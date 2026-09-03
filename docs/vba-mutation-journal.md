@@ -81,6 +81,23 @@ backup/prepared journal record for that patch; earlier candidate edits are not
 partially dispatched. This R33 correction does not change existing recovery or
 the journal protocol; Windows/VBE qualification remains open.
 
+A model-visible module observation is distinct from internal guard and verification
+reads. Only a complete `common.resources_read` source representation refreshes that
+observation; one bounded chunk does not. After a verified source mutation, the
+module is stale for model context even though runtime read it back. A second patch
+or whole-source write fails with `vba_snapshot_refresh_required` until the complete
+current source is read. Multiple edits derived from one snapshot belong in one
+ordered patch array: every hunk is validated in memory and dispatched as one write.
+The kernel rejects multiple mutation calls in one response; only independent local
+reads may be batched.
+
+Live-source validation also rejects export-only headers, unclosed string literals,
+C/JSON-style backslash quote escaping, common C-style operators/braces and
+unbalanced conditional-compilation blocks. JSON `\"` remains valid transport
+escaping; rejection applies only when a literal backslash reaches live VBA source
+before an opening quote. Existing hidden/control, joined-terminator and duplicate
+procedure/property checks remain fail-closed before journal preparation or COM.
+
 ## Transaction protocol
 
 The native handler prepares and persists an exact live guard before confirmation,
@@ -102,6 +119,17 @@ After the Office operation and read-back, one `mutation.terminal` records:
 - `rolled_back` — a structured backend disposition explicitly reports rollback and live state matches before; message text is never classification evidence;
 - `failed` — reserved for a definite terminal failure without an uncertain external effect;
 - `unknown` — live state is unreadable or matches neither side.
+
+Host replacement failure preserves structured stage, exception type/HRESULT, root
+cause and rollback disposition. A verified restoration/removal is a definite error
+(`vba_module_replace_failed`); inability to verify rollback is
+`vba_module_replace_rollback_failed` with unknown effect. Generic
+`vba_access_error` no longer hides this replacement distinction.
+
+Excel, Word and PowerPoint macro dispatch qualifies the requested
+module/procedure with the exact bound document name before `Application.Run`.
+An incoming document qualifier is replaced rather than trusted, preventing an
+active or same-named external document from receiving the call.
 
 The typed domain outcome is only `ok`, `error`, or `unknown`. Verified intended state maps to `ok`; verified before/not-applied maps to a definite `error`; unreadable or divergent state maps to non-retryable `unknown`. Existing live components must match the recorded component type as well as the applicable source hash: a create race that leaves identical source under another type is `unknown`, not committed. Delete `ok` requires verified absence after the compare-and-swap backend action; backend success while the component remains is not success. Source read-back verifies the requested text/type state, not VBA compilation or runtime behavior.
 

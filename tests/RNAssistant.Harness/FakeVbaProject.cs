@@ -12,6 +12,7 @@ namespace RNAssistant.Harness
             VBProject = new FakeVbaProjectObject();
         }
 
+        public string Name { get; set; } = "Fixture.xlsm";
         public FakeVbaProjectObject VBProject { get; private set; }
     }
 

@@ -88,8 +88,15 @@ namespace RNAssistant.Office.Tools
             VbaModuleState module;
             ToolRunResult result;
             if (!_reader.TryReadResourceModule(moduleName, maxChars, out module, out result)) return result;
-            RecordObservationFromModule(session, moduleName, module);
             return result;
+        }
+
+        void IVbaResourceSource.ObserveCompleteResourceModule(
+            ChatSession session,
+            string moduleName,
+            string codeSha256)
+        {
+            RecordObservation(session, moduleName, codeSha256);
         }
 
         private static IReadOnlyList<VbaPatchOperationRequest> ParsePatchOperations(JArray patch)

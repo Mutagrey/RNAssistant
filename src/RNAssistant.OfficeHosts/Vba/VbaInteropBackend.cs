@@ -164,7 +164,9 @@ namespace RNAssistant.OfficeHosts.Vba
                         true);
                 var output = VbaProjectSupport.RunStringFunction(
                     _application,
-                    request.MacroName,
+                    VbaProjectSupport.QualifyDocumentMacroName(
+                        RequireDocument(),
+                        request.MacroName),
                     request.Arguments);
                 return VbaBackendActionResult.Ok(
                     "Macro ran: " + request.MacroName,

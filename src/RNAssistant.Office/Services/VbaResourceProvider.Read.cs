@@ -54,7 +54,7 @@ namespace RNAssistant.Office.Services
                 if (target.Module != null)
                 {
                     var source = ReadModuleSource(session, target.Module, MaximumMaterializedCharacters);
-                    return SelectText(
+                    var selection = SelectText(
                         resourceUri,
                         DescribeComponent(session, target.Module, source.CodeSha256),
                         ResourceRepresentations.Source,
@@ -63,6 +63,14 @@ namespace RNAssistant.Office.Services
                         request,
                         position,
                         cursorBinding);
+                    if (selection.Result.Complete)
+                    {
+                        _source.ObserveCompleteResourceModule(
+                            session,
+                            target.Module.Name,
+                            source.CodeSha256);
+                    }
+                    return selection;
                 }
                 var backup = ReadBackup(target.Backup);
                 return SelectText(

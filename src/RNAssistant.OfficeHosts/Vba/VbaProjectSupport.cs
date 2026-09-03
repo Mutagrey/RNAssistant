@@ -202,18 +202,34 @@ namespace RNAssistant.OfficeHosts.Vba
 
                 if (rollbackError != null)
                 {
-                    throw new InvalidOperationException(
-                        "VBA module replacement failed and the original code could not be restored: " + rollbackError.Message,
-                        ex);
+                    return VbaBackendActionResult.Unknown(
+                        "VBA module replacement failed and rollback could not be verified: " +
+                            rollbackError.Message,
+                        ReplacementFailureData(
+                            moduleName,
+                            created,
+                            mutationStarted,
+                            false,
+                            ex,
+                            rollbackError),
+                        "vba_module_replace_rollback_failed");
                 }
 
-                throw new InvalidOperationException(
+                return VbaBackendActionResult.Error(
                     created
                         ? "VBA module replacement failed; the incomplete module was removed."
                         : mutationStarted
                             ? "VBA module replacement failed; the original code was restored."
                             : "VBA module replacement failed before source mutation.",
-                    ex);
+                    ReplacementFailureData(
+                        moduleName,
+                        created,
+                        mutationStarted,
+                        true,
+                        ex,
+                        null),
+                    "vba_module_replace_failed",
+                    false);
             }
             return VbaBackendActionResult.Ok(
                 "VBA module replaced: " + component.Name,
@@ -223,6 +239,47 @@ namespace RNAssistant.OfficeHosts.Vba
                 lineCount = (int)component.CodeModule.CountOfLines,
                 codeSha256 = VbaTextCanonicalizer.LiveCodeSha256(ReadComponentCode(component))
             });
+        }
+
+        private static object ReplacementFailureData(
+            string moduleName,
+            bool created,
+            bool mutationStarted,
+            bool rollbackVerified,
+            Exception failure,
+            Exception rollbackFailure)
+        {
+            return new
+            {
+                moduleName = moduleName ?? string.Empty,
+                stage = mutationStarted ? "replace" : created ? "create" : "prepare",
+                rollbackDisposition = rollbackVerified
+                    ? created ? "created-module-removed" : mutationStarted ? "original-source-restored" : "not-needed"
+                    : "unverified",
+                failure = ExceptionDiagnostic(failure),
+                rollbackFailure = ExceptionDiagnostic(rollbackFailure)
+            };
+        }
+
+        private static object ExceptionDiagnostic(Exception exception)
+        {
+            if (exception == null) return null;
+            var root = exception;
+            var depth = 0;
+            while (root.InnerException != null && depth < 8)
+            {
+                root = root.InnerException;
+                depth++;
+            }
+            return new
+            {
+                type = exception.GetType().FullName,
+                hresult = "0x" + exception.HResult.ToString("X8"),
+                message = exception.Message,
+                rootType = root.GetType().FullName,
+                rootHresult = "0x" + root.HResult.ToString("X8"),
+                rootMessage = root.Message
+            };
         }
 
         public static VbaBackendActionResult CreateModule(
@@ -544,6 +601,30 @@ namespace RNAssistant.OfficeHosts.Vba
                 applicationObject,
                 invokeArguments);
             return Convert.ToString(output);
+        }
+
+        public static string QualifyDocumentMacroName(
+            object documentObject,
+            string macroName)
+        {
+            if (documentObject == null)
+                throw new InvalidOperationException("Office document is not available.");
+            var documentName = Convert.ToString(documentObject.GetType().InvokeMember(
+                "Name",
+                BindingFlags.GetProperty,
+                null,
+                documentObject,
+                null));
+            if (string.IsNullOrWhiteSpace(documentName))
+                throw new InvalidOperationException(
+                    "The bound Office document has no name for macro qualification.");
+            var localName = (macroName ?? string.Empty).Trim();
+            var separator = localName.LastIndexOf('!');
+            if (separator >= 0) localName = localName.Substring(separator + 1).Trim();
+            if (string.IsNullOrWhiteSpace(localName))
+                throw new InvalidOperationException(
+                    "The VBA macro name is empty after document qualification.");
+            return "'" + documentName.Replace("'", "''") + "'!" + localName;
         }
 
         public static VbaBackendActionResult InstallPackage(

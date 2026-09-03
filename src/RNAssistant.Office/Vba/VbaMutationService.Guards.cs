@@ -32,6 +32,13 @@ namespace RNAssistant.Office.Vba
 
             var correlation = request.Correlation ?? new VbaMutationCorrelation();
             var currentHash = CodeSha256(current.Code);
+            if (RequiresObservationRefresh(correlation.SessionId, resolvedName))
+            {
+                return new VbaApplyPatchGuardPreparation
+                {
+                    Error = SnapshotRefreshRequired(resolvedName)
+                };
+            }
             string observedHash;
             if (TryGetObservation(correlation.SessionId, resolvedName, out observedHash) &&
                 !string.Equals(observedHash, currentHash, StringComparison.OrdinalIgnoreCase))
@@ -195,6 +202,22 @@ namespace RNAssistant.Office.Vba
                     ["reloadEditor"] = true
                 },
                 "vba_internal_snapshot_missing",
+                true);
+        }
+
+        private static VbaMutationOutcome SnapshotRefreshRequired(string moduleName)
+        {
+            return VbaMutationOutcome.Error(
+                "The VBA module was changed by an earlier mutation and the model-visible source is now stale. Read the complete current module source before another mutation.",
+                new JObject
+                {
+                    ["moduleName"] = moduleName ?? string.Empty,
+                    ["retrySameTool"] = false,
+                    ["inspectTool"] = "common.resources_read",
+                    ["discoveryScope"] = "vba",
+                    ["completeSourceRequired"] = true
+                },
+                "vba_snapshot_refresh_required",
                 true);
         }
 

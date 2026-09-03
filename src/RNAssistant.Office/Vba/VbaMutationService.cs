@@ -16,6 +16,8 @@ namespace RNAssistant.Office.Vba
         private readonly object _observationsSync = new object();
         private readonly Dictionary<string, string> _observedModuleHashes =
             new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+        private readonly HashSet<string> _modulesRequiringRefresh =
+            new HashSet<string>(StringComparer.OrdinalIgnoreCase);
 
         internal VbaMutationService(
             IVbaMutationDocumentContext document,
@@ -38,7 +40,7 @@ namespace RNAssistant.Office.Vba
             _reader = reader ?? throw new ArgumentNullException(nameof(reader));
             _backend = backend ?? throw new ArgumentNullException(nameof(backend));
             _renameJournal = renameJournal;
-            _verifier = new VbaVerifier(reader, RecordObservation, RemoveObservation);
+            _verifier = new VbaVerifier(reader, MarkObservationStale, RemoveObservation);
         }
 
         public VbaMutationOutcome TryReadExistingModule(
@@ -104,8 +106,37 @@ namespace RNAssistant.Office.Vba
                 if (_observedModuleHashes.Count >= 1024 && !_observedModuleHashes.ContainsKey(key))
                 {
                     _observedModuleHashes.Clear();
+                    _modulesRequiringRefresh.Clear();
                 }
                 _observedModuleHashes[key] = hash;
+                _modulesRequiringRefresh.Remove(key);
+            }
+        }
+
+        public void MarkObservationStale(string sessionId, string moduleName, string hash)
+        {
+            if (string.IsNullOrWhiteSpace(moduleName)) return;
+            var key = ObservationKey(sessionId, moduleName);
+            lock (_observationsSync)
+            {
+                if (_modulesRequiringRefresh.Count >= 1024 &&
+                    !_modulesRequiringRefresh.Contains(key))
+                {
+                    _observedModuleHashes.Clear();
+                    _modulesRequiringRefresh.Clear();
+                }
+                if (!string.IsNullOrWhiteSpace(hash))
+                    _observedModuleHashes[key] = hash;
+                _modulesRequiringRefresh.Add(key);
+            }
+        }
+
+        public bool RequiresObservationRefresh(string sessionId, string moduleName)
+        {
+            lock (_observationsSync)
+            {
+                return _modulesRequiringRefresh.Contains(
+                    ObservationKey(sessionId, moduleName));
             }
         }
 
@@ -122,6 +153,7 @@ namespace RNAssistant.Office.Vba
             lock (_observationsSync)
             {
                 _observedModuleHashes.Remove(ObservationKey(sessionId, moduleName));
+                _modulesRequiringRefresh.Remove(ObservationKey(sessionId, moduleName));
             }
         }
 

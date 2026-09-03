@@ -217,7 +217,7 @@ namespace RNAssistant.Office.Vba
                 StringComparison.Ordinal))
             {
                 RemoveObservation(sessionId, sourceName);
-                RecordObservation(sessionId, targetName, sourceHash);
+                MarkObservationStale(sessionId, targetName, sourceHash);
                 if (actionResult.Status == VbaMutationActionStatus.Error ||
                     actionResult.Status == VbaMutationActionStatus.Unknown)
                 {

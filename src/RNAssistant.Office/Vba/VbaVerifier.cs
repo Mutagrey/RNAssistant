@@ -8,16 +8,16 @@ namespace RNAssistant.Office.Vba
     internal sealed class VbaVerifier
     {
         private readonly IVbaMutationReader _reader;
-        private readonly Action<string, string, string> _recordObservation;
+        private readonly Action<string, string, string> _markObservationStale;
         private readonly Action<string, string> _removeObservation;
 
         public VbaVerifier(
             IVbaMutationReader reader,
-            Action<string, string, string> recordObservation,
+            Action<string, string, string> markObservationStale,
             Action<string, string> removeObservation)
         {
             _reader = reader ?? throw new ArgumentNullException(nameof(reader));
-            _recordObservation = recordObservation;
+            _markObservationStale = markObservationStale;
             _removeObservation = removeObservation;
         }
 
@@ -31,6 +31,10 @@ namespace RNAssistant.Office.Vba
             string sessionId = null)
         {
             var expectedHash = VbaTextCanonicalizer.LiveCodeSha256(expectedCode);
+            if (_markObservationStale != null)
+            {
+                _markObservationStale(sessionId, moduleName, expectedHash);
+            }
             var expectedComparableHash = VbaTextCanonicalizer.VbeComparableCodeSha256(expectedCode);
             var expectedLineCount = VbaTextCanonicalizer.LiveCodeLineCount(expectedCode);
             var read = _reader.ReadModule(moduleName, 1000000);
@@ -95,10 +99,6 @@ namespace RNAssistant.Office.Vba
                     (errorPrefix ?? "vba_write") + "_verify_mismatch");
             }
 
-            if (_recordObservation != null)
-            {
-                _recordObservation(sessionId, moduleName, actualHash);
-            }
             return VbaMutationActionResult.Verified(
                 successMessage,
                 SuccessfulVerificationData(

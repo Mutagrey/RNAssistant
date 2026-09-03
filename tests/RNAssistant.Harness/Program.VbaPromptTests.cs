@@ -506,6 +506,12 @@ namespace RNAssistant.Harness
                     store.ListMutations(adapter.HostName, adapter.DocumentKey).Single().Terminal.Status,
                     "domain workflow owns the terminal journal result");
 
+                service.RecordObservation(
+                    correlation.SessionId,
+                    preparation.ResolvedModuleName,
+                    VbaTextCanonicalizer.LiveCodeSha256(
+                        adapter.GetVbaModuleCode(preparation.ResolvedModuleName)));
+
                 var existingPreparation = service.PrepareWholeModuleWriteGuard(
                     new VbaWholeModuleWriteGuardRequest
                     {
@@ -1388,6 +1394,9 @@ namespace RNAssistant.Harness
                     "normalized VBA component name is valid and bounded");
                 AssertContains(adapter.GetVbaModuleCode(actualName), "Public Value", "normalized module receives requested source");
 
+                AssertTrue(ReadVbaSource(executor, session, actualName).Complete,
+                    "complete source refreshes the normalized module before another write");
+
                 var repeated = executor.ExecuteManual(
                     Command("common.vba_write_module", "moduleName", requestedName, "componentType", "StdModule", "code", "Option Explicit\nPublic Value As String"),
                     tools,
@@ -1430,8 +1439,11 @@ namespace RNAssistant.Harness
                 AssertEqual("stale_vba_module", stale.ErrorCode, "runtime uses a prior read snapshot without a model hash argument");
                 AssertContains(stale.DataJson, "reconcileBeforeOverwrite", "stale whole write explains reconciliation");
                 AssertContains(adapter.GetVbaModuleCode("ObservedModule"), "ExternalChange", "stale whole write preserves external code");
+                AssertContains(ReadVbaSource(executor, session, "ObservedModule").Text,
+                    "ExternalChange",
+                    "whole-source overwrite requires a fresh current read after stale detection");
                 AssertTrue(executor.ExecuteManual(observedWrite, tools, settings, false, false, session).Success,
-                    "an intentional same-tool retry can explicitly overwrite after the stale warning");
+                    "intentional overwrite succeeds only after the current source is visible");
                 AssertContains(adapter.GetVbaModuleCode("ObservedModule"), "IntendedFromOldSource", "intentional retry writes complete source");
             });
         }
@@ -1547,9 +1559,9 @@ namespace RNAssistant.Harness
                 adapter.VbaModuleCode = "Sub Main()\nEnd Sub";
                 var backupStore = new VbaJournalStore(paths);
                 var executor = new OfficeToolExecutor(adapter, backupStore, new SkillStore(paths));
+                var session = NewSession(adapter);
                 var tools = OfficeToolCatalog.ForHost(adapter.HostName).Concat(executor.GetControllerTools()).ToList();
                 var settings = new AppSettings { AutoConfirmToolActions = true };
-                var session = NewSession(adapter);
                 var result = executor.ExecuteManual(
                     Command("common.vba_delete_module", "moduleName", "Module1"),
                     tools,
@@ -1638,6 +1650,7 @@ namespace RNAssistant.Harness
                 adapter.SetVbaModule("Module2", "Sub Run()\nDebug.Print \"old\"\nEnd Sub", "StdModule");
                 var backupStore = new VbaJournalStore(paths);
                 var executor = new OfficeToolExecutor(adapter, backupStore, new SkillStore(paths));
+                var session = NewSession(adapter);
                 var command = new ToolInvocation { ToolId = executor.VbaToolId("vba_apply_patch") };
                 command.Arguments["moduleName"] = "Module2";
                 command.Arguments["patch"] = new JArray
@@ -1654,7 +1667,7 @@ namespace RNAssistant.Harness
                     }
                 };
 
-                var result = executor.ExecuteManual(command, new List<ToolCatalogEntry>(OfficeToolCatalog.ForHost(adapter.HostName)), new AppSettings { AutoConfirmToolActions = true }, false, false);
+                var result = executor.ExecuteManual(command, new List<ToolCatalogEntry>(OfficeToolCatalog.ForHost(adapter.HostName)), new AppSettings { AutoConfirmToolActions = true }, false, false, session);
 
                 AssertTrue(result.Success, "patch result");
                 AssertContains(adapter.GetVbaModuleCode("Module2"), "\"new\"", "module2 updated");
@@ -1667,6 +1680,9 @@ namespace RNAssistant.Harness
                 AssertTrue(backups[0].Code == null, "backup list is metadata-only");
                 AssertContains(backupStore.Find("Excel", "doc", backups[0].BackupId, null).Code, "\"old\"", "backup code");
 
+                AssertTrue(ReadVbaSource(executor, session, "Module2").Complete,
+                    "complete source refreshes the module before the next patch");
+
                 var mixedNoOp = executor.ExecuteManual(
                     Command(
                         "common.vba_apply_patch",
@@ -1677,9 +1693,13 @@ namespace RNAssistant.Harness
                     OfficeToolCatalog.ForHost(adapter.HostName).Concat(executor.GetControllerTools()).ToList(),
                     new AppSettings { AutoConfirmToolActions = true },
                     false,
-                    false);
+                    false,
+                    session);
                 AssertTrue(mixedNoOp.Success, "already-satisfied hunk does not abort later exact replacements");
                 AssertContains(adapter.GetVbaModuleCode("Module2"), "Sub RunFixed()", "later hunk still changes source");
+
+                AssertTrue(ReadVbaSource(executor, session, "Module2").Complete,
+                    "complete source refreshes the module before a no-op patch");
 
                 var writesBeforeNoOp = adapter.CountVbaCalls(FakeVbaOperation.ReplaceModule);
                 var backupsBeforeNoOp = backupStore.List("Excel", "doc").Count;
@@ -1695,7 +1715,8 @@ namespace RNAssistant.Harness
                     OfficeToolCatalog.ForHost(adapter.HostName).Concat(executor.GetControllerTools()).ToList(),
                     new AppSettings { AutoConfirmToolActions = true },
                     false,
-                    false);
+                    false,
+                    session);
                 AssertTrue(allNoOp.Success, "all-no-op patch completes successfully");
                 AssertContains(allNoOp.DataJson, "\"changed\":false", "all-no-op patch reports its outcome");
                 AssertEqual(writesBeforeNoOp, adapter.CountVbaCalls(FakeVbaOperation.ReplaceModule),
@@ -1978,8 +1999,8 @@ namespace RNAssistant.Harness
                     false,
                     false,
                     session);
-                AssertEqual("vba_patch_stale_source", rejected.ErrorCode,
-                    "a stale exact hunk cannot target shifted current text");
+                AssertEqual("vba_snapshot_refresh_required", rejected.ErrorCode,
+                    "a second mutation cannot use the model's stale pre-write source");
                 AssertEqual("A\nX\nB\nC", adapter.VbaModuleCode, "stale exact patch leaves current module intact");
                 AssertEqual(1, adapter.CountVbaCalls(FakeVbaOperation.ReplaceModule),
                     "stale exact hunk never reaches the backend writer");
@@ -2251,6 +2272,12 @@ namespace RNAssistant.Harness
         private static void VbaBackendCompareAndSwapRejectsDrift()
         {
             var document = new FakeVbaDocumentObject();
+            document.Name = "Bound O'Brien.xlsm";
+            AssertEqual("'Bound O''Brien.xlsm'!Module1.Run",
+                VbaProjectSupport.QualifyDocumentMacroName(
+                    document,
+                    "'Other.xlsm'!Module1.Run"),
+                "macro dispatch is forced to the exact bound document");
             var component = document.VBProject.VBComponents.Seed("Module1", "Sub ExternalChange()\nEnd Sub");
             var staleHash = VbaTextCanonicalizer.LiveCodeSha256("Sub EarlierSnapshot()\nEnd Sub");
 
@@ -2292,13 +2319,18 @@ namespace RNAssistant.Harness
             {
                 var tools = OfficeToolCatalog.ForHost(adapter.HostName).Concat(executor.GetControllerTools()).ToList();
                 var settings = new AppSettings { AutoConfirmToolActions = true };
+                var session = NewSession(adapter);
                 var publicCreate = executor.ExecuteManual(
                     Command("common.vba_write_module", "moduleName", "UserForm2", "componentType", "MSForm", "code", "Option Explicit\n", "mode", "createOnly"),
                     tools,
                     settings,
                     false,
-                    false);
+                    false,
+                    session);
                 AssertTrue(publicCreate.Success, "public UserForm create succeeds");
+
+                AssertTrue(ReadVbaSource(executor, session, "UserForm2").Complete,
+                    "complete UserForm code read refreshes the model snapshot");
 
                 var publicEdit = executor.ExecuteManual(
                     Command(
@@ -2312,7 +2344,8 @@ namespace RNAssistant.Harness
                     tools,
                     settings,
                     false,
-                    false);
+                    false,
+                    session);
                 AssertTrue(publicEdit.Success, "public UserForm code edit succeeds");
                 AssertContains(adapter.GetVbaModuleCode("UserForm2"), "UserForm_Activate", "public UserForm code changed");
             });
@@ -2348,6 +2381,12 @@ namespace RNAssistant.Harness
                 "VBA discovery fallback selects the aggregate project target");
             AssertContains(editing.BodyMarkdown, "one successful result contains the complete representation",
                 "VBA skill relies on whole model-facing resource reads");
+            AssertContains(editing.BodyMarkdown, "one ordered patch call",
+                "VBA skill batches same-snapshot hunks into one atomic mutation");
+            AssertContains(editing.BodyMarkdown, "before a second source mutation",
+                "VBA skill requires a fresh complete model-visible snapshot between writes");
+            AssertContains(editing.BodyMarkdown, "never backslash escaping",
+                "VBA skill distinguishes JSON transport escaping from VBA string syntax");
             AssertContains(editing.BodyMarkdown, "never creates a missing module", "patch remains existing-only");
             AssertContains(editing.BodyMarkdown, "repeat the exact anchor block", "insertions use explicit exact replacement text");
             AssertContains(editing.BodyMarkdown, "common.vba_rename_module", "skill explains the strict rename intent");
@@ -2427,6 +2466,109 @@ namespace RNAssistant.Harness
                 AssertTrue(whole.Complete, "bounded resource read reports complete source when it fits");
                 AssertContains(whole.Text, "line250",
                     "resource source read returns the complete module when it fits the bound");
+            });
+        }
+
+        private static void VbaMutationRequiresCompleteModelVisibleRefresh()
+        {
+            WithTempExecutor(delegate(OfficeToolExecutor executor, FakeOfficeAdapter adapter)
+            {
+                adapter.VbaModuleCode =
+                    "Option Explicit\nSub Main()\nDebug.Print \"before\"\nEnd Sub\n" +
+                    string.Join("\n", Enumerable.Range(1, 80)
+                        .Select(index => "' padding " + index).ToArray());
+                var session = NewSession(adapter);
+                var tools = OfficeToolCatalog.ForHost(adapter.HostName)
+                    .Concat(executor.GetControllerTools()).ToList();
+                var component = VbaComponent(executor, session, "Module1");
+                var initial = ReadResource(
+                    executor.ResourceGateway,
+                    session,
+                    component.Reference.Uri,
+                    ResourceRepresentations.Source,
+                    null,
+                    32000).Result;
+                AssertTrue(initial.Complete, "initial complete source is model-visible");
+
+                var first = executor.ExecuteManual(
+                    Command("common.vba_apply_patch",
+                        "moduleName", "Module1",
+                        "patch", new JArray(new JObject
+                        {
+                            ["find"] = "\"before\"",
+                            ["text"] = "\"first\""
+                        })),
+                    tools,
+                    new AppSettings { AutoConfirmToolActions = true },
+                    false,
+                    false,
+                    session);
+                AssertTrue(first.Success, "first mutation succeeds and verifies read-back");
+
+                var blocked = executor.ExecuteManual(
+                    Command("common.vba_apply_patch",
+                        "moduleName", "Module1",
+                        "patch", new JArray(new JObject
+                        {
+                            ["find"] = "\"first\"",
+                            ["text"] = "\"second\""
+                        })),
+                    tools,
+                    new AppSettings { AutoConfirmToolActions = true },
+                    false,
+                    false,
+                    session);
+                AssertEqual("vba_snapshot_refresh_required", blocked.ErrorCode,
+                    "internal write verification does not refresh the model snapshot");
+
+                var partial = ReadResource(
+                    executor.ResourceGateway,
+                    session,
+                    component.Reference.Uri,
+                    ResourceRepresentations.Source,
+                    null,
+                    128).Result;
+                AssertTrue(!partial.Complete, "first bounded chunk is incomplete");
+                var stillBlocked = executor.ExecuteManual(
+                    Command("common.vba_apply_patch",
+                        "moduleName", "Module1",
+                        "patch", new JArray(new JObject
+                        {
+                            ["find"] = "\"first\"",
+                            ["text"] = "\"second\""
+                        })),
+                    tools,
+                    new AppSettings { AutoConfirmToolActions = true },
+                    false,
+                    false,
+                    session);
+                AssertEqual("vba_snapshot_refresh_required", stillBlocked.ErrorCode,
+                    "a partial source read cannot authorize another mutation");
+
+                var refreshed = ReadResource(
+                    executor.ResourceGateway,
+                    session,
+                    component.Reference.Uri,
+                    ResourceRepresentations.Source,
+                    null,
+                    32000).Result;
+                AssertTrue(refreshed.Complete, "complete current source refreshes model authority");
+                var second = executor.ExecuteManual(
+                    Command("common.vba_apply_patch",
+                        "moduleName", "Module1",
+                        "patch", new JArray(new JObject
+                        {
+                            ["find"] = "\"first\"",
+                            ["text"] = "\"second\""
+                        })),
+                    tools,
+                    new AppSettings { AutoConfirmToolActions = true },
+                    false,
+                    false,
+                    session);
+                AssertTrue(second.Success, "mutation succeeds after complete current source read");
+                AssertContains(adapter.VbaModuleCode, "\"second\"",
+                    "second mutation applies to the refreshed source");
             });
         }
 
@@ -2622,6 +2764,32 @@ namespace RNAssistant.Harness
                 false);
             AssertTrue(commentText.Success, "Rem comment does not trigger joined procedure guard");
 
+            foreach (var invalid in new[]
+            {
+                new { Code = "Sub Main()\nDebug.Print \\\"wrong\\\"\nEnd Sub", Reason = "C/JSON-style" },
+                new { Code = "Sub Main()\nDebug.Print \"unclosed\nEnd Sub", Reason = "not closed" },
+                new { Code = "Attribute VB_Name = \"Module1\"\nSub Main()\nEnd Sub", Reason = "export-file metadata" },
+                new { Code = "Sub Main()\nIf value == 1 Then Debug.Print value\nEnd Sub", Reason = "non-VBA token" },
+                new { Code = "#If VBA7 Then\nSub Main()\nEnd Sub", Reason = "#If block" }
+            })
+            {
+                var invalidSyntax = VbaProjectSupport.ReplaceModule(
+                    document, "Module1", invalid.Code, false);
+                AssertTrue(!invalidSyntax.Success, "unsafe VBA syntax is rejected");
+                AssertEqual("vba_code_invalid", invalidSyntax.ErrorCode,
+                    "unsafe VBA syntax uses the validation error code");
+                AssertContains(invalidSyntax.Message, invalid.Reason,
+                    "unsafe VBA syntax explains the failure");
+            }
+
+            var validQuotes = VbaProjectSupport.ReplaceModule(
+                document,
+                "Module1",
+                "Sub Main()\nDebug.Print \"C:\\\\\" & \"\"\"quoted\"\"\"\nEnd Sub",
+                false);
+            AssertTrue(validQuotes.Success,
+                "VBA path backslashes and doubled string quotes remain valid");
+
             var cleared = VbaProjectSupport.ReplaceModule(document, "Module1", string.Empty, false);
             AssertTrue(cleared.Success, "existing module can be cleared");
             AssertEqual(string.Empty, component.CodeModule.Code, "module cleared");
@@ -2692,15 +2860,18 @@ namespace RNAssistant.Harness
             var component = document.VBProject.VBComponents.Seed("Module1", "Sub Original()\nEnd Sub");
             component.CodeModule.FailNextAdd = true;
 
-            try
-            {
-                VbaProjectSupport.ReplaceModule(document, "Module1", "Sub Changed()\nEnd Sub", false);
-                throw new InvalidOperationException("failed VBA replacement was accepted");
-            }
-            catch (InvalidOperationException ex)
-            {
-                AssertContains(ex.Message, "original code was restored", "atomic replacement diagnostic");
-            }
+            var failedReplacement = VbaProjectSupport.ReplaceModule(
+                document, "Module1", "Sub Changed()\nEnd Sub", false);
+            AssertTrue(!failedReplacement.Success, "failed VBA replacement is rejected");
+            AssertEqual("vba_module_replace_failed", failedReplacement.ErrorCode,
+                "replacement has a specific error code");
+            AssertContains(failedReplacement.Message, "original code was restored",
+                "atomic replacement diagnostic");
+            AssertEqual("original-source-restored",
+                (string)failedReplacement.Data["rollbackDisposition"],
+                "verified rollback is structured evidence");
+            AssertTrue(failedReplacement.Data["failure"] != null,
+                "replacement failure retains exception diagnostics");
 
             AssertEqual(
                 VbaTextCanonicalizer.NormalizeLiveCode("Sub Original()\nEnd Sub"),
@@ -2709,15 +2880,14 @@ namespace RNAssistant.Harness
 
             var newDocument = new FakeVbaDocumentObject();
             newDocument.VBProject.VBComponents.FailNextAddedModuleWrite = true;
-            try
-            {
-                VbaProjectSupport.ReplaceModule(newDocument, "NewModule", "Sub Main()\nEnd Sub", true);
-                throw new InvalidOperationException("failed new VBA module was accepted");
-            }
-            catch (InvalidOperationException ex)
-            {
-                AssertContains(ex.Message, "incomplete module was removed", "new module cleanup diagnostic");
-            }
+            var failedCreate = VbaProjectSupport.ReplaceModule(
+                newDocument, "NewModule", "Sub Main()\nEnd Sub", true);
+            AssertTrue(!failedCreate.Success, "failed new VBA module is rejected");
+            AssertContains(failedCreate.Message, "incomplete module was removed",
+                "new module cleanup diagnostic");
+            AssertEqual("created-module-removed",
+                (string)failedCreate.Data["rollbackDisposition"],
+                "created module cleanup is structured evidence");
             AssertEqual(0, newDocument.VBProject.VBComponents.Count, "incomplete module removed");
         }
 

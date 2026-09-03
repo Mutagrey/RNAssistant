@@ -525,6 +525,7 @@ namespace RNAssistant.Harness
                 Test("vba: mutation cancellation boundaries", VbaMutationCancellationBoundaries),
                 Test("vba: apply patch backs up module", VbaApplyPatchBacksUpModule),
                 Test("vba: confirmed mutation rejects stale snapshot", VbaConfirmedMutationRejectsStaleSnapshot),
+                Test("vba: mutation requires complete model-visible refresh", VbaMutationRequiresCompleteModelVisibleRefresh),
                 Test("vba: queued guard reads wait for mutation", VbaQueuedGuardReadsWaitForMutation),
                 Test("vba: create rejects confirmation race", VbaCreateRejectsConfirmationRace),
                 Test("vba: write upserts and normalizes name", VbaWriteUpsertsAndNormalizesName),

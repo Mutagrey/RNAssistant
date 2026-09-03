@@ -37,6 +37,14 @@ namespace RNAssistant.Core.Tools
                 }
             }
 
+            int syntaxLine;
+            string syntaxReason;
+            if (TryFindUnsafeSyntax(code, out syntaxLine, out syntaxReason))
+            {
+                error = "VBA code is not safe to write on line " + syntaxLine + ": " + syntaxReason;
+                return false;
+            }
+
             int joinedLine;
             string joinedFragment;
             if (TryFindJoinedVbaBlock(code, out joinedLine, out joinedFragment))
@@ -57,6 +65,95 @@ namespace RNAssistant.Core.Tools
 
             error = null;
             return true;
+        }
+
+        private static bool TryFindUnsafeSyntax(
+            string code,
+            out int lineNumber,
+            out string reason)
+        {
+            var conditionalDepth = 0;
+            var lines = Lines(code);
+            for (var lineIndex = 0; lineIndex < lines.Length; lineIndex++)
+            {
+                var line = lines[lineIndex] ?? string.Empty;
+                var trimmed = line.TrimStart();
+                if (trimmed.StartsWith("Attribute VB_", StringComparison.OrdinalIgnoreCase) ||
+                    trimmed.StartsWith("VERSION 1.0 CLASS", StringComparison.OrdinalIgnoreCase) ||
+                    trimmed.StartsWith("BEGIN VB.", StringComparison.OrdinalIgnoreCase))
+                {
+                    lineNumber = lineIndex + 1;
+                    reason = "export-file metadata cannot be inserted through a live CodeModule; provide source code only.";
+                    return true;
+                }
+
+                var executable = new StringBuilder(line.Length);
+                var inString = false;
+                for (var index = 0; index < line.Length; index++)
+                {
+                    var value = line[index];
+                    if (!inString && value == '\'') break;
+                    if (!inString && IsVbaRemComment(line, index)) break;
+                    if (value == '"')
+                    {
+                        if (!inString && index > 0 && line[index - 1] == '\\')
+                        {
+                            lineNumber = lineIndex + 1;
+                            reason = "found C/JSON-style \\\" escaping. VBA embeds a quote inside a string as \"\" and does not use backslash escaping.";
+                            return true;
+                        }
+                        if (inString && index + 1 < line.Length && line[index + 1] == '"')
+                        {
+                            executable.Append("  ");
+                            index++;
+                            continue;
+                        }
+                        inString = !inString;
+                        executable.Append(' ');
+                        continue;
+                    }
+                    executable.Append(inString ? ' ' : value);
+                }
+                if (inString)
+                {
+                    lineNumber = lineIndex + 1;
+                    reason = "string literal is not closed; use doubled quotes (\"\") inside VBA strings.";
+                    return true;
+                }
+
+                var outside = executable.ToString();
+                foreach (var token in new[] { "==", "!=", "&&", "||", "{", "}" })
+                {
+                    if (outside.IndexOf(token, StringComparison.Ordinal) >= 0)
+                    {
+                        lineNumber = lineIndex + 1;
+                        reason = "found non-VBA token '" + token + "'.";
+                        return true;
+                    }
+                }
+
+                var preprocessor = outside.Trim();
+                if (StartsWithPreprocessor(preprocessor, "#If")) conditionalDepth++;
+                else if (StartsWithPreprocessor(preprocessor, "#End If"))
+                {
+                    conditionalDepth--;
+                    if (conditionalDepth < 0)
+                    {
+                        lineNumber = lineIndex + 1;
+                        reason = "#End If has no matching #If.";
+                        return true;
+                    }
+                }
+            }
+            if (conditionalDepth != 0)
+            {
+                lineNumber = lines.Length;
+                reason = "conditional-compilation #If block is not closed with #End If.";
+                return true;
+            }
+            lineNumber = 0;
+            reason = null;
+            return false;
         }
 
         private static bool TryFindJoinedVbaBlock(

@@ -7,5 +7,6 @@ namespace RNAssistant.Office.Services
     {
         ToolRunResult ListResourceModules();
         ToolRunResult ReadResourceModule(ChatSession session, string moduleName, int maxChars);
+        void ObserveCompleteResourceModule(ChatSession session, string moduleName, string codeSha256);
     }
 }
