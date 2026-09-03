@@ -35,10 +35,9 @@ namespace RNAssistant.Office
                 throw new InvalidOperationException(
                     "Unsupported or incomplete Tool Library documentation contract.");
             }
-            var matches = _toolExecutor.GetHostTools()
-                .Concat(_toolExecutor.GetControllerTools())
-                .Where(tool => tool != null && tool.BuiltIn &&
-                    string.Equals(tool.Id, request.ToolId,
+            var matches = _toolCatalog.GetVisibleTools()
+                .Where(item => item != null && item.BuiltIn &&
+                    string.Equals(item.Id, request.ToolId,
                         StringComparison.Ordinal)).ToArray();
             if (matches.Length != 1 || !matches[0].BuiltIn)
                 throw new InvalidOperationException(
