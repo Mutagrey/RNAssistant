@@ -193,23 +193,11 @@ namespace RNAssistant.Office.Tools
         private static IReadOnlyList<Tuple<VbaModuleBackup, string>> BackupIntentTargets(
             IEnumerable<VbaModuleBackup> backups)
         {
-            var values = (backups ?? new VbaModuleBackup[0])
+            return (backups ?? new VbaModuleBackup[0])
                 .Where(item => item != null)
-                .ToArray();
-            var duplicates = values
-                .Where(item => item != null)
-                .GroupBy(
-                    VbaResourceProvider.BackupSemanticBaseTarget,
-                    StringComparer.OrdinalIgnoreCase)
-                .ToDictionary(
-                    group => group.Key,
-                    group => group.Count(),
-                    StringComparer.OrdinalIgnoreCase);
-            return values.Select(item => Tuple.Create(
-                item,
-                VbaResourceProvider.BackupSemanticTarget(
+                .Select(item => Tuple.Create(
                     item,
-                    duplicates[VbaResourceProvider.BackupSemanticBaseTarget(item)] > 1)))
+                    VbaResourceProvider.BackupSemanticTarget(item)))
                 .ToArray();
         }
 

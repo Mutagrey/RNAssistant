@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Globalization;
 using System.Linq;
 using RNAssistant.Core.Models;
 
@@ -21,9 +22,9 @@ namespace RNAssistant.Office.Services
             scope = NormalizeIntentScope(scope);
             var unavailable = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
             var sourceTruncated = false;
-            var plans = IntentListPlans().ToList();
+            var plans = IntentPlansForScope(scope).ToList();
             if (!string.Equals(scope, "all", StringComparison.Ordinal) &&
-                !plans.Any(plan => ScopeMatches(scope, plan.Scope)))
+                plans.Count == 0)
             {
                 unavailable.Add(scope);
             }
@@ -97,8 +98,9 @@ namespace RNAssistant.Office.Services
             var failures = new Dictionary<string, ResourceRequestException>(
                 StringComparer.OrdinalIgnoreCase);
             var truncated = false;
+            var scope = IntentTargetScope(target);
             var states = EnumerateIntentResources(
-                session, IntentListPlans().ToList(), unavailable, failures, ref truncated);
+                session, IntentPlansForScope(scope), unavailable, failures, ref truncated);
             AssignIntentTargets(states);
             var matches = states.Where(state => string.Equals(
                     state.Target, target, StringComparison.Ordinal))
@@ -114,15 +116,11 @@ namespace RNAssistant.Office.Services
             if (matches.Count == 0)
             {
                 ResourceRequestException failure;
-                if (failures.TryGetValue(IntentTargetScope(target), out failure))
+                if (failures.TryGetValue(scope, out failure))
                     throw failure;
-                var suffix = unavailable.Count > 0
-                    ? " Some semantic scopes are currently unavailable: " +
-                        string.Join(", ", unavailable.OrderBy(value => value).ToArray()) + "."
-                    : string.Empty;
                 throw new ResourceRequestException(
                     "Resource target is no longer available: " + target +
-                    ". Run common.resources_find and choose one exact returned target." + suffix,
+                    ". Run common.resources_find and choose one exact returned target.",
                     "resource_target_not_found",
                     true);
             }
@@ -286,6 +284,22 @@ namespace RNAssistant.Office.Services
             }
         }
 
+        private IEnumerable<ResourceIntentPlan> IntentPlansForScope(string scope)
+        {
+            foreach (var plan in IntentListPlans())
+            {
+                if (ScopeMatches(scope, plan.Scope) ||
+                    string.Equals(scope, "html", StringComparison.Ordinal) &&
+                    string.Equals(plan.Provider.Id,
+                        ChatArtifactResourceProvider.ProviderName,
+                        StringComparison.OrdinalIgnoreCase) &&
+                    plan.Kind == null)
+                {
+                    yield return plan;
+                }
+            }
+        }
+
         private static void AddIntentState(
             ICollection<ResourceIntentState> states,
             ResourceDescriptor descriptor)
@@ -300,33 +314,15 @@ namespace RNAssistant.Office.Services
                     descriptor.Reference.Uri,
                     descriptor.Reference.Revision),
                 Type = type,
-                Scope = IntentScope(descriptor, type),
-                BaseTarget = IntentBaseTarget(descriptor)
+                Scope = IntentScope(descriptor, type)
             });
         }
 
         private static void AssignIntentTargets(
             IEnumerable<ResourceIntentState> states)
         {
-            foreach (var group in (states ?? new ResourceIntentState[0])
-                .GroupBy(state => state.BaseTarget,
-                    StringComparer.OrdinalIgnoreCase))
-            {
-                var values = group.ToList();
-                if (values.Count == 1)
-                {
-                    values[0].Target = values[0].BaseTarget;
-                    continue;
-                }
-                foreach (var state in values)
-                {
-                    state.Target = state.BaseTarget +
-                        (state.Descriptor.CreatedUtc.HasValue
-                            ? " [created " + state.Descriptor.CreatedUtc.Value
-                                .ToUniversalTime().ToString("yyyy-MM-dd HH:mm:ss'Z'") + "]"
-                            : " [" + state.Scope + "]");
-                }
-            }
+            foreach (var state in states ?? new ResourceIntentState[0])
+                state.Target = IntentTarget(state.Descriptor);
         }
 
         private static ResourceIntentCandidate ProjectIntentCandidate(
@@ -376,17 +372,15 @@ namespace RNAssistant.Office.Services
                     : descriptor.Title.Trim());
         }
 
-        internal static string IntentTarget(
-            ResourceDescriptor descriptor,
-            bool duplicate)
+        internal static string IntentTarget(ResourceDescriptor descriptor)
         {
             var value = IntentBaseTarget(descriptor);
-            if (!duplicate) return value;
-            var type = IntentType(descriptor);
-            return value + (descriptor != null && descriptor.CreatedUtc.HasValue
-                ? " [created " + descriptor.CreatedUtc.Value.ToUniversalTime()
-                    .ToString("yyyy-MM-dd HH:mm:ss'Z'") + "]"
-                : " [" + IntentScope(descriptor, type) + "]");
+            return descriptor != null && descriptor.CreatedUtc.HasValue
+                ? value + " [created " + descriptor.CreatedUtc.Value
+                    .ToUniversalTime().ToString(
+                        "yyyy-MM-dd'T'HH:mm:ss.fffffff'Z'",
+                        CultureInfo.InvariantCulture) + "]"
+                : value;
         }
 
         private static ResourceSearchMatch Match(
@@ -521,7 +515,6 @@ namespace RNAssistant.Office.Services
             public ResourceRef Reference { get; set; }
             public string Type { get; set; }
             public string Scope { get; set; }
-            public string BaseTarget { get; set; }
             public string Target { get; set; }
         }
     }

@@ -2412,7 +2412,8 @@ namespace RNAssistant.Harness
                 };
                 session.Artifacts.Add(artifact);
                 var uri = ArtifactUri(session, artifact);
-                const string target = "note: Reference note";
+                var target = executor.ResourceGateway.Find(
+                    session, "Reference note", "conversation").Items.Single().Target;
                 var responses = new Queue<string>(new[]
                 {
                     "{\"message\":\"Читаю заметку.\",\"tool_calls\":[{\"name\":\"common.resources_read\",\"arguments\":{\"target\":\"" + target + "\",\"representation\":\"text\"}}]}",

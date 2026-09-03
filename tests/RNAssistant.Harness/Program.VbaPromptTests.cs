@@ -248,13 +248,13 @@ namespace RNAssistant.Harness
                     "model prompt exposes two complete restore alternatives without an optional envelope");
                 var backupTime = new DateTime(
                     2026, 9, 3, 10, 0, 0, DateTimeKind.Utc);
-                var firstTarget = VbaResourceProvider.BackupSemanticBaseTarget(
+                var firstTarget = VbaResourceProvider.BackupSemanticTarget(
                     new VbaModuleBackup
                     {
                         ModuleName = "Module1",
                         CreatedUtc = backupTime.AddTicks(1)
                     });
-                var secondTarget = VbaResourceProvider.BackupSemanticBaseTarget(
+                var secondTarget = VbaResourceProvider.BackupSemanticTarget(
                     new VbaModuleBackup
                     {
                         ModuleName = "Module1",

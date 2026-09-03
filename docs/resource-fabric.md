@@ -1,6 +1,6 @@
 # Resource Fabric
 
-Status: implemented through the user-requested R61/11O1 whole-read correction host-neutral. Providers retain exact typed resource state; the public model surface is the semantic `common.resources_find/read` pair. Replaced public list/resolve/search handlers, continuation arguments and ids are removed without aliases.
+Status: implemented through R61/11O1 whole-read correction and D05.3 stable semantic target resolution host-neutral. Providers retain exact typed resource state; the public model surface is the semantic `common.resources_find/read` pair. Replaced public list/resolve/search handlers, continuation arguments and ids are removed without aliases.
 
 ## Goals
 
@@ -61,7 +61,11 @@ The public surface is now `common.resources_find` and `common.resources_read`.
 `find` accepts only optional literal `query` and semantic `scope`, returns at most
 20 readable targets, distinguishes true empty from unavailable/partial scopes and
 keeps provider routing, kind vocabulary and paging internal. A query is explicitly
-a filtered match set, not an inventory. For an unfiltered `vba` browse, the project
+a filtered match set, not an inventory. A scoped find enumerates only provider plans
+that can supply that semantic scope. Resources with creation evidence always carry
+the same full-precision readable UTC timestamp in their target; sibling additions
+cannot conditionally rename it, while equal human titles remain distinguishable.
+For an unfiltered `vba` browse, the project
 target is pinned first even when the visible module candidates are truncated; its
 `structure` representation contains the complete discovered component inventory
 with semantic component targets only. A runtime-owned `rna://` value is never an
@@ -71,7 +75,8 @@ For the exact bound VBA-capable document, `RUNTIME_CONTEXT.document` also expose
 the readable `vba_project_target`; a project-wide question can therefore start with
 `read` and does not need a discovery round-trip. `read` accepts that runtime target
 or one exact target returned by `find`, plus an optional representation, and
-returns that representation whole in one public call. Providers may page internally,
+routes it only through provider plans for the target's semantic scope. It returns
+that representation whole in one public call. Providers may page internally,
 but runtime reconstructs one exact contiguous revision-guarded result before model
 publication. URI, revision/hash, cursor, offset, page size and continuation action
 are absent from schema, model result, `RUNTIME_CONTEXT`, media provenance and
@@ -237,6 +242,6 @@ Users may clear Chats/Data during the cutover. Unsupported prior streams are ski
 5. **Done:** plan/HTML reads use canonical `chat` resources; live Office document/selection and VBA project/component/backup providers are registered. Duplicated plan/HTML/VBA reads plus host `get_context/get_selection` tools are removed without aliases; domain-specific range/slide/mail reads remain typed tools.
 6. **Done:** Agent receives one compact exact-id tool/skill catalog plus `common.capabilities_search/read`; exact revisioned tool schemas enter a finite-core plus atomic optional `CallableToolPack`, and full-schema catalog injection is removed. Optional membership has no LRU or execution touches and is reconstructed only from the exact accepted extension chain for the logical turn. Split model-facing tool/skill readers were removed without aliases. Custom-definition inspection remains `common.tools_definition_read`.
 7. **Done:** durable messages, media handoff, compaction, fork reachability, replay, and trajectory diagnostics carry revision-pinned `ResourceRef` values. Internal `ArtifactIds` message transport and `ChatArtifactService` are removed; event schema 3/session format 6 reject pre-cutover streams without migration.
-8. **Done host-neutral (R61/11O1 plus whole-read correction):** public resource discovery is the semantic `find/read` pair; provider routing, exact references, revisions and internal continuations stay in runtime state and are removed from model arguments/results/context/history. One read call returns one complete representation or an explicit error. Capability catalog/read follows the same model-visibility boundary while durable admission events retain exact revisions.
+8. **Done host-neutral (R61/11O1 whole-read correction plus D05.3):** public resource discovery is the semantic `find/read` pair; stable readable targets route through their exact semantic scope while provider routing, exact references, revisions and internal continuations stay in runtime state and are removed from model arguments/results/context/history. One read call returns one complete representation or an explicit error. Capability catalog/read follows the same model-visibility boundary while durable admission events retain exact revisions.
 
 Each slice must leave one authoritative path for the capability it migrates and add harness coverage for URI safety, provider bounds, replay, context compaction, media hydration lifetime, and Chat mutation denial.

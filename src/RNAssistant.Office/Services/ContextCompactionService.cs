@@ -417,19 +417,13 @@ namespace RNAssistant.Office.Services
                         Title = artifact.Title,
                         CreatedUtc = artifact.CreatedUtc
                     }, StringComparer.OrdinalIgnoreCase);
-                var duplicateTargets = new HashSet<string>(descriptors.Values
-                    .GroupBy(ResourceGatewayService.IntentBaseTarget, StringComparer.OrdinalIgnoreCase)
-                    .Where(group => group.Count() > 1)
-                    .Select(group => group.Key), StringComparer.OrdinalIgnoreCase);
                 foreach (var artifact in artifacts.Take(100))
                 {
                     ResourceDescriptor descriptor;
                     if (!descriptors.TryGetValue(artifact.Id, out descriptor)) continue;
                     artifactIndex.AppendLine(
                         "target=" + ModelContextBudget.TruncateText(
-                            ResourceGatewayService.IntentTarget(
-                                descriptor,
-                                duplicateTargets.Contains(ResourceGatewayService.IntentBaseTarget(descriptor))),
+                            ResourceGatewayService.IntentTarget(descriptor),
                             256,
                             settings) + " | type=" + ResourceGatewayService.IntentType(descriptor));
                 }

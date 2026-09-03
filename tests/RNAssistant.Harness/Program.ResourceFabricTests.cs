@@ -97,6 +97,63 @@ namespace RNAssistant.Harness
                 "missing semantic scope is explicitly incomplete");
             AssertTrue(unavailable.UnavailableScopes.Contains("vba"),
                 "missing VBA provider is reported through its semantic scope");
+
+            var chat = new TestResourceProvider("chat");
+            var unrelatedVba = new TestResourceProvider("vba", true);
+            var scopedGateway = new ResourceGatewayService(new IResourceProvider[]
+            {
+                chat,
+                unrelatedVba
+            });
+            var scopedFind = scopedGateway.Find(new ChatSession(), null, "conversation");
+            var scopedTarget = scopedFind.Items.Single().Target;
+            AssertTrue(scopedFind.Complete && !scopedFind.Partial,
+                "an unavailable unrelated provider does not make scoped find partial");
+            AssertEqual(0, unrelatedVba.ListCalls,
+                "scoped find does not enumerate an unrelated provider");
+            AssertEqual("rna://chat/item",
+                scopedGateway.ResolveIntentTarget(new ChatSession(), scopedTarget).Reference.Uri,
+                "semantic read resolution uses the target scope");
+            AssertEqual(0, unrelatedVba.ListCalls,
+                "semantic read resolution does not enumerate an unrelated provider");
+
+            var created = new DateTime(2026, 9, 3, 12, 0, 0, DateTimeKind.Utc);
+            var first = new ChatArtifact
+            {
+                Id = "stable-first",
+                Kind = ChatArtifactKinds.Markdown,
+                Title = "Repeated title",
+                InlineText = "first",
+                CreatedUtc = created.AddTicks(1)
+            };
+            var duplicateSession = new ChatSession
+            {
+                Artifacts = new System.Collections.Generic.List<ChatArtifact> { first }
+            };
+            var duplicateGateway = new ResourceGatewayService();
+            var stableTarget = duplicateGateway.Find(
+                duplicateSession, null, "conversation").Items.Single().Target;
+            duplicateSession.Artifacts.Add(new ChatArtifact
+            {
+                Id = "stable-second",
+                Kind = ChatArtifactKinds.Markdown,
+                Title = first.Title,
+                InlineText = "second",
+                CreatedUtc = created.AddTicks(2)
+            });
+            var duplicates = duplicateGateway.Find(
+                duplicateSession, null, "conversation").Items;
+            AssertEqual(2, duplicates.Select(item => item.Target)
+                    .Distinct(StringComparer.OrdinalIgnoreCase).Count(),
+                "duplicate human titles retain distinct stable targets");
+            AssertEqual(ChatResourceUri.CreateArtifactRevisionUri(duplicateSession, first),
+                duplicateGateway.ResolveIntentTarget(
+                    duplicateSession, stableTarget).Reference.Uri,
+                "a target remains bound when a duplicate title is added");
+            AssertTrue(duplicates.All(item =>
+                    item.Target.IndexOf("rna://", StringComparison.OrdinalIgnoreCase) < 0 &&
+                    item.Target.IndexOf("stable-", StringComparison.OrdinalIgnoreCase) < 0),
+                "stable duplicate targets expose no runtime identity");
         }
 
         private static void ResourceToolsHardCutoverArtifactTools()
@@ -123,15 +180,22 @@ namespace RNAssistant.Harness
 
         private sealed class TestResourceProvider : IResourceProvider
         {
-            public TestResourceProvider(string id)
+            private readonly bool _failList;
+
+            public TestResourceProvider(string id, bool failList = false)
             {
                 Id = id;
+                _failList = failList;
             }
 
             public string Id { get; private set; }
+            public int ListCalls { get; private set; }
 
             public ResourceListPage List(ChatSession session, string kind, string cursor, int limit)
             {
+                ListCalls++;
+                if (_failList)
+                    throw new InvalidOperationException("provider unavailable");
                 return new ResourceListPage
                 {
                     Items = new System.Collections.Generic.List<ResourceDescriptor>

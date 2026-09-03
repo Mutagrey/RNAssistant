@@ -192,18 +192,10 @@ namespace RNAssistant.Office.Services
             return descriptor;
         }
 
-        internal static string BackupSemanticBaseTarget(VbaModuleBackup backup)
-        {
-            return ResourceGatewayService.IntentBaseTarget(
-                BackupSemanticDescriptor(backup));
-        }
-
-        internal static string BackupSemanticTarget(
-            VbaModuleBackup backup,
-            bool duplicate)
+        internal static string BackupSemanticTarget(VbaModuleBackup backup)
         {
             return ResourceGatewayService.IntentTarget(
-                BackupSemanticDescriptor(backup), duplicate);
+                BackupSemanticDescriptor(backup));
         }
 
         private static ResourceDescriptor BackupSemanticDescriptor(

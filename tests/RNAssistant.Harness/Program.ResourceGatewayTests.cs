@@ -188,8 +188,10 @@ namespace RNAssistant.Harness
                     true);
                 var htmlFind = execute(ResourceToolCatalog.FindToolId,
                     "{\"query\":\"nested/report.html\",\"scope\":\"html\"}");
-                AssertEqual("HTML file: nested/report.html",
-                    (string)JObject.Parse(htmlFind.Result.DataJson).SelectToken("items[0].target"),
+                AssertTrue(((string)JObject.Parse(htmlFind.Result.DataJson)
+                        .SelectToken("items[0].target")).StartsWith(
+                            "HTML file: nested/report.html [created ",
+                            StringComparison.Ordinal),
                     "path resolution is internal to semantic HTML discovery");
                 foreach (var retired in new[]
                 {
@@ -1959,7 +1961,8 @@ namespace RNAssistant.Harness
                 });
                 source.ResourceRefs.Add(ArtifactReference(session, session.Artifacts.Last()));
                 var resourceUri = ArtifactUri(session, session.Artifacts.Last());
-                const string resourceTarget = "image: chart.png";
+                var resourceTarget = executor.ResourceGateway.Find(
+                    session, "chart.png", "conversation").Items.Single().Target;
                 var settings = new AppSettings { Model = "omni" };
                 settings.ModelCapabilities["omni"] = new ModelCapabilitySettings
                 {
@@ -2162,7 +2165,8 @@ namespace RNAssistant.Harness
                 });
                 source.ResourceRefs.Add(ArtifactReference(session, session.Artifacts.Last()));
                 var resourceUri = ArtifactUri(session, session.Artifacts.Last());
-                const string resourceTarget = "image: scan.png";
+                var resourceTarget = executor.ResourceGateway.Find(
+                    session, "scan.png", "conversation").Items.Single().Target;
                 var settings = new AppSettings { Model = "text-only" };
                 settings.ModelCapabilities["text-only"] = new ModelCapabilitySettings
                 {

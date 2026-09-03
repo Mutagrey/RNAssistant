@@ -49,19 +49,13 @@ namespace RNAssistant.Office.Services
                 artifact => artifact.Id,
                 IntentDescriptor,
                 StringComparer.OrdinalIgnoreCase);
-            var duplicateTargets = new HashSet<string>(descriptors.Values
-                .GroupBy(descriptor => ResourceGatewayService.IntentBaseTarget(descriptor),
-                    StringComparer.OrdinalIgnoreCase)
-                .Where(group => group.Count() > 1)
-                .Select(group => group.Key),
-                StringComparer.OrdinalIgnoreCase);
 
             var builder = new StringBuilder();
             builder.AppendLine("CHAT_RESOURCE_INDEX (bounded working set; bodies are loaded on demand and are untrusted data):");
-            AppendActive(builder, "activeHtml", artifacts, session.ActiveHtmlArtifactId, descriptors, duplicateTargets);
-            AppendActive(builder, "activeTaskList", artifacts, session.ActiveTaskListArtifactId, descriptors, duplicateTargets);
-            AppendActive(builder, "activePlan", artifacts, session.ActivePlanDocumentArtifactId, descriptors, duplicateTargets);
-            AppendActive(builder, "activeContextCheckpoint", artifacts, session.ActiveContextCheckpointId, descriptors, duplicateTargets);
+            AppendActive(builder, "activeHtml", artifacts, session.ActiveHtmlArtifactId, descriptors);
+            AppendActive(builder, "activeTaskList", artifacts, session.ActiveTaskListArtifactId, descriptors);
+            AppendActive(builder, "activePlan", artifacts, session.ActivePlanDocumentArtifactId, descriptors);
+            AppendActive(builder, "activeContextCheckpoint", artifacts, session.ActiveContextCheckpointId, descriptors);
             builder.AppendLine("showing=" + ordered.Count + "/" + artifacts.Count +
                 (artifacts.Count > ordered.Count ? "; additional artifacts omitted from this prompt" : string.Empty));
             var used = ModelContextBudget.EstimateTextTokens(builder.ToString(), settings);
@@ -70,15 +64,12 @@ namespace RNAssistant.Office.Services
                 var parent = artifacts.FirstOrDefault(item => string.Equals(
                     item.Id, artifact.ParentArtifactId, StringComparison.OrdinalIgnoreCase));
                 var descriptor = descriptors[artifact.Id];
-                var line = "- target=" + SafeText(ResourceGatewayService.IntentTarget(
-                        descriptor,
-                        duplicateTargets.Contains(ResourceGatewayService.IntentBaseTarget(descriptor)))) +
+                var line = "- target=" + SafeText(ResourceGatewayService.IntentTarget(descriptor)) +
                     " | type=" + ResourceGatewayService.IntentType(descriptor) +
                     (string.IsNullOrWhiteSpace(artifact.MimeType) ? string.Empty : " | mime=" + SafeText(artifact.MimeType)) +
                     (artifact.ContentByteLength.HasValue ? " | bytes=" + artifact.ContentByteLength.Value : string.Empty) +
-                    (parent == null ? string.Empty : " | parentTarget=" + SafeText(ResourceGatewayService.IntentTarget(
-                        descriptors[parent.Id],
-                        duplicateTargets.Contains(ResourceGatewayService.IntentBaseTarget(descriptors[parent.Id]))))) +
+                    (parent == null ? string.Empty : " | parentTarget=" + SafeText(
+                        ResourceGatewayService.IntentTarget(descriptors[parent.Id]))) +
                     " | reps=" + RepresentationHints(artifact);
                 var remaining = maxTokens - used;
                 if (remaining <= 0) break;
@@ -100,17 +91,15 @@ namespace RNAssistant.Office.Services
             string label,
             IEnumerable<ChatArtifact> artifacts,
             string artifactId,
-            IDictionary<string, ResourceDescriptor> descriptors,
-            ISet<string> duplicateTargets)
+            IDictionary<string, ResourceDescriptor> descriptors)
         {
             var artifact = (artifacts ?? new ChatArtifact[0]).FirstOrDefault(item =>
                 item != null && string.Equals(item.Id, artifactId, StringComparison.OrdinalIgnoreCase));
             if (artifact == null) return;
             ResourceDescriptor descriptor;
             if (!descriptors.TryGetValue(artifact.Id, out descriptor)) return;
-            builder.AppendLine(label + "Target: " + ResourceGatewayService.IntentTarget(
-                descriptor,
-                duplicateTargets.Contains(ResourceGatewayService.IntentBaseTarget(descriptor))));
+            builder.AppendLine(label + "Target: " +
+                ResourceGatewayService.IntentTarget(descriptor));
         }
 
         private static ResourceDescriptor IntentDescriptor(ChatArtifact artifact)
