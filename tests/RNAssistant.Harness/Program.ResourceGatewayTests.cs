@@ -73,6 +73,25 @@ namespace RNAssistant.Harness
                 AssertEqual(1, ((JArray)JObject.Parse(
                     (string)JObject.Parse(directProjectRead.Result.DataJson)["text"])["components"]).Count,
                     "direct project read returns the exact bound component inventory");
+                var directProjectStructure = JObject.Parse(
+                    (string)JObject.Parse(directProjectRead.Result.DataJson)["text"]);
+                AssertTrue(directProjectStructure.ToString(Formatting.None)
+                        .IndexOf("rna://", StringComparison.OrdinalIgnoreCase) < 0,
+                    "VBA project structure never exposes runtime resource URIs");
+                AssertEqual("VBA module: Module1",
+                    (string)directProjectStructure.SelectToken(
+                        "components[0].target"),
+                    "VBA project structure exposes the readable module target");
+                var directModuleRead = execute(
+                    ResourceToolCatalog.ReadToolId,
+                    JsonConvert.SerializeObject(new
+                    {
+                        target = (string)directProjectStructure.SelectToken(
+                            "components[0].target"),
+                        representation = ResourceRepresentations.Source
+                    }));
+                AssertEqual(ToolExecutionOutcome.Ok, directModuleRead.Outcome,
+                    "semantic module target remains readable immediately after structure read");
 
                 var found = execute(ResourceToolCatalog.FindToolId, "{\"scope\":\"conversation\"}");
                 AssertEqual(ToolExecutionOutcome.Ok, found.Outcome, "semantic resource find succeeds in chat mode");
@@ -87,6 +106,33 @@ namespace RNAssistant.Harness
                     "find data does not expose provider routing or exact reference plumbing");
                 var resourceUri = found.Result.Resources.Single(reference =>
                     reference.Uri.StartsWith("rna://", StringComparison.Ordinal)).Uri;
+
+                var opaqueTarget = execute(
+                    ResourceToolCatalog.ReadToolId,
+                    JsonConvert.SerializeObject(new
+                    {
+                        target = resourceUri,
+                        representation = ResourceRepresentations.Text
+                    }));
+                AssertEqual(ToolExecutionOutcome.Error, opaqueTarget.Outcome,
+                    "runtime-owned URI is rejected as a semantic read target");
+                AssertEqual("resource_target_runtime_owned",
+                    (string)JObject.Parse(opaqueTarget.Result.DataJson)["code"],
+                    "opaque target has a stable recovery code");
+                AssertTrue(opaqueTarget.Message.IndexOf(resourceUri,
+                        StringComparison.OrdinalIgnoreCase) < 0,
+                    "opaque target error does not echo the URI into model context");
+                string historyError;
+                AssertTrue(!ModelToolResultProjection.ValidateAcceptedCall(
+                        new ToolCall("opaque_history",
+                            ResourceToolCatalog.ReadToolId,
+                            JsonConvert.SerializeObject(new
+                            {
+                                target = resourceUri,
+                                representation = ResourceRepresentations.Text
+                            })),
+                        out historyError),
+                    "stored resource URI target requires explicit chat reset");
 
                 var calls = new Dictionary<string, string>(StringComparer.Ordinal)
                 {
@@ -223,6 +269,9 @@ namespace RNAssistant.Harness
                 var projectManifest = JObject.Parse((string)projectReadData["text"]);
                 AssertEqual(81, ((JArray)projectManifest["components"]).Count,
                     "project structure contains every live VBA module, not only the visible find page");
+                AssertTrue(projectManifest.ToString(Formatting.None)
+                        .IndexOf("rna://", StringComparison.OrdinalIgnoreCase) < 0,
+                    "large project structure contains semantic targets only");
 
                 var retiredNext = execute(ResourceToolCatalog.ReadToolId,
                     JsonConvert.SerializeObject(new

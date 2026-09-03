@@ -105,7 +105,9 @@ namespace RNAssistant.Office.Tools
                     {
                         Operation = "replace",
                         Find = (string)item["find"],
-                        Text = (string)item["text"]
+                        Text = (string)item["text"],
+                        ContextBefore = (string)item["contextBefore"],
+                        ContextAfter = (string)item["contextAfter"]
                     });
             }
             return operations;

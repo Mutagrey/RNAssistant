@@ -54,7 +54,11 @@ namespace RNAssistant.Core.Tools
                 return false;
             }
 
-            if (!string.Equals((string)parsed["type"], "object", StringComparison.OrdinalIgnoreCase) || !(parsed["properties"] is JObject))
+            if (parsed["type"] == null ||
+                parsed["type"].Type != JTokenType.String ||
+                !string.Equals((string)parsed["type"], "object",
+                    StringComparison.OrdinalIgnoreCase) ||
+                !(parsed["properties"] is JObject))
             {
                 error = "argumentSchemaJson must be a formal JSON Schema object with type=object and properties.";
                 return false;
@@ -106,7 +110,9 @@ namespace RNAssistant.Core.Tools
                     error = "argumentSchemaJson.properties." + property.Name + " must be an object.";
                     return false;
                 }
-                if (string.IsNullOrWhiteSpace((string)propertySchema["description"]))
+                if (propertySchema["description"] == null ||
+                    propertySchema["description"].Type != JTokenType.String ||
+                    string.IsNullOrWhiteSpace((string)propertySchema["description"]))
                 {
                     error = "argumentSchemaJson.properties." + property.Name + ".description is required.";
                     return false;
@@ -521,8 +527,12 @@ namespace RNAssistant.Core.Tools
         {
             if (typeToken == null) return true;
             var types = typeToken.Type == JTokenType.Array
-                ? ((JArray)typeToken).Values<string>()
-                : new[] { (string)typeToken };
+                ? ((JArray)typeToken).Where(item =>
+                    item != null && item.Type == JTokenType.String)
+                    .Select(item => (string)item)
+                : typeToken.Type == JTokenType.String
+                    ? new[] { (string)typeToken }
+                    : new string[0];
             foreach (var type in types)
             {
                 if (string.Equals(type, "null", StringComparison.OrdinalIgnoreCase) && (value == null || value.Type == JTokenType.Null)) return true;
@@ -540,9 +550,13 @@ namespace RNAssistant.Core.Tools
         private static bool HasValidType(JToken typeToken)
         {
             if (typeToken == null) return false;
-            var types = typeToken.Type == JTokenType.Array
-                ? ((JArray)typeToken).Values<string>().ToArray()
-                : new[] { typeToken.Type == JTokenType.String ? (string)typeToken : null };
+            var array = typeToken as JArray;
+            if (array != null && array.Any(item =>
+                    item == null || item.Type != JTokenType.String)) return false;
+            var types = array != null
+                ? array.Select(item => (string)item).ToArray()
+                : new[] { typeToken.Type == JTokenType.String
+                    ? (string)typeToken : null };
             return types.Length > 0 &&
                 types.Distinct(StringComparer.OrdinalIgnoreCase).Count() == types.Length &&
                 types.All(type =>

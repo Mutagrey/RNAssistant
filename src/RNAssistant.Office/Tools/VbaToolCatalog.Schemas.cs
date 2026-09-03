@@ -131,7 +131,7 @@ namespace RNAssistant.Office.Tools
             var find = new JObject
             {
                 ["type"] = "string",
-                ["description"] = "Exact current VBA source block copied from a recent bounded read. Include enough unchanged surrounding source for exactly one match. LF and CRLF are accepted.",
+                ["description"] = "Exact current VBA source to replace, copied from a recent read of moduleName. If it repeats, keep find minimal and add exact contextBefore/contextAfter. LF and CRLF are accepted.",
                 ["minLength"] = 1
             };
             var text = new JObject
@@ -145,7 +145,17 @@ namespace RNAssistant.Office.Tools
                 ["properties"] = new JObject
                 {
                     ["find"] = find,
-                    ["text"] = text
+                    ["text"] = text,
+                    ["contextBefore"] = new JObject
+                    {
+                        ["type"] = "string",
+                        ["description"] = "Optional exact source immediately before find, copied from the same current module read. Use it to disambiguate repeated find text; it is verified but not replaced."
+                    },
+                    ["contextAfter"] = new JObject
+                    {
+                        ["type"] = "string",
+                        ["description"] = "Optional exact source immediately after find, copied from the same current module read. Use it to disambiguate repeated find text; it is verified but not replaced."
+                    }
                 },
                 ["required"] = new JArray("find", "text"),
                 ["additionalProperties"] = false

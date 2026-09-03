@@ -547,6 +547,7 @@ namespace RNAssistant.Harness
                 Test("vba: code-only UserForm authoring skill", VbaCodeOnlyUserFormSkillIsExplicit),
                 Test("vba: resources read bounded source", VbaResourcesReadBoundedSource),
                 Test("vba: patch rejects ambiguous exact source", VbaPatchRejectsAmbiguousExactSource),
+                Test("vba: patch disambiguates with exact context", VbaPatchDisambiguatesWithExactContext),
                 Test("vba: exact patch preserves boundary newlines", VbaExactPatchPreservesBoundaryNewlines),
                 Test("vba: write rejects hidden controls", VbaWriteRejectsHiddenControlCharacters),
                 Test("vba: regex patch and safe delete", VbaSearchRegexpPatchAndDeleteAreSafe),

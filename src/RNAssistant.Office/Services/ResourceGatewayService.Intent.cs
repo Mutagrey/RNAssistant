@@ -86,6 +86,13 @@ namespace RNAssistant.Office.Services
                     "resource_target_required",
                     true);
             }
+            if (IsRuntimeOwnedIntentTarget(target))
+            {
+                throw new ResourceRequestException(
+                    "Exact resource URIs are runtime-owned and cannot be used as model targets. Run common.resources_find and pass one exact returned semantic target.",
+                    "resource_target_runtime_owned",
+                    true);
+            }
             var unavailable = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
             var failures = new Dictionary<string, ResourceRequestException>(
                 StringComparer.OrdinalIgnoreCase);
@@ -130,6 +137,12 @@ namespace RNAssistant.Office.Services
                     match.Reference.Uri,
                     match.Reference.Revision)
             };
+        }
+
+        internal static bool IsRuntimeOwnedIntentTarget(string target)
+        {
+            return (target ?? string.Empty).Trim().StartsWith(
+                "rna://", StringComparison.OrdinalIgnoreCase);
         }
 
         private List<ResourceIntentState> EnumerateIntentResources(

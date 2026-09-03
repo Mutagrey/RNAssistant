@@ -35,11 +35,14 @@ namespace RNAssistant.Core.Tools
             var start = code.IndexOf(OpenMarker, StringComparison.Ordinal);
             var end = code.IndexOf(CloseMarker, StringComparison.Ordinal);
             if (start < 0 || end < start) return VbaToolManifestParseResult.Fail("manifest_missing", "VBA tool manifest markers were not found.");
+            if (!ManifestLinesAreComments(code, start, end + CloseMarker.Length))
+                return VbaToolManifestParseResult.Fail("manifest_not_commented", "Every VBA tool manifest line, including both markers, must be a VBA comment.");
             try
             {
                 var manifest = JObject.Parse(StripCommentPrefixes(code.Substring(start + OpenMarker.Length, end - start - OpenMarker.Length)));
-                var components = ReadStringArray(manifest["components"]);
-                if (components.Count == 0) return VbaToolManifestParseResult.Fail("manifest_components", "components must identify the entry module first.");
+                List<string> components;
+                if (!TryReadStringArray(manifest["components"], out components) || components.Count == 0)
+                    return VbaToolManifestParseResult.Fail("manifest_components", "components must be an array of VBA component-name strings with the entry module first.");
                 return Parse(components[0], code);
             }
             catch (JsonException ex)
@@ -56,6 +59,8 @@ namespace RNAssistant.Core.Tools
             var end = code.IndexOf(CloseMarker, StringComparison.Ordinal);
             if (start < 0 || end < start) return VbaToolManifestParseResult.Fail("manifest_missing", "VBA tool manifest markers were not found.");
             if (code.IndexOf(OpenMarker, start + OpenMarker.Length, StringComparison.Ordinal) >= 0) return VbaToolManifestParseResult.Fail("multiple_manifests", "Only one VBA tool manifest is allowed per entry module.");
+            if (!ManifestLinesAreComments(code, start, end + CloseMarker.Length))
+                return VbaToolManifestParseResult.Fail("manifest_not_commented", "Every VBA tool manifest line, including both markers, must be a VBA comment.");
 
             var manifestText = StripCommentPrefixes(code.Substring(start + OpenMarker.Length, end - start - OpenMarker.Length));
             JObject manifest;
@@ -75,7 +80,12 @@ namespace RNAssistant.Core.Tools
             }, StringComparer.Ordinal);
             var extra = manifest.Properties().FirstOrDefault(property => !allowed.Contains(property.Name));
             if (extra != null) return VbaToolManifestParseResult.Fail("manifest_unexpected_field", "Unsupported manifest field: " + extra.Name);
-            if ((int?)manifest["protocolVersion"] != 1) return VbaToolManifestParseResult.Fail("manifest_version", "protocolVersion must be 1.");
+            var protocolVersion = manifest["protocolVersion"];
+            if (protocolVersion == null ||
+                protocolVersion.Type != JTokenType.Integer ||
+                !string.Equals(protocolVersion.ToString(Formatting.None), "1",
+                    StringComparison.Ordinal))
+                return VbaToolManifestParseResult.Fail("manifest_version", "protocolVersion must be 1.");
 
             var id = StringValue(manifest["id"]);
             var host = NormalizeHost(StringValue(manifest["host"]));
@@ -84,17 +94,21 @@ namespace RNAssistant.Core.Tools
             if (string.IsNullOrWhiteSpace(host)) return VbaToolManifestParseResult.Fail("manifest_host", "host must be Excel, Word, or PowerPoint.");
             if (!ValidIdentifier(entryPoint)) return VbaToolManifestParseResult.Fail("invalid_entry_point", "entryPoint must be a valid VBA identifier of at most 40 characters.");
 
-            var components = ReadStringArray(manifest["components"]);
-            if (components.Count == 0 || !string.Equals(components[0], moduleName, StringComparison.OrdinalIgnoreCase))
+            List<string> components;
+            if (!TryReadStringArray(manifest["components"], out components) ||
+                components.Count == 0 ||
+                !string.Equals(components[0], moduleName, StringComparison.OrdinalIgnoreCase))
             {
-                return VbaToolManifestParseResult.Fail("manifest_components", "components must list the entry module first.");
+                return VbaToolManifestParseResult.Fail("manifest_components", "components must be an array of VBA component-name strings with the entry module first.");
             }
             if (components.Any(name => !ValidComponentName(name)) || components.Distinct(StringComparer.OrdinalIgnoreCase).Count() != components.Count)
             {
                 return VbaToolManifestParseResult.Fail("manifest_components", "components must contain unique valid VBA component names.");
             }
 
-            var argumentOrder = ReadStringArray(manifest["argumentOrder"]);
+            List<string> argumentOrder;
+            if (!TryReadStringArray(manifest["argumentOrder"], out argumentOrder))
+                return VbaToolManifestParseResult.Fail("argument_order", "argumentOrder must be an array of parameter-name strings.");
             if (argumentOrder.Distinct(StringComparer.OrdinalIgnoreCase).Count() != argumentOrder.Count)
             {
                 return VbaToolManifestParseResult.Fail("argument_order", "argumentOrder contains duplicate names.");
@@ -152,7 +166,11 @@ namespace RNAssistant.Core.Tools
                 var propertySchema = properties[argumentName] as JObject;
                 if (propertySchema == null) return VbaToolManifestParseResult.Fail("argument_schema_property", "argumentOrder property is missing from parameters: " + argumentName);
                 if (!string.Equals(parameter.Name, argumentName, StringComparison.OrdinalIgnoreCase)) return VbaToolManifestParseResult.Fail("signature_arguments", "Function parameter order/name does not match argumentOrder at " + argumentName + ".");
-                var expectedType = VbaType((string)propertySchema["type"]);
+                var propertyType = propertySchema["type"];
+                var expectedType = propertyType != null &&
+                    propertyType.Type == JTokenType.String
+                    ? VbaType((string)propertyType)
+                    : null;
                 if (expectedType == null || !string.Equals(parameter.Type, expectedType, StringComparison.OrdinalIgnoreCase))
                 {
                     return VbaToolManifestParseResult.Fail("signature_type", argumentName + " must use VBA type " + (expectedType ?? "String/Long/Double/Boolean") + ".");
@@ -186,6 +204,29 @@ namespace RNAssistant.Core.Tools
                 Regex.IsMatch(normalized, "(?im)^\\s*Attribute\\s+VB_Base\\s*=");
         }
 
+        public static string NormalizeManifestComments(string code)
+        {
+            code = code ?? string.Empty;
+            var newline = code.IndexOf("\r\n", StringComparison.Ordinal) >= 0
+                ? "\r\n"
+                : code.IndexOf('\r') >= 0 ? "\r" : "\n";
+            var normalized = code.Replace("\r\n", "\n").Replace('\r', '\n');
+            var lines = normalized.Split('\n');
+            var openLine = FindMarkerLine(lines, OpenMarker);
+            var closeLine = FindMarkerLine(lines, CloseMarker);
+            if (openLine < 0 || closeLine < openLine) return code;
+            for (var index = openLine; index <= closeLine; index++)
+            {
+                var line = lines[index] ?? string.Empty;
+                var indentationLength = line.Length - line.TrimStart().Length;
+                var indentation = line.Substring(0, indentationLength);
+                var content = line.Substring(indentationLength);
+                if (!content.StartsWith("'", StringComparison.Ordinal))
+                    lines[index] = indentation + "' " + content;
+            }
+            return string.Join(newline, lines);
+        }
+
         private static VbaSignatureResult ParseFunctionSignature(string trailingCode, string entryPoint)
         {
             var flattened = Regex.Replace(trailingCode ?? string.Empty, "_\\s*(?:\\r?\\n)", " ");
@@ -214,10 +255,48 @@ namespace RNAssistant.Core.Tools
             }).ToArray()).Trim();
         }
 
-        private static List<string> ReadStringArray(JToken token)
+        private static bool TryReadStringArray(JToken token, out List<string> values)
         {
             var array = token as JArray;
-            return array == null ? new List<string>() : array.Values<string>().Where(value => !string.IsNullOrWhiteSpace(value)).Select(value => value.Trim()).ToList();
+            values = new List<string>();
+            if (array == null) return false;
+            foreach (var item in array)
+            {
+                if (item == null || item.Type != JTokenType.String) return false;
+                var value = ((string)item ?? string.Empty).Trim();
+                if (value.Length == 0) return false;
+                values.Add(value);
+            }
+            return true;
+        }
+
+        private static bool ManifestLinesAreComments(
+            string code, int start, int end)
+        {
+            var lineStart = (code ?? string.Empty).LastIndexOf('\n',
+                Math.Max(0, start - 1));
+            lineStart = lineStart < 0 ? 0 : lineStart + 1;
+            var block = code.Substring(lineStart,
+                Math.Min(code.Length, end) - lineStart)
+                .Replace("\r\n", "\n").Replace('\r', '\n');
+            return block.Split('\n').Where(line =>
+                    !string.IsNullOrWhiteSpace(line))
+                .All(line => line.TrimStart().StartsWith("'",
+                    StringComparison.Ordinal));
+        }
+
+        private static int FindMarkerLine(string[] lines, string marker)
+        {
+            for (var index = 0; index < (lines == null ? 0 : lines.Length);
+                index++)
+            {
+                var value = (lines[index] ?? string.Empty).Trim();
+                if (value.StartsWith("'", StringComparison.Ordinal))
+                    value = value.Substring(1).Trim();
+                if (string.Equals(value, marker, StringComparison.Ordinal))
+                    return index;
+            }
+            return -1;
         }
 
         private static string VbaType(string jsonType)

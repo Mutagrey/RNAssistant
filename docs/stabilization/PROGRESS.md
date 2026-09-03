@@ -9,6 +9,22 @@ Next step for tools: final post-cutover Windows rebuild/live-provider/WebView2 q
 Required context: [11O7 evidence](PHASE_11O7_TOOL_LIBRARY_UX.md), [Tool Library contract](../tool-library.md#mandatory-all-tool-contract-audit-r61), [R61 audit](R61_TOOL_CONTRACT_AUDIT.md), [Qualification](../qualification.md) and the exact Windows gate instructions only.
 Open gates / remaining legacy: active tool execution/catalog/result legacy is empty. All current Excel, Word, PowerPoint, Outlook, public VBA/macro, custom VBA package and controller-owned tools use direct typed owners. `ThisAddIn` active-window/document lookup remains only VSTO pane lifecycle discovery, never execution target fallback, and is part of Windows UI/session qualification. Permanent narrow journal ports and current model-compatibility diagnostics share the canonical authority and are not legacy. R61 11O0–11O7 are complete host-neutral; final post-cutover live-provider/WQ-PACK and real WebView2 evidence remain. R62 is fixed host-neutral but requires the exact Windows WebView model/tool-error retest. R63 is fixed host-neutral; exact real Excel bind/refresh on Windows remains open. R51 remains open for audio, other committed-resource removal and Windows WebView image-gallery/thumbnail/PDF/lifecycle qualification; 11D2 image, 11D3 PDF and their thumbnail/sequence navigation remain complete host-neutral and are not removed. R64 has matching exact-package x86 PDFium/Skia wired, but exact Windows x86 PDF extraction/preview/scanned-page/model-send execution remains open. Production OfficeHosts/VSTO build, actual COM marshal/cleanup, real DocumentSession lifetime, WQ0, WQ-SESSION, WQ-EXCEL, WQ-WORD, WQ-POWERPOINT and WQ-OUTLOOK are open evidence. Full Phase 6 Windows/VBE, Phase 8 WQ-PACK, Phase 9/R45–R48 WebView/restart/multi-window and R28/R29/R32 live-provider/UI gates remain open. R52 Host Fabric, R53 Local Automation, R54 Skill Library, R56 Tool Library, R57 Issue Center and R58 typed-facade risk remain open. Product 16.1.0-dev, no release/tag.
 
+Post-11O7 resource/tool recovery correction (2026-09-03, user-reported,
+host-neutral): VBA project `structure` now exposes semantic project/component
+targets only; runtime-owned `rna://` input is rejected before resolution and the
+obsolete accepted-call shape requires explicit reset. Tool upsert no longer derives
+host from an id namespace, so missing/mismatched manifests return their exact
+validation error instead of `invalid_tool_host custom`; authoring guidance keeps
+Library package source out of active-document `common.vba_*`, and normalizes raw
+manifest blocks into valid VBA comments before validation/save. Malformed manifest
+and schema token shapes now return stable diagnostics instead of escaping as
+Json.NET casts. Exact module patching remains atomic and gains optional unchanged
+`contextBefore`/`contextAfter` to disambiguate repeated source inside that module;
+unsafe first/all/global replacement is not restored. The cleanup route is recorded
+as `BACKLOG` D05 and is deletion-first. Focused Harness gates pass 13/13 and the
+existing multi-chat request/attachment isolation gate passes 3/3. Real Windows
+VBE/WebView2 parallel-run and recovery qualification remains open.
+
 R61/11O7 Tool Library UX (2026-09-03, user-requested host-neutral):
 every effective built-in now has on-demand human Markdown through one exact
 id/revision UI-only DTO; built-in `Readme`, compact catalog, model descriptors,

@@ -365,6 +365,15 @@ namespace RNAssistant.Harness
                 var exposedSnapshot = registry.Get("chat-1");
                 exposedSnapshot.Session.Title = "Mutated returned snapshot";
                 AssertEqual("Before run", registry.Get("chat-1").Session.Title, "returned snapshot cannot mutate registry state");
+                using (registry.Start("chat-2", "run-2",
+                    new ChatSession { Title = "Parallel chat" }))
+                {
+                    AssertTrue(registry.IsRunning("chat-1") &&
+                            registry.IsRunning("chat-2"),
+                        "different chats may own independent runs concurrently");
+                }
+                AssertTrue(!registry.IsRunning("chat-2"),
+                    "parallel chat lease releases independently");
                 try
                 {
                     secondRegistry.Start("chat-1", "history-edit", session);

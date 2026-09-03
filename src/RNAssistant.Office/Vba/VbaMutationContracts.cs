@@ -186,6 +186,8 @@ namespace RNAssistant.Office.Vba
         public string Operation { get; set; }
         public string Find { get; set; }
         public string Text { get; set; }
+        public string ContextBefore { get; set; }
+        public string ContextAfter { get; set; }
     }
 
     internal sealed class VbaApplyPatchGuardRequest

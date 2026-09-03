@@ -73,7 +73,9 @@ namespace RNAssistant.Office.Tools
             var tool = NormalizeVbaEntryCode(new ToolCatalogEntry
             {
                 Id = id,
-                Host = ToolArgumentReader.String(arguments, "host", DefaultHostFromId(id)),
+                // The model-facing contract does not own host. Common is only a
+                // pre-validation placeholder; a valid manifest replaces it.
+                Host = ToolArgumentReader.String(arguments, "host", "Common"),
                 Name = ToolArgumentReader.String(arguments, "name", id),
                 Description = ToolArgumentReader.String(arguments, "description", string.Empty),
                 ArgumentSchemaJson = ToolArgumentReader.String(arguments,
@@ -94,8 +96,7 @@ namespace RNAssistant.Office.Tools
                 Components = components
             });
             var manifest = new VbaToolManifestParser().Parse(tool.Code);
-            if (manifest.Success && string.Equals(id, manifest.Tool.Id,
-                    StringComparison.OrdinalIgnoreCase))
+            if (manifest.Success)
                 tool.Host = manifest.Tool.Host;
             return tool;
         }
@@ -134,7 +135,16 @@ namespace RNAssistant.Office.Tools
             if (tool != null && string.Equals(tool.Executor, "vba", StringComparison.OrdinalIgnoreCase))
             {
                 var entry = (tool.Components ?? new List<ToolPackageComponentDefinition>()).FirstOrDefault();
-                tool.Code = entry == null ? string.Empty : entry.Code ?? string.Empty;
+                if (entry == null)
+                {
+                    tool.Code = string.Empty;
+                }
+                else
+                {
+                    entry.Code = VbaToolManifestParser.NormalizeManifestComments(
+                        entry.Code);
+                    tool.Code = entry.Code ?? string.Empty;
+                }
             }
             return tool;
         }
@@ -281,23 +291,6 @@ namespace RNAssistant.Office.Tools
                 !t.BuiltIn &&
                 (string.Equals(t.Host, _adapter.HostName, StringComparison.OrdinalIgnoreCase) ||
                  string.Equals(t.Host, "Common", StringComparison.OrdinalIgnoreCase)));
-        }
-
-        private static string DefaultHostFromId(string id)
-        {
-            if (string.IsNullOrWhiteSpace(id))
-            {
-                return "Common";
-            }
-
-            var dot = id.IndexOf('.');
-            if (dot <= 0)
-            {
-                return "Common";
-            }
-
-            var prefix = id.Substring(0, dot);
-            return string.Equals(prefix, "common", StringComparison.OrdinalIgnoreCase) ? "Common" : prefix;
         }
 
         private static bool ReadBool(

@@ -464,6 +464,10 @@ namespace RNAssistant.Harness
                     skill.Id == "common.tool_authoring").BodyMarkdown;
                 AssertContains(toolAuthoring, "Domain identity rationale:",
                     "tool skill documents dynamic argument review");
+                AssertContains(toolAuthoring, "not to the active document VBA project",
+                    "tool skill keeps package source out of document VBA");
+                AssertContains(toolAuthoring, "custom is a namespace, never a host",
+                    "tool skill distinguishes id namespace from manifest host");
                 AssertTrue(toolAuthoring.IndexOf("common.tools_validate",
                         StringComparison.Ordinal) < 0,
                     "tool skill does not teach retired validation");
@@ -496,6 +500,69 @@ namespace RNAssistant.Harness
                             "{\"id\":\"excel.x\",\"referencePath\":\"references/x.md\"}"),
                         out error),
                     "skill core history rejects reference arguments");
+
+                var mismatchedManifest = CustomTool(
+                    "Excel", "excel.avg_calculator");
+                var mismatchedUpsert = new ToolInvocation
+                {
+                    ToolId = ToolAuthoringCatalog.UpsertToolId
+                };
+                mismatchedUpsert.Arguments["id"] = "custom.avg_calculator";
+                mismatchedUpsert.Arguments["components"] =
+                    ToolComponentsPayload(mismatchedManifest);
+                var mismatch = executor.ExecuteManual(
+                    mismatchedUpsert,
+                    tools,
+                    new AppSettings { AutoConfirmToolActions = true },
+                    false,
+                    false);
+                AssertEqual("vba_manifest_metadata_mismatch",
+                    mismatch.ErrorCode,
+                    "manifest id mismatch is not masked as an invalid custom host");
+
+                var missingManifest = new ToolInvocation
+                {
+                    ToolId = ToolAuthoringCatalog.UpsertToolId
+                };
+                missingManifest.Arguments["id"] = "custom.missing_manifest";
+                missingManifest.Arguments["components"] = new JArray(
+                    new JObject
+                    {
+                        ["name"] = "RNA_MissingManifest",
+                        ["type"] = "StdModule",
+                        ["code"] = "Option Explicit\nPublic Function Run() As String\nEnd Function"
+                    });
+                var missing = executor.ExecuteManual(
+                    missingManifest,
+                    tools,
+                    new AppSettings { AutoConfirmToolActions = true },
+                    false,
+                    false);
+                AssertEqual("manifest_missing", missing.ErrorCode,
+                    "manifest parse error is not masked as an invalid custom host");
+
+                var objectManifestTool = CustomTool(
+                    "Excel", "custom.object_components");
+                objectManifestTool.Components[0].Code =
+                    objectManifestTool.Components[0].Code.Replace(
+                        "\"components\":[\"RNA_Test\"]",
+                        "\"components\":[{\"name\":\"RNA_Test\",\"type\":\"StdModule\"}]");
+                var objectManifestUpsert = new ToolInvocation
+                {
+                    ToolId = ToolAuthoringCatalog.UpsertToolId
+                };
+                objectManifestUpsert.Arguments["id"] =
+                    "custom.object_components";
+                objectManifestUpsert.Arguments["components"] =
+                    ToolComponentsPayload(objectManifestTool);
+                var objectManifest = executor.ExecuteManual(
+                    objectManifestUpsert,
+                    tools,
+                    new AppSettings { AutoConfirmToolActions = true },
+                    false,
+                    false);
+                AssertEqual("manifest_components", objectManifest.ErrorCode,
+                    "object-shaped inner manifest components return validation instead of throwing");
 
                 var invocation = new ToolInvocation
                 {
@@ -699,7 +766,12 @@ namespace RNAssistant.Harness
 
                 var command = new ToolInvocation { ToolId = "common.tools_upsert" };
                 command.Arguments["id"] = "excel.generated_report";
-                command.Arguments["components"] = ToolComponentsPayload(CustomTool("Excel", "excel.generated_report"));
+                var authored = CustomTool("Excel", "excel.generated_report");
+                authored.Components[0].Code = authored.Components[0].Code
+                    .Replace("' <RNAssistantTool>", "<RNAssistantTool>")
+                    .Replace("' {\"protocolVersion\"", "{\"protocolVersion\"")
+                    .Replace("' </RNAssistantTool>", "</RNAssistantTool>");
+                command.Arguments["components"] = ToolComponentsPayload(authored);
 
                 var blocked = executor.ExecuteManual(command, new List<ToolCatalogEntry>(OfficeToolCatalog.ForHost(adapter.HostName)), new AppSettings { AutoConfirmToolActions = false }, false, false);
                 AssertTrue(!blocked.Success, "tool create should require confirmation");
@@ -728,6 +800,10 @@ namespace RNAssistant.Harness
                 AssertContains(saved.Message, "created", "create message");
                 var conservative = new ToolStore(FixturePaths.Value).Load()
                     .Single(tool => tool.Id == "excel.generated_report");
+                AssertContains(conservative.Code, "' <RNAssistantTool>",
+                    "authoring stores a VBA-commented manifest marker");
+                AssertContains(conservative.Code, "' {\"protocolVersion\"",
+                    "authoring stores manifest JSON as VBA comments");
                 AssertTrue(conservative.RequiresConfirmation &&
                         conservative.MutatesDocument &&
                         conservative.MutatesLocalState &&

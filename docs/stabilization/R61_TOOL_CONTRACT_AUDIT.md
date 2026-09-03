@@ -168,7 +168,7 @@ public id также нельзя «вспоминать» приблизите�
 | `common.vba_restore_backup` | Нужен только для явного rollback | `DONE 11O5 + 11O6 ON-DEMAND KEEP`: exact readable target либо latest-for-module; raw backup id внутренний |
 | `common.vba_write_module` | Whole-source write нужен | `DONE 11O5 + 11O6 CORE KEEP`: только module/full source и meaningful creation policy/type |
 | `common.vba_rename_module` | Identity-preserving rename отличается от write | `DONE 11O5 SPLIT + 11O6 ON-DEMAND`: source/destination names only; guards и journal identity внутренние |
-| `common.vba_apply_patch` | Exact minimal edit нужен | `DONE 11O5 + 11O6 CORE KEEP`: hunks `find/text`, constant `op=replace` и guards внутренние |
+| `common.vba_apply_patch` | Exact minimal edit нужен | `DONE 11O5 + post-11O7 correction + 11O6 CORE KEEP`: hunks `find/text` + optional exact unchanged context для повторов внутри выбранного module, constant `op=replace` и guards внутренние |
 | `common.vba_delete_module` | Нужен только по явному запросу | `DONE 11O5 + 11O6 ON-DEMAND KEEP`: module name semantic, guard/backup lifecycle внутренние |
 | `common.office_run_macro` | Нужен только когда пользователь просит execution | `DONE 11O5 + 11O6 ON-DEMAND KEEP`: high-risk самостоятельный effect; arguments semantic, runtime identity/evidence внутренние |
 

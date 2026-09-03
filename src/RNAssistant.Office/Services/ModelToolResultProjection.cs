@@ -256,7 +256,18 @@ namespace RNAssistant.Office.Services
                 var parsedSchema = JObject.Parse(schema);
                 string validationError;
                 if (arguments != null && ToolSchemaSupport.ValidateArguments(
-                    arguments, parsedSchema, false, out validationError)) return true;
+                    arguments, parsedSchema, false, out validationError))
+                {
+                    if (string.Equals(call.Name, ResourceToolCatalog.ReadToolId,
+                            StringComparison.Ordinal) &&
+                        ResourceGatewayService.IsRuntimeOwnedIntentTarget(
+                            (string)arguments["target"]))
+                    {
+                        error = "Stored common.resources_read target contains a runtime-owned URI.";
+                        return false;
+                    }
+                    return true;
+                }
                 error = "Stored " + call.Name + " arguments do not match the current semantic schema.";
                 return false;
             }

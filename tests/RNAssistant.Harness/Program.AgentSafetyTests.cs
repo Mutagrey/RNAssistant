@@ -1396,8 +1396,8 @@ namespace RNAssistant.Harness
                 AssertTrue(exactReplace != null, "patch schema exposes one exact replacement contract");
                 AssertTrue(exactReplace.SelectToken("properties.op") == null,
                     "constant VBA patch operation is runtime-owned");
-                AssertEqual(2, ((JObject)exactReplace["properties"]).Properties().Count(),
-                    "exact replacement exposes only find and text");
+                AssertEqual(4, ((JObject)exactReplace["properties"]).Properties().Count(),
+                    "exact replacement exposes find, text, and optional exact context");
                 AssertTrue(exactReplace.SelectToken("properties.startLine") == null &&
                     exactReplace.SelectToken("properties.pattern") == null,
                     "line-number and regex patch fields are absent from the model schema");

@@ -45,6 +45,46 @@ namespace RNAssistant.Harness
             AssertEqual("manifest_invalid_json",
                 new VbaToolManifestParser().Parse("RNA_Echo", duplicateSafety).ErrorCode,
                 "duplicate manifest safety fields are rejected");
+
+            var objectComponents = tool.Code.Replace(
+                "\"components\":[\"RNA_Echo\",\"RNA_EchoService\"]",
+                "\"components\":[{\"name\":\"RNA_Echo\",\"type\":\"StdModule\"}]");
+            AssertEqual("manifest_components",
+                new VbaToolManifestParser().Parse("RNA_Echo", objectComponents).ErrorCode,
+                "object-shaped manifest components fail as a normal validation error");
+            var objectVersion = tool.Code.Replace(
+                "\"protocolVersion\":1", "\"protocolVersion\":{}");
+            AssertEqual("manifest_version",
+                new VbaToolManifestParser().Parse(
+                    "RNA_Echo", objectVersion).ErrorCode,
+                "object-shaped manifest version fails without throwing");
+            var arrayParameterType = tool.Code.Replace(
+                "\"type\":\"string\",\"description\":\"Text value.\"",
+                "\"type\":[\"string\",\"null\"],\"description\":\"Text value.\"");
+            AssertEqual("signature_type",
+                new VbaToolManifestParser().Parse(
+                    "RNA_Echo", arrayParameterType).ErrorCode,
+                "non-scalar VBA parameter schema fails without throwing");
+
+            var rawManifest = tool.Code.Replace("' <RNAssistantTool>",
+                    "<RNAssistantTool>")
+                .Replace("' {\"protocolVersion\"", "{\"protocolVersion\"")
+                .Replace("' </RNAssistantTool>", "</RNAssistantTool>");
+            AssertEqual("manifest_not_commented",
+                new VbaToolManifestParser().Parse("RNA_Echo", rawManifest).ErrorCode,
+                "uncommented JSON is never accepted as compilable VBA source");
+            var normalized = VbaToolManifestParser.NormalizeManifestComments(
+                rawManifest);
+            AssertTrue(new VbaToolManifestParser().Parse(
+                    "RNA_Echo", normalized).Success,
+                "authoring normalization comments every manifest line");
+            var multilineRaw = rawManifest.Replace(
+                "{\"protocolVersion\"", "{\n\"protocolVersion\"");
+            AssertTrue(new VbaToolManifestParser().Parse(
+                    "RNA_Echo",
+                    VbaToolManifestParser.NormalizeManifestComments(
+                        multilineRaw)).Success,
+                "authoring normalization comments multiline manifest JSON");
         }
 
         private static void VbaToolStoreRoundTripsPackageSources()
@@ -1385,6 +1425,18 @@ namespace RNAssistant.Harness
                 AssertEqual("RNA_Echo.Echo", adapter.RanMacros.Last(),
                     "document VBA tool reaches the exact package entry point");
                 AssertContains(adapter.GetVbaModuleCode("RNA_Echo"), "<RNAssistantTool>", "document source is not removed after run");
+
+                var objectComponents = tool.Components[0].Code.Replace(
+                    "\"components\":[\"RNA_Echo\",\"RNA_EchoService\"]",
+                    "\"components\":[{\"name\":\"RNA_Echo\",\"type\":\"StdModule\"}]");
+                adapter.SetVbaModule("RNA_InvalidManifest", objectComponents,
+                    "StdModule");
+                catalogService.InvalidateDocumentVbaTools();
+                var catalogWithInvalidManifest = catalogService.GetVisibleTools();
+                AssertTrue(catalogWithInvalidManifest.Any(item =>
+                        string.Equals(item.Id, tool.Id,
+                            StringComparison.OrdinalIgnoreCase)),
+                    "malformed document manifest is skipped without failing a fresh catalog/run");
 
                 store.SaveOne(tool);
                 var duplicateCode = tool.Components[0].Code.Replace(

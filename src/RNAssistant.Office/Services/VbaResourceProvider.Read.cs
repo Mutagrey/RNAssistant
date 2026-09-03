@@ -40,13 +40,7 @@ namespace RNAssistant.Office.Services
                 var position = ResourceReadCursor.ParseRevisionBound(request, cursorBinding);
                 if (target.Project)
                 {
-                    var manifest = JsonConvert.SerializeObject(new
-                    {
-                        type = "rnassistant.vbaProject",
-                        resource = ProjectUri(session),
-                        components = LoadModules().Select(module => DescribeComponent(session, module, null)).ToList(),
-                        backupCount = LoadBackups().Count
-                    });
+                    var manifest = ProjectStructure();
                     return SelectText(
                         resourceUri,
                         DescribeProject(session),
@@ -80,6 +74,35 @@ namespace RNAssistant.Office.Services
                     request,
                     position,
                     cursorBinding);
+            });
+        }
+
+        private string ProjectStructure()
+        {
+            var components = LoadModules().Select(module => new
+            {
+                target = ResourceGatewayService.IntentBaseTarget(
+                    new ResourceDescriptor
+                    {
+                        Kind = ComponentKind,
+                        Title = module.Name
+                    }),
+                type = "VBA module",
+                title = module.Name,
+                componentType = module.ComponentType,
+                lineCount = module.LineCount,
+                representations = new[]
+                {
+                    ResourceRepresentations.Metadata,
+                    ResourceRepresentations.Source
+                }
+            }).ToList();
+            return JsonConvert.SerializeObject(new
+            {
+                type = "rnassistant.vbaProject",
+                target = ProjectSemanticTarget(_adapter.DocumentTitle),
+                components,
+                backupCount = LoadBackups().Count
             });
         }
 

@@ -19,12 +19,35 @@
 | Debt | Owner и проблема | Условие начала | Результат и проверка |
 |---|---|---|---|
 | D01 — compact current docs | Documentation owners. `architecture.md`, master plan и `PROGRESS.md` всё ещё содержат длинную историю и повторяют часть domain docs | После R61 или при изменении соответствующего canonical contract; historical master/progress archive — только после 16.1 с полным backlink inventory | `architecture.md` оставляет только layers/owners/flows; история остаётся evidence, но исчезает из default reading path. Проверка всех local links/anchors |
-| D02 — explicit composition root | Application. `AssistantController` одновременно orchestrates и конструирует concrete storage/runtime/model/catalog/session/diagnostics graph | Следующее изменение production lifecycle/dependency graph после текущих R61/WQ gates | Один `AssistantCompositionRoot`/factory владеет construction и dispose order; controller получает application services. Удалены concrete construction dependencies; targeted lifecycle + architecture checks |
+| D02 — single composition path | Application. `AssistantController` одновременно orchestrates и конструирует concrete storage/runtime/model/catalog/session/diagnostics graph | Следующее изменение production lifecycle/dependency graph после текущих R61/WQ gates | Один существующий application-owned path владеет construction и dispose order. Не добавлять factory/interface только ради DI; новый composition type допустим лишь при удалении нескольких concrete construction paths и отрицательном production LOC. Targeted lifecycle + architecture checks |
 | D03 — versioned bridge operation catalog | Bridge. Большой string switch не гарантирует C#/JS parity и единый JSON casing | Следующее versioned bridge изменение после qualification текущего WebView path | Typed catalog/handlers, handshake version и один canonical casing; удалены ad-hoc operation routing и dual Pascal/camel reads. C#/JS parity, serialization/error-envelope и Windows WebView checks |
 | D04 — change-driven hotspot extraction | Владельцы Controller, ToolRuntime, prompts, storage и UI. Крупные файлы затрудняют локальные изменения, но не доказывают смешение ответственности | Только когда ближайший approved change требует чтения несвязанного behavior | Извлекается один тематический owner из `AssistantController*`, `OfficeToolExecutor`, `PromptContextInspectorService`, `ChatStore*` или крупного `app-*.js`; старый path удаляется, targeted tests сохраняют контракт |
+| D05 — agent-loop contraction | Model Protocol / Tool Runtime / Resources / Controller. Один accepted call несколько раз проходит `JObject → Dictionary → JObject/string → JObject → Dictionary`; semantic target повторно вычисляется через полный cross-provider inventory; fresh и confirmed run дублируют checkpoint/error/finalization | После текущей regression-коррекции и обязательной Windows репродукции/квалификации либо как отдельно одобренные host-neutral slices; не смешивать slices | Ниже: один owner и один удаляемый path на slice, без второго loop/store/router/base service. Каждый slice уменьшает production LOC/representation hops и проходит точные protocol/resource/tool/run gates |
 
 Не проводить общий предварительный split/rename, массовый namespace move, новый
 service locator, второй store/read model или универсальный Office abstraction.
+
+### D05 — последовательность очистки основного цикла
+
+Сохраняются как необходимые инварианты: один `AgentKernel`, exact captured
+tool policy/binding, bound `RuntimeKey`, per-chat run lease, VBA guard/journal и
+read-back, append-only event evidence и запрет автоматического повтора после
+possible effect. Их количество не является redundancy: они предотвращают неверный
+target, двойной dispatch и ложный success.
+
+| Slice | Удаляемая сложность и owner | Gate завершения |
+|---|---|---|
+| D05.1 — one JSON argument tree | `Core/ModelProtocol` сохраняет validated arguments одним `JObject` до создания canonical `ArgumentsJson`. Удалить первичную нормализацию в dictionary, повторный `JObject.FromObject` и вторую нормализацию в `ConversationResponseParser`; `ToolRuntime` выполняет единственный parse/typed handoff | V4 strict JSON, duplicate/case names, nested arrays/objects, malformed custom manifest и accepted-call replay; меньше representation hops и production LOC |
+| D05.2 — native compound arguments | `ToolAuthoringService` и `TableArgumentResolver` читают `JArray/JObject` напрямую. Удалить `ToolArgumentReader.String` stringify + последующий parse для `components`/`values`; не вводить generic binder или reflection mapping | Tool create/update, two-dimensional table values, malformed token shape и exact error code |
+| D05.3 — stable resource target resolution | Resource owner разрешает target из точного scope/accepted evidence, а не пересобирает весь unrelated provider inventory. Удалить conditional cross-scope suffix churn и full enumeration на every read; не выдавать модели URI/revision/cursor или новый opaque candidate id | `find → read` и `project structure → module read` остаются валидны без изменения source; duplicate human titles разрешимы; unavailable unrelated provider не ломает read; real revision drift по-прежнему fail-closed |
+| D05.4 — one result materialization | `ConversationModelSession` один раз разбирает `DataJson`; projection, context budgeting и media routing используют один sanitized token/result. Объединить два почти одинаковых oversized-read error paths и удалить повторный parse/serialize | resource/capability complete evidence, oversized failure, media hydration, effect/status projection и durable raw evidence |
+| D05.5 — one controller run finalizer | В существующем `AssistantController` объединить совпадающие fresh/confirmed checkpoint, failure, terminal save и lease cleanup; `ConversationRunService → AgentKernel` остаётся единственным loop. Не создавать второй orchestrator/service | two different chats run concurrently; same-chat duplicate rejected; confirmation/cancel/store-failure recovery; никакой global coordination/document gate не удерживается во время model wait |
+| D05.6 — authoring duplicate deletion | Tool/Skill authoring удаляет дубли `ArgumentPayload/Canonicalize/Hash` через один уже существующий canonical representation owner. Не вводить общий authoring base/service: Tool, Skill и Prompt сохраняют отдельную domain validation | prepare/confirm state hash и read-back для Tool/Skill/Prompt; net deletion обязательна |
+
+Каждый slice — отдельный commit. Перед реализацией фиксируются baseline сценарий,
+удаляемые методы/переходы и ожидаемое сокращение; новый interface/class допускается
+только если в том же slice удаляются более крупные production paths. Общий rewrite,
+массовый rename и “унификация” без воспроизводимого дефекта не входят в план.
 
 ## Deferred product decisions
 

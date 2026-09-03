@@ -33,15 +33,31 @@ namespace RNAssistant.Core.Tools
     {
         public static VbaPatchResult Replace(string source, string find, string replacement)
         {
+            return Replace(source, find, replacement, null, null);
+        }
+
+        public static VbaPatchResult Replace(
+            string source,
+            string find,
+            string replacement,
+            string contextBefore,
+            string contextAfter)
+        {
             source = source ?? string.Empty;
             find = VbaTextCanonicalizer.MatchLineEndings(find, source);
             replacement = VbaTextCanonicalizer.MatchLineEndings(replacement ?? string.Empty, source);
+            contextBefore = VbaTextCanonicalizer.MatchLineEndings(
+                contextBefore ?? string.Empty, source);
+            contextAfter = VbaTextCanonicalizer.MatchLineEndings(
+                contextAfter ?? string.Empty, source);
             if (string.IsNullOrEmpty(find))
                 return new VbaPatchResult(VbaPatchStatus.EmptyFind, source, find, 0);
-            var count = CountOccurrences(source, find);
+            var exactBlock = contextBefore + find + contextAfter;
+            var count = CountOccurrences(source, exactBlock);
             if (count == 0) return new VbaPatchResult(VbaPatchStatus.NotFound, source, find, count);
             if (count != 1) return new VbaPatchResult(VbaPatchStatus.Ambiguous, source, find, count);
-            var index = source.IndexOf(find, StringComparison.Ordinal);
+            var blockIndex = source.IndexOf(exactBlock, StringComparison.Ordinal);
+            var index = blockIndex + contextBefore.Length;
             var updated = source.Substring(0, index) + replacement + source.Substring(index + find.Length);
             return new VbaPatchResult(string.Equals(updated, source, StringComparison.Ordinal)
                 ? VbaPatchStatus.Unchanged : VbaPatchStatus.Changed, updated, find, count);

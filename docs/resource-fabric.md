@@ -63,7 +63,10 @@ The public surface is now `common.resources_find` and `common.resources_read`.
 keeps provider routing, kind vocabulary and paging internal. A query is explicitly
 a filtered match set, not an inventory. For an unfiltered `vba` browse, the project
 target is pinned first even when the visible module candidates are truncated; its
-`structure` representation contains the complete discovered component inventory.
+`structure` representation contains the complete discovered component inventory
+with semantic component targets only. A runtime-owned `rna://` value is never an
+accepted public `target`; retained calls with that obsolete shape require an
+explicit reset/new chat.
 For the exact bound VBA-capable document, `RUNTIME_CONTEXT.document` also exposes
 the readable `vba_project_target`; a project-wide question can therefore start with
 `read` and does not need a discovery round-trip. `read` accepts that runtime target

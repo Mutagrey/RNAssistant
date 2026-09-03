@@ -222,10 +222,15 @@ namespace RNAssistant.Harness
                 var patch = JObject.Parse(tools.Single(tool =>
                     tool.Id == VbaToolCatalog.ApplyPatch).ArgumentSchemaJson);
                 var hunk = (JObject)patch.SelectToken("properties.patch.items");
-                AssertEqual(2, ((JObject)hunk["properties"]).Properties().Count(),
-                    "VBA patch hunk contains only find and text");
+                AssertEqual(4, ((JObject)hunk["properties"]).Properties().Count(),
+                    "VBA patch hunk contains replacement plus optional exact context");
                 AssertTrue(hunk.SelectToken("properties.op") == null,
                     "fixed replace operation belongs to runtime");
+                var editingSkill = BuiltInSkillProvider.GetSkills(adapter)
+                    .Single(skill => skill.Id == "common.vba_code_editing")
+                    .BodyMarkdown;
+                AssertContains(editingSkill, "contextBefore",
+                    "VBA editing skill teaches exact patch disambiguation");
 
                 var restore = JObject.Parse(tools.Single(tool =>
                     tool.Id == VbaToolCatalog.RestoreBackup).ArgumentSchemaJson);
@@ -265,6 +270,11 @@ namespace RNAssistant.Harness
                             "{\"moduleName\":\"Module1\",\"patch\":[{\"find\":\"old\",\"text\":\"new\"}]}"),
                         out error),
                     "current patch history is replayable");
+                AssertTrue(ModelToolResultProjection.ValidateAcceptedCall(
+                        new ToolCall("patch_context", VbaToolCatalog.ApplyPatch,
+                            "{\"moduleName\":\"Module1\",\"patch\":[{\"find\":\"old\",\"text\":\"new\",\"contextBefore\":\"Sub Main()\\n\",\"contextAfter\":\"\\nEnd Sub\"}]}"),
+                        out error),
+                    "context-qualified patch history is replayable");
                 AssertTrue(!ModelToolResultProjection.ValidateAcceptedCall(
                         new ToolCall("patch_old", VbaToolCatalog.ApplyPatch,
                             "{\"moduleName\":\"Module1\",\"patch\":[{\"op\":\"replace\",\"find\":\"old\",\"text\":\"new\"}]}"),
@@ -2330,7 +2340,7 @@ namespace RNAssistant.Harness
                     AssertTrue(!result.Success, "ambiguous exact block rejected");
                     AssertEqual("vba_patch_ambiguous", result.ErrorCode, "ambiguous exact block error");
                     AssertTrue(!string.Equals("awaiting_confirmation", result.Status, StringComparison.OrdinalIgnoreCase), "ambiguous patch fails before confirmation");
-                    AssertContains(result.Message, "surrounding source", "ambiguous exact block recovery guidance");
+                    AssertContains(result.Message, "contextBefore or contextAfter", "ambiguous exact block recovery guidance");
                     AssertEqual(2, (int)JObject.Parse(result.DataJson)["matchCount"], "tool reports overlapping matches");
                     AssertEqual(sample.Source, adapter.VbaModuleCode, "no earlier operation is partially written");
                     AssertEqual(0, adapter.CountVbaCalls(FakeVbaOperation.ReplaceModule),
@@ -2339,6 +2349,51 @@ namespace RNAssistant.Harness
                     AssertEqual(0, store.ListMutations("Excel", "doc").Count, "ambiguous patch creates no mutation journal entry");
                 });
             }
+        }
+
+        private static void VbaPatchDisambiguatesWithExactContext()
+        {
+            WithTempExecutor(delegate(OfficeToolExecutor executor,
+                FakeOfficeAdapter adapter)
+            {
+                adapter.VbaModuleCode =
+                    "Sub One()\nDebug.Print \"same\"\nEnd Sub\n" +
+                    "Sub Two()\nDebug.Print \"same\"\nEnd Sub";
+                var result = executor.ExecuteManual(
+                    Command(
+                        VbaToolCatalog.ApplyPatch,
+                        "moduleName", "Module1",
+                        "patch", new JArray(new JObject
+                        {
+                            ["find"] = "Debug.Print \"same\"",
+                            ["text"] = "Debug.Print \"changed\"",
+                            ["contextBefore"] = "Sub Two()\n",
+                            ["contextAfter"] = "\nEnd Sub"
+                        })),
+                    OfficeToolCatalog.ForHost(adapter.HostName)
+                        .Concat(executor.GetControllerTools()).ToList(),
+                    new AppSettings { AutoConfirmToolActions = true },
+                    false,
+                    false);
+
+                AssertTrue(result.Success,
+                    "exact context disambiguates repeated source");
+                AssertEqual(
+                    "Sub One()\nDebug.Print \"same\"\nEnd Sub\n" +
+                    "Sub Two()\nDebug.Print \"changed\"\nEnd Sub",
+                    adapter.VbaModuleCode,
+                    "context is verified but only find is replaced");
+                AssertEqual(1,
+                    adapter.CountVbaCalls(FakeVbaOperation.ReplaceModule),
+                    "context-qualified patch remains one whole-module dispatch");
+            });
+
+            var stale = VbaPatchEngine.Replace(
+                "A\nX\nA", "A", "B", "missing\n", null);
+            AssertEqual(VbaPatchStatus.NotFound, stale.Status,
+                "stale exact context is rejected");
+            AssertEqual("A\nX\nA", stale.Text,
+                "stale context never mutates source");
         }
 
         private static void VbaExactPatchPreservesBoundaryNewlines()

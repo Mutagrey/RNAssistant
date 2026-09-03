@@ -149,7 +149,12 @@ namespace RNAssistant.Office.Vba
                     true);
             }
 
-            var patch = VbaPatchEngine.Replace(current, operation.Find, operation.Text);
+            var patch = VbaPatchEngine.Replace(
+                current,
+                operation.Find,
+                operation.Text,
+                operation.ContextBefore,
+                operation.ContextAfter);
             if (patch.Status == VbaPatchStatus.EmptyFind)
             {
                 return VbaMutationOutcome.Error(
@@ -175,7 +180,7 @@ namespace RNAssistant.Office.Vba
             if (patch.Status == VbaPatchStatus.Ambiguous)
             {
                 return VbaMutationOutcome.Error(
-                    "The exact VBA source block occurs " + patch.MatchCount + " times. Nothing was written; include more unchanged surrounding source so find identifies one block.",
+                    "The exact VBA source block occurs " + patch.MatchCount + " times. Nothing was written; add exact contextBefore or contextAfter from the same module read so one block is identified.",
                     new JObject
                     {
                         ["matchCount"] = patch.MatchCount,

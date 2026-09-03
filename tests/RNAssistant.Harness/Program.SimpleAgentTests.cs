@@ -626,6 +626,12 @@ namespace RNAssistant.Harness
             AssertTrue(!ToolSchemaSupport.TryParse(tool, out schema, out error), "case-colliding schema properties are rejected");
             AssertContains(error, "differ only by case", "case-colliding schema diagnostic");
 
+            tool.ArgumentSchemaJson = "{\"type\":\"object\",\"properties\":{\"name\":{\"type\":[\"string\",{}],\"description\":\"Name.\"}},\"required\":[],\"additionalProperties\":false}";
+            AssertTrue(!ToolSchemaSupport.TryParse(tool, out schema, out error),
+                "object in type array is rejected without throwing");
+            AssertContains(error, "type is invalid",
+                "object-shaped type has a normal schema diagnostic");
+
         }
 
         private static void ControllerToolCatalogUsesStrictSchemas()

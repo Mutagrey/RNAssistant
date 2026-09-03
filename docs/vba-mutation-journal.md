@@ -52,8 +52,9 @@ durable event formats remain unchanged.
 
 Since 11O5 the six public VBA/macro registrations use exact intent bindings. Whole-
 source write and identity-preserving rename are separate tools. Model patch hunks
-contain only `find` and `text`; runtime supplies the fixed replace operation before
-domain preparation. Restore accepts either an exact readable backup target returned
+require `find` and `text`; optional unchanged `contextBefore`/`contextAfter`
+disambiguates repeated text inside the exact `moduleName`, while runtime supplies
+the fixed replace operation before domain preparation. Restore accepts either an exact readable backup target returned
 by Resource Fabric or a module name meaning its latest available backup. Runtime
 resolves that intent to the exact backup id before confirmation and stores it only
 in prepared state. Raw backup ids, hashes, revisions, guards and journal identities
