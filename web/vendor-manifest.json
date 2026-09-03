@@ -229,6 +229,13 @@
       "provenanceUrl": "https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/codemirror.min.css"
     },
     {
+      "path": "css/vendor/codemirror/addon/hint/show-hint.min.css",
+      "package": "codemirror",
+      "bytes": 529,
+      "sha256": "f6fbd102ae7fabc501b8e1618bc935d05dae8c8d82a89cf1cc89ac2db0dbcf69",
+      "provenanceUrl": "https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/addon/hint/show-hint.min.css"
+    },
+    {
       "path": "css/vendor/fonts/KaTeX_AMS-Regular.woff2",
       "package": "katex",
       "bytes": 28076,
@@ -404,6 +411,13 @@
       "bytes": 3096,
       "sha256": "f359c5f395a2a08191557d40b61ef8c3893803da9019171cc44b8d9c8c7d4a3a",
       "provenanceUrl": "https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/addon/edit/matchbrackets.min.js"
+    },
+    {
+      "path": "js/vendor/codemirror/addon/hint/show-hint.min.js",
+      "package": "codemirror",
+      "bytes": 10582,
+      "sha256": "9b8e07b45c581e8fbfb95d1f442b7a2d1946bd40451a8250f7fe332a7d8218e6",
+      "provenanceUrl": "https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/addon/hint/show-hint.min.js"
     },
     {
       "path": "js/vendor/codemirror/addon/selection/active-line.min.js",

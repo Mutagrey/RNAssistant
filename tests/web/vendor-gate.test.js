@@ -73,8 +73,8 @@ assert.deepEqual(packages.get("wunderbaum").packageDependencies, {});
 assert.ok(packages.has("viewerjs"));
 assert.equal(packages.get("viewerjs").version, "1.12.0");
 assert.deepEqual(packages.get("viewerjs").packageDependencies, {});
-assert.equal(entries.size, 40);
-console.log("PASS vendor gate: 40 runtime files have exact size/hash and no unmanifested sibling");
+assert.equal(entries.size, 42);
+console.log("PASS vendor gate: 42 runtime files have exact size/hash and no unmanifested sibling");
 
 let cssDependencyCount = 0;
 for (const item of manifest.files.filter(item => item.path.endsWith(".css"))) {

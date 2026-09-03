@@ -9,6 +9,20 @@ Next step for tools: 11O7 adds UI-only built-in documentation, typed Library Tes
 Required context: [Tool Library contract](../tool-library.md#mandatory-all-tool-contract-audit-r61), [R61 audit](R61_TOOL_CONTRACT_AUDIT.md), `web/js/app-tools*.js`, `web/css/app-tools.css` and the focused Tools web tests only.
 Open gates / remaining legacy: active tool execution/catalog/result legacy is empty. All current Excel, Word, PowerPoint, Outlook, public VBA/macro, custom VBA package and controller-owned tools use direct typed owners. `ThisAddIn` active-window/document lookup remains only VSTO pane lifecycle discovery, never execution target fallback, and is part of Windows UI/session qualification. Permanent narrow journal ports and current model-compatibility diagnostics share the canonical authority and are not legacy. R61 11O0–11O6 are complete host-neutral; Library documentation/Test/layout remains before final post-cutover qualification. R62 is fixed host-neutral but requires the exact Windows WebView model/tool-error retest. R63 is fixed host-neutral; exact real Excel bind/refresh on Windows remains open. R51 remains open for audio, other committed-resource removal and Windows WebView image-gallery/thumbnail/PDF/lifecycle qualification; 11D2 image, 11D3 PDF and their thumbnail/sequence navigation remain complete host-neutral and are not removed. R64 has matching exact-package x86 PDFium/Skia wired, but exact Windows x86 PDF extraction/preview/scanned-page/model-send execution remains open. Production OfficeHosts/VSTO build, actual COM marshal/cleanup, real DocumentSession lifetime, WQ0, WQ-SESSION, WQ-EXCEL, WQ-WORD, WQ-POWERPOINT and WQ-OUTLOOK are open evidence. Full Phase 6 Windows/VBE, Phase 8 WQ-PACK, Phase 9/R45–R48 WebView/restart/multi-window and R28/R29/R32 live-provider/UI gates remain open. R52 Host Fabric, R53 Local Automation, R54 Skill Library, R56 Tool Library, R57 Issue Center and R58 typed-facade risk remain open. Product 16.1.0-dev, no release/tag.
 
+11O7 VBA CodeMirror completion slice (2026-09-03, user-requested host-neutral):
+the existing pinned CodeMirror 5.65.16 now includes its local `show-hint` JS/CSS,
+with the exact web vendor manifest expanded from 40 to 42 files. Both VBA source
+editors expose `Ctrl+Space`; a typed dot opens member suggestions only for a known
+loaded component. The UI-owned provider combines mode keywords with bounded module/
+component and Sub/Function/Property declarations from the current unsaved draft and
+already loaded sources, hides another component's private procedures, caps parse
+input at 2,000,000 characters and the popup at 80 entries, and makes no bridge/COM/
+network call per keystroke. This does not claim Office object-model completion,
+type inference, diagnostics or semantic rename. Focused completion and vendor gates
+pass; real Windows WebView2 keyboard/focus/theme/layout qualification remains open.
+The broader 11O7 built-in documentation, typed Test form and responsive layout work
+remains current.
+
 R61/11O6 final minimal core pack (2026-09-03, user-requested host-neutral):
 Excel Agent core is now 21 exact schemas: four bootstrap, all 15 Excel and only
 VBA whole-source write/exact patch. Word/PowerPoint have bootstrap plus the same

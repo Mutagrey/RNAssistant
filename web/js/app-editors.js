@@ -21,10 +21,40 @@
     wrapper.style.minHeight = (typeof config.minHeight === "number" ? config.minHeight : 160) + "px";
   }
 
+  function showVbaHints(editor) {
+    if (editor && typeof editor.showHint === "function") {
+      editor.showHint({ completeSingle: false });
+    }
+  }
+
   function createEditor(id, config) {
     var node = textarea(id);
     if (!node || !window.CodeMirror || editors[id]) {
       return editors[id] || null;
+    }
+
+    var extraKeys = {
+      "Ctrl-S": function (editor) {
+        editor.save();
+        if (id === "vbaCodeInput" && typeof saveVbaModule === "function") {
+          saveVbaModule();
+        }
+        if (id === "htmlWorkspaceEditorInput" && typeof saveHtmlWorkspaceSelection === "function") {
+          saveHtmlWorkspaceSelection();
+        }
+      },
+      "Cmd-S": function (editor) {
+        editor.save();
+        if (id === "vbaCodeInput" && typeof saveVbaModule === "function") {
+          saveVbaModule();
+        }
+        if (id === "htmlWorkspaceEditorInput" && typeof saveHtmlWorkspaceSelection === "function") {
+          saveHtmlWorkspaceSelection();
+        }
+      }
+    };
+    if (config.mode === "vb") {
+      extraKeys["Ctrl-Space"] = showVbaHints;
     }
 
     var cm = window.CodeMirror.fromTextArea(node, {
@@ -37,29 +67,20 @@
       matchBrackets: true,
       autoCloseBrackets: true,
       viewportMargin: 80,
-      extraKeys: {
-        "Ctrl-S": function (editor) {
-          editor.save();
-          if (id === "vbaCodeInput" && typeof saveVbaModule === "function") {
-            saveVbaModule();
-          }
-          if (id === "htmlWorkspaceEditorInput" && typeof saveHtmlWorkspaceSelection === "function") {
-            saveHtmlWorkspaceSelection();
-          }
-        },
-        "Cmd-S": function (editor) {
-          editor.save();
-          if (id === "vbaCodeInput" && typeof saveVbaModule === "function") {
-            saveVbaModule();
-          }
-          if (id === "htmlWorkspaceEditorInput" && typeof saveHtmlWorkspaceSelection === "function") {
-            saveHtmlWorkspaceSelection();
-          }
-        }
-      }
+      extraKeys: extraKeys
     });
 
+    cm._rnEditorId = id;
     addEditorClass(cm, id, config);
+    if (config.mode === "vb") {
+      cm.getInputField().setAttribute("aria-keyshortcuts", "Control+Space");
+      cm.getWrapperElement().title = "VBA подсказки: Ctrl+Space";
+      cm.on("inputRead", function (editor, change) {
+        if (change && change.origin === "+input" && change.text && change.text.length === 1 && change.text[0] === ".") {
+          showVbaHints(editor);
+        }
+      });
+    }
     cm.on("change", function () {
       cm.save();
       if (cm._rnSettingValue) {

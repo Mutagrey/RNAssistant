@@ -27,6 +27,11 @@ separate dependency is loaded. HTML workspaces that reference the `echarts` glob
 receive that exact local bundle inside their sandbox and standalone export; no CDN
 or second chart runtime is loaded.
 
+CodeMirror ships only the pinned core, selected modes/addons and its `show-hint`
+popup. RNAssistant owns the bounded VBA keyword/module/procedure provider; it reads
+only current drafts and already loaded local source and performs no bridge, COM or
+network lookup per keystroke.
+
 Wunderbaum ships its pinned UMD and CSS only. RNAssistant's `TreeAdapter` accepts
 bounded local arrays and does not expose URL/lazy loading, edit, DnD, grid or
 persistence capabilities. Its local icon layer uses CSS masks; no icon font or
