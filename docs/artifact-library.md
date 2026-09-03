@@ -231,8 +231,13 @@ are preview frames, never child artifacts or independently durable revisions.
   existing explicit allowlist and last-good binding behavior. A workspace whose
   HTML/JavaScript references `echarts` receives the exact local ECharts 5.6.0 bundle
   as classic JavaScript before workspace scripts in its sandbox and standalone
-  export; ordinary workspaces do not carry it, and Chart.js/CDN loading is
-  unsupported.
+  export. The tree projects that runtime as the read-only
+  `Dependencies/echarts.min.js` item; it is not a user-editable workspace member or
+  a second durable artifact. Ordinary workspaces do not carry it, and Chart.js/CDN
+  loading is unsupported. Full-document assembly inserts workspace scripts against
+  the original document's last closing body/html tag before adding the vendor head
+  block, so tag-shaped strings inside the bundled source cannot capture the
+  insertion.
 
 ViewerRegistry remains UI-only dispatch. Fetching bounded text/media and checking
 the exact revision belong to the Artifact Library owner and the shared resource

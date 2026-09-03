@@ -227,6 +227,7 @@
       query: search ? search.value : "",
       files: files().map(workspaceTreeFile),
       dataSources: dataSources().map(workspaceTreeData),
+      dependencies: htmlPreview.dependencies(files()),
       artifacts: libraryArtifacts.map(workspaceTreeArtifact),
       plans: latestPlanArtifacts().map(workspaceTreeArtifact),
       selected: state.htmlWorkspaceSelection || {},

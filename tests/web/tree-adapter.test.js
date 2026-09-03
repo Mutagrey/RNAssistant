@@ -224,6 +224,8 @@ const controller = adapter.mount(root, {
       { id: "j", path: "scripts/app.js", kind: "js", content: "run();" }
     ],
     dataSources: [{ id: "d", name: "metrics", json: "{\"ok\":true}" }],
+    dependencies: [{ id: "runtime/echarts.min.js", path: "runtime/echarts.min.js", title: "echarts.min.js",
+      kind: "script", version: "5.6.0", loaded: true, readOnly: true, description: "Bundled runtime" }],
     plans: [{ id: "p", title: "Plan", kind: "plan_document", meta: "plan", text: "steps" }],
     artifacts: [{ id: "a", title: "Chart", kind: "chart", meta: "chart", text: "chart" }],
     selected: { type: "file", id: "h" },
@@ -234,6 +236,10 @@ const controller = adapter.mount(root, {
   assert.equal(captured.nodes[0].groupKey, "artifacts:html");
   const styles = captured.nodes[0].children.find(node => node.groupKey === "html-styles");
   assert.equal(styles.expanded, false);
+  const dependencies = captured.nodes[0].children.find(node => node.groupKey === "html-dependencies");
+  assert.equal(dependencies.children[0].title, "echarts.min.js");
+  assert.match(dependencies.children[0].meta, /загружено · только чтение/);
+  assert.equal(dependencies.children[0].itemType, undefined, "runtime dependency is visible but not a mutable workspace member");
   function sourceDepth(nodes, depth = 1) { return nodes.reduce((max, node) => Math.max(max, node.children ? sourceDepth(node.children, depth + 1) : depth), depth); }
   function sourceNode(nodes, key) { for (const node of nodes) { if (node.key === key) return node; const nested = node.children && sourceNode(node.children, key); if (nested) return nested; } return null; }
   assert.equal(sourceDepth(captured.nodes), 12);

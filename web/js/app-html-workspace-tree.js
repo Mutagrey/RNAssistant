@@ -180,6 +180,25 @@
     return children.length ? groupNode("html-data", "Данные", children.length, children, "json") : null;
   }
 
+  function dependencyGroup(items, query) {
+    var children = [];
+    items.forEach(function (dependency) {
+      var status = dependency.loaded ? "загружено" : "недоступно";
+      if (!matchesText([
+        dependency.title, dependency.path, dependency.version, status, dependency.description
+      ].join(" "), query)) return;
+      children.push({
+        key: itemKey("dependency", dependency.id),
+        title: dependency.title || dependency.path,
+        meta: "ECharts " + dependency.version + " · " + status + " · только чтение",
+        tooltip: tooltip(dependency.path, status, dependency.description),
+        iconKind: "js",
+        deletable: false
+      });
+    });
+    return children.length ? groupNode("html-dependencies", "Зависимости", children.length, children, "folder") : null;
+  }
+
   function artifactGroup(label, key, items, query, selectionType) {
     var matched = items.filter(function (artifact) {
       return matchesText([artifact.title, artifact.kind, artifact.mimeType, artifact.relativePath, artifact.text].join(" "), query);
@@ -226,6 +245,7 @@
     var query = String(options.query || "").trim().toLowerCase();
     var files = options.files || [];
     var dataSources = options.dataSources || [];
+    var dependencies = options.dependencies || [];
     var artifacts = options.artifacts || [];
     var htmlChildren = [];
 
@@ -241,6 +261,8 @@
     });
     var data = dataGroup(dataSources, query);
     if (data) htmlChildren.push(data);
+    var dependency = dependencyGroup(dependencies, query);
+    if (dependency) htmlChildren.push(dependency);
 
     var nodes = [];
     if (htmlChildren.length) {

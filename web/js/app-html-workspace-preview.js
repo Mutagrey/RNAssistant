@@ -1,6 +1,9 @@
 (function () {
   "use strict";
 
+  var ECHARTS_DEPENDENCY_ID = "runtime/echarts.min.js";
+  var ECHARTS_VERSION = "5.6.0";
+
   function prop(source, pascal, camel, fallback) {
     source = source || {};
     return source[camel] !== undefined ? source[camel] : (source[pascal] !== undefined ? source[pascal] : fallback);
@@ -119,16 +122,43 @@
     });
   }
 
+  function dependencies(files) {
+    if (!usesECharts(files || [])) return [];
+    var loaded = typeof window.RNAssistantEChartsFactory === "function" &&
+      !!window.echarts && window.echarts.version === ECHARTS_VERSION;
+    return [{
+      id: ECHARTS_DEPENDENCY_ID,
+      path: ECHARTS_DEPENDENCY_ID,
+      title: "echarts.min.js",
+      kind: "script",
+      version: ECHARTS_VERSION,
+      loaded: loaded,
+      readOnly: true,
+      description: loaded
+        ? "Встроенная зависимость preview/export; подключается перед скриптами workspace."
+        : "Встроенная зависимость ECharts не загрузилась."
+    }];
+  }
+
   function echartsScript(files) {
     if (!usesECharts(files) || typeof window.RNAssistantEChartsFactory !== "function" ||
-        !window.echarts || window.echarts.version !== "5.6.0") {
+        !window.echarts || window.echarts.version !== ECHARTS_VERSION) {
       return "";
     }
-    return "<script data-rn-vendor=\"echarts-5.6.0\">" +
+    return "<script data-rn-vendor=\"echarts-" + ECHARTS_VERSION + "\">" +
       "/* Licensed to the Apache Software Foundation under the Apache License, Version 2.0. " +
       "https://www.apache.org/licenses/LICENSE-2.0 */\n(" +
       safeScript(window.RNAssistantEChartsFactory.toString()) +
       ")(window.echarts={});<\/script>";
+  }
+
+  function injectBeforeLastClosingTag(html, tagName, content) {
+    var pattern = new RegExp("<\\/" + tagName + "\\s*>", "ig");
+    var match = null;
+    var candidate;
+    while ((candidate = pattern.exec(html)) !== null) match = candidate;
+    if (!match) return null;
+    return html.slice(0, match.index) + content + "\n" + html.slice(match.index);
   }
 
   function previewViewportReset() {
@@ -162,18 +192,20 @@
       html = "<div style=\"font-family:Segoe UI,Arial,sans-serif;padding:24px;color:#475467\">HTML workspace пуст.</div>";
     }
     if (/<html[\s>]/i.test(html)) {
+      if (bodyInject) {
+        var withBodyScripts = injectBeforeLastClosingTag(html, "body", bodyInject) ||
+          injectBeforeLastClosingTag(html, "html", bodyInject);
+        html = withBodyScripts || html + "\n" + bodyInject;
+      }
       if (/<head[\s>]/i.test(html)) {
         html = html.replace(/<head([^>]*)>/i, function (match) { return match + "\n" + headInject; });
       } else {
         html = html.replace(/<html[^>]*>/i, function (match) { return match + "<head>" + headInject + "</head>"; });
       }
-      if (!bodyInject) return html;
-      if (/<\/body>/i.test(html)) return html.replace(/<\/body>/i, bodyInject + "\n</body>");
-      if (/<\/html>/i.test(html)) return html.replace(/<\/html>/i, bodyInject + "\n</html>");
-      return html + "\n" + bodyInject;
+      return html;
     }
     return "<!doctype html><html><head><meta charset=\"utf-8\"><meta name=\"viewport\" content=\"width=device-width,initial-scale=1\">" + headInject + "</head><body>" + html + "\n" + bodyInject + "</body></html>";
   }
 
-  window.RNAssistantHtmlWorkspacePreview = { build: build };
+  window.RNAssistantHtmlWorkspacePreview = { build: build, dependencies: dependencies };
 }());
