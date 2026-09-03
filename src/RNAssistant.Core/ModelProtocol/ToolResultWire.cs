@@ -48,18 +48,32 @@ namespace RNAssistant.Core.ModelProtocol
 
         public static string Write(string toolCallId, string toolName, TerminalResult result, ResourceRef resultResource = null)
         {
-            if (string.IsNullOrWhiteSpace(toolCallId)) throw new ArgumentException("A tool call ID is required.", nameof(toolCallId));
-            if (string.IsNullOrWhiteSpace(toolName)) throw new ArgumentException("An exact tool name is required.", nameof(toolName));
             if (result == null) throw new ArgumentNullException(nameof(result));
-            JToken data;
+            return WriteParsed(toolCallId, toolName, result,
+                ParseData(result.DataJson), resultResource);
+        }
+
+        public static JToken ParseData(string dataJson)
+        {
             try
             {
-                data = result.DataJson == null ? JValue.CreateNull() : ReadJson(result.DataJson);
+                return dataJson == null ? JValue.CreateNull() : ReadJson(dataJson);
             }
             catch (JsonException ex)
             {
-                throw new ArgumentException("Tool result data must be one strict JSON value.", nameof(result), ex);
+                throw new ArgumentException("Tool result data must be one strict JSON value.",
+                    nameof(dataJson), ex);
             }
+        }
+
+        public static string WriteParsed(string toolCallId, string toolName,
+            TerminalResult result, JToken data, ResourceRef resultResource = null)
+        {
+            if (string.IsNullOrWhiteSpace(toolCallId)) throw new ArgumentException("A tool call ID is required.", nameof(toolCallId));
+            if (string.IsNullOrWhiteSpace(toolName)) throw new ArgumentException("An exact tool name is required.", nameof(toolName));
+            if (result == null) throw new ArgumentNullException(nameof(result));
+            if (data == null || data.Type == JTokenType.Property || ContainsNonJsonValue(data))
+                throw new ArgumentException("Parsed tool result data must be one strict JSON value.", nameof(data));
 
             var root = new JObject
             {
@@ -67,7 +81,7 @@ namespace RNAssistant.Core.ModelProtocol
                 ["name"] = toolName,
                 ["status"] = StatusName(result.Status),
                 ["message"] = result.Message,
-                ["data"] = data
+                ["data"] = data.DeepClone()
             };
             var references = result.Resources;
             var markedIndex = -1;

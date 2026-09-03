@@ -106,10 +106,11 @@ namespace RNAssistant.Office.Services
         {
             // The callable pack was reconstructed from the durable turn event before
             // this confirmed result is projected into the next model request.
-            var accepted = MaterializeToolResultMessage(command, result);
+            ChatMessage model;
+            var accepted = MaterializeToolResultMessage(
+                command, result, out model);
             _session.Messages.Add(accepted);
-            _messages.Add(ModelToolResultProjection.Project(
-                accepted, _runnableCatalog, _skills));
+            _messages.Add(model);
         }
 
         internal async Task<PreparedToolResult> PrepareToolResultAsync(
@@ -133,7 +134,7 @@ namespace RNAssistant.Office.Services
                 {
                     result = ProjectionFailure(command, result,
                         "Artifact media could not be prepared for the model: " + ex.Message,
-                        result.Result.DataJson, "artifact_media_unavailable");
+                        "artifact_media_unavailable");
                 }
             }
             return new PreparedToolResult(result, media);
@@ -141,31 +142,41 @@ namespace RNAssistant.Office.Services
 
         private static ToolResultMaterialization ProjectionFailure(ToolInvocation command,
             ToolResultMaterialization source,
-            string message, string dataJson, string code)
+            string message, string code)
         {
             // Preserve mutation outcome/effect authority. A read whose requested
             // evidence cannot reach the model fails closed as a read result.
-            return new ToolResultMaterialization(new RNAssistant.Core.Tools.Contracts.ToolResult(
-                ToolResultResourceService.ProjectionFailureStatus(command, source.Result.Status), message, new JObject
-                {
-                    ["code"] = code,
-                    ["loaded"] = false,
-                    ["complete"] = false,
-                    ["tool_data"] = string.IsNullOrWhiteSpace(dataJson) ? JValue.CreateNull() :
-                        JsonConvert.DeserializeObject<JToken>(dataJson,
-                            new JsonSerializerSettings { DateParseHandling = DateParseHandling.None })
-                }.ToString(Formatting.None), source.Result.Resources),
-                resultResource: source.ResultResource, resultResourceKind: source.ResultResourceKind);
+            var data = new JObject
+            {
+                ["code"] = code,
+                ["loaded"] = false,
+                ["complete"] = false,
+                ["tool_data"] = source.Data.DeepClone()
+            };
+            return new ToolResultMaterialization(
+                new RNAssistant.Core.Tools.Contracts.ToolResult(
+                    ToolResultResourceService.ProjectionFailureStatus(
+                        command, source.Result.Status),
+                    message,
+                    data.ToString(Formatting.None),
+                    source.Result.Resources),
+                resultResource: source.ResultResource,
+                resultResourceKind: source.ResultResourceKind,
+                data: data);
         }
 
         internal void AppendToolResult(ToolInvocation command, PreparedToolResult prepared)
         {
             var result = prepared.Result;
-            var accepted = MaterializeToolResultMessage(command, result);
-            accepted.RunId = _session.LastRun == null ? null : _session.LastRun.RunId;
+            ChatMessage model;
+            var accepted = MaterializeToolResultMessage(
+                command, result, out model);
+            accepted.RunId = _session.LastRun == null
+                ? null
+                : _session.LastRun.RunId;
+            model.RunId = accepted.RunId;
             AppendPairedResult(_session.Messages, accepted);
-            AppendPairedResult(_messages, ModelToolResultProjection.Project(
-                accepted, _runnableCatalog, _skills));
+            AppendPairedResult(_messages, model);
             _toolPack.StageReadResult(accepted);
             if (prepared.Media != null && result.Result.Status == RNAssistant.Core.Tools.Contracts.ToolResultStatus.Ok)
             {
@@ -345,7 +356,8 @@ namespace RNAssistant.Office.Services
 
         private ChatMessage MaterializeToolResultMessage(
             ToolInvocation command,
-            ToolResultMaterialization result)
+            ToolResultMaterialization result,
+            out ChatMessage modelMessage)
         {
             var exactEvidence = ToolResultResourceService.IsExactReadEvidence(command);
             var availableForData = AvailableToolResultDataTokens();
@@ -358,9 +370,13 @@ namespace RNAssistant.Office.Services
                 result,
                 maxDataTokens,
                 _settings);
-            var message = AgentJsonProtocol.CreateToolResultMessage(
-                command, result, maxDataTokens, _settings.ToolResultRole, _settings);
-            if (!RequestFits(message) && !exactEvidence)
+            var modelResult = ModelToolResultProjection.ForModel(
+                command.ToolId, result, _runnableCatalog, _skills);
+            var selectedDataTokens = maxDataTokens;
+            modelMessage = AgentJsonProtocol.CreateToolResultMessage(
+                command, modelResult, selectedDataTokens,
+                _settings.ToolResultRole, _settings);
+            if (!RequestFits(modelMessage) && !exactEvidence)
             {
                 if (artifact == null)
                 {
@@ -373,27 +389,38 @@ namespace RNAssistant.Office.Services
                 }
                 if (artifact != null)
                 {
-                    message = LargestFittingExternalizedResultMessage(command, result, maxDataTokens);
+                    modelMessage = LargestFittingExternalizedResultMessage(
+                        command, modelResult, maxDataTokens,
+                        out selectedDataTokens);
                 }
             }
-            if (!RequestFits(message) && exactEvidence &&
-                result != null && result.Result.Status == RNAssistant.Core.Tools.Contracts.ToolResultStatus.Ok)
+            if (!RequestFits(modelMessage) && exactEvidence &&
+                result.Result.Status == RNAssistant.Core.Tools.Contracts.ToolResultStatus.Ok)
             {
-                ReplaceOversizedReadEvidence(command, result, availableForData);
-                message = AgentJsonProtocol.CreateToolResultMessage(
-                    command, result, int.MaxValue, _settings.ToolResultRole, _settings);
-                if (!RequestFits(message))
+                ReplaceOversizedReadEvidence(
+                    command, result, availableForData, false);
+                modelResult = ModelToolResultProjection.ForModel(
+                    command.ToolId, result, _runnableCatalog, _skills);
+                selectedDataTokens = int.MaxValue;
+                modelMessage = AgentJsonProtocol.CreateToolResultMessage(
+                    command, modelResult, selectedDataTokens,
+                    _settings.ToolResultRole, _settings);
+                if (!RequestFits(modelMessage))
                 {
-                    ReplaceWithCompactReadEvidenceError(command, result);
-                    message = AgentJsonProtocol.CreateToolResultMessage(
-                        command, result, int.MaxValue, _settings.ToolResultRole, _settings);
+                    ReplaceOversizedReadEvidence(
+                        command, result, availableForData, true);
+                    modelResult = ModelToolResultProjection.ForModel(
+                        command.ToolId, result, _runnableCatalog, _skills);
+                    modelMessage = AgentJsonProtocol.CreateToolResultMessage(
+                        command, modelResult, selectedDataTokens,
+                        _settings.ToolResultRole, _settings);
                 }
             }
-            if (!RequestFits(message))
+            if (!RequestFits(modelMessage))
             {
                 var candidateMessages = new List<ChatMessage>(_messages)
                 {
-                    ModelToolResultProjection.Project(message, _runnableCatalog, _skills)
+                    modelMessage
                 };
                 var candidateTokens = EstimatedAdmittedRequestTokens(candidateMessages, _toolPack.Tools);
                 throw new PromptBudgetExceededException(
@@ -404,11 +431,17 @@ namespace RNAssistant.Office.Services
                     "or use a larger-context model.",
                     false);
             }
-            message.ResourceRefs = AgentTranscript.CloneResourceRefs(result == null ? null : result.Result.Resources);
+            var message = AgentJsonProtocol.CreateToolResultMessage(
+                command, result, selectedDataTokens,
+                _settings.ToolResultRole, _settings);
+            modelMessage.Id = message.Id;
+            modelMessage.CreatedUtc = message.CreatedUtc;
+            message.ResourceRefs = AgentTranscript.CloneResourceRefs(result.Result.Resources);
             if (artifact != null && !string.Equals(
                 artifact.Kind,
                 ChatArtifactKinds.Chart,
-                StringComparison.OrdinalIgnoreCase)) artifact.SourceMessageId = message.Id;
+                StringComparison.OrdinalIgnoreCase))
+                artifact.SourceMessageId = message.Id;
             return message;
         }
 
@@ -465,20 +498,20 @@ namespace RNAssistant.Office.Services
 
         private bool RequestFits(ChatMessage resultMessage)
         {
-            var messages = new List<ChatMessage>(_messages);
-            if (resultMessage != null) messages.Add(ModelToolResultProjection.Project(
-                resultMessage, _runnableCatalog, _skills));
+            var messages = new List<ChatMessage>(_messages) { resultMessage };
             return EstimatedAdmittedRequestTokens(messages, _toolPack.Tools) <=
                 ModelContextBudget.InputBudgetTokens(_settings);
         }
 
         private ChatMessage LargestFittingExternalizedResultMessage(
             ToolInvocation command,
-            ToolResultMaterialization result,
-            int maximumDataTokens)
+            ToolResultMaterialization modelResult,
+            int maximumDataTokens,
+            out int selectedDataTokens)
         {
+            selectedDataTokens = 0;
             var best = AgentJsonProtocol.CreateToolResultMessage(
-                command, result, 0, _settings.ToolResultRole, _settings);
+                command, modelResult, 0, _settings.ToolResultRole, _settings);
             if (!RequestFits(best)) return best;
             var low = 1;
             var high = Math.Max(0, maximumDataTokens);
@@ -486,10 +519,12 @@ namespace RNAssistant.Office.Services
             {
                 var middle = low + (high - low) / 2;
                 var candidate = AgentJsonProtocol.CreateToolResultMessage(
-                    command, result, middle, _settings.ToolResultRole, _settings);
+                    command, modelResult, middle,
+                    _settings.ToolResultRole, _settings);
                 if (RequestFits(candidate))
                 {
                     best = candidate;
+                    selectedDataTokens = middle;
                     low = middle + 1;
                 }
                 else
@@ -503,51 +538,11 @@ namespace RNAssistant.Office.Services
         private void ReplaceOversizedReadEvidence(
             ToolInvocation command,
             ToolResultMaterialization materialized,
-            int availableDataTokens)
+            int availableDataTokens,
+            bool compactError)
         {
             var result = materialized.Result;
-            JObject original;
-            try
-            {
-                original = JsonConvert.DeserializeObject<JObject>(result.DataJson ?? "{}",
-                    new JsonSerializerSettings { DateParseHandling = DateParseHandling.None }) ?? new JObject();
-            }
-            catch (JsonException)
-            {
-                original = new JObject();
-            }
-            var compact = original.ToString(Formatting.None);
-            var capability = !ToolResultResourceService.IsResourceEvidence(command);
-            var data = new JObject
-            {
-                ["code"] = capability
-                    ? "capability_evidence_context_too_large"
-                    : "resource_evidence_context_too_large",
-                ["complete"] = false,
-                ["original_chars"] = compact.Length,
-                ["original_estimated_tokens"] = ModelContextBudget.EstimateTextTokens(compact, _settings),
-                ["available_tokens"] = Math.Max(0, availableDataTokens)
-            };
-            if (capability)
-            {
-                data["kind"] = original["kind"] == null ? JValue.CreateNull() : original["kind"].DeepClone();
-                data["id"] = original["id"] == null ? JValue.CreateNull() : original["id"].DeepClone();
-                data["revision"] = original["revision"] == null ? JValue.CreateNull() : original["revision"].DeepClone();
-                data["loaded"] = false;
-                data["truncated"] = true;
-            }
-            materialized.ReplaceResult(RNAssistant.Core.Tools.Contracts.ToolResult.Error(
-                capability
-                    ? "Capability evidence did not fit the request with mandatory reserves and was not loaded. Reduce context or use a larger-context model; do not retry unchanged."
-                    : "Resource evidence did not fit the request with mandatory reserves. Refine the semantic find query, compact context, or retry the read in a larger-context model.",
-                data.ToString(Formatting.None),
-                capability ? result.Resources : new ResourceRef[0]));
-        }
-
-        private static void ReplaceWithCompactReadEvidenceError(
-            ToolInvocation command,
-            ToolResultMaterialization materialized)
-        {
+            var original = materialized.Data as JObject;
             var capability = !ToolResultResourceService.IsResourceEvidence(command);
             var data = new JObject
             {
@@ -556,13 +551,41 @@ namespace RNAssistant.Office.Services
                     : "resource_evidence_context_too_large",
                 ["complete"] = false
             };
-            if (capability) data["loaded"] = false;
-            materialized.ReplaceResult(RNAssistant.Core.Tools.Contracts.ToolResult.Error(
-                capability
+            if (!compactError)
+            {
+                var originalJson = materialized.Data.ToString(Formatting.None);
+                data["original_chars"] = originalJson.Length;
+                data["original_estimated_tokens"] =
+                    ModelContextBudget.EstimateTextTokens(originalJson, _settings);
+                data["available_tokens"] = Math.Max(0, availableDataTokens);
+            }
+            if (capability)
+            {
+                if (!compactError)
+                {
+                    data["kind"] = original == null || original["kind"] == null
+                        ? JValue.CreateNull() : original["kind"].DeepClone();
+                    data["id"] = original == null || original["id"] == null
+                        ? JValue.CreateNull() : original["id"].DeepClone();
+                    data["revision"] = original == null || original["revision"] == null
+                        ? JValue.CreateNull() : original["revision"].DeepClone();
+                    data["truncated"] = true;
+                }
+                data["loaded"] = false;
+            }
+            var message = compactError
+                ? capability
                     ? "Capability evidence did not fit the reserved model context."
-                    : "Resource evidence did not fit the reserved model context; choose a narrower semantic resource or compact context.",
-                data.ToString(Formatting.None),
-                capability ? materialized.Result.Resources : new ResourceRef[0]));
+                    : "Resource evidence did not fit the reserved model context; choose a narrower semantic resource or compact context."
+                : capability
+                    ? "Capability evidence did not fit the request with mandatory reserves and was not loaded. Reduce context or use a larger-context model; do not retry unchanged."
+                    : "Resource evidence did not fit the request with mandatory reserves. Refine the semantic find query, compact context, or retry the read in a larger-context model.";
+            materialized.ReplaceResult(
+                RNAssistant.Core.Tools.Contracts.ToolResult.Error(
+                    message,
+                    data.ToString(Formatting.None),
+                    capability ? result.Resources : new ResourceRef[0]),
+                data);
         }
 
         private async Task<ChatMessage> BuildArtifactMediaMessageAsync(
@@ -607,18 +630,10 @@ namespace RNAssistant.Office.Services
 
         private static string SemanticMediaTarget(ToolResultMaterialization result)
         {
-            try
-            {
-                var data = JObject.Parse(result == null || result.Result == null
-                    ? "{}" : result.Result.DataJson ?? "{}");
-                var target = ((string)data["target"] ?? string.Empty)
-                    .Replace('\r', ' ').Replace('\n', ' ').Trim();
-                return target.Length == 0 ? string.Empty : "\nsemantic_target:" + target;
-            }
-            catch (JsonException)
-            {
-                return string.Empty;
-            }
+            var data = result == null ? null : result.Data as JObject;
+            var target = ((string)(data == null ? null : data["target"]) ?? string.Empty)
+                .Replace('\r', ' ').Replace('\n', ' ').Trim();
+            return target.Length == 0 ? string.Empty : "\nsemantic_target:" + target;
         }
 
         private static ChatMessage ProjectMediaForModel(ChatMessage source)

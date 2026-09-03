@@ -29,8 +29,12 @@ namespace RNAssistant.Office.Services
             }
             if (IsExactReadEvidence(command)) return null;
 
-            JObject chart;
-            if (TryParseChart(data, out chart))
+            var chart = result.Data as JObject;
+            var chartType = chart == null
+                ? null
+                : (string)chart["type"] ?? (string)chart["Type"];
+            if (string.Equals(
+                chartType, "rnassistant.chart", StringComparison.OrdinalIgnoreCase))
             {
                 return AddArtifact(
                     session,
@@ -42,7 +46,9 @@ namespace RNAssistant.Office.Services
                     chart.ToString(Formatting.None));
             }
 
-            if (EstimateProtocolDataTokens(data, settings) <= Math.Max(0, inlineTokenBudget))
+            if (ModelContextBudget.EstimateTextTokens(
+                result.Data.ToString(Formatting.None), settings) <=
+                Math.Max(0, inlineTokenBudget))
             {
                 return null;
             }
@@ -54,7 +60,7 @@ namespace RNAssistant.Office.Services
                 result,
                 ChatArtifactKinds.ToolResult,
                 string.IsNullOrWhiteSpace(toolId) ? "Tool result" : "Tool result · " + toolId,
-                IsJson(data) ? "application/json" : "text/plain; charset=utf-8",
+                "application/json",
                 data);
         }
 
@@ -169,53 +175,5 @@ namespace RNAssistant.Office.Services
             return CapabilityToolCatalog.Owns(id);
         }
 
-        private static int EstimateProtocolDataTokens(string data, AppSettings settings)
-        {
-            JToken parsed;
-            try
-            {
-                parsed = JsonConvert.DeserializeObject<JToken>(data,
-                    new JsonSerializerSettings { DateParseHandling = DateParseHandling.None }) ?? JValue.CreateNull();
-            }
-            catch (JsonException)
-            {
-                parsed = new JValue(data);
-            }
-            return ModelContextBudget.EstimateTextTokens(parsed.ToString(Formatting.None), settings);
-        }
-
-        private static bool IsJson(string data)
-        {
-            try
-            {
-                JsonConvert.DeserializeObject<JToken>(data,
-                    new JsonSerializerSettings { DateParseHandling = DateParseHandling.None });
-                return true;
-            }
-            catch (JsonException)
-            {
-                return false;
-            }
-        }
-
-        private static bool TryParseChart(string data, out JObject chart)
-        {
-            chart = null;
-            try
-            {
-                chart = JsonConvert.DeserializeObject<JObject>(data ?? string.Empty,
-                    new JsonSerializerSettings { DateParseHandling = DateParseHandling.None });
-                if (chart == null) return false;
-                var type = (string)chart["type"] ?? (string)chart["Type"];
-                if (string.Equals(type, "rnassistant.chart", StringComparison.OrdinalIgnoreCase)) return true;
-                chart = null;
-                return false;
-            }
-            catch (JsonException)
-            {
-                chart = null;
-                return false;
-            }
-        }
     }
 }

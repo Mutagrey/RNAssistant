@@ -597,6 +597,7 @@ namespace RNAssistant.Harness
                 var reference = new ResourceRef("rna://chat/session/artifact/full/revision/1", "1");
                 materialized.IncludeResultResource(reference, ChatArtifactKinds.ToolResult);
                 materialized.ReplaceResult(new RuntimeResult(item.Status, "Projection message", "{\"loaded\":false}", materialized.Result.Resources));
+                var parsedData = materialized.Data;
                 var ui = ToolRunResultFactory.Create(record, materialized);
                 ui.Success = !ui.Success;
                 ui.Status = "prepared";
@@ -606,6 +607,8 @@ namespace RNAssistant.Harness
                 ui.ModelResultResourceRef.Revision = "UI_ONLY";
                 var wire = ToolResultWire.Read(AgentJsonProtocol.BuildToolResult(
                     new ToolInvocation { ToolCallId = context.Call.Id, ToolId = context.Call.Name }, materialized));
+                AssertTrue(ReferenceEquals(parsedData, materialized.Data),
+                    "request-local materialization owns one parsed result tree");
                 AssertTrue(wire.Success, "UI mutation cannot invalidate the model resource relation");
                 AssertEqual(item.Status, wire.Result.Status, "projection keeps the terminal status");
                 AssertEqual("Projection message", wire.Result.Message, "UI prose is not model data");

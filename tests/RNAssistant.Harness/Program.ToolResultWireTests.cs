@@ -66,6 +66,14 @@ namespace RNAssistant.Harness
             AssertEqual("2026-08-28T00:00:00.000Z", (string)restored["nested"][0]["date"], "nested ISO formatting remains exact");
             AssertEqual(html, (string)restored["nested"][1], "wire does not truncate materialized data");
             AssertTrue(restored["A"] != null && restored["a"] != null, "distinct data keys remain arbitrary JSON");
+            var parsedData = ToolResultWire.ParseData(data.ToString(Formatting.None));
+            var parsedWire = ToolResultWire.WriteParsed(
+                "call_parsed", "test.read",
+                TerminalResult.Ok(literal, data.ToString(Formatting.None)), parsedData);
+            AssertTrue(JToken.DeepEquals(data, WireJson(parsedWire)["data"]),
+                "parsed writer preserves the one strict data tree");
+            AssertEqual(null, parsedData.Parent,
+                "parsed writer does not reparent the caller-owned data tree");
             var scalar = ToolResultWire.Read(ToolResultWire.Write("call_scalar", "test.read",
                 TerminalResult.Ok(iso, JsonConvert.SerializeObject(iso))));
             AssertEqual(JTokenType.String, WireJson(scalar.Result.DataJson).Type, "scalar ISO data stays a string");
@@ -223,6 +231,11 @@ namespace RNAssistant.Harness
                 WireWriteRejects(() => ToolResultWire.Write("call_1", identity, TerminalResult.Ok("done")));
             }
             WireWriteRejects(() => ToolResultWire.Write("call_1", "test.read", null));
+            WireWriteRejects(() => ToolResultWire.ParseData("{\"x\":1,\"x\":2}"));
+            WireWriteRejects(() => ToolResultWire.WriteParsed(
+                "call_1", "test.read", TerminalResult.Ok("done"), null));
+            WireWriteRejects(() => ToolResultWire.WriteParsed(
+                "call_1", "test.read", TerminalResult.Ok("done"), new JValue(double.NaN)));
             foreach (var data in new[]
             {
                 "", " ", "{} {}", "undefined", "NaN", "/* comment */{}", "{\"x\":1,\"x\":2}", "[1,]", "[1,,2]",

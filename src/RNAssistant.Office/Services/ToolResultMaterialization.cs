@@ -1,6 +1,8 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using Newtonsoft.Json.Linq;
+using RNAssistant.Core.ModelProtocol;
 using RNAssistant.Core.Models;
 using TerminalResult = RNAssistant.Core.Tools.Contracts.ToolResult;
 
@@ -12,6 +14,7 @@ namespace RNAssistant.Office.Services
     {
         private ResourceRef _resultResource;
         internal TerminalResult Result { get; private set; }
+        internal JToken Data { get; private set; }
         internal IReadOnlyList<ChatAttachment> ModelAttachments { get; private set; }
         internal ResourceRef ResultResource
         {
@@ -21,17 +24,20 @@ namespace RNAssistant.Office.Services
 
         internal ToolResultMaterialization(TerminalResult result,
             IEnumerable<ChatAttachment> attachments = null,
-            ResourceRef resultResource = null, string resultResourceKind = null)
+            ResourceRef resultResource = null, string resultResourceKind = null,
+            JToken data = null)
         {
             Result = result ?? throw new ArgumentNullException(nameof(result));
+            Data = data ?? ToolResultWire.ParseData(result.DataJson);
             ModelAttachments = Array.AsReadOnly((attachments ?? new ChatAttachment[0]).ToArray());
             _resultResource = resultResource == null ? null : new ResourceRef(resultResource.Uri, resultResource.Revision);
             ResultResourceKind = resultResourceKind;
         }
 
-        internal void ReplaceResult(TerminalResult result)
+        internal void ReplaceResult(TerminalResult result, JToken data = null)
         {
             Result = result ?? throw new ArgumentNullException(nameof(result));
+            Data = data ?? ToolResultWire.ParseData(result.DataJson);
         }
 
         internal void IncludeResultResource(ResourceRef reference, string kind)

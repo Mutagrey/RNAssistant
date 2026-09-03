@@ -43,10 +43,34 @@ namespace RNAssistant.Office.Services
                 return InvalidSwitchedResult(projected, source);
             }
 
-            var data = ParseData(wire.Result.DataJson);
-            var status = wire.Result.Status;
-            var message = wire.Result.Message;
-            if (IsCapabilityResult(wire.Name) && status == ToolResultStatus.Ok &&
+            var data = ToolResultWire.ParseData(wire.Result.DataJson);
+            var materialized = new ToolResultMaterialization(
+                wire.Result, resultResource: wire.ResultResource, data: data);
+            var model = ForModel(wire.Name, materialized, tools, skills);
+            var json = ToolResultWire.WriteParsed(
+                wire.ToolCallId,
+                wire.Name,
+                model.Result,
+                model.Data,
+                model.ResultResource);
+            projected.Content = string.Equals(projected.Role, ToolResultRoles.Tool, StringComparison.Ordinal)
+                ? json
+                : Prefix + json;
+            return projected;
+        }
+
+        internal static ToolResultMaterialization ForModel(
+            string name,
+            ToolResultMaterialization source,
+            IEnumerable<ToolCatalogEntry> tools = null,
+            IEnumerable<SkillDefinition> skills = null)
+        {
+            if (source == null) throw new ArgumentNullException(nameof(source));
+            if (CanonicalSwitchedName(name) == null) return source;
+            var data = source.Data.DeepClone();
+            var status = source.Result.Status;
+            var message = source.Result.Message;
+            if (IsCapabilityResult(name) && status == ToolResultStatus.Ok &&
                 tools != null && skills != null &&
                 !MatchesCurrentCapability(data, tools, skills))
             {
@@ -54,23 +78,23 @@ namespace RNAssistant.Office.Services
                 message = "Capability evidence no longer matches the current catalog. Read the exact id again.";
                 data = StaleCapabilityData(data);
             }
-            else if (IsResourceResult(wire.Name))
+            else if (IsResourceResult(name))
             {
                 RemoveResourceRuntimeState(data);
             }
-            else if (IsPlanningResult(wire.Name))
+            else if (IsPlanningResult(name))
             {
-                RemovePlanningRuntimeState(wire.Name, data);
+                RemovePlanningRuntimeState(name, data);
             }
-            else if (IsHtmlResult(wire.Name))
+            else if (IsHtmlResult(name))
             {
                 RemoveHtmlRuntimeState(data);
             }
-            else if (IsAuthoringResult(wire.Name))
+            else if (IsAuthoringResult(name))
             {
                 RemoveAuthoringRuntimeState(data);
             }
-            else if (IsVbaResult(wire.Name))
+            else if (IsVbaResult(name))
             {
                 message = SanitizeVbaMessage(message, data);
                 RemoveVbaRuntimeState(data);
@@ -80,16 +104,13 @@ namespace RNAssistant.Office.Services
                 RemoveCapabilityRuntimeState(data);
             }
 
-            var modelResult = new RNAssistant.Core.Tools.Contracts.ToolResult(
+            var result = new RNAssistant.Core.Tools.Contracts.ToolResult(
                 status,
                 message,
                 data == null ? "null" : data.ToString(Formatting.None),
                 new ResourceRef[0]);
-            var json = ToolResultWire.Write(wire.ToolCallId, wire.Name, modelResult);
-            projected.Content = string.Equals(projected.Role, ToolResultRoles.Tool, StringComparison.Ordinal)
-                ? json
-                : Prefix + json;
-            return projected;
+            return new ToolResultMaterialization(
+                result, source.ModelAttachments, data: data);
         }
 
         private static ChatMessage InvalidSwitchedResult(
@@ -318,21 +339,6 @@ namespace RNAssistant.Office.Services
         private static bool IsVbaResult(string name)
         {
             return VbaToolCatalog.Owns(name);
-        }
-
-        private static JToken ParseData(string value)
-        {
-            if (string.IsNullOrWhiteSpace(value)) return JValue.CreateNull();
-            try
-            {
-                return JsonConvert.DeserializeObject<JToken>(value,
-                    new JsonSerializerSettings { DateParseHandling = DateParseHandling.None }) ??
-                    JValue.CreateNull();
-            }
-            catch (JsonException)
-            {
-                return JValue.CreateNull();
-            }
         }
 
         private static void RemoveResourceRuntimeState(JToken token)

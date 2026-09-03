@@ -34,12 +34,7 @@ namespace RNAssistant.Office.Services
             if (command == null) throw new ArgumentNullException(nameof(command));
             if (materialized == null) throw new ArgumentNullException(nameof(materialized));
             var result = materialized.Result;
-            // Validate the complete terminal contract before budgeting, so truncation
-            // cannot hide invalid JSON or a non-resource transport in the source.
-            var complete = ToolResultWire.Write(command.ToolCallId, command.ToolId, result, materialized.ResultResource);
-            var source = JsonConvert.DeserializeObject<JObject>(complete,
-                new JsonSerializerSettings { DateParseHandling = DateParseHandling.None });
-            var data = BoundData(source["data"], maxDataTokens, settings);
+            var data = BoundData(materialized.Data.DeepClone(), maxDataTokens, settings);
             if (materialized.ResultResource != null)
             {
                 if (string.Equals(materialized.ResultResourceKind, ChatArtifactKinds.Chart, StringComparison.OrdinalIgnoreCase))
@@ -63,7 +58,12 @@ namespace RNAssistant.Office.Services
             var bounded = new TerminalResult(result.Status,
                 BoundText(result.Message, MaxToolResultMessageTokens, settings),
                 data.ToString(Formatting.None), result.Resources);
-            return ToolResultWire.Write(command.ToolCallId, command.ToolId, bounded, materialized.ResultResource);
+            return ToolResultWire.WriteParsed(
+                command.ToolCallId,
+                command.ToolId,
+                bounded,
+                data,
+                materialized.ResultResource);
         }
 
         public static ChatMessage CreateToolResultMessage(ToolInvocation command, TerminalResult result)
