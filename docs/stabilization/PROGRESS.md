@@ -13,7 +13,7 @@ Open gates / remaining legacy: active tool execution/catalog/result legacy is em
 the existing pinned CodeMirror 5.65.16 now includes its local `show-hint` JS/CSS,
 with the exact web vendor manifest expanded from 40 to 42 files. Both VBA source
 editors expose `Ctrl+Space`; a typed dot opens member suggestions only for a known
-loaded component. The UI-owned provider combines mode keywords with bounded module/
+loaded component. The UI-owned provider combines VBA-only keywords with bounded module/
 component and Sub/Function/Property declarations from the current unsaved draft and
 already loaded sources, hides another component's private procedures, caps parse
 input at 2,000,000 characters and the popup at 80 entries, and makes no bridge/COM/

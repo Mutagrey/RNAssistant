@@ -6,10 +6,22 @@
   var MAX_PROCEDURES = 500;
   var MAX_HINTS = 80;
   var VBA_WORDS = [
-    "Attribute", "ByRef", "ByVal", "Call", "Collection", "Currency", "Debug",
-    "Declare", "DoEvents", "LongLong", "LongPtr", "Option Explicit",
-    "Option Private Module", "ParamArray", "PtrSafe", "Variant", "VbCrLf",
-    "WithEvents"
+    "#Const", "#Else", "#ElseIf", "#End If", "#If", "AddressOf", "Alias",
+    "And", "As", "Attribute", "Binary", "Boolean", "ByRef", "Byte", "ByVal",
+    "Call", "Case", "Const", "Currency", "Date", "Declare", "Dim", "Do",
+    "Double", "Each", "Else", "ElseIf", "Empty", "End", "Enum", "Eqv",
+    "Erase", "Error", "Event", "Exit", "Explicit", "False", "For", "Friend",
+    "Function", "Get", "Global", "GoSub", "GoTo", "If", "Implements", "Imp",
+    "In", "Input", "Integer", "Is", "Len", "Let", "Lib", "Like", "Lock",
+    "Long", "LongLong", "LongPtr", "Loop", "Me", "Mid", "Mod", "New",
+    "Next", "Not", "Nothing", "Null", "Object", "On", "Open", "Option",
+    "Option Explicit", "Option Private Module", "Optional", "Or", "Output",
+    "ParamArray", "Preserve", "Print", "Private", "Property", "Property Get",
+    "Property Let", "Property Set", "PtrSafe", "Public", "Put", "RaiseEvent",
+    "ReDim", "Rem", "Resume", "Return", "Seek", "Select", "Set", "Single",
+    "Static", "Step", "Stop", "String", "Sub", "Then", "Time", "To", "True",
+    "Type", "Unlock", "Until", "Variant", "Wend", "While", "Width", "With",
+    "WithEvents", "Write", "Xor"
   ];
 
   function value(value) {
@@ -176,9 +188,7 @@
         candidates.push(procedureCandidate(procedure));
       });
     } else {
-      var words = typeof editor.getHelper === "function" ? editor.getHelper(cursor, "hintWords") : [];
-      words = Array.isArray(words) ? words : [];
-      words.concat(VBA_WORDS).forEach(function (word) {
+      VBA_WORDS.forEach(function (word) {
         candidates.push({ text: value(word), displayText: value(word), className: "rn-vba-hint-keyword", matchText: value(word), rank: 3 });
       });
       sources.forEach(function (source) {

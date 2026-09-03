@@ -45,7 +45,7 @@ function editor(id, line, source, tokenType) {
     getLine: () => line,
     getTokenAt: () => ({ type: tokenType || "variable", string: line }),
     getValue: () => source,
-    getHelper: (_cursor, type) => type === "hintWords" ? ["sub", "function", "option", "with"] : []
+    getHelper: (_cursor, type) => type === "hintWords" ? ["namespace", "try", "catch"] : []
   };
 }
 function texts(result) {
@@ -67,6 +67,7 @@ assert.deepEqual(result.from, { line: 0, ch: 8 });
 
 result = hint(editor("vbaCodeInput", "Module2.L", currentSource));
 assert.deepEqual(texts(result), ["LocalOnly"], "current-module qualification includes private procedures");
+assert.equal(hint(editor("vbaCodeInput", "Nam", currentSource)), null, "VB.NET-only mode words are not suggested as VBA");
 
 assert.equal(hint(editor("vbaCodeInput", "Cur", currentSource, "comment")), null);
 assert.equal(hint(editor("vbaCodeInput", "Cur", currentSource, "string")), null);
