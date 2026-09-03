@@ -4,10 +4,10 @@
 # The descriptor revision pins descriptions, defaults, validation and schema shape. The binding column identifies the internal resolver; family/effect/result dependencies and target merge/split decisions live in R61_TOOL_CONTRACT_AUDIT.md.
 common.capabilities_read	Excel,Outlook,PowerPoint,Word	agent,plan	capabilities.read.intent.v1	83a5377df41216258264626ccd93d35427348bde31354a064bb27ff1355be73f	action,id,referencePath	id=semantic-capability-identity
 common.capabilities_search	Excel,Outlook,PowerPoint,Word	agent,plan	capabilities.search.intent.v1	7e647d1a4ae13887d52348b154210db01e9dd818346404a316105e88d68b5e48	kind,query	-
-common.html_data_bind	Excel	agent	html.data.bind.v1	2897b9bd484dc9f07f95ceb6d64447a1a4085d29baefc3a654814d72ae5db69b	headers,name,transform	-
-common.html_data_bind	Outlook	agent	html.data.bind.v1	46570865c1b9034e6b393c30e02a6060d6ed0b8b055c149522115fb36ec2429d	headers,name,transform	-
-common.html_data_bind	PowerPoint	agent	html.data.bind.v1	e153a02f42247d9e99ab62c9d6c0bbed0133a1d005a4842f6092c0bd78c96662	headers,name,transform	-
-common.html_data_bind	Word	agent	html.data.bind.v1	28d986239c9b93a47114a0dbf16c9195278029695240c2f930577eafc131e219	headers,name,transform	-
+common.html_data_bind	Excel	agent	html.data.bind.v1	b104fc2ecc425816cfbc3ae5475986bc1e33f52a2364a8d3629739438ba3182a	headers,name,transform	-
+common.html_data_bind	Outlook	agent	html.data.bind.v1	f9149d0ec1c4b7117af52d7f74ee525e605165e635dbe76b075d0229c4592c4f	headers,name,transform	-
+common.html_data_bind	PowerPoint	agent	html.data.bind.v1	1bc9b810254c61142945063c25943c6b3dcd2dbbb386b185e694c0283da0e1f9	headers,name,transform	-
+common.html_data_bind	Word	agent	html.data.bind.v1	bc7f16bc012ff26311dd96184b522381474f4003b22c823ec82828b3bd5e0c87	headers,name,transform	-
 common.html_data_freeze	Excel,Outlook,PowerPoint,Word	agent	html.data.freeze.v1	ece229bab4113c463fb303422654e0e657e73dcb7d7395cee9736d1c6ee1e9f4	name	-
 common.html_data_refresh	Excel,Outlook,PowerPoint,Word	agent	html.data.refresh.v1	17163976c7377547ffb36af26f3a53a05cd52c902818bf572087a9bbcc9bcf5e	name	-
 common.html_data_write	Excel,Outlook,PowerPoint,Word	agent	html.data.write.v1	7780f4587ea35717d58bf62dd341c3a47218eaa640e7fd2cd56a681bd5e3d76a	json,name	-

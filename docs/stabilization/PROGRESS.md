@@ -2,12 +2,45 @@
 
 Current target: 16.1.0
 Current phase: Milestone WQ — обязательный Phase 11 existing-tool migration route и final active-legacy cleanup через 11T10 завершены host-neutral; Phase 12 ещё не начат
-Current task: user-reported R69 chart artifact preview routing is complete host-neutral. `rnassistant.chart` artifacts in Artifact Library now render the ECharts domain preview instead of the JSON tree, while exact JSON remains in Details; return to final Milestone WQ qualification before Phase 12.
-Execution mode: mandatory host-neutral route 0–11T10, WQ-A1–A5, R61/11O0–11O7, the separately approved D05.1–D05.6 slices and R65–R69 corrections завершены. WQ0 не блокировал implementation: текущий `RuntimeKey` exact bound Excel/Word/PowerPoint/Outlook object or window принят как lifetime assumption. Накопленные Windows gates по §16.1 теперь квалифицируют только итоговый post-cutover catalog/UI; до их evidence Phase 12 remains blocked.
+Current task: user-reported R71 Task List finish and HTML bound-data render correction is complete host-neutral. Active Task List completion guidance now fails successful finals that leave a list open, and table binding/render diagnostics now keep refreshed JSON reachable by generated dashboards instead of silently producing blank visuals.
+Execution mode: mandatory host-neutral route 0–11T10, WQ-A1–A5, R61/11O0–11O7, the separately approved D05.1–D05.6 slices and R65–R70 corrections завершены. WQ0 не блокировал implementation: текущий `RuntimeKey` exact bound Excel/Word/PowerPoint/Outlook object or window принят как lifetime assumption. Накопленные Windows gates по §16.1 теперь квалифицируют только итоговый post-cutover catalog/UI; до их evidence Phase 12 remains blocked.
 
-Next step for tools: final post-cutover Windows rebuild/live-provider/WebView2 qualification, including R61 Library UX plus the accumulated R62/R63 and R65–R69 complex-dashboard retests; then collect final Milestone WQ evidence. Phase 12 remains blocked until those gates close.
+Next step for tools: final post-cutover Windows rebuild/live-provider/WebView2 qualification, including R61 Library UX plus the accumulated R62/R63 and R65–R71 complex-dashboard retests; then collect final Milestone WQ evidence. Phase 12 remains blocked until those gates close.
 Required context: [11O7 evidence](PHASE_11O7_TOOL_LIBRARY_UX.md), [Tool Library contract](../tool-library.md#mandatory-all-tool-contract-audit-r61), [R61 audit](R61_TOOL_CONTRACT_AUDIT.md), [Qualification](../qualification.md) and the exact Windows gate instructions only.
-Open gates / remaining legacy: active tool execution/catalog/result legacy is empty. All current Excel, Word, PowerPoint, Outlook, public VBA/macro, custom VBA package and controller-owned tools use direct typed owners. `ThisAddIn` active-window/document lookup remains only VSTO pane lifecycle discovery, never execution target fallback, and is part of Windows UI/session qualification. Permanent narrow journal ports and current model-compatibility diagnostics share the canonical authority and are not legacy. R61 11O0–11O7 are complete host-neutral; final post-cutover live-provider/WQ-PACK and real WebView2 evidence remain. R62 is fixed host-neutral but requires the exact Windows WebView model/tool-error retest. R63/R68/R69 are fixed host-neutral; exact real Excel bind, edited-cell toolbar refresh, WebView rerender, Artifact Library chart preview and downloaded ECharts export remain open on Windows. R65/R67 are contained in prompt/schema/skill/tool guidance; explicit saved-prompt review/reset and a real complex Excel/VBA → HTML bind run on the target model remain open. R66 passes local Chromium but still requires the exact Windows WebView2 dashboard preview/export retest. R51 remains open for audio, other committed-resource removal and Windows WebView image-gallery/thumbnail/PDF/lifecycle qualification; 11D2 image, 11D3 PDF and their thumbnail/sequence navigation remain complete host-neutral and are not removed. R64 has matching exact-package x86 PDFium/Skia wired, but exact Windows x86 PDF extraction/preview/scanned-page/model-send execution remains open. Production OfficeHosts/VSTO build, actual COM marshal/cleanup, real DocumentSession lifetime, WQ0, WQ-SESSION, WQ-EXCEL, WQ-WORD, WQ-POWERPOINT and WQ-OUTLOOK are open evidence. Full Phase 6 Windows/VBE, Phase 8 WQ-PACK, Phase 9/R45–R48 WebView/restart/multi-window and R28/R29/R32 live-provider/UI gates remain open. R52 Host Fabric, R53 Local Automation, R54 Skill Library, R56 Tool Library, R57 Issue Center and R58 typed-facade risk remain open. Product 16.1.0-dev, no release/tag.
+Open gates / remaining legacy: active tool execution/catalog/result legacy is empty. All current Excel, Word, PowerPoint, Outlook, public VBA/macro, custom VBA package and controller-owned tools use direct typed owners. `ThisAddIn` active-window/document lookup remains only VSTO pane lifecycle discovery, never execution target fallback, and is part of Windows UI/session qualification. Permanent narrow journal ports and current model-compatibility diagnostics share the canonical authority and are not legacy. R61 11O0–11O7 are complete host-neutral; final post-cutover live-provider/WQ-PACK and real WebView2 evidence remain. R62 is fixed host-neutral but requires the exact Windows WebView model/tool-error retest. R63/R68/R69/R70/R71 are fixed host-neutral. Exact real Excel bind, edited-cell toolbar refresh, WebView rerender, Artifact Library chart preview, run resource-card count and downloaded ECharts export remain open on Windows. R65/R67/R70/R71 are contained in prompt/schema/skill/tool guidance; explicit saved-prompt review/reset and a real complex Excel/VBA → HTML bind run on the target model remain open. R66 passes local Chromium but still requires the exact Windows WebView2 dashboard preview/export retest. R51 remains open for audio, other committed-resource removal and Windows WebView image-gallery/thumbnail/PDF/lifecycle qualification; 11D2 image, 11D3 PDF and their thumbnail/sequence navigation remain complete host-neutral and are not removed. R64 has matching exact-package x86 PDFium/Skia wired, but exact Windows x86 PDF extraction/preview/scanned-page/model-send execution remains open. Production OfficeHosts/VSTO build, actual COM marshal/cleanup, real DocumentSession lifetime, WQ0, WQ-SESSION, WQ-EXCEL, WQ-WORD, WQ-POWERPOINT and WQ-OUTLOOK are open evidence. Full Phase 6 Windows/VBE, Phase 8 WQ-PACK, Phase 9/R45–R48 WebView/restart/multi-window and R28/R29/R32 live-provider/UI gates remain open. R52 Host Fabric, R53 Local Automation, R54 Skill Library, R56 Tool Library, R57 Issue Center and R58 typed-facade risk remain open. Product 16.1.0-dev, no release/tag.
+
+R71 Task List finish and HTML bound-data render correction (2026-09-03,
+user-reported host-neutral): refresh JSON can update correctly while a
+generated dashboard remains visually stale or blank when page code guesses a stale
+data-source name or uses first-row labels such as `Продажи` while
+`transform=table` exposes canonical keys such as `продажи`. The correction keeps
+canonical `columns[].key` as the public contract, adds first-row label aliases to
+bound table rows, adds a single-data-source `RNAssistant.data.first()`/
+`defaultName()` helper plus a warning fallback for stale names, and upgrades static
+preflight so missing data-source references are errors when workspace data exists.
+Prompt schema 25 tightens successful completion: an open active Task List is
+unfinished work unless the final message honestly reports why it could not be
+closed. HTML skill/tool guidance now requires refreshed JSON read-back plus visible
+KPI/table/chart render evidence before claiming live dashboard refresh works.
+Focused host-neutral checks passed: Harness `html` 23/23, `settings: built-in` 2/2,
+`tools: R61 built-in contract inventory` 1/1; web HTML ECharts 7/7, export 7/7,
+plan document 8/8, artifact library projection 5/5, chat resource cards 2/2;
+`node --check` for touched HTML workspace/resource-card scripts, `git diff --check`
+and `ValidateVersionFormat` passed. Windows WebView2 live refresh and exported file
+qualification remain open.
+
+R70 chart/resource duplicate-surface correction (2026-09-03,
+user-reported host-neutral): one run could legitimately produce a chart artifact and
+an HTML workspace revision for the same requested visual; the final resource bundle
+then displayed `Ресурсы · 2` (`Диаграмма · HTML workspace`), although the chat showed
+only one chart. Run resource cards now suppress the supporting HTML workspace when a
+chart artifact is present, while HTML-only runs still expose their workspace. HTML
+authoring guidance now requires choosing one visual surface and forbids calling
+`excel.create_chat_chart` for the same data when an ECharts/HTML dashboard is the
+deliverable. Existing persisted extra artifacts are not deleted automatically.
+Focused web and Harness checks cover the resource-card count, cache busting, chart
+preview route and skill/catalog references. Real Windows WebView2 and target-model
+behavior remain open gates.
 
 R69 chart artifact preview routing (2026-09-03, user-reported host-neutral):
 Artifact Library routed immutable `rnassistant.chart` snapshots through the generic

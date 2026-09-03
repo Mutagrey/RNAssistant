@@ -210,7 +210,8 @@ namespace RNAssistant.Harness
                         HtmlWorkspaceToolCatalog.BindDataToolId,
                         new JObject
                         {
-                            ["name"] = "sales"
+                            ["name"] = "sales",
+                            ["transform"] = "table"
                         });
                     AssertEqual(ToolExecutionOutcome.Ok, bind.Outcome,
                         "native HTML bind succeeds");
@@ -220,6 +221,10 @@ namespace RNAssistant.Harness
                     AssertEqual(1, adapter.ExcelBackendCalls.Count(operation =>
                             operation == FakeOfficeAdapter.ExcelRangeReadOperation),
                         "HTML bind reuses accepted data without a nested read");
+                    var boundTable = JObject.Parse(session.HtmlWorkspace.DataSources.Single(item =>
+                        string.Equals(item.Name, "sales", StringComparison.OrdinalIgnoreCase)).Json);
+                    AssertEqual("120", (string)boundTable["rows"][0]["Sales"],
+                        "bound table rows keep first-row header labels as aliases for dashboard code");
 
                     var boundArtifactId = session.ActiveHtmlArtifactId;
                     var boundArtifact = session.Artifacts.Single(item =>

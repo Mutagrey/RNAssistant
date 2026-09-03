@@ -621,6 +621,17 @@
     return artifactResourceHeads(artifacts);
   }
 
+  function visibleRunArtifacts(artifacts) {
+    artifacts = artifacts || [];
+    var hasChart = artifacts.some(function (artifact) {
+      return artifactKind(artifact) === "chart";
+    });
+    if (!hasChart) return artifacts;
+    return artifacts.filter(function (artifact) {
+      return artifactKind(artifact) !== "html_workspace";
+    });
+  }
+
   function collectRunImageArtifacts(items, finalMessage) {
     var messages = (items || []).map(function (item) { return item && item.message; });
     if (finalMessage && finalMessage.message) messages.push(finalMessage.message);
@@ -653,7 +664,7 @@
   function appendAgentRunResourceCards(parent, items, finalMessage) {
     if (!parent) return;
     appendArtifactMediaGallery(parent, collectRunImageArtifacts(items, finalMessage), "agent-run-media-gallery");
-    var artifacts = collectRunArtifacts(items, finalMessage);
+    var artifacts = visibleRunArtifacts(collectRunArtifacts(items, finalMessage));
     if (!artifacts.length) return;
 
     if (artifacts.length === 1) {

@@ -83,6 +83,26 @@ assert.deepEqual(JSON.parse(JSON.stringify(documentRuntime.__workspaceScriptRan)
 assert.doesNotMatch(documentChart, /rnassistant-html-fetch/);
 console.log("PASS HTML ECharts: standalone assembly executes the local runtime and bound table before workspace code");
 
+const fallbackChart = context.RNAssistantHtmlWorkspacePreview.build({
+  activeFileId: "dashboard.html",
+  files: [
+    { id: "dashboard.html", path: "dashboard.html", kind: "html", content: "<main></main>" },
+    { id: "dashboard.js", path: "dashboard.js", kind: "script", content: "var table=RNAssistant.data.get('demoSalesData'); window.__fallbackData={name:RNAssistant.data.defaultName(),value:table.rows[0].Sales};" }
+  ],
+  dataSources: [{
+    id: "sales", name: "sales",
+    json: "{\"schema\":\"rnassistant.table.v1\",\"columns\":[{\"key\":\"sales\",\"label\":\"Sales\",\"type\":\"number\"}],\"rows\":[{\"sales\":120,\"Sales\":120}],\"rowCount\":1}"
+  }],
+  hostBridge: false
+});
+const fallbackRuntime = vm.createContext({ Deno: {}, console: { warn(message) { this.last = message; } } });
+fallbackRuntime.window = fallbackRuntime;
+Array.from(fallbackChart.matchAll(/<script(?:\s[^>]*)?>([\s\S]*?)<\/script>/gi), match => match[1])
+  .forEach(source => vm.runInContext(source, fallbackRuntime, { timeout: 5000 }));
+assert.deepEqual(JSON.parse(JSON.stringify(fallbackRuntime.__fallbackData)), { name: "sales", value: 120 });
+assert.match(fallbackRuntime.console.last, /missing data source/);
+console.log("PASS HTML ECharts: a single bound data source survives a stale generated data name");
+
 const missingRuntime = vm.createContext({});
 missingRuntime.window = missingRuntime;
 vm.runInContext(fs.readFileSync(path.join(root, "web/js/app-html-workspace-preview.js"), "utf8"), missingRuntime,
@@ -111,8 +131,8 @@ const index = fs.readFileSync(path.join(root, "web/index.html"), "utf8");
 const captureIndex = index.indexOf("app-echarts-sandbox-runtime.js?v=html-echarts-20260902-2");
 const vendorIndex = index.indexOf("js/vendor/echarts.min.js");
 const finishIndex = index.indexOf("RNAssistantEChartsSandboxRuntime.finish()");
-const previewIndex = index.indexOf("app-html-workspace-preview.js?v=html-echarts-20260903-2");
+const previewIndex = index.indexOf("app-html-workspace-preview.js?v=html-bind-refresh-20260903-1");
 assert.ok(captureIndex >= 0 && captureIndex < vendorIndex && vendorIndex < finishIndex && finishIndex < previewIndex);
 console.log("PASS HTML ECharts: trusted capture spans vendor load and finalizes before preview assembly");
 
-console.log("OK 6/6");
+console.log("OK 7/7");

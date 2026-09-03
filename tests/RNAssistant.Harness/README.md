@@ -49,7 +49,7 @@ version check still apply.
 | Host document gate / neutral bound session / direct context and catalog reads | `Program.ParserDesktopTests.cs`; live-read/guard integration in `Program.VbaPromptTests.cs` and `Program.ResourceGatewayTests.cs` | `host runtime:`, `vba: queued guard`, `waits for active mutation`, `vba: confirmed mutation`, `tool runtime: native resource list manual and model paths` |
 | Excel identity owner/helper protocol (no Office execution) | `Program.ParserDesktopTests.cs`; source-linked `OfficeHosts.Qualification` | `excel identity probe:` |
 | Qualification pack/catalog/runner/event/build authority | `Program.QualificationTests.cs`; strict manifest/coverage, fake action/verifier ports, pause/replay/fault barriers, real chat CAS and signed exact-build admission | `qualification:` |
-| Artifact Library classes, exact heads/history, HTML branch selection and media gallery projection | `Program.ArtifactLibraryTests.cs`; UI contracts in `tests/web/artifact-library-projection.test.js` and `tests/web/artifact-media-gallery.test.js` | `artifact library:` |
+| Artifact Library classes, exact heads/history, HTML branch selection, media gallery projection and chat resource cards | `Program.ArtifactLibraryTests.cs`; UI contracts in `tests/web/artifact-library-projection.test.js`, `tests/web/artifact-media-gallery.test.js` and `tests/web/chat-resource-card.test.js` | `artifact library:` |
 | Exact bounded artifact text/source and Markdown viewer projection | `Program.ResourceGatewayTests.cs`, `Program.ContextBridgeTests.cs`; UI contracts in `tests/web/artifact-text-viewer.test.js` and `tests/web/artifact-json-viewer.test.js` | `artifact viewer:`, `bridge: typed artifact viewer`, `resources: gateway reads searches resolves and pages`, `resources: duplicate artifact ids fail closed`, `resources: empty text remains exact` |
 | HTML whole-workspace revision lineage and branch recovery | `Program.HtmlArtifactStorageTests.cs`; replay/recovery in `Program.SessionEventStoreTests.cs` | `html lineage:`, `storage: html navigation`, `storage: html redo branches`, `storage: html recovery` |
 | Inert uploaded-HTML preview/import and typed bridge payload | `Program.HtmlArtifactStorageTests.cs`, `Program.ContextBridgeTests.cs`; UI contract in `tests/web/html-upload-import.test.js` | `html import:`, `bridge: typed html import` |
@@ -377,10 +377,11 @@ schema 20 for whole resource reads and the direct bound VBA-project target;
 R61/11O4 uses schema 21 for semantic Prompt/Tool/Skill authoring; R61/11O5 uses
 schema 22 for semantic VBA/macro intents; the user-reported readiness/completion
 correction used schema 23 for prerequisite skill/tool selection, Task List lifecycle,
-root tool arguments, dependency order and evidence-reconciled completion. Current
-schema 24 makes the six-stage operating workflow and prompt/skill/tool authority
-split explicit, strengthens all built-in skill completion criteria, and adds exact
-skill-reference-to-catalog validation. Tests
+root tool arguments, dependency order and evidence-reconciled completion. Schema 24
+makes the six-stage operating workflow and prompt/skill/tool authority split
+explicit, strengthens all built-in skill completion criteria, and adds exact
+skill-reference-to-catalog validation. Current schema 25 tightens successful finish
+around closing active Task Lists and HTML bound-data render evidence. Tests
 preserve, review, or reset saved older/future markers explicitly. JS review behavior
 is unchanged.
 See [2C3B evidence](../../docs/stabilization/PHASE_2C3B_PROMPT_REVIEW.md).
@@ -432,7 +433,7 @@ the fixed patch operation and raw backup identity from model arguments, resolves
 restore by readable target or latest-for-module inside runtime, and hides mutation/
 backup ids, hashes and guards from model results. Use `vba:`, the focused semantic
 contract case, the VBA Agent/resource/facade cases and the R61 inventory. Prompt
-schema 22 was the 11O5 boundary. Current schema 24 requires explicit prompt
+schema 22 was the 11O5 boundary. Current schema 25 requires explicit prompt
 review/reset before Agent/Plan execution; retained pre-switch calls still require a
 new chat/reset.
 

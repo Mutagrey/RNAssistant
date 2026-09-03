@@ -111,7 +111,7 @@ vm.runInContext(source, context, { filename: "app-artifacts.js" });
   assert.ok(index.includes("app-core.js?v=artifact-gallery-20260902-1"), "core has the artifact gallery cache key");
   assert.ok(index.includes("app-chat-state.js?v=artifact-gallery-20260902-1"), "chat state has the artifact gallery cache key");
   assert.ok(index.includes("app-chat-session.js?v=tool-contract-20260901-1"), "chat session has the typed Tool contract cache key");
-  assert.ok(index.includes("app-artifacts.js?v=artifact-gallery-20260902-1"), "artifact cards have the gallery cache key");
+  assert.ok(index.includes("app-artifacts.js?v=chart-resource-card-20260903-1"), "artifact cards have the chart resource cache key");
   assert.ok(index.includes("app-html-workspace-model.js?v=artifact-gallery-20260902-1"), "artifact selection model has the gallery cache key");
   assert.ok(index.includes("app-html-workspace.js?v=html-echarts-20260903-1"), "artifact actions have the ECharts dependency cache key");
   assert.ok(index.includes("app-html-workspace-actions.js?v=artifact-gallery-20260902-1"), "artifact tool calls have the gallery cache key");

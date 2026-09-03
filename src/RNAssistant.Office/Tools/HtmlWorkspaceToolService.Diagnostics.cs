@@ -364,7 +364,13 @@ namespace RNAssistant.Office.Tools
             {
                 var value = MatchValue(match);
                 if (known.Contains(value) || !seen.Add(value)) continue;
-                collector.Add("warning", code, label + " '" + value + "' is not declared in the selected entry/workspace; it may be created dynamically.", name, kind, lineStarts, baseOffset + match.Index);
+                var dataSourceReference = string.Equals(code, "script.data_source_missing", StringComparison.Ordinal);
+                var knownValues = known == null ? new string[0] : known.Where(item => !string.IsNullOrWhiteSpace(item)).ToArray();
+                var severity = dataSourceReference && knownValues.Length > 0 ? "error" : "warning";
+                var detail = dataSourceReference && knownValues.Length > 0
+                    ? " Known data source(s): " + string.Join(", ", knownValues.Take(8).ToArray()) + "."
+                    : " It may be created dynamically.";
+                collector.Add(severity, code, label + " '" + value + "' is not declared in the selected entry/workspace." + detail, name, kind, lineStarts, baseOffset + match.Index);
             }
         }
 

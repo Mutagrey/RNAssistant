@@ -35,7 +35,7 @@ namespace RNAssistant.Office.Tools
             return "Workspace: Bind the most recent successful approved Office read from this Agent run as a refreshable HTML data source. " +
                 "Run the intended source read first; its exact tool and arguments are reused from accepted runtime evidence. " +
                 "Use transform=table only when that result contains row arrays; it returns an rnassistant.table.v1 envelope with columns, object rows, rowCount, and scalar source metadata. " +
-                "Page code reads the saved value through RNAssistant.data.get(name). Eligible reads: " +
+                "Page code reads the saved value through RNAssistant.data.get(name) and should use columns[].key for row access; first-row labels are also stored as row aliases when they differ from canonical keys. Eligible reads: " +
                 string.Join(", ", _dataSourceTools.Keys.ToArray()) + ".";
         }
 
@@ -57,7 +57,7 @@ namespace RNAssistant.Office.Tools
                     {
                         ["type"] = "string",
                         ["enum"] = new JArray("raw", "table"),
-                        ["description"] = "raw preserves source JSON; table returns {schema:'rnassistant.table.v1',source,columns:[{key,label,type}],rows:[{...}],rowCount}.",
+                        ["description"] = "raw preserves source JSON; table returns {schema:'rnassistant.table.v1',source,columns:[{key,label,type}],rows:[{...}],rowCount}; first-row label aliases are also present in rows when they differ from canonical keys.",
                         ["default"] = "raw"
                     },
                     ["headers"] = new JObject
@@ -612,6 +612,7 @@ namespace RNAssistant.Office.Tools
             var count = Math.Max(headerRow == null ? 0 : headerRow.Count, dataRows.Count == 0 ? 0 : dataRows.Max(item => item.Count));
             var keys = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
             var names = new List<string>();
+            var labels = new List<string>();
             for (var index = 0; index < count; index++)
             {
                 var label = headerRow != null && index < headerRow.Count && headerRow[index].Type != JTokenType.Null
@@ -619,14 +620,22 @@ namespace RNAssistant.Office.Tools
                     : "Column " + (index + 1);
                 var key = UniqueColumnKey(label, index, keys);
                 names.Add(key);
-                columns.Add(Column(key, string.IsNullOrWhiteSpace(label) ? "Column " + (index + 1) : label, InferType(dataRows.Select(item => index < item.Count ? item[index] : null))));
+                labels.Add(string.IsNullOrWhiteSpace(label) ? "Column " + (index + 1) : label);
+                columns.Add(Column(key, labels[index], InferType(dataRows.Select(item => index < item.Count ? item[index] : null))));
             }
             foreach (var sourceRow in dataRows)
             {
                 var row = new JObject();
                 for (var index = 0; index < names.Count; index++)
                 {
-                    row[names[index]] = index < sourceRow.Count ? sourceRow[index].DeepClone() : JValue.CreateNull();
+                    var value = index < sourceRow.Count ? sourceRow[index].DeepClone() : JValue.CreateNull();
+                    row[names[index]] = value;
+                    if (!string.IsNullOrWhiteSpace(labels[index]) &&
+                        !string.Equals(labels[index], names[index], StringComparison.Ordinal) &&
+                        row[labels[index]] == null)
+                    {
+                        row[labels[index]] = value.DeepClone();
+                    }
                 }
                 rows.Add(row);
             }

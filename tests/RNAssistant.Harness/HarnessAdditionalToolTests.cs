@@ -321,6 +321,8 @@ namespace RNAssistant.Harness
                 AssertEqual("rnassistant.table.v1", (string)table["schema"], "html table transform schema");
                 AssertEqual(3, table["rowCount"].Value<int>(), "html table transform row count");
                 AssertEqual("Jan", (string)table["rows"][0]["month"], "html table header becomes stable key");
+                AssertEqual("Jan", (string)table["rows"][0]["Month"], "html table keeps the source header label alias");
+                AssertEqual("120", (string)table["rows"][0]["Sales"], "html table keeps numeric header label aliases for generated dashboards");
                 AssertEqual("bounded", boundSession.HtmlWorkspace.DataSources[0].Binding.PayloadCompleteness,
                     "binding makes unknown source completeness explicit");
 
@@ -578,6 +580,7 @@ namespace RNAssistant.Harness
                 HtmlWorkspaceToolService.UpsertFile(inspectSession, "index.html", "html", "<main id=\"total\"></main><div id='total'></div><script src=\"echarts.min.js\"></script>", true);
                 HtmlWorkspaceToolService.UpsertFile(inspectSession, "styles.css", "css", "@import url('theme.css');", false);
                 HtmlWorkspaceToolService.UpsertFile(inspectSession, "app.js", "script", "import thing from 'pkg';\ndocument.getElementById('missing');\nRNAssistantData.missingData;", false);
+                HtmlWorkspaceToolService.UpsertDataSource(inspectSession, "sales", "{\"rows\":[1]}");
                 var inspectResult = HtmlWorkspaceToolService.InspectForPreview(
                     inspectSession, CancellationToken.None);
                 AssertEqual(HtmlWorkspaceOutcomeStatus.Ok, inspectResult.Status,
@@ -585,10 +588,15 @@ namespace RNAssistant.Harness
                 var inspection = JObject.Parse(inspectResult.DataJson);
                 AssertTrue(!(bool)inspection["runtimeExecuted"], "HTML inspection identifies static-only scope");
                 AssertTrue(!(bool)inspection["passed"], "HTML inspection fails preflight when errors exist");
-                AssertTrue((int)inspection["errorCount"] >= 4, "HTML inspection reports assembly and CSP errors");
-                AssertTrue((int)inspection["warningCount"] >= 2, "HTML inspection reports likely missing references");
+                AssertTrue((int)inspection["errorCount"] >= 5, "HTML inspection reports assembly, CSP and missing-data errors");
+                AssertTrue((int)inspection["warningCount"] >= 1, "HTML inspection reports likely missing DOM references");
                 AssertTrue(inspection["issues"].Any(item => (string)item["code"] == "html.duplicate_id"), "HTML inspection finds duplicate ids");
                 AssertTrue(inspection["issues"].Any(item => (string)item["code"] == "script.module_syntax_unsupported"), "HTML inspection finds module syntax");
+                AssertTrue(inspection["issues"].Any(item =>
+                        (string)item["code"] == "script.data_source_missing" &&
+                        (string)item["severity"] == "error" &&
+                        ((string)item["message"] ?? string.Empty).IndexOf("sales", StringComparison.OrdinalIgnoreCase) >= 0),
+                    "HTML inspection fails loudly when code uses a missing data-source name");
                 AssertTrue(inspection["issues"].Any(item =>
                         (string)item["code"] == "html.script_src_unsupported" &&
                         ((string)item["message"] ?? string.Empty).IndexOf("bundled ECharts automatically", StringComparison.OrdinalIgnoreCase) >= 0),

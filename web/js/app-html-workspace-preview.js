@@ -95,9 +95,11 @@
     return "<script>(function(){" +
       "var raw=" + escapeScriptJson(JSON.stringify(raw)) + ",data=Object.create(null),meta=" + escapeScriptJson(JSON.stringify(metadata)) + ";" +
       "Object.keys(raw).forEach(function(name){data[name]=JSON.parse(raw[name]);});" +
+      "function names(){return Object.keys(data);}" +
+      "function resolve(name){if(Object.prototype.hasOwnProperty.call(data,name))return name;var keys=names();if(keys.length===1){if(window.console&&console.warn)console.warn(\"RNAssistant.data.get('\"+String(name)+\"') used missing data source; falling back to '\"+keys[0]+\"'. Update workspace code to the exact name.\");return keys[0];}return name;}" +
       "Object.freeze(raw);Object.freeze(data);Object.freeze(meta);" +
       "window.RNAssistantData=data;window.RNAssistantDataRaw=raw;window.RNAssistantDataMeta=meta;" +
-      "window.RNAssistant={data:Object.freeze({get:function(name){return data[name];},raw:function(name){return raw[name]||null;},meta:function(name){return meta[name]||null;},names:function(){return Object.keys(data);}})};" +
+      "window.RNAssistant={data:Object.freeze({get:function(name){return data[resolve(name)];},raw:function(name){var key=resolve(name);return raw[key]||null;},meta:function(name){var key=resolve(name);return meta[key]||null;},names:names,defaultName:function(){var keys=names();return keys.length===1?keys[0]:null;},first:function(){var key=this.defaultName();return key?data[key]:null;}})};" +
       "Object.freeze(window.RNAssistant);" +
       "}());<\/script>";
   }

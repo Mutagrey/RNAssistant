@@ -411,6 +411,8 @@ namespace RNAssistant.Harness
                 "HTML authoring avoids duplicate bundled chart instances");
             AssertContains(htmlAuthoring, "Do not create `echarts.js`",
                 "HTML authoring rejects remote or duplicate chart runtimes");
+            AssertContains(htmlAuthoring, "do not also call `excel.create_chat_chart` for the same data",
+                "HTML authoring keeps ECharts workspace and chat-chart artifacts from duplicating one visual");
             AssertContains(htmlAuthoring, "root `arguments` contains exactly `path` and `content`",
                 "HTML writes put semantic properties directly at the schema root");
             foreach (var file in new[] { "`index.html`", "`styles.css`", "`dashboard.js`" })
@@ -433,8 +435,14 @@ namespace RNAssistant.Harness
                 "source-backed HTML establishes its live data contract before construction");
             AssertContains(htmlAuthoring, "columns:[{key,label,type}], rows:[{...}], rowCount",
                 "HTML guidance defines the bound table envelope used by page code");
+            AssertContains(htmlAuthoring, "rows also include label aliases",
+                "HTML guidance explains generated-dashboard compatibility for source headers");
+            AssertContains(htmlAuthoring, "RNAssistant.data.first()",
+                "HTML guidance gives a single-data-source helper instead of guessed names");
             AssertContains(htmlAuthoring, "A host refresh with changed values/status creates a new workspace head without adding an Undo step",
                 "HTML guidance requires durable refresh read-back");
+            AssertContains(htmlAuthoring, "visible render evidence",
+                "HTML guidance requires proof that refreshed JSON reached the page");
             AssertContains(htmlAuthoring, "Standalone export embeds the exact current JSON snapshot plus the local ECharts runtime",
                 "HTML guidance distinguishes a self-contained export from live Office refresh");
             AssertContains(htmlAuthoring, "preflight has zero errors",
@@ -451,6 +459,8 @@ namespace RNAssistant.Harness
                 "task tracking uses the complex-request threshold");
             AssertContains(taskTracking, "Before the first Office/source read or mutation",
                 "the execution checklist precedes domain work");
+            AssertContains(taskTracking, "An open active Task List means the run is not successfully finished",
+                "task tracking forbids successful completion with an open checklist");
             foreach (var skill in skills)
                 AssertTrue(skill.BodyMarkdown.IndexOf("TOOL_RESULT ok=true", StringComparison.OrdinalIgnoreCase) < 0,
                     skill.Id + " does not teach the removed result success flag");
@@ -480,6 +490,10 @@ namespace RNAssistant.Harness
                 "Agent follows source, deliverable, verification and reuse dependency order");
             AssertContains(defaults.SystemPrompt, "compare every explicit deliverable and every active task-list step",
                 "Agent verifies requested outcomes before ending the loop");
+            AssertContains(defaults.SystemPrompt, "An open active Task List is an unfinished requested deliverable",
+                "Agent completion gate treats open task list as unfinished work");
+            AssertContains(defaults.SystemPrompt, "the final action for a successful run is `common.task_list_set` with `action=close`",
+                "Agent final success requires the task-list close tool");
             AssertContains(defaults.SystemPrompt, "cannot become success prose",
                 "tool and protocol errors cannot be reported as completed work");
             AssertContains(defaults.SystemPrompt, "simplified placeholder",
@@ -488,6 +502,8 @@ namespace RNAssistant.Harness
                 "complex Agent work creates a task list before execution");
             AssertContains(defaults.AgentToolsPrompt, "common.task_tracking` and `common.task_list_set",
                 "task tracking explains separate skill and tool-schema loading");
+            AssertContains(defaults.AgentToolsPrompt, "an empty `tool_calls` response is not a successful completion",
+                "tool policy prevents ending while task list is still active");
             AssertContains(defaults.AgentToolsPrompt, "never add an inner `arguments`",
                 "tool arguments are supplied at the schema root");
             AssertContains(defaults.AgentToolsPrompt, "Skills define domain workflow and quality criteria",

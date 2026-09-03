@@ -225,6 +225,9 @@ are preview frames, never child artifacts or independently durable revisions.
   owners of their formats. `application/vnd.rnassistant.chart+json` artifacts
   render the ECharts chart viewer in Preview and keep the exact JSON payload in
   Details; if the domain viewer is unavailable, the safe JSON fallback remains.
+  Agent run resource cards do not count a supporting HTML workspace as a second
+  visible resource when the same run also exposes a chart artifact; HTML-only runs
+  still expose the workspace.
 - Uploaded HTML: escaped source only by default. Preview requires explicit import
   into the HTML workspace; untrusted upload source is never inserted into the main
   DOM or granted network access.
@@ -233,7 +236,12 @@ are preview frames, never child artifacts or independently durable revisions.
   existing explicit allowlist and last-good binding behavior. `transform=table`
   exposes one stable `rnassistant.table.v1` envelope (`columns`, object `rows`,
   `rowCount`, scalar `source` metadata), available to page code through
-  `RNAssistant.data.get(name)`. Refresh rereads the stored exact Office source,
+  `RNAssistant.data.get(name)`. New page code should read row values by
+  `columns[].key`; first-row source labels are also copied as row aliases when
+  they differ from the canonical key so generated dashboards using labels such as
+  `Продажи` keep rendering. A one-data-source workspace also exposes
+  `RNAssistant.data.first()` and `defaultName()` to avoid guessed names. Refresh
+  rereads the stored exact Office source,
   captures a replacement authoritative workspace head when JSON or binding status
   changes without adding an Undo step, and creates no artifact for verified
   no-change. The UI reloads that head before rebuilding the preview. A
