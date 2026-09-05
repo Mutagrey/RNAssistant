@@ -61,7 +61,11 @@ namespace RNAssistant.Office.Services
             {
                 new ChatArtifactResourceProvider(loadArtifactBody, readAttachmentText)
             };
-            if (authority?.Payloads != null) providers.Add(new ResourceStateProvider(authority, authority.Payloads));
+            if (authority?.Payloads != null)
+            {
+                providers.Add(new ResourceStateProvider(authority, authority.Payloads));
+                providers.Add(new ContextResourceProvider(authority, authority.Payloads));
+            }
             if (catalogs != null) providers.Add(new CatalogResourceProvider(catalogs, authority));
             if (adapter != null)
             {

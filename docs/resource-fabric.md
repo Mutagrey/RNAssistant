@@ -35,12 +35,24 @@ batch is not a complete source. Core contracts live in `Resource*Models.cs` and
 
 `ResourceGatewayService` and `ResourceProviderRegistry` own generic routing and
 bounded reads. Registered owners are chat artifacts/attachments, bound Office
-document/VBA, Excel ranges/formulas, conversation state/definitions and catalogs.
+document/VBA, Excel ranges/formulas, conversation state/definitions, typed context
+and catalogs. `ContextResourceProvider` discovers attached supplied data in the
+conversation scope and Office observations in the exact bound document scope.
+Instructions/untyped notes are not resources; display previews never supply bodies.
+`ResourceSnapshotReadService` reads state/context from whole retained views or the
+canonical revision payload. Partial views cannot substitute for whole bodies;
+continuations bind logical revision and URI/view, never an equal content hash.
+Exact historical reads retain access after drift/removal without moving heads.
+An identity with only prepared metadata cannot be activated by reading it; copied
+context becomes readable after the owning atomic fork publication.
 `ResourceGatewayService.Binary` captures CAS image/thumbnail/PDF-page views using
 the existing renderer owners. Providers retain interpretation/materialization.
 
 Model discovery/read uses `common.resources_find/read` with runtime-resolved
-semantic targets and exact internal references/continuations. The `catalogs`
+semantic targets and exact internal references/continuations. A mutable semantic
+target captures its current head on the first read, then pins all internal pages
+to that exact revision; it cannot get stuck on discovery's previous observation.
+The `catalogs`
 scope discovers definitions without execution admission. `CatalogResourceProvider`
 serves committed metadata, exact skill bodies and reference Markdown, including
 historical publications. Remaining domain-specific read consumers are tracked below.
@@ -179,10 +191,13 @@ Removed in touched contours: per-chat VBA observation/refresh hash dictionaries 
 callbacks; `VbaToolExecutor.Observations`; `HtmlAcceptedReadSourceResolver`; HTML
 binding tool IDs/arguments/transforms/current JSON; independent model history/repair
 assembly; free-summary resource authority; inline large pending payload duplication;
-viewer text/base64 bridge transport; mutable-disk skill reference activation.
+viewer text/base64 bridge transport; mutable-disk skill reference activation;
+separate state text reader, hash-bound state continuations and read-side activation
+of prepared state/context identities.
 No compatibility alias, dual-write or feature flag restores these paths.
 
-Still open within this same cutover: remaining definition/domain read consumers, finer
+Still open within this same cutover: the live/retained Office logical-continuation
+boundary, remaining definition/domain read consumers, finer
 Excel coverage/named resources, complete binary/raw view negotiation,
 remaining bulk upload/export surfaces, bounded history/retention
 optimization and final documentation cleanup. These are not permanent adapters.

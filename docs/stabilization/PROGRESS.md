@@ -41,8 +41,9 @@ the UI and authorized RN.resources subscribers. Authority readers catch up journ
 tails, and Known-head publication now requires durable exact revision metadata.
 The canonical owner map and active removal gates are updated in resource-fabric.md
 and MIGRATION_MAP.md.
-Checkpoint commits: `ec8b179` (integrated foundation), `332b911` (lifecycle) and
-`904e1ae` (exact lineage across restore/context/fork); user-requested checkpoints,
+Checkpoint commits: `ec8b179` (integrated foundation), `332b911` (lifecycle),
+`904e1ae` (exact lineage across restore/context/fork) and `b59e26d` (exact HTML
+data-plane export); user-requested checkpoints,
 not a completed cutover. The lifecycle checkpoint switches controller clear/edit/message-delete/
 fork to typed history intents through the same journal/authority observer. History
 and fork preparation belong to ChatHistoryEditService/ChatCloneService; active
@@ -72,7 +73,7 @@ immutable materialized CAS and old workspace bodies remain unchanged. Unavailabl
 unpublished dependencies, cycles and graph bounds fail closed; failed publication
 cannot partially activate a copied graph. The blanket unsupported-definition path
 and optional fork-preparation bypass are removed.
-Wave 4 export checkpoint after `904e1ae`: standalone HTML export captures
+Wave 4 export checkpoint `b59e26d`: standalone HTML export captures
 typed exact leases through the same resource data plane. Head bindings must agree
 with one frozen authority tuple; historical bindings stay pinned. Export pulls
 bounded table/text/binary parts, never workspace JSON or control-message bodies.
@@ -91,6 +92,26 @@ Export checks: host-neutral exact capture/failure cleanup 2/2; typed export brid
 1/1 and production source inclusion 1/1. Web export 11/11, ECharts 7/7 and hosted
 resource data-plane contract pass; related static UI fixtures: Plan 8/8, Artifact
 Library 5/5, HTML import 5/5. No full harness or Office/VSTO validation.
+Context-read checkpoint after `b59e26d`: typed context refs now route through
+the same Gateway/data plane in their conversation or exact document authority
+scope. Instructions and untyped notes are excluded from resource discovery; bodies
+come only from exact CAS. State/context share one retained text reader: partial
+views cannot replace whole payloads, cursors bind logical revisions (including
+equal-byte restores), and reads cannot activate prepared identities or resurrect
+removed heads. Fork preparation remains unreadable until atomic publication;
+replayed copied context reads in its child scope. Open context leases remain exact
+after drift, while new unknown-head reads fail. Semantic mutable reads now capture
+the current head once and pin internal pages, fixing reads stuck on an older
+discovery observation. Legacy HTML-body/provider-list fixtures use current bindings
+and the integrated provider registry.
+Continuation checks: resource cutover 19/19; resources 10/10; native semantic
+resource tools (including multi-page context) 1/1; Agent large whole read 1/1;
+native resource evidence replay 1/1; HTML export 2/2 and production source inclusion
+1/1. No full harness, Office/VSTO or Windows validation. The required version-format
+gate passed before the user-requested context-read checkpoint commit.
+Next host-neutral read contour: live/retained Office continuation tokens still
+carry physical view hashes; close that logical-revision boundary through the same
+Gateway/authority owner, including equal-byte restore tests.
 Still open: remaining definition/domain read and bulk upload/export consumers,
 finer Excel coverage/named resources, complete binary/raw view negotiation, bounded
 cold replay/checkpoint/retention optimization,

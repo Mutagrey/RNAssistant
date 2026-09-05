@@ -12,11 +12,10 @@ namespace RNAssistant.Office.Services
     internal sealed class ResourceStateProvider : IResourceProvider
     {
         private readonly ResourceAuthorityService _authority;
-        private readonly IResourceRevisionStore _revisions;
-        private readonly ChatBlobStore _payloads;
+        private readonly ResourceSnapshotReadService _reads;
         public string Id { get { return "state"; } }
         internal ResourceStateProvider(ResourceAuthorityService authority, ChatBlobStore payloads)
-        { _authority = authority; _revisions = (IResourceRevisionStore)authority.Store; _payloads = payloads; }
+        { _authority = authority; _reads = new ResourceSnapshotReadService(authority, payloads); }
 
         internal static ResourceIdentity Identity(ResourceAuthorityScopeId scope, string name)
         { return new ResourceIdentity(ResourceUri.Create("state", scope.Kind, scope.Id, name)); }
@@ -60,29 +59,7 @@ namespace RNAssistant.Office.Services
         {
             var scope = Scope(session, request.Reference.Uri);
             var descriptor = Resolve(session, request.Reference.Uri);
-            var exact = request.Reference.IsExact ? request.Reference : descriptor.Reference;
-            if (exact == null || !exact.IsExact) throw Error("RESOURCE_HEAD_UNKNOWN", "The current logical resource has no captured revision.");
-            var metadata = _revisions.GetRevision(scope, exact);
-            var view = string.IsNullOrWhiteSpace(request.Representation) || request.Representation == "auto" ? "text" : request.Representation;
-            var captured = _revisions.GetView(scope, exact, view);
-            var payload = captured?.Payload ?? (view == "text" ? metadata?.Payload : null);
-            if (payload == null) throw Error("RESOURCE_VIEW_UNAVAILABLE", "This exact revision does not have the requested view.");
-            if (payload.ByteLength > 8L * 1024 * 1024) throw Error("RESOURCE_BATCH_TOO_LARGE", "The snapshot exceeds this view's materialization bound.");
-            var text = _payloads.ReadText(payload.ToBlobReference());
-            if (text == null) throw Error("RESOURCE_SNAPSHOT_UNAVAILABLE", "The exact snapshot payload is unavailable.");
-            var binding = ResourceReadCursor.ReadBinding(exact.Uri, view);
-            var position = ResourceReadCursor.ParseRevisionBound(request, binding);
-            var hash = captured?.ContentSha256 ?? metadata.ContentSha256;
-            ResourceReadCursor.ValidateContinuation(position, hash);
-            if (position.Offset > text.Length) throw Error("RESOURCE_CURSOR_INVALID", "The cursor is outside this exact view.");
-            var count = Math.Min(text.Length - position.Offset, Math.Max(1, Math.Min(32000, request.MaxChars <= 0 ? 32000 : request.MaxChars)));
-            var next = position.Offset + count;
-            descriptor.Reference = exact.Copy(); descriptor.Payload = payload; descriptor.MimeType = payload.ContentType;
-            descriptor.Dependencies = metadata.Dependencies.ToList();
-            return new ResourceReadSelection { Result = new ResourceReadResult { Resource = descriptor, Representation = view,
-                Text = text.Substring(position.Offset, count), ContentSha256 = hash, Offset = position.Offset,
-                ReturnedCharacters = count, TotalCharacters = text.Length, Complete = next == text.Length, Truncated = next < text.Length,
-                NextCursor = next < text.Length ? ResourceReadCursor.CreateRevisionBound(next, hash, binding) : null }, ResourceRefs = new[] { exact.Copy() } };
+            return _reads.Read(scope, descriptor, request);
         }
         private ResourceAuthorityScopeId Scope(ChatSession session, string uri)
         {

@@ -37,17 +37,20 @@ namespace RNAssistant.Office.Tools
             var target = ToolArgumentReader.String(
                 context.Arguments, "target", string.Empty).Trim();
             var selected = Gateway.ResolveIntentTarget(Session, target);
+            // A semantic mutable target requests its current head, not the last
+            // observed revision from discovery. Internal pages pin the first read.
+            var reference = selected.Descriptor.Mutable ? new ResourceRef(selected.Reference.Uri) : selected.Reference;
             var representation = ToolArgumentReader.String(context.Arguments, "representation", "auto");
             var structured = representation == "table" || representation == "records";
             if (!structured && new[] { "limit", "offset", "path", "fields" }.Any(context.Arguments.ContainsKey))
                 throw new ResourceRequestException("Structural selectors require representation=table or records.", "RESOURCE_VIEW_UNSUPPORTED", false);
             var selection = structured
-                ? Gateway.Read(Session, new ResourceReadRequest { Reference = selected.Reference, Representation = representation,
+                ? Gateway.Read(Session, new ResourceReadRequest { Reference = reference, Representation = representation,
                     MaxRows = ToolArgumentReader.Int32(context.Arguments, "limit", 500),
                     RowOffset = ToolArgumentReader.Int32(context.Arguments, "offset", 0),
                     ViewPath = ToolArgumentReader.String(context.Arguments, "path", "$"),
                     Fields = Fields(context.Arguments) })
-                : ReadWhole(selected.Reference, representation);
+                : ReadWhole(reference, representation);
             var projection = Project(
                 selection,
                 selected.Target,
@@ -108,6 +111,7 @@ namespace RNAssistant.Office.Tools
                 if (first == null)
                 {
                     first = result;
+                    reference = result.Resource.Reference.Copy();
                 }
                 else if (!string.Equals(
                     first.Representation,

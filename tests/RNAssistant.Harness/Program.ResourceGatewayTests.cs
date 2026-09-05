@@ -261,7 +261,7 @@ namespace RNAssistant.Harness
                         representation = ResourceRepresentations.Structure
                     }));
                 AssertEqual(ToolExecutionOutcome.Ok, projectRead.Outcome,
-                    "large VBA project structure is read through one public call");
+                    "large VBA project structure is read through one public call: " + projectRead.Result.Message + " " + projectRead.Result.DataJson);
                 var projectReadData = JObject.Parse(projectRead.Result.DataJson);
                 AssertEqual(true, (bool)projectReadData["complete"],
                     "large project structure is complete");
@@ -285,6 +285,18 @@ namespace RNAssistant.Harness
                     "model-owned resource continuation action is rejected by the whole-read schema");
                 AssertEqual(ToolDispatchEvidence.NotDispatched, retiredNext.Evidence.Dispatch,
                     "retired continuation never reaches a provider");
+
+                var contextBody = "EXACT_CONTEXT " + new string('x', 40000);
+                var note = new ContextNote { Role = ContextNoteRole.OfficeObservation, Title = "Large observation", Text = contextBody };
+                executor.ResourceAuthority.ObserveNote(session, note, executor.Payloads);
+                session.Context.Notes.Add(note);
+                note.Text = note.Preview = "FORGED_DISPLAY";
+                var contextRead = execute(ResourceToolCatalog.ReadToolId,
+                    "{\"target\":\"Office observation: Large observation\",\"representation\":\"text\"}");
+                AssertEqual(ToolExecutionOutcome.Ok, contextRead.Outcome, "semantic context read pins the first bounded page for subsequent reads");
+                AssertEqual(contextBody, (string)JObject.Parse(contextRead.Result.DataJson)["text"], "model-facing context uses the same whole exact CAS view");
+                AssertEqual(note.Evidence.Resource.Revision, contextRead.Result.Resources.Single().Revision,
+                    "complete model-facing context keeps the original logical revision");
             });
         }
 
@@ -785,10 +797,11 @@ namespace RNAssistant.Harness
                 ChatHtmlResourceCatalog.DataKind,
                 null,
                 10).Items.Single();
-            AssertContains(
-                ReadResource(htmlGateway, htmlSession, dataResource.Reference.Uri, ResourceRepresentations.Text, null, 128).Result.Text,
-                "items",
-                "HTML data is an independently readable text resource");
+            var binding = JsonConvert.DeserializeObject<HtmlWorkspaceDataBinding>(
+                ReadResource(htmlGateway, htmlSession, dataResource.Reference.Uri, ResourceRepresentations.Text, null, 32000).Result.Text);
+            AssertTrue(binding.Resource.IsExact, "HTML data members expose exact binding metadata, not a second body");
+            AssertContains(htmlGateway.Read(htmlSession, new ResourceReadRequest { Reference = binding.Resource,
+                Representation = ResourceRepresentations.Text }).Result.Text, "items", "binding reads its canonical resource body through the same gateway");
 
             HtmlWorkspaceToolService.UpsertFile(
                 htmlSession,
@@ -1509,7 +1522,7 @@ namespace RNAssistant.Harness
                 var gateway = executor.ResourceGateway;
 
                 var discovery = gateway.List(session, null, null, null, 20);
-                AssertEqual("chat,document,vba", string.Join(",", discovery.Providers.ToArray()),
+                AssertEqual("catalog,chat,context,document,excel,state,vba", string.Join(",", discovery.Providers.ToArray()),
                     "resource discovery exposes the registered providers only");
 
                 var defaultVba = gateway.List(

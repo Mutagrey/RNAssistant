@@ -257,6 +257,10 @@ namespace RNAssistant.Harness
                     new ResourceForkService(executor.ResourceAuthority, executor.Payloads));
                 var childScope = executor.ResourceAuthority.Scope(child, false);
                 AssertEqual(0L, executor.ResourceAuthority.Store.Capture(childScope).Generation, "preparation cannot publish copied heads");
+                AssertEqual("RESOURCE_SNAPSHOT_UNAVAILABLE", RuntimeThrows<ResourceRequestException>(() => gateway.Read(child,
+                    new ResourceReadRequest { Reference = child.Context.Notes[0].Evidence.Resource, Representation = "text" })).ErrorCode,
+                    "prepared context copies cannot become readable/published through a read");
+                AssertEqual(0L, executor.ResourceAuthority.Store.Capture(childScope).Generation, "rejected read leaves fork preparation unpublished");
                 var childDerived = child.HtmlWorkspace.DataSources.Single(item => item.Name == "virtual").Binding.Resource;
                 AssertTrue(childDerived.Uri.Contains(child.Id) && childDerived.Revision != derived.Revision, "fork has a new exact resource identity/revision");
                 var copiedSnapshot = child.Artifacts.Single(item => item.Id == originalSnapshotId);
@@ -282,6 +286,9 @@ namespace RNAssistant.Harness
                 AssertEqual(childDerived.Revision, replayed.HtmlWorkspace.DataSources.Single(item => item.Name == "virtual").Binding.Resource.Revision,
                     "restore reuses the deliberately copied revision, never the parent head");
                 AssertEqual(childScope, replayed.Context.Notes[0].Evidence.ScopeId, "supplied context is copied into the child's evidence scope");
+                AssertEqual("FORKED_DATA", gateway.Read(replayed, new ResourceReadRequest {
+                    Reference = replayed.Context.Notes[0].Evidence.Resource, Representation = "text" }).Result.Text,
+                    "replayed context copies use the same gateway after atomic fork publication");
                 AssertEqual(originalSnapshotBody, session.Artifacts.Single(item => item.Id == originalSnapshotId).InlineText,
                     "fork never mutates the parent snapshot");
 
@@ -709,6 +716,142 @@ namespace RNAssistant.Harness
             var artifact1 = new ResourceRef("rna://chat/s/artifact/a/revision/1", "1");
             var artifact2 = new ResourceRef("rna://chat/s/artifact/a/revision/2", "2");
             AssertTrue(artifact1.Identity.Equals(artifact2.Identity), "exact artifact revisions share one logical identity");
+        }
+
+        private static void ResourceContextGatewayUsesScopedSnapshots()
+        {
+            WithTempPaths(paths =>
+            {
+                var payloads = new ChatBlobStore(paths);
+                var store = new ResourceAuthorityStore(paths);
+                var authority = new ResourceAuthorityService(store, store, payloads: payloads);
+                var session = new ChatSession { DocumentAuthorityId = "context-document" };
+                var liveReads = 0;
+                var gateway = new ResourceGatewayService(null, null, null, authority: authority,
+                    beginLiveOfficeRead: chat => { liveReads++; throw new InvalidOperationException("Context snapshots cannot call Office."); });
+                var dataBody = "CANONICAL_DATA " + new string('x', 1000);
+                var data = new ContextNote { Role = ContextNoteRole.SuppliedData, Title = "Input draft", Text = dataBody };
+                var office = new ContextNote { Role = ContextNoteRole.OfficeObservation, Title = "Captured cells", Text = "EXACT_OFFICE_CELLS" };
+                authority.ObserveNote(session, data, payloads);
+                authority.ObserveNote(session, office, payloads);
+                session.Context.Notes.AddRange(new[] { data, office,
+                    new ContextNote { Role = ContextNoteRole.UserInstruction, Title = "Hidden instruction", Evidence = data.Evidence },
+                    new ContextNote { Title = "Untyped note", Evidence = data.Evidence } });
+                data.Text = data.Preview = "FORGED_DISPLAY";
+                office.Text = office.Preview = "FORGED_DISPLAY";
+                var conversation = authority.Scope(session, false);
+                var document = authority.Scope(session, true);
+                var listed = gateway.List(session, "context", null, null, 20);
+                AssertEqual(2, listed.Items.Count, "only typed supplied data and Office observations are discoverable resources");
+                var target = gateway.Find(session, "Input draft", "conversation").Items.Single();
+                AssertEqual("context data: Input draft", target.Target, "context uses ordinary semantic resource targets");
+                AssertEqual(data.Evidence.Resource.Revision, gateway.ResolveIntentTarget(session, target.Target).Reference.Revision,
+                    "model target resolution pins the canonical revision");
+                AssertEqual("Office observation: Captured cells", gateway.Find(session, "Captured cells", "document").Items.Single().Target,
+                    "Office context is discovered in its document scope, not the conversation scope");
+                AssertEqual(0, gateway.Find(session, "Captured cells", "conversation").Items.Count, "scope filtering cannot borrow document context");
+                AssertEqual(0, gateway.Search(session, "context", "FORGED_DISPLAY", null, 20, 200).Matches.Count,
+                    "display previews are not a searchable alternate body");
+                var page = gateway.Read(session, new ResourceReadRequest { Reference = data.Evidence.Resource, Representation = "text", MaxChars = 8 }).Result;
+                var rest = gateway.Read(session, new ResourceReadRequest { Reference = page.Resource.Reference, Representation = "text", Cursor = page.NextCursor }).Result;
+                AssertEqual(dataBody, page.Text + rest.Text, "bounded context reads hydrate full exact CAS rather than display or retained fragments");
+                AssertEqual(ResourceCoverageKinds.CharacterRange, page.Coverage.Kind, "partial reads keep partial evidence coverage");
+                var observed = gateway.Read(session, new ResourceReadRequest { Reference = office.Evidence.Resource, Representation = "text" }).Result;
+                var evidence = gateway.Evidence(session, observed).Single();
+                AssertEqual(document, evidence.ScopeId, "snapshot reads preserve document authority without being live COM reads");
+                AssertTrue(!evidence.Immutable, "Office observations still track document head currentness");
+                AssertEqual(EvidenceState.Current, new EvidenceStateReducer().Reduce(evidence, authority.CaptureMany(new[] { document })).State,
+                    "shared reducer recognizes the current Office observation");
+                var other = new ChatSession { DocumentAuthorityId = session.DocumentAuthorityId };
+                AssertEqual("EXACT_OFFICE_CELLS", gateway.Read(other, new ResourceReadRequest {
+                    Reference = office.Evidence.Resource, Representation = "text" }).Result.Text, "explicit document refs stay shared across chats on that document");
+                AssertEqual("RESOURCE_ACCESS_DENIED", RuntimeThrows<ResourceRequestException>(() => gateway.Read(other,
+                    new ResourceReadRequest { Reference = data.Evidence.Resource, Representation = "text" })).ErrorCode, "conversation data never aliases another chat");
+                other.DocumentAuthorityId = "another-document";
+                AssertEqual("RESOURCE_ACCESS_DENIED", RuntimeThrows<ResourceRequestException>(() => gateway.Read(other,
+                    new ResourceReadRequest { Reference = office.Evidence.Resource, Representation = "text" })).ErrorCode, "document refs require the exact bound document authority");
+                using (var plane = new ResourceDataPlaneService(gateway))
+                {
+                    var opened = plane.Open(session, "context-viewer", new ResourceRef(office.Evidence.Resource.Uri), "text");
+                    authority.ReportExternalDrift(document, office.Evidence.Resource.Identity);
+                    var batch = JObject.Parse(System.Text.Encoding.UTF8.GetString(plane.Read(opened.LeaseId, 0, 7, System.Threading.CancellationToken.None)));
+                    var tail = JObject.Parse(System.Text.Encoding.UTF8.GetString(plane.Read(opened.LeaseId, 7, 100, System.Threading.CancellationToken.None)));
+                    AssertEqual("EXACT_OFFICE_CELLS", (string)batch["text"] + (string)tail["text"], "an open data-plane handle remains pinned after document drift");
+                    plane.Close(session.Id, "context-viewer", opened.LeaseId);
+                    AssertEqual("RESOURCE_HEAD_UNKNOWN", RuntimeThrows<ResourceRequestException>(() => plane.Open(session, "context-viewer",
+                        new ResourceRef(office.Evidence.Resource.Uri), "text")).ErrorCode, "new head reads cannot claim an unknown observation as current");
+                }
+                var generation = store.Capture(document).Generation;
+                AssertEqual("EXACT_OFFICE_CELLS", gateway.Read(session, new ResourceReadRequest {
+                    Reference = office.Evidence.Resource, Representation = "text" }).Result.Text, "explicit historical observations remain readable after drift");
+                AssertEqual(generation, store.Capture(document).Generation, "historical reads never reconcile or republish a head");
+                AssertEqual(EvidenceState.Unknown, new EvidenceStateReducer().Reduce(evidence, authority.CaptureMany(new[] { document })).State,
+                    "the same reducer still excludes unknown Office evidence after historical reads");
+                AssertEqual(1L, store.Capture(conversation).Generation, "all data reads leave publication authority untouched");
+                AssertEqual(0, liveReads, "retained context operations never enter a live Office read");
+            });
+        }
+
+        private static void ResourceRetainedStateReadsPreservePublication()
+        {
+            WithTempPaths(paths =>
+            {
+                var payloads = new ChatBlobStore(paths);
+                var store = new ResourceAuthorityStore(paths);
+                var authority = new ResourceAuthorityService(store, store, payloads: payloads);
+                var session = new ChatSession();
+                var scope = authority.Scope(session, false);
+                var gateway = new ResourceGatewayService(null, null, null, authority: authority);
+                var identity = ResourceStateProvider.Identity(scope, "state-read-test");
+                var r1 = new ResourceRef(identity.Uri, "r1");
+                var body = "CANONICAL_STATE_BODY";
+                var payload = PayloadRef.FromBlob(payloads.StoreText(body, "text/plain"));
+                store.RegisterRevision(scope, new ResourceRevisionMetadata(r1, payload.Sha256, payload));
+                Func<ResourceRef, string, int, ResourceReadResult> read = (reference, cursor, max) => gateway.Read(session,
+                    new ResourceReadRequest { Reference = reference, Representation = "text", Cursor = cursor, MaxChars = max }).Result;
+                Action<ResourceRef> publish = reference => {
+                    var snapshot = store.Capture(scope);
+                    store.Publish(ResourceAuthorityCommit.Create(scope, snapshot.Generation, null,
+                        new[] { new ResourceHeadChange(identity, snapshot.GetHead(identity), ResourceHeadState.Known(reference, snapshot.Generation + 1)) },
+                        AuthorityCommitReason.InitialObservation));
+                };
+                AssertEqual("RESOURCE_SNAPSHOT_UNAVAILABLE", RuntimeThrows<ResourceRequestException>(() => read(r1, null, 4)).ErrorCode,
+                    "retained metadata alone cannot activate an unpublished state identity");
+                AssertEqual(0L, store.Capture(scope).Generation, "unpublished read is side-effect free");
+                publish(r1);
+                var fragment = PayloadRef.FromBlob(payloads.StoreText(body.Substring(0, 4), "text/plain"));
+                store.RegisterView(scope, new ResourceRevisionView(r1, "text", payload.Sha256, fragment,
+                    new ResourceCoverage(ResourceCoverageKinds.CharacterRange, start: 0, end: 4)));
+                var first = read(new ResourceRef(identity.Uri), null, 4);
+                AssertEqual(body.Length, first.TotalCharacters, "a retained fragment cannot replace the canonical whole revision body");
+                AssertEqual(body, first.Text + read(r1, first.NextCursor, 32000).Text, "continuation reads beyond an already retained partial view");
+                AssertEqual(payload.Sha256, store.GetView(scope, r1, "text").Payload.Sha256, "whole-view retention uses canonical CAS, never concatenated fragments");
+                var r2 = new ResourceRef(identity.Uri, "r2");
+                var changed = PayloadRef.FromBlob(payloads.StoreText("CHANGED_STATE", "text/plain"));
+                store.RegisterRevision(scope, new ResourceRevisionMetadata(r2, changed.Sha256, changed, r1));
+                publish(r2);
+                var r3 = new ResourceRef(identity.Uri, "r3");
+                store.RegisterRevision(scope, new ResourceRevisionMetadata(r3, payload.Sha256, payload, r2, r1));
+                publish(r3);
+                AssertEqual("RESOURCE_REVISION_CHANGED", RuntimeThrows<ResourceRequestException>(() => read(r3, first.NextCursor, 100)).ErrorCode,
+                    "equal restored bytes cannot reuse another logical revision's cursor");
+                AssertEqual("RESOURCE_CURSOR_INVALID", RuntimeThrows<ResourceRequestException>(() => read(new ResourceRef(identity.Uri), first.NextCursor, 100)).ErrorCode,
+                    "continuations require an explicit exact revision, never a moving head");
+                AssertEqual(body.Substring(4), read(r1, first.NextCursor, 100).Text, "historical continuation retains its original logical revision");
+                var observed = gateway.Evidence(session, read(r1, null, 100)).Single();
+                AssertTrue(!observed.Immutable, "materialized state is head-tracked even when its bytes are retained");
+                AssertEqual(EvidenceState.Superseded, new EvidenceStateReducer().Reduce(observed, authority.CaptureMany(new[] { scope })).State,
+                    "same-hash restore does not make old logical evidence current");
+                var before = store.Capture(scope);
+                store.Publish(ResourceAuthorityCommit.Create(scope, before.Generation, null,
+                    new[] { new ResourceHeadChange(identity, before.GetHead(identity), ResourceHeadState.Unavailable(identity, before.Generation + 1, "removed")) },
+                    AuthorityCommitReason.InitialObservation));
+                var removedGeneration = store.Capture(scope).Generation;
+                AssertEqual(body, read(r1, null, 100).Text, "removed state keeps explicit retained historical access");
+                RuntimeThrows<ResourceRequestException>(() => read(new ResourceRef(identity.Uri), null, 100));
+                AssertEqual(HeadKnowledge.Unavailable, store.GetHead(scope, identity).Knowledge, "reads cannot resurrect removed state");
+                AssertEqual(removedGeneration, store.Capture(scope).Generation, "reads cannot advance a tombstone's authority generation");
+            });
         }
 
         private static void ResourceCompilerUsesTypedContextPayloads()

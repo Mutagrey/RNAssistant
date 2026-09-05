@@ -223,6 +223,8 @@
     <Compile Include="Services\ResourceDataPlaneService.cs" />
     <Compile Include="Services\ResourceDataRouter.cs" />
     <Compile Include="Services\ResourceStateProvider.cs" />
+    <Compile Include="Services\ResourceSnapshotReadService.cs" />
+    <Compile Include="Services\ContextResourceProvider.cs" />
     <Compile Include="Services\ResourceStructuredViewService.cs" />
     <Compile Include="Services\ResourceDerivedViewService.cs" />
     <Compile Include="Services\ResourceDefinitionReader.cs" />

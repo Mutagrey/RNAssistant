@@ -87,7 +87,8 @@ namespace RNAssistant.Office.Services
             return new[] { new ResourceEvidence("ev_" + Guid.NewGuid().ToString("N"), scope,
                 result.Resource.Reference, result.Representation ?? "content",
                 result.Coverage ?? CoverageFor(result), result.Complete, result.AuthorityGeneration ?? snapshot.Generation,
-                result.Payload, result.Resource.Dependencies, immutable: !live,
+                result.Payload, result.Resource.Dependencies, immutable: scope.Kind != "document" && !result.Resource.Mutable &&
+                    ResourceUri.Parse(result.Resource.Reference.Uri).Provider != "state",
                 contentSha256: result.ContentSha256 ?? result.Resource.ContentSha256) };
         }
 
@@ -108,8 +109,19 @@ namespace RNAssistant.Office.Services
 
         internal ResourceAuthorityScopeId ScopeFor(ChatSession session, ResourceRef reference, bool live)
         {
-            return reference != null && ResourceUri.Parse(reference.Uri).Provider == "catalog"
-                ? CatalogPublicationService.ScopeId : Scope(session, live);
+            var address = reference == null ? null : ResourceUri.Parse(reference.Uri);
+            if (address?.Provider == "catalog") return CatalogPublicationService.ScopeId;
+            if (address?.Provider == "context" || address?.Provider == "state")
+            {
+                if (address.Segments.Count != 3 || address.Segments[0] != "conversation" &&
+                    (address.Provider != "context" || address.Segments[0] != "document"))
+                    throw new ResourceRequestException("The embedded authority scope is invalid.", "RESOURCE_ACCESS_DENIED", false);
+                var scope = Scope(session, address.Segments[0] == "document");
+                if (address.Segments[1] != scope.Id)
+                    throw new ResourceRequestException("The resource belongs to another authority scope.", "RESOURCE_ACCESS_DENIED", false);
+                return scope;
+            }
+            return Scope(session, live);
         }
 
         internal void RetainView(ChatSession session, ResourceReadResult result, bool live)
@@ -208,7 +220,10 @@ namespace RNAssistant.Office.Services
                     _revisions.RegisterRevision(scope, new ResourceRevisionMetadata(exact, result.Resource.ContentSha256,
                         result.Resource.Payload, dependencies: result.Resource.Dependencies));
                 string artifactId;
-                if (scope.Kind != "catalog" && (head == null || RNAssistant.Core.Services.ChatResourceUri.TryGetCurrentArtifactId(session, exact, out artifactId) &&
+                var provider = ResourceUri.Parse(exact.Uri).Provider;
+                // Already-materialized state/context/catalog resources are activated
+                // by their publication owners, never as a side effect of a read.
+                if (provider != "state" && provider != "context" && scope.Kind != "catalog" && (head == null || RNAssistant.Core.Services.ChatResourceUri.TryGetCurrentArtifactId(session, exact, out artifactId) &&
                     (head.Revision == null || head.Revision.Revision != exact.Revision)))
                     publication = ResourceAuthorityCommit.Create(scope, snapshot.Generation, null,
                     new[] { new ResourceHeadChange(identity, head, ResourceHeadState.Known(exact, snapshot.Generation + 1)) },

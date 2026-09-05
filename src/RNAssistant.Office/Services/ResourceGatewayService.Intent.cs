@@ -275,6 +275,11 @@ namespace RNAssistant.Office.Services
                 {
                     yield return new ResourceIntentPlan(provider, null, "catalogs");
                 }
+                else if (provider is ContextResourceProvider)
+                {
+                    yield return new ResourceIntentPlan(provider, ContextResourceProvider.DataKind, "conversation");
+                    yield return new ResourceIntentPlan(provider, ContextResourceProvider.ObservationKind, "document");
+                }
                 else
                 {
                     yield return new ResourceIntentPlan(provider, null, "conversation");
@@ -441,6 +446,7 @@ namespace RNAssistant.Office.Services
             {
                 case "document": return "document";
                 case "Excel range": return "document";
+                case "Office observation": return "document";
                 case "catalog":
                 case "skill":
                 case "skill reference": return "catalogs";
@@ -460,6 +466,8 @@ namespace RNAssistant.Office.Services
             var kind = (descriptor.Kind ?? string.Empty).Trim().ToLowerInvariant();
             switch (kind)
             {
+                case ContextResourceProvider.DataKind: return "context data";
+                case ContextResourceProvider.ObservationKind: return "Office observation";
                 case "catalog": return "catalog";
                 case "skill": return "skill";
                 case "skill-reference": return "skill reference";
@@ -488,7 +496,7 @@ namespace RNAssistant.Office.Services
             string type)
         {
             if (descriptor.Provider == "catalog") return "catalogs";
-            if (string.Equals(type, "document", StringComparison.Ordinal) || type == "Excel range") return "document";
+            if (string.Equals(type, "document", StringComparison.Ordinal) || type == "Excel range" || type == "Office observation") return "document";
             if (string.Equals(type, "selection", StringComparison.Ordinal)) return "selection";
             if (string.Equals(type, "VBA backup", StringComparison.Ordinal)) return "backups";
             if (string.Equals(type, "VBA module", StringComparison.Ordinal) ||
