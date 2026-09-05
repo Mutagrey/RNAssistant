@@ -1028,10 +1028,12 @@ namespace RNAssistant.Harness
                 AssertEqual(r1.Revision, ResourceReadCursor.ParseRevisionBound(first.NextCursor, binding).Revision,
                     "Gateway continuations expose the logical revision, not the private provider hash");
                 AssertTrue(r1.Revision != first.ContentSha256, "logical lineage is separate from physical bytes");
-                AssertEqual(ResourceCoverageKinds.CharacterRange, revisions.GetView(scope, r1, "source").Coverage.Kind,
-                    "bounded live read need not materialize a whole source");
+                AssertEqual(ResourceCoverageKinds.CharacterRange, first.Coverage.Kind,
+                    "the delivered bounded page remains partial evidence");
+                AssertEqual(ResourceCoverageKinds.Whole, revisions.GetView(scope, r1, "source").Coverage.Kind,
+                    "the full VBA source already captured by the provider is retained once");
                 AssertEqual(body.Substring(128, 128), read(r1, first.NextCursor, 128).Text,
-                    "exact live continuation privately translates its physical guard at dispatch");
+                    "exact continuation reads the retained snapshot using a logical cursor");
                 adapter.SetVbaModule("CursorModule", body.Replace('a', 'b'), "StdModule");
                 var r2 = read(new ResourceRef(identity.Uri), null, 128).Resource.Reference;
                 adapter.SetVbaModule("CursorModule", body, "StdModule");
@@ -1050,9 +1052,8 @@ namespace RNAssistant.Harness
                 AssertEqual(calls, adapter.TotalBackendCallCount, "logical cursor mismatch fails before Office dispatch");
                 var restored = read(r3, null, 128);
                 AssertEqual(first.ContentSha256, restored.ContentSha256, "restore deduplicates equal physical bytes");
-                AssertEqual(body.Substring(128, 128), read(r3, restored.NextCursor, 128).Text, "restored revision has its own valid live continuation");
+                AssertEqual(body.Substring(128, 128), read(r3, restored.NextCursor, 128).Text, "restored revision has its own exact continuation");
                 AssertEqual(body, read(r3, null, 1000).Text, "whole exact read retains the restored view");
-                revisions.RegisterView(scope, new ResourceRevisionView(r1, "source", first.ContentSha256, payload, ResourceCoverage.Whole()));
                 calls = adapter.TotalBackendCallCount;
                 AssertEqual("RESOURCE_REVISION_CHANGED", RuntimeThrows<ResourceRequestException>(() => read(r3, first.NextCursor, 128)).ErrorCode,
                     "retained snapshot selection applies the same logical cursor rule");

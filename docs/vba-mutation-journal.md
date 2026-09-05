@@ -27,6 +27,39 @@ HostRuntime gate and mutation/journal ownership. A malformed successful read is
 rejected and never converted into live or durable evidence; this does not change
 CAS bytes, journal events, reconciliation or COM.
 
+## Editor source reads
+
+Module source in the VBA editor is read through `VbaEditorResourceService` →
+`ResourceGatewayService` → the existing bound `VbaResourceProvider`. Shared transfer
+capacity is reserved before capture. The provider keeps its complete source snapshot
+in the existing CAS before the shared authority publishes the exact revision; later
+source pages and the editor download do not recapture live VBA. A fresh unpinned
+read still observes external changes. Retaining a whole source does not turn a
+delivered partial page into a complete model observation, and an editor read does
+not grant model mutation authority.
+
+`getVbaModule` accepts an explicit chat and module name and returns typed metadata,
+the exact `ResourceRef`, normalized `codeSha256` write guard and a disposable shared
+download capability. The former `ReadVbaModuleForEditor` direct source read,
+controller `DataJson` parsing and inline bridge body are removed. Project inventory
+remains metadata-only under its existing bound read owner.
+
+The existing 1,000,000 UTF-16-code-unit editor limit remains; transfer reservation
+is at most 4,000,000 bytes. A complete empty module is valid. Truncated, missing,
+corrupt or mismatched source never enables editing. The UI verifies the exact raw
+byte SHA-256 and complete decoded extent; CRLF, Unicode and final line terminators
+are preserved. Raw payload SHA-256 is not the normalized VBA write guard. Saving
+still uses the existing mutation owner and checks that guard before dispatch;
+an old editor snapshot cannot overwrite changed live code.
+
+Selection/project/chat change, bridge loss and page close cancel reads; late metadata
+and completed/failed reads release the owner-scoped lease. At most two captures may
+remain pending during cancellation, without an unbounded queue. No second resource
+store, publication path or inline fallback is introduced. Actual controller/STA/COM
+and WebView2 editor read/save/cancel qualification remains an open Windows gate.
+
+## Mutation ownership
+
 Phase 6C moves the complete `common.vba_apply_patch` workflow and shared module
 prepare/dispatch/terminal orchestration to `Office.Vba.VbaMutationService`.
 `Office.Vba.VbaVerifier` owns module write/delete read-back and before/intended

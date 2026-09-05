@@ -75,7 +75,7 @@ namespace RNAssistant.Office.Services
                 if (excel?.ExcelReadBackend != null) providers.Add(new ExcelResourceProvider(adapter, excel.ExcelReadBackend, authority?.Payloads));
                 if (vbaSource != null && VbaResourceProvider.SupportsHost(adapter.HostName))
                 {
-                    providers.Add(new VbaResourceProvider(adapter, vbaSource, vbaJournalStore));
+                    providers.Add(new VbaResourceProvider(adapter, vbaSource, vbaJournalStore, authority?.Payloads));
                 }
             }
             _registry = new ResourceProviderRegistry(providers);

@@ -941,11 +941,17 @@ namespace RNAssistant.Harness
             var bridge = new AssistantWebBridge(controller, null);
             var token = BridgeToken(bridge);
             var readResponseJson = bridge.HandleMessageAsync(
-                "{\"id\":\"b5-read\",\"type\":\"getVbaModule\",\"bridgeToken\":\"" + token + "\",\"payload\":{\"moduleName\":\"Module2\"}}")
+                "{\"id\":\"b5-read\",\"type\":\"getVbaModule\",\"bridgeToken\":\"" + token + "\",\"payload\":{\"chatId\":\"chat-editor\",\"moduleName\":\"Module2\"}}")
                 .GetAwaiter()
                 .GetResult();
             AssertTrue(JObject.Parse(readResponseJson)["ok"].Value<bool>(), "VBA read bridge response ok");
             AssertEqual("Module2", controller.LastModuleName, "read module name");
+            AssertEqual("chat-editor", controller.LastChatId, "read uses the explicitly addressed chat");
+            var source = JObject.Parse(readResponseJson)["payload"];
+            AssertTrue(source["dataJson"] == null && source["DataJson"] == null && source["code"] == null,
+                "the editor bridge no longer embeds source code or a ToolRunResult JSON body");
+            AssertEqual("r_snapshot", (string)source["resource"]["revision"], "editor source has exact logical revision evidence");
+            AssertEqual("text/plain; charset=utf-8", (string)source["data"]["payload"]["contentType"], "bounded inert source download");
 
             var mutationsResponseJson = bridge.HandleMessageAsync(
                 "{\"id\":\"b5-mutations\",\"type\":\"getVbaMutations\",\"bridgeToken\":\"" + token +

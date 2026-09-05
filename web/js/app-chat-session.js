@@ -263,7 +263,10 @@ function applyInitState(init) {
   var previousChatId = state.activeChatId || "";
   var nextChatId = init.activeChatId || init.ActiveChatId || "";
   var chatChanged = previousChatId !== nextChatId;
-  if (chatChanged) captureChatDraft(previousChatId);
+  if (chatChanged) {
+    captureChatDraft(previousChatId);
+    if (typeof cancelVbaModuleRead === "function") cancelVbaModuleRead();
+  }
   state.bridgeUnavailable = false;
   document.body.classList.remove("bridge-unavailable");
   resetMessageEditState();
@@ -338,6 +341,7 @@ function applyBridgeUnavailableState(error) {
   var previousChatId = state.activeChatId || "";
   captureChatDraft(previousChatId);
   state.bridgeUnavailable = true;
+  if (typeof cancelVbaModuleRead === "function") cancelVbaModuleRead();
   state.bridgeToken = "";
   document.body.classList.add("bridge-unavailable");
   resetMessageEditState();

@@ -23,16 +23,18 @@ namespace RNAssistant.Office.Services
         private readonly IOfficeApplicationAdapter _adapter;
         private readonly IVbaResourceSource _source;
         private readonly VbaJournalStore _journal;
+        private readonly ChatBlobStore _payloads;
         private readonly LiveOfficeResourceScope _scope;
 
         public VbaResourceProvider(
             IOfficeApplicationAdapter adapter,
             IVbaResourceSource source,
-            VbaJournalStore journal)
+            VbaJournalStore journal, ChatBlobStore payloads)
         {
             _adapter = adapter ?? throw new ArgumentNullException("adapter");
             _source = source ?? throw new ArgumentNullException("source");
             _journal = journal;
+            _payloads = payloads;
             _scope = new LiveOfficeResourceScope(adapter);
         }
 

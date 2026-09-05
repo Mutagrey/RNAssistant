@@ -192,6 +192,7 @@ function applyChatState(response) {
   var chatChanged = previousChatId !== nextChatId;
   if (chatChanged) {
     captureChatDraft(previousChatId);
+    if (typeof cancelVbaModuleRead === "function") cancelVbaModuleRead();
     if (typeof window.closeArtifactViewerResources === "function") window.closeArtifactViewerResources();
     state.artifactViewerPages = {};
     state.artifactViewerThumbnails = { items: {}, order: [], queue: [], pending: 0 };

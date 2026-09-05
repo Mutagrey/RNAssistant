@@ -3540,7 +3540,12 @@ namespace RNAssistant.Harness
 
             ToolRunResult result;
             if (consumer == "editor module")
-                result = executor.ReadVbaModuleForEditor(session, "Module1", 32000);
+            {
+                executor.BindResourceAuthority(session);
+                using (var data = new ResourceDataPlaneService(executor.ResourceGateway))
+                    return new VbaEditorResourceService(executor.ResourceGateway, data)
+                        .Open(session, "Module1", CancellationToken.None).Resource.Revision;
+            }
             else if (consumer == "editor project")
                 result = executor.ReadVbaProjectForEditor(session);
             else if (consumer == "manual read")

@@ -342,8 +342,7 @@ namespace RNAssistant.Office.WebView
                         responsePayload = _controller.GetVbaProject();
                         break;
                     case "getVbaModule":
-                        var getVbaModule = Payload<VbaModulePayload>(payload);
-                        responsePayload = _controller.GetVbaModule(getVbaModule.ModuleName);
+                        responsePayload = await _controller.GetVbaModuleAsync(Payload<VbaEditorReadRequest>(payload), cancellationToken).ConfigureAwait(false);
                         break;
                     case "getVbaMutations":
                         responsePayload = _controller.GetVbaMutations(Payload<VbaMutationQueryPayload>(payload));

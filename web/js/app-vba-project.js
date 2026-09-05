@@ -1,3 +1,23 @@
+var vbaModuleRead = null;
+var vbaModuleReadPending = 0;
+
+function closeVbaModuleRead(operation) {
+  if (!operation || operation.closed || !operation.data || !/^[a-f0-9]{64}$/.test(operation.data.leaseId)) return Promise.resolve();
+  operation.closed = true;
+  return send("resourceDataClose", { chatId: operation.chatId, workspaceId: "vba-editor", leaseId: operation.data.leaseId })
+    .catch(function () {});
+}
+
+function cancelVbaModuleRead() {
+  var operation = vbaModuleRead;
+  if (!operation) return;
+  operation.abort.abort();
+  if (operation.requestId) cancelBridgeRequest(operation.requestId).catch(function () {});
+  closeVbaModuleRead(operation);
+  vbaModuleRead = null;
+  state.vba.loadingModule = "";
+}
+
 function renderVbaProject() {
   var moduleSelect = $("vbaModuleSelect");
   var backupSelect = $("vbaBackupSelect");
@@ -304,51 +324,71 @@ function hasVbaModuleCode(module) {
 
 async function loadSelectedVbaModule() {
   var module = selectedVbaModule();
-  if (!module || hasVbaModuleCode(module) || state.bridgeUnavailable) {
+  var chatId = state.activeChatId;
+  if (vbaModuleRead && vbaModuleRead.module === module && vbaModuleRead.chatId === chatId) return;
+  cancelVbaModuleRead();
+  if (!module || hasVbaModuleCode(module) || state.bridgeUnavailable || !chatId) {
     return;
   }
-
+  if (vbaModuleReadPending >= 2) {
+    $("vbaStatus").textContent = "Предыдущее чтение ещё закрывается. Выберите модуль повторно после завершения.";
+    return;
+  }
   var moduleName = vbaModuleName(module);
+  var operation = { module: module, chatId: chatId, abort: new AbortController(), data: null, requestId: null, closed: false };
+  vbaModuleRead = operation;
+  vbaModuleReadPending++;
   state.vba.loadingModule = moduleName;
-  renderSelectedVbaModule();
+  function current() {
+    return vbaModuleRead === operation && !operation.abort.signal.aborted && !state.bridgeUnavailable &&
+      state.activeChatId === chatId && selectedVbaModule() === module && state.vba.modules.indexOf(module) >= 0;
+  }
   try {
-    var response = await send("getVbaModule", { moduleName: moduleName });
-    if (response.Success === false || response.success === false) {
-      throw new Error(response.Message || response.message || "VBA-модуль не прочитан.");
-    }
-    var dataJson = response.DataJson || response.dataJson || "{}";
-    var data = JSON.parse(dataJson);
-    var loadedTruncated = data.truncated !== undefined ? data.truncated : data.Truncated;
-    if (typeof loadedTruncated !== "boolean") {
-      throw new Error("Ответ чтения VBA-модуля не содержит признак полноты; редактирование заблокировано.");
-    }
-    if (loadedTruncated) {
-      throw new Error("VBA-модуль прочитан не полностью и не будет открыт для сохранения.");
-    }
-    var loadedCode = data.code !== undefined ? data.code : data.Code;
-    var loadedHash = data.codeSha256 || data.CodeSha256 || "";
-    if (typeof loadedCode !== "string" || !loadedHash) {
+    renderSelectedVbaModule();
+    var request = send("getVbaModule", { chatId: chatId, moduleName: moduleName });
+    operation.requestId = request.requestId;
+    var response = await request;
+    operation.requestId = null;
+    operation.data = response && response.data;
+    if (!current()) return;
+    if (!response || response.chatId !== chatId || response.moduleName !== moduleName ||
+        !response.resource || !/^rna:\/\/vba\/[^/]+\/component\/[^/]+$/.test(response.resource.uri) ||
+        typeof response.resource.revision !== "string" || !response.resource.revision ||
+        !/^[a-f0-9]{64}$/.test(response.codeSha256) || typeof response.componentType !== "string" || !response.componentType ||
+        !Number.isInteger(response.lineCount) || response.lineCount < 0 ||
+        !Number.isInteger(response.totalCharacters) || response.totalCharacters < 0 || response.totalCharacters > 1000000 ||
+        !operation.data || !operation.data.payload || operation.data.payload.contentType !== "text/plain; charset=utf-8")
       throw new Error("Ответ чтения VBA-модуля неполон; редактирование и сохранение заблокированы.");
-    }
-    module.code = loadedCode;
-    module.type = data.type || data.Type || module.type || module.Type;
-    module.lineCount = data.lineCount || data.LineCount || module.lineCount || module.LineCount;
-    module.codeSha256 = loadedHash;
-    $("vbaStatus").textContent = response.Message || response.message || "VBA-модуль загружен.";
+    var bytes = await window.RNAssistantResourceDownload.read(operation.data, {
+      fetch: window.fetch.bind(window), signal: operation.abort.signal, isCurrent: current, maxBytes: 4000000
+    });
+    var code = new TextDecoder("utf-8", { fatal: true, ignoreBOM: true }).decode(bytes);
+    if (code.length !== response.totalCharacters) throw new Error("VBA-модуль прочитан не полностью; сохранение заблокировано.");
+    await closeVbaModuleRead(operation);
+    if (!current()) return;
+    module.code = code;
+    module.type = response.componentType;
+    module.lineCount = response.lineCount;
+    module.codeSha256 = response.codeSha256;
+    module.resource = response.resource;
+    $("vbaStatus").textContent = "VBA-модуль загружен.";
   } catch (error) {
-    $("vbaStatus").textContent = error.message;
-    log(error.detail || error.message, "error");
+    if (current()) {
+      $("vbaStatus").textContent = error.message;
+      log(error.detail || error.message, "error");
+    }
   } finally {
-    if (state.vba.loadingModule === moduleName) {
+    await closeVbaModuleRead(operation);
+    vbaModuleReadPending--;
+    if (vbaModuleRead === operation) {
+      vbaModuleRead = null;
       state.vba.loadingModule = "";
-    }
-    if (vbaModuleName(selectedVbaModule()) === moduleName) {
       renderSelectedVbaModule();
+      renderVbaModuleList(state.vba.modules.filter(function (item) {
+        var query = (($("vbaModuleSearchInput") && $("vbaModuleSearchInput").value) || "").trim().toLowerCase();
+        return !query || vbaModuleMatchesSearch(item, query);
+      }), (($("vbaModuleSearchInput") && $("vbaModuleSearchInput").value) || "").trim().toLowerCase());
     }
-    renderVbaModuleList(state.vba.modules.filter(function (item) {
-      var query = (($("vbaModuleSearchInput") && $("vbaModuleSearchInput").value) || "").trim().toLowerCase();
-      return !query || vbaModuleMatchesSearch(item, query);
-    }), (($("vbaModuleSearchInput") && $("vbaModuleSearchInput").value) || "").trim().toLowerCase());
   }
 }
 

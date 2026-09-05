@@ -17,6 +17,7 @@ namespace RNAssistant.Office.WebView
             "completeChatResourceUpload",
             "exportChatTrajectory",
             "getChatEventPayload",
+            "getVbaModule",
             "readArtifactViewerPage",
             "readArtifactImage",
             "readArtifactImageThumbnail",

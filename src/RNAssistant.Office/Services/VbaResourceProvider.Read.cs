@@ -54,6 +54,8 @@ namespace RNAssistant.Office.Services
                 if (target.Module != null)
                 {
                     var source = ReadModuleSource(session, target.Module, MaximumMaterializedCharacters);
+                    if (source.Code.Length > MaximumMaterializedCharacters)
+                        throw new ResourceRequestException("The VBA provider exceeded its source capture bound.", "RESOURCE_BATCH_TOO_LARGE", false);
                     var selection = SelectText(
                         resourceUri,
                         DescribeComponent(session, target.Module, source.CodeSha256),
@@ -63,6 +65,17 @@ namespace RNAssistant.Office.Services
                         request,
                         position,
                         cursorBinding);
+                    if (!source.Truncated)
+                    {
+                        if (_payloads == null)
+                            throw new ResourceRequestException("VBA snapshots require canonical CAS storage.", "RESOURCE_AUTHORITY_NOT_READY", false);
+                        // Retain the complete source already captured under the document gate.
+                        // Later exact pages must not re-enter COM or borrow a newer module body.
+                        var payload = PayloadRef.FromBlob(_payloads.StoreText(source.Code, selection.Result.Resource.MimeType));
+                        selection.Result.CompleteViewPayload = payload;
+                        selection.Result.Resource.Payload = payload;
+                        selection.Result.Resource.ByteLength = payload.ByteLength;
+                    }
                     return selection;
                 }
                 var backup = ReadBackup(target.Backup);

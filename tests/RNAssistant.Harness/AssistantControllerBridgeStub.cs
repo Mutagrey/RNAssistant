@@ -538,7 +538,16 @@ namespace RNAssistant.Office
             };
         }
         public VbaProjectResponse GetVbaProject() { return new VbaProjectResponse { Result = ToolRunResult.Ok("ok") }; }
-        public ToolRunResult GetVbaModule(string moduleName) { LastModuleName = moduleName; return ToolRunResult.Ok("read"); }
+        public Task<VbaEditorReadResponse> GetVbaModuleAsync(VbaEditorReadRequest request, CancellationToken token)
+        {
+            LastModuleName = request.ModuleName; LastChatId = request.ChatId;
+            return Task.FromResult(new VbaEditorReadResponse { ChatId = request.ChatId, ModuleName = request.ModuleName,
+                ComponentType = "StdModule", TotalCharacters = 0, CodeSha256 = new string('b', 64),
+                Resource = new ResourceRef("rna://vba/doc/component/key", "r_snapshot"),
+                Data = new ResourceDownloadOpenResponse { LeaseId = new string('a', 64),
+                    Url = "https://rnassistant.local-resource/v1/download/" + new string('a', 64), MaxChunkBytes = 262144,
+                    Payload = new PayloadRef(new string('c', 64), 0, "text/plain; charset=utf-8") } });
+        }
         public VbaMutationQueryResponse GetVbaMutations(VbaMutationQueryPayload request)
         {
             LastVbaMutationCursor = request == null ? null : request.Cursor;

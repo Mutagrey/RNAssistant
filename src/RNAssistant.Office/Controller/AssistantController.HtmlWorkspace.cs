@@ -56,6 +56,7 @@ namespace RNAssistant.Office
                 return session != null && (workspaceId == "viewer" || workspaceId == ResourceDataPlaneService.UploadOwner ||
                     workspaceId == TrajectoryExportDownloadService.Owner ||
                     workspaceId == TrajectoryPayloadService.Owner ||
+                    workspaceId == VbaEditorResourceService.Owner ||
                     string.Equals(session.ActiveHtmlArtifactId, workspaceId, StringComparison.Ordinal));
             }
             catch (InvalidOperationException) { return false; }

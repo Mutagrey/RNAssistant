@@ -88,6 +88,7 @@ function previewVbaDiff() {
 }
 
 function readVbaResult(response) {
+  cancelVbaModuleRead();
   var result = response.result || response.Result || response;
   var dataJson = result.DataJson || result.dataJson || "";
   var data = dataJson ? JSON.parse(dataJson) : {};
@@ -338,6 +339,7 @@ function bindVbaActions() {
     renderSelectedVbaModule();
     loadSelectedVbaModule();
   });
+  window.addEventListener("pagehide", cancelVbaModuleRead);
   $("vbaCodeInput").addEventListener("input", markVbaEditorDirty);
   $("vbaMacroInput").addEventListener("input", updateVbaMacroRunState);
   Array.prototype.slice.call(document.querySelectorAll(".vba-mode-button")).forEach(function (button) {

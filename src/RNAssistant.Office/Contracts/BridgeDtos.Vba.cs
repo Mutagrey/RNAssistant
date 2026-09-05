@@ -11,6 +11,23 @@ using RNAssistant.Office.Vba;
 
 namespace RNAssistant.Office.Contracts
 {
+    public sealed class VbaEditorReadRequest : ChatPayload
+    {
+        [JsonProperty("moduleName")] public string ModuleName { get; set; }
+    }
+
+    public sealed class VbaEditorReadResponse
+    {
+        [JsonProperty("chatId")] public string ChatId { get; set; }
+        [JsonProperty("moduleName")] public string ModuleName { get; set; }
+        [JsonProperty("componentType")] public string ComponentType { get; set; }
+        [JsonProperty("lineCount")] public int LineCount { get; set; }
+        [JsonProperty("totalCharacters")] public int TotalCharacters { get; set; }
+        [JsonProperty("codeSha256")] public string CodeSha256 { get; set; }
+        [JsonProperty("resource")] public ResourceRef Resource { get; set; }
+        [JsonProperty("data")] public ResourceDownloadOpenResponse Data { get; set; }
+    }
+
     public sealed class VbaModulePayload
     {
         [JsonProperty("moduleName")]

@@ -519,6 +519,8 @@ namespace RNAssistant.Harness
                 Test("plan document: restore and removal stay append-only", PlanDocumentRestoreAndRemovalStayAppendOnly),
 
                 Test("vba: reader validates typed snapshots", VbaReaderValidatesTypedSnapshots),
+                Test("vba editor: exact resource source and guarded save", VbaEditorUsesExactResourceSource),
+                Test("vba editor: bounded capture rejects incomplete source", VbaEditorRejectsIncompleteSource),
                 Test("vba: public tools use native runtime", VbaPublicToolsUseNativeRuntime),
                 Test("vba: semantic intent contracts isolate runtime state", VbaSemanticIntentContractsAreStrict),
                 Test("vba: mutation service owns apply patch", VbaMutationServiceOwnsApplyPatch),

@@ -13,10 +13,10 @@ const session = fs.readFileSync(path.join(root, "web/js/app-chat-session.js"), "
 assert.equal(index.includes('<script src="js/vendor/echarts.min.js"></script>'), false,
   "the 1 MiB chart vendor must not block WebView startup");
 assert.match(index, /app-echarts-sandbox-runtime\.js\?v=ui-lazy-20260903-1/);
-["app-chat-state.js", "app-messages.js", "app-context.js", "app-model-render.js",
-  "app-html-workspace.js", "app-html-workspace-editor.js"].forEach(asset => {
+["app-messages.js", "app-context.js", "app-model-render.js", "app-html-workspace-editor.js"].forEach(asset => {
   assert.ok(index.includes(asset + "?v=ui-lazy-20260903-1"), asset + " uses the lazy UI cache key");
 });
+assert.ok(index.includes("app-html-workspace.js?v=html-source-resource-20260905-1"), "HTML workspace uses the resource source cache key");
 assert.doesNotMatch(app, /initializeCodeEditors\(\);/,
   "hidden CodeMirror editors must not be created during DOMContentLoaded");
 assert.doesNotMatch(session, /loadModelCatalog\(false\)/,

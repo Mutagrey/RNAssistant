@@ -205,7 +205,7 @@ empty exact text 1/1 and source inclusion 1/1 — 8/8 host-neutral. Web source/i
 5/5, artifact JSON 8/8, text/media viewer 10/10, Library projection 5/5, Plan 8/8 and
 HTML export 11/11 — 47/47. Version-format, JavaScript syntax and diff checks pass;
 no full harness or Office/VSTO validation. Windows source/import gates remain open.
-Trajectory-payload slice (2026-09-06): raw event previews and Run Journal bodies
+Trajectory-payload checkpoint `fa0f0fa`: raw event previews and Run Journal bodies
 now share metadata-only setup and the existing bounded download data plane/reader.
 The separate inline bridge text and whole-payload-then-clip read are removed.
 TrajectoryPayloadService resolves the exact addressed event in a complete validated
@@ -223,6 +223,28 @@ host-neutral. Web payload 7/7, trajectory viewer/export 8/8, Run Journal 10/10 a
 shared download 6/6 — 31/31. Version-format, JavaScript syntax and diff checks pass;
 no full harness or Office/VSTO validation. Whole journal replay and actual Windows
 controller/WebView2 capture/read/cancel qualification remain open.
+VBA editor resource slice (2026-09-06): module source now uses the same Gateway,
+bound provider, authority and shared bounded download data plane. The direct
+ReadVbaModuleForEditor path, controller DataJson parsing and inline code bridge
+body are removed. Complete bounded VBA source is retained in the existing CAS
+before publishing its logical revision; exact model/editor/HTML continuations
+can read that snapshot after drift without re-entering Office. Delivered partial
+pages remain partial evidence, and editor reads do not grant model observations.
+The editor enables only complete SHA-256/UTF-8-verified source, retaining the
+existing 1,000,000-character limit and normalized write guard separately from raw
+payload hash. An old snapshot cannot overwrite changed live VBA; the existing
+mutation owner still verifies save. Cancel, late response, chat/project/selection
+change and bridge/page close release the shared lease without applying stale code.
+Checks: editor source/guard/bounds 2/2; live Office/VBA and exact continuation 2/2;
+typed reader, model-visible refresh, editor-vs-mutation gate and stale guard 4/4;
+typed VBA bridge, WebView policy and source inclusion 3/3 — 11/11 host-neutral.
+Web editor 4/4, context/metadata viewer 7/7, completion 1/1, Library 5/5,
+commit projection 4/4, chat sync 4/4 and lazy UI 4/4 — 29/29. Cache fixtures were
+aligned with the shipped asset revisions. No full harness or Office/VSTO validation;
+actual Windows source/read/save/cancel qualification remains open.
+Version-format, JavaScript syntax and diff checks pass.
+VBA save/create code uploads still use their existing control payloads; their
+bulk transport cutover remains open, with mutation ownership unchanged.
 Next host-neutral contour: remaining domain/authoring read consumers and other bulk
 upload/export transport through the existing Gateway/data plane, then finer Excel
 coverage/named resources and binary/raw view negotiation in MASTER order.

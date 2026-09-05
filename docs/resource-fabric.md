@@ -56,6 +56,18 @@ owning atomic fork publication.
 `ResourceGatewayService.Binary` captures CAS image/thumbnail/PDF-page views using
 the existing renderer owners. Providers retain interpretation/materialization.
 
+VBA component source capture now retains the complete bounded source already read
+under the document gate in the existing CAS. A returned page still has partial
+coverage; the retained whole view enables later exact reads without another COM
+read, even after external drift. New unpinned reads still capture live source and
+publish its current logical revision. Truncated captures never acquire whole-view
+coverage, and corrupt retained bytes never fall back to current Office content.
+`VbaEditorResourceService` uses this same Gateway capture and shared download data
+plane: `getVbaModule` carries typed metadata and an exact resource reference, not
+source code inside `ToolRunResult.DataJson`. The editor only enables complete,
+integrity-checked code and keeps the normalized VBA write guard separate from the
+raw CAS/transport SHA-256. See [VBA journal](vba-mutation-journal.md#editor-source-reads).
+
 Model discovery/read uses `common.resources_find/read` with runtime-resolved
 semantic targets and exact internal references/continuations. A mutable semantic
 target captures its current head on the first read, then pins all internal pages
@@ -268,6 +280,8 @@ assembly; free-summary resource authority; inline large pending payload duplicat
 viewer text/base64 bridge transport; attachment base64 staging bridge and decoder;
 trajectory ZIP base64 bridge body and decoder;
 diagnostic event payload inline bridge text and whole-body-then-clip preview reads;
+direct VBA editor module reads, controller JSON parsing and inline source bridge
+body (now the same Gateway/CAS snapshot and bounded download owner);
 uploaded-HTML source bridge/DTO and independent preview cache, plus direct
 attachment-text import reads (now exact Gateway pages through the same owners);
 mutable-disk skill reference activation;

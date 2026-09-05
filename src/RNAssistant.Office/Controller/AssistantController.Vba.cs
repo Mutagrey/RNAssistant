@@ -1,11 +1,11 @@
 using System;
 using System.Linq;
 using System.Threading;
-using Newtonsoft.Json;
-using Newtonsoft.Json.Linq;
+using System.Threading.Tasks;
 using RNAssistant.Core.Models;
 using RNAssistant.Core.Tools;
 using RNAssistant.Office.Contracts;
+using RNAssistant.Office.Services;
 using RNAssistant.Office.Tools;
 
 namespace RNAssistant.Office
@@ -61,56 +61,17 @@ namespace RNAssistant.Office
             };
         }
 
-        public ToolRunResult GetVbaModule(string moduleName)
+        public Task<VbaEditorReadResponse> GetVbaModuleAsync(VbaEditorReadRequest request, CancellationToken token)
         {
-            const int editorReadLimit = 1000000;
-            var session = OfficeToolExecutor.CreateIsolatedManualSession(LoadSession(null));
-            var result = _toolExecutor.ReadVbaModuleForEditor(session, moduleName, editorReadLimit);
-            if (result == null || !result.Success || string.IsNullOrWhiteSpace(result.DataJson))
-            {
-                return result ?? ToolRunResult.Error("VBA module read returned no result.", null, "vba_editor_read_missing", true);
-            }
-
-            try
-            {
-                var data = JObject.Parse(result.DataJson);
-                var codeToken = data["code"];
-                var hashToken = data["codeSha256"];
-                var truncatedToken = data["truncated"];
-                if (codeToken == null || codeToken.Type != JTokenType.String ||
-                    hashToken == null || hashToken.Type != JTokenType.String ||
-                    string.IsNullOrWhiteSpace((string)hashToken) ||
-                    truncatedToken == null || truncatedToken.Type != JTokenType.Boolean)
-                {
-                    return ToolRunResult.Error(
-                        "VBA editor received an incomplete module payload. The module was not opened for saving.",
-                        null,
-                        "vba_editor_read_invalid",
-                        true);
-                }
-
-                var code = (string)codeToken;
-                if ((bool)truncatedToken || code.EndsWith("\n...[truncated]", StringComparison.Ordinal))
-                {
-                    return ToolRunResult.Error(
-                        "VBA module is larger than the editor's safe read limit and was not opened. Saving a partial module is blocked.",
-                        new JObject
-                        {
-                            ["moduleName"] = (string)data["name"] ?? moduleName,
-                            ["lineCount"] = data["lineCount"],
-                            ["codeSha256"] = data["codeSha256"],
-                            ["maxChars"] = editorReadLimit
-                        }.ToString(Formatting.None),
-                        "vba_editor_source_truncated",
-                        false);
-                }
-            }
-            catch (JsonException ex)
-            {
-                return ToolRunResult.Error("VBA editor received an invalid module payload: " + ex.Message, null, "vba_editor_read_invalid", true);
-            }
-
-            return result;
+            if (request == null || string.IsNullOrWhiteSpace(request.ChatId))
+                throw new InvalidOperationException("RESOURCE_ACCESS_DENIED: an explicit chat is required.");
+            var session = LoadAddressedSession(request.ChatId);
+            var source = new ChatSession { Id = session.Id, Host = session.Host, DocumentKey = session.DocumentKey,
+                DocumentPath = session.DocumentPath, DocumentAuthorityId = session.DocumentAuthorityId,
+                LastRun = session.LastRun == null ? null : new ChatRunRecord { DocumentRuntimeKey = session.LastRun.DocumentRuntimeKey } };
+            _toolExecutor.BindResourceAuthority(source);
+            return Task.Run(() => new VbaEditorResourceService(_toolExecutor.ResourceGateway, _resourceData)
+                .Open(source, request.ModuleName, token), token);
         }
 
         public VbaMutationQueryResponse GetVbaMutations(VbaMutationQueryPayload request)

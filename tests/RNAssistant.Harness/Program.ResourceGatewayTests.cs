@@ -1709,27 +1709,15 @@ namespace RNAssistant.Harness
                     "ResourceModule",
                     "Option Explicit\nSub ResourceNeedleChanged()\n" + new string('y', 220) + "\nEnd Sub",
                     "StdModule");
-                ResourceRequestException vbaDrift = null;
-                try
-                {
-                    ReadResource(
-                        gateway,
-                        session,
-                        component.Reference.Uri,
-                        ResourceRepresentations.Source,
-                        firstSource.NextCursor,
-                        128,
-                        firstSource.Resource.Reference.Revision);
-                }
-                catch (ResourceRequestException ex)
-                {
-                    vbaDrift = ex;
-                }
-                AssertEqual("resource_revision_changed", vbaDrift == null ? null : vbaDrift.ErrorCode,
-                    "VBA continuation fails instead of mixing source revisions");
-                AssertContains(vbaDrift == null ? null : vbaDrift.Message,
-                    "Run common.resources_read again for the same semantic target",
-                    "live revision drift gives one explicit fresh whole-read recovery");
+                var vbaCalls = adapter.CountVbaCalls(FakeVbaOperation.ReadModule);
+                var pinnedSource = ReadResource(gateway, session, component.Reference.Uri, ResourceRepresentations.Source,
+                    firstSource.NextCursor, 128, firstSource.Resource.Reference.Revision).Result;
+                AssertEqual(sharedVbaSource.Substring(128, 128), pinnedSource.Text,
+                    "VBA continuation uses the exact retained snapshot after external drift");
+                AssertEqual(vbaCalls, adapter.CountVbaCalls(FakeVbaOperation.ReadModule), "exact continuation never re-enters Office");
+                var freshSource = ReadResource(gateway, session, component.Reference.Uri, ResourceRepresentations.Source, null, 128).Result;
+                AssertTrue(freshSource.Resource.Reference.Revision != firstSource.Resource.Reference.Revision,
+                    "a new unpinned read still observes and publishes the changed live source");
 
                 session.LastRun = new ChatRunRecord
                 {

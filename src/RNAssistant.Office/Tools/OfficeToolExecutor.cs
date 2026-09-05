@@ -503,16 +503,6 @@ namespace RNAssistant.Office.Tools
                 () => ((IVbaResourceSource)_vbaExecutor).ListResourceModules());
         }
 
-        internal ToolRunResult ReadVbaModuleForEditor(ChatSession session, string moduleName, int maxChars)
-        {
-            return ExecuteLiveVbaEditorRead(
-                session,
-                () => ((IVbaResourceSource)_vbaExecutor).ReadResourceModule(
-                    session,
-                    moduleName,
-                    maxChars));
-        }
-
         private ToolRunResult ExecuteLiveVbaEditorRead(ChatSession session, Func<ToolRunResult> action)
         {
             // An editor request is a separate operation, not a nested read from an
