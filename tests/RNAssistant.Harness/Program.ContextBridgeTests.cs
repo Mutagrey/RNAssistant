@@ -473,6 +473,18 @@ namespace RNAssistant.Harness
             AssertEqual("none", controller.LastTrajectoryExportRedaction, "trajectory export redaction");
             AssertTrue(controller.LastTrajectoryExportCas, "trajectory export CAS flag");
             AssertEqual("llm.failure", controller.LastTrajectoryEventTypes.Single(), "trajectory export types remain native array");
+            responseJson = bridge.HandleMessageAsync(
+                "{\"id\":\"payload1\",\"type\":\"getChatEventPayload\",\"bridgeToken\":\"" + token +
+                "\",\"payload\":{\"chatId\":\"chat-payload\",\"eventId\":\"event-payload\"}}")
+                .GetAwaiter().GetResult();
+            var preview = JObject.Parse(responseJson);
+            AssertTrue((bool)preview["ok"], "payload metadata bridge succeeds");
+            AssertEqual("chat-payload", controller.LastChatId, "payload uses the addressed chat");
+            AssertEqual("event-payload", (string)preview["payload"]["eventId"], "payload retains the exact event");
+            AssertTrue(preview["payload"]["text"] == null, "no inline payload or old compatibility field");
+            AssertEqual(2, (int)preview["payload"]["returnedCharacters"], "preview extent is explicit");
+            AssertEqual("text/plain; charset=utf-8", (string)preview["payload"]["data"]["payload"]["contentType"],
+                "original JSON MIME cannot turn the preview transport into executable content");
         }
 
         private static void BridgeRejectsMissingToken()

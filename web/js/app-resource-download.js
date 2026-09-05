@@ -6,7 +6,7 @@
     if (!data || !/^[a-f0-9]{64}$/.test(data.leaseId) ||
         data.url !== "https://rnassistant.local-resource/v1/download/" + data.leaseId ||
         !payload || !/^[a-f0-9]{64}$/.test(payload.sha256) ||
-        !Number.isInteger(payload.byteLength) || payload.byteLength < 1 || payload.byteLength > options.maxBytes ||
+        !Number.isInteger(payload.byteLength) || payload.byteLength < 0 || payload.byteLength > options.maxBytes ||
         !Number.isInteger(data.maxChunkBytes) || data.maxChunkBytes < 1 || data.maxChunkBytes > 256 * 1024)
       throw new Error("RESOURCE_DOWNLOAD_INVALID");
     if (!window.crypto || !window.crypto.subtle) throw new Error("RESOURCE_INTEGRITY_UNAVAILABLE");

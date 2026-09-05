@@ -28,6 +28,36 @@ CAS payload bodies are intentionally excluded from full-text search and remain l
 
 Every returned raw-event row retains `sourceEventSeqs`, `sourceEventIds`, and deduplicated revision evidence in `resourceRefs`.
 
+## Payload preview delivery
+
+`TrajectoryPayloadService` resolves one exact event in the explicitly addressed
+chat through `IEventStore.Read(RequireComplete)`. The shared resource data plane
+reserves a download slot before event/CAS capture. `getChatEventPayload` returns
+only typed source metadata, `returnedCharacters`, `textTruncated` and the existing
+download capability; there is no inline body or alternate legacy path.
+
+`ChatBlobStore.ReadPrefix` streams through the existing CAS codec: authentication,
+decompression and whole-source length/SHA-256 verification must finish before any
+preview is exposed. This diagnostic operation rejects sources above 32 MiB and
+retains at most `4 * (512 * 1024 + 1)` source bytes. The preview contains at most
+`512 * 1024` UTF-16 code units without splitting a surrogate pair. It does not
+allocate the whole source body. Empty exact UTF-8 is valid; missing, corrupt,
+inaccessible, ambiguous or oversized evidence fails explicitly.
+
+The original `sha256`/`byteLength` identify the whole CAS source; `data.payload`
+identifies the returned preview bytes. Transport MIME is inert
+`text/plain; charset=utf-8`; original MIME is only a renderer hint. Raw diagnostics
+and Run Journal share `RNAssistantTrajectoryPayload` and the sequential bounded
+`RNAssistantResourceDownload` reader, which verifies preview SHA-256 before strict
+UTF-8 decoding. BOM, duplicate JSON keys and numeric lexemes remain unchanged.
+At most two browser captures are pending, with no unbounded queue. Selection/chat
+change, row collapse/unmount and page close cancel capture/read; success, failure
+and late metadata revoke the exact lease. A late response cannot rebind or render.
+
+The preview is disposable, not a published resource/head or a new CAS root/store.
+Complete journal replay is still required; bounded cold replay/checkpoints and
+real Windows/WebView2 capture/read/cancel qualification remain open gates.
+
 ## Derived views
 
 The same `ITrajectoryQuery` rebuilds seven correlated, read-only projections:

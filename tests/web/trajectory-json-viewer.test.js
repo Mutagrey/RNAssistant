@@ -4,6 +4,7 @@ const assert = require("node:assert/strict");
 const fs = require("node:fs");
 const path = require("node:path");
 const vm = require("node:vm");
+const crypto = require("node:crypto");
 
 class ClassList {
   constructor(owner) { this.owner = owner; }
@@ -64,6 +65,15 @@ const panel = new Element("section"); panel.className = "trajectory-panel";
 const body = new Element("body");
 const clipboard = [];
 let payloadResponse = null;
+let payloadText = "";
+function preview(text, contentType, truncated) {
+  payloadText = text;
+  const sha = crypto.createHash("sha256").update(text).digest("hex"), byteLength = Buffer.byteLength(text);
+  return { chatId: "chat-1", eventId: "evt-32", contentType, textTruncated: truncated,
+    returnedCharacters: text.length, sha256: truncated ? "f".repeat(64) : sha,
+    byteLength: byteLength + (truncated ? 100 : 0), data: { leaseId: "d".repeat(64),
+      payload: { sha256: sha, byteLength, contentType: "text/plain; charset=utf-8" } } };
+}
 const rawResponse = {
   View: "raw", TotalEvents: 1, TotalMatches: 1, HasMore: false,
   Events: [{
@@ -81,11 +91,14 @@ let downloads = 0, downloadReads = 0, exportResponse;
 const leaseCloses = [], exportRequests = [], windowEvents = new EventTarget();
 
 const context = vm.createContext({
-  AbortController, Uint8Array, setTimeout, clearTimeout,
+  AbortController, Uint8Array, TextDecoder, setTimeout, clearTimeout,
   addEventListener: windowEvents.addEventListener.bind(windowEvents),
   removeEventListener: windowEvents.removeEventListener.bind(windowEvents),
   fetch() { throw new Error("read utility is supplied below"); },
-  RNAssistantResourceDownload: { read: async () => { downloadReads += 1; return new Uint8Array([80, 75]); } },
+  RNAssistantResourceDownload: { read: async data => {
+    if (data.payload.contentType === "text/plain; charset=utf-8") return new TextEncoder().encode(payloadText);
+    downloadReads += 1; return new Uint8Array([80, 75]);
+  } },
   cancelBridgeRequest: () => Promise.resolve(),
   state: { activeChatId: "chat-1", chatRuns: {}, messages: [] },
   $: get,
@@ -116,7 +129,7 @@ context.window = context;
 get("trajectoryViewInput").value = "raw";
 get("trajectoryExportRedactionInput").value = "metadata";
 
-for (const file of ["app-utils.js", "app-viewer-registry.js", "app-json-viewer.js", "app-run-journal.js", "app-trajectory.js"]) {
+for (const file of ["app-utils.js", "app-viewer-registry.js", "app-json-viewer.js", "app-run-journal.js", "app-trajectory-payload.js", "app-trajectory.js"]) {
   vm.runInContext(fs.readFileSync(path.join(__dirname, "../../web/js", file), "utf8"), context, { filename: file });
 }
 
@@ -142,9 +155,7 @@ function button(root, text) { return root.querySelectorAll("button").find(node =
   assert.equal(clipboard.at(-1), rawResponse.Events[0].DataJson);
   console.log("PASS trajectory JSON viewer: raw event keeps exact tokens and separate source evidence");
 
-  payloadResponse = {
-    EventId: "evt-32", ContentType: "application/json", Text: '{"html":"<div>unfinished', TextTruncated: true
-  };
+  payloadResponse = preview('{"html":"<div>unfinished', "application/json", true);
   get("loadTrajectoryPayloadButton").click();
   await settle();
   const payloadHost = get("trajectoryEventPayload");
@@ -154,16 +165,15 @@ function button(root, text) { return root.querySelectorAll("button").find(node =
   assert.match(payloadHost.textContent, /<div>unfinished/);
   console.log("PASS trajectory JSON viewer: truncated CAS JSON remains an explicit raw preview");
 
-  payloadResponse = {
-    EventId: "evt-32", ContentType: "text/html; charset=utf-8", Text: "<main onclick=evil()>safe</main>", TextTruncated: false
-  };
+  payloadResponse = preview("<main onclick=evil()>safe</main>", "text/html; charset=utf-8", false);
   get("loadTrajectoryPayloadButton").click();
   await settle();
   assert.ok(payloadHost.firstElementChild.classList.contains("trajectory-text-viewer"));
-  assert.equal(payloadHost.querySelector("pre").textContent, payloadResponse.Text);
+  assert.equal(payloadHost.querySelector("pre").textContent, payloadText);
   button(payloadHost, "Копировать всё").click();
   await settle();
-  assert.equal(clipboard.at(-1), payloadResponse.Text);
+  assert.equal(clipboard.at(-1), payloadText);
+  assert.equal(leaseCloses.at(-1).workspaceId, "trajectory-payload");
   console.log("PASS trajectory JSON viewer: non-JSON payload stays inert text with exact copy");
 
   const trajectorySource = fs.readFileSync(path.join(__dirname, "../../web/js/app-trajectory.js"), "utf8");

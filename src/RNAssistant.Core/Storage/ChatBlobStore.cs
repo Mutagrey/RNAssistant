@@ -2,6 +2,7 @@ using System;
 using System.IO;
 using System.Security.Cryptography;
 using System.Text;
+using System.Threading;
 using RNAssistant.Core.Models;
 
 namespace RNAssistant.Core.Storage
@@ -208,6 +209,19 @@ namespace RNAssistant.Core.Storage
             {
                 return null;
             }
+        }
+
+        // Returns only a bounded prefix, but authenticates/decompresses/hashes the
+        // whole exact source through the same codec before exposing any bytes.
+        public byte[] ReadPrefix(ChatBlobReference reference, int maximumBytes, CancellationToken token = default(CancellationToken))
+        {
+            if (maximumBytes < 1) throw new ArgumentOutOfRangeException(nameof(maximumBytes));
+            token.ThrowIfCancellationRequested();
+            if (!ValidReference(reference) || reference.ByteLength > int.MaxValue) return null;
+            var protector = Protection();
+            if (!ProtectionMatches(reference, protector)) return null;
+            return CasBlobCodec.ReadPrefixFile(PathFor(reference.Sha256), reference.ByteLength, reference.Sha256,
+                protector, BlobPurpose(reference.Sha256, reference.ByteLength), maximumBytes, token);
         }
 
         internal string PathFor(string sha256)

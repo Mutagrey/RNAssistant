@@ -47,7 +47,7 @@ namespace RNAssistant.Office.Services
             {
                 var content = capture(token);
                 RequireDownloadActive(access, token);
-                if (content?.Bytes == null || content.Bytes.LongLength < 1 || content.Bytes.LongLength > maximumBytes ||
+                if (content?.Bytes == null || content.Bytes.LongLength > maximumBytes ||
                     string.IsNullOrWhiteSpace(content.ContentType) || content.ContentType.Length > 128 || content.ContentType.Any(char.IsControl))
                     throw Error("RESOURCE_BATCH_TOO_LARGE", "The captured download violates its negotiated bounds.");
                 string hash;

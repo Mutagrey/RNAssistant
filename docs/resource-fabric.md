@@ -212,6 +212,14 @@ second store. Redaction, bounds and lifetime are owned by
 [Trajectory export](trajectory-export.md). General binary/raw resource-view
 negotiation and bounded cold replay remain separate open gates.
 
+Diagnostic event payload previews also use these download slots and the same
+sequential reader. `TrajectoryPayloadService` resolves the exact event in a complete
+validated journal, and the existing CAS codec verifies the whole bounded source
+while retaining only a prefix. Source and preview hashes remain separate; bridge
+setup contains no text. Both raw diagnostics and Run Journal use one cancellable
+UI consumer, with no new publication/store. Bounds, UTF-8 handling and remaining
+qualification gates are owned by [Trajectory query](trajectory-query.md#payload-preview-delivery).
+
 Text/Markdown/PDF text pages, images, thumbnails and PDF renders travel through
 that data plane. Typed bridge DTOs carry metadata/leases, not page text or base64.
 Text leases close after each bounded page; media leases close on replacement,
@@ -259,6 +267,7 @@ binding tool IDs/arguments/transforms/current JSON; independent model history/re
 assembly; free-summary resource authority; inline large pending payload duplication;
 viewer text/base64 bridge transport; attachment base64 staging bridge and decoder;
 trajectory ZIP base64 bridge body and decoder;
+diagnostic event payload inline bridge text and whole-body-then-clip preview reads;
 uploaded-HTML source bridge/DTO and independent preview cache, plus direct
 attachment-text import reads (now exact Gateway pages through the same owners);
 mutable-disk skill reference activation;

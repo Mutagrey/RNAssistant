@@ -121,9 +121,14 @@ namespace RNAssistant.Office
                 CasPayloadsIncluded = LastTrajectoryExportCas
             });
         }
-        public ChatEventPayloadResponse GetChatEventPayload(string chatId, string eventId)
+        public Task<ChatEventPayloadResponse> GetChatEventPayloadAsync(string chatId, string eventId, CancellationToken cancellationToken)
         {
-            return new ChatEventPayloadResponse { ChatId = chatId, EventId = eventId, Text = "{}", ContentType = "application/json" };
+            LastChatId = chatId;
+            return Task.FromResult(new ChatEventPayloadResponse { ChatId = chatId, EventId = eventId,
+                Sha256 = new string('b', 64), ByteLength = 2, ReturnedCharacters = 2, ContentType = "application/json",
+                Data = new ResourceDownloadOpenResponse { LeaseId = new string('a', 64),
+                    Url = "https://rnassistant.local-resource/v1/download/" + new string('a', 64), MaxChunkBytes = 262144,
+                    Payload = new PayloadRef(new string('b', 64), 2, "text/plain; charset=utf-8") } });
         }
         public QualificationCatalogResponse GetQualificationCatalog(string chatId, string suite)
         {

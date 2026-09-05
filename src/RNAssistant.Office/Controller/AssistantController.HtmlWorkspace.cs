@@ -55,6 +55,7 @@ namespace RNAssistant.Office
                 var session = LoadAddressedSession(chatId);
                 return session != null && (workspaceId == "viewer" || workspaceId == ResourceDataPlaneService.UploadOwner ||
                     workspaceId == TrajectoryExportDownloadService.Owner ||
+                    workspaceId == TrajectoryPayloadService.Owner ||
                     string.Equals(session.ActiveHtmlArtifactId, workspaceId, StringComparison.Ordinal));
             }
             catch (InvalidOperationException) { return false; }

@@ -351,18 +351,32 @@
     section.appendChild(host);
 
     var state = "idle";
+    var pending = null;
     var button;
+    function cancel() {
+      if (pending) pending.abort();
+      pending = null;
+      state = "idle";
+      unmountJson(host);
+      host.textContent = "Body загрузится автоматически при раскрытии строки.";
+      button.disabled = false;
+      button.textContent = definition.label;
+    }
     function loadPayload(force) {
       if (state === "loading" || (state === "loaded" && !force)) {
         return Promise.resolve();
       }
       state = "loading";
+      var operation = new AbortController();
+      pending = operation;
       button.disabled = true;
       button.textContent = "Загружаю…";
       host.textContent = "Загружаю body…";
       return Promise.resolve().then(function () {
-        return options.onLoadPayload(definition.eventId);
+        if (pending !== operation) return;
+        return options.onLoadPayload(definition.eventId, operation.signal);
       }).then(function (response) {
+        if (pending !== operation) return;
         var text = value(response, "Text", "text", "");
         var truncated = !!value(response, "TextTruncated", "textTruncated", false);
         var contentType = String(value(response, "ContentType", "contentType", "") || "");
@@ -374,17 +388,22 @@
         state = "loaded";
         button.textContent = definition.label;
       }).catch(function (error) {
+        if (pending !== operation) return;
         state = "error";
         host.textContent = "Не удалось загрузить payload: " + (error && error.message ? error.message : String(error));
         button.textContent = "Повторить";
       }).then(function () {
+        if (pending !== operation) return;
+        pending = null;
         button.disabled = false;
       });
     }
     button = actionButton(definition.label, function () { loadPayload(true); });
+    options.payloadCleanups.push(cancel);
     actions.appendChild(button);
     return {
       section: section,
+      cancel: cancel,
       load: function () { return loadPayload(false); }
     };
   }
@@ -503,6 +522,7 @@
         if (payloadView) payloadView.load();
       }
       else {
+        if (payloadView) payloadView.cancel();
         setDetailsMounted(details, row, false);
         details.setAttribute("data-mounted", "false");
       }
@@ -590,7 +610,7 @@
   }
 
   function renderError(root, error) {
-    root.replaceChildren();
+    unmount(root);
     var message = document.createElement("div");
     message.className = "rn-run-journal-empty is-error";
     message.textContent = "Журнал не отображён: " + error.message;
@@ -600,6 +620,8 @@
 
   function unmount(root) {
     if (!root) return;
+    (root.rnaPayloadCleanups || []).forEach(function (cancel) { cancel(); });
+    root.rnaPayloadCleanups = [];
     Array.prototype.slice.call(root.querySelectorAll(".rn-run-journal-json")).forEach(unmountJson);
     Array.prototype.slice.call(root.querySelectorAll(".rn-run-journal-payload-host")).forEach(unmountJson);
     root.replaceChildren();
@@ -609,6 +631,7 @@
     options = options || {};
     if (!root) throw new Error("Run journal root is required.");
     unmount(root);
+    options = Object.assign({}, options, { payloadCleanups: root.rnaPayloadCleanups });
     try {
       var normalized = normalizeRows(input === undefined ? [] : input);
       var rows = normalized.rows;

@@ -224,6 +224,7 @@
     <Compile Include="Services\ResourceDataPlaneService.Uploads.cs" />
     <Compile Include="Services\ResourceDataPlaneService.Downloads.cs" />
     <Compile Include="Services\TrajectoryExportDownloadService.cs" />
+    <Compile Include="Services\TrajectoryPayloadService.cs" />
     <Compile Include="Services\ResourceDataRouter.cs" />
     <Compile Include="Services\ResourceStateProvider.cs" />
     <Compile Include="Services\ResourceSnapshotReadService.cs" />

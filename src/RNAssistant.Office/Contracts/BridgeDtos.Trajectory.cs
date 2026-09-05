@@ -318,7 +318,8 @@ namespace RNAssistant.Office.Contracts
         [JsonProperty("sha256")] public string Sha256 { get; set; }
         [JsonProperty("byteLength")] public long ByteLength { get; set; }
         [JsonProperty("contentType")] public string ContentType { get; set; }
-        [JsonProperty("text")] public string Text { get; set; }
+        [JsonProperty("data")] public ResourceDownloadOpenResponse Data { get; set; }
+        [JsonProperty("returnedCharacters")] public int ReturnedCharacters { get; set; }
         [JsonProperty("textTruncated")] public bool TextTruncated { get; set; }
     }
 }

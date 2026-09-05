@@ -48,6 +48,7 @@ class Element {
 const mounts = [];
 let unmounts = 0;
 const context = vm.createContext({
+  AbortController,
   document: { createElement: tag => new Element(tag) },
   RNAssistantViewerRegistry: {
     has(kind) { return kind === "json"; },
@@ -230,17 +231,42 @@ function findButton(root, prefix) {
   assert.match(context.RNAssistantRunJournal.render(root, null, options).error, /array/i);
   console.log("PASS run journal: expand/collapse state is owner-controlled and malformed projection fails closed");
 
+  for (const action of ["collapse", "unmount"]) {
+    let resolveLate, signal;
+    context.RNAssistantRunJournal.render(root, [rows[1]], {
+      onLoadPayload(eventId, cancellation) {
+        assert.equal(eventId, "evt-2");
+        signal = cancellation;
+        return new Promise(resolve => { resolveLate = resolve; });
+      }
+    });
+    const pendingRow = root.querySelector(".rn-run-journal-row");
+    pendingRow.open = true; pendingRow.dispatch("toggle");
+    await new Promise(resolve => setImmediate(resolve));
+    if (action === "collapse") { pendingRow.open = false; pendingRow.dispatch("toggle"); }
+    else context.RNAssistantRunJournal.unmount(root);
+    assert.equal(signal.aborted, true);
+    resolveLate({ text: "LATE BODY", contentType: "text/plain" });
+    await new Promise(resolve => setImmediate(resolve));
+    assert.doesNotMatch(pendingRow.textContent, /LATE BODY/);
+    assert.doesNotMatch(root.textContent, /LATE BODY/);
+  }
+  console.log("PASS run journal: collapse/unmount cancels payload and suppresses late render");
+
   const page = fs.readFileSync(path.join(__dirname, "../../web/index.html"), "utf8");
   const trajectory = fs.readFileSync(path.join(__dirname, "../../web/js/app-trajectory.js"), "utf8");
   const activity = fs.readFileSync(path.join(__dirname, "../../web/js/app-agent-activity.js"), "utf8");
   const agent = fs.readFileSync(path.join(__dirname, "../../web/js/app-agent.js"), "utf8");
   assert.ok(page.indexOf("app-run-journal.js") < page.indexOf("app-trajectory.js"));
-  ["app-trajectory.js", "app-agent.js"].forEach(asset => {
+  ["app-agent.js"].forEach(asset => {
     assert.ok(page.includes(asset + "?v=runtime-diagnostics-20260831-1"), asset + " uses the diagnostics cache key");
   });
-  ["app-run-journal.css", "app-run-journal.js"].forEach(asset => {
+  ["app-run-journal.css"].forEach(asset => {
     assert.ok(page.includes(asset + "?v=runtime-diagnostics-20260901-1"),
       asset + " uses the fresh API body visibility cache key");
+  });
+  ["app-run-journal.js", "app-trajectory-payload.js", "app-trajectory.js"].forEach(asset => {
+    assert.ok(page.includes(asset + "?v=trajectory-payload-20260906-1"), "payload cutover refreshes " + asset);
   });
   assert.match(page, /option value="run-causal">Журнал запуска/);
   assert.match(trajectory, /pageSize:\s*view === "run-causal" \? 200 : 100/);
@@ -252,7 +278,7 @@ function findButton(root, prefix) {
   assert.match(agent, /appendAgentRunViewState\(body, runViewState, agentRunId\(items, finalMessage\)\)/);
   assert.equal(/JSON\.parse|fetch\(|XMLHttpRequest|WebSocket|EventSource/.test(source), false);
   console.log("PASS run journal: integration defaults to bounded run-causal and exposes direct failed-activity navigation");
-  console.log("OK 9/9");
+  console.log("OK 10/10");
 }()).catch(error => {
   console.error(error);
   process.exitCode = 1;

@@ -18,8 +18,6 @@ namespace RNAssistant.Office
 {
     public sealed partial class AssistantController
     {
-        private const int MaxTrajectoryPayloadPreviewChars = 512 * 1024;
-
         public ChatTrajectoryResponse GetChatTrajectory(ChatTrajectoryRequest request)
         {
             request = request ?? new ChatTrajectoryRequest();
@@ -78,27 +76,14 @@ namespace RNAssistant.Office
                 source, () => _eventStore.Read(source, SessionEventReadMode.RequireComplete), selection, token), token);
         }
 
-        public ChatEventPayloadResponse GetChatEventPayload(string chatId, string eventId)
+        public Task<ChatEventPayloadResponse> GetChatEventPayloadAsync(string chatId, string eventId, CancellationToken token)
         {
-            if (string.IsNullOrWhiteSpace(eventId)) throw new InvalidOperationException("eventId is required.");
-            var session = LoadSession(chatId);
-            var sessionEvent = _eventStore.Read(session, SessionEventReadMode.Validated)
-                .FirstOrDefault(item => string.Equals(item.EventId, eventId, StringComparison.OrdinalIgnoreCase));
-            if (sessionEvent == null) throw new InvalidOperationException("Session event was not found.");
-            if (sessionEvent.Payload == null) throw new InvalidOperationException("Session event has no external payload.");
-            var text = _eventStore.ReadPayload(session, sessionEvent);
-            if (text == null) throw new InvalidOperationException("Session event payload is missing or corrupted.");
-            var truncated = text.Length > MaxTrajectoryPayloadPreviewChars;
-            return new ChatEventPayloadResponse
-            {
-                ChatId = session.Id,
-                EventId = sessionEvent.EventId,
-                Sha256 = sessionEvent.Payload.Sha256,
-                ByteLength = sessionEvent.Payload.ByteLength,
-                ContentType = sessionEvent.Payload.ContentType,
-                Text = truncated ? text.Substring(0, MaxTrajectoryPayloadPreviewChars) : text,
-                TextTruncated = truncated
-            };
+            if (string.IsNullOrWhiteSpace(chatId) || string.IsNullOrWhiteSpace(eventId))
+                throw new InvalidOperationException("RESOURCE_ACCESS_DENIED: an explicit chat and event are required.");
+            var session = LoadAddressedSession(chatId);
+            var source = new ChatSession { Id = session.Id, Host = session.Host, DocumentKey = session.DocumentKey };
+            return Task.Run(() => new TrajectoryPayloadService(_eventStore, _toolExecutor.Payloads, _resourceData)
+                .Open(source, eventId, token), token);
         }
 
         public async Task<ChatStateResponse> CompactChatContextAsync(

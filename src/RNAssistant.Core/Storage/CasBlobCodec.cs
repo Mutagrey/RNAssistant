@@ -3,6 +3,7 @@ using System.IO;
 using System.IO.Compression;
 using System.Security.Cryptography;
 using System.Text;
+using System.Threading;
 
 namespace RNAssistant.Core.Storage
 {
@@ -102,6 +103,21 @@ namespace RNAssistant.Core.Storage
             StorageProtector protector,
             string purpose)
         {
+            return VerifyFile(path, expectedPlaintextLength, expectedSha256, protector, purpose, null, 0, CancellationToken.None);
+        }
+
+        internal static byte[] ReadPrefixFile(string path, long expectedLength, string expectedHash,
+            StorageProtector protector, string purpose, int maximumBytes, CancellationToken token)
+        {
+            using (var prefix = new MemoryStream())
+                return VerifyFile(path, expectedLength, expectedHash, protector, purpose, prefix, maximumBytes, token)
+                    ? prefix.ToArray() : null;
+        }
+
+        private static bool VerifyFile(string path, long expectedPlaintextLength, string expectedSha256,
+            StorageProtector protector, string purpose, MemoryStream capture, int maximumBytes, CancellationToken token)
+        {
+            token.ThrowIfCancellationRequested();
             if (string.IsNullOrWhiteSpace(path) || expectedPlaintextLength < 0 ||
                 string.IsNullOrWhiteSpace(expectedSha256)) return false;
             protector = protector ?? StorageProtector.None;
@@ -110,19 +126,22 @@ namespace RNAssistant.Core.Storage
                 VerificationResult result;
                 using (var stored = new FileStream(
                     path, FileMode.Open, FileAccess.Read, FileShare.Read, 81920, FileOptions.SequentialScan))
-                using (var plaintext = protector.OpenUnprotectedReadStream(stored, purpose))
                 {
-                    result = VerifyPlaintextStream(plaintext, expectedPlaintextLength, expectedSha256);
+                    if (capture != null && stored.Length > protector.StoredByteLength(checked(expectedPlaintextLength + HeaderLength))) return false;
+                    using (var plaintext = protector.OpenUnprotectedReadStream(stored, purpose, token))
+                        result = VerifyPlaintextStream(plaintext, expectedPlaintextLength, expectedSha256, capture, maximumBytes, token);
                 }
                 if (result != VerificationResult.RetryAsRaw)
                 {
                     return result == VerificationResult.Valid;
                 }
+                if (capture != null) { capture.SetLength(0); capture.Position = 0; }
                 using (var stored = new FileStream(
                     path, FileMode.Open, FileAccess.Read, FileShare.Read, 81920, FileOptions.SequentialScan))
-                using (var plaintext = protector.OpenUnprotectedReadStream(stored, purpose))
                 {
-                    return VerifyRawStream(null, 0, plaintext, expectedPlaintextLength, expectedSha256);
+                    if (capture != null && stored.Length > protector.StoredByteLength(checked(expectedPlaintextLength + HeaderLength))) return false;
+                    using (var plaintext = protector.OpenUnprotectedReadStream(stored, purpose, token))
+                        return VerifyRawStream(null, 0, plaintext, expectedPlaintextLength, expectedSha256, capture, maximumBytes, token);
                 }
             }
             catch (IOException)
@@ -248,7 +267,7 @@ namespace RNAssistant.Core.Storage
         private static VerificationResult VerifyPlaintextStream(
             Stream plaintext,
             long expectedLength,
-            string expectedSha256)
+            string expectedSha256, MemoryStream capture, int maximumBytes, CancellationToken token)
         {
             var prefix = new byte[HeaderLength];
             var prefixLength = ReadUpTo(plaintext, prefix, 0, prefix.Length);
@@ -256,7 +275,7 @@ namespace RNAssistant.Core.Storage
             if (prefixLength != HeaderLength || !TryParseHeaderPrefix(prefix, out header) ||
                 header.PlaintextLength != expectedLength)
             {
-                return VerifyRawStream(prefix, prefixLength, plaintext, expectedLength, expectedSha256)
+                return VerifyRawStream(prefix, prefixLength, plaintext, expectedLength, expectedSha256, capture, maximumBytes, token)
                     ? VerificationResult.Valid
                     : VerificationResult.Invalid;
             }
@@ -272,9 +291,9 @@ namespace RNAssistant.Core.Storage
                     bool hashMatches;
                     using (var gzip = new GZipStream(payload, CompressionMode.Decompress, true))
                     {
-                        hashMatches = HashStream(gzip, expectedLength, expectedSha256);
+                        hashMatches = HashStream(gzip, expectedLength, expectedSha256, capture, maximumBytes, token);
                     }
-                    Drain(payload);
+                    Drain(payload, token);
                     if (payload.Remaining != 0)
                     {
                         throw new InvalidDataException("CAS compression envelope is truncated.");
@@ -298,7 +317,7 @@ namespace RNAssistant.Core.Storage
             int prefixLength,
             Stream remainder,
             long expectedLength,
-            string expectedSha256)
+            string expectedSha256, MemoryStream capture, int maximumBytes, CancellationToken token)
         {
             using (var sha = SHA256.Create())
             {
@@ -307,15 +326,18 @@ namespace RNAssistant.Core.Storage
                 {
                     if (prefixLength > expectedLength) return false;
                     sha.TransformBlock(prefix, 0, prefixLength, prefix, 0);
+                    CapturePrefix(capture, maximumBytes, prefix, prefixLength);
                     total = prefixLength;
                 }
                 var buffer = new byte[81920];
                 while (true)
                 {
+                    token.ThrowIfCancellationRequested();
                     var read = remainder.Read(buffer, 0, buffer.Length);
                     if (read <= 0) break;
                     if (total > expectedLength - read) return false;
                     sha.TransformBlock(buffer, 0, read, buffer, 0);
+                    CapturePrefix(capture, maximumBytes, buffer, read);
                     total += read;
                 }
                 if (total != expectedLength) return false;
@@ -327,7 +349,7 @@ namespace RNAssistant.Core.Storage
         private static bool HashStream(
             Stream stream,
             long expectedLength,
-            string expectedSha256)
+            string expectedSha256, MemoryStream capture, int maximumBytes, CancellationToken token)
         {
             using (var sha = SHA256.Create())
             {
@@ -335,6 +357,7 @@ namespace RNAssistant.Core.Storage
                 var total = 0L;
                 while (true)
                 {
+                    token.ThrowIfCancellationRequested();
                     var read = stream.Read(buffer, 0, buffer.Length);
                     if (read <= 0) break;
                     if (total > expectedLength - read)
@@ -342,6 +365,7 @@ namespace RNAssistant.Core.Storage
                         throw new InvalidDataException("CAS blob expands beyond its declared plaintext length.");
                     }
                     sha.TransformBlock(buffer, 0, read, buffer, 0);
+                    CapturePrefix(capture, maximumBytes, buffer, read);
                     total += read;
                 }
                 if (total != expectedLength)
@@ -365,11 +389,18 @@ namespace RNAssistant.Core.Storage
             return total;
         }
 
-        private static void Drain(Stream stream)
+        private static void CapturePrefix(MemoryStream capture, int maximumBytes, byte[] bytes, int count)
+        {
+            if (capture == null || capture.Length >= maximumBytes) return;
+            capture.Write(bytes, 0, (int)Math.Min(count, maximumBytes - capture.Length));
+        }
+
+        private static void Drain(Stream stream, CancellationToken token)
         {
             var buffer = new byte[81920];
             while (stream.Read(buffer, 0, buffer.Length) > 0)
             {
+                token.ThrowIfCancellationRequested();
             }
         }
 

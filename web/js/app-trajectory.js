@@ -13,6 +13,14 @@
   var expandedJournalRows = {};
   var journalStateChatId = "";
   var activeExport = null;
+  var activePayload = null;
+
+  function readPayload(chatId, eventId, signal, isCurrent) {
+    return window.RNAssistantTrajectoryPayload.read(chatId, eventId, {
+      send: send, cancelRequest: cancelBridgeRequest, fetch: window.fetch.bind(window),
+      signal: signal, isCurrent: isCurrent
+    });
+  }
 
   function value(source, pascal, camel, fallback) {
     source = source || {};
@@ -126,6 +134,8 @@
 
   function resetLazyDetail() {
     detailRequestId += 1;
+    if (activePayload) activePayload.abort();
+    activePayload = null;
     unmountTrajectoryJson("trajectoryEventPayload");
     $("trajectoryEventPayload").replaceChildren();
     $("trajectoryEventPayload").classList.add("hidden");
@@ -142,6 +152,7 @@
 
   function invalidateTrajectoryRequest() {
     cancelTrajectoryExport();
+    window.RNAssistantTrajectoryPayload.cancelAll();
     trajectoryRequestId += 1;
     setTrajectoryBusy(false);
   }
@@ -462,10 +473,10 @@
       onNavigate: function (field, filterValue, targetView) {
         navigateCorrelation(field, filterValue, targetView, trajectoryChatId || state.activeChatId);
       },
-      onLoadPayload: function (eventId) {
-        var chatId = trajectoryChatId || state.activeChatId;
-        if (!chatId) return Promise.reject(new Error("Нет активного чата."));
-        return send("getChatEventPayload", { chatId: chatId, eventId: eventId });
+      onLoadPayload: function (eventId, signal) {
+        return readPayload(responseChatId, eventId, signal, function () {
+          return isRunJournal() && (trajectoryChatId || state.activeChatId) === responseChatId;
+        });
       }
     });
     root.scrollTop = previousScroll;
@@ -842,11 +853,18 @@
     var target = $("trajectoryEventPayload");
     var selectedId = eventId(selected);
     var requestId = ++detailRequestId;
+    if (activePayload) activePayload.abort();
+    var operation = new AbortController();
+    activePayload = operation;
+    function isCurrent() {
+      return !operation.signal.aborted && requestId === detailRequestId && activeView === "raw" &&
+        selected && eventId(selected) === selectedId && (trajectoryChatId || state.activeChatId) === chatId;
+    }
     try {
       button.disabled = true;
       button.textContent = "Загружаю…";
-      var response = await send("getChatEventPayload", { chatId: chatId, eventId: selectedId });
-      if (requestId !== detailRequestId || !selected || eventId(selected) !== selectedId) return;
+      var response = await readPayload(chatId, selectedId, operation.signal, isCurrent);
+      if (!isCurrent()) return;
       var text = value(response, "Text", "text", "");
       var truncated = value(response, "TextTruncated", "textTruncated", false);
       var contentType = value(response, "ContentType", "contentType", "");
@@ -858,12 +876,13 @@
       target.classList.remove("hidden");
       button.textContent = "Payload загружен";
     } catch (error) {
-      if (requestId !== detailRequestId) return;
+      if (!isCurrent()) return;
       unmountTrajectoryJson("trajectoryEventPayload");
       showTextPayload(target, "Не удалось загрузить payload: " + error.message, "text/plain", false);
       target.classList.remove("hidden");
       button.textContent = "Повторить";
     } finally {
+      if (activePayload === operation) activePayload = null;
       if (requestId === detailRequestId) button.disabled = false;
     }
   }
@@ -1065,6 +1084,7 @@
   }
 
   window.bindTrajectoryActions = function () {
+    window.addEventListener("pagehide", window.RNAssistantTrajectoryPayload.cancelAll);
     var refresh = $("refreshTrajectoryButton");
     var more = $("loadMoreTrajectoryButton");
     var payload = $("loadTrajectoryPayloadButton");

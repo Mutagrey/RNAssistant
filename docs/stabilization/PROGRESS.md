@@ -191,7 +191,7 @@ table/binary leases 2/2; WebView policy 1/1 and source inclusion 1/1 — 12/12
 host-neutral. UI download 6/6 and trajectory viewer/export 8/8 also pass.
 Version-format, JavaScript syntax and diff checks pass; no full harness or
 Office/VSTO validation.
-Uploaded-HTML source slice (2026-09-05): original-source preview now uses the shared
+Uploaded-HTML source checkpoint `91c96b2`: original-source preview now uses the shared
 ArtifactViewerService/Gateway/data plane and bounded exact text-page cache. Its
 separate text-body bridge/DTO, preview cache and UI wrappers are removed. HTML stays
 inert until explicit workspace import. Import reads exact Gateway pages rather than
@@ -205,6 +205,24 @@ empty exact text 1/1 and source inclusion 1/1 — 8/8 host-neutral. Web source/i
 5/5, artifact JSON 8/8, text/media viewer 10/10, Library projection 5/5, Plan 8/8 and
 HTML export 11/11 — 47/47. Version-format, JavaScript syntax and diff checks pass;
 no full harness or Office/VSTO validation. Windows source/import gates remain open.
+Trajectory-payload slice (2026-09-06): raw event previews and Run Journal bodies
+now share metadata-only setup and the existing bounded download data plane/reader.
+The separate inline bridge text and whole-payload-then-clip read are removed.
+TrajectoryPayloadService resolves the exact addressed event in a complete validated
+stream; shared capacity is reserved before journal/CAS capture. The existing CAS
+codec authenticates/decompresses/hashes the whole source while retaining a bounded
+prefix. Diagnostic limits are 32 MiB/source and 512 Ki UTF-16 code units/preview,
+without splitting a surrogate pair. Source/preview hashes are separate; exact
+empty UTF-8 remains valid. UI verifies SHA-256 and strict UTF-8 before rendering,
+caps concurrent captures and closes leases on success/failure/cancel/late metadata.
+Selection/context change, row collapse/unmount and page close cannot render a stale
+body. No new resource/head/store or compatibility transport is introduced.
+Checks: payload 2/2, verified CAS prefix 1/1, adjacent CAS codecs 3/3, trajectory
+export 3/3, typed bridge 1/1, WebView policy 1/1 and source inclusion 1/1 — 12/12
+host-neutral. Web payload 7/7, trajectory viewer/export 8/8, Run Journal 10/10 and
+shared download 6/6 — 31/31. Version-format, JavaScript syntax and diff checks pass;
+no full harness or Office/VSTO validation. Whole journal replay and actual Windows
+controller/WebView2 capture/read/cancel qualification remain open.
 Next host-neutral contour: remaining domain/authoring read consumers and other bulk
 upload/export transport through the existing Gateway/data plane, then finer Excel
 coverage/named resources and binary/raw view negotiation in MASTER order.

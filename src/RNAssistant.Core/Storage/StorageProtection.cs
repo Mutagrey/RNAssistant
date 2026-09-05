@@ -2,6 +2,7 @@ using System;
 using System.IO;
 using System.Security.Cryptography;
 using System.Text;
+using System.Threading;
 using RNAssistant.Core.Models;
 
 namespace RNAssistant.Core.Storage
@@ -305,8 +306,9 @@ namespace RNAssistant.Core.Storage
             }
         }
 
-        internal Stream OpenUnprotectedReadStream(Stream stored, string purpose)
+        internal Stream OpenUnprotectedReadStream(Stream stored, string purpose, CancellationToken token = default(CancellationToken))
         {
+            token.ThrowIfCancellationRequested();
             if (stored == null) throw new ArgumentNullException("stored");
             if (!stored.CanRead) throw new ArgumentException("Stored stream must be readable.", "stored");
             if (!Encrypts)
@@ -319,7 +321,7 @@ namespace RNAssistant.Core.Storage
                 throw new CryptographicException("Encrypted history stream must be seekable for authentication.");
             }
 
-            var envelope = AuthenticateStream(stored, purpose);
+            var envelope = AuthenticateStream(stored, purpose, token);
             stored.Position = envelope.CiphertextOffset;
             return new DecryptingReadStream(
                 stored,
@@ -328,7 +330,7 @@ namespace RNAssistant.Core.Storage
                 envelope.Iv);
         }
 
-        private EncryptedStreamEnvelope AuthenticateStream(Stream stored, string purpose)
+        private EncryptedStreamEnvelope AuthenticateStream(Stream stored, string purpose, CancellationToken token)
         {
             var start = stored.Position;
             var totalLength = stored.Length - start;
@@ -369,6 +371,7 @@ namespace RNAssistant.Core.Storage
                 var remaining = bodyLength;
                 while (remaining > 0)
                 {
+                    token.ThrowIfCancellationRequested();
                     var read = stored.Read(buffer, 0, (int)Math.Min(buffer.Length, remaining));
                     if (read <= 0) throw new CryptographicException("Encrypted history payload is truncated.");
                     hmac.TransformBlock(buffer, 0, read, buffer, 0);
