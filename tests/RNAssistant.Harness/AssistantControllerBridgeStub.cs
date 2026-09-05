@@ -398,14 +398,19 @@ namespace RNAssistant.Office
                 Library = EmptySkillLibrary()
             };
         }
-        public SkillReferenceResponse ReadSkillReference(
-            SkillReferencePayload payload)
+        public Task<SkillReferenceReadResponse> ReadSkillReferenceAsync(
+            SkillReferenceReadRequest payload, CancellationToken token)
         {
+            token.ThrowIfCancellationRequested();
+            LastChatId = payload.ChatId;
             LastSkillReferenceId = payload == null ? null : payload.SkillId;
             LastSkillReferencePath = payload == null ? null : payload.Path;
-            return SkillReferenceResult(
-                LastSkillReferenceId, LastSkillReferencePath,
-                "reference", false, "read_reference");
+            return Task.FromResult(new SkillReferenceReadResponse { Type = SkillReferenceReadResponse.ContractType,
+                ContractVersion = 1, ChatId = payload.ChatId, SkillId = payload.SkillId, PackageRevision = payload.ExpectedPackageRevision,
+                Reference = new SkillReferenceDto { Path = payload.Path, Revision = "ref", ByteLength = 9 }, TotalCharacters = 9,
+                Resource = new ResourceRef("rna://catalog/skills/common.review/reference/rules.md", "r_published"),
+                Data = new ResourceDownloadOpenResponse { LeaseId = new string('a', 64),
+                    Payload = new PayloadRef(new string('b', 64), 9, "text/markdown; charset=utf-8") } });
         }
         public SkillReferenceResponse SaveSkillReference(
             SaveSkillReferencePayload payload)

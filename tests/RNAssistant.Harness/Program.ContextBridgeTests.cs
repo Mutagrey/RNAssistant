@@ -851,7 +851,7 @@ namespace RNAssistant.Harness
                 .GetAwaiter()
                 .GetResult();
             var readReferenceJson = bridge.HandleMessageAsync(
-                "{\"id\":\"b8\",\"type\":\"readSkillReference\",\"bridgeToken\":\"" + token + "\",\"payload\":{\"type\":\"rnassistant.skillReferenceRequest\",\"contractVersion\":1,\"skillId\":\"common.review\",\"path\":\"references/rules.md\",\"expectedPackageRevision\":\"package\"}}")
+                "{\"id\":\"b8\",\"type\":\"readSkillReference\",\"bridgeToken\":\"" + token + "\",\"payload\":{\"type\":\"rnassistant.skillReferenceRequest\",\"contractVersion\":1,\"chatId\":\"skill-chat\",\"skillId\":\"common.review\",\"path\":\"references/rules.md\",\"expectedPackageRevision\":\"package\"}}")
                 .GetAwaiter()
                 .GetResult();
             var saveReferenceJson = bridge.HandleMessageAsync(
@@ -867,6 +867,12 @@ namespace RNAssistant.Harness
             AssertTrue(JObject.Parse(documentationResponseJson)["ok"].Value<bool>(), "tool documentation bridge response ok");
             AssertTrue(JObject.Parse(skillsResponseJson)["ok"].Value<bool>(), "skills bridge response ok");
             AssertTrue(JObject.Parse(readReferenceJson)["ok"].Value<bool>(), "skill reference read bridge response ok");
+            var referenceRead = JObject.Parse(readReferenceJson)["payload"];
+            AssertEqual(SkillReferenceReadResponse.ContractType, (string)referenceRead["type"], "distinct metadata-only reference read contract");
+            AssertEqual("skill-chat", (string)referenceRead["chatId"], "reference read is addressed to its chat");
+            AssertTrue(referenceRead["content"] == null && referenceRead["skill"] == null && referenceRead["result"] == null,
+                "no inline reference/core source or fake mutation result on reads");
+            AssertEqual("r_published", (string)referenceRead["resource"]["revision"], "exact published resource reaches the editor");
             AssertTrue(JObject.Parse(saveReferenceJson)["ok"].Value<bool>(), "skill reference save bridge response ok");
             AssertTrue(JObject.Parse(deleteReferenceJson)["ok"].Value<bool>(), "skill reference delete bridge response ok");
             AssertEqual("excel.custom", JArray.Parse(controller.LastToolsJson)[0]["id"].Value<string>(), "tool id");

@@ -104,8 +104,11 @@ function fixture(text = "Sub Main()\r\n'😀\r\nEnd Sub\r\n") {
     ["app-chat-state.js", "app-chat-session.js"].forEach(file => {
       assert.match(fs.readFileSync(path.join(__dirname, "../../web/js", file), "utf8"), /cancelVbaModuleRead\(\)/);
     });
-    ["app-vba.js", "app-vba-project.js", "app-chat-state.js", "app-chat-session.js"].forEach(file => {
+    ["app-vba.js", "app-vba-project.js"].forEach(file => {
       assert.ok(page.includes(file + "?v=vba-upload-20260906-1"));
+    });
+    ["app-chat-state.js", "app-chat-session.js"].forEach(file => {
+      assert.ok(page.includes(file + "?v=skill-resource-20260906-1"));
     });
     console.log("PASS VBA resource read: cancellation aborts active transfer and is wired to owner lifecycle");
   }

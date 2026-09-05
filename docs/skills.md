@@ -27,12 +27,14 @@ The visible catalog is built-in first, then custom, filtered to `Common` plus th
 current adapter host. A custom package cannot shadow a built-in id. Tool and skill
 ids share one namespace and a collision fails request construction.
 
-Current custom persistence is atomic current-file replacement, not revision
-history. `version` is a manual label. Runtime separately computes `revision` as a
+Custom authoring uses atomic current-file replacement; published catalog generations
+retain immutable package bodies in the existing CAS/authority, without an editor
+history/restore UI. `version` is a manual label. Runtime separately computes `revision` as a
 versioned SHA-256 package fingerprint over the stable id, host, complete normalized
 front matter/body and ordered reference paths/revisions. Editing package metadata,
-the core or any reference changes the package revision, but old package bodies are
-not retained and delete removes the custom package directory.
+the core or any reference changes the package revision. Delete removes the custom
+authoring directory, not previously committed catalog snapshots. External file
+drift cannot silently change an active publication.
 
 The existing Library UI already owns skills under `Library → Instructions → Skills`.
 It supports Markdown edit/preview, references, enable/disable, clone and custom
@@ -55,6 +57,29 @@ There is no unversioned/PascalCase response fallback or storage-path identity in
 UI. A mutation becomes available through a freshly built catalog on the next run
 boundary; it does not rewrite the immutable catalog of an already accepted model
 step.
+
+### Reference editor reads
+
+`SkillReferenceResourceService` resolves the exact custom reference from the
+host-filtered published catalog, then reads through `CatalogResourceProvider`,
+Gateway and the existing CAS. `readSkillReference` returns only typed
+`rnassistant.skillReferenceRead` v1 metadata, an exact `ResourceRef` and a shared
+download lease. It requires an explicit chat and expected package revision;
+there is no direct authoring-file reader, inline read body or fake mutation result.
+Reading does not publish a catalog or add model observations.
+
+Capacity is reserved before catalog hydration. The existing limits remain 500,000
+characters and 2,100,000 bytes; the editor enables only a complete verified UTF-8
+snapshot. Source-file revision/byte length (which may include a file BOM) remain
+distinct from the published text's transport hash/length and the logical resource
+revision. The existing `SkillAuthoringService` still checks live package drift
+before Save/Delete; an old published read cannot authorize overwriting changed files.
+
+Cancel, chat/package/reference changes and bridge/page close invalidate pending
+reads and close late leases. Failed reads stay read-only. Catalog refresh discards
+changed clean reference caches, but retains dirty user text and blocks saving its
+conflict instead of silently rebasing it. Core Library body delivery and mutation
+body transport remain separate open consumers in the same resource cutover.
 
 ## Built-in guidance contract
 

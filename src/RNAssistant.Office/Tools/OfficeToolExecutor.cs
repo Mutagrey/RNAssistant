@@ -562,13 +562,6 @@ namespace RNAssistant.Office.Tools
                     value.Outcome.Effect == ToolAuthoringEffect.Unknown ? ToolEffectEvidence.Unknown : ToolEffectEvidence.None);
         }
 
-        internal SkillReferenceReadResult ReadSkillLibraryReference(
-            string skillId, string path, string expectedRevision)
-        {
-            return _skillAuthoringService.ReadManualReference(
-                skillId, path, expectedRevision);
-        }
-
         internal SkillManualMutationResult ExecuteSkillLibraryReferenceMutation(
             string kind, string skillId, string path, string content,
             string expectedRevision)

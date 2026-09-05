@@ -82,8 +82,8 @@ function library(skills) {
     contractVersion: 1,
     result: {
       type: "rnassistant.skillMutationResult", contractVersion: 1,
-      status: "ok", message: "read", dispatch: "not_dispatched",
-      effect: "none", operation: "read_reference"
+      status: "ok", message: "updated", dispatch: "may_have_dispatched",
+      effect: "verified_change", operation: "update_reference"
     },
     skill: Object.assign(item("common.one", "4".repeat(64)), {
       references: [{
@@ -95,17 +95,17 @@ function library(skills) {
     path: "references/rules.md", content: "# Rules", deleted: false,
     reference: { path: "references/rules.md", byteLength: 7, revision: "5".repeat(64) }
   };
-  const parsed = context.skillReferenceFromResponse(response, "read_reference");
+  const parsed = context.skillReferenceFromResponse(response, "update_reference");
   assert.equal(parsed.content, "# Rules");
   assert.equal(parsed.skill.References[0].Path, "references/rules.md");
   assert.throws(() => context.skillReferenceFromResponse(
-    Object.assign({}, response, { contractVersion: 0 }), "read_reference"),
+    Object.assign({}, response, { contractVersion: 0 }), "update_reference"),
   /typed/);
-  console.log("PASS skill contract: reference source/result is exact and versioned");
+  console.log("PASS skill contract: reference mutation result is exact and versioned");
 }
 
 {
-  assert.ok(index.includes("app-skills.js?v=skill-contract-20260901-1"));
+  assert.ok(index.includes("app-skills.js?v=skill-resource-20260906-1"));
   assert.equal(/StoragePath|storagePath|response\s*\|\|\s*\[\]/.test(source), false);
   assert.match(source, /expectedPackageRevision/);
   assert.match(source, /skillLibraryMutationRequestType/);

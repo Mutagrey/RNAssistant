@@ -82,6 +82,25 @@ namespace RNAssistant.Office.Contracts
         public string Content { get; set; }
     }
 
+    public sealed class SkillReferenceReadRequest : SkillReferencePayload
+    {
+        [JsonProperty("chatId")] public string ChatId { get; set; }
+    }
+
+    public sealed class SkillReferenceReadResponse
+    {
+        public const string ContractType = "rnassistant.skillReferenceRead";
+        [JsonProperty("type")] public string Type { get; set; }
+        [JsonProperty("contractVersion")] public int ContractVersion { get; set; }
+        [JsonProperty("chatId")] public string ChatId { get; set; }
+        [JsonProperty("skillId")] public string SkillId { get; set; }
+        [JsonProperty("packageRevision")] public string PackageRevision { get; set; }
+        [JsonProperty("reference")] public SkillReferenceDto Reference { get; set; }
+        [JsonProperty("resource")] public ResourceRef Resource { get; set; }
+        [JsonProperty("totalCharacters")] public int TotalCharacters { get; set; }
+        [JsonProperty("data")] public ResourceDownloadOpenResponse Data { get; set; }
+    }
+
     public sealed class SkillReferenceResponse
     {
         public const string ContractType =
@@ -294,26 +313,6 @@ namespace RNAssistant.Office.Contracts
                     ? string.Empty : data.PreviousRevision,
                 Revision = data == null ? string.Empty : data.Revision,
                 Changed = data != null && data.Changed
-            };
-        }
-
-        internal static SkillMutationResultDto Read(
-            string id, string referencePath, string revision)
-        {
-            return new SkillMutationResultDto
-            {
-                Type = "rnassistant.skillMutationResult",
-                ContractVersion = SkillAuthoringOutcome.CurrentContractVersion,
-                Status = "ok",
-                Message = "Skill reference read.",
-                Dispatch = "not_dispatched",
-                Effect = "none",
-                Id = id ?? string.Empty,
-                Operation = "read_reference",
-                ReferencePath = referencePath,
-                PreviousRevision = revision ?? string.Empty,
-                Revision = revision ?? string.Empty,
-                Changed = false
             };
         }
 

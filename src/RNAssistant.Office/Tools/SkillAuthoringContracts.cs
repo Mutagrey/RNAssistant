@@ -157,20 +157,4 @@ namespace RNAssistant.Office.Tools
         }
     }
 
-    internal sealed class SkillReferenceReadResult
-    {
-        internal SkillPackageSource Package { get; private set; }
-        internal SkillPackageReferenceSource Reference { get; private set; }
-        internal string Content { get; private set; }
-
-        internal SkillReferenceReadResult(
-            SkillPackageSource package,
-            SkillPackageReferenceSource reference,
-            string content)
-        {
-            Package = package ?? throw new ArgumentNullException(nameof(package));
-            Reference = reference ?? throw new ArgumentNullException(nameof(reference));
-            Content = content ?? string.Empty;
-        }
-    }
 }

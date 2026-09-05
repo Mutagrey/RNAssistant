@@ -3,6 +3,7 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Threading;
+using System.Threading.Tasks;
 using RNAssistant.Core.Models;
 using RNAssistant.Office.Contracts;
 using RNAssistant.Office.Services;
@@ -202,27 +203,17 @@ namespace RNAssistant.Office
             }
         }
 
-        public SkillReferenceResponse ReadSkillReference(
-            SkillReferencePayload payload)
+        public Task<SkillReferenceReadResponse> ReadSkillReferenceAsync(
+            SkillReferenceReadRequest payload, CancellationToken token)
         {
             ValidateSkillReferencePayload(payload);
-            var read = _toolExecutor.ReadSkillLibraryReference(
-                payload.SkillId, payload.Path,
-                payload.ExpectedPackageRevision);
-            return new SkillReferenceResponse
-            {
-                Type = SkillReferenceResponse.ContractType,
-                ContractVersion =
-                    SkillLibraryResponse.CurrentContractVersion,
-                Result = SkillMutationResultDto.Read(
-                    read.Package.Id, read.Reference.Path,
-                    read.Package.Revision),
-                Skill = SkillPackageDto.From(read.Package),
-                Path = read.Reference.Path,
-                Content = read.Content,
-                Deleted = false,
-                Reference = SkillReferenceDto.From(read.Reference)
-            };
+            if (string.IsNullOrWhiteSpace(payload.ChatId))
+                throw new InvalidOperationException("RESOURCE_ACCESS_DENIED: an explicit chat is required.");
+            var session = LoadAddressedSession(payload.ChatId);
+            var source = new ChatSession { Id = session.Id, Host = session.Host, DocumentKey = session.DocumentKey,
+                DocumentAuthorityId = session.DocumentAuthorityId };
+            return Task.Run(() => new SkillReferenceResourceService(_toolExecutor.ResourceGateway, _resourceData, _skillCatalog)
+                .Open(source, payload, token), token);
         }
 
         public SkillReferenceResponse SaveSkillReference(

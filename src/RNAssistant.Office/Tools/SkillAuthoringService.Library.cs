@@ -95,23 +95,6 @@ namespace RNAssistant.Office.Tools
                 arguments, expectedRevision, intended.Id);
         }
 
-        internal SkillReferenceReadResult ReadManualReference(
-            string skillId, string path, string expectedRevision)
-        {
-            var skill = RequireManualSkill(skillId, expectedRevision);
-            string content;
-            string error;
-            SkillReferenceMetadata metadata;
-            if (!_skillStore.TryReadReference(
-                skill, path, out content, out metadata, out error))
-            {
-                throw new InvalidOperationException(error);
-            }
-            return new SkillReferenceReadResult(
-                SkillPackageSource.Capture(skill),
-                ReferenceSource(metadata), content);
-        }
-
         internal SkillManualMutationResult ExecuteManualReferenceMutation(
             string kind, string skillId, string path, string content,
             string expectedRevision)
@@ -289,23 +272,6 @@ namespace RNAssistant.Office.Tools
             return ManualResult(outcome, dispatched, verified);
         }
 
-        private SkillDefinition RequireManualSkill(
-            string id, string expectedRevision)
-        {
-            var skill = FindStoredSkill(id);
-            if (skill == null)
-                throw new InvalidOperationException(
-                    "Custom skill not found: " + (id ?? string.Empty));
-            var actual = StateRevision(skill);
-            if (!string.Equals(expectedRevision ?? string.Empty,
-                actual, StringComparison.Ordinal))
-            {
-                throw new InvalidOperationException(
-                    "Custom skill changed after the editor loaded it. Refresh the Skill Library before retrying.");
-            }
-            return skill;
-        }
-
         private static SkillAuthoringOutcome StaleLibraryMutation(
             string id, string expectedRevision, string actualRevision)
         {
@@ -325,12 +291,5 @@ namespace RNAssistant.Office.Tools
                 outcome, dispatched, SkillPackageSource.Capture(package));
         }
 
-        private static SkillPackageReferenceSource ReferenceSource(
-            SkillReferenceMetadata metadata)
-        {
-            return metadata == null ? null :
-                new SkillPackageReferenceSource(
-                    metadata.Path, metadata.ByteLength, metadata.Revision);
-        }
     }
 }

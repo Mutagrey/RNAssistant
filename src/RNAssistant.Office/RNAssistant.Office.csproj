@@ -215,6 +215,7 @@
     <Compile Include="Services\LiveDocumentResourceProvider.Read.cs" />
     <Compile Include="Services\VbaResourceProvider.cs" />
     <Compile Include="Services\VbaEditorResourceService.cs" />
+    <Compile Include="Services\SkillReferenceResourceService.cs" />
     <Compile Include="Services\VbaResourceProvider.Read.cs" />
     <Compile Include="Services\ChatResourceIngestionService.cs" />
     <Compile Include="Services\ResourceGatewayService.cs" />

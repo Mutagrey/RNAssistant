@@ -1351,24 +1351,18 @@ namespace RNAssistant.Harness
                 AssertEqual(SkillAuthoringEffect.VerifiedChange,
                     reference.Outcome.Effect,
                     "typed UI reference update verifies package read-back");
-                var read = executor.ReadSkillLibraryReference(
-                    original.Id, "references/rules.md",
-                    reference.Package.Revision);
-                AssertEqual("# Rules", read.Content,
-                    "typed UI reference read is revision-bound");
-                var staleRead = false;
-                try
+                using (var data = new ResourceDataPlaneService(executor.ResourceGateway))
                 {
-                    executor.ReadSkillLibraryReference(
-                        original.Id, "references/rules.md",
-                        update.Package.Revision);
+                    var reader = new SkillReferenceResourceService(executor.ResourceGateway, data,
+                        new SkillCatalogService(adapter, executor.CapturePublishedSkills));
+                    var session = NewSession(adapter);
+                    var request = SkillReferenceRequest(session, original.Id, reference.Package.Revision);
+                    var read = reader.Open(session, request, CancellationToken.None);
+                    AssertEqual("# Rules", ReadSkillReferenceDownload(data, read), "typed UI reference read is revision-bound");
+                    request.ExpectedPackageRevision = update.Package.Revision;
+                    AssertEqual("RESOURCE_REVISION_CHANGED", RuntimeThrows<ResourceRequestException>(() =>
+                        reader.Open(session, request, CancellationToken.None)).ErrorCode, "stale UI reference read fails closed");
                 }
-                catch (InvalidOperationException)
-                {
-                    staleRead = true;
-                }
-                AssertTrue(staleRead,
-                    "stale UI reference read fails closed");
 
                 var deletedReference = executor
                     .ExecuteSkillLibraryReferenceMutation(

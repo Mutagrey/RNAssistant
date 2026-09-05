@@ -87,6 +87,15 @@ heal Unknown authority. Each member read hydrates its root once; public root
 projection remains in the catalog owner. Remaining domain-specific read consumers
 are tracked below.
 
+`SkillReferenceResourceService` uses that published catalog and exact Gateway/CAS
+source for the Library reference editor. `readSkillReference` carries metadata and
+a shared bounded download lease, not Markdown or a whole package. It reserves
+capacity before hydration and requires the displayed package revision; no authoring
+file fallback or model observation is created. Complete-source/read-only, cache
+conflict and existing save-guard rules belong to
+[Skill Library](skills.md#reference-editor-reads). Core Library bodies and mutation
+body transport still require consumer cutover.
+
 ## Conversation loop
 
 Controller clear/edit/message-delete/fork use typed `ChatResourceMutationIntent`
@@ -296,6 +305,8 @@ inline VBA save/create code DTOs and the attachment-only browser chunk loop
 uploaded-HTML source bridge/DTO and independent preview cache, plus direct
 attachment-text import reads (now exact Gateway pages through the same owners);
 mutable-disk skill reference activation;
+direct Skill Library reference reads and their inline body/fake mutation-result
+bridge response (now published catalog → Gateway/CAS → shared bounded download);
 separate state/Office retained text readers, externally hash-bound Office/state/catalog
 continuations, and read-side exposure of prepared state/context/catalog identities.
 No compatibility alias, dual-write or feature flag restores these paths.

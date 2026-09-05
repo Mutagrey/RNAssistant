@@ -1,4 +1,6 @@
 var skillReferenceLoadSequence = 0;
+var skillReferenceRead = null;
+var skillReferenceReadPending = 0;
 var skillLibraryContractVersion = 1;
 var skillLibraryContractType = "rnassistant.skillLibrary";
 var skillLibraryMutationRequestType = "rnassistant.skillLibraryMutationRequest";
@@ -130,6 +132,7 @@ function ensureSkillReferenceState(skill) {
   if (!skill._referenceLoading) skill._referenceLoading = {};
   if (!skill._referenceLoadTokens) skill._referenceLoadTokens = {};
   if (!skill._referenceDirty) skill._referenceDirty = {};
+  if (!skill._referenceConflicts) skill._referenceConflicts = {};
   if (!skill._selectedReferencePath) skill._selectedReferencePath = "";
 }
 
@@ -193,6 +196,14 @@ function matchingSkillRecord(index, record) {
 function skillHasDirtyReferences(skill) {
   ensureSkillReferenceState(skill);
   return Object.keys(skill._referenceDirty).some(function (path) { return !!skill._referenceDirty[path]; });
+}
+
+function requireUnconflictedSkillReferences() {
+  (state.skills || []).forEach(function (skill) {
+    ensureSkillReferenceState(skill);
+    if (Object.keys(skill._referenceConflicts).some(function (path) { return skill._referenceDirty[path] && skill._referenceConflicts[path]; }))
+      throw new Error("Reference изменился после чтения. Обновите пакет и разрешите конфликт перед сохранением.");
+  });
 }
 
 function skillRecordChanged(current, baseline) {
@@ -262,8 +273,8 @@ function captureSelectedSkillResource(skill) {
   var value = skillEditorValue();
   var path = selectedSkillReferencePath(skill);
   if (path) {
-    if (skill._referenceLoading[path] && !skill._referenceLoaded[path]) return;
-    if (!skill._referenceLoaded[path] || skill._referenceDrafts[path] !== value) {
+    if (!skill._referenceLoaded[path]) return;
+    if (skill._referenceDrafts[path] !== value) {
       skill._referenceDirty[path] = true;
     }
     skill._referenceDrafts[path] = value;
@@ -287,6 +298,7 @@ function mergeSkillReferenceMetadata(skill, references) {
 }
 
 function preserveSkillReferenceState(skills) {
+  cancelSkillReferenceRead();
   var transient = {};
   (state.skills || []).forEach(function (skill) {
     if (!skill || !skill.Id) return;
@@ -295,9 +307,9 @@ function preserveSkillReferenceState(skills) {
       selected: skill._selectedReferencePath || "",
       drafts: skill._referenceDrafts,
       loaded: skill._referenceLoaded,
-      loading: skill._referenceLoading,
-      loadTokens: skill._referenceLoadTokens,
       dirty: skill._referenceDirty,
+      conflicts: skill._referenceConflicts,
+      references: skill.References.slice(),
       pending: (skill.References || []).filter(function (item) { return !!item.Pending; })
     };
   });
@@ -308,9 +320,19 @@ function preserveSkillReferenceState(skills) {
     skill._selectedReferencePath = saved.selected;
     skill._referenceDrafts = saved.drafts;
     skill._referenceLoaded = saved.loaded;
-    skill._referenceLoading = saved.loading;
-    skill._referenceLoadTokens = saved.loadTokens;
+    skill._referenceLoading = {};
+    skill._referenceLoadTokens = {};
     skill._referenceDirty = saved.dirty;
+    skill._referenceConflicts = saved.conflicts;
+    Object.keys(saved.loaded).forEach(function (path) {
+      var before = saved.references.find(function (item) { return skillReferencePath(item) === path; });
+      var after = skill.References.find(function (item) { return skillReferencePath(item) === path; });
+      if (before && before.Pending) return;
+      if (!before || !after || before.Revision !== after.Revision) {
+        if (saved.dirty[path]) skill._referenceConflicts[path] = true;
+        else { delete skill._referenceLoaded[path]; delete skill._referenceDrafts[path]; }
+      }
+    });
     saved.pending.forEach(function (reference) {
       var path = skillReferencePath(reference);
       if (!skill.References.some(function (item) {
@@ -380,6 +402,48 @@ function renderSkillReferenceControls(skill, disabled, builtIn) {
   if ($("deleteSkillReferenceButton")) $("deleteSkillReferenceButton").disabled = disabled || builtIn || !selected || !!state.bridgeUnavailable;
 }
 
+function closeSkillReferenceRead(operation) {
+  if (!operation || operation.closed || !operation.data || !/^[a-f0-9]{64}$/.test(operation.data.leaseId)) return Promise.resolve();
+  operation.closed = true;
+  return send("resourceDataClose", { chatId: operation.chatId, workspaceId: "skill-reference-editor", leaseId: operation.data.leaseId })
+    .catch(function () {});
+}
+
+function cancelSkillReferenceRead() {
+  var operation = skillReferenceRead;
+  if (!operation) return;
+  operation.abort.abort();
+  if (operation.bridgeRequestId) cancelBridgeRequest(operation.bridgeRequestId).catch(function () {});
+  closeSkillReferenceRead(operation);
+  delete operation.skill._referenceLoading[operation.path];
+  delete operation.skill._referenceLoadTokens[operation.path];
+  skillReferenceRead = null;
+}
+
+function updateSkillReferenceReadOnly() {
+  var skill = state.skills[state.selectedSkillIndex], path = selectedSkillReferencePath(skill);
+  var readOnly = !!state.bridgeUnavailable || !skill || !!skill.BuiltIn || !!(path && !skill._referenceLoaded[path]);
+  if ($("skillBodyInput")) $("skillBodyInput").readOnly = readOnly;
+  if (typeof setCodeEditorReadOnly === "function") setCodeEditorReadOnly("skillBodyInput", readOnly);
+}
+
+function skillReferenceReadFromContract(response, operation) {
+  var resource = response && response.resource;
+  var parts = resource && typeof resource.uri === "string" ? resource.uri.split("/") : [];
+  if (!response || response.type !== "rnassistant.skillReferenceRead" || response.contractVersion !== skillLibraryContractVersion ||
+      response.chatId !== operation.chatId || response.skillId !== operation.skillId || response.packageRevision !== operation.packageRevision ||
+      !response.reference || response.reference.path !== operation.path || response.reference.revision !== operation.referenceRevision ||
+      response.reference.byteLength !== operation.referenceByteLength || !Number.isInteger(response.totalCharacters) ||
+      response.totalCharacters < 0 || response.totalCharacters > 500000 || !response.data ||
+      !response.data.payload || response.data.payload.contentType !== "text/markdown; charset=utf-8" ||
+      parts.length !== 7 || parts[0] !== "rna:" || parts[1] !== "" || parts[2] !== "catalog" || parts[3] !== "skills" ||
+      decodeURIComponent(parts[4]) !== operation.skillId || parts[5] !== "reference" ||
+      decodeURIComponent(parts[6]) !== operation.path.substring("references/".length) ||
+      typeof resource.revision !== "string" || !resource.revision)
+    throw new Error("Некорректный снимок reference навыка.");
+  return response;
+}
+
 async function loadSelectedSkillReference(skill, path) {
   if (!skill || !path) return;
   ensureSkillReferenceState(skill);
@@ -391,45 +455,68 @@ async function loadSelectedSkillReference(skill, path) {
     skill._referenceLoaded[path] = true;
     return;
   }
+  cancelSkillReferenceRead();
+  if (!reference || !state.activeChatId || state.bridgeUnavailable) return;
+  if (skillReferenceReadPending >= 2) {
+    log("Предыдущее чтение ещё закрывается. Выберите reference повторно после завершения.", "error");
+    return;
+  }
   var requestId = ++skillReferenceLoadSequence;
+  var operation = { skill: skill, skillId: skill.Id, path: path, chatId: state.activeChatId, packageRevision: skill._baseRevision,
+    referenceRevision: reference.Revision, referenceByteLength: reference.ByteLength,
+    abort: new AbortController(), data: null, bridgeRequestId: null, closed: false };
+  skillReferenceRead = operation;
+  skillReferenceReadPending++;
   skill._referenceLoading[path] = requestId;
   skill._referenceLoadTokens[path] = requestId;
   updateSkillSaveButton();
-  if (selectedSkillReferencePath(skill) === path && typeof setCodeEditorReadOnly === "function") {
-    setCodeEditorReadOnly("skillBodyInput", true);
+  function current() {
+    return skillReferenceRead === operation && !operation.abort.signal.aborted && !state.bridgeUnavailable &&
+      state.activeChatId === operation.chatId && state.skills[state.selectedSkillIndex] === skill &&
+      selectedSkillReferencePath(skill) === path && skill._baseRevision === operation.packageRevision && skill.Id === operation.skillId &&
+      skill._referenceLoadTokens[path] === requestId && !skill._referenceDirty[path] &&
+      skill.References.some(function (item) { return skillReferencePath(item) === path && item.Revision === operation.referenceRevision; });
   }
+  function active() { if (!current()) throw new Error("RESOURCE_READ_CANCELLED"); }
   try {
-    var response = await send("readSkillReference", {
+    updateSkillReferenceReadOnly();
+    active();
+    var opening = send("readSkillReference", {
       type: skillReferenceRequestType,
       contractVersion: skillLibraryContractVersion,
-      skillId: skill.Id || "",
+      chatId: operation.chatId,
+      skillId: operation.skillId || "",
       path: path,
-      expectedPackageRevision: skill._baseRevision || ""
+      expectedPackageRevision: operation.packageRevision || ""
     });
-    var typed = skillReferenceFromResponse(response, "read_reference");
-    if (skill._referenceLoadTokens[path] !== requestId || skill._referenceLoading[path] !== requestId ||
-      !(skill.References || []).some(function (item) {
-        return skillReferencePath(item).toLowerCase() === path.toLowerCase();
-      })) return;
-    if (skill._referenceDirty[path]) return;
-    skill._referenceDrafts[path] = typed.content || "";
+    operation.bridgeRequestId = opening.requestId;
+    var response = await opening;
+    operation.bridgeRequestId = null;
+    operation.data = response && response.data;
+    active();
+    var typed = skillReferenceReadFromContract(response, operation);
+    var bytes = await window.RNAssistantResourceDownload.read(typed.data, { maxBytes: 2100000, fetch: window.fetch.bind(window),
+      signal: operation.abort.signal, isCurrent: current });
+    var text = new TextDecoder("utf-8", { fatal: true, ignoreBOM: true }).decode(bytes);
+    if (text.length !== typed.totalCharacters) throw new Error("Неполный снимок reference навыка.");
+    await closeSkillReferenceRead(operation);
+    active();
+    skill._referenceDrafts[path] = text;
     skill._referenceLoaded[path] = true;
     delete skill._referenceDirty[path];
-    mergeSkillReferenceMetadata(skill, typed.skill.References);
-    skill.Revision = typed.skill.Revision;
-    skill._baseRevision = typed.skill._baseRevision;
+    delete skill._referenceConflicts[path];
     if (state.skills[state.selectedSkillIndex] === skill && selectedSkillReferencePath(skill) === path) {
       setSkillEditorValue(skill._referenceDrafts[path]);
       renderSkillPreview();
     }
   } catch (error) {
-    if (skill._referenceLoadTokens[path] === requestId) log(error.detail || error.message, "error");
+    if (current()) log(error.detail || error.message, "error");
   } finally {
+    await closeSkillReferenceRead(operation);
     if (skill._referenceLoading[path] === requestId) delete skill._referenceLoading[path];
-    if (state.skills[state.selectedSkillIndex] === skill && typeof setCodeEditorReadOnly === "function") {
-      var selectedPath = selectedSkillReferencePath(skill);
-      setCodeEditorReadOnly("skillBodyInput", !!skill.BuiltIn || !!(selectedPath && skill._referenceLoading[selectedPath]));
-    }
+    skillReferenceReadPending--;
+    if (skillReferenceRead === operation) skillReferenceRead = null;
+    updateSkillReferenceReadOnly();
     updateSkillSaveButton();
   }
 }
@@ -440,6 +527,8 @@ function renderSkillEditor() {
   var builtIn = !!(skill && skill.BuiltIn);
   ensureSkillReferenceState(skill);
   var referencePath = selectedSkillReferencePath(skill);
+  if (skillReferenceRead && (skillReferenceRead.skill !== skill || skillReferenceRead.path !== referencePath ||
+      skillReferenceRead.chatId !== state.activeChatId || skillReferenceRead.packageRevision !== skill._baseRevision)) cancelSkillReferenceRead();
   var references = skill ? (skill.References || []) : [];
   var panel = $("skillEditorPanel");
   if (panel) panel.classList.toggle("hidden", disabled);
@@ -463,9 +552,7 @@ function renderSkillEditor() {
   var identityLocked = references.length > 0;
   $("skillIdInput").disabled = disabled || builtIn || identityLocked;
   $("skillHostInput").disabled = disabled || builtIn || identityLocked;
-  if (typeof setCodeEditorReadOnly === "function") {
-    setCodeEditorReadOnly("skillBodyInput", disabled || builtIn || !!(referencePath && skill._referenceLoading[referencePath]));
-  }
+  updateSkillReferenceReadOnly();
 
   $("deleteSkillButton").disabled = disabled || builtIn;
   $("cloneSkillButton").disabled = disabled;
@@ -607,6 +694,7 @@ async function saveSelectedSkillResource() {
   syncSelectedSkillFromEditor();
   var skill = state.skills[state.selectedSkillIndex];
   if (!skill) return;
+  requireUnconflictedSkillReferences();
   var selectedId = skill.Id || "";
   var response = await send("saveSkills", {
     type: skillLibraryMutationRequestType,
@@ -630,6 +718,7 @@ async function saveSelectedSkillResource() {
     throw coreError;
   }
   var savedReferences = 0;
+  requireUnconflictedSkillReferences();
   for (var skillIndex = 0; skillIndex < state.skills.length; skillIndex += 1) {
     var saved = state.skills[skillIndex];
     if (!saved || saved.BuiltIn) continue;
@@ -656,6 +745,7 @@ async function saveSelectedSkillResource() {
       saved._referenceDrafts[referencePath] = typedReference.content || referenceContent;
       saved._referenceLoaded[referencePath] = true;
       delete saved._referenceDirty[referencePath];
+      delete saved._referenceConflicts[referencePath];
       savedReferences += 1;
     }
   }
@@ -694,6 +784,7 @@ function addSkillReference() {
 }
 
 async function deleteSelectedSkillReference() {
+  cancelSkillReferenceRead();
   syncSelectedSkillFromEditor();
   var skill = state.skills[state.selectedSkillIndex];
   var path = selectedSkillReferencePath(skill);
@@ -726,6 +817,7 @@ async function deleteSelectedSkillReference() {
   delete skill._referenceLoading[path];
   delete skill._referenceLoadTokens[path];
   delete skill._referenceDirty[path];
+  delete skill._referenceConflicts[path];
   skill._selectedReferencePath = "";
   updateSkillLibraryDirty();
   renderSkillEditor();
@@ -733,6 +825,7 @@ async function deleteSelectedSkillReference() {
 }
 
 function bindSkillActions() {
+  window.addEventListener("pagehide", cancelSkillReferenceRead);
   Array.prototype.slice.call(document.querySelectorAll(".instruction-mode-button")).forEach(function (button) {
     button.addEventListener("click", function () { syncSelectedSkillFromEditor(); state.promptEditorMode = button.getAttribute("data-instruction-mode"); applyInstructionMode(); });
   });
