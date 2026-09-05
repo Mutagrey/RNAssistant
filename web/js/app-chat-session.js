@@ -281,6 +281,7 @@ function applyInitState(init) {
   state.hasHistorySecret = !!(init.hasHistorySecret || init.HasHistorySecret);
   state.tools = toolLibraryItemsFromContract(init.tools);
   if (typeof cancelSkillSourceRead === "function") cancelSkillSourceRead();
+  if (typeof cancelSkillSourceWrite === "function") cancelSkillSourceWrite();
   state.skills = skillLibraryItemsFromContract(init.skills);
   if (typeof acceptToolLibraryState === "function") acceptToolLibraryState();
   if (typeof acceptSkillLibraryState === "function") acceptSkillLibraryState();
@@ -346,6 +347,7 @@ function applyBridgeUnavailableState(error) {
   if (typeof cancelVbaModuleRead === "function") cancelVbaModuleRead();
   if (typeof cancelVbaModuleWrite === "function") cancelVbaModuleWrite();
   if (typeof cancelSkillSourceRead === "function") cancelSkillSourceRead();
+  if (typeof cancelSkillSourceWrite === "function") cancelSkillSourceWrite();
   state.bridgeToken = "";
   document.body.classList.add("bridge-unavailable");
   resetMessageEditState();

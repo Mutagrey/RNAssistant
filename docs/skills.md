@@ -96,9 +96,35 @@ preserving its live body. Creation, delete, or mixing preservation with replacem
 is rejected; the typed preservation intent is recorded at the same commit barrier.
 Replacing the core requires a loaded/user-created draft. A successful Save clears
 only its unchanged submitted draft and reloads exact published text; later user
-edits remain visible and conflicts block further writes. Core/reference mutation
-body transport (including the reference mutation echo) remains an open consumer
-in the same cutover.
+edits remain visible and conflicts block further writes.
+
+### Editor mutation uploads
+
+Core batches and reference upserts use the shared data plane, owned by the same
+`SkillEditorResourceService`. `beginSkillMutationUpload` reserves a chat-bound
+`skill-editor` capability before receiving bytes. `saveSkills` and
+`saveSkillReference` accept only `chatId`, `uploadLeaseId` and the SHA-256 of the
+complete uploaded UTF-8 JSON. The typed mutation body (including revision guards)
+travels through the existing chunk upload route, never the bridge control message.
+It is transient input, not an attachment, CAS publication or model observation.
+
+One upload is limited to 16 MiB and shares existing upload capacity. A core batch
+contains at most 256 mutations; each replacement source retains the 500,000
+character / 2,100,000 byte limit. Empty reference text is valid. Complete bytes,
+hash, typed shape and all batch body bounds are checked before the first domain
+dispatch. The capability is consumed once, including on validation failure.
+The existing authoring owner then applies revision-guarded mutations sequentially
+through its prepare/read-back/commit barrier, stopping at the first non-OK result.
+This preserves a verified committed prefix; it is not an atomic multi-package save.
+Metadata-only core mutations still explicitly preserve the guarded body.
+
+The UI permits one pending writer and freezes the submitted core/reference plan.
+Later edits are not silently added to that save or cleared by its response.
+Cancellation, chat/library replacement and bridge/page close abort transport and
+close late leases; possible dispatch or a lost response never triggers replay.
+An unconfirmed outcome asks for Library refresh before another attempt. Successful
+reference saves return metadata only and reread the exact published source; the
+inline source echo is removed. Reference delete remains a body-free guarded action.
 
 ## Built-in guidance contract
 

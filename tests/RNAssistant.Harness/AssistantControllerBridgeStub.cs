@@ -49,7 +49,7 @@ namespace RNAssistant.Office
         public string LastSkillsJson { get; private set; }
         public string LastSkillReferenceId { get; private set; }
         public string LastSkillReferencePath { get; private set; }
-        public string LastSkillReferenceContent { get; private set; }
+        public string LastSkillReferenceUpload { get; private set; }
         public string LastDocumentHost { get; private set; }
         public string LastHtmlPath { get; private set; }
         public string LastHtmlDataName { get; private set; }
@@ -385,18 +385,25 @@ namespace RNAssistant.Office
             return EmptySkillLibrary();
         }
 
-        public SkillLibraryMutationResponse SaveSkills(
-            SaveSkillsPayload payload)
+        public ResourceUploadOpenResponse BeginSkillMutationUpload(SkillMutationUploadRequest request, CancellationToken token)
         {
-            LastSkillsJson = JsonConvert.SerializeObject(
-                payload == null ? null : payload.Mutations);
-            return new SkillLibraryMutationResponse
+            token.ThrowIfCancellationRequested(); LastChatId = request.ChatId;
+            return new ResourceUploadOpenResponse { LeaseId = new string('a', 64), ByteLength = request.ByteLength,
+                Url = "https://rnassistant.local-resource/v1/upload/" + new string('a', 64), MaxChunkBytes = 262144 };
+        }
+        public ResourceDataCloseResponse CancelSkillMutationUpload(ResourceUploadLeaseRequest request)
+        { LastChatId = request.ChatId; return new ResourceDataCloseResponse { Closed = true }; }
+        public Task<SkillLibraryMutationResponse> SaveSkillsAsync(SkillMutationWriteRequest payload, CancellationToken token)
+        {
+            token.ThrowIfCancellationRequested();
+            LastSkillsJson = JsonConvert.SerializeObject(payload);
+            return Task.FromResult(new SkillLibraryMutationResponse
             {
                 Type = SkillLibraryMutationResponse.ContractType,
                 ContractVersion = SkillLibraryResponse.CurrentContractVersion,
                 Results = new List<SkillMutationResultDto>(),
                 Library = EmptySkillLibrary()
-            };
+            });
         }
         public Task<SkillSourceReadResponse> ReadSkillSourceAsync(
             SkillSourceReadRequest payload, CancellationToken token)
@@ -412,15 +419,11 @@ namespace RNAssistant.Office
                 Data = new ResourceDownloadOpenResponse { LeaseId = new string('a', 64),
                     Payload = new PayloadRef(new string('b', 64), 9, "text/markdown; charset=utf-8") } });
         }
-        public SkillReferenceResponse SaveSkillReference(
-            SaveSkillReferencePayload payload)
+        public Task<SkillReferenceResponse> SaveSkillReferenceAsync(SkillMutationWriteRequest payload, CancellationToken token)
         {
-            LastSkillReferenceId = payload == null ? null : payload.SkillId;
-            LastSkillReferencePath = payload == null ? null : payload.Path;
-            LastSkillReferenceContent = payload == null ? null : payload.Content;
-            return SkillReferenceResult(
-                LastSkillReferenceId, LastSkillReferencePath,
-                LastSkillReferenceContent, false, "update_reference");
+            token.ThrowIfCancellationRequested();
+            LastSkillReferenceUpload = JsonConvert.SerializeObject(payload);
+            return Task.FromResult(SkillReferenceResult("common.review", "references/rules.md", false, "update_reference"));
         }
         public SkillReferenceResponse DeleteSkillReference(
             SkillReferencePayload payload)
@@ -429,17 +432,17 @@ namespace RNAssistant.Office
             LastSkillReferencePath = payload == null ? null : payload.Path;
             return SkillReferenceResult(
                 LastSkillReferenceId, LastSkillReferencePath,
-                null, true, "delete_reference");
+                true, "delete_reference");
         }
         private static SkillReferenceResponse SkillReferenceResult(
-            string skillId, string path, string content,
+            string skillId, string path,
             bool deleted, string operation)
         {
             var reference = deleted ? null : new SkillReferenceDto
             {
                 Path = path,
                 Revision = "ref",
-                ByteLength = content == null ? 0 : content.Length
+                ByteLength = 0
             };
             return new SkillReferenceResponse
             {
@@ -476,7 +479,6 @@ namespace RNAssistant.Office
                         : new List<SkillReferenceDto> { reference }
                 },
                 Path = path,
-                Content = content,
                 Deleted = deleted,
                 Reference = reference
             };

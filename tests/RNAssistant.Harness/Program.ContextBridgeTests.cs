@@ -847,7 +847,7 @@ namespace RNAssistant.Harness
                 .GetAwaiter()
                 .GetResult();
             var skillsResponseJson = bridge.HandleMessageAsync(
-                "{\"id\":\"b7\",\"type\":\"saveSkills\",\"bridgeToken\":\"" + token + "\",\"payload\":{\"type\":\"rnassistant.skillLibraryMutationRequest\",\"contractVersion\":1,\"mutations\":[{\"kind\":\"upsert\",\"baseId\":\"\",\"expectedRevision\":\"\",\"id\":\"common.review\",\"host\":\"Common\",\"name\":\"Review\",\"description\":\"Review.\",\"version\":\"1.0.0\",\"bodyMarkdown\":\"# Review\",\"enabled\":true}]}}")
+                "{\"id\":\"b7\",\"type\":\"saveSkills\",\"bridgeToken\":\"" + token + "\",\"payload\":{\"chatId\":\"skill-chat\",\"uploadLeaseId\":\"core-lease\",\"sha256\":\"core-hash\"}}")
                 .GetAwaiter()
                 .GetResult();
             var readReferenceJson = bridge.HandleMessageAsync(
@@ -855,7 +855,7 @@ namespace RNAssistant.Harness
                 .GetAwaiter()
                 .GetResult();
             var saveReferenceJson = bridge.HandleMessageAsync(
-                "{\"id\":\"b9\",\"type\":\"saveSkillReference\",\"bridgeToken\":\"" + token + "\",\"payload\":{\"type\":\"rnassistant.skillReferenceRequest\",\"contractVersion\":1,\"skillId\":\"common.review\",\"path\":\"references/rules.md\",\"expectedPackageRevision\":\"package\",\"content\":\"# Rules\"}}")
+                "{\"id\":\"b9\",\"type\":\"saveSkillReference\",\"bridgeToken\":\"" + token + "\",\"payload\":{\"chatId\":\"skill-chat\",\"uploadLeaseId\":\"reference-lease\",\"sha256\":\"reference-hash\"}}")
                 .GetAwaiter()
                 .GetResult();
             var deleteReferenceJson = bridge.HandleMessageAsync(
@@ -876,7 +876,7 @@ namespace RNAssistant.Harness
             AssertTrue(JObject.Parse(saveReferenceJson)["ok"].Value<bool>(), "skill reference save bridge response ok");
             AssertTrue(JObject.Parse(deleteReferenceJson)["ok"].Value<bool>(), "skill reference delete bridge response ok");
             AssertEqual("excel.custom", JArray.Parse(controller.LastToolsJson)[0]["id"].Value<string>(), "tool id");
-            AssertEqual("common.review", JArray.Parse(controller.LastSkillsJson)[0]["id"].Value<string>(), "skill id");
+            AssertEqual("core-lease", (string)JObject.Parse(controller.LastSkillsJson)["uploadLeaseId"], "core control carries only upload identity");
             AssertEqual("rnassistant.skillLibraryMutationResult",
                 JObject.Parse(skillsResponseJson)["payload"]["type"].Value<string>(),
                 "skill bridge result contract");
@@ -896,7 +896,8 @@ namespace RNAssistant.Harness
                 "skill reference result contract");
             AssertEqual("common.review", controller.LastSkillReferenceId, "skill reference id");
             AssertEqual("references/rules.md", controller.LastSkillReferencePath, "skill reference path");
-            AssertEqual("# Rules", controller.LastSkillReferenceContent, "skill reference content");
+            AssertEqual("reference-hash", (string)JObject.Parse(controller.LastSkillReferenceUpload)["sha256"], "reference control pins uploaded mutation bytes");
+            AssertTrue(JObject.Parse(saveReferenceJson)["payload"]["content"] == null, "reference save has no inline echo");
         }
 
         private static void BridgeUsesTypedContextPayload()

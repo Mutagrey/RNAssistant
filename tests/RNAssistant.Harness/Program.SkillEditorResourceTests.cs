@@ -154,6 +154,117 @@ namespace RNAssistant.Harness
             });
         }
 
+        private static SkillMutationWriteRequest UploadSkillMutation(ResourceDataPlaneService data, SkillEditorResourceService editor,
+            ChatSession session, object body, bool partial = false)
+        {
+            var text = Newtonsoft.Json.JsonConvert.SerializeObject(body);
+            var bytes = Encoding.UTF8.GetBytes(text);
+            var lease = editor.BeginUpload(session, new SkillMutationUploadRequest { ChatId = session.Id, ByteLength = bytes.Length }, CancellationToken.None);
+            var length = partial ? bytes.Length / 2 : bytes.Length;
+            for (var offset = 0; offset < length;)
+            {
+                var count = Math.Min(lease.MaxChunkBytes, length - offset);
+                using (var stream = new MemoryStream(bytes, offset, count)) data.WriteUpload(lease.LeaseId, offset, count, stream, CancellationToken.None);
+                offset += count;
+            }
+            return new SkillMutationWriteRequest { ChatId = session.Id, UploadLeaseId = lease.LeaseId, Sha256 = TextPatternEngine.Sha256(text) };
+        }
+
+        private static void SkillEditorUploadsUseMutationOwner()
+        {
+            WithTempPaths(paths =>
+            {
+                var store = new SkillStore(paths);
+                var original = store.SaveOne(new SkillDefinition { Id = "common.upload_original", Name = "Original", Description = "Before", BodyMarkdown = "# Keep" });
+                var adapter = FakeOfficeAdapter.ForHost("Word");
+                var executor = new OfficeToolExecutor(adapter, new VbaJournalStore(paths), store, new ToolStore(paths));
+                var catalog = new SkillCatalogService(adapter, executor.CapturePublishedSkills);
+                var session = NewSession(adapter);
+                using (var data = new ResourceDataPlaneService(executor.ResourceGateway))
+                {
+                    var editor = new SkillEditorResourceService(executor.ResourceGateway, data, catalog);
+                    var source = "# Large\n" + new string('Ж', 140000);
+                    var batch = new SkillLibraryMutationBatch { Type = SkillLibraryMutationBatch.ContractType, ContractVersion = 1,
+                        Mutations = new System.Collections.Generic.List<SkillCoreMutationPayload> {
+                            new SkillCoreMutationPayload { Kind = "upsert", BaseId = original.Id, ExpectedRevision = SkillRevision.Compute(original),
+                                Id = original.Id, Host = "Common", Name = "Original", Description = "After", Version = "1.0.0", Enabled = true, PreserveBody = true },
+                            new SkillCoreMutationPayload { Kind = "upsert", Id = "common.upload_new", Host = "Common", Name = "New", Description = "New", Version = "1.0.0", Enabled = true, BodyMarkdown = source } } };
+                    var generation = catalog.Capture().Generation;
+                    var request = UploadSkillMutation(data, editor, session, batch);
+                    var prepared = editor.PrepareCoreMutations(session, request, CancellationToken.None);
+                    AssertEqual(2, prepared.Count, "one upload preserves the complete typed batch");
+                    AssertEqual(generation, catalog.Capture().Generation, "upload and preparation do not publish");
+                    AssertEqual(1, store.Load().Count, "preparation cannot write a package");
+                    RuntimeThrows<ResourceRequestException>(() => editor.PrepareCoreMutations(session, request, CancellationToken.None));
+                    foreach (var mutation in prepared) AssertEqual(SkillAuthoringOutcomeStatus.Ok, executor.ExecuteSkillLibraryMutation(mutation).Outcome.Status, "existing owner commits each prepared member");
+                    var saved = store.Load().Single(item => item.Id == original.Id);
+                    AssertEqual("# Keep", saved.BodyMarkdown, "metadata-only mutation preserves the guarded live body");
+                    AssertEqual(source, store.Load().Single(item => item.Id == "common.upload_new").BodyMarkdown, "large source reaches the existing authoring store");
+                    var reference = new SkillReferenceMutationBody { Type = SkillReferencePayload.ContractType, ContractVersion = 1,
+                        SkillId = saved.Id, ExpectedPackageRevision = SkillRevision.Compute(saved), Path = "references/rules.md", Content = "# Правила\r\n😀\r\n" };
+                    foreach (var content in new[] { reference.Content, "" })
+                    {
+                        reference.Content = content;
+                        var uploaded = editor.PrepareReferenceMutation(session, UploadSkillMutation(data, editor, session, reference), CancellationToken.None);
+                        var result = executor.ExecuteSkillLibraryReferenceMutation("upsert", uploaded.SkillId, uploaded.Path, uploaded.Content, uploaded.ExpectedPackageRevision);
+                        AssertEqual(SkillAuthoringOutcomeStatus.Ok, result.Outcome.Status, "reference write uses the same guarded owner");
+                        var read = SkillReferenceRequest(session, saved.Id, result.Package.Revision);
+                        AssertEqual(content, ReadSkillSourceDownload(data, editor.Open(session, read, CancellationToken.None)), "reference exact read-back includes empty source");
+                        reference.ExpectedPackageRevision = result.Package.Revision;
+                    }
+                    reference.ExpectedPackageRevision = SkillRevision.Compute(saved);
+                    var stale = editor.PrepareReferenceMutation(session, UploadSkillMutation(data, editor, session, reference), CancellationToken.None);
+                    var rejected = executor.ExecuteSkillLibraryReferenceMutation("upsert", stale.SkillId, stale.Path, stale.Content, stale.ExpectedPackageRevision);
+                    AssertTrue(rejected.Outcome.Status == SkillAuthoringOutcomeStatus.Error && !rejected.DispatchPossible, "upload never bypasses package revision guards");
+                    AssertEqual(0, session.Messages.Count, "no model observation or chat attachment is created by upload");
+                    AssertTrue(JObject.FromObject(new SkillReferenceResponse())["content"] == null, "mutation metadata has no reference echo");
+                }
+            });
+        }
+
+        private static void SkillEditorUploadBounds()
+        {
+            WithTempPaths(paths =>
+            {
+                var adapter = FakeOfficeAdapter.ForHost("Word");
+                var store = new SkillStore(paths);
+                var executor = new OfficeToolExecutor(adapter, new VbaJournalStore(paths), store, new ToolStore(paths));
+                var session = NewSession(adapter);
+                using (var data = new ResourceDataPlaneService(executor.ResourceGateway))
+                {
+                    var editor = new SkillEditorResourceService(executor.ResourceGateway, data, new SkillCatalogService(adapter, executor.CapturePublishedSkills));
+                    var body = new SkillReferenceMutationBody { Type = SkillReferencePayload.ContractType, ContractVersion = 1,
+                        SkillId = "common.upload", ExpectedPackageRevision = "guard", Path = "references/rules.md", Content = "# Content" };
+                    var request = UploadSkillMutation(data, editor, session, body);
+                    var foreign = NewSession(adapter); request.ChatId = foreign.Id;
+                    RuntimeThrows<ResourceRequestException>(() => editor.PrepareReferenceMutation(foreign, request, CancellationToken.None));
+                    request.ChatId = session.Id;
+                    RuntimeThrows<ResourceRequestException>(() => data.CloseUpload(session.Id, request.UploadLeaseId, VbaEditorResourceService.Owner));
+                    AssertEqual(body.Content, editor.PrepareReferenceMutation(session, request, CancellationToken.None).Content, "foreign consumers cannot destroy the owned upload");
+                    foreach (var mode in new[] { "hash", "partial", "shape", "cancel", "oversized" })
+                    {
+                        body.Content = mode == "oversized" ? new string('x', 500001) : "# Content";
+                        request = UploadSkillMutation(data, editor, session, body, mode == "partial");
+                        if (mode == "hash") request.Sha256 = new string('0', 64);
+                        if (mode == "cancel") RuntimeThrows<OperationCanceledException>(() => editor.PrepareReferenceMutation(session, request, new CancellationToken(true)));
+                        else if (mode == "shape") RuntimeThrows<ResourceRequestException>(() => editor.PrepareCoreMutations(session, request, CancellationToken.None));
+                        else RuntimeThrows<ResourceRequestException>(() => editor.PrepareReferenceMutation(session, request, CancellationToken.None));
+                        RuntimeThrows<ResourceRequestException>(() => editor.PrepareReferenceMutation(session, request, CancellationToken.None));
+                    }
+                    var batch = new SkillLibraryMutationBatch { Type = SkillLibraryMutationBatch.ContractType, ContractVersion = 1,
+                        Mutations = new System.Collections.Generic.List<SkillCoreMutationPayload> { new SkillCoreMutationPayload { Kind = "upsert", Id = "common.first", BodyMarkdown = "# Valid" },
+                            new SkillCoreMutationPayload { Kind = "upsert", Id = "common.second" } } };
+                    request = UploadSkillMutation(data, editor, session, batch);
+                    RuntimeThrows<ResourceRequestException>(() => editor.PrepareCoreMutations(session, request, CancellationToken.None));
+                    AssertEqual(0, store.Load().Count, "an invalid later body cannot dispatch the valid prefix");
+                    RuntimeThrows<ResourceRequestException>(() => editor.BeginUpload(session, new SkillMutationUploadRequest { ChatId = session.Id,
+                        ByteLength = SkillEditorResourceService.MaximumMutationBytes + 1L }, CancellationToken.None));
+                    for (var i = 0; i < 4; i++) editor.BeginUpload(session, new SkillMutationUploadRequest { ChatId = session.Id, ByteLength = 1 }, CancellationToken.None);
+                    RuntimeThrows<ResourceRequestException>(() => editor.BeginUpload(session, new SkillMutationUploadRequest { ChatId = session.Id, ByteLength = 1 }, CancellationToken.None));
+                }
+            });
+        }
+
         private static void SkillReferenceEditorBoundsAndLifetime()
         {
             WithTempPaths(paths =>

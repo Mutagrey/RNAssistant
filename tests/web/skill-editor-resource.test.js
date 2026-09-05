@@ -15,7 +15,7 @@ function fixture(text = "# Справка\r\n😀\r\n", sourcePath = referencePa
     resource: { uri: "rna://catalog/" + (builtIn ? "builtin-skills-word" : "skills") + "/common.editor/" + (sourcePath ? "reference/rules.md" : "body"), revision: "r_published" }, totalCharacters: text.length,
     data: { leaseId: "a".repeat(64), url: "https://rnassistant.local-resource/v1/download/" + "a".repeat(64), maxChunkBytes: 65536,
       payload: { sha256: sha(bytes), byteLength: bytes.length, contentType: "text/markdown; charset=utf-8" } } };
-  const context = vm.createContext({ AbortController, TextDecoder, Uint8Array, setTimeout, clearTimeout, crypto: crypto.webcrypto,
+  const context = vm.createContext({ AbortController, TextDecoder, TextEncoder, Blob, Uint8Array, setTimeout, clearTimeout, crypto: crypto.webcrypto,
     state: { skills: [skill], selectedSkillIndex: 0, selectedInstructionKind: "skill", activeChatId: "chat", bridgeUnavailable: false },
     $: id => elements[id] || (elements[id] = { value: "", readOnly: true }), log: error => errors.push(error),
     cancelBridgeRequest: async id => cancelled.push(id),
@@ -31,11 +31,64 @@ function fixture(text = "# Справка\r\n😀\r\n", sourcePath = referencePa
       return new Response(bytes.slice(offset, offset + count), { headers: { "Content-Type": "text/markdown; charset=utf-8" } });
     } });
   context.window = context;
-  ["app-resource-download.js", "app-skills.js"].forEach(file => vm.runInContext(read("js/" + file), context));
+  ["app-resource-download.js", "app-resource-upload.js", "app-skills.js"].forEach(file => vm.runInContext(read("js/" + file), context));
   context.renderSkillPreview = () => {};
   context.syncSelectedSkillFromEditor = () => {};
   return { context, skill, text, bytes, metadata, calls, closes, errors, cancelled, elements,
     load: () => context.loadSelectedSkillSource(skill, sourcePath) };
+}
+
+function uploads(f, save, hooks = {}) {
+  const send = f.context.send, fetch = f.context.fetch, pending = {}, bodies = [], closed = [], controls = [];
+  let sequence = 0;
+  f.context.fetch = async (url, options) => {
+    if (options.method !== "POST") return fetch(url, options);
+    const address = new URL(url), id = address.pathname.split("/").pop(), current = pending[id];
+    assert.equal(options.redirect, "error"); assert.equal(options.credentials, "omit");
+    const offset = Number(address.searchParams.get("offset")), count = Number(address.searchParams.get("count"));
+    assert.equal(current.bytes.length, offset); assert.ok(count <= 262144);
+    current.bytes = Buffer.concat([current.bytes, Buffer.from(await options.body.arrayBuffer())]);
+    if (hooks.chunk) await hooks.chunk(options);
+    return new Response(JSON.stringify({ leaseId: id, nextOffset: offset + count }));
+  };
+  f.context.send = (type, payload) => {
+    let response;
+    if (type === "beginSkillMutationUpload") {
+      assert.deepEqual(Object.keys(payload).sort(), ["byteLength", "chatId"]); assert.equal(payload.chatId, "chat");
+      const id = (++sequence).toString(16).padStart(64, "0"), lease = { leaseId: id, byteLength: payload.byteLength,
+        url: "https://rnassistant.local-resource/v1/upload/" + id, maxChunkBytes: 65536 };
+      pending[id] = { bytes: Buffer.alloc(0), lease };
+      response = hooks.open ? hooks.open(lease) : lease;
+    } else if (type === "cancelSkillMutationUpload") {
+      closed.push(payload); assert.equal(payload.chatId, "chat"); response = { closed: true };
+    } else if (type === "saveSkills" || type === "saveSkillReference") {
+      assert.deepEqual(Object.keys(payload).sort(), ["chatId", "sha256", "uploadLeaseId"]);
+      const upload = pending[payload.uploadLeaseId];
+      assert.equal(upload.bytes.length, upload.lease.byteLength); assert.equal(payload.sha256, sha(upload.bytes));
+      const body = JSON.parse(upload.bytes.toString("utf8")); bodies.push(body); controls.push(payload);
+      response = save(type, body);
+    } else return send(type, payload);
+    return Object.assign(Promise.resolve(response), { requestId: type + "-request" });
+  };
+  return { bodies, closed, controls, pending };
+}
+
+function catalog(f, revision = "package", references = f.skill.References) {
+  return { type: "rnassistant.skillLibrary", contractVersion: 1, skills: [{
+    id: f.skill.Id, host: "Common", name: f.skill.Id, description: "", version: "1.0.0", enabled: true,
+    builtIn: false, revision, body: f.skill.Body,
+    references: references.map(item => ({ path: item.Path, revision: item.Revision, byteLength: item.ByteLength }))
+  }] };
+}
+
+function coreResponse(f) {
+  return { type: "rnassistant.skillLibraryMutationResult", contractVersion: 1, results: [], library: catalog(f) };
+}
+
+function deferred() {
+  let resolve;
+  const promise = new Promise(done => { resolve = done; });
+  return { promise, resolve };
 }
 
 (async () => {
@@ -114,8 +167,12 @@ function fixture(text = "# Справка\r\n😀\r\n", sourcePath = referencePa
     for (const file of ["app-chat-state.js", "app-chat-session.js", "app-prompts.js"])
       assert.ok(read("js/" + file).includes("cancelSkillSourceRead()"));
     assert.ok(read("js/app-skills.js").includes('window.addEventListener("pagehide", cancelSkillSourceRead)'));
-    for (const file of ["app-skills.js", "app-chat-state.js", "app-chat-session.js", "app-prompts.js"])
-      assert.ok(read("index.html").includes(file + "?v=skill-core-20260906-1"));
+    for (const file of ["app-chat-state.js", "app-chat-session.js"])
+      assert.ok(read("js/" + file).includes("cancelSkillSourceWrite()"));
+    assert.ok(read("js/app-skills.js").includes('window.addEventListener("pagehide", cancelSkillSourceWrite)'));
+    for (const file of ["app-skills.js", "app-chat-state.js", "app-chat-session.js"])
+      assert.ok(read("index.html").includes(file + "?v=skill-upload-20260906-1"));
+    assert.ok(read("index.html").includes("app-prompts.js?v=skill-core-20260906-1"));
     console.log("PASS skill reference: lifecycle and changed assets are delivered together");
   }
   {
@@ -167,7 +224,7 @@ function fixture(text = "# Справка\r\n😀\r\n", sourcePath = referencePa
       f.elements.skillBodyInput.value = "# Edit"; f.context.captureSelectedSkillResource(f.skill);
       f.context.renderSkills = () => {};
       const body = new TextEncoder().encode("# Edit"); let sent;
-      f.context.send = async (type, payload) => {
+      const transport = uploads(f, async (type, payload) => {
         assert.equal(type, "saveSkills"); sent = payload.mutations[0];
         if (lateEdit) f.skill._sourceDrafts[""] = "# Later user edit";
         return { type: "rnassistant.skillLibraryMutationResult", contractVersion: 1,
@@ -178,11 +235,12 @@ function fixture(text = "# Справка\r\n😀\r\n", sourcePath = referencePa
           library: { type: "rnassistant.skillLibrary", contractVersion: 1, skills: [{ id: f.skill.Id, host: "Common", name: f.skill.Id,
             description: "", version: "1.0.0", enabled: true, builtIn: false, revision: "saved", references: [],
             body: { sha256: sha(body), byteLength: body.length, characters: 6 } }] } };
-      };
+      });
       if (lateEdit) await assert.rejects(f.context.saveSelectedSkillResource(), /Источник навыка изменился/);
       else if (mode === "partial") await assert.rejects(f.context.saveSelectedSkillResource(), /another package failed/);
       else await f.context.saveSelectedSkillResource();
       assert.equal(sent.bodyMarkdown, "# Edit"); assert.equal(sent.preserveBody, false);
+      assert.equal(transport.closed.length, 1); assert.equal(transport.bodies.length, 1);
       const saved = f.context.state.skills[0];
       assert.equal(!!saved._sourceDirty[""], lateEdit);
       if (lateEdit) assert.equal(saved._sourceDrafts[""], "# Later user edit");
@@ -193,5 +251,92 @@ function fixture(text = "# Справка\r\n😀\r\n", sourcePath = referencePa
     }
     console.log("PASS skill core: explicit replacement save acknowledges only the submitted draft and preserves later edits");
   }
-  console.log("OK 10/10");
+  {
+    for (const stage of ["begin", "chunk", "dispatched"]) {
+      const f = fixture("# Core", ""); await f.load(); f.context.setSkillLibraryBaseline([f.skill]);
+      f.elements.skillBodyInput.value = "# Edit"; f.context.captureSelectedSkillResource(f.skill);
+      const reached = deferred(), release = deferred();
+      const transport = uploads(f, async () => { reached.resolve(); await release.promise; return coreResponse(f); }, {
+        open: async lease => { if (stage === "begin") { reached.resolve(); await release.promise; } return lease; },
+        chunk: async options => { if (stage === "chunk") {
+          reached.resolve(); await new Promise((resolve, reject) => options.signal.addEventListener("abort", () => reject(new Error("aborted")), { once: true }));
+        } }
+      });
+      const saving = f.context.saveSelectedSkillResource();
+      const stopped = assert.rejects(saving, error => {
+        if (stage === "dispatched") assert.match(error.detail, /результат записи не подтверждён/);
+        return true;
+      });
+      await reached.promise; f.context.state.activeChatId = "other"; f.context.cancelSkillSourceWrite();
+      assert.ok(f.context.skillWriteOperation, "cancelled work retains the single writer slot until it exits");
+      await assert.rejects(f.context.saveSelectedSkillResource(), /Дождитесь завершения/);
+      release.resolve(); await stopped;
+      assert.equal(transport.closed.length, 1); assert.equal(transport.closed[0].chatId, "chat");
+      assert.equal(transport.controls.length, stage === "dispatched" ? 1 : 0, "no dispatch after cancellation and no automatic retry");
+      assert.equal(f.context.state.skills[0], f.skill); assert.equal(f.skill._sourceDrafts[""], "# Edit");
+      assert.equal(f.context.skillWriteOperation, null);
+      assert.equal(f.elements.copySkillContextButton.disabled, false, "writer completion restores loaded-source controls");
+      if (stage !== "chunk") assert.ok(f.cancelled.includes((stage === "begin" ? "beginSkillMutationUpload" : "saveSkills") + "-request"));
+    }
+    console.log("PASS skill upload: begin/fetch/late-dispatch cancellation closes the captured lease, preserves drafts and never retries");
+  }
+  {
+    for (const text of ["", "# Reference\r\n" + "Ж".repeat(40000) + "😀", "late-edit"]) {
+      const f = fixture(); await f.load(); f.context.setSkillLibraryBaseline([f.skill]);
+      f.skill._sourceDrafts[referencePath] = text; f.skill._sourceDirty[referencePath] = true;
+      f.context.renderSkills = () => {};
+      const laterPath = "references/later.md";
+      const transport = uploads(f, async (type, body) => {
+        if (type === "saveSkills") {
+          assert.equal(body.mutations.length, 0);
+          // A new edit made after Save was pressed must not join the in-flight plan.
+          f.skill._sourceDrafts[laterPath] = "later draft"; f.skill._sourceDirty[laterPath] = true;
+          f.skill._sourceLoaded[laterPath] = true; f.skill.References.push({ Path: laterPath, Revision: "", ByteLength: 0, Pending: true });
+          return coreResponse(f);
+        }
+        assert.equal(type, "saveSkillReference"); assert.equal(body.content, text); assert.equal(body.path, referencePath);
+        assert.equal(body.expectedPackageRevision, "package");
+        if (text === "late-edit") f.context.state.skills[0]._sourceDrafts[referencePath] = "new unsaved draft";
+        const reference = { Path: referencePath, Revision: sha(Buffer.from(text)), ByteLength: Buffer.byteLength(text) };
+        return { type: "rnassistant.skillReferenceResult", contractVersion: 1, path: referencePath, deleted: false,
+          skill: catalog(f, "saved", [reference]).skills[0],
+          reference: { path: referencePath, revision: reference.Revision, byteLength: reference.ByteLength },
+          result: { type: "rnassistant.skillMutationResult", contractVersion: 1, status: "ok", message: "saved",
+            operation: "update_reference", dispatch: "may_have_dispatched", effect: "verified_change", id: f.skill.Id,
+            previousRevision: "package", revision: "saved" } };
+      });
+      await f.context.saveSelectedSkillResource();
+      assert.equal(transport.bodies.length, 2); assert.equal(transport.closed.length, 2);
+      const saved = f.context.state.skills[0];
+      assert.equal(saved.Revision, "saved"); assert.equal(saved._sourceDrafts[laterPath], "later draft");
+      assert.equal(saved._sourceDirty[laterPath], true, "later new references stay unsaved");
+      if (text === "late-edit") {
+        assert.equal(saved._sourceDrafts[referencePath], "new unsaved draft"); assert.equal(saved._sourceConflicts[referencePath], true);
+      } else assert.equal(saved._sourceDrafts[referencePath], undefined, "success rereads the published source without an echo");
+    }
+    console.log("PASS skill upload: empty/Unicode reference bodies, exact guards, frozen plans and later drafts without inline echo");
+  }
+  {
+    for (const mode of ["oversize", "unicode", "count", "invalid-response", "unknown"]) {
+      const f = fixture("# Core", ""); await f.load(); f.context.setSkillLibraryBaseline([f.skill]);
+      f.skill._sourceDrafts[""] = mode === "oversize" ? "x".repeat(500001) : mode === "unicode" ? "\ud800" : "# Edit";
+      f.skill._sourceDirty[""] = true; f.context.renderSkills = () => {};
+      if (mode === "count") f.context.skillLibraryMutations = () => new Array(257).fill({ kind: "delete" });
+      const transport = uploads(f, () => mode === "invalid-response" ? {} : {
+        ...coreResponse(f), results: [{ type: "rnassistant.skillMutationResult", contractVersion: 1, status: "unknown",
+          message: "read-back failed", dispatch: "may_have_dispatched", effect: "unknown", id: f.skill.Id }] });
+      await assert.rejects(f.context.saveSelectedSkillResource(), error => {
+        if (["unknown", "invalid-response"].includes(mode)) assert.match(error.detail, /результат записи не подтверждён/);
+        else assert.match(error.message, /RESOURCE_(BATCH_TOO_LARGE|UPLOAD_INVALID)/);
+        return true;
+      });
+      const dispatched = ["unknown", "invalid-response"].includes(mode);
+      assert.equal(Object.keys(transport.pending).length, dispatched ? 1 : 0);
+      assert.equal(transport.closed.length, dispatched ? 1 : 0);
+      assert.equal(transport.controls.length, dispatched ? 1 : 0);
+      assert.equal(f.context.state.skills[0]._sourceDirty[""], true); assert.equal(f.context.skillWriteOperation, null);
+    }
+    console.log("PASS skill upload: source/count bounds fail before allocation; malformed/unknown results preserve drafts and stop");
+  }
+  console.log("OK 13/13");
 })().catch(error => { console.error(error.stack || error); process.exitCode = 1; });

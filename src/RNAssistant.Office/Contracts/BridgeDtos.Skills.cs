@@ -8,7 +8,8 @@ using RNAssistant.Office.Tools;
 
 namespace RNAssistant.Office.Contracts
 {
-    public sealed class SaveSkillsPayload
+    // Bulk data-plane body, never an inline bridge payload.
+    public sealed class SkillLibraryMutationBatch
     {
         public const string ContractType =
             "rnassistant.skillLibraryMutationRequest";
@@ -80,10 +81,23 @@ namespace RNAssistant.Office.Contracts
         public string ExpectedPackageRevision { get; set; }
     }
 
-    public sealed class SaveSkillReferencePayload : SkillReferencePayload
+    public sealed class SkillReferenceMutationBody : SkillReferencePayload
     {
         [JsonProperty("content")]
         public string Content { get; set; }
+    }
+
+    public sealed class SkillMutationUploadRequest
+    {
+        [JsonProperty("chatId")] public string ChatId { get; set; }
+        [JsonProperty("byteLength")] public long ByteLength { get; set; }
+    }
+
+    public sealed class SkillMutationWriteRequest
+    {
+        [JsonProperty("chatId")] public string ChatId { get; set; }
+        [JsonProperty("uploadLeaseId")] public string UploadLeaseId { get; set; }
+        [JsonProperty("sha256")] public string Sha256 { get; set; }
     }
 
     public sealed class SkillSourceReadRequest
@@ -131,9 +145,6 @@ namespace RNAssistant.Office.Contracts
 
         [JsonProperty("path")]
         public string Path { get; set; }
-
-        [JsonProperty("content")]
-        public string Content { get; set; }
 
         [JsonProperty("deleted")]
         public bool Deleted { get; set; }

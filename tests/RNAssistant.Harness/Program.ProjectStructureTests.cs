@@ -631,9 +631,13 @@ namespace RNAssistant.Harness
                     source.IndexOf("_skillStore", StringComparison.Ordinal) >= 0),
                 "Skills UI controller must call the typed authoring owner instead of mutating SkillStore");
             AssertTrue(
-                typeof(RNAssistant.Office.Contracts.SaveSkillsPayload)
+                typeof(RNAssistant.Office.Contracts.SkillMutationWriteRequest)
                     .GetProperty("Skills") == null &&
-                typeof(RNAssistant.Office.Contracts.SaveSkillsPayload)
+                typeof(RNAssistant.Office.Contracts.SkillMutationWriteRequest)
+                    .GetProperty("Mutations") == null &&
+                typeof(RNAssistant.Office.Contracts.SkillMutationWriteRequest)
+                    .GetProperty("UploadLeaseId").PropertyType == typeof(string) &&
+                typeof(RNAssistant.Office.Contracts.SkillLibraryMutationBatch)
                     .GetProperty("Mutations").PropertyType ==
                     typeof(List<RNAssistant.Office.Contracts.SkillCoreMutationPayload>) &&
                 typeof(RNAssistant.Office.Contracts.InitResponse)

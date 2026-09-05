@@ -98,11 +98,11 @@ function library(skills) {
         revision: "5".repeat(64)
       }]
     }),
-    path: "references/rules.md", content: "# Rules", deleted: false,
+    path: "references/rules.md", deleted: false,
     reference: { path: "references/rules.md", byteLength: 7, revision: "5".repeat(64) }
   };
   const parsed = context.skillReferenceFromResponse(response, "update_reference");
-  assert.equal(parsed.content, "# Rules");
+  assert.equal(Object.prototype.hasOwnProperty.call(parsed, "content"), false, "reference mutation results contain no inline echo");
   assert.equal(parsed.skill.References[0].Path, "references/rules.md");
   assert.throws(() => context.skillReferenceFromResponse(
     Object.assign({}, response, { contractVersion: 0 }), "update_reference"),
@@ -111,7 +111,7 @@ function library(skills) {
 }
 
 {
-  assert.ok(index.includes("app-skills.js?v=skill-core-20260906-1"));
+  assert.ok(index.includes("app-skills.js?v=skill-upload-20260906-1"));
   assert.equal(/StoragePath|storagePath|response\s*\|\|\s*\[\]/.test(source), false);
   assert.match(source, /expectedPackageRevision/);
   assert.match(source, /skillLibraryMutationRequestType/);

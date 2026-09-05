@@ -1,6 +1,8 @@
 var skillSourceLoadSequence = 0;
 var skillSourceRead = null;
 var skillSourceReadPending = 0;
+var skillWriteOperation = null;
+var skillMutationMaximumBytes = 16 * 1024 * 1024;
 var skillLibraryContractVersion = 1;
 var skillLibraryContractType = "rnassistant.skillLibrary";
 var skillLibraryMutationRequestType = "rnassistant.skillLibraryMutationRequest";
@@ -105,8 +107,6 @@ function skillReferenceFromResponse(response, expectedOperation) {
     result: result,
     skill: skillFromContract(response.skill),
     path: response.path,
-    content: response.content === null || response.content === undefined
-      ? null : String(response.content),
     deleted: response.deleted === true,
     reference: response.reference ? skillReferenceFromContract(response.reference) : null
   };
@@ -359,7 +359,7 @@ function hasPendingSkillSourceLoad() {
 function updateSkillSaveButton() {
   if ($("saveSkillsButton")) {
     $("saveSkillsButton").hidden = !state.skillLibraryDirty;
-    $("saveSkillsButton").disabled = !!state.bridgeUnavailable || !state.skillLibraryDirty || hasPendingSkillSourceLoad();
+    $("saveSkillsButton").disabled = !!state.bridgeUnavailable || !!skillWriteOperation || !state.skillLibraryDirty || hasPendingSkillSourceLoad();
   }
 }
 
@@ -430,7 +430,7 @@ function updateSkillSourceReadOnly() {
   if ($("skillBodyInput")) $("skillBodyInput").readOnly = readOnly;
   if (typeof setCodeEditorReadOnly === "function") setCodeEditorReadOnly("skillBodyInput", readOnly);
   ["cloneSkillButton", "copySkillContextButton", "askSkillBuilderButton"].forEach(function (id) {
-    if ($(id)) $(id).disabled = !!state.bridgeUnavailable || !skill || !skill._sourceLoaded[""];
+    if ($(id)) $(id).disabled = !!state.bridgeUnavailable || !!skillWriteOperation || !skill || !skill._sourceLoaded[""];
   });
 }
 
@@ -585,6 +585,7 @@ function renderSkillEditor() {
 
   $("deleteSkillButton").disabled = disabled || builtIn;
   $("addSkillButton").disabled = !!state.bridgeUnavailable;
+  updateSkillWriteControls();
   updateSkillSaveButton();
   if (skill && !skill._sourceLoaded[referencePath]) loadSelectedSkillSource(skill, referencePath);
 }
@@ -720,24 +721,127 @@ async function addSelectedSkillContextToContext() {
   return true;
 }
 
+function closeSkillMutationUpload(operation) {
+  if (!operation || operation.closed || !operation.lease || !/^[a-f0-9]{64}$/.test(operation.lease.leaseId)) return Promise.resolve();
+  operation.closed = true;
+  return send("cancelSkillMutationUpload", { chatId: operation.chatId, leaseId: operation.lease.leaseId }).catch(function () {});
+}
+
+function cancelSkillSourceWrite() {
+  var operation = skillWriteOperation;
+  if (!operation) return;
+  operation.abort.abort();
+  if (operation.requestId) cancelBridgeRequest(operation.requestId).catch(function () {});
+  closeSkillMutationUpload(operation);
+}
+
+function updateSkillWriteControls() {
+  var skill = state.skills[state.selectedSkillIndex], unavailable = !!state.bridgeUnavailable || !!skillWriteOperation;
+  var disabled = unavailable || !skill || !!skill.BuiltIn;
+  ["skillEnabledInput", "skillDescriptionInput", "deleteSkillButton", "addSkillReferenceButton"].forEach(function (id) { if ($(id)) $(id).disabled = disabled; });
+  ["skillIdInput", "skillHostInput"].forEach(function (id) { if ($(id)) $(id).disabled = disabled || !!(skill && skill.References && skill.References.length); });
+  if ($("addSkillButton")) $("addSkillButton").disabled = unavailable;
+  if ($("deleteSkillReferenceButton")) $("deleteSkillReferenceButton").disabled = disabled || !selectedSkillReferencePath(skill);
+  ["cloneSkillButton", "copySkillContextButton", "askSkillBuilderButton"].forEach(function (id) {
+    if ($(id)) $(id).disabled = unavailable || !skill || !skill._sourceLoaded[""];
+  });
+}
+
+async function uploadSkillMutation(operation, action, body) {
+  operation.active();
+  function validateText(text) {
+    if (typeof text !== "string" || text.length > 500000) throw new Error("RESOURCE_BATCH_TOO_LARGE");
+    if (new TextDecoder("utf-8", { fatal: true, ignoreBOM: true }).decode(new TextEncoder().encode(text)) !== text)
+      throw new Error("RESOURCE_UPLOAD_INVALID: некорректный Unicode в тексте навыка.");
+  }
+  // Bound each serialized member before constructing the whole batch. The resulting
+  // typed JSON travels only as upload bytes, never as a nested control-message body.
+  if (body.mutations) {
+    if (body.mutations.length > 256) throw new Error("RESOURCE_BATCH_TOO_LARGE");
+    var length = 256;
+    body.mutations.forEach(function (mutation) {
+      if (mutation.bodyMarkdown != null) validateText(mutation.bodyMarkdown);
+      length += JSON.stringify(mutation).length + 1;
+      if (length > skillMutationMaximumBytes) throw new Error("RESOURCE_BATCH_TOO_LARGE");
+    });
+  } else validateText(body.content);
+  var json = JSON.stringify(body);
+  if (json.length > skillMutationMaximumBytes) throw new Error("RESOURCE_BATCH_TOO_LARGE");
+  var bytes = new TextEncoder().encode(json);
+  if (bytes.length > skillMutationMaximumBytes || new TextDecoder("utf-8", { fatal: true, ignoreBOM: true }).decode(bytes) !== json)
+    throw new Error("RESOURCE_UPLOAD_INVALID");
+  var hash = Array.from(new Uint8Array(await crypto.subtle.digest("SHA-256", bytes)))
+    .map(function (part) { return part.toString(16).padStart(2, "0"); }).join("");
+  operation.active();
+  operation.lease = null; operation.closed = false; operation.possibleEffect = false;
+  try {
+    var opening = send("beginSkillMutationUpload", { chatId: operation.chatId, byteLength: bytes.length });
+    operation.requestId = opening.requestId;
+    operation.lease = await opening; operation.requestId = null;
+    operation.active();
+    await window.RNAssistantResourceUpload.write(operation.lease, new Blob([bytes]), {
+      maxBytes: skillMutationMaximumBytes, signal: operation.abort.signal, isCurrent: operation.current
+    });
+    operation.active();
+    operation.possibleEffect = action !== "saveSkills" || body.mutations.length > 0;
+    var saving = send(action, { chatId: operation.chatId, uploadLeaseId: operation.lease.leaseId, sha256: hash });
+    operation.requestId = saving.requestId;
+    var response = await saving; operation.requestId = null;
+    operation.active();
+    return response;
+  } finally { await closeSkillMutationUpload(operation); }
+}
+
 async function saveSelectedSkillResource() {
+  if (skillWriteOperation) throw new Error("Дождитесь завершения сохранения навыков.");
+  var operation = { chatId: state.activeChatId, library: state.skills, abort: new AbortController(),
+    requestId: null, lease: null, closed: false, possibleEffect: false };
+  operation.current = function () { return skillWriteOperation === operation && !operation.abort.signal.aborted && !state.bridgeUnavailable &&
+    !!operation.chatId && state.activeChatId === operation.chatId && state.skills === operation.library; };
+  operation.active = function () { if (!operation.current()) throw new Error("Сохранение навыков остановлено: контекст Library изменился."); };
+  skillWriteOperation = operation;
+  updateSkillSaveButton(); updateSkillWriteControls();
+  try { operation.active(); await saveSkillResources(operation); }
+  catch (error) {
+    if (operation.possibleEffect) error.detail = (error.detail || error.message) + " Обновите Library перед повтором: результат записи не подтверждён в редакторе.";
+    throw error;
+  } finally {
+    await closeSkillMutationUpload(operation);
+    if (skillWriteOperation === operation) skillWriteOperation = null;
+    updateSkillSaveButton(); updateSkillWriteControls();
+  }
+}
+
+async function saveSkillResources(operation) {
   syncSelectedSkillFromEditor();
   var skill = state.skills[state.selectedSkillIndex];
   if (!skill) return;
   requireUnconflictedSkillSources();
-  var selectedId = skill.Id || "";
   var mutations = skillLibraryMutations();
   var submittedSkills = state.skills.slice();
-  var response = await send("saveSkills", {
+  var references = [];
+  submittedSkills.forEach(function (item) {
+    ensureSkillSourceState(item);
+    Object.keys(item._sourceDirty).forEach(function (path) {
+      if (path && item._sourceDirty[path]) {
+        if (!item._sourceLoaded[path]) throw new Error("Сначала загрузите полный reference.");
+        references.push({ id: item.Id, path: path, text: item._sourceDrafts[path] });
+      }
+    });
+  });
+  var response = await uploadSkillMutation(operation, "saveSkills", {
     type: skillLibraryMutationRequestType,
     contractVersion: skillLibraryContractVersion,
     mutations: mutations
   });
   var coreResult = skillLibraryMutationFromContract(response);
+  operation.possibleEffect = coreResult.results.some(function (result) { return result.status === "unknown" || result.effect === "unknown"; });
+  var selectedId = (state.skills[state.selectedSkillIndex] || {}).Id || "";
   acknowledgeSkillBodySaves(submittedSkills, mutations, coreResult);
   state.skills = coreResult.failure
     ? reconcileSkillLibraryCatalog(coreResult.skills)
     : preserveSkillSourceState(coreResult.skills);
+  operation.library = state.skills;
   state.selectedSkillIndex = state.skills.findIndex(function (item) {
     return String((item && item.Id) || "").toLowerCase() === String(selectedId).toLowerCase();
   });
@@ -752,35 +856,34 @@ async function saveSelectedSkillResource() {
   }
   var savedReferences = 0;
   requireUnconflictedSkillSources();
-  for (var skillIndex = 0; skillIndex < state.skills.length; skillIndex += 1) {
-    var saved = state.skills[skillIndex];
-    if (!saved || saved.BuiltIn) continue;
-    ensureSkillSourceState(saved);
-    var dirtyPaths = Object.keys(saved._sourceDirty).filter(function (path) {
-      return !!path && !!saved._sourceDirty[path];
-    });
-    for (var pathIndex = 0; pathIndex < dirtyPaths.length; pathIndex += 1) {
-      var referencePath = dirtyPaths[pathIndex];
-      var referenceContent = saved._sourceDrafts[referencePath] || "";
-      var referenceResponse = await send("saveSkillReference", {
+  for (var referenceIndex = 0; referenceIndex < references.length; referenceIndex++) {
+      operation.active(); requireUnconflictedSkillSources();
+      var planned = references[referenceIndex];
+      var saved = state.skills.find(function (item) { return item.Id === planned.id; });
+      if (!saved || saved.BuiltIn || !saved._sourceDirty[planned.path] || saved._sourceDrafts[planned.path] !== planned.text) continue;
+      var referencePath = planned.path, referenceContent = planned.text, expectedRevision = saved._baseRevision;
+      var referenceResponse = await uploadSkillMutation(operation, "saveSkillReference", {
         type: skillReferenceRequestType,
         contractVersion: skillLibraryContractVersion,
         skillId: saved.Id || "",
         path: referencePath,
         content: referenceContent,
-        expectedPackageRevision: saved._baseRevision || ""
+        expectedPackageRevision: expectedRevision || ""
       });
       var typedReference = skillReferenceFromResponse(referenceResponse,
         ["create_reference", "update_reference"]);
+      if (typedReference.path !== referencePath || typedReference.skill.Id !== saved.Id || typedReference.result.id !== saved.Id ||
+          typedReference.result.previousRevision !== expectedRevision || typedReference.result.revision !== typedReference.skill.Revision)
+        throw new Error("Результат сохранения reference не совпадает с запросом.");
+      operation.possibleEffect = false;
       mergeSkillReferenceMetadata(saved, typedReference.skill.References);
       saved.Revision = typedReference.skill.Revision;
       saved._baseRevision = typedReference.skill._baseRevision;
-      saved._sourceDrafts[referencePath] = typedReference.content || referenceContent;
-      saved._sourceLoaded[referencePath] = true;
-      delete saved._sourceDirty[referencePath];
-      delete saved._sourceConflicts[referencePath];
+      if (saved._sourceDrafts[referencePath] === referenceContent) {
+        delete saved._sourceDirty[referencePath]; delete saved._sourceConflicts[referencePath];
+        delete saved._sourceLoaded[referencePath]; delete saved._sourceDrafts[referencePath];
+      } else saved._sourceConflicts[referencePath] = true;
       savedReferences += 1;
-    }
   }
   log(savedReferences ? ("Навыки и references сохранены: " + savedReferences + ".") : "Навыки сохранены.");
   acceptSkillLibraryState();
@@ -837,6 +940,7 @@ function addSkillReference() {
 }
 
 async function deleteSelectedSkillReference() {
+  if (skillWriteOperation) throw new Error("Дождитесь завершения сохранения навыков.");
   cancelSkillSourceRead();
   syncSelectedSkillFromEditor();
   var skill = state.skills[state.selectedSkillIndex];
@@ -879,6 +983,7 @@ async function deleteSelectedSkillReference() {
 
 function bindSkillActions() {
   window.addEventListener("pagehide", cancelSkillSourceRead);
+  window.addEventListener("pagehide", cancelSkillSourceWrite);
   Array.prototype.slice.call(document.querySelectorAll(".instruction-mode-button")).forEach(function (button) {
     button.addEventListener("click", function () { syncSelectedSkillFromEditor(); state.promptEditorMode = button.getAttribute("data-instruction-mode"); applyInstructionMode(); });
   });
@@ -965,6 +1070,7 @@ function bindSkillActions() {
   });
 
   $("deleteSkillButton").addEventListener("click", function () {
+    if (skillWriteOperation) return;
     var skill = state.skills[state.selectedSkillIndex];
     if (!skill || skill.BuiltIn) {
       return;

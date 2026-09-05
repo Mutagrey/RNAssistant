@@ -176,31 +176,50 @@ namespace RNAssistant.Office
                 _skillCatalog.GetVisibleSkills());
         }
 
-        public SkillLibraryMutationResponse SaveSkills(
-            SaveSkillsPayload payload)
+        public ResourceUploadOpenResponse BeginSkillMutationUpload(SkillMutationUploadRequest request, CancellationToken token)
         {
-            using (_chatRuns.ReserveMaintenance())
+            if (request == null || string.IsNullOrWhiteSpace(request.ChatId))
+                throw new InvalidOperationException("RESOURCE_ACCESS_DENIED: an explicit chat is required.");
+            return WithReservedSession(LoadAddressedSession(request.ChatId), session =>
+                new SkillEditorResourceService(_toolExecutor.ResourceGateway, _resourceData, _skillCatalog).BeginUpload(session, request, token));
+        }
+
+        public ResourceDataCloseResponse CancelSkillMutationUpload(ResourceUploadLeaseRequest request)
+        {
+            if (request == null || string.IsNullOrWhiteSpace(request.ChatId))
+                throw new InvalidOperationException("RESOURCE_ACCESS_DENIED: an explicit chat is required.");
+            _resourceData.CloseUpload(request.ChatId, request.LeaseId, SkillEditorResourceService.Owner);
+            return new ResourceDataCloseResponse { Closed = true };
+        }
+
+        public async Task<SkillLibraryMutationResponse> SaveSkillsAsync(SkillMutationWriteRequest payload, CancellationToken token)
+        {
+            if (payload == null || string.IsNullOrWhiteSpace(payload.ChatId))
+                throw new InvalidOperationException("RESOURCE_ACCESS_DENIED: an explicit chat is required.");
+            try
             {
-                EnsureNoActiveRuns();
-                var mutations = ValidateSkillLibraryPayload(payload);
-                var results = new List<SkillMutationResultDto>();
-                foreach (var mutation in mutations)
+                using (_chatRuns.ReserveMaintenance())
                 {
-                    var result = _toolExecutor.ExecuteSkillLibraryMutation(
-                        mutation);
-                    results.Add(SkillMutationResultDto.From(result));
-                    if (result.Outcome.Status !=
-                        SkillAuthoringOutcomeStatus.Ok) break;
+                    EnsureNoActiveRuns();
+                    var session = LoadAddressedSession(payload.ChatId);
+                    return await Task.Run(() =>
+                    {
+                        var mutations = new SkillEditorResourceService(_toolExecutor.ResourceGateway, _resourceData, _skillCatalog)
+                            .PrepareCoreMutations(session, payload, token);
+                        var results = new List<SkillMutationResultDto>();
+                        foreach (var mutation in mutations)
+                        {
+                            token.ThrowIfCancellationRequested();
+                            var result = _toolExecutor.ExecuteSkillLibraryMutation(mutation);
+                            results.Add(SkillMutationResultDto.From(result));
+                            if (result.Outcome.Status != SkillAuthoringOutcomeStatus.Ok) break;
+                        }
+                        return new SkillLibraryMutationResponse { Type = SkillLibraryMutationResponse.ContractType,
+                            ContractVersion = SkillLibraryResponse.CurrentContractVersion, Results = results, Library = GetSkills() };
+                    }, token).ConfigureAwait(false);
                 }
-                return new SkillLibraryMutationResponse
-                {
-                    Type = SkillLibraryMutationResponse.ContractType,
-                    ContractVersion =
-                        SkillLibraryResponse.CurrentContractVersion,
-                    Results = results,
-                    Library = GetSkills()
-                };
             }
+            finally { _resourceData.CloseUpload(payload.ChatId, payload.UploadLeaseId, SkillEditorResourceService.Owner); }
         }
 
         public Task<SkillSourceReadResponse> ReadSkillSourceAsync(
@@ -215,21 +234,28 @@ namespace RNAssistant.Office
                 .Open(source, payload, token), token);
         }
 
-        public SkillReferenceResponse SaveSkillReference(
-            SaveSkillReferencePayload payload)
+        public async Task<SkillReferenceResponse> SaveSkillReferenceAsync(SkillMutationWriteRequest payload, CancellationToken token)
         {
-            using (_chatRuns.ReserveMaintenance())
+            if (payload == null || string.IsNullOrWhiteSpace(payload.ChatId))
+                throw new InvalidOperationException("RESOURCE_ACCESS_DENIED: an explicit chat is required.");
+            try
             {
-                EnsureNoActiveRuns();
-                ValidateSkillReferencePayload(payload);
-                var result = _toolExecutor
-                    .ExecuteSkillLibraryReferenceMutation(
-                        "upsert", payload.SkillId, payload.Path,
-                        payload.Content,
-                        payload.ExpectedPackageRevision);
-                return SkillReferenceMutationResult(
-                    result, payload.Path, payload.Content, false);
+                using (_chatRuns.ReserveMaintenance())
+                {
+                    EnsureNoActiveRuns();
+                    var session = LoadAddressedSession(payload.ChatId);
+                    return await Task.Run(() =>
+                    {
+                        var body = new SkillEditorResourceService(_toolExecutor.ResourceGateway, _resourceData, _skillCatalog)
+                            .PrepareReferenceMutation(session, payload, token);
+                        token.ThrowIfCancellationRequested();
+                        var result = _toolExecutor.ExecuteSkillLibraryReferenceMutation("upsert", body.SkillId, body.Path,
+                            body.Content, body.ExpectedPackageRevision);
+                        return SkillReferenceMutationResult(result, body.Path, false);
+                    }, token).ConfigureAwait(false);
+                }
             }
+            finally { _resourceData.CloseUpload(payload.ChatId, payload.UploadLeaseId, SkillEditorResourceService.Owner); }
         }
 
         public SkillReferenceResponse DeleteSkillReference(
@@ -244,102 +270,8 @@ namespace RNAssistant.Office
                         "delete", payload.SkillId, payload.Path,
                         null, payload.ExpectedPackageRevision);
                 return SkillReferenceMutationResult(
-                    result, payload.Path, null, true);
+                    result, payload.Path, true);
             }
-        }
-
-        private static IReadOnlyList<SkillLibraryCoreMutation>
-            ValidateSkillLibraryPayload(SaveSkillsPayload payload)
-        {
-            if (payload == null ||
-                !string.Equals(payload.Type,
-                    SaveSkillsPayload.ContractType,
-                    StringComparison.Ordinal) ||
-                payload.ContractVersion !=
-                    SkillLibraryResponse.CurrentContractVersion)
-            {
-                throw new InvalidOperationException(
-                    "Unsupported Skill Library mutation contract.");
-            }
-            var source = payload.Mutations ??
-                new List<SkillCoreMutationPayload>();
-            if (source.Count > 256)
-                throw new InvalidOperationException(
-                    "Skill Library mutation limit exceeded: 256.");
-            var baseIds = new HashSet<string>(
-                StringComparer.OrdinalIgnoreCase);
-            var targetIds = new HashSet<string>(
-                StringComparer.OrdinalIgnoreCase);
-            var result = new List<SkillLibraryCoreMutation>();
-            foreach (var item in source)
-            {
-                if (item == null ||
-                    !string.Equals(item.Kind, "upsert",
-                        StringComparison.Ordinal) &&
-                    !string.Equals(item.Kind, "delete",
-                        StringComparison.Ordinal))
-                {
-                    throw new InvalidOperationException(
-                        "Skill Library mutation kind is invalid.");
-                }
-                var baseId = item.BaseId ?? string.Empty;
-                var expected = item.ExpectedRevision ?? string.Empty;
-                if (!string.IsNullOrWhiteSpace(baseId) &&
-                    !baseIds.Add(baseId))
-                {
-                    throw new InvalidOperationException(
-                        "Duplicate Skill Library base id: " + baseId);
-                }
-                if (string.Equals(item.Kind, "delete",
-                    StringComparison.Ordinal))
-                {
-                    if (string.IsNullOrWhiteSpace(baseId) ||
-                        string.IsNullOrWhiteSpace(expected) || item.PreserveBody)
-                    {
-                        throw new InvalidOperationException(
-                            "Skill delete requires baseId and expectedRevision.");
-                    }
-                    result.Add(new SkillLibraryCoreMutation
-                    {
-                        Kind = item.Kind,
-                        BaseId = baseId,
-                        ExpectedRevision = expected
-                    });
-                    continue;
-                }
-                if (string.IsNullOrWhiteSpace(item.Id) ||
-                    !targetIds.Add(item.Id))
-                {
-                    throw new InvalidOperationException(
-                        "Skill upsert id is missing or duplicated: " +
-                        (item.Id ?? string.Empty));
-                }
-                if (string.IsNullOrWhiteSpace(baseId) !=
-                    string.IsNullOrWhiteSpace(expected))
-                {
-                    throw new InvalidOperationException(
-                        "Existing skill upsert requires both baseId and expectedRevision; a new skill requires neither.");
-                }
-                result.Add(new SkillLibraryCoreMutation
-                {
-                    Kind = item.Kind,
-                    BaseId = baseId,
-                    ExpectedRevision = expected,
-                    PreserveBody = item.PreserveBody,
-                    Intended = new SkillDefinition
-                    {
-                        Id = item.Id,
-                        Host = item.Host,
-                        Name = item.Name,
-                        Description = item.Description,
-                        Version = item.Version,
-                        BodyMarkdown = item.BodyMarkdown,
-                        Enabled = item.Enabled,
-                        BuiltIn = false
-                    }
-                });
-            }
-            return result;
         }
 
         private static void ValidateSkillReferencePayload(
@@ -362,7 +294,6 @@ namespace RNAssistant.Office
         private static SkillReferenceResponse SkillReferenceMutationResult(
             SkillManualMutationResult result,
             string path,
-            string content,
             bool deleted)
         {
             var package = result == null ? null : result.Package;
@@ -378,9 +309,6 @@ namespace RNAssistant.Office
                 Result = SkillMutationResultDto.From(result),
                 Skill = SkillPackageDto.From(package),
                 Path = reference == null ? path : reference.Path,
-                Content = deleted || result == null ||
-                    result.Outcome.Status != SkillAuthoringOutcomeStatus.Ok
-                        ? null : content ?? string.Empty,
                 Deleted = deleted && result != null &&
                     result.Outcome.Status == SkillAuthoringOutcomeStatus.Ok,
                 Reference = SkillReferenceDto.From(reference)

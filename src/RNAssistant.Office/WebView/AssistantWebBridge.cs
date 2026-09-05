@@ -296,16 +296,19 @@ namespace RNAssistant.Office.WebView
                         responsePayload = _controller.GetSkills();
                         break;
                     case "saveSkills":
-                        var saveSkills = Payload<SaveSkillsPayload>(payload);
-                        responsePayload = _controller.SaveSkills(saveSkills);
+                        responsePayload = await _controller.SaveSkillsAsync(Payload<SkillMutationWriteRequest>(payload), cancellationToken).ConfigureAwait(false);
+                        break;
+                    case "beginSkillMutationUpload":
+                        responsePayload = _controller.BeginSkillMutationUpload(Payload<SkillMutationUploadRequest>(payload), cancellationToken);
+                        break;
+                    case "cancelSkillMutationUpload":
+                        responsePayload = _controller.CancelSkillMutationUpload(Payload<ResourceUploadLeaseRequest>(payload));
                         break;
                     case "readSkillSource":
                         responsePayload = await _controller.ReadSkillSourceAsync(Payload<SkillSourceReadRequest>(payload), cancellationToken).ConfigureAwait(false);
                         break;
                     case "saveSkillReference":
-                        var saveSkillReference = Payload<SaveSkillReferencePayload>(payload);
-                        responsePayload = _controller.SaveSkillReference(
-                            saveSkillReference);
+                        responsePayload = await _controller.SaveSkillReferenceAsync(Payload<SkillMutationWriteRequest>(payload), cancellationToken).ConfigureAwait(false);
                         break;
                     case "deleteSkillReference":
                         var deleteSkillReference = Payload<SkillReferencePayload>(payload);

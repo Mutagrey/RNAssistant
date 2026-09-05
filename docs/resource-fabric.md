@@ -96,8 +96,13 @@ capacity before hydration and requires the displayed package revision; no author
 file fallback or model observation is created. Complete-source/read-only, cache
 conflict and existing save-guard rules belong to
 [Skill Library](skills.md#editor-source-reads). Metadata-only edits explicitly
-preserve the guarded body without fetching it. Skill mutation body transport
-still requires consumer cutover.
+preserve the guarded body without fetching it. The same owner consumes core batches
+and reference upserts as bounded typed UTF-8 JSON through the existing single-use
+upload route. Bridge write controls carry only chat/lease/hash; structural/body
+validation precedes the existing sequential guarded authoring/commit path.
+No upload publishes a resource or creates model evidence. Limits, cancellation,
+partial outcomes and draft rules belong to
+[Skill mutation uploads](skills.md#editor-mutation-uploads).
 
 ## Conversation loop
 
@@ -312,6 +317,8 @@ direct Skill Library reference reads and their inline body/fake mutation-result
 bridge response (now published catalog → Gateway/CAS → shared bounded download);
 inline SkillPackageDto core text in catalog/mutation projections and the separate
 reference-only bridge action (now one pull-based skill source reader);
+inline Skill Library core/reference mutation bodies and reference source echo
+(now one bounded upload consumer, retaining the existing guarded mutation owner);
 separate state/Office retained text readers, externally hash-bound Office/state/catalog
 continuations, and read-side exposure of prepared state/context/catalog identities.
 No compatibility alias, dual-write or feature flag restores these paths.
