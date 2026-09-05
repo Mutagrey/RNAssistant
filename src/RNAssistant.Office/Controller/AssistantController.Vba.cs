@@ -102,46 +102,68 @@ namespace RNAssistant.Office
                 _vbaJournalStore.GetMutationDetail(session.Host, session.DocumentKey, mutationId));
         }
 
-        public ToolRunResult SaveVbaModule(string moduleName, string code, string expectedCodeSha256 = null)
+        public ResourceUploadOpenResponse BeginVbaModuleUpload(VbaEditorUploadRequest request, CancellationToken token)
         {
-            var settings = _settingsService.Load();
-            var tools = _toolCatalog.GetVisibleTools().Where(s => s.Enabled).ToList();
-            var command = new ToolInvocation { ToolId = _toolExecutor.VbaToolId("vba_write_module") };
-            command.Arguments["moduleName"] = moduleName;
-            command.Arguments["code"] = code;
-            command.Arguments["mode"] = "updateOnly";
-            command.ExpectedContentSha256 = expectedCodeSha256;
-            return WithReservedSession(LoadSession(null), session =>
+            if (request == null || string.IsNullOrWhiteSpace(request.ChatId))
+                throw new InvalidOperationException("RESOURCE_ACCESS_DENIED: an explicit chat is required.");
+            return WithReservedSession(LoadAddressedSession(request.ChatId), session =>
+                new VbaEditorResourceService(_toolExecutor.ResourceGateway, _resourceData).BeginUpload(session, request, token));
+        }
+
+        public ResourceDataCloseResponse CancelVbaModuleUpload(ResourceUploadLeaseRequest request)
+        {
+            if (request == null || string.IsNullOrWhiteSpace(request.ChatId))
+                throw new InvalidOperationException("RESOURCE_ACCESS_DENIED: an explicit chat is required.");
+            _resourceData.CloseUpload(request.ChatId, request.LeaseId, VbaEditorResourceService.Owner);
+            return new ResourceDataCloseResponse { Closed = true };
+        }
+
+        public Task<ToolRunResult> SaveVbaModuleAsync(VbaModulePayload request, CancellationToken token)
+        {
+            return WriteVbaModuleAsync(request, "updateOnly", null, request?.ExpectedCodeSha256, token);
+        }
+
+        public Task<ToolRunResult> CreateVbaModuleAsync(VbaCreateModulePayload request, CancellationToken token)
+        {
+            return WriteVbaModuleAsync(request, "createOnly", request?.ComponentType, null, token);
+        }
+
+        private async Task<ToolRunResult> WriteVbaModuleAsync(VbaEditorWriteRequest request, string mode,
+            string componentType, string expectedCodeSha256, CancellationToken token)
+        {
+            if (request == null || string.IsNullOrWhiteSpace(request.ChatId))
+                throw new InvalidOperationException("RESOURCE_ACCESS_DENIED: an explicit chat is required.");
+            try
             {
-                var result = _toolExecutor.ExecuteManual(command, tools,
-                    settings, false, true, session);
-                _toolCatalog.InvalidateDocumentVbaTools();
-                return result;
-            });
+                var session = LoadAddressedSession(request.ChatId);
+                using (ReserveChatOperation(session))
+                {
+                    session = ReloadReservedSession(session);
+                    var settings = _settingsService.Load();
+                    var tools = _toolCatalog.GetVisibleTools().Where(s => s.Enabled).ToList();
+                    var result = await Task.Run(() =>
+                    {
+                        var code = new VbaEditorResourceService(_toolExecutor.ResourceGateway, _resourceData)
+                            .ReadUploadedSource(session, request, token);
+                        var command = new ToolInvocation { ToolId = _toolExecutor.VbaToolId("vba_write_module"),
+                            ExpectedContentSha256 = expectedCodeSha256 };
+                        command.Arguments["moduleName"] = request.ModuleName;
+                        command.Arguments["code"] = code;
+                        command.Arguments["mode"] = mode;
+                        if (componentType != null) command.Arguments["componentType"] = componentType;
+                        return _toolExecutor.ExecuteManual(command, tools, settings, false, true, session, token);
+                    }, token).ConfigureAwait(false);
+                    _toolCatalog.InvalidateDocumentVbaTools();
+                    return result;
+                }
+            }
+            finally { _resourceData.CloseUpload(request.ChatId, request.UploadLeaseId, VbaEditorResourceService.Owner); }
         }
 
         public ToolRunResult RunVbaMacro(string macroName, CancellationToken cancellationToken)
         {
             return WithReservedSession(LoadSession(null), session =>
                 _toolExecutor.RunVbaMacro(macroName, session, cancellationToken));
-        }
-
-        public ToolRunResult CreateVbaModule(string moduleName, string componentType, string code)
-        {
-            var settings = _settingsService.Load();
-            var tools = _toolCatalog.GetVisibleTools().Where(s => s.Enabled).ToList();
-            var command = new ToolInvocation { ToolId = _toolExecutor.VbaToolId("vba_write_module") };
-            command.Arguments["moduleName"] = moduleName;
-            command.Arguments["componentType"] = componentType;
-            command.Arguments["code"] = code;
-            command.Arguments["mode"] = "createOnly";
-            return WithReservedSession(LoadSession(null), session =>
-            {
-                var result = _toolExecutor.ExecuteManual(command, tools,
-                    settings, false, true, session);
-                _toolCatalog.InvalidateDocumentVbaTools();
-                return result;
-            });
         }
 
         public ToolRunResult DeleteVbaModule(string moduleName)

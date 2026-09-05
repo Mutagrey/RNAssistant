@@ -33,7 +33,8 @@ namespace RNAssistant.Office
         public string LastApiKey { get; private set; }
         public string LastHistorySecret { get; private set; }
         public string LastModuleName { get; private set; }
-        public string LastModuleCode { get; private set; }
+        public string LastModuleUpload { get; private set; }
+        public string LastModuleSourceHash { get; private set; }
         public string LastModuleHash { get; private set; }
         public string LastModuleType { get; private set; }
         public string LastVbaMutationId { get; private set; }
@@ -559,20 +560,33 @@ namespace RNAssistant.Office
             return new VbaMutationDetailResponse { MutationId = mutationId, Components = new VbaMutationComponentDto[0] };
         }
 
-        public ToolRunResult SaveVbaModule(string moduleName, string code, string expectedCodeSha256 = null)
+        public ResourceUploadOpenResponse BeginVbaModuleUpload(VbaEditorUploadRequest request, CancellationToken token)
         {
-            LastModuleName = moduleName;
-            LastModuleCode = code;
-            LastModuleHash = expectedCodeSha256;
-            return ToolRunResult.Ok("saved");
+            token.ThrowIfCancellationRequested(); LastChatId = request.ChatId;
+            return new ResourceUploadOpenResponse { LeaseId = new string('a', 64), ByteLength = request.ByteLength,
+                Url = "https://rnassistant.local-resource/v1/upload/" + new string('a', 64), MaxChunkBytes = 262144 };
         }
 
-        public ToolRunResult CreateVbaModule(string moduleName, string componentType, string code)
+        public ResourceDataCloseResponse CancelVbaModuleUpload(ResourceUploadLeaseRequest request)
         {
-            LastModuleName = moduleName;
-            LastModuleType = componentType;
-            LastModuleCode = code;
-            return ToolRunResult.Ok("created");
+            LastChatId = request.ChatId; LastModuleUpload = request.LeaseId;
+            return new ResourceDataCloseResponse { Closed = true };
+        }
+
+        public Task<ToolRunResult> SaveVbaModuleAsync(VbaModulePayload request, CancellationToken token)
+        {
+            token.ThrowIfCancellationRequested(); LastChatId = request.ChatId;
+            LastModuleName = request.ModuleName; LastModuleUpload = request.UploadLeaseId;
+            LastModuleHash = request.ExpectedCodeSha256; LastModuleSourceHash = request.SourceSha256;
+            return Task.FromResult(ToolRunResult.Ok("saved"));
+        }
+
+        public Task<ToolRunResult> CreateVbaModuleAsync(VbaCreateModulePayload request, CancellationToken token)
+        {
+            token.ThrowIfCancellationRequested(); LastChatId = request.ChatId;
+            LastModuleName = request.ModuleName; LastModuleType = request.ComponentType;
+            LastModuleUpload = request.UploadLeaseId; LastModuleSourceHash = request.SourceSha256;
+            return Task.FromResult(ToolRunResult.Ok("created"));
         }
 
         public ToolRunResult DeleteVbaModule(string moduleName)

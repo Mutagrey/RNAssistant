@@ -54,7 +54,7 @@ function createContext(stageFails) {
   };
   context.FileReader = class { constructor() { throw new Error("base64 ingestion must not return"); } };
 
-  for (const file of ["app-attachments.js", "app-chat-run.js"]) {
+  for (const file of ["app-resource-upload.js", "app-attachments.js", "app-chat-run.js"]) {
     vm.runInContext(fs.readFileSync(path.join(root, "web/js", file), "utf8"), context, { filename: file });
   }
   context.sendChat = (text, attachments, chatId) => sent.push({ text, attachments, chatId });
@@ -128,7 +128,7 @@ async function settle() {
   }
 
   const index = fs.readFileSync(path.join(root, "web/index.html"), "utf8");
-  assert.ok(index.includes("app-attachments.js?v=resource-upload-20260905-1"), "attachment upload has the direct-cutover cache key");
+  assert.ok(index.includes("app-attachments.js?v=vba-upload-20260906-1"), "attachment upload has the shared uploader cache key");
   assert.ok(index.includes("app-chat-composer.js?v=multi-chat-20260902-1"), "composer retains its unchanged cache key");
   assert.ok(index.includes("app-chat-run.js?v=chat-sync-20260903-1"), "app-chat-run.js has the chat sync cache key");
   console.log("PASS attachment staging: changed UI modules have current cache keys");

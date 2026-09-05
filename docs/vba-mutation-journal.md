@@ -58,6 +58,30 @@ remain pending during cancellation, without an unbounded queue. No second resour
 store, publication path or inline fallback is introduced. Actual controller/STA/COM
 and WebView2 editor read/save/cancel qualification remains an open Windows gate.
 
+## Editor source uploads
+
+Editor save/create sends source through the existing shared upload route, not an
+inline `code` field. `beginVbaModuleUpload` reserves bounded bytes for the explicit
+chat and `vba-editor` consumer; `saveVbaModule`/`createVbaModule` carry that single-use
+capability, raw source SHA-256, module metadata and (for save) the mandatory normalized
+editor read guard. Attachment ingestion cannot consume or close a VBA upload, and
+VBA cannot consume an attachment upload. Both use one sequential browser uploader,
+the same 256 KiB POST chunks, four-upload cap, shared transfer quota and expiry.
+
+`VbaEditorResourceService` consumes complete UTF-8/hash-verified source once, before
+the existing `ExecuteManual` → typed VBA mutation owner prepares, dispatches and
+verifies the write. Empty source is valid; the 1,000,000 UTF-16/4,000,000-byte limits
+remain explicit. Uploads do not create attachments, publish VBA revisions or grant
+model observations. CAS preimages/intended state, write guards, CodeOnly UserForms
+and authority publication stay with the existing mutation/journal owners.
+
+The addressed chat is reserved only for opening or final consumption/write, not
+while the UI transfers bytes. Duplicate UI writes are rejected without queuing.
+Edit/selection/project/chat change, bridge loss and page close cancel pending work;
+late capabilities close, and late write/refresh responses cannot mark newer edits
+saved or replace their text. An uncertain write is never automatically repeated.
+Controller/STA/COM and WebView2 save/create/cancel still require Windows qualification.
+
 ## Mutation ownership
 
 Phase 6C moves the complete `common.vba_apply_patch` workflow and shared module

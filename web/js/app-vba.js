@@ -89,6 +89,7 @@ function previewVbaDiff() {
 
 function readVbaResult(response) {
   cancelVbaModuleRead();
+  cancelVbaModuleWrite();
   var result = response.result || response.Result || response;
   var dataJson = result.DataJson || result.dataJson || "";
   var data = dataJson ? JSON.parse(dataJson) : {};
@@ -164,6 +165,7 @@ function updateVbaMacroSuggestion() {
 }
 
 function markVbaEditorDirty() {
+  cancelVbaModuleWrite();
   state.vbaEditorDirty = true;
   updateVbaMacroSuggestion();
   $("vbaStatus").textContent = "Есть несохраненные изменения VBA.";
@@ -171,6 +173,10 @@ function markVbaEditorDirty() {
 
 var vbaActions = window.RNAssistantVbaActions.create({
   send: send,
+  cancelRequest: cancelBridgeRequest,
+  getChatId: function () { return state.activeChatId; },
+  getProject: function () { return state.vba.modules; },
+  isAvailable: function () { return !state.bridgeUnavailable; },
   log: log,
   logToolResult: logToolResult,
   getModuleName: function () { return $("vbaModuleSelect").value; },
@@ -194,6 +200,8 @@ var vbaActions = window.RNAssistantVbaActions.create({
   setMacroStatus: setVbaMacroStatus,
   updateMacroRunState: updateVbaMacroRunState
 });
+
+function cancelVbaModuleWrite() { if (vbaActions) vbaActions.cancelWrite(); }
 
 function refreshVbaProject() {
   if (state.vbaEditorDirty && !window.confirm("Перезагрузить VBA project и потерять несохранённые изменения?")) {
@@ -340,6 +348,7 @@ function bindVbaActions() {
     loadSelectedVbaModule();
   });
   window.addEventListener("pagehide", cancelVbaModuleRead);
+  window.addEventListener("pagehide", cancelVbaModuleWrite);
   $("vbaCodeInput").addEventListener("input", markVbaEditorDirty);
   $("vbaMacroInput").addEventListener("input", updateVbaMacroRunState);
   Array.prototype.slice.call(document.querySelectorAll(".vba-mode-button")).forEach(function (button) {

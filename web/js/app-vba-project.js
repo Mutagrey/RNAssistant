@@ -323,6 +323,7 @@ function hasVbaModuleCode(module) {
 }
 
 async function loadSelectedVbaModule() {
+  if (typeof cancelVbaModuleWrite === "function") cancelVbaModuleWrite();
   var module = selectedVbaModule();
   var chatId = state.activeChatId;
   if (vbaModuleRead && vbaModuleRead.module === module && vbaModuleRead.chatId === chatId) return;

@@ -223,7 +223,7 @@ host-neutral. Web payload 7/7, trajectory viewer/export 8/8, Run Journal 10/10 a
 shared download 6/6 — 31/31. Version-format, JavaScript syntax and diff checks pass;
 no full harness or Office/VSTO validation. Whole journal replay and actual Windows
 controller/WebView2 capture/read/cancel qualification remain open.
-VBA editor resource slice (2026-09-06): module source now uses the same Gateway,
+VBA editor resource checkpoint `1f542c3` (2026-09-06): module source now uses the same Gateway,
 bound provider, authority and shared bounded download data plane. The direct
 ReadVbaModuleForEditor path, controller DataJson parsing and inline code bridge
 body are removed. Complete bounded VBA source is retained in the existing CAS
@@ -243,8 +243,21 @@ commit projection 4/4, chat sync 4/4 and lazy UI 4/4 — 29/29. Cache fixtures w
 aligned with the shipped asset revisions. No full harness or Office/VSTO validation;
 actual Windows source/read/save/cancel qualification remains open.
 Version-format, JavaScript syntax and diff checks pass.
-VBA save/create code uploads still use their existing control payloads; their
-bulk transport cutover remains open, with mutation ownership unchanged.
+VBA editor upload slice (2026-09-06): save/create source now travels through the
+existing shared upload router and one browser chunk writer also used by attachments.
+Inline code DTOs and the attachment-local chunk loop are removed. Exact chat/consumer
+ownership, complete UTF-8/raw SHA-256 checks and one-time consumption precede the
+existing manual mutation owner; save requires its explicit normalized editor guard.
+Empty source, the existing 1M-character bound, shared quotas, cancellation and late
+response cleanup are covered. No attachment, new durable store or authority head is
+created by uploading alone. Current edits survive late mutation/refresh responses;
+uncertain writes are not automatically repeated. Real Windows source upload,
+save/create, STA dispatch/read-back and WebView2 cancellation remain open.
+Checks: VBA editor 4/4, attachment upload 4/4, typed VBA/ingestion bridge 2/2,
+WebView policy and production inclusion 2/2 — 12/12 host-neutral. Web VBA upload
+6/6, shared upload 6/6, source read 4/4, attachment send barrier 4/4, chat sync 4/4,
+Library 5/5 and commit projection 4/4 — 33/33. JavaScript syntax, version-format
+and diff checks pass; no full harness or Office/VSTO validation.
 Next host-neutral contour: remaining domain/authoring read consumers and other bulk
 upload/export transport through the existing Gateway/data plane, then finer Excel
 coverage/named resources and binary/raw view negotiation in MASTER order.

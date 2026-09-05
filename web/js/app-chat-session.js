@@ -266,6 +266,7 @@ function applyInitState(init) {
   if (chatChanged) {
     captureChatDraft(previousChatId);
     if (typeof cancelVbaModuleRead === "function") cancelVbaModuleRead();
+    if (typeof cancelVbaModuleWrite === "function") cancelVbaModuleWrite();
   }
   state.bridgeUnavailable = false;
   document.body.classList.remove("bridge-unavailable");
@@ -342,6 +343,7 @@ function applyBridgeUnavailableState(error) {
   captureChatDraft(previousChatId);
   state.bridgeUnavailable = true;
   if (typeof cancelVbaModuleRead === "function") cancelVbaModuleRead();
+  if (typeof cancelVbaModuleWrite === "function") cancelVbaModuleWrite();
   state.bridgeToken = "";
   document.body.classList.add("bridge-unavailable");
   resetMessageEditState();

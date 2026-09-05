@@ -42,34 +42,8 @@ async function uploadChatResourceFile(chatId, file, signal) {
     lease = await opening;
     pendingRequestId = null;
     active();
-    if (!lease || !/^[a-f0-9]{64}$/.test(lease.leaseId) ||
-        lease.url !== "https://rnassistant.local-resource/v1/upload/" + lease.leaseId ||
-        lease.byteLength !== file.size || !Number.isInteger(lease.maxChunkBytes) ||
-        lease.maxChunkBytes < 1 || lease.maxChunkBytes > 256 * 1024)
-      throw new Error("RESOURCE_UPLOAD_INVALID");
-    for (var offset = 0; offset < file.size;) {
-      active();
-      var count = Math.min(lease.maxChunkBytes, file.size - offset);
-      var chunk = new AbortController();
-      var abortChunk = function () { chunk.abort(); };
-      lifetime.signal.addEventListener("abort", abortChunk, { once: true });
-      var timer = setTimeout(abortChunk, 30000);
-      try {
-        var response = await fetch(lease.url + "?offset=" + offset + "&count=" + count, {
-          method: "POST", body: file.slice(offset, offset + count, "application/octet-stream"),
-          credentials: "omit", cache: "no-store", redirect: "error", signal: chunk.signal
-        });
-        if (!response.ok) throw new Error("RESOURCE_UPLOAD_FAILED: " + response.status);
-        var ack = await response.json();
-        active();
-        if (ack.leaseId !== lease.leaseId || ack.nextOffset !== offset + count)
-          throw new Error("RESOURCE_CURSOR_INVALID");
-        offset = ack.nextOffset;
-      } finally {
-        clearTimeout(timer);
-        lifetime.signal.removeEventListener("abort", abortChunk);
-      }
-    }
+    await window.RNAssistantResourceUpload.write(lease, file, { maxBytes: ATTACHMENT_MAX_FILE_BYTES,
+      signal: lifetime.signal, isCurrent: function () { return !(signal && signal.aborted); } });
     active();
     var finishing = send("completeChatResourceUpload", { chatId: chatId, leaseId: lease.leaseId });
     pendingRequestId = finishing.requestId;

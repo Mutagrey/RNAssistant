@@ -16,13 +16,15 @@ namespace RNAssistant.Office.Services
         private readonly Dictionary<string, Upload> _uploads = new Dictionary<string, Upload>(StringComparer.Ordinal);
 
         internal ResourceUploadOpenResponse OpenUpload(ChatSession session, ResourceUploadOpenRequest request,
-            CancellationToken cancellationToken = default(CancellationToken))
+            CancellationToken cancellationToken = default(CancellationToken), string owner = UploadOwner,
+            long maximumBytes = AttachmentStore.MaxFileBytes, bool allowEmpty = false)
         {
             if (session == null || string.IsNullOrWhiteSpace(session.Id) || request == null || request.ChatId != session.Id ||
-                _ownerIsActive != null && !_ownerIsActive(session.Id, UploadOwner))
+                string.IsNullOrWhiteSpace(owner) || _ownerIsActive != null && !_ownerIsActive(session.Id, owner))
                 throw Error("RESOURCE_ACCESS_DENIED", "An explicit addressed chat is required for upload.");
-            if (request.ByteLength < 1 || request.ByteLength > AttachmentStore.MaxFileBytes)
-                throw Error("RESOURCE_BATCH_TOO_LARGE", "An upload must contain between 1 byte and 20 MiB.");
+            if (maximumBytes < 1 || maximumBytes > AttachmentStore.MaxFileBytes ||
+                request.ByteLength < (allowEmpty ? 0 : 1) || request.ByteLength > maximumBytes)
+                throw Error("RESOURCE_BATCH_TOO_LARGE", "The upload exceeds its owner's byte bounds.");
             if (string.IsNullOrWhiteSpace(request.FileName) || request.FileName.Length > 255 ||
                 request.ContentType == null || request.ContentType.Length > 128 || request.ContentType.Any(char.IsControl))
                 throw Error("RESOURCE_UPLOAD_INVALID", "Bounded file metadata is required.");
@@ -35,7 +37,7 @@ namespace RNAssistant.Office.Services
                     throw Error("RESOURCE_BACKPRESSURE", "Uploads may reserve at most 50 MiB in total.");
                 // One exact-sized transient buffer, reserved before reading any body. No second
                 // durable store or CAS publication; completed drafts use the existing ingestion owner.
-                var upload = new Upload { Id = NewLeaseId(), ChatId = session.Id, FileName = request.FileName,
+                var upload = new Upload { Id = NewLeaseId(), ChatId = session.Id, Owner = owner, FileName = request.FileName,
                     ContentType = request.ContentType, Bytes = new byte[checked((int)request.ByteLength)],
                     ExpiresUtc = _utcNow().AddMinutes(10) };
                 _uploads.Add(upload.Id, upload);
@@ -84,21 +86,36 @@ namespace RNAssistant.Office.Services
         {
             if (session == null || string.IsNullOrWhiteSpace(session.Id) || ingestion == null)
                 throw Error("RESOURCE_ACCESS_DENIED", "An addressed ingestion owner is required.");
-            var upload = EnterUpload(leaseId, session.Id);
             ChatAttachment draft = null;
             try
             {
-                RequireActiveUpload(upload, token);
-                if (upload.Received != upload.Bytes.Length)
-                    throw Error("RESOURCE_UPLOAD_INCOMPLETE", "Every byte must be acknowledged before staging the resource.");
-                draft = ingestion.Stage(session, upload.FileName, upload.ContentType, upload.Bytes);
-                RequireActiveUpload(upload, token);
-                return new ChatResourceDraftResponse { Resource = draft };
+                return ConsumeUpload(session, leaseId, UploadOwner, (bytes, fileName, contentType) =>
+                {
+                    draft = ingestion.Stage(session, fileName, contentType, bytes);
+                    return new ChatResourceDraftResponse { Resource = draft };
+                }, token);
             }
             catch
             {
                 if (draft != null) ingestion.Discard(session, draft.Id);
                 throw;
+            }
+        }
+
+        internal T ConsumeUpload<T>(ChatSession session, string leaseId, string owner,
+            Func<byte[], string, string, T> consume, CancellationToken token)
+        {
+            if (session == null || string.IsNullOrWhiteSpace(session.Id) || string.IsNullOrWhiteSpace(owner) || consume == null)
+                throw Error("RESOURCE_ACCESS_DENIED", "An addressed upload consumer is required.");
+            var upload = EnterUpload(leaseId, session.Id, owner);
+            try
+            {
+                RequireActiveUpload(upload, token);
+                if (upload.Received != upload.Bytes.Length)
+                    throw Error("RESOURCE_UPLOAD_INCOMPLETE", "Every byte must be acknowledged before consuming the upload.");
+                var result = consume(upload.Bytes, upload.FileName, upload.ContentType);
+                RequireActiveUpload(upload, token);
+                return result;
             }
             finally
             {
@@ -109,13 +126,14 @@ namespace RNAssistant.Office.Services
             }
         }
 
-        internal void CloseUpload(string chatId, string leaseId)
+        internal void CloseUpload(string chatId, string leaseId, string owner = UploadOwner)
         {
             lock (_sync)
             {
                 Upload upload;
                 if (!_uploads.TryGetValue(leaseId ?? string.Empty, out upload)) return;
-                if (upload.ChatId != chatId) throw Error("RESOURCE_ACCESS_DENIED", "The upload belongs to another chat.");
+                if (upload.ChatId != chatId || upload.Owner != owner)
+                    throw Error("RESOURCE_ACCESS_DENIED", "The upload belongs to another chat or consumer.");
                 CancelUpload(upload);
             }
         }
@@ -129,12 +147,13 @@ namespace RNAssistant.Office.Services
             }
         }
 
-        private Upload EnterUpload(string leaseId, string chatId)
+        private Upload EnterUpload(string leaseId, string chatId, string owner = null)
         {
             lock (_sync)
             {
                 var upload = FindUpload(leaseId);
-                if (chatId != null && upload.ChatId != chatId) throw Error("RESOURCE_ACCESS_DENIED", "The upload belongs to another chat.");
+                if (chatId != null && upload.ChatId != chatId || owner != null && upload.Owner != owner)
+                    throw Error("RESOURCE_ACCESS_DENIED", "The upload belongs to another chat or consumer.");
                 if (upload.Busy) throw Error("RESOURCE_BACKPRESSURE", "Only one operation may be in flight per upload.");
                 upload.Busy = true;
                 return upload;
@@ -154,7 +173,7 @@ namespace RNAssistant.Office.Services
         {
             token.ThrowIfCancellationRequested();
             if (upload.Cancelled || upload.ExpiresUtc <= _utcNow() ||
-                checkOwner && _ownerIsActive != null && !_ownerIsActive(upload.ChatId, UploadOwner))
+                checkOwner && _ownerIsActive != null && !_ownerIsActive(upload.ChatId, upload.Owner))
                 throw Error("RESOURCE_LEASE_EXPIRED", "The upload lease or its chat owner has closed.");
         }
 
@@ -173,7 +192,7 @@ namespace RNAssistant.Office.Services
 
         private sealed class Upload
         {
-            internal string Id, ChatId, FileName, ContentType;
+            internal string Id, ChatId, Owner, FileName, ContentType;
             internal byte[] Bytes;
             internal int Received;
             internal DateTime ExpiresUtc;

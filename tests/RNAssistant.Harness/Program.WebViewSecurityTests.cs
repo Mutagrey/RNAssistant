@@ -25,7 +25,7 @@ namespace RNAssistant.Harness
             cancellations.Release("request-1", source);
             AssertTrue(!cancellations.Cancel("request-1"), "released bridge request removed");
 
-            foreach (var type in new[] { "beginChatResourceUpload", "completeChatResourceUpload", "exportChatTrajectory", "getChatEventPayload", "getVbaModule" })
+            foreach (var type in new[] { "beginChatResourceUpload", "completeChatResourceUpload", "exportChatTrajectory", "getChatEventPayload", "getVbaModule", "beginVbaModuleUpload", "saveVbaModule", "createVbaModule" })
             {
                 var uploadSource = cancellations.Create(type, type);
                 AssertTrue(uploadSource != null && cancellations.Cancel(type) && uploadSource.IsCancellationRequested,

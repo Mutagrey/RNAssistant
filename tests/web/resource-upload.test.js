@@ -41,6 +41,7 @@ function fixture() {
     chunks.push(...bytes);
     return { ok: true, json: async () => ({ leaseId: id, nextOffset: Number(params.get("offset")) + bytes.length }) };
   };
+  vm.runInContext(fs.readFileSync(path.join(__dirname, "../../web/js/app-resource-upload.js"), "utf8"), context);
   vm.runInContext(source, context);
   return { context, calls, chunks, lease, events };
 }

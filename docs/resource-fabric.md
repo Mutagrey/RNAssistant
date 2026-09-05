@@ -214,6 +214,15 @@ WebView request stream is consumed on its STA. No base64 staging route/adapter o
 second durable upload store remains. Real Windows POST/preflight/close-during-PDF
 qualification is still open.
 
+VBA editor save/create now uses the same upload route, byte reservations and shared
+sequential browser uploader. Its capability is scoped to the addressed chat and
+`vba-editor` consumer, distinct from attachment staging. `VbaEditorResourceService`
+consumes verified complete UTF-8 source once; only the existing guarded mutation
+owner can then write/publish live VBA. Control DTOs contain upload identity and raw
+source hash, never source code; save also requires its normalized editor read guard.
+There is no attachment/publication side effect from uploading alone. Bounds and
+cancel/late-response semantics are in [VBA journal](vba-mutation-journal.md#editor-source-uploads).
+
 Trajectory ZIP export uses the same owner-scoped data plane at
 `/v1/download/<opaque-lease>`, with metadata-only bridge setup, sequential 256 KiB
 GET chunks and full-payload SHA-256 verification before download. At most two
@@ -282,6 +291,8 @@ trajectory ZIP base64 bridge body and decoder;
 diagnostic event payload inline bridge text and whole-body-then-clip preview reads;
 direct VBA editor module reads, controller JSON parsing and inline source bridge
 body (now the same Gateway/CAS snapshot and bounded download owner);
+inline VBA save/create code DTOs and the attachment-only browser chunk loop
+(now shared bounded upload transport with separate consumer capabilities);
 uploaded-HTML source bridge/DTO and independent preview cache, plus direct
 attachment-text import reads (now exact Gateway pages through the same owners);
 mutable-disk skill reference activation;

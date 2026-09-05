@@ -969,26 +969,42 @@ namespace RNAssistant.Harness
             AssertTrue(JObject.Parse(mutationDetailResponseJson)["ok"].Value<bool>(), "VBA mutation detail bridge response ok");
             AssertEqual("mutation-1", controller.LastVbaMutationId, "VBA mutation id reaches typed controller");
 
+            var uploadJson = bridge.HandleMessageAsync(
+                "{\"id\":\"vba-upload\",\"type\":\"beginVbaModuleUpload\",\"bridgeToken\":\"" + token +
+                "\",\"payload\":{\"chatId\":\"vba-chat\",\"byteLength\":123}}").GetAwaiter().GetResult();
+            var uploadResponse = JObject.Parse(uploadJson);
+            AssertTrue(uploadResponse["ok"].Value<bool>(), "typed VBA upload open");
+            AssertEqual(123L, uploadResponse["payload"]["byteLength"].Value<long>(), "exact source byte reservation");
+            var cancelUploadJson = bridge.HandleMessageAsync(
+                "{\"id\":\"vba-upload-close\",\"type\":\"cancelVbaModuleUpload\",\"bridgeToken\":\"" + token +
+                "\",\"payload\":{\"chatId\":\"vba-chat\",\"leaseId\":\"source-upload\"}}").GetAwaiter().GetResult();
+            AssertTrue(JObject.Parse(cancelUploadJson)["payload"]["closed"].Value<bool>(), "typed VBA upload close");
+
             var responseJson = bridge.HandleMessageAsync(
-                "{\"id\":\"b5\",\"type\":\"saveVbaModule\",\"bridgeToken\":\"" + token + "\",\"payload\":{\"moduleName\":\"Module1\",\"code\":\"Sub Main()\\nEnd Sub\",\"expectedCodeSha256\":\"save123\"}}")
+                "{\"id\":\"b5\",\"type\":\"saveVbaModule\",\"bridgeToken\":\"" + token + "\",\"payload\":{\"chatId\":\"vba-chat\",\"moduleName\":\"Module1\",\"uploadLeaseId\":\"source-upload\",\"sourceSha256\":\"raw123\",\"expectedCodeSha256\":\"save123\"}}")
                 .GetAwaiter()
                 .GetResult();
 
             var response = JObject.Parse(responseJson);
             AssertTrue(response["ok"].Value<bool>(), "bridge response ok");
             AssertEqual("Module1", controller.LastModuleName, "module name");
-            AssertContains(controller.LastModuleCode, "Sub Main", "module code");
+            AssertEqual("vba-chat", controller.LastChatId, "explicit save chat");
+            AssertEqual("source-upload", controller.LastModuleUpload, "single-use module source capability");
+            AssertEqual("raw123", controller.LastModuleSourceHash, "raw source byte hash");
             AssertEqual("save123", controller.LastModuleHash, "save module hash");
 
             var createResponseJson = bridge.HandleMessageAsync(
                 "{\"id\":\"b5-create\",\"type\":\"createVbaModule\",\"bridgeToken\":\"" + token +
-                "\",\"payload\":{\"moduleName\":\"UserForm1\",\"componentType\":\"MSForm\",\"code\":\"Option Explicit\"}}")
+                "\",\"payload\":{\"chatId\":\"vba-chat\",\"moduleName\":\"UserForm1\",\"componentType\":\"MSForm\",\"uploadLeaseId\":\"create-upload\",\"sourceSha256\":\"create123\"}}")
                 .GetAwaiter()
                 .GetResult();
             AssertTrue(JObject.Parse(createResponseJson)["ok"].Value<bool>(), "VBA create bridge response ok");
             AssertEqual("UserForm1", controller.LastModuleName, "create module name");
             AssertEqual("MSForm", controller.LastModuleType, "create module type");
-            AssertContains(controller.LastModuleCode, "Option Explicit", "create module code");
+            AssertEqual("create-upload", controller.LastModuleUpload, "create source capability");
+            AssertEqual("create123", controller.LastModuleSourceHash, "create raw byte hash");
+            AssertTrue(typeof(VbaModulePayload).GetProperty("Code") == null && typeof(VbaCreateModulePayload).GetProperty("Code") == null,
+                "neither write contract carries an inline code fallback");
 
             var deleteResponseJson = bridge.HandleMessageAsync(
                 "{\"id\":\"b5-delete\",\"type\":\"deleteVbaModule\",\"bridgeToken\":\"" + token +

@@ -352,18 +352,16 @@ namespace RNAssistant.Office.WebView
                             Payload<VbaMutationDetailPayload>(payload).MutationId);
                         break;
                     case "saveVbaModule":
-                        var saveVbaModule = Payload<VbaModulePayload>(payload);
-                        responsePayload = _controller.SaveVbaModule(
-                            saveVbaModule.ModuleName,
-                            saveVbaModule.Code,
-                            saveVbaModule.ExpectedCodeSha256);
+                        responsePayload = await _controller.SaveVbaModuleAsync(Payload<VbaModulePayload>(payload), cancellationToken).ConfigureAwait(false);
                         break;
                     case "createVbaModule":
-                        var createVbaModule = Payload<VbaCreateModulePayload>(payload);
-                        responsePayload = _controller.CreateVbaModule(
-                            createVbaModule.ModuleName,
-                            createVbaModule.ComponentType,
-                            createVbaModule.Code);
+                        responsePayload = await _controller.CreateVbaModuleAsync(Payload<VbaCreateModulePayload>(payload), cancellationToken).ConfigureAwait(false);
+                        break;
+                    case "beginVbaModuleUpload":
+                        responsePayload = _controller.BeginVbaModuleUpload(Payload<VbaEditorUploadRequest>(payload), cancellationToken);
+                        break;
+                    case "cancelVbaModuleUpload":
+                        responsePayload = _controller.CancelVbaModuleUpload(Payload<ResourceUploadLeaseRequest>(payload));
                         break;
                     case "deleteVbaModule":
                         var deleteVbaModule = Payload<VbaDeleteModulePayload>(payload);

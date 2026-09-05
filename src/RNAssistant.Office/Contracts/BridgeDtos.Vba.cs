@@ -28,28 +28,30 @@ namespace RNAssistant.Office.Contracts
         [JsonProperty("data")] public ResourceDownloadOpenResponse Data { get; set; }
     }
 
-    public sealed class VbaModulePayload
+    public sealed class VbaEditorUploadRequest : ChatPayload
+    {
+        [JsonProperty("byteLength")] public long ByteLength { get; set; }
+    }
+
+    public abstract class VbaEditorWriteRequest : ChatPayload
     {
         [JsonProperty("moduleName")]
         public string ModuleName { get; set; }
 
-        [JsonProperty("code")]
-        public string Code { get; set; }
+        [JsonProperty("uploadLeaseId")] public string UploadLeaseId { get; set; }
+        [JsonProperty("sourceSha256")] public string SourceSha256 { get; set; }
+    }
 
+    public sealed class VbaModulePayload : VbaEditorWriteRequest
+    {
         [JsonProperty("expectedCodeSha256")]
         public string ExpectedCodeSha256 { get; set; }
     }
 
-    public sealed class VbaCreateModulePayload
+    public sealed class VbaCreateModulePayload : VbaEditorWriteRequest
     {
-        [JsonProperty("moduleName")]
-        public string ModuleName { get; set; }
-
         [JsonProperty("componentType")]
         public string ComponentType { get; set; }
-
-        [JsonProperty("code")]
-        public string Code { get; set; }
     }
 
     public sealed class VbaDeleteModulePayload
