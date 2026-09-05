@@ -1589,7 +1589,8 @@ namespace RNAssistant.Harness
                         document.Reference.Uri,
                         ResourceRepresentations.Text,
                         documentText.NextCursor,
-                        128);
+                        128,
+                        documentText.Resource.Reference.Revision);
                 }
                 catch (ResourceRequestException ex)
                 {
@@ -1659,7 +1660,8 @@ namespace RNAssistant.Harness
                         twinComponent.Reference.Uri,
                         ResourceRepresentations.Source,
                         firstSource.NextCursor,
-                        128);
+                        128,
+                        firstSource.Resource.Reference.Revision);
                 }
                 catch (ResourceRequestException ex)
                 {
@@ -1716,7 +1718,8 @@ namespace RNAssistant.Harness
                         component.Reference.Uri,
                         ResourceRepresentations.Source,
                         firstSource.NextCursor,
-                        128);
+                        128,
+                        firstSource.Resource.Reference.Revision);
                 }
                 catch (ResourceRequestException ex)
                 {

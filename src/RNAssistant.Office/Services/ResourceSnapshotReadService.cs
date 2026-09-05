@@ -7,7 +7,7 @@ using RNAssistant.Core.Storage;
 
 namespace RNAssistant.Office.Services
 {
-    // One retained text-view reader for state and context resources. Only whole
+    // One retained text-view reader for logical resources. Only whole
     // captured views or the canonical revision payload can supply a complete body.
     internal sealed class ResourceSnapshotReadService
     {
@@ -21,11 +21,10 @@ namespace RNAssistant.Office.Services
         {
             var exact = request.Reference.IsExact ? request.Reference : descriptor.Reference;
             if (exact?.IsExact != true) throw Error("RESOURCE_HEAD_UNKNOWN", "The logical resource has no known current revision.");
-            if (!string.IsNullOrEmpty(request.Cursor) && !request.Reference.IsExact)
-                throw Error("RESOURCE_CURSOR_INVALID", "A continuation requires its exact resource revision.");
+            var snapshot = _authority.CaptureMany(new[] { scope }).Get(scope);
             var metadata = _revisions.GetRevision(scope, exact);
             if (metadata == null) throw Error("RESOURCE_SNAPSHOT_UNAVAILABLE", "The exact revision metadata is unavailable.");
-            if (_authority.Store.GetHead(scope, exact.Identity) == null)
+            if (snapshot.GetHead(exact.Identity) == null)
                 throw Error("RESOURCE_SNAPSHOT_UNAVAILABLE", "The retained resource has not crossed its publication barrier.");
             var view = string.IsNullOrWhiteSpace(request.Representation) || request.Representation == "auto" ? "text" : request.Representation;
             var captured = _revisions.GetView(scope, exact, view);
@@ -34,9 +33,7 @@ namespace RNAssistant.Office.Services
             if (payload == null) throw Error("RESOURCE_VIEW_UNAVAILABLE", "This exact revision has no complete payload for the requested view.");
             if (payload.ByteLength > 8L * 1024 * 1024) throw Error("RESOURCE_BATCH_TOO_LARGE", "The retained view exceeds its materialization bound.");
             var binding = ResourceReadCursor.ReadBinding(exact.Uri, view);
-            var position = ResourceReadCursor.ParseRevisionBound(request, binding);
-            if (!string.IsNullOrEmpty(position.Revision) && position.Revision != exact.Revision)
-                throw Error("RESOURCE_REVISION_CHANGED", "The continuation belongs to another logical revision, even if its bytes are equal.");
+            var position = ResourceReadCursor.ParseExact(request, binding);
             string text;
             try { text = _payloads.ReadText(payload.ToBlobReference()); }
             catch (Exception error) when (error is IOException || error is InvalidDataException || error is CryptographicException)
@@ -50,11 +47,12 @@ namespace RNAssistant.Office.Services
                 new ResourceCoverage(ResourceCoverageKinds.CharacterRange, start: position.Offset, end: next);
             descriptor.Reference = exact.Copy(); descriptor.Payload = payload; descriptor.MimeType = payload.ContentType;
             descriptor.ContentSha256 = hash; descriptor.ByteLength = payload.ByteLength;
+            descriptor.Coverage = coverage;
             descriptor.Dependencies = metadata.Dependencies.ToList();
             return new ResourceReadSelection { Result = new ResourceReadResult { Resource = descriptor, Representation = view,
                 Text = text.Substring(position.Offset, count), ContentSha256 = hash, Offset = position.Offset, Coverage = coverage,
                 ReturnedCharacters = count, TotalCharacters = text.Length, Complete = next == text.Length, Truncated = next < text.Length,
-                CompleteViewPayload = payload,
+                CompleteViewPayload = payload, AuthorityGeneration = snapshot.Generation,
                 NextCursor = next < text.Length ? ResourceReadCursor.CreateRevisionBound(next, exact.Revision, binding) : null },
                 ResourceRefs = new[] { exact.Copy() } };
         }

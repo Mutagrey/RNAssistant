@@ -2436,7 +2436,8 @@ namespace RNAssistant.Harness
                     component.Reference.Uri,
                     ResourceRepresentations.Source,
                     first.NextCursor,
-                    128).Result;
+                    128,
+                    first.Resource.Reference.Revision).Result;
                 AssertEqual(128, second.Offset, "VBA continuation starts at the exact prior cursor");
                 AssertEqual(adapter.VbaModuleCode.Substring(128, 128), second.Text,
                     "VBA continuation returns the next exact source chunk");

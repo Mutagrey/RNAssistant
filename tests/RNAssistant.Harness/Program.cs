@@ -630,6 +630,7 @@ namespace RNAssistant.Harness
                 Test("resource cutover: typed context exact payloads", ResourceCompilerUsesTypedContextPayloads),
                 Test("resource cutover: context gateway scoped snapshots", ResourceContextGatewayUsesScopedSnapshots),
                 Test("resource cutover: retained state cursors and publication", ResourceRetainedStateReadsPreservePublication),
+                Test("resource cutover: live and retained logical continuations", ResourceLiveContinuationsUseLogicalRevisions),
                 Test("resource cutover: document identity SaveAs and copy", DocumentAuthoritySurvivesSaveAsAndSeparatesCopy),
                 Test("resource cutover: bounded table lease snapshot", ResourceBoundedTableLeaseUsesOneSnapshot),
                 Test("resource cutover: local restore logical lineage", LocalResourceRestorePublishesNewLogicalRevision),

@@ -42,8 +42,8 @@ tails, and Known-head publication now requires durable exact revision metadata.
 The canonical owner map and active removal gates are updated in resource-fabric.md
 and MIGRATION_MAP.md.
 Checkpoint commits: `ec8b179` (integrated foundation), `332b911` (lifecycle),
-`904e1ae` (exact lineage across restore/context/fork) and `b59e26d` (exact HTML
-data-plane export); user-requested checkpoints,
+`904e1ae` (exact lineage across restore/context/fork), `b59e26d` (exact HTML
+data-plane export) and `75e2aef` (shared context/state reads); user-requested checkpoints,
 not a completed cutover. The lifecycle checkpoint switches controller clear/edit/message-delete/
 fork to typed history intents through the same journal/authority observer. History
 and fork preparation belong to ChatHistoryEditService/ChatCloneService; active
@@ -92,7 +92,7 @@ Export checks: host-neutral exact capture/failure cleanup 2/2; typed export brid
 1/1 and production source inclusion 1/1. Web export 11/11, ECharts 7/7 and hosted
 resource data-plane contract pass; related static UI fixtures: Plan 8/8, Artifact
 Library 5/5, HTML import 5/5. No full harness or Office/VSTO validation.
-Context-read checkpoint after `b59e26d`: typed context refs now route through
+Context-read checkpoint `75e2aef`: typed context refs now route through
 the same Gateway/data plane in their conversation or exact document authority
 scope. Instructions and untyped notes are excluded from resource discovery; bodies
 come only from exact CAS. State/context share one retained text reader: partial
@@ -104,14 +104,29 @@ after drift, while new unknown-head reads fail. Semantic mutable reads now captu
 the current head once and pin internal pages, fixing reads stuck on an older
 discovery observation. Legacy HTML-body/provider-list fixtures use current bindings
 and the integrated provider registry.
-Continuation checks: resource cutover 19/19; resources 10/10; native semantic
+Context-read checkpoint checks: resource cutover 19/19; resources 10/10; native semantic
 resource tools (including multi-page context) 1/1; Agent large whole read 1/1;
 native resource evidence replay 1/1; HTML export 2/2 and production source inclusion
 1/1. No full harness, Office/VSTO or Windows validation. The required version-format
 gate passed before the user-requested context-read checkpoint commit.
-Next host-neutral read contour: live/retained Office continuation tokens still
-carry physical view hashes; close that logical-revision boundary through the same
-Gateway/authority owner, including equal-byte restore tests.
+Office-cursor checkpoint after `75e2aef`: Gateway Office text/source continuations
+now bind exact logical revision plus URI/view. Missing exact refs and old hash-bound
+or cross-revision tokens fail before Office dispatch, including equal-byte restores.
+Physical view guards remain private to PrepareRead/provider dispatch; PublishRead
+validates and rebinds outgoing cursors. The separate Office retained reader is
+removed: exact views use the same snapshot reader as state/context, including the
+last known head. Historical/unknown-head snapshots and open leases remain exact;
+missing CAS never queries Office or publishes a head. Live Gateway access without
+shared authority fails closed. Existing bounded-read fixtures now pass exact refs.
+Continuation checks: resource cutover 20/20; resources 10/10; bounded VBA source,
+native semantic resource tools, Agent large whole read and resource evidence replay
+1/1 each; VBA restore 4/4; HTML export 2/2; production source inclusion 1/1 — 41/41.
+No full harness, Office/VSTO or Windows validation. The checkpoint is being committed
+at the user's request after the required version-format gate.
+Next host-neutral read contour: catalog text/skill/reference continuations still
+bind payload hashes; switch this remaining consumer to exact publication revision
+rules through the same catalog/Gateway owners, then remaining definition/domain
+reads and bulk transport in MASTER order.
 Still open: remaining definition/domain read and bulk upload/export consumers,
 finer Excel coverage/named resources, complete binary/raw view negotiation, bounded
 cold replay/checkpoint/retention optimization,

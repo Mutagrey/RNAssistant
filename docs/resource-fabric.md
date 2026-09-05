@@ -39,10 +39,17 @@ document/VBA, Excel ranges/formulas, conversation state/definitions, typed conte
 and catalogs. `ContextResourceProvider` discovers attached supplied data in the
 conversation scope and Office observations in the exact bound document scope.
 Instructions/untyped notes are not resources; display previews never supply bodies.
-`ResourceSnapshotReadService` reads state/context from whole retained views or the
-canonical revision payload. Partial views cannot substitute for whole bodies;
+`ResourceSnapshotReadService` reads state/context and retained Office views from
+whole captured views or the canonical revision payload. Partial views cannot substitute for whole bodies;
 continuations bind logical revision and URI/view, never an equal content hash.
 Exact historical reads retain access after drift/removal without moving heads.
+Gateway Office continuations require an exact logical reference and reject
+cross-revision, URI/view or old hash-bound tokens before provider dispatch.
+`ResourceAuthorityService` translates the logical token to the retained physical
+view guard only inside dispatch, validates the provider continuation and returns
+a logical token. It owns no second cursor/head store. Available exact Office views
+use the common snapshot reader even for the last known head; fresh head reads still
+observe the provider. Missing/corrupt retained CAS never falls back to live bytes.
 An identity with only prepared metadata cannot be activated by reading it; copied
 context becomes readable after the owning atomic fork publication.
 `ResourceGatewayService.Binary` captures CAS image/thumbnail/PDF-page views using
@@ -192,12 +199,12 @@ callbacks; `VbaToolExecutor.Observations`; `HtmlAcceptedReadSourceResolver`; HTM
 binding tool IDs/arguments/transforms/current JSON; independent model history/repair
 assembly; free-summary resource authority; inline large pending payload duplication;
 viewer text/base64 bridge transport; mutable-disk skill reference activation;
-separate state text reader, hash-bound state continuations and read-side activation
-of prepared state/context identities.
+separate state/Office retained text readers, externally hash-bound Office/state
+continuations, and read-side activation of prepared state/context identities.
 No compatibility alias, dual-write or feature flag restores these paths.
 
-Still open within this same cutover: the live/retained Office logical-continuation
-boundary, remaining definition/domain read consumers, finer
+Still open within this same cutover: catalog text logical-continuation normalization,
+remaining definition/domain read consumers, finer
 Excel coverage/named resources, complete binary/raw view negotiation,
 remaining bulk upload/export surfaces, bounded history/retention
 optimization and final documentation cleanup. These are not permanent adapters.

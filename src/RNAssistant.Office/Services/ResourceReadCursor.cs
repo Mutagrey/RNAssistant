@@ -81,6 +81,18 @@ namespace RNAssistant.Office.Services
             return new ResourceReadPosition { Offset = offset, Revision = parts[2] };
         }
 
+        internal static ResourceReadPosition ParseExact(ResourceReadRequest request, string binding)
+        {
+            var position = ParseRevisionBound(request, binding);
+            if (string.IsNullOrEmpty(position.Revision)) return position;
+            if (request.Reference?.IsExact != true)
+                throw new ResourceRequestException("A continuation requires its exact resource revision.", "RESOURCE_CURSOR_INVALID", false);
+            if (!string.Equals(position.Revision, request.Reference.Revision, StringComparison.Ordinal))
+                throw new ResourceRequestException("The continuation belongs to another logical revision, even if its bytes are equal.",
+                    "RESOURCE_REVISION_CHANGED", false);
+            return position;
+        }
+
         public static string CreateRevisionBound(int offset, string revision, string binding)
         {
             if (offset < 0 || !IsRevisionToken(revision) || !IsBindingToken(binding))

@@ -137,42 +137,26 @@ namespace RNAssistant.Office.Services
 
         internal ResourceReadSelection ReadRetained(ChatSession session, ResourceReadRequest request, bool live)
         {
-            if (!live || request.Reference == null || !request.Reference.IsExact || _payloads == null) return null;
+            if (!live) return null;
+            ResourceReadCursor.ParseExact(request, ResourceReadCursor.ReadBinding(request.Reference.Uri, request.Representation));
+            if (!request.Reference.IsExact || _payloads == null) return null;
             var scope = Scope(session, true);
-            var head = _authority.GetHead(scope, request.Reference.Identity);
-            if (head != null && head.Knowledge == HeadKnowledge.Known && head.Revision.Revision == request.Reference.Revision &&
-                string.IsNullOrEmpty(request.Cursor)) return null;
             var view = _revisions.GetView(scope, request.Reference, request.Representation);
             if (view?.Payload == null || view.Coverage.Kind != ResourceCoverageKinds.Whole) return null;
-            if (view.Payload.ByteLength > 8L * 1024 * 1024)
-                throw new ResourceRequestException("This retained view requires the bounded data plane.", "RESOURCE_BATCH_TOO_LARGE", false);
-            var content = _payloads.ReadText(view.Payload.ToBlobReference());
-            if (content == null) throw new ResourceRequestException("The retained view payload is unavailable.", "RESOURCE_SNAPSHOT_UNAVAILABLE", false);
-            var binding = ResourceReadCursor.ReadBinding(request.Reference.Uri, view.View);
-            var position = ResourceReadCursor.ParseRevisionBound(request, binding);
-            ResourceReadCursor.ValidateContinuation(position, view.ContentSha256);
-            var offset = position.Offset;
-            if (offset > content.Length) throw new ResourceRequestException("Cursor exceeds the retained view.", "resource_cursor_invalid", false);
-            var count = Math.Min(content.Length - offset, Math.Max(1, Math.Min(32000, request.MaxChars <= 0 ? 32000 : request.MaxChars)));
-            var next = offset + count;
-            var revision = _revisions.GetRevision(scope, request.Reference);
-            return new ResourceReadSelection { Result = new ResourceReadResult {
-                Resource = new ResourceDescriptor { Reference = request.Reference.Copy(), MimeType = view.Payload.ContentType,
-                    ContentSha256 = view.ContentSha256, Dependencies = revision?.Dependencies.ToList() ?? new List<ResourceDependency>() }, Representation = view.View,
-                Text = content.Substring(offset, count), ContentSha256 = view.ContentSha256,
-                Offset = offset, ReturnedCharacters = count, TotalCharacters = content.Length,
-                Complete = next == content.Length, Truncated = next < content.Length,
-                NextCursor = next < content.Length ? ResourceReadCursor.CreateRevisionBound(next, view.ContentSha256, binding) : null,
-                AuthorityGeneration = _authority.Capture(scope).Generation,
-                Coverage = offset == 0 && next == content.Length ? ResourceCoverage.Whole() :
-                    new ResourceCoverage(ResourceCoverageKinds.CharacterRange, start: offset, end: next)
-            }, ResourceRefs = new[] { request.Reference.Copy() } };
+            var descriptor = new ResourceDescriptor { Reference = request.Reference.Copy(),
+                Provider = ResourceUri.Parse(request.Reference.Uri).Provider, Mutable = true };
+            var retained = new ResourceSnapshotReadService(this, _payloads).Read(scope, descriptor, request);
+            retained.Result.RawContentIncluded = true;
+            return retained;
         }
 
         internal ResourceReadRequest PrepareRead(ChatSession session, ResourceReadRequest request, bool live)
         {
             EnsureReady(new[] { ScopeFor(session, request.Reference, live) });
-            if (!live || request == null || request.Reference == null || !request.Reference.IsExact) return request;
+            if (!live) return request;
+            var binding = ResourceReadCursor.ReadBinding(request.Reference.Uri, request.Representation);
+            var position = ResourceReadCursor.ParseExact(request, binding);
+            if (!request.Reference.IsExact) return request;
             var scope = Scope(session, true);
             var head = _authority.GetHead(scope, request.Reference.Identity);
             if (head == null || head.Knowledge == HeadKnowledge.Unknown)
@@ -188,13 +172,18 @@ namespace RNAssistant.Office.Services
                     "RESOURCE_SNAPSHOT_UNAVAILABLE", false);
             }
             var metadata = _revisions.GetView(scope, head.Revision, request.Representation);
+            if (!string.IsNullOrEmpty(position.Revision) && string.IsNullOrEmpty(metadata?.ContentSha256))
+                throw new ResourceRequestException("The exact continuation view has no retained physical guard.", "RESOURCE_SNAPSHOT_UNAVAILABLE", false);
             return new ResourceReadRequest
             {
                 Reference = new ResourceRef(request.Reference.Uri,
                     metadata == null ? null : metadata.ContentSha256),
                 Representation = request.Representation,
-                Cursor = request.Cursor,
-                MaxChars = request.MaxChars
+                // Physical byte guards are private to the provider dispatch.
+                Cursor = string.IsNullOrEmpty(position.Revision) ? null :
+                    ResourceReadCursor.CreateRevisionBound(position.Offset, metadata.ContentSha256, binding),
+                MaxChars = request.MaxChars, MaxRows = request.MaxRows, RowOffset = request.RowOffset,
+                ViewPath = request.ViewPath, Fields = request.Fields
             };
         }
 
@@ -213,6 +202,15 @@ namespace RNAssistant.Office.Services
             var contentSha256 = string.IsNullOrWhiteSpace(result.ContentSha256)
                 ? result.Resource.ContentSha256
                 : result.ContentSha256;
+            ResourceReadPosition continuation = null;
+            var cursorBinding = ResourceReadCursor.ReadBinding(identity.Uri, result.Representation);
+            if (live && !string.IsNullOrWhiteSpace(result.NextCursor))
+            {
+                continuation = ResourceReadCursor.ParseRevisionBound(result.NextCursor, cursorBinding);
+                if (!string.Equals(continuation.Revision, contentSha256, StringComparison.OrdinalIgnoreCase) ||
+                    continuation.Offset != (long)result.Offset + result.ReturnedCharacters)
+                    throw new ResourceRequestException("The provider continuation does not match the captured view.", "RESOURCE_CURSOR_INVALID", false);
+            }
             ResourceRef exact = live ? null : result.Resource.Reference.Copy();
             if (!live)
             {
@@ -267,6 +265,8 @@ namespace RNAssistant.Office.Services
             }
 
             result.Resource.Reference = exact.Copy();
+            if (continuation != null)
+                result.NextCursor = ResourceReadCursor.CreateRevisionBound(continuation.Offset, exact.Revision, cursorBinding);
             if (!live)
             {
                 string artifactId;

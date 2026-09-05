@@ -718,6 +718,95 @@ namespace RNAssistant.Harness
             AssertTrue(artifact1.Identity.Equals(artifact2.Identity), "exact artifact revisions share one logical identity");
         }
 
+        private static void ResourceLiveContinuationsUseLogicalRevisions()
+        {
+            WithTempExecutor(FakeOfficeAdapter.ForHost("Word"), (executor, adapter) =>
+            {
+                var body = "Option Explicit\n' " + new string('a', 700);
+                adapter.SetVbaModule("CursorModule", body, "StdModule");
+                var session = NewSession(adapter);
+                executor.BindResourceAuthority(session);
+                var gateway = executor.ResourceGateway;
+                var authority = executor.ResourceAuthority;
+                var scope = authority.Scope(session, true);
+                var revisions = (IResourceRevisionStore)authority.Store;
+                var identity = gateway.ResolveIntentTarget(session, "VBA module: CursorModule").Reference.Identity;
+                Func<ResourceRef, string, int, ResourceReadResult> read = (reference, cursor, maximum) => gateway.Read(session,
+                    new ResourceReadRequest { Reference = reference, Representation = "source", Cursor = cursor, MaxChars = maximum }).Result;
+                var first = read(new ResourceRef(identity.Uri), null, 128);
+                var r1 = first.Resource.Reference;
+                var binding = ResourceReadCursor.ReadBinding(identity.Uri, "source");
+                AssertEqual(r1.Revision, ResourceReadCursor.ParseRevisionBound(first.NextCursor, binding).Revision,
+                    "Gateway continuations expose the logical revision, not the private provider hash");
+                AssertTrue(r1.Revision != first.ContentSha256, "logical lineage is separate from physical bytes");
+                AssertEqual(ResourceCoverageKinds.CharacterRange, revisions.GetView(scope, r1, "source").Coverage.Kind,
+                    "bounded live read need not materialize a whole source");
+                AssertEqual(body.Substring(128, 128), read(r1, first.NextCursor, 128).Text,
+                    "exact live continuation privately translates its physical guard at dispatch");
+                adapter.SetVbaModule("CursorModule", body.Replace('a', 'b'), "StdModule");
+                var r2 = read(new ResourceRef(identity.Uri), null, 128).Resource.Reference;
+                adapter.SetVbaModule("CursorModule", body, "StdModule");
+                // Isolate the cursor boundary using the same durable restore metadata
+                // and authority publication unit as mutation read-back.
+                var payload = PayloadRef.FromBlob(executor.Payloads.StoreText(body, first.Resource.MimeType));
+                var r3 = new ResourceRef(identity.Uri, "r_restored_cursor");
+                revisions.RegisterRevision(scope, new ResourceRevisionMetadata(r3, first.ContentSha256, payload, r2, r1));
+                var before = authority.Store.Capture(scope);
+                authority.Store.Publish(ResourceAuthorityCommit.Create(scope, before.Generation, null,
+                    new[] { new ResourceHeadChange(identity, before.GetHead(identity), ResourceHeadState.Known(r3, before.Generation + 1)) },
+                    AuthorityCommitReason.MutationEffect));
+                var calls = adapter.TotalBackendCallCount;
+                AssertEqual("RESOURCE_REVISION_CHANGED", RuntimeThrows<ResourceRequestException>(() => read(r3, first.NextCursor, 128)).ErrorCode,
+                    "a same-byte restore cannot borrow a cursor from its origin even before a full view is retained");
+                AssertEqual(calls, adapter.TotalBackendCallCount, "logical cursor mismatch fails before Office dispatch");
+                var restored = read(r3, null, 128);
+                AssertEqual(first.ContentSha256, restored.ContentSha256, "restore deduplicates equal physical bytes");
+                AssertEqual(body.Substring(128, 128), read(r3, restored.NextCursor, 128).Text, "restored revision has its own valid live continuation");
+                AssertEqual(body, read(r3, null, 1000).Text, "whole exact read retains the restored view");
+                revisions.RegisterView(scope, new ResourceRevisionView(r1, "source", first.ContentSha256, payload, ResourceCoverage.Whole()));
+                calls = adapter.TotalBackendCallCount;
+                AssertEqual("RESOURCE_REVISION_CHANGED", RuntimeThrows<ResourceRequestException>(() => read(r3, first.NextCursor, 128)).ErrorCode,
+                    "retained snapshot selection applies the same logical cursor rule");
+                var legacyHashCursor = ResourceReadCursor.CreateRevisionBound(128, first.ContentSha256, binding);
+                AssertEqual("RESOURCE_REVISION_CHANGED", RuntimeThrows<ResourceRequestException>(() => read(r3, legacyHashCursor, 128)).ErrorCode,
+                    "old hash-bound cursors have no compatibility path");
+                AssertEqual("RESOURCE_CURSOR_INVALID", RuntimeThrows<ResourceRequestException>(() => read(new ResourceRef(identity.Uri), restored.NextCursor, 128)).ErrorCode,
+                    "a moving head cannot consume an exact continuation");
+                RuntimeThrows<ResourceRequestException>(() => gateway.Read(session, new ResourceReadRequest {
+                    Reference = r3, Representation = "structure", Cursor = restored.NextCursor, MaxChars = 128 }));
+                RuntimeThrows<ResourceRequestException>(() => read(new ResourceRef(ResourceUri.Create("vba", "another", "module"), r3.Revision), restored.NextCursor, 128));
+                AssertEqual(body.Substring(128, 128), read(r1, first.NextCursor, 128).Text,
+                    "historical continuation reads the original retained revision");
+                adapter.SetVbaModule("CursorModule", "CHANGED_OUTSIDE_RESOURCE_READ", "StdModule");
+                AssertEqual(body, read(r3, null, 1000).Text, "exact reads use an available snapshot even when it is the last known head");
+                AssertEqual(calls, adapter.TotalBackendCallCount, "retained reads and cursor rejection never query Office");
+                using (var plane = new ResourceDataPlaneService(gateway))
+                {
+                    var lease = plane.Open(session, "vba-snapshot", r3, "source");
+                    var page = JObject.Parse(System.Text.Encoding.UTF8.GetString(plane.Read(lease.LeaseId, 0, 128, System.Threading.CancellationToken.None)));
+                    authority.ReportExternalDrift(scope, identity);
+                    var tail = JObject.Parse(System.Text.Encoding.UTF8.GetString(plane.Read(lease.LeaseId, 128, 1000, System.Threading.CancellationToken.None)));
+                    AssertEqual(body, (string)page["text"] + (string)tail["text"], "existing data-plane leases remain exact after the authority becomes unknown");
+                    plane.Close(session.Id, "vba-snapshot", lease.LeaseId);
+                }
+                var generation = authority.Store.Capture(scope).Generation;
+                var historical = read(r1, first.NextCursor, 128);
+                AssertEqual(EvidenceState.Unknown, new EvidenceStateReducer().Reduce(gateway.Evidence(session, historical).Single(),
+                    authority.CaptureMany(new[] { scope })).State, "snapshot access never reconciles unknown evidence currentness");
+                AssertEqual(generation, authority.Store.Capture(scope).Generation, "historical reads never publish a head");
+                var missing = new ResourceRef(identity.Uri, "r_missing_cursor_view");
+                var missingPayload = new PayloadRef(new string('f', 64), body.Length, "text/plain");
+                revisions.RegisterRevision(scope, new ResourceRevisionMetadata(missing, missingPayload.Sha256, missingPayload));
+                revisions.RegisterView(scope, new ResourceRevisionView(missing, "source", missingPayload.Sha256, missingPayload, ResourceCoverage.Whole()));
+                AssertEqual("RESOURCE_SNAPSHOT_UNAVAILABLE", RuntimeThrows<ResourceRequestException>(() => read(missing, null, 128)).ErrorCode,
+                    "missing retained CAS fails explicitly without falling back to current Office bytes");
+                AssertEqual(calls, adapter.TotalBackendCallCount, "retained failures also stay outside Office");
+                var unboundGateway = new ResourceGatewayService(adapter, null, null);
+                AssertEqual("RESOURCE_AUTHORITY_NOT_READY", RuntimeThrows<ResourceRequestException>(() => unboundGateway.List(session,
+                    "document", null, null, 20)).ErrorCode, "Gateway cannot expose raw physical live revisions without shared authority");
+            });
+        }
+
         private static void ResourceContextGatewayUsesScopedSnapshots()
         {
             WithTempPaths(paths =>

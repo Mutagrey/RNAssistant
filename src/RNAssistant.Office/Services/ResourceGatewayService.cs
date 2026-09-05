@@ -244,6 +244,8 @@ namespace RNAssistant.Office.Services
 
         private T WithProvider<T>(IResourceProvider provider, ChatSession session, Func<T> action)
         {
+            if (provider is ILiveOfficeResourceProvider && _authority == null)
+                throw new ResourceRequestException("Live resources require the shared logical revision authority.", "RESOURCE_AUTHORITY_NOT_READY", true);
             if (!(provider is ILiveOfficeResourceProvider) || _beginLiveOfficeRead == null)
             {
                 return action();
