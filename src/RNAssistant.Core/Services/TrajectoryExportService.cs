@@ -6,6 +6,7 @@ using System.IO.Compression;
 using System.Linq;
 using System.Security.Cryptography;
 using System.Text;
+using System.Threading;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
 using RNAssistant.Core.Models;
@@ -23,7 +24,7 @@ namespace RNAssistant.Core.Services
         private const int MaxExportEvents = 5000;
         private const int MaxExportRows = 2000;
         private const long MaxUncompressedBytes = 32L * 1024L * 1024L;
-        private const long MaxBundleBytes = 24L * 1024L * 1024L;
+        public const long MaximumBundleBytes = 24L * 1024L * 1024L;
         private static readonly UTF8Encoding Utf8 = new UTF8Encoding(false);
         private static readonly DateTimeOffset ZipTimestamp = new DateTimeOffset(1980, 1, 1, 0, 0, 0, TimeSpan.Zero);
 
@@ -42,8 +43,10 @@ namespace RNAssistant.Core.Services
             string documentKey,
             string sessionId,
             IReadOnlyList<SessionEvent> events,
-            TrajectoryExportRequest request)
+            TrajectoryExportRequest request,
+            CancellationToken cancellationToken = default(CancellationToken))
         {
+            cancellationToken.ThrowIfCancellationRequested();
             request = NormalizeRequest(request);
             var source = (events ?? new List<SessionEvent>()).Where(item => item != null)
                 .OrderBy(item => item.Sequence).ToList();
@@ -53,15 +56,16 @@ namespace RNAssistant.Core.Services
                 throw new InvalidOperationException("The export source contains events from another chat session.");
             }
 
-            var selection = Select(source, request);
+            var selection = Select(source, request, cancellationToken);
             if (selection.Events.Count == 0) throw new InvalidOperationException("The trajectory export selection is empty.");
             var references = CollectReferences(selection.Events);
             var generatedUtc = DateTime.UtcNow;
             var files = new SortedDictionary<string, byte[]>(StringComparer.Ordinal);
-            AddFile(files, "events.jsonl", SerializeEvents(selection.Events, request.RedactionMode));
+            AddFile(files, "events.jsonl", SerializeEvents(selection.Events, request.RedactionMode, cancellationToken));
             if (selection.Rows.Count > 0)
             {
-                AddFile(files, "views/" + request.View + ".json", SerializeRows(selection.Rows, request.RedactionMode));
+                AddFile(files, "views/" + request.View + ".json", SerializeRows(selection.Rows, request.RedactionMode,
+                    MaxUncompressedBytes - files.Values.Sum(item => (long)item.Length), cancellationToken));
             }
             AddFile(files, "README.txt", Readme(request));
 
@@ -70,6 +74,9 @@ namespace RNAssistant.Core.Services
             {
                 foreach (var reference in references.Values.OrderBy(item => item.Reference.Sha256, StringComparer.Ordinal))
                 {
+                    cancellationToken.ThrowIfCancellationRequested();
+                    if (reference.Reference.ByteLength > MaxUncompressedBytes - files.Values.Sum(item => (long)item.Length))
+                        throw new InvalidOperationException("Trajectory export CAS payload exceeds the remaining uncompressed budget.");
                     var bytes = _blobs.ReadBytes(reference.Reference);
                     if (bytes == null)
                     {
@@ -94,7 +101,8 @@ namespace RNAssistant.Core.Services
                 request,
                 generatedUtc,
                 files);
-            AddFile(files, "manifest.json", Utf8.GetBytes(manifest.ToString(Formatting.Indented)));
+            AddFile(files, "manifest.json", SerializeManifest(manifest,
+                MaxUncompressedBytes - files.Values.Sum(item => (long)item.Length), cancellationToken));
             AddFile(files, "checksums.sha256", Checksums(files));
             var uncompressedBytes = files.Values.Sum(item => (long)item.Length);
             if (uncompressedBytes > MaxUncompressedBytes)
@@ -103,12 +111,8 @@ namespace RNAssistant.Core.Services
                     " byte uncompressed limit. Narrow the selection or exclude CAS payloads.");
             }
 
-            var bundle = CreateZip(files);
-            if (bundle.LongLength > MaxBundleBytes)
-            {
-                throw new InvalidOperationException("Trajectory export exceeds the " + MaxBundleBytes.ToString(CultureInfo.InvariantCulture) +
-                    " byte bundle limit. Narrow the selection or exclude CAS payloads.");
-            }
+            var bundle = CreateZip(files, cancellationToken);
+            cancellationToken.ThrowIfCancellationRequested();
             var suffix = string.Equals(request.RedactionMode, TrajectoryExportRedactionModes.None, StringComparison.Ordinal)
                 ? "full"
                 : request.RedactionMode;
@@ -128,7 +132,7 @@ namespace RNAssistant.Core.Services
             };
         }
 
-        private ExportSelection Select(IReadOnlyList<SessionEvent> source, TrajectoryExportRequest request)
+        private ExportSelection Select(IReadOnlyList<SessionEvent> source, TrajectoryExportRequest request, CancellationToken token)
         {
             if (string.Equals(request.View, TrajectoryViews.Raw, StringComparison.Ordinal))
             {
@@ -136,6 +140,7 @@ namespace RNAssistant.Core.Services
                 string cursor = null;
                 do
                 {
+                    token.ThrowIfCancellationRequested();
                     var page = _query.Query(source, RawQuery(request, cursor));
                     if (page.TotalMatches > MaxExportEvents)
                     {
@@ -156,6 +161,7 @@ namespace RNAssistant.Core.Services
             string viewCursor = null;
             do
             {
+                token.ThrowIfCancellationRequested();
                 var page = _query.QueryView(source, ViewQuery(request, viewCursor));
                 if (page.TotalMatches > MaxExportRows)
                 {
@@ -338,77 +344,94 @@ namespace RNAssistant.Core.Services
             });
         }
 
-        private static byte[] SerializeEvents(IEnumerable<SessionEvent> events, string redactionMode)
+        private static byte[] SerializeEvents(IEnumerable<SessionEvent> events, string redactionMode, CancellationToken token)
         {
-            var builder = new StringBuilder();
-            foreach (var item in events ?? new List<SessionEvent>())
+            using (var output = new BoundedExportStream(MaxUncompressedBytes, token))
             {
-                var data = ExportData(item.Data, redactionMode);
-                var exported = new JObject
+                using (var text = new StreamWriter(output, Utf8, 8192, true))
                 {
-                    ["sourceSchemaVersion"] = item.SchemaVersion,
-                    ["sessionId"] = item.SessionId,
-                    ["sequence"] = item.Sequence,
-                    ["eventId"] = item.EventId,
-                    ["createdUtc"] = item.CreatedUtc.ToUniversalTime().ToString("o", CultureInfo.InvariantCulture),
-                    ["type"] = item.Type,
-                    ["runId"] = StringToken(item.RunId),
-                    ["turnId"] = StringToken(item.TurnId),
-                    ["stepId"] = StringToken(item.StepId),
-                    ["sourcePreviousHash"] = StringToken(item.PreviousHash),
-                    ["sourceHashAlgorithm"] = item.HashAlgorithm,
-                    ["sourceHash"] = item.Hash,
-                    ["dataRedacted"] = !string.Equals(redactionMode, TrajectoryExportRedactionModes.None, StringComparison.Ordinal),
-                    ["data"] = data ?? JValue.CreateNull(),
-                    ["payload"] = ReferenceToken(item.Payload)
-                };
-                builder.Append(exported.ToString(Formatting.None)).Append('\n');
+                    foreach (var item in events ?? new List<SessionEvent>())
+                    {
+                        token.ThrowIfCancellationRequested();
+                        var data = ExportData(item.Data, redactionMode);
+                        var exported = new JObject
+                        {
+                            ["sourceSchemaVersion"] = item.SchemaVersion,
+                            ["sessionId"] = item.SessionId,
+                            ["sequence"] = item.Sequence,
+                            ["eventId"] = item.EventId,
+                            ["createdUtc"] = item.CreatedUtc.ToUniversalTime().ToString("o", CultureInfo.InvariantCulture),
+                            ["type"] = item.Type,
+                            ["runId"] = StringToken(item.RunId),
+                            ["turnId"] = StringToken(item.TurnId),
+                            ["stepId"] = StringToken(item.StepId),
+                            ["sourcePreviousHash"] = StringToken(item.PreviousHash),
+                            ["sourceHashAlgorithm"] = item.HashAlgorithm,
+                            ["sourceHash"] = item.Hash,
+                            ["dataRedacted"] = !string.Equals(redactionMode, TrajectoryExportRedactionModes.None, StringComparison.Ordinal),
+                            ["data"] = data ?? JValue.CreateNull(),
+                            ["payload"] = ReferenceToken(item.Payload)
+                        };
+                        using (var writer = new JsonTextWriter(text) { CloseOutput = false }) exported.WriteTo(writer);
+                        text.Write('\n');
+                    }
+                }
+                return output.ToArray();
             }
-            return Utf8.GetBytes(builder.ToString());
         }
 
-        private static byte[] SerializeRows(IEnumerable<TrajectoryViewRow> rows, string redactionMode)
+        private static byte[] SerializeRows(IEnumerable<TrajectoryViewRow> rows, string redactionMode, long budget, CancellationToken token)
         {
-            var result = new JArray();
-            foreach (var row in rows ?? new List<TrajectoryViewRow>())
+            using (var output = new BoundedExportStream(budget, token))
             {
-                result.Add(new JObject
+                using (var text = new StreamWriter(output, Utf8, 8192, true))
+                using (var writer = new JsonTextWriter(text) { Formatting = Formatting.Indented })
                 {
-                    ["id"] = row.Id,
-                    ["view"] = row.View,
-                    ["kind"] = row.Kind,
-                    ["title"] = string.Equals(redactionMode, TrajectoryExportRedactionModes.Metadata, StringComparison.Ordinal)
-                        ? row.Kind
-                        : row.Title,
-                    ["status"] = StringToken(row.Status),
-                    ["createdUtc"] = row.CreatedUtc.ToUniversalTime().ToString("o", CultureInfo.InvariantCulture),
-                    ["completedUtc"] = row.CompletedUtc.HasValue
-                        ? new JValue(row.CompletedUtc.Value.ToUniversalTime().ToString("o", CultureInfo.InvariantCulture))
-                        : JValue.CreateNull(),
-                    ["durationMs"] = NullableToken(row.DurationMs),
-                    ["firstSequence"] = row.FirstSequence,
-                    ["lastSequence"] = row.LastSequence,
-                    ["runId"] = StringToken(row.RunId),
-                    ["turnId"] = StringToken(row.TurnId),
-                    ["stepId"] = StringToken(row.StepId),
-                    ["toolCallId"] = StringToken(row.ToolCallId),
-                    ["toolId"] = StringToken(row.ToolId),
-                    ["artifactId"] = StringToken(row.ArtifactId),
-                    ["parentArtifactId"] = StringToken(row.ParentArtifactId),
-                    ["attemptCount"] = row.AttemptCount,
-                    ["failureCount"] = row.FailureCount,
-                    ["promptTokens"] = NullableToken(row.PromptTokens),
-                    ["completionTokens"] = NullableToken(row.CompletionTokens),
-                    ["totalTokens"] = NullableToken(row.TotalTokens),
-                    ["estimatedPromptTokens"] = NullableToken(row.EstimatedPromptTokens),
-                    ["costUsd"] = row.CostUsd.HasValue ? new JValue(row.CostUsd.Value) : JValue.CreateNull(),
-                    ["dataRedacted"] = !string.Equals(redactionMode, TrajectoryExportRedactionModes.None, StringComparison.Ordinal),
-                    ["data"] = ExportData(row.Data, redactionMode) ?? JValue.CreateNull(),
-                    ["sourceEventSeqs"] = new JArray(row.SourceEventSeqs ?? new List<long>()),
-                    ["sourceEventIds"] = new JArray(row.SourceEventIds ?? new List<string>())
-                });
+                    writer.WriteStartArray();
+                    foreach (var row in rows ?? new List<TrajectoryViewRow>())
+                    {
+                        token.ThrowIfCancellationRequested();
+                        var exported = new JObject
+                        {
+                            ["id"] = row.Id,
+                            ["view"] = row.View,
+                            ["kind"] = row.Kind,
+                            ["title"] = string.Equals(redactionMode, TrajectoryExportRedactionModes.Metadata, StringComparison.Ordinal)
+                                ? row.Kind
+                                : row.Title,
+                            ["status"] = StringToken(row.Status),
+                            ["createdUtc"] = row.CreatedUtc.ToUniversalTime().ToString("o", CultureInfo.InvariantCulture),
+                            ["completedUtc"] = row.CompletedUtc.HasValue
+                                ? new JValue(row.CompletedUtc.Value.ToUniversalTime().ToString("o", CultureInfo.InvariantCulture))
+                                : JValue.CreateNull(),
+                            ["durationMs"] = NullableToken(row.DurationMs),
+                            ["firstSequence"] = row.FirstSequence,
+                            ["lastSequence"] = row.LastSequence,
+                            ["runId"] = StringToken(row.RunId),
+                            ["turnId"] = StringToken(row.TurnId),
+                            ["stepId"] = StringToken(row.StepId),
+                            ["toolCallId"] = StringToken(row.ToolCallId),
+                            ["toolId"] = StringToken(row.ToolId),
+                            ["artifactId"] = StringToken(row.ArtifactId),
+                            ["parentArtifactId"] = StringToken(row.ParentArtifactId),
+                            ["attemptCount"] = row.AttemptCount,
+                            ["failureCount"] = row.FailureCount,
+                            ["promptTokens"] = NullableToken(row.PromptTokens),
+                            ["completionTokens"] = NullableToken(row.CompletionTokens),
+                            ["totalTokens"] = NullableToken(row.TotalTokens),
+                            ["estimatedPromptTokens"] = NullableToken(row.EstimatedPromptTokens),
+                            ["costUsd"] = row.CostUsd.HasValue ? new JValue(row.CostUsd.Value) : JValue.CreateNull(),
+                            ["dataRedacted"] = !string.Equals(redactionMode, TrajectoryExportRedactionModes.None, StringComparison.Ordinal),
+                            ["data"] = ExportData(row.Data, redactionMode) ?? JValue.CreateNull(),
+                            ["sourceEventSeqs"] = new JArray(row.SourceEventSeqs ?? new List<long>()),
+                            ["sourceEventIds"] = new JArray(row.SourceEventIds ?? new List<string>())
+                        };
+                        exported.WriteTo(writer);
+                    }
+                    writer.WriteEndArray();
+                }
+                return output.ToArray();
             }
-            return Utf8.GetBytes(result.ToString(Formatting.Indented));
         }
 
         private static JObject BuildManifest(
@@ -607,21 +630,63 @@ namespace RNAssistant.Core.Services
             }
         }
 
-        private static byte[] CreateZip(IDictionary<string, byte[]> files)
+        private static byte[] CreateZip(IDictionary<string, byte[]> files, CancellationToken token)
         {
-            using (var output = new MemoryStream())
+            using (var output = new BoundedExportStream(MaximumBundleBytes, token))
             {
                 using (var archive = new ZipArchive(output, ZipArchiveMode.Create, true))
                 {
                     foreach (var item in files.OrderBy(value => value.Key, StringComparer.Ordinal))
                     {
+                        token.ThrowIfCancellationRequested();
                         var entry = archive.CreateEntry(item.Key, CompressionLevel.Optimal);
                         entry.LastWriteTime = ZipTimestamp;
-                        using (var stream = entry.Open()) stream.Write(item.Value, 0, item.Value.Length);
+                        using (var stream = entry.Open())
+                            for (var offset = 0; offset < item.Value.Length; offset += 65536)
+                            {
+                                token.ThrowIfCancellationRequested();
+                                stream.Write(item.Value, offset, Math.Min(65536, item.Value.Length - offset));
+                            }
                     }
                 }
                 return output.ToArray();
             }
+        }
+
+        private static byte[] SerializeManifest(JObject manifest, long budget, CancellationToken token)
+        {
+            using (var output = new BoundedExportStream(budget, token))
+            {
+                using (var text = new StreamWriter(output, Utf8, 8192, true))
+                using (var writer = new JsonTextWriter(text) { Formatting = Formatting.Indented }) manifest.WriteTo(writer);
+                return output.ToArray();
+            }
+        }
+
+        private sealed class BoundedExportStream : Stream
+        {
+            private readonly MemoryStream _inner = new MemoryStream();
+            private readonly long _limit;
+            private readonly CancellationToken _token;
+            internal BoundedExportStream(long limit, CancellationToken token) { _limit = limit; _token = token; }
+            public override bool CanRead { get { return true; } }
+            public override bool CanSeek { get { return true; } }
+            public override bool CanWrite { get { return true; } }
+            public override long Length { get { return _inner.Length; } }
+            public override long Position { get { return _inner.Position; } set { Check(value); _inner.Position = value; } }
+            public override void Flush() { _token.ThrowIfCancellationRequested(); _inner.Flush(); }
+            public override int Read(byte[] buffer, int offset, int count) { return _inner.Read(buffer, offset, count); }
+            public override long Seek(long offset, SeekOrigin origin) { var result = _inner.Seek(offset, origin); Check(result); return result; }
+            internal byte[] ToArray() { _token.ThrowIfCancellationRequested(); return _inner.ToArray(); }
+            private void Check(long length)
+            {
+                _token.ThrowIfCancellationRequested();
+                if (length > _limit) throw new InvalidOperationException("Trajectory export exceeds its byte budget. Narrow the selection or exclude CAS payloads.");
+            }
+            public override void Write(byte[] buffer, int offset, int count) { Check(Position + count); _inner.Write(buffer, offset, count); }
+            public override void WriteByte(byte value) { Check(Position + 1); _inner.WriteByte(value); }
+            public override void SetLength(long value) { Check(value); _inner.SetLength(value); }
+            protected override void Dispose(bool disposing) { if (disposing) _inner.Dispose(); base.Dispose(disposing); }
         }
 
         private static string Sha256(byte[] bytes)

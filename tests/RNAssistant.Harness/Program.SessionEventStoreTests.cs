@@ -1976,6 +1976,18 @@ namespace RNAssistant.Harness
                 AssertContains(ZipEntryText(full.BundleBytes, "events.jsonl"), credential, "full export preserves event data");
                 AssertEqual(64, full.BundleSha256.Length, "bundle has SHA-256");
 
+                var derived = exporter.Export(session.Host, session.DocumentKey, session.Id, events,
+                    new TrajectoryExportRequest { View = TrajectoryViews.RunCausal });
+                AssertTrue(JArray.Parse(ZipEntryText(derived.BundleBytes, "views/run-causal.json")).Count > 0,
+                    "bounded streamed row serialization preserves derived exports");
+                RuntimeThrows<OperationCanceledException>(() => exporter.Export(session.Host, session.DocumentKey, session.Id, events,
+                    new TrajectoryExportRequest(), new CancellationToken(true)));
+                var oversized = new[] { new SessionEvent { SessionId = session.Id, Sequence = 1, Type = SessionEventTypes.LlmRequest,
+                    Payload = new ChatBlobReference { Sha256 = new string('a', 64), ByteLength = 33L * 1024 * 1024 } } };
+                AssertContains(RuntimeThrows<InvalidOperationException>(() => exporter.Export(session.Host, session.DocumentKey, session.Id, oversized,
+                    new TrajectoryExportRequest { RedactionMode = TrajectoryExportRedactionModes.None, IncludeCasPayloads = true })).Message,
+                    "remaining uncompressed budget", "an oversized reference is rejected before trying to hydrate its missing CAS body");
+
                 File.AppendAllText(SessionEventFile(paths, session), "{\"incomplete\"");
                 var incompleteRejected = false;
                 try

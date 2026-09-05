@@ -139,7 +139,7 @@ namespace RNAssistant.Harness
                 for (var index = 0; index < 4; index++) data.OpenUpload(session, UploadRequest(session, 1));
                 AssertEqual("RESOURCE_LEASE_LIMIT", RuntimeThrows<ResourceRequestException>(() => data.OpenUpload(session, UploadRequest(session, 1))).ErrorCode,
                     "four uploads maximum");
-                data.CloseUploads();
+                data.CloseTransfers();
                 var first = data.OpenUpload(session, UploadRequest(session, AttachmentStore.MaxFileBytes));
                 data.OpenUpload(session, UploadRequest(session, AttachmentStore.MaxFileBytes));
                 data.OpenUpload(session, UploadRequest(session, 10 * 1024 * 1024));
@@ -157,7 +157,7 @@ namespace RNAssistant.Harness
                     AssertEqual("RESOURCE_LEASE_EXPIRED", RuntimeThrows<ResourceRequestException>(() => data.WriteUpload(first.LeaseId, 0, 1, body, CancellationToken.None)).ErrorCode,
                         "owner close racing a chunk cannot acknowledge it");
                 data.OpenUpload(session, UploadRequest(session, AttachmentStore.MaxFileBytes));
-                data.CloseUploads(session.Id);
+                data.CloseTransfers(session.Id);
                 var cancelled = data.OpenUpload(session, UploadRequest(session, 1));
                 RuntimeThrows<OperationCanceledException>(() => data.WriteUpload(cancelled.LeaseId, 0, 1, new MemoryStream(new byte[] { 65 }), new CancellationToken(true)));
                 RuntimeThrows<ResourceRequestException>(() => data.ValidateUpload(cancelled.LeaseId));

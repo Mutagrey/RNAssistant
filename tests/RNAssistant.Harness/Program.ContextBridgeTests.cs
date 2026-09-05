@@ -466,6 +466,9 @@ namespace RNAssistant.Harness
                 .GetAwaiter()
                 .GetResult();
             AssertTrue(JObject.Parse(responseJson)["ok"].Value<bool>(), "trajectory export bridge response ok");
+            var download = JObject.Parse(responseJson)["payload"];
+            AssertTrue(download["base64"] == null, "the export bridge has no base64 body or compatibility field");
+            AssertEqual(100L, (long)download["data"]["payload"]["byteLength"], "bounded download carries only exact payload metadata");
             AssertEqual("chat-export", controller.LastChatId, "trajectory export chat id");
             AssertEqual("none", controller.LastTrajectoryExportRedaction, "trajectory export redaction");
             AssertTrue(controller.LastTrajectoryExportCas, "trajectory export CAS flag");

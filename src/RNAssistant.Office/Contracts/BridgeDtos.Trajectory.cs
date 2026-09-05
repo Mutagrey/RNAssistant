@@ -139,7 +139,7 @@ namespace RNAssistant.Office.Contracts
         [JsonProperty("chatId")] public string ChatId { get; set; }
         [JsonProperty("fileName")] public string FileName { get; set; }
         [JsonProperty("contentType")] public string ContentType { get; set; }
-        [JsonProperty("base64")] public string Base64 { get; set; }
+        [JsonProperty("data")] public ResourceDownloadOpenResponse Data { get; set; }
         [JsonProperty("bundleSha256")] public string BundleSha256 { get; set; }
         [JsonProperty("byteLength")] public long ByteLength { get; set; }
         [JsonProperty("uncompressedByteLength")] public long UncompressedByteLength { get; set; }
@@ -150,17 +150,18 @@ namespace RNAssistant.Office.Contracts
         [JsonProperty("referencedBlobCount")] public int ReferencedBlobCount { get; set; }
         [JsonProperty("includedBlobCount")] public int IncludedBlobCount { get; set; }
 
-        public static ChatTrajectoryExportResponse From(string chatId, TrajectoryExportResult result)
+        public static ChatTrajectoryExportResponse From(string chatId, TrajectoryExportResult result, ResourceDownloadOpenResponse data)
         {
-            if (result == null) return null;
+            if (result == null || data?.Payload == null || data.Payload.Sha256 != result.BundleSha256)
+                throw new InvalidOperationException("The captured trajectory bundle does not match its download payload.");
             return new ChatTrajectoryExportResponse
             {
                 ChatId = chatId,
                 FileName = result.FileName,
                 ContentType = result.ContentType,
-                Base64 = Convert.ToBase64String(result.BundleBytes ?? new byte[0]),
+                Data = data,
                 BundleSha256 = result.BundleSha256,
-                ByteLength = result.BundleBytes == null ? 0 : result.BundleBytes.LongLength,
+                ByteLength = data.Payload.ByteLength,
                 UncompressedByteLength = result.UncompressedByteLength,
                 RedactionMode = result.RedactionMode,
                 CasPayloadsIncluded = result.CasPayloadsIncluded,

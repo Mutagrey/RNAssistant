@@ -187,7 +187,7 @@ Attachment ingestion uses the same router at `/v1/upload/<opaque-lease>`.
 typed metadata/capabilities. Binary POST chunks have an exact acknowledged byte
 offset and count, at most 256 KiB each; CORS preflight admits only POST/Content-Type
 from the opaque local origin. There is one in-flight operation per upload, at most
-four uploads and 50 MiB of reserved buffers within the shared 64-lease budget.
+four uploads within the shared 50 MiB transfer-buffer and 64-lease budgets.
 The existing 20 MiB/file and 50 MiB/message limits remain. Ten-minute expiry is
 checked on access and swept periodically; close/dispose releases idle buffers.
 A cancelled busy lease retains its reservation until the operation actually exits.
@@ -201,6 +201,16 @@ even if another chat becomes active. Extraction runs off the UI thread; the boun
 WebView request stream is consumed on its STA. No base64 staging route/adapter or
 second durable upload store remains. Real Windows POST/preflight/close-during-PDF
 qualification is still open.
+
+Trajectory ZIP export uses the same owner-scoped data plane at
+`/v1/download/<opaque-lease>`, with metadata-only bridge setup, sequential 256 KiB
+GET chunks and full-payload SHA-256 verification before download. At most two
+downloads share capture/lease limits and the 50 MiB transfer budget with uploads;
+reservation precedes source validation and production. The ZIP remains a transient
+projection of one validated event snapshot, not a synthetic published resource or
+second store. Redaction, bounds and lifetime are owned by
+[Trajectory export](trajectory-export.md). General binary/raw resource-view
+negotiation and bounded cold replay remain separate open gates.
 
 Text/Markdown/PDF text pages, images, thumbnails and PDF renders travel through
 that data plane. Typed bridge DTOs carry metadata/leases, not page text or base64.
@@ -248,6 +258,7 @@ callbacks; `VbaToolExecutor.Observations`; `HtmlAcceptedReadSourceResolver`; HTM
 binding tool IDs/arguments/transforms/current JSON; independent model history/repair
 assembly; free-summary resource authority; inline large pending payload duplication;
 viewer text/base64 bridge transport; attachment base64 staging bridge and decoder;
+trajectory ZIP base64 bridge body and decoder;
 mutable-disk skill reference activation;
 separate state/Office retained text readers, externally hash-bound Office/state/catalog
 continuations, and read-side exposure of prepared state/context/catalog identities.

@@ -12,6 +12,7 @@
   var journalFilter = "all";
   var expandedJournalRows = {};
   var journalStateChatId = "";
+  var activeExport = null;
 
   function value(source, pascal, camel, fallback) {
     source = source || {};
@@ -140,6 +141,7 @@
   }
 
   function invalidateTrajectoryRequest() {
+    cancelTrajectoryExport();
     trajectoryRequestId += 1;
     setTrajectoryBusy(false);
   }
@@ -685,11 +687,7 @@
     return payload;
   }
 
-  function downloadBase64(response) {
-    var encoded = value(response, "Base64", "base64", "");
-    var binary = window.atob(encoded);
-    var bytes = new Uint8Array(binary.length);
-    for (var index = 0; index < binary.length; index++) bytes[index] = binary.charCodeAt(index);
+  function downloadBundle(response, bytes) {
     var blob = new Blob([bytes], { type: value(response, "ContentType", "contentType", "application/zip") });
     var url = URL.createObjectURL(blob);
     var link = document.createElement("a");
@@ -701,7 +699,22 @@
     window.setTimeout(function () { URL.revokeObjectURL(url); }, 1000);
   }
 
+  function closeExportLease(operation) {
+    if (operation && operation.data && operation.data.leaseId)
+      return send("resourceDataClose", { chatId: operation.chatId, workspaceId: "trajectory-export",
+        leaseId: operation.data.leaseId }).catch(function () {});
+    return Promise.resolve();
+  }
+
+  function cancelTrajectoryExport() {
+    if (!activeExport) return;
+    activeExport.abort.abort();
+    if (activeExport.requestId) cancelBridgeRequest(activeExport.requestId).catch(function () {});
+    closeExportLease(activeExport);
+  }
+
   async function exportTrajectory() {
+    if (activeExport) return;
     var view = $("trajectoryViewInput").value || "raw";
     var chatId = trajectoryChatId || state.activeChatId;
     if (view === "vba-mutations") {
@@ -716,20 +729,47 @@
     if (payload.redactionMode === "none" && !window.confirm(
       "Экспорт без redaction содержит расшифрованные prompts, document data и event data. Продолжить?")) return;
     var button = $("exportTrajectoryButton");
+    var operation = { chatId: chatId, abort: new AbortController(), data: null, requestId: null };
+    var selection = JSON.stringify(payload);
+    activeExport = operation;
+    window.addEventListener("pagehide", cancelTrajectoryExport, { once: true });
+    function isCurrent() {
+      return activeExport === operation && !operation.abort.signal.aborted &&
+        (trajectoryChatId || state.activeChatId) === chatId && JSON.stringify(exportPayload(chatId)) === selection;
+    }
     try {
       button.disabled = true;
       button.textContent = "Готовлю ZIP…";
       $("trajectoryStatus").textContent = "Проверяю stream/CAS и формирую одноразовую projection…";
-      var response = await send("exportChatTrajectory", payload);
-      downloadBase64(response);
+      var request = send("exportChatTrajectory", payload);
+      operation.requestId = request.requestId;
+      var response = await request;
+      operation.requestId = null;
+      operation.data = response && response.data;
+      if (!isCurrent()) throw new Error("RESOURCE_DOWNLOAD_CANCELLED");
+      if (response.chatId !== chatId || response.contentType !== "application/zip" || !operation.data ||
+          !operation.data.payload || operation.data.payload.contentType !== response.contentType ||
+          operation.data.payload.byteLength !== response.byteLength || operation.data.payload.sha256 !== response.bundleSha256)
+        throw new Error("RESOURCE_DOWNLOAD_INVALID");
+      button.textContent = "Скачиваю ZIP…";
+      var bytes = await window.RNAssistantResourceDownload.read(operation.data, {
+        fetch: window.fetch.bind(window), signal: operation.abort.signal, isCurrent: isCurrent, maxBytes: 24 * 1024 * 1024
+      });
+      if (!isCurrent()) throw new Error("RESOURCE_DOWNLOAD_CANCELLED");
+      downloadBundle(response, bytes);
       $("trajectoryStatus").textContent = "Экспортировано событий: " + value(response, "EventCount", "eventCount", 0) +
         " · ZIP " + bytesLabel(value(response, "ByteLength", "byteLength", 0)) +
         " · sha256=" + shortHash(value(response, "BundleSha256", "bundleSha256", ""));
     } catch (error) {
-      $("trajectoryStatus").textContent = "Не удалось экспортировать trajectory: " + error.message;
+      if (isCurrent()) $("trajectoryStatus").textContent = "Не удалось экспортировать trajectory: " + error.message;
     } finally {
-      button.disabled = false;
-      button.textContent = "Скачать ZIP";
+      await closeExportLease(operation);
+      window.removeEventListener("pagehide", cancelTrajectoryExport);
+      if (activeExport === operation) {
+        activeExport = null;
+        button.textContent = "Скачать ZIP";
+        updateExportControls();
+      }
     }
   }
 
@@ -739,7 +779,7 @@
     var vba = ($("trajectoryViewInput").value || "raw") === "vba-mutations";
     $("trajectoryExportCasInput").disabled = !full || vba;
     if (!full) $("trajectoryExportCasInput").checked = false;
-    $("exportTrajectoryButton").disabled = vba;
+    $("exportTrajectoryButton").disabled = vba || !!activeExport;
     $("trajectoryExportNotice").textContent = vba
       ? "VBA export будет отдельным bundle из journal."
       : (mode === "metadata"
@@ -765,6 +805,7 @@
   }
 
   async function refreshTrajectory(append, preserveJournalScroll) {
+    if (!append) cancelTrajectoryExport();
     var requestedView = $("trajectoryViewInput").value || "raw";
     var vba = requestedView === "vba-mutations";
     var chatId = trajectoryChatId || state.activeChatId;
@@ -1055,7 +1096,8 @@
       refreshTrajectory(false);
     });
     $("clearTrajectoryCorrelationButton").addEventListener("click", clearCorrelation);
-    $("trajectoryExportRedactionInput").addEventListener("change", updateExportControls);
+    $("trajectoryExportRedactionInput").addEventListener("change", function () { cancelTrajectoryExport(); updateExportControls(); });
+    $("trajectoryExportCasInput").addEventListener("change", cancelTrajectoryExport);
     if (payload) payload.addEventListener("click", loadPayload);
     if (vbaDetail) vbaDetail.addEventListener("click", loadVbaMutation);
     updateViewControls();

@@ -65,18 +65,17 @@ namespace RNAssistant.Office
             };
         }
 
-        public ChatTrajectoryExportResponse ExportChatTrajectory(ChatTrajectoryExportRequest request)
+        public Task<ChatTrajectoryExportResponse> ExportChatTrajectoryAsync(ChatTrajectoryExportRequest request, CancellationToken token)
         {
-            request = request ?? new ChatTrajectoryExportRequest();
+            if (request == null || string.IsNullOrWhiteSpace(request.ChatId))
+                throw new InvalidOperationException("RESOURCE_ACCESS_DENIED: an explicit chat is required for export.");
             var session = LoadAddressedSession(request.ChatId);
-            var events = _eventStore.Read(session, SessionEventReadMode.RequireComplete);
-            var result = _trajectoryExportService.Export(
-                session.Host,
-                session.DocumentKey,
-                session.Id,
-                events,
-                request.ToExportRequest());
-            return ChatTrajectoryExportResponse.From(session.Id, result);
+            var selection = request.ToExportRequest();
+            var source = new ChatSession { Id = session.Id, Host = session.Host, DocumentKey = session.DocumentKey };
+            // Reservation precedes complete stream validation and ZIP construction; no UI/COM
+            // work runs in the producer, and the captured stream never changes during delivery.
+            return Task.Run(() => new TrajectoryExportDownloadService(_trajectoryExportService, _resourceData).Open(
+                source, () => _eventStore.Read(source, SessionEventReadMode.RequireComplete), selection, token), token);
         }
 
         public ChatEventPayloadResponse GetChatEventPayload(string chatId, string eventId)
@@ -453,7 +452,7 @@ namespace RNAssistant.Office
             {
                 var sessionId = current.Id;
                 var selected = _chatSessions.DeleteAndSelectNext(sessionId);
-                _resourceData.CloseUploads(sessionId);
+                _resourceData.CloseTransfers(sessionId);
                 RemovePendingAgentToolsForSession(sessionId);
                 return selected;
             });
@@ -478,7 +477,7 @@ namespace RNAssistant.Office
                 _conversationStore.DeleteDocument(host, documentKey);
                 foreach (var header in sessions)
                 {
-                    _resourceData.CloseUploads(header.Id);
+                    _resourceData.CloseTransfers(header.Id);
                     RemovePendingAgentToolsForSession(header.Id);
                 }
             }

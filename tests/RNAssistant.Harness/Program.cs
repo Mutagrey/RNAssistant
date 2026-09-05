@@ -335,6 +335,8 @@ namespace RNAssistant.Harness
                 Test("storage: trajectory derived views retain sources and usage", TrajectoryDerivedViewsRetainSourcesAndUsage),
                 Test("storage: trajectory run causal projection correlates exact evidence", TrajectoryRunCausalProjectionCorrelatesExactEvidence),
                 Test("storage: trajectory export redacts and verifies bundle", TrajectoryExportRedactsAndVerifiesBundle),
+                Test("trajectory export: exact leased bundle", TrajectoryExportUsesExactDownload),
+                Test("trajectory export: bounded capture and delivery", TrajectoryDownloadBoundsAndLifecycle),
                 Test("storage: fork lineage is canonical", SessionForkLineageIsCanonical),
                 Test("storage: stale chat save is rejected", StaleChatRevisionIsRejected),
                 Test("storage: event integrity rejects tampering", SessionEventIntegrityRejectsTampering),

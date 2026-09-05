@@ -98,7 +98,7 @@ namespace RNAssistant.Office
                 : request.EventTypes ?? new List<string>();
             return new ChatTrajectoryResponse { ChatId = LastChatId, Revision = 1, Events = new SessionEventDto[0], Rows = new TrajectoryViewRowDto[0] };
         }
-        public ChatTrajectoryExportResponse ExportChatTrajectory(ChatTrajectoryExportRequest request)
+        public Task<ChatTrajectoryExportResponse> ExportChatTrajectoryAsync(ChatTrajectoryExportRequest request, CancellationToken token)
         {
             LastChatId = request == null ? null : request.ChatId;
             LastTrajectoryView = request == null ? null : request.View;
@@ -109,15 +109,17 @@ namespace RNAssistant.Office
                 : request.EventTypes ?? new List<string>();
             LastTrajectoryExportRedaction = request == null ? null : request.RedactionMode;
             LastTrajectoryExportCas = request != null && request.IncludeCasPayloads == true;
-            return new ChatTrajectoryExportResponse
+            return Task.FromResult(new ChatTrajectoryExportResponse
             {
                 ChatId = LastChatId,
                 FileName = "trajectory.zip",
                 ContentType = "application/zip",
-                Base64 = string.Empty,
+                Data = new ResourceDownloadOpenResponse { LeaseId = new string('a', 64),
+                    Url = "https://rnassistant.local-resource/v1/download/" + new string('a', 64), MaxChunkBytes = 262144,
+                    Payload = new PayloadRef(new string('b', 64), 100, "application/zip") },
                 RedactionMode = LastTrajectoryExportRedaction,
                 CasPayloadsIncluded = LastTrajectoryExportCas
-            };
+            });
         }
         public ChatEventPayloadResponse GetChatEventPayload(string chatId, string eventId)
         {

@@ -39,6 +39,8 @@ namespace RNAssistant.Office.Services
                     return Failure(403, "RESOURCE_ACCESS_DENIED", "Path traversal is not a resource route.");
                 if (path.Length == 4 && path[1] == "v1" && path[2] == "upload" && IsLeaseId(path[3]))
                     return Upload(method, uri, path[3], body, token);
+                if (path.Length == 4 && path[1] == "v1" && path[2] == "download" && IsLeaseId(path[3]))
+                    return Download(method, uri, path[3], token);
                 if (method != "GET") return Failure(405, "RESOURCE_METHOD_NOT_ALLOWED", "Only GET batch reads are supported on read leases.");
                 if (path.Length != 3 || path[1] != "v1" || path[2].Length != 64 ||
                     !IsLeaseId(path[2]))
@@ -79,21 +81,9 @@ namespace RNAssistant.Office.Services
         {
             if (method != "POST" && method != "OPTIONS")
                 return Failure(405, "RESOURCE_METHOD_NOT_ALLOWED", "Upload capabilities only accept POST chunks.");
-            int offset = -1, count = -1;
-            var fields = uri.Query.TrimStart('?').Split('&');
-            if (fields.Length != 2) return Failure(400, "RESOURCE_CURSOR_INVALID", "An exact byte offset and count are required.");
-            foreach (var field in fields)
-            {
-                var parts = field.Split('=');
-                int value;
-                if (parts.Length != 2 || !int.TryParse(parts[1], NumberStyles.None, CultureInfo.InvariantCulture, out value))
-                    return Failure(400, "RESOURCE_CURSOR_INVALID", "Invalid bounded upload selector.");
-                if (parts[0] == "offset" && offset == -1) offset = value;
-                else if (parts[0] == "count" && count == -1) count = value;
-                else return Failure(400, "RESOURCE_CURSOR_INVALID", "Unknown or duplicated upload selector.");
-            }
-            if (offset < 0 || count < 1 || count > ResourceDataPlaneService.MaximumUploadChunkBytes)
-                return Failure(400, "RESOURCE_BATCH_TOO_LARGE", "Invalid upload chunk bounds.");
+            int offset, count;
+            var error = TransferBounds(uri, ResourceDataPlaneService.MaximumUploadChunkBytes, out offset, out count);
+            if (error != null) return error;
             token.ThrowIfCancellationRequested();
             if (method == "OPTIONS")
             {
@@ -104,6 +94,37 @@ namespace RNAssistant.Office.Services
             var result = _data.WriteUpload(id, offset, count, body, token);
             return new ResourceStreamResponse { StatusCode = 200, Reason = "OK",
                 Body = new MemoryStream(Encoding.UTF8.GetBytes(JsonConvert.SerializeObject(result)), false) };
+        }
+
+        private ResourceStreamResponse Download(string method, Uri uri, string id, CancellationToken token)
+        {
+            if (method != "GET") return Failure(405, "RESOURCE_METHOD_NOT_ALLOWED", "Download capabilities only accept GET chunks.");
+            int offset, count;
+            var error = TransferBounds(uri, ResourceDataPlaneService.MaximumDownloadChunkBytes, out offset, out count);
+            if (error != null) return error;
+            string contentType;
+            var bytes = _data.ReadDownload(id, offset, count, token, out contentType);
+            return new ResourceStreamResponse { StatusCode = 200, Reason = "OK", ContentType = contentType, Body = new MemoryStream(bytes, false) };
+        }
+
+        private static ResourceStreamResponse TransferBounds(Uri uri, int maximumCount, out int offset, out int count)
+        {
+            offset = -1; count = -1;
+            var fields = uri.Query.TrimStart('?').Split('&');
+            if (fields.Length != 2) return Failure(400, "RESOURCE_CURSOR_INVALID", "An exact byte offset and count are required.");
+            foreach (var field in fields)
+            {
+                var parts = field.Split('=');
+                int value;
+                if (parts.Length != 2 || !int.TryParse(parts[1], NumberStyles.None, CultureInfo.InvariantCulture, out value))
+                    return Failure(400, "RESOURCE_CURSOR_INVALID", "Invalid bounded transfer selector.");
+                if (parts[0] == "offset" && offset == -1) offset = value;
+                else if (parts[0] == "count" && count == -1) count = value;
+                else return Failure(400, "RESOURCE_CURSOR_INVALID", "Unknown or duplicated transfer selector.");
+            }
+            if (offset < 0 || count < 1 || count > maximumCount)
+                return Failure(400, "RESOURCE_BATCH_TOO_LARGE", "Invalid transfer chunk bounds.");
+            return null;
         }
         private static bool IsLeaseId(string id)
         { return System.Text.RegularExpressions.Regex.IsMatch(id, "\\A[0-9a-f]{64}\\z"); }

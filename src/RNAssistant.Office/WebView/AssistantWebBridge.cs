@@ -87,7 +87,7 @@ namespace RNAssistant.Office.WebView
                         responsePayload = _controller.GetChatTrajectory(Payload<ChatTrajectoryRequest>(payload));
                         break;
                     case "exportChatTrajectory":
-                        responsePayload = _controller.ExportChatTrajectory(Payload<ChatTrajectoryExportRequest>(payload));
+                        responsePayload = await _controller.ExportChatTrajectoryAsync(Payload<ChatTrajectoryExportRequest>(payload), cancellationToken).ConfigureAwait(false);
                         break;
                     case "getChatEventPayload":
                         var chatEventPayload = Payload<ChatEventPayloadRequest>(payload);

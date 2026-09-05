@@ -5,6 +5,15 @@ using RNAssistant.Core.Models;
 
 namespace RNAssistant.Office.Contracts
 {
+    public sealed class ResourceDownloadOpenResponse
+    {
+        [JsonProperty("leaseId")] public string LeaseId { get; set; }
+        [JsonProperty("url")] public string Url { get; set; }
+        [JsonProperty("payload")] public PayloadRef Payload { get; set; }
+        [JsonProperty("maxChunkBytes")] public int MaxChunkBytes { get; set; }
+        [JsonProperty("expiresUtc")] public DateTime ExpiresUtc { get; set; }
+    }
+
     public sealed class ResourceUploadOpenRequest : ChatPayload
     {
         [JsonProperty("fileName")] public string FileName { get; set; }

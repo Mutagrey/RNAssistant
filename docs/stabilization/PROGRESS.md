@@ -165,7 +165,7 @@ HTML export 2/2, skill-reference continuation 1/1, Agent full skill 1/1, Inspect
 chat editing 5/5 and production source inclusion 1/1 — 48/48. No full harness,
 Office/VSTO or Windows validation. The required version-format gate passed before
 the user-requested checkpoint commit.
-Attachment-upload slice (2026-09-05): the base64 staging bridge/decoder is removed.
+Attachment-upload checkpoint `158cc26`: the base64 staging bridge/decoder is removed.
 Typed begin/complete/cancel and binary POST chunks use the existing data plane;
 256 KiB chunks, four uploads/50 MiB reservations, shared lease capacity and exact
 chat ownership bound the work. Cancellation/expiry/close cannot release a busy
@@ -177,9 +177,22 @@ Checks: attachments 22/22; shared table/binary leases 2/2, typed ingestion bridg
 WebView policy/cancellation 1/1, chat editing 5/5, HTML import 1/1 and source inclusion
 1/1 — 33/33 host-neutral. UI upload 6/6 and ingestion ordering 4/4 also pass.
 Version-format and diff checks pass; no full harness or Office/VSTO validation.
+Trajectory-export slice (2026-09-05): metadata-only bridge setup replaces the ZIP
+base64 body/decoder. The existing exporter captures one validated event snapshot;
+the shared data plane reserves capacity before source validation/production and
+serves exact sequential 256 KiB chunks. Two download slots share the 50 MiB transfer
+budget and capture/lease limits with uploads. Cancelled busy transfers keep their
+reservation until exit. JSON/ZIP writes and CAS hydration enforce output budgets;
+the UI verifies complete SHA-256 and closes success/failure/late leases. Redaction
+is unchanged; no ZIP store, published head or legacy fallback was introduced.
+Windows/WebView2 delivery/cancel gates and bounded cold replay remain open.
+Checks: trajectory export 3/3; typed bridge 1/1; attachment upload 4/4; shared
+table/binary leases 2/2; WebView policy 1/1 and source inclusion 1/1 — 12/12
+host-neutral. UI download 6/6 and trajectory viewer/export 8/8 also pass.
+Version-format, JavaScript syntax and diff checks pass; no full harness or
+Office/VSTO validation.
 Next host-neutral contour: remaining domain/authoring read consumers and other bulk
-upload/export transport (including trajectory export) through the existing
-Gateway/data plane, then finer Excel
+upload/export transport through the existing Gateway/data plane, then finer Excel
 coverage/named resources and binary/raw view negotiation in MASTER order.
 Still open: remaining definition/domain read and other bulk upload/export consumers,
 finer Excel coverage/named resources, complete binary/raw view negotiation, bounded

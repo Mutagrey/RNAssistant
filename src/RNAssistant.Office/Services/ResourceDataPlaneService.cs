@@ -48,8 +48,8 @@ namespace RNAssistant.Office.Services
             lock (_sync)
             {
                 EnsureActive(); Expire();
-                if (_access.Count + _openings.Count + _uploads.Count >= 64) throw Error("RESOURCE_LEASE_LIMIT", "Close unused resource handles before opening more.");
-                if (_openings.Count >= 4) throw Error("RESOURCE_BACKPRESSURE", "Only four resource opens may be in flight.");
+                if (LeaseCount >= 64) throw Error("RESOURCE_LEASE_LIMIT", "Close unused resource handles before opening more.");
+                if (OpeningCount >= 4) throw Error("RESOURCE_BACKPRESSURE", "Only four resource opens may be in flight.");
                 _openings.Add(opening);
             }
             try
@@ -166,6 +166,13 @@ namespace RNAssistant.Office.Services
         {
             lock (_sync)
             {
+                Download download;
+                if (_downloads.TryGetValue(leaseId ?? string.Empty, out download))
+                {
+                    if (download.ChatId != sessionId || download.WorkspaceId != workspaceId)
+                        throw Error("RESOURCE_ACCESS_DENIED", "The download belongs to another owner.");
+                    CancelDownload(download); return;
+                }
                 Access access;
                 if (!_access.TryGetValue(leaseId ?? string.Empty, out access)) return;
                 if (access.Lease.Owner != sessionId + ":" + workspaceId)
@@ -179,6 +186,7 @@ namespace RNAssistant.Office.Services
             lock (_sync)
             {
                 foreach (var opening in _openings.Where(item => item.Owner == sessionId + ":" + workspaceId)) opening.Cancelled = true;
+                foreach (var download in _downloads.Values.Where(item => item.ChatId == sessionId && item.WorkspaceId == workspaceId).ToArray()) CancelDownload(download);
                 foreach (var access in _access.Values.Where(item => item.Lease.Owner == sessionId + ":" + workspaceId).ToArray())
                     Close(sessionId, workspaceId, access.Lease.LeaseId);
             }
@@ -194,6 +202,7 @@ namespace RNAssistant.Office.Services
                 foreach (var access in _access.Values) { access.Cancelled = true; access.First = null; }
                 _access.Clear();
                 foreach (var upload in _uploads.Values.ToArray()) CancelUpload(upload);
+                foreach (var download in _downloads.Values.ToArray()) CancelDownload(download);
             }
         }
         private void Expire()
@@ -201,6 +210,7 @@ namespace RNAssistant.Office.Services
             foreach (var access in _access.Values.Where(item => item.Lease.ExpiresUtc <= _utcNow()).ToArray())
             { access.Cancelled = true; access.First = null; _access.Remove(access.Lease.LeaseId); }
             foreach (var upload in _uploads.Values.Where(item => item.ExpiresUtc <= _utcNow()).ToArray()) CancelUpload(upload);
+            foreach (var download in _downloads.Values.Where(item => item.ExpiresUtc <= _utcNow()).ToArray()) CancelDownload(download);
         }
         private static string NewLeaseId()
         {

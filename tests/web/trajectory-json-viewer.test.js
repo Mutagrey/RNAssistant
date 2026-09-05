@@ -28,12 +28,13 @@ class Element {
   get childElementCount() { return this.childNodes.length; }
   appendChild(child) { child.parentNode = this; this.childNodes.push(child); return child; }
   removeChild(child) { this.childNodes.splice(this.childNodes.indexOf(child), 1); child.parentNode = null; return child; }
+  remove() { if (this.parentNode) this.parentNode.removeChild(this); }
   replaceChildren(...children) { this.childNodes.forEach(child => { child.parentNode = null; }); this.childNodes = []; children.forEach(child => this.appendChild(child)); }
   setAttribute(name, value) { this.attributes[name] = String(value); }
   getAttribute(name) { return this.attributes[name]; }
   addEventListener(name, handler) { (this.handlers[name] ||= []).push(handler); }
   dispatch(name, event = {}) { (this.handlers[name] || []).forEach(handler => handler(Object.assign({ preventDefault() {}, stopPropagation() {}, key: "" }, event))); }
-  click() { if (!this.disabled) this.dispatch("click"); }
+  click() { if (this.tagName === "a") downloads += 1; if (!this.disabled) this.dispatch("click"); }
   select() {}
   querySelector(selector) { return this.querySelectorAll(selector)[0] || null; }
   querySelectorAll(selector) {
@@ -76,8 +77,16 @@ const rawResponse = {
 };
 let trajectoryResponse = rawResponse;
 const trajectoryQueries = [];
+let downloads = 0, downloadReads = 0, exportResponse;
+const leaseCloses = [], exportRequests = [], windowEvents = new EventTarget();
 
 const context = vm.createContext({
+  AbortController, Uint8Array, setTimeout, clearTimeout,
+  addEventListener: windowEvents.addEventListener.bind(windowEvents),
+  removeEventListener: windowEvents.removeEventListener.bind(windowEvents),
+  fetch() { throw new Error("read utility is supplied below"); },
+  RNAssistantResourceDownload: { read: async () => { downloadReads += 1; return new Uint8Array([80, 75]); } },
+  cancelBridgeRequest: () => Promise.resolve(),
   state: { activeChatId: "chat-1", chatRuns: {}, messages: [] },
   $: get,
   document: {
@@ -91,6 +100,8 @@ const context = vm.createContext({
   send(action, payload) {
     if (action === "getChatTrajectory") { trajectoryQueries.push(payload); return Promise.resolve(trajectoryResponse); }
     if (action === "getChatEventPayload") return Promise.resolve(payloadResponse);
+    if (action === "exportChatTrajectory") { exportRequests.push(payload); return Promise.resolve(exportResponse); }
+    if (action === "resourceDataClose") { leaseCloses.push(payload); return Promise.resolve({ closed: true }); }
     throw new Error("Unexpected bridge action: " + action);
   },
   setDiagnosticsTab() {},
@@ -192,7 +203,30 @@ function button(root, text) { return root.querySelectorAll("button").find(node =
   assert.match(rejected.textContent, /duplicate id/);
   assert.match(rejected.textContent, /<\/script><img onerror=1>/);
   console.log("PASS run journal integration: latest persisted run opens bounded causal rows with lazy exact JSON");
-  console.log("OK 6/6");
+  exportResponse = { chatId: "chat-1", contentType: "application/zip", fileName: "trace.zip", byteLength: 2,
+    bundleSha256: "b".repeat(64), data: { leaseId: "a".repeat(64), payload: { byteLength: 2, sha256: "b".repeat(64), contentType: "application/zip" } } };
+  get("exportTrajectoryButton").click();
+  await settle();
+  assert.equal(downloadReads, 1);
+  assert.equal(downloads, 1);
+  assert.equal(exportRequests[0].redactionMode, "metadata", "safe redaction default is unchanged");
+  assert.equal(leaseCloses.at(-1).workspaceId, "trajectory-export");
+  assert.equal(leaseCloses.at(-1).leaseId, "a".repeat(64));
+  assert.equal(/downloadBase64|window\.atob/.test(trajectorySource), false);
+  console.log("PASS trajectory export: one-off data-plane reader replaces base64 and closes the lease");
+
+  let resolveLate;
+  exportResponse = new Promise(resolve => { resolveLate = resolve; });
+  get("exportTrajectoryButton").click();
+  await settle();
+  context.state.activeChatId = "chat-2";
+  resolveLate({ chatId: "chat-1", data: { leaseId: "c".repeat(64) } });
+  await settle();
+  assert.equal(downloads, 1, "a late response for a different active chat never triggers a download");
+  assert.equal(leaseCloses.at(-1).chatId, "chat-1");
+  assert.equal(leaseCloses.at(-1).leaseId, "c".repeat(64));
+  console.log("PASS trajectory export: late owner response is closed without rebind or download");
+  console.log("OK 8/8");
 })().catch(error => {
   console.error(error);
   process.exitCode = 1;

@@ -29,9 +29,9 @@ namespace RNAssistant.Office.Services
             lock (_sync)
             {
                 EnsureActive(); Expire(); cancellationToken.ThrowIfCancellationRequested();
-                if (_access.Count + _openings.Count + _uploads.Count >= 64 || _uploads.Count >= 4)
+                if (LeaseCount >= 64 || _uploads.Count >= 4)
                     throw Error("RESOURCE_LEASE_LIMIT", "Only four uploads may be open at once.");
-                if (_uploads.Values.Sum(item => (long)item.Bytes.Length) + request.ByteLength > AttachmentStore.MaxMessageBytes)
+                if (TransferBytes + request.ByteLength > AttachmentStore.MaxMessageBytes)
                     throw Error("RESOURCE_BACKPRESSURE", "Uploads may reserve at most 50 MiB in total.");
                 // One exact-sized transient buffer, reserved before reading any body. No second
                 // durable store or CAS publication; completed drafts use the existing ingestion owner.
@@ -120,10 +120,13 @@ namespace RNAssistant.Office.Services
             }
         }
 
-        internal void CloseUploads(string chatId = null)
+        internal void CloseTransfers(string chatId = null)
         {
             lock (_sync)
+            {
                 foreach (var upload in _uploads.Values.Where(item => chatId == null || item.ChatId == chatId).ToArray()) CancelUpload(upload);
+                foreach (var download in _downloads.Values.Where(item => chatId == null || item.ChatId == chatId).ToArray()) CancelDownload(download);
+            }
         }
 
         private Upload EnterUpload(string leaseId, string chatId)
