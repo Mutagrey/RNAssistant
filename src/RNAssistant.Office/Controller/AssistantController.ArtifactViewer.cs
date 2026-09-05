@@ -1,3 +1,4 @@
+using System;
 using RNAssistant.Office.Contracts;
 using RNAssistant.Core.Services;
 using RNAssistant.Office.Services;
@@ -12,7 +13,9 @@ namespace RNAssistant.Office
             string resourceUri,
             string cursor, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken))
         {
-            return _artifactViewer.ReadPage(LoadSession(chatId), resourceUri, cursor, _resourceData, cancellationToken);
+            if (string.IsNullOrWhiteSpace(chatId))
+                throw new InvalidOperationException("RESOURCE_ACCESS_DENIED: an explicit chat is required for artifact text reads.");
+            return _artifactViewer.ReadPage(LoadAddressedSession(chatId), resourceUri, cursor, _resourceData, cancellationToken);
         }
 
         public ArtifactImageViewerDto ReadArtifactImage(string chatId, string resourceUri, CancellationToken cancellationToken = default(CancellationToken))

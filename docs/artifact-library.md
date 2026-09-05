@@ -228,9 +228,10 @@ are preview frames, never child artifacts or independently durable revisions.
   Agent run resource cards do not count a supporting HTML workspace as a second
   visible resource when the same run also exposes a chart artifact; HTML-only runs
   still expose the workspace.
-- Uploaded HTML: escaped source only by default. Preview requires explicit import
-  into the HTML workspace; untrusted upload source is never inserted into the main
-  DOM or granted network access.
+- Uploaded HTML: escaped source only, loaded on demand through the shared exact
+  text viewer/data plane. The original remains inert; rendered preview requires
+  explicit import into the HTML workspace. Untrusted upload source is never
+  inserted into the main DOM or granted network access.
 - HTML workspace: sandboxed rendered preview, exact HTML/CSS/JS editors,
   ResourceRef bindings, revision/branch history and export. Hosted network access
   retains its explicit allowlist. The unified [Resource Fabric](resource-fabric.md)
@@ -277,8 +278,23 @@ kind before granting full-source actions. Page state is ephemeral, bounded to ei
 selected resources and cleared on chat switch; it is not an event, artifact revision
 or persisted index. Image reads additionally require one exact source-message /
 attachment identity, matching kind/MIME/hash/length and a recomputed binary SHA-256
-before the payload reaches WebView. HTML/JSON are rejected by the generic text
-bridge and remain with their specialized viewer owners.
+before the payload reaches WebView. Uploaded HTML originals use the same inert text
+viewer with exact retained attachment evidence, including when a title resembles
+Markdown. Executable HTML workspaces and JSON remain with their specialized owners.
+
+The uploaded-HTML source bridge/DTO and its separate eight-entry preview cache are
+removed. Source reads return metadata/leases only; bounded pages, exact extracted
+text hashes, continuation checks and lease cleanup share `ArtifactViewerService`
+and the existing viewer cache. Text reads and imports require an explicit chat,
+without selecting another chat or falling back to the active one.
+`UploadedHtmlResourceService` imports through exact Gateway text pages, not a direct
+attachment callback. Retained text evidence and the existing 300,000-character
+import limit are checked before hydration; contiguous pages, total length and the
+complete extracted-text SHA-256 are verified before any workspace revision is
+created. Missing, corrupted or truncated text cannot be imported as empty/partial
+content. Original binary identity, source provenance, target-path collision and
+active-workspace guards remain unchanged. Real Windows/WebView source/import
+qualification remains open.
 
 Artifact detail is preview-first. Plan/Markdown renders as a document, Task List as
 goal/progress/steps and image as media; domain JSON remains a domain viewer. Generic

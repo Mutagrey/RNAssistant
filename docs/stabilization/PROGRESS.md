@@ -177,7 +177,7 @@ Checks: attachments 22/22; shared table/binary leases 2/2, typed ingestion bridg
 WebView policy/cancellation 1/1, chat editing 5/5, HTML import 1/1 and source inclusion
 1/1 — 33/33 host-neutral. UI upload 6/6 and ingestion ordering 4/4 also pass.
 Version-format and diff checks pass; no full harness or Office/VSTO validation.
-Trajectory-export slice (2026-09-05): metadata-only bridge setup replaces the ZIP
+Trajectory-export checkpoint `a6be9d3`: metadata-only bridge setup replaces the ZIP
 base64 body/decoder. The existing exporter captures one validated event snapshot;
 the shared data plane reserves capacity before source validation/production and
 serves exact sequential 256 KiB chunks. Two download slots share the 50 MiB transfer
@@ -191,6 +191,20 @@ table/binary leases 2/2; WebView policy 1/1 and source inclusion 1/1 — 12/12
 host-neutral. UI download 6/6 and trajectory viewer/export 8/8 also pass.
 Version-format, JavaScript syntax and diff checks pass; no full harness or
 Office/VSTO validation.
+Uploaded-HTML source slice (2026-09-05): original-source preview now uses the shared
+ArtifactViewerService/Gateway/data plane and bounded exact text-page cache. Its
+separate text-body bridge/DTO, preview cache and UI wrappers are removed. HTML stays
+inert until explicit workspace import. Import reads exact Gateway pages rather than
+an attachment callback; retained text/byte bounds are checked before hydration,
+and contiguous complete content plus extracted-text SHA-256 before workspace
+mutation. Original binary identity, provenance and active-workspace/path guards
+remain. Text reads/import require an explicit addressed chat, with no active-chat
+fallback. No new store, resource identity or compatibility path was introduced.
+Checks: HTML source/import 1/1, artifact viewer 3/3, typed import/viewer bridges 2/2,
+empty exact text 1/1 and source inclusion 1/1 — 8/8 host-neutral. Web source/import
+5/5, artifact JSON 8/8, text/media viewer 10/10, Library projection 5/5, Plan 8/8 and
+HTML export 11/11 — 47/47. Version-format, JavaScript syntax and diff checks pass;
+no full harness or Office/VSTO validation. Windows source/import gates remain open.
 Next host-neutral contour: remaining domain/authoring read consumers and other bulk
 upload/export transport through the existing Gateway/data plane, then finer Excel
 coverage/named resources and binary/raw view negotiation in MASTER order.

@@ -20,12 +20,12 @@ namespace RNAssistant.Harness
             WithTempPaths(paths =>
             {
                 var session = NewSession(FakeOfficeAdapter.ForHost("Word"));
-                var sourceText = "<!doctype html><main data-safe=\"yes\">" + new string('x', 33000) + "</main>";
+                var sourceText = "<!doctype html><main data-safe=\"yes\">Пример🙂" + new string('x', 33000) + "</main>";
                 var attachmentStore = new AttachmentStore(paths);
                 var attachment = attachmentStore.Import(
                     "landing.html",
                     "text/html; charset=utf-8",
-                    Encoding.UTF8.GetBytes(sourceText),
+                    Encoding.UTF8.GetPreamble().Concat(Encoding.UTF8.GetBytes(sourceText)).ToArray(),
                     session.Id);
                 var message = new ChatMessage
                 {
@@ -42,19 +42,61 @@ namespace RNAssistant.Harness
                 var sourceMetadata = sourceArtifact.MetadataJson;
                 var sourceHash = sourceArtifact.ContentSha256;
                 var sourceArtifactCount = session.Artifacts.Count;
-                var service = new UploadedHtmlResourceService(
-                    new ResourceGatewayService(null, attachmentStore.ReadExtractedText),
-                    attachmentStore.ReadExtractedText);
-
-                var preview = service.Preview(session, sourceUri);
-                AssertEqual(sourceUri, preview.SourceResourceUri, "preview retains the exact source URI");
-                AssertEqual(32000, preview.ReturnedCharacters, "uploaded HTML preview is bounded");
-                AssertEqual(sourceText.Length, preview.TotalCharacters, "preview reports the complete source length");
-                AssertTrue(preview.Truncated && !preview.Complete, "bounded source is explicitly labelled truncated");
+                var reads = 0;
+                string replacement = null;
+                var gateway = new ResourceGatewayService(null, (item, max) =>
+                {
+                    reads++;
+                    return replacement ?? attachmentStore.ReadExtractedText(item, max);
+                });
+                var service = new UploadedHtmlResourceService(gateway);
+                var viewer = new ArtifactViewerService(gateway);
+                using (var plane = new ResourceDataPlaneService(gateway))
+                {
+                    var preview = viewer.ReadPage(session, sourceUri, null, plane);
+                    AssertEqual(sourceUri, preview.ResourceUri, "preview retains the exact source URI");
+                    AssertEqual("text", preview.ViewerKind, "uploaded HTML is inert text, never rendered HTML or Markdown");
+                    AssertEqual(attachment.ExtractedTextSha256, preview.ContentSha256, "preview pins the extracted text, not binary hash");
+                    AssertTrue(preview.ContentSha256 != sourceHash, "UTF-8 BOM distinguishes original and text payloads");
+                    AssertTrue(JObject.FromObject(preview)["text"] == null, "preview bridge has no text body");
+                    AssertEqual(32000, preview.ReturnedCharacters, "uploaded HTML preview is bounded");
+                    AssertEqual(sourceText.Length, preview.TotalCharacters, "preview reports the complete source length");
+                    AssertTrue(preview.Truncated && !preview.Complete, "bounded source is explicitly labelled truncated");
+                    var firstText = ReadViewerBatch(plane, preview);
+                    plane.Close(session.Id, "viewer", preview.Data.LeaseId);
+                    var next = viewer.ReadPage(session, sourceUri, preview.NextCursor, plane);
+                    AssertEqual(32000, next.Offset, "HTML continuation is contiguous and exact");
+                    AssertEqual(sourceText, firstText + ReadViewerBatch(plane, next), "shared data plane preserves exact decoded source");
+                    plane.Close(session.Id, "viewer", next.Data.LeaseId);
+                    RuntimeThrows<InvalidOperationException>(() => viewer.ReadPage(new ChatSession { Id = "other" }, sourceUri, null, plane));
+                }
                 AssertEqual(sourceArtifactCount, session.Artifacts.Count, "preview creates no artifact revision");
                 AssertEqual(0, session.HtmlWorkspace.Files.Count, "preview never inserts uploaded HTML into the workspace");
 
+                var beforeRejected = reads;
+                attachment.TextTruncated = true;
+                RuntimeThrows<InvalidOperationException>(() => service.Import(session, sourceUri, "", "truncated.html"));
+                attachment.TextTruncated = false;
+                attachment.ExtractedCharCount = 300001;
+                RuntimeThrows<InvalidOperationException>(() => service.Import(session, sourceUri, "", "oversized.html"));
+                attachment.ExtractedCharCount = sourceText.Length;
+                var textBytes = attachment.ExtractedTextByteLength;
+                attachment.ExtractedTextByteLength = 2L * 1024 * 1024;
+                RuntimeThrows<InvalidOperationException>(() => service.Import(session, sourceUri, "", "oversized-payload.html"));
+                attachment.ExtractedTextByteLength = null;
+                RuntimeThrows<InvalidOperationException>(() => service.Import(session, sourceUri, "", "unretained.html"));
+                attachment.ExtractedTextByteLength = textBytes;
+                AssertEqual(beforeRejected, reads, "truncated, oversized and unretained sources fail before body hydration");
+                replacement = sourceText.Substring(0, sourceText.Length - 1) + "!";
+                RuntimeThrows<InvalidOperationException>(() => service.Import(session, sourceUri, "", "corrupt.html"));
+                replacement = string.Empty;
+                RuntimeThrows<InvalidOperationException>(() => service.Import(session, sourceUri, "", "missing.html"));
+                replacement = null;
+                AssertEqual(sourceArtifactCount, session.Artifacts.Count, "failed text integrity appends no revision");
+                AssertEqual(0, session.HtmlWorkspace.Files.Count, "failed text integrity mutates no workspace file");
+                var beforeImport = reads;
                 var imported = service.Import(session, sourceUri, string.Empty, "pages/landing.html");
+                AssertEqual(2, reads - beforeImport, "import consumes exact bounded Gateway pages, not an attachment callback");
                 AssertEqual("pages/landing.html", imported.ImportedPath, "explicit import target path");
                 AssertEqual(sourceUri, imported.ImportedFromResourceUri, "import result retains exact provenance");
                 AssertEqual(sourceText, session.HtmlWorkspace.Files.Single().Content, "import uses the complete decoded source");

@@ -127,9 +127,6 @@
       importUploadedHtml: function (request) {
         return workspaceActions && workspaceActions.importUploadedHtml(request);
       },
-      loadUploadedHtmlSource: function (request) {
-        return workspaceActions && workspaceActions.loadUploadedHtmlSource(request);
-      },
       loadArtifactImage: function (request) {
         return workspaceActions && workspaceActions.loadArtifactImage(request);
       },
@@ -147,9 +144,6 @@
       },
       loadArtifactViewerFull: function (request) {
         return workspaceActions && workspaceActions.loadArtifactViewerFull(request);
-      },
-      uploadedHtmlPreview: function (uri) {
-        return workspaceActions && workspaceActions.uploadedHtmlPreview(uri);
       },
       collectionItems: function (collectionId) {
         return typeof window.artifactCollectionItems === "function"

@@ -106,9 +106,7 @@ namespace RNAssistant.Office
                 attachment => _attachmentStore.ReadBytes(attachment));
             _resourceData = new ResourceDataPlaneService(_toolExecutor.ResourceGateway, ResourceOwnerIsActive);
             _resourceDataRouter = new ResourceDataRouter(_resourceData);
-            _uploadedHtmlResources = new UploadedHtmlResourceService(
-                _toolExecutor.ResourceGateway,
-                (attachment, maxChars) => _attachmentStore.ReadExtractedText(attachment, maxChars));
+            _uploadedHtmlResources = new UploadedHtmlResourceService(_toolExecutor.ResourceGateway);
             _artifactViewer = new ArtifactViewerService(
                 _toolExecutor.ResourceGateway,
                 attachment => _attachmentStore.ReadBytes(attachment));

@@ -41,21 +41,6 @@
     var htmlImportPending = false;
     state.htmlWorkspaceExportPending = false;
 
-    function uploadedHtmlPreviewCache() {
-      state.uploadedHtmlSourcePreviews = state.uploadedHtmlSourcePreviews || {};
-      return state.uploadedHtmlSourcePreviews;
-    }
-
-    function cacheUploadedHtmlPreview(uri, preview) {
-      var cache = uploadedHtmlPreviewCache();
-      if (!cache[uri] && Object.keys(cache).length >= 8) delete cache[Object.keys(cache)[0]];
-      cache[uri] = preview;
-    }
-
-    function uploadedHtmlPreview(uri) {
-      return uploadedHtmlPreviewCache()[uri] || null;
-    }
-
     async function refreshPlan(planId, chatId) {
       if (state.activeChatId !== chatId) return false;
       var response = await options.send("selectChat", { chatId: chatId });
@@ -224,52 +209,6 @@
         return options.submitPlanHandoff(exactUri) !== false;
       } finally {
         planHandoffPending = false;
-      }
-    }
-
-    async function loadUploadedHtmlSource(request) {
-      request = request || {};
-      var uri = request.sourceResourceUri || "";
-      if (state.bridgeUnavailable || !uri) return false;
-      var current = uploadedHtmlPreview(uri);
-      if (current && (current.status === "loading" || current.status === "ready")) return current.status === "ready";
-      var chatId = state.activeChatId;
-      cacheUploadedHtmlPreview(uri, { status: "loading" });
-      if (options.render) options.render();
-      try {
-        var response = await options.send("getUploadedHtmlSourcePreview", {
-          chatId: chatId,
-          sourceResourceUri: uri
-        });
-        if (state.activeChatId !== chatId) {
-          delete uploadedHtmlPreviewCache()[uri];
-          return false;
-        }
-        var returnedUri = value(response, "SourceResourceUri", "sourceResourceUri", "") || "";
-        if (returnedUri !== uri) throw new Error("Источник HTML изменился; preview отклонён.");
-        cacheUploadedHtmlPreview(uri, {
-          status: "ready",
-          sourceResourceUri: returnedUri,
-          text: value(response, "Text", "text", "") || "",
-          returnedCharacters: Number(value(response, "ReturnedCharacters", "returnedCharacters", 0) || 0),
-          totalCharacters: Number(value(response, "TotalCharacters", "totalCharacters", 0) || 0),
-          complete: value(response, "Complete", "complete", false) === true,
-          truncated: value(response, "Truncated", "truncated", false) === true
-        });
-        if (options.render) options.render();
-        return true;
-      } catch (error) {
-        if (state.activeChatId !== chatId) {
-          delete uploadedHtmlPreviewCache()[uri];
-          return false;
-        }
-        cacheUploadedHtmlPreview(uri, {
-          status: "error",
-          message: error.detail || error.message || "Исходник HTML недоступен."
-        });
-        options.log(error.detail || error.message, "error");
-        if (options.render) options.render();
-        return false;
       }
     }
 
@@ -541,14 +480,12 @@
       loadArtifactViewer: artifactViewers.loadArtifactViewer,
       loadArtifactViewerFull: artifactViewers.loadArtifactViewerFull,
       selectArtifactPdfPage: artifactViewers.selectArtifactPdfPage,
-      loadUploadedHtmlSource: loadUploadedHtmlSource,
       recoverRevision: recoverRevision,
       refreshAll: function () { return refreshData("", "all", true); },
       refreshAuto: function () { return refreshData("", "on_preview", false); },
       redo: function () { return restore("redo"); },
       restorePlanRevision: restorePlanRevision,
       saveSelection: saveSelection,
-      uploadedHtmlPreview: uploadedHtmlPreview,
       undo: function () { return restore("undo"); }
     };
   }

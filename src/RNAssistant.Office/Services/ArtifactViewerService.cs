@@ -170,22 +170,29 @@ namespace RNAssistant.Office.Services
 
             var descriptor = _gateway.Resolve(session, resourceUri).Resource;
             var viewerKind = ViewerKind(descriptor, artifact);
-            ChatAttachment exactPdfAttachment = null;
+            ChatAttachment exactTextAttachment = null;
+            if (IsUploadedHtmlSource(artifact))
+            {
+                exactTextAttachment = ChatArtifactResourceProvider.FindExactAttachment(session, artifact);
+                if (exactTextAttachment == null || !string.Equals(exactTextAttachment.Kind, "text", StringComparison.OrdinalIgnoreCase) ||
+                    string.IsNullOrWhiteSpace(exactTextAttachment.ExtractedTextSha256) || !exactTextAttachment.ExtractedTextByteLength.HasValue)
+                    throw new InvalidOperationException("Uploaded HTML requires exact retained text evidence.");
+            }
             if (string.Equals(viewerKind, ArtifactViewerKinds.Pdf, StringComparison.Ordinal))
             {
-                exactPdfAttachment = _pdfViewer.ValidateTextRead(session, artifact, descriptor);
+                exactTextAttachment = _pdfViewer.ValidateTextRead(session, artifact, descriptor);
             }
             ArtifactViewerPageDto metadata = null;
             var data = dataPlane.Open(session, "viewer",
                 new ResourceRef(resourceUri, revision.ToString(CultureInfo.InvariantCulture)), ResourceRepresentations.Text,
                 cancellationToken: cancellationToken, initialCursor: cursor,
-                validate: result => { metadata = ValidatePage(session, resourceUri, descriptor, artifact, viewerKind, exactPdfAttachment, result); });
+                validate: result => { metadata = ValidatePage(session, resourceUri, descriptor, artifact, viewerKind, exactTextAttachment, result); });
             metadata.Data = data;
             return metadata;
         }
 
         private static ArtifactViewerPageDto ValidatePage(ChatSession session, string resourceUri, ResourceDescriptor descriptor,
-            ChatArtifact artifact, string viewerKind, ChatAttachment exactPdfAttachment, ResourceReadResult result)
+            ChatArtifact artifact, string viewerKind, ChatAttachment exactTextAttachment, ResourceReadResult result)
         {
             if (result == null || !result.RawContentIncluded || result.Resource == null ||
                 result.Resource.Reference == null ||
@@ -206,7 +213,7 @@ namespace RNAssistant.Office.Services
                 throw new InvalidOperationException("Artifact viewer received inconsistent exact-read evidence.");
             }
 
-            var attachment = exactPdfAttachment ?? ChatArtifactResourceProvider.FindExactAttachment(session, artifact);
+            var attachment = exactTextAttachment ?? ChatArtifactResourceProvider.FindExactAttachment(session, artifact);
             if (string.Equals(artifact.Kind, ChatArtifactKinds.Attachment, StringComparison.OrdinalIgnoreCase) &&
                 attachment == null)
             {
@@ -249,6 +256,9 @@ namespace RNAssistant.Office.Services
 
         private static string ViewerKind(ResourceDescriptor descriptor, ChatArtifact artifact)
         {
+            // An uploaded original is always inert source, even when its title also
+            // resembles Markdown. Executable workspace previews remain separate.
+            if (IsUploadedHtmlSource(artifact)) return ArtifactViewerKinds.Text;
             var mimeType = NormalizeMimeType(descriptor == null ? null : descriptor.MimeType);
             var kind = artifact == null ? string.Empty : (artifact.Kind ?? string.Empty).Trim().ToLowerInvariant();
             var extension = Path.GetExtension(descriptor == null ? null : descriptor.Title ?? string.Empty) ?? string.Empty;
@@ -278,6 +288,16 @@ namespace RNAssistant.Office.Services
                 return ArtifactViewerKinds.Text;
             }
             throw new InvalidOperationException("Artifact has no admitted text/source viewer representation.");
+        }
+
+        private static bool IsUploadedHtmlSource(ChatArtifact artifact)
+        {
+            if (artifact == null || (!string.Equals(artifact.Kind, ChatArtifactKinds.Attachment, StringComparison.OrdinalIgnoreCase) &&
+                !string.Equals(artifact.Kind, ChatArtifactKinds.File, StringComparison.OrdinalIgnoreCase))) return false;
+            var extension = Path.GetExtension(artifact.Title ?? string.Empty);
+            return NormalizeMimeType(artifact.MimeType) == "text/html" ||
+                string.Equals(extension, ".html", StringComparison.OrdinalIgnoreCase) ||
+                string.Equals(extension, ".htm", StringComparison.OrdinalIgnoreCase);
         }
 
         internal static string NormalizeMimeType(string value)

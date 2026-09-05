@@ -579,17 +579,6 @@ namespace RNAssistant.Office
         public HtmlWorkspaceResponse GetHtmlWorkspace(string chatId = null) { return new HtmlWorkspaceResponse { ActiveChatId = chatId ?? string.Empty, Workspace = HtmlWorkspaceDto.From(null) }; }
         public HtmlWorkspaceResponse SaveHtmlWorkspaceFile(string chatId, string path, string kind, string content, bool setActive) { return new HtmlWorkspaceResponse { ActiveChatId = chatId ?? string.Empty, Workspace = HtmlWorkspaceDto.From(new HtmlWorkspace { ActiveFileId = path ?? string.Empty }) }; }
         public HtmlWorkspaceResponse SaveHtmlWorkspaceData(string chatId, string name, string json) { return new HtmlWorkspaceResponse { ActiveChatId = chatId ?? string.Empty, Workspace = HtmlWorkspaceDto.From(null) }; }
-        public UploadedHtmlSourcePreviewDto GetUploadedHtmlSourcePreview(string chatId, string sourceResourceUri)
-        {
-            LastChatId = chatId;
-            LastHtmlSourceResourceUri = sourceResourceUri;
-            return new UploadedHtmlSourcePreviewDto
-            {
-                SourceResourceUri = sourceResourceUri,
-                Text = "<main>preview</main>",
-                Complete = true
-            };
-        }
         public ArtifactViewerPageDto ReadArtifactViewerPage(string chatId, string resourceUri, string cursor,
             System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken))
         {

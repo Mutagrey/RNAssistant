@@ -404,12 +404,6 @@ namespace RNAssistant.Office.WebView
                             htmlData.Name,
                             htmlData.Json);
                         break;
-                    case "getUploadedHtmlSourcePreview":
-                        var uploadedHtmlSource = Payload<UploadedHtmlSourcePayload>(payload);
-                        responsePayload = _controller.GetUploadedHtmlSourcePreview(
-                            uploadedHtmlSource.ChatId,
-                            uploadedHtmlSource.SourceResourceUri);
-                        break;
                     case "readArtifactViewerPage":
                         var artifactViewerPage = Payload<ArtifactViewerPagePayload>(payload);
                         responsePayload = _controller.ReadArtifactViewerPage(

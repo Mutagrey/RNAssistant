@@ -68,15 +68,15 @@ vm.runInContext(source, context, { filename: "app-html-workspace-artifacts.js" }
   assert.ok(index.includes("app-artifacts.js?v=chart-resource-card-20260903-1"), "artifact cards use the chart resource cache key");
   assert.ok(index.includes("app-artifact-viewer-actions.js?v=artifact-gallery-20260902-1"),
     "artifact actions have the current artifact cache key");
-  assert.ok(index.includes("app-html-workspace-artifacts.js?v=artifact-chart-preview-20260903-1"),
+  assert.ok(index.includes("app-html-workspace-artifacts.js?v=html-source-resource-20260905-1"),
     "artifact detail has the current artifact cache key");
   assert.ok(index.includes("app-html-workspace-editor.js?v=ui-lazy-20260903-1"));
   ["app-task-list.js", "app-agent-activity.js"].forEach(asset => {
     assert.ok(index.includes(asset + "?v=planning-intents-20260902-1"), asset + " has the current planning-intent cache key");
   });
-  assert.ok(index.includes("app-html-workspace-actions.js?v=resource-export-20260905-1"),
+  assert.ok(index.includes("app-html-workspace-actions.js?v=html-source-resource-20260905-1"),
     "app-html-workspace-actions.js has the current preview cache key");
-  assert.ok(index.includes("app-html-workspace.js?v=resource-export-20260905-1"),
+  assert.ok(index.includes("app-html-workspace.js?v=html-source-resource-20260905-1"),
     "app-html-workspace.js has the current preview cache key");
   assert.ok(index.includes("app-html-workspace.css?v=html-export-20260831-1"), "Plan/HTML actions have the matching CSS cache key");
   assert.match(workspace, /switchChatMode:\s*function\s*\(mode\)/);

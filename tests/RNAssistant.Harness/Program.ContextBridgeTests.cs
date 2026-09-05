@@ -1084,11 +1084,13 @@ namespace RNAssistant.Harness
             var token = BridgeToken(bridge);
             const string sourceUri = "rna://chat/chat-html/artifact/upload-html/revision/1";
             var preview = bridge.HandleMessageAsync(
-                "{\"id\":\"html-preview\",\"type\":\"getUploadedHtmlSourcePreview\",\"bridgeToken\":\"" + token +
-                "\",\"payload\":{\"chatId\":\"chat-html\",\"sourceResourceUri\":\"" + sourceUri + "\"}}")
+                "{\"id\":\"html-preview\",\"type\":\"readArtifactViewerPage\",\"bridgeToken\":\"" + token +
+                "\",\"payload\":{\"chatId\":\"chat-html\",\"resourceUri\":\"" + sourceUri + "\"}}")
                 .GetAwaiter().GetResult();
             AssertTrue(JObject.Parse(preview)["ok"].Value<bool>(), "uploaded HTML preview bridge response ok");
-            AssertEqual(sourceUri, controller.LastHtmlSourceResourceUri, "preview forwards the exact source URI");
+            AssertEqual(sourceUri, controller.LastArtifactViewerResourceUri, "preview uses the shared exact viewer request");
+            AssertTrue(JObject.Parse(preview)["payload"]["text"] == null && JObject.Parse(preview)["payload"]["data"]["leaseId"] != null,
+                "HTML source setup carries metadata only, with bytes on the shared data plane");
 
             var imported = bridge.HandleMessageAsync(
                 "{\"id\":\"html-import\",\"type\":\"importUploadedHtmlToWorkspace\",\"bridgeToken\":\"" + token +

@@ -102,20 +102,15 @@ namespace RNAssistant.Office
             });
         }
 
-        public UploadedHtmlSourcePreviewDto GetUploadedHtmlSourcePreview(
-            string chatId,
-            string sourceResourceUri)
-        {
-            return _uploadedHtmlResources.Preview(LoadSession(chatId), sourceResourceUri);
-        }
-
         public HtmlWorkspaceResponse ImportUploadedHtmlToWorkspace(
             string chatId,
             string sourceResourceUri,
             string expectedActiveHtmlArtifactId,
             string targetPath)
         {
-            return WithReservedSession(LoadSession(chatId), session =>
+            if (string.IsNullOrWhiteSpace(chatId))
+                throw new InvalidOperationException("RESOURCE_ACCESS_DENIED: an explicit chat is required for HTML import.");
+            return WithReservedSession(LoadAddressedSession(chatId), session =>
             {
                 var imported = _toolExecutor.MutateLocalResources(session, "common.html_workspace_import",
                     new Dictionary<string, object> { ["source"] = sourceResourceUri, ["expected"] = expectedActiveHtmlArtifactId, ["path"] = targetPath },

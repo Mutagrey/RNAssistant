@@ -2,56 +2,25 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
+using System.Text;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
 using RNAssistant.Core.Models;
 using RNAssistant.Core.Services;
-using RNAssistant.Office.Contracts;
+using RNAssistant.Core.Tools;
 using RNAssistant.Office.Tools;
 
 namespace RNAssistant.Office.Services
 {
     internal sealed class UploadedHtmlResourceService
     {
-        private const int MaximumPreviewCharacters = 32000;
         private const int MaximumImportCharacters = 300000;
 
         private readonly ResourceGatewayService _gateway;
-        private readonly Func<ChatAttachment, int, string> _readAttachmentText;
 
-        public UploadedHtmlResourceService(
-            ResourceGatewayService gateway,
-            Func<ChatAttachment, int, string> readAttachmentText)
+        public UploadedHtmlResourceService(ResourceGatewayService gateway)
         {
             _gateway = gateway ?? throw new ArgumentNullException("gateway");
-            _readAttachmentText = readAttachmentText ?? throw new ArgumentNullException("readAttachmentText");
-        }
-
-        public UploadedHtmlSourcePreviewDto Preview(ChatSession session, string sourceResourceUri)
-        {
-            var source = Resolve(session, sourceResourceUri);
-            var selection = _gateway.Read(session, new ResourceReadRequest
-            {
-                Reference = ChatResourceUri.CreateArtifactRevision(session, source.Artifact),
-                Representation = ResourceRepresentations.Text,
-                MaxChars = MaximumPreviewCharacters
-            });
-            var result = selection == null ? null : selection.Result;
-            if (result == null || !result.RawContentIncluded)
-            {
-                throw new InvalidOperationException("Uploaded HTML source is unavailable.");
-            }
-            return new UploadedHtmlSourcePreviewDto
-            {
-                SourceResourceUri = source.ResourceUri,
-                MimeType = source.Artifact.MimeType,
-                ContentSha256 = source.Artifact.ContentSha256,
-                Text = result.Text ?? string.Empty,
-                ReturnedCharacters = result.ReturnedCharacters,
-                TotalCharacters = result.TotalCharacters,
-                Complete = result.Complete,
-                Truncated = result.Truncated
-            };
         }
 
         public UploadedHtmlImportResult Import(
@@ -87,21 +56,7 @@ namespace RNAssistant.Office.Services
             {
                 throw new InvalidOperationException("HTML workspace already contains this path; choose a new import path.");
             }
-            if (source.Attachment.TextTruncated)
-            {
-                throw new InvalidOperationException("Uploaded HTML extraction is truncated and cannot be imported exactly.");
-            }
-            var content = _readAttachmentText(source.Attachment, MaximumImportCharacters + 1) ?? string.Empty;
-            if (content.Length > MaximumImportCharacters || source.Attachment.ExtractedCharCount > MaximumImportCharacters)
-            {
-                throw new InvalidOperationException("Uploaded HTML is too large to import. Limit is 300000 characters.");
-            }
-            if (source.Attachment.ExtractedCharCount > 0 &&
-                source.Attachment.ExtractedCharCount != content.Length)
-            {
-                throw new InvalidOperationException("Complete uploaded HTML source is unavailable; import was not performed.");
-            }
-
+            var content = ReadSource(session, source);
             var imported = HtmlWorkspaceToolService.UpsertFile(
                 session,
                 normalizedPath,
@@ -129,6 +84,54 @@ namespace RNAssistant.Office.Services
                 ImportedFromResourceUri = source.ResourceUri,
                 RevisionArtifactId = revision.Id
             };
+        }
+
+        private string ReadSource(ChatSession session, UploadedHtmlSource source)
+        {
+            var expectedLength = source.Attachment.ExtractedCharCount;
+            var expectedHash = source.Attachment.ExtractedTextSha256;
+            if (source.Attachment.TextTruncated || expectedLength < 0 || string.IsNullOrWhiteSpace(expectedHash) ||
+                !source.Attachment.ExtractedTextByteLength.HasValue)
+                throw new InvalidOperationException("Complete uploaded HTML text evidence is required for import.");
+            if (expectedLength > MaximumImportCharacters)
+                throw new InvalidOperationException("Uploaded HTML is too large to import. Limit is 300000 characters.");
+            if (source.Attachment.ExtractedTextByteLength.Value < 0 ||
+                source.Attachment.ExtractedTextByteLength.Value > (long)expectedLength * 4)
+                throw new InvalidOperationException("Uploaded HTML text byte evidence exceeds its character bound.");
+
+            var reference = ChatResourceUri.CreateArtifactRevision(session, source.Artifact);
+            var text = new StringBuilder(expectedLength);
+            string cursor = null;
+            do
+            {
+                var read = _gateway.Read(session, new ResourceReadRequest
+                {
+                    Reference = reference, Representation = ResourceRepresentations.Text,
+                    MaxChars = 32000, Cursor = cursor
+                })?.Result;
+                if (read?.Resource?.Reference == null || read.Resource.Reference.Uri != reference.Uri ||
+                    read.Resource.Reference.Revision != reference.Revision || !read.RawContentIncluded ||
+                    read.Representation != ResourceRepresentations.Text || read.Text == null ||
+                    !string.Equals(read.ContentSha256, expectedHash, StringComparison.OrdinalIgnoreCase) ||
+                    read.Offset != text.Length || read.ReturnedCharacters != read.Text.Length ||
+                    read.ReturnedCharacters > 32000 || read.TotalCharacters != expectedLength ||
+                    read.ReturnedCharacters > expectedLength - text.Length)
+                    throw new InvalidOperationException("RESOURCE_SNAPSHOT_UNAVAILABLE: uploaded HTML text evidence changed or is incomplete.");
+                text.Append(read.Text);
+                if (read.Complete)
+                {
+                    if (read.Truncated || !string.IsNullOrEmpty(read.NextCursor) || text.Length != expectedLength)
+                        throw new InvalidOperationException("RESOURCE_SNAPSHOT_UNAVAILABLE: uploaded HTML text is incomplete.");
+                    break;
+                }
+                if (read.ReturnedCharacters == 0 || text.Length >= expectedLength || string.IsNullOrEmpty(read.NextCursor))
+                    throw new InvalidOperationException("RESOURCE_SNAPSHOT_UNAVAILABLE: uploaded HTML continuation is incomplete.");
+                cursor = read.NextCursor;
+            } while (true);
+            var content = text.ToString();
+            if (!string.Equals(TextPatternEngine.Sha256(content), expectedHash, StringComparison.OrdinalIgnoreCase))
+                throw new InvalidOperationException("RESOURCE_SNAPSHOT_UNAVAILABLE: uploaded HTML text failed integrity verification.");
+            return content;
         }
 
         private UploadedHtmlSource Resolve(ChatSession session, string sourceResourceUri)

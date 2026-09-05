@@ -75,6 +75,7 @@
   }
 
   function artifactViewerKind(artifact) {
+    if (isUploadedHtmlArtifact(artifact)) return "text";
     var mediaType = artifactMimeType(artifact).split(";", 1)[0].trim();
     var kind = artifactKind(artifact);
     var title = String(prop(artifact, "Title", "title", "") || "");
@@ -419,11 +420,6 @@
       (mediaType === "text/html" || htmlName);
   }
 
-  function uploadedHtmlResourceUri(artifact) {
-    var exact = libraryRevision(artifact);
-    return prop(exact, "ResourceUri", "resourceUri", prop(artifact, "ResourceUri", "resourceUri", "")) || "";
-  }
-
   function uploadedHtmlTargetPath(artifact) {
     var title = String(prop(artifact, "Title", "title", "index.html") || "index.html").split(/[\\/]/).pop();
     return /\.html?$/i.test(title) ? title : "index.html";
@@ -431,7 +427,7 @@
 
   function appendUploadedHtml(root, artifact, actions) {
     actions = actions || {};
-    var uri = uploadedHtmlResourceUri(artifact);
+    var uri = exactArtifactUri(artifact);
     var notice = document.createElement("div");
     notice.className = "artifact-inert-html-note";
     notice.textContent = "Загруженный HTML инертен: до явного импорта показывается только экранированный исходник.";
@@ -439,16 +435,16 @@
 
     var actionBox = document.createElement("div");
     actionBox.className = "artifact-inert-html-actions";
-    var preview = typeof actions.uploadedHtmlPreview === "function" ? actions.uploadedHtmlPreview(uri) : null;
+    var viewer = typeof actions.artifactViewerState === "function" ? actions.artifactViewerState(uri) : null;
     var load = document.createElement("button");
     load.type = "button";
     load.className = "secondary";
-    load.textContent = preview && preview.status === "loading" ? "Загружаю…" : "Показать исходник";
-    load.disabled = !uri || !!preview && (preview.status === "loading" || preview.status === "ready") ||
-      typeof actions.loadUploadedHtmlSource !== "function";
+    load.textContent = viewer && viewer.status === "loading" ? "Загружаю…" : "Показать исходник";
+    load.disabled = !uri || !!viewer && (viewer.status === "loading" || viewer.status === "ready") ||
+      typeof actions.loadArtifactViewer !== "function" || !!state.bridgeUnavailable;
     load.addEventListener("click", function () {
-      if (typeof actions.loadUploadedHtmlSource === "function") {
-        actions.loadUploadedHtmlSource({ sourceResourceUri: uri });
+      if (typeof actions.loadArtifactViewer === "function") {
+        actions.loadArtifactViewer({ resourceUri: uri });
       }
     });
     actionBox.appendChild(load);
@@ -468,21 +464,7 @@
     actionBox.appendChild(importButton);
     root.appendChild(actionBox);
 
-    if (preview && preview.status === "error") {
-      var error = document.createElement("div");
-      error.className = "artifact-detail-error";
-      error.textContent = preview.message || "Исходник HTML недоступен.";
-      root.appendChild(error);
-      return;
-    }
-    if (!preview || preview.status !== "ready" || preview.sourceResourceUri !== uri) return;
-    appendContentLabel(root, preview.truncated
-      ? "HTML source · ограниченный preview " + preview.returnedCharacters + " из " + preview.totalCharacters + " символов"
-      : "HTML source · полный");
-    var source = document.createElement("pre");
-    source.className = "artifact-text-viewer artifact-html-source-viewer";
-    source.textContent = preview.text || "";
-    root.appendChild(source);
+    if (viewer) appendTypedArtifactViewer(root, artifact, actions);
   }
 
   function versionLabel(artifact) {

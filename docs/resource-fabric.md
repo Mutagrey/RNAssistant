@@ -259,6 +259,8 @@ binding tool IDs/arguments/transforms/current JSON; independent model history/re
 assembly; free-summary resource authority; inline large pending payload duplication;
 viewer text/base64 bridge transport; attachment base64 staging bridge and decoder;
 trajectory ZIP base64 bridge body and decoder;
+uploaded-HTML source bridge/DTO and independent preview cache, plus direct
+attachment-text import reads (now exact Gateway pages through the same owners);
 mutable-disk skill reference activation;
 separate state/Office retained text readers, externally hash-bound Office/state/catalog
 continuations, and read-side exposure of prepared state/context/catalog identities.

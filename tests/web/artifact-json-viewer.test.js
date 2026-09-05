@@ -194,16 +194,18 @@ function render(item, actions) {
       History: [{ ArtifactId: "upload-html", ResourceUri: htmlUri }]
     }
   }, {
-    uploadedHtmlPreview() {
-      return { status: "ready", sourceResourceUri: htmlUri, text: hostileHtml, complete: true, truncated: false };
+    artifactViewerState() {
+      return { status: "ready", resourceUri: htmlUri, viewerKind: "text", complete: true,
+        sourceComplete: true, fullText: hostileHtml,
+        pages: [{ text: hostileHtml, offset: 0, totalCharacters: hostileHtml.length }] };
     },
-    loadUploadedHtmlSource() {},
+    loadArtifactViewer() {},
     importUploadedHtml(request) { imported.push(request); }
   });
   assert.equal(context.RNAssistantHtmlWorkspaceArtifacts.isUploadedHtmlArtifact({
     Kind: "attachment", Title: "landing.html", MimeType: "text/html", libraryHead: { ResourceClass: "immutable_original" }
   }), true);
-  assert.equal(uploadedHtml.querySelector("pre").textContent, hostileHtml);
+  assert.equal(uploadedHtml.querySelector(".rn-text-viewer-content").textContent, hostileHtml);
   assert.equal(uploadedHtml.querySelector("script"), null, "uploaded source never becomes DOM");
   assert.match(uploadedHtml.textContent, /инертен/);
   button(uploadedHtml, "Импортировать в HTML workspace").click();
