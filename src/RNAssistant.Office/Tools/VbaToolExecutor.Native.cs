@@ -4,6 +4,8 @@ using System.Linq;
 using System.Threading;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
+using RNAssistant.Core.Models;
+using RNAssistant.Office.Services;
 using RNAssistant.Core.Tools;
 using RNAssistant.Office.Domains.Vba;
 using RNAssistant.Office.Vba;
@@ -28,7 +30,7 @@ namespace RNAssistant.Office.Tools
             var correlation = MutationCorrelation(execution, session);
             var state = new VbaNativePreparedState
             {
-                Version = 1,
+                Version = 2,
                 ToolId = toolId,
                 ArgumentsSha256 = TextPatternEngine.Sha256(
                     execution == null || execution.Call == null
@@ -165,6 +167,8 @@ namespace RNAssistant.Office.Tools
             }
 
             var outcome = VbaNativeOutcome.From(preview);
+            if (toolId == VbaToolCatalog.RestoreBackup && outcome.Status == VbaNativeOutcomeStatus.Ok)
+                state.RestoredFrom = CaptureRestoreOrigin(session, state);
             return outcome.Status == VbaNativeOutcomeStatus.Ok
                 ? VbaNativePreparation.Ready(outcome, state)
                 : VbaNativePreparation.Failed(outcome);
@@ -196,7 +200,8 @@ namespace RNAssistant.Office.Tools
                     "Prepared VBA state is invalid: " + ex.Message,
                     "vba_prepared_state_invalid", false);
             }
-            if (state == null || state.Version != 1 ||
+            if (state == null || state.Version != 2 ||
+                (toolId == VbaToolCatalog.RestoreBackup && state.RestoredFrom?.IsExact != true) ||
                 !string.Equals(state.ToolId, toolId, StringComparison.Ordinal) ||
                 execution == null || execution.Call == null ||
                 !string.Equals(state.ArgumentsSha256,
@@ -318,7 +323,39 @@ namespace RNAssistant.Office.Tools
             if (state == null || state.ToolId == VbaToolCatalog.RunMacro) return result;
             var names = new[] { state.ModuleName, state.TargetModuleName, state.RestoreGuard?.ModuleName }
                 .Where(name => !string.IsNullOrWhiteSpace(name)).Distinct(StringComparer.OrdinalIgnoreCase);
-            return CaptureModules(session, names);
+            var captured = CaptureModules(session, names);
+            if (state.ToolId != VbaToolCatalog.RestoreBackup) return captured;
+            var restoredIdentity = VbaResourceProvider.ComponentIdentity(session.DocumentAuthorityId, state.ModuleName);
+            return captured.Select(item => new ResourceMutationReadBack(item.Identity, item.Exists, item.View,
+                item.ContentSha256, item.Payload, item.Coverage, item.Dependencies, item.Parts,
+                item.Exists && item.Identity.Equals(restoredIdentity) ? state.RestoredFrom : null)).ToArray();
+        }
+
+        private ResourceRef CaptureRestoreOrigin(ChatSession session, VbaNativePreparedState state)
+        {
+            var backup = _vbaJournalStore.Find(_adapter.HostName, _adapter.DocumentKey, state.BackupId, state.ModuleName);
+            if (backup == null || state.RestoreGuard == null ||
+                VbaTextCanonicalizer.LiveCodeSha256(backup.Code) != state.RestoreGuard.BackupLiveCodeSha256)
+                throw new InvalidOperationException("The exact restore backup changed during preparation.");
+            var scope = _authority.Scope(session, true);
+            if (backup.SourceResource != null)
+            {
+                var view = ((IResourceRevisionStore)_authority.Store).GetView(scope, backup.SourceResource, ResourceRepresentations.Source);
+                if (!backup.SourceResource.IsExact || !backup.SourceResource.Identity.Equals(VbaResourceProvider.ComponentIdentity(session.DocumentAuthorityId, state.ModuleName)) ||
+                    view?.Coverage.Kind != ResourceCoverageKinds.Whole || view.ContentSha256 != state.RestoreGuard.BackupLiveCodeSha256)
+                    throw new InvalidOperationException("The backup's recorded resource provenance is unavailable or inconsistent.");
+                return backup.SourceResource.Copy();
+            }
+            // An independently captured backup has no proven prior live revision.
+            // Retain its own exact resource; never search module history by hash.
+            var reference = new ResourceRef(VbaResourceProvider.BackupIdentity(session.DocumentAuthorityId, backup.BackupId).Uri);
+            var body = backup.Code ?? string.Empty;
+            var read = new ResourceReadResult { Resource = new ResourceDescriptor { Reference = reference,
+                Provider = "vba", Kind = "vba-backup", MimeType = "text/x-vba; charset=utf-8" },
+                Representation = ResourceRepresentations.Source, Text = body, ContentSha256 = backup.CodeSha256,
+                Complete = true, ReturnedCharacters = body.Length, TotalCharacters = body.Length, Coverage = ResourceCoverage.Whole() };
+            return _authority.PublishRead(session, new ResourceReadSelection { Result = read },
+                new ResourceReadRequest { Reference = reference, Representation = ResourceRepresentations.Source }, true).Result.Resource.Reference.Copy();
         }
 
         internal IReadOnlyList<RNAssistant.Core.Models.ResourceMutationReadBack> CaptureModules(
@@ -359,6 +396,14 @@ namespace RNAssistant.Office.Tools
                 ExpectedContentSha256 = execution == null ? null : execution.ExpectedContentSha256,
                 ObserveExternalDrift = module => _authority.ReportExternalDrift(_authority.Scope(session, true),
                     RNAssistant.Office.Services.VbaResourceProvider.ComponentIdentity(session.DocumentAuthorityId, module)),
+                CaptureBeforeResource = (module, contentHash) =>
+                {
+                    var scope = _authority.Scope(session, true);
+                    var head = _authority.Store.GetHead(scope, VbaResourceProvider.ComponentIdentity(session.DocumentAuthorityId, module));
+                    if (head?.Knowledge != HeadKnowledge.Known) return null;
+                    var view = ((IResourceRevisionStore)_authority.Store).GetView(scope, head.Revision, ResourceRepresentations.Source);
+                    return view?.Coverage.Kind == ResourceCoverageKinds.Whole && view.ContentSha256 == contentHash ? head.Revision.Copy() : null;
+                },
                 RunId = execution == null ? session?.LastRun?.RunId : execution.RunId,
                 TurnId = execution == null ? session?.LastRun?.TurnId : execution.TurnId,
                 StepId = execution == null ? null : execution.StepId,
@@ -509,5 +554,6 @@ namespace RNAssistant.Office.Tools
         public string BackupId { get; set; }
         public VbaMutationGuard Guard { get; set; }
         public VbaRestoreGuard RestoreGuard { get; set; }
+        public ResourceRef RestoredFrom { get; set; }
     }
 }

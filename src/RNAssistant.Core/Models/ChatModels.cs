@@ -250,6 +250,7 @@ namespace RNAssistant.Core.Models
         public string ParentSessionId { get; set; }
         public long? ParentSessionRevision { get; set; }
         public string ForkedThroughMessageId { get; set; }
+        public List<ResourceCopyLink> ResourceCopies { get; set; } = new List<ResourceCopyLink>();
         public string Host { get; set; }
         public string DocumentKey { get; set; }
         public string DocumentAuthorityId { get; set; }

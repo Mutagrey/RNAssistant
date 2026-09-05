@@ -226,6 +226,7 @@
     <Compile Include="Services\ResourceStructuredViewService.cs" />
     <Compile Include="Services\ResourceDerivedViewService.cs" />
     <Compile Include="Services\ResourceDefinitionReader.cs" />
+    <Compile Include="Services\ResourceForkService.cs" />
     <Compile Include="Services\CatalogPublicationService.cs" />
     <Compile Include="Services\CatalogResourceProvider.cs" />
     <Compile Include="Services\ExcelResourceProvider.cs" />

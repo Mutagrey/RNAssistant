@@ -41,8 +41,8 @@ the UI and authorized RN.resources subscribers. Authority readers catch up journ
 tails, and Known-head publication now requires durable exact revision metadata.
 The canonical owner map and active removal gates are updated in resource-fabric.md
 and MIGRATION_MAP.md.
-Checkpoint commit: `ec8b179` (user-requested, integrated foundation; not a completed
-cutover). The next user-requested checkpoint switches controller clear/edit/message-delete/
+Checkpoint commits: `ec8b179` (integrated foundation) and `332b911` (lifecycle;
+both user-requested, not a completed cutover). The lifecycle checkpoint switches controller clear/edit/message-delete/
 fork to typed history intents through the same journal/authority observer. History
 and fork preparation belong to ChatHistoryEditService/ChatCloneService; active
 workspace, plan, task and membership heads publish atomically after conversation
@@ -52,16 +52,38 @@ Persistence/publication failure blocks fresh captures and recovers to Unknown,
 never automatic replay. Duplicate controller saves in this contour are removed.
 Fork preserves document authority and explicitly rebinds copied artifact references
 in a new workspace snapshot; old snapshot bodies stay immutable. Missing exact
-checkpoints no longer fall back to newer parent content. Copying bound conversation
-schema/mapping/derived definitions remains an explicit pre-publication rejection.
+checkpoints no longer fall back to newer parent content.
+Exact-lineage checkpoint: VBA backup preparations retain a proven exact preimage
+reference; restore pins that origin (or the exact independent backup) before
+confirmation and publishes Parent/RestoredFrom without selecting history by equal
+hash. ContextNoteRole separates user instructions from supplied data and bound
+Office observations. The compiler hydrates exact CAS payloads after correctness
+filtering; mutable Text/Preview is never a model source. Upsert now replaces evidence
+as well as display fields; replay/clone preserve typed roles and payload references.
+Old untyped notes require reattachment. Context/continuation and Web fixtures are
+updated to structured claims and typed package results, without compatibility paths.
+Bounded conversation-definition fork copying now requires ResourceForkService
+preparation through the same persistence/authority barrier. Exact copy provenance
+replays from conversation events; schemas/mappings/derived definitions and supplied
+context publish atomically with workspace state. Nested forks retain older pinned
+mappings without borrowing newer parent heads. Typed definition refs are rebased;
+immutable materialized CAS and old workspace bodies remain unchanged. Unavailable/
+unpublished dependencies, cycles and graph bounds fail closed; failed publication
+cannot partially activate a copied graph. The blanket unsupported-definition path
+and optional fork-preparation bypass are removed.
 Still open: remaining definition/domain read and bulk upload/export consumers,
-fork copying of conversation-scoped definitions, typed user-note/observation separation,
-VBA restore-origin metadata, finer
-Excel coverage/named resources, complete binary/raw view negotiation, bounded
+finer Excel coverage/named resources, complete binary/raw view negotiation, bounded
 cold replay/checkpoint/retention optimization, standalone bound HTML export,
 cross-process push qualification, and final cross-document cleanup.
 This is NOT a completed cutover; no Windows gate is closed by these changes.
-Focused checks so far: VBA 98/98 (before latest manual-package/drift integration),
+Latest continuation checks: VBA restore 4/4, mutation 11/11, journal 4/4;
+typed context exact-payload/event replay 1/1, context/continuation 12/12, Inspector
+3/3, typed context bridge 1/1 and Web context/viewer 7/7. Resource cutover 17/17
+includes exact graph copy, nested forks, immutable snapshot restore, event replay
+and failed copy publication. Latest chat editing 5/5, bound context capture 1/1 and
+production source inclusion 1/1 also pass. `git diff --check` is clean. This checkpoint
+records the continuation after `332b911`. No full harness or Office validation.
+Earlier focused checks: VBA 98/98 (before latest manual-package/drift integration),
 resources 10/10 (earlier), resource cutover 16/16 including publication, lease
 cancellation/capacity, history/fork/clear and failure barriers; chat editing 5/5
 and production source inclusion 1/1. Kernel replay 10/10, Inspector 3/3, artifact viewer 3/3,

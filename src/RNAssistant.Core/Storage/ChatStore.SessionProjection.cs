@@ -19,7 +19,7 @@ namespace RNAssistant.Core.Storage
         };
         private static readonly string[] MetadataProperties =
         {
-            "FormatVersion", "Id", "ParentSessionId", "ParentSessionRevision", "ForkedThroughMessageId",
+            "FormatVersion", "Id", "ParentSessionId", "ParentSessionRevision", "ForkedThroughMessageId", "ResourceCopies",
             "Host", "DocumentKey", "PreviousDocumentKeys", "DocumentTitle", "DocumentPath", "DocumentAuthorityId", "LastContextReceipt",
             "Title", "Model", "Mode", "ReasoningEnabled", "CreatedUtc", "UpdatedUtc"
         };

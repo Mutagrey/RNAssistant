@@ -179,6 +179,7 @@ namespace RNAssistant.Office.Vba
         public IReadOnlyList<RNAssistant.Core.Models.ResourceEvidence> Evidence { get; set; }
         public string ExpectedContentSha256 { get; set; }
         public Action<string> ObserveExternalDrift { get; set; }
+        public Func<string, string, RNAssistant.Core.Models.ResourceRef> CaptureBeforeResource { get; set; }
         public string SessionId { get; set; }
         public string RunId { get; set; }
         public string TurnId { get; set; }

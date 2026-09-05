@@ -212,6 +212,96 @@ namespace RNAssistant.Harness
                 AssertEqual(12L, Convert.ToInt64(gateway.Read(session, new ResourceReadRequest { Reference = derived, Representation = "table", MaxRows = 1 }).Result.Table.Rows[0]["sales"]),
                     "historical exact derived view does not silently follow a new mapping");
                 AssertEqual(1, frozen.Schemas.Count, "captured schema registry stays immutable");
+
+                var note = new ContextNote { Role = ContextNoteRole.SuppliedData, Text = "FORKED_DATA", Title = "Draft" };
+                executor.ResourceAuthority.ObserveNote(session, note, executor.Payloads);
+                session.Context.Notes.Add(note);
+                session.HtmlWorkspace.DataSources.Add(new HtmlWorkspaceDataSource { Name = "virtual", Binding = new HtmlWorkspaceDataBinding {
+                    Resource = derived, Mapping = mapping, Schema = schema, View = "table", Policy = "exact" } });
+                session.HtmlWorkspace.DataSources.Add(new HtmlWorkspaceDataSource { Name = "saved", Binding = new HtmlWorkspaceDataBinding {
+                    Resource = materialized, View = "table", Policy = "exact" } });
+                HtmlWorkspaceArtifactService.CaptureCurrent(session, "Fork source");
+                var originalSnapshotId = session.ActiveHtmlArtifactId;
+                var originalSnapshotBody = session.Artifacts.Single(item => item.Id == originalSnapshotId).InlineText;
+                var chats = new ChatStore(FixturePaths.Value);
+                chats.Save(session);
+                var child = NewSession(adapter);
+                child.ParentSessionId = session.Id; child.DocumentAuthorityId = session.DocumentAuthorityId;
+                child.Context = ChatCloneService.CloneContext(session.Context);
+                var copyPlan = ChatCloneService.PrepareForkResources(session, child, chats.LoadArtifactBody,
+                    new ResourceForkService(executor.ResourceAuthority, executor.Payloads));
+                var childScope = executor.ResourceAuthority.Scope(child, false);
+                AssertEqual(0L, executor.ResourceAuthority.Store.Capture(childScope).Generation, "preparation cannot publish copied heads");
+                var childDerived = child.HtmlWorkspace.DataSources.Single(item => item.Name == "virtual").Binding.Resource;
+                AssertTrue(childDerived.Uri.Contains(child.Id) && childDerived.Revision != derived.Revision, "fork has a new exact resource identity/revision");
+                var copiedSnapshot = child.Artifacts.Single(item => item.Id == originalSnapshotId);
+                AssertEqual(originalSnapshotBody, copiedSnapshot.InlineText, "old snapshot body is not rewritten during copy");
+                executor.MutateChatResources(child, new ChatResourceMutationIntent(ChatResourceMutationKind.Fork, source: session, fork: copyPlan), () => {
+                    chats.Save(child); return child;
+                });
+                AssertEqual(1L, executor.ResourceAuthority.Store.Capture(childScope).Generation, "all copied definitions and workspace publish in one commit");
+                RuntimeThrows<InvalidOperationException>(() => executor.MutateChatResources(child,
+                    new ChatResourceMutationIntent(ChatResourceMutationKind.Fork, source: session, fork: copyPlan), () => child));
+                AssertEqual(1L, executor.ResourceAuthority.Store.Capture(childScope).Generation, "an existing child cannot be republished as a new fork");
+                AssertEqual(12L, Convert.ToInt64(gateway.Read(child, new ResourceReadRequest { Reference = childDerived, Representation = "table", MaxRows = 1 })
+                    .Result.Table.Rows[0]["sales"]), "copied derived view uses its exact old mapping, not the parent's newer mapping");
+                var childSaved = child.HtmlWorkspace.DataSources.Single(item => item.Name == "saved").Binding.Resource;
+                var revisions = (IResourceRevisionStore)executor.ResourceAuthority.Store;
+                AssertEqual(revisions.GetRevision(scope, materialized).Payload.Sha256, revisions.GetRevision(childScope, childSaved).Payload.Sha256,
+                    "materialized data keeps the same immutable CAS body");
+                RuntimeThrows<ResourceRequestException>(() => gateway.Read(child, new ResourceReadRequest { Reference = derived, Representation = "table" }));
+                var replayed = chats.Load(child.Id);
+                AssertEqual(child.ResourceCopies.Count, replayed.ResourceCopies.Count, "exact copy provenance replays from conversation events");
+                chats.LoadArtifactBody(replayed, originalSnapshotId);
+                AssertTrue(HtmlWorkspaceArtifactService.Restore(replayed, originalSnapshotId), "old copied workspace can be restored through exact copy links");
+                AssertEqual(childDerived.Revision, replayed.HtmlWorkspace.DataSources.Single(item => item.Name == "virtual").Binding.Resource.Revision,
+                    "restore reuses the deliberately copied revision, never the parent head");
+                AssertEqual(childScope, replayed.Context.Notes[0].Evidence.ScopeId, "supplied context is copied into the child's evidence scope");
+                AssertEqual(originalSnapshotBody, session.Artifacts.Single(item => item.Id == originalSnapshotId).InlineText,
+                    "fork never mutates the parent snapshot");
+
+                var childRuntime = executor.CreateNativeRuntime(child,
+                    OfficeToolCatalog.ForHost(adapter.HostName).Concat(executor.GetControllerTools()).ToList(), new AppSettings(), "agent", false);
+                var copiedMapping = Newtonsoft.Json.JsonConvert.DeserializeObject<ResourceMappingDefinition>(
+                    executor.Payloads.ReadText(revisions.GetRevision(childScope,
+                        child.HtmlWorkspace.DataSources.Single(item => item.Name == "virtual").Binding.Mapping).Payload.ToBlobReference()));
+                var republished = ExecuteHtmlNative(childRuntime, ResourceDefinitionToolHandler.Mapping, new JObject {
+                    ["name"] = "sales", ["schema"] = ResourceGatewayService.IntentTarget(gateway.Resolve(child, copiedMapping.Schema.Uri).Resource),
+                    ["source"] = ResourceGatewayService.IntentTarget(gateway.Resolve(child, copiedMapping.Source.Uri).Resource),
+                    ["mapping"] = new JArray(new JObject { ["field"] = "sales", ["sourceField"] = "backup" }) });
+                AssertEqual(ToolExecutionOutcome.Ok, republished.Outcome, "child mapping publication succeeds independently");
+                var childNewMapping = republished.Result.Resources.Single(item => item.Uri.StartsWith("rna://state/", StringComparison.Ordinal));
+                child.HtmlWorkspace.DataSources.Add(new HtmlWorkspaceDataSource { Name = "latest-mapping", Binding = new HtmlWorkspaceDataBinding {
+                    Resource = childNewMapping, View = "text", Policy = "exact" } });
+                HtmlWorkspaceArtifactService.CaptureCurrent(child, "Independent child mapping");
+                chats.Save(child);
+                var grandchild = NewSession(adapter);
+                grandchild.ParentSessionId = child.Id; grandchild.DocumentAuthorityId = child.DocumentAuthorityId;
+                grandchild.Context = ChatCloneService.CloneContext(child.Context);
+                var nextPlan = ChatCloneService.PrepareForkResources(child, grandchild, chats.LoadArtifactBody,
+                    new ResourceForkService(executor.ResourceAuthority, executor.Payloads));
+                executor.MutateChatResources(grandchild, new ChatResourceMutationIntent(ChatResourceMutationKind.Fork, source: child, fork: nextPlan), () => {
+                    chats.Save(grandchild); return grandchild;
+                });
+                var grandScope = executor.ResourceAuthority.Scope(grandchild, false);
+                AssertEqual(2, grandchild.ResourceCopies.Select(item => item.Copy).Where(item => item.Uri.EndsWith("/mapping-sales", StringComparison.Ordinal))
+                    .Select(item => item.Revision).Distinct().Count(), "nested fork retains both exact historical mappings without merging equal identities");
+                AssertEqual(grandchild.HtmlWorkspace.DataSources.Single(item => item.Name == "latest-mapping").Binding.Resource.Revision,
+                    executor.ResourceAuthority.Store.GetHead(grandScope, ResourceStateProvider.Identity(grandScope, "mapping-sales")).Revision.Revision,
+                    "publication order, not hash or recursive traversal order, chooses the copied head");
+                AssertEqual(12L, Convert.ToInt64(gateway.Read(grandchild, new ResourceReadRequest {
+                    Reference = grandchild.HtmlWorkspace.DataSources.Single(item => item.Name == "virtual").Binding.Resource,
+                    Representation = "table", MaxRows = 1 }).Result.Table.Rows[0]["sales"]), "nested fork still reads the pinned older mapping");
+
+                var failed = NewSession(adapter); failed.ParentSessionId = child.Id; failed.DocumentAuthorityId = child.DocumentAuthorityId;
+                var failedPlan = ChatCloneService.PrepareForkResources(child, failed, chats.LoadArtifactBody,
+                    new ResourceForkService(executor.ResourceAuthority, executor.Payloads));
+                RuntimeThrows<InvalidOperationException>(() => executor.MutateChatResources<int>(failed,
+                    new ChatResourceMutationIntent(ChatResourceMutationKind.Fork, source: child, fork: failedPlan),
+                    () => { throw new InvalidOperationException("fork persistence failed"); }));
+                var failedState = executor.ResourceAuthority.Store.Capture(executor.ResourceAuthority.Scope(failed, false));
+                AssertTrue(failedPlan.Heads.All(item => failedState.GetHead(item.Identity).Knowledge == HeadKnowledge.Unknown),
+                    "fork failure cannot leave a partially activated schema/mapping graph");
             });
         }
 
@@ -356,14 +446,15 @@ namespace RNAssistant.Harness
                 fork.ParentSessionId = session.Id; fork.ParentSessionRevision = session.Revision;
                 fork.DocumentAuthorityId = session.DocumentAuthorityId;
                 fork.Messages = ChatCloneService.CloneMessages(session.Messages);
-                ChatCloneService.PrepareForkResources(session, fork, chats.LoadArtifactBody);
+                var preparedFork = ChatCloneService.PrepareForkResources(session, fork, chats.LoadArtifactBody,
+                    new ResourceForkService(executor.ResourceAuthority, executor.Payloads));
                 AssertTrue(fork.HtmlWorkspace.DataSources.Single().Binding.Resource.Uri != session.HtmlWorkspace.DataSources.Single().Binding.Resource.Uri,
                     "copied artifact bindings are explicitly rebound to child resources");
                 AssertTrue(fork.Artifacts.Any(item => item.Id == session.ActiveHtmlArtifactId &&
                     item.InlineText == session.Artifacts.Single(source => source.Id == session.ActiveHtmlArtifactId).InlineText),
                     "rebinding never rewrites the immutable copied snapshot body");
                 expectedGenerationDuringSave = 0;
-                executor.MutateChatResources(fork, new ChatResourceMutationIntent(ChatResourceMutationKind.Fork, target.Id, source: session), () => fork);
+                executor.MutateChatResources(fork, new ChatResourceMutationIntent(ChatResourceMutationKind.Fork, target.Id, source: session, fork: preparedFork), () => fork);
                 expectedGenerationDuringSave = null;
                 var forkScope = executor.ResourceAuthority.Scope(fork, false);
                 var forkHead = store.GetHead(forkScope, ResourceStateProvider.Identity(forkScope, "html-workspace")).Revision;
@@ -425,29 +516,39 @@ namespace RNAssistant.Harness
 
         private static void ResourceForkPreparationFailsClosed()
         {
+            WithTempPaths(paths =>
+            {
+            var store = new ResourceAuthorityStore(paths);
+            var payloads = new ChatBlobStore(paths);
+            var copies = new ResourceForkService(new ResourceAuthorityService(store, store, payloads: payloads), payloads);
             var adapter = FakeOfficeAdapter.ForHost("Word");
             var source = NewSession(adapter);
             HtmlWorkspaceToolService.UpsertFile(source, "index.html", "html", "<p>old</p>", true);
             var checkpoint = ChatResourceUri.ResolveArtifactRevision(source, source.ActiveHtmlArtifactId);
             source.Messages.Add(new ChatMessage { Role = "user", Content = "Checkpoint", HtmlWorkspaceCheckpoint = checkpoint });
             HtmlWorkspaceToolService.UpsertFile(source, "index.html", "html", "<p>new</p>", true);
-            source.Artifacts.Single(item => item.Id == ResourceUri.Parse(checkpoint.Uri).Segments[2]).InlineText = null;
+            var missing = source.Artifacts.Single(item => item.Id == ResourceUri.Parse(checkpoint.Uri).Segments[2]);
+            var oldBody = missing.InlineText;
+            missing.InlineText = null;
             var fork = NewSession(adapter);
             fork.ParentSessionId = source.Id;
             fork.Messages = ChatCloneService.CloneMessages(source.Messages);
-            RuntimeThrows<InvalidOperationException>(() => ChatCloneService.PrepareForkResources(source, fork, (_, id) => false));
+            RuntimeThrows<InvalidOperationException>(() => ChatCloneService.PrepareForkResources(source, fork, (_, id) => false, copies));
             AssertTrue(!fork.HtmlWorkspace.Files.Any(item => item.Content == "<p>new</p>"),
                 "unavailable old checkpoint never silently falls back to the parent's newer workspace");
 
             source.Messages.Clear();
+            missing.InlineText = oldBody;
             source.HtmlWorkspace.DataSources.Add(new HtmlWorkspaceDataSource { Name = "bound", Binding = new HtmlWorkspaceDataBinding {
                 Resource = new ResourceRef("rna://document/shared/root", "r1"), View = "text", Policy = "exact",
                 Schema = new ResourceRef(ResourceStateProvider.Identity(new ResourceAuthorityScopeId("conversation", source.Id), "schema-published-demo").Uri, "r1") } });
             HtmlWorkspaceArtifactService.CaptureCurrent(source, "Bound definition");
             var boundFork = NewSession(adapter); boundFork.ParentSessionId = source.Id;
-            RuntimeThrows<InvalidOperationException>(() => ChatCloneService.PrepareForkResources(source, boundFork, null));
-            AssertTrue(boundFork.HtmlWorkspace.DataSources.Single().Binding.Schema.Uri.Contains(source.Id),
-                "unsupported definition copy cannot manufacture a child revision or alias another chat's current head");
+            RuntimeThrows<InvalidOperationException>(() => ChatCloneService.PrepareForkResources(source, boundFork, null, copies));
+            AssertEqual(0, boundFork.ResourceCopies.Count, "an unavailable definition cannot manufacture copy provenance");
+            AssertEqual(0L, store.Capture(new ResourceAuthorityScopeId("conversation", boundFork.Id)).Generation,
+                "unavailable definition copy cannot activate a partial child graph");
+            });
         }
 
         private static void ResourceAuthorityAtomicCommitAndReplay()
@@ -514,6 +615,71 @@ namespace RNAssistant.Harness
             var artifact1 = new ResourceRef("rna://chat/s/artifact/a/revision/1", "1");
             var artifact2 = new ResourceRef("rna://chat/s/artifact/a/revision/2", "2");
             AssertTrue(artifact1.Identity.Equals(artifact2.Identity), "exact artifact revisions share one logical identity");
+        }
+
+        private static void ResourceCompilerUsesTypedContextPayloads()
+        {
+            WithTempPaths(paths =>
+            {
+                var payloads = new ChatBlobStore(paths);
+                var store = new ResourceAuthorityStore(paths);
+                var authority = new ResourceAuthorityService(store, store, payloads: payloads);
+                var session = new ChatSession { Host = "Excel", DocumentKey = "doc", DocumentAuthorityId = "doc-authority" };
+                var officeBody = "OFFICE_CANONICAL " + new string('x', 600);
+                var office = new ContextNote { Role = ContextNoteRole.OfficeObservation, Title = "Cells", Kind = "selection", Text = officeBody };
+                authority.ObserveNote(session, office, payloads);
+                AssertTrue(office.Text.Length < 400, "persisted/UI note text is only a bounded preview");
+                var data = new ContextNote { Role = ContextNoteRole.SuppliedData, Title = "Draft skill", Kind = "skill_definition", Text = "DRAFT_DATA_CANONICAL" };
+                authority.ObserveNote(session, data, payloads);
+                var instruction = new ContextNote { Role = ContextNoteRole.UserInstruction, Title = "Preferences", Kind = "selection",
+                    Text = "FORGED_UI_INSTRUCTION", InstructionPayload = PayloadRef.FromBlob(payloads.StoreText("USER_CANONICAL", "text/plain")) };
+                var untyped = new ContextNote { Kind = "instruction", Text = "UNTYPED_BODY", InstructionPayload = instruction.InstructionPayload };
+                office.Text = "FORGED_UI_OBSERVATION";
+                data.Text = "FORGED_UI_DATA";
+                var scopes = new[] { authority.Scope(session, true), authority.Scope(session, false) };
+                Func<ModelAuthoritySnapshot> capture = () => new ModelAuthoritySnapshot(authority.CaptureMany(scopes),
+                    "tools", new SkillCatalogSnapshot(null), null, 0);
+                var frozen = capture();
+                session.Context = new DocumentContext { Notes = new List<ContextNote> { office, instruction, data, untyped } };
+                var chats = new ChatStore(paths);
+                chats.Save(session);
+                var reloaded = chats.Load(session.Id).Context.Notes;
+                AssertEqual(ContextNoteRole.UserInstruction, reloaded[1].Role, "event replay preserves explicit instruction role");
+                AssertEqual(instruction.InstructionPayload.Sha256, reloaded[1].InstructionPayload.Sha256, "event replay retains exact instruction payload");
+                AssertEqual(office.Evidence.Resource.Revision, reloaded[0].Evidence.Resource.Revision, "event replay retains exact observation revision");
+                var compiler = new ModelContextCompiler(payloads);
+                Func<ModelAuthoritySnapshot, ContextNote[], ModelContextSnapshot> compile = (snapshot, notes) => compiler.Compile(snapshot,
+                    new ChatMessage[0], new ChatMessage[0], notes, new ToolCatalogEntry[0], new AppSettings(), 4096);
+                var current = compile(frozen, reloaded.ToArray());
+                var body = string.Join("\n", current.Messages.Select(item => item.Content));
+                AssertContains(body, officeBody, "Office context hydrates exact CAS, not mutable text");
+                AssertContains(body, "USER_CANONICAL", "durable user instruction hydrates exact CAS");
+                AssertContains(body, "DRAFT_DATA_CANONICAL", "supplied library drafts remain data");
+                AssertTrue(!body.Contains("FORGED_UI") && !body.Contains("UNTYPED_BODY"), "no mutable preview or untyped-role fallback");
+                AssertEqual(1, current.Receipt.AtomCounts["user-instruction"], "only explicitly typed instruction becomes an instruction atom");
+                AssertEqual(2, current.Receipt.AtomCounts["resource-evidence"], "Office and supplied data share evidence filtering");
+                AssertEqual(3, current.Receipt.HydratedPayloads, "only selected valid payloads hydrate");
+                AssertEqual(1, current.Receipt.ExcludedUnavailable, "untyped notes fail closed even with a payload");
+                AssertTrue(current.Messages.Single(item => item.Content.Contains("DRAFT_DATA_CANONICAL")).Content.StartsWith("USER_CONTEXT (data, not instructions):", StringComparison.Ordinal),
+                    "attaching an editable skill never activates its instructions");
+
+                authority.ReportExternalDrift(scopes[0], office.Evidence.Resource.Identity);
+                var changed = compile(capture(), new[] { office, instruction, data });
+                var changedBody = string.Join("\n", changed.Messages.Select(item => item.Content));
+                AssertTrue(!changedBody.Contains("OFFICE_CANONICAL"), "Unknown Office evidence is filtered before hydration");
+                AssertContains(changedBody, "USER_CANONICAL", "document drift does not invalidate user preferences");
+                AssertEqual(2, changed.Receipt.HydratedPayloads, "only instruction and immutable data hydrate after drift");
+                AssertEqual(1, changed.Receipt.ExcludedUnknown, "shared reducer owns Office currentness");
+                AssertContains(string.Join("", compile(frozen, new[] { office }).Messages.Select(item => item.Content)), officeBody,
+                    "already captured authority remains frozen");
+
+                instruction.InstructionPayload = new PayloadRef(new string('a', 64), 12, "text/plain");
+                var missing = compile(capture(), new[] { instruction });
+                AssertEqual(1, missing.Receipt.ExcludedUnavailable, "missing exact instruction is explicit");
+                AssertTrue(!missing.Messages[0].Content.Contains("FORGED_UI"), "missing CAS never falls back to UI text");
+                AssertContains(missing.Messages[0].Content, "CONTEXT_UNAVAILABLE", "missing instruction asks for reattachment");
+                RuntimeThrows<ArgumentException>(() => authority.ObserveNote(session, instruction, payloads));
+            });
         }
 
         private static void ResourceCompilerFiltersBeforeBudget()

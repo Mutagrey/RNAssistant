@@ -37,6 +37,8 @@ namespace RNAssistant.Harness
             {
                 Id = "note-1",
                 Host = "Excel",
+                Role = ContextNoteRole.UserInstruction,
+                InstructionPayload = new PayloadRef(new string('a', 64), 10, "text/plain"),
                 Kind = "selection",
                 Title = "Cells",
                 Reference = "A1",
@@ -51,6 +53,9 @@ namespace RNAssistant.Harness
             AssertTrue(!object.ReferenceEquals(context, clonedContext), "context cloned");
             AssertTrue(!object.ReferenceEquals(context.Notes[0], clonedContext.Notes[0]), "context note cloned");
             AssertEqual("Original note", clonedContext.Notes[0].Text, "context note text");
+            AssertEqual(ContextNoteRole.UserInstruction, clonedContext.Notes[0].Role, "typed context role cloned");
+            AssertEqual(context.Notes[0].InstructionPayload.Sha256, clonedContext.Notes[0].InstructionPayload.Sha256,
+                "exact instruction payload cloned without consulting mutable preview");
             context.Notes[0].Text = "Changed";
             AssertEqual("Original note", clonedContext.Notes[0].Text, "context clone independent");
 
@@ -359,6 +364,21 @@ namespace RNAssistant.Harness
             AssertEqual("Changed", context.Notes[0].Title, "updated note title");
             AssertEqual("second", context.Notes[0].Text, "updated note text");
             AssertEqual(originalCreatedUtc, context.Notes[0].CreatedUtc, "created time preserved on update");
+
+            note.Role = replacement.Role = ContextNoteRole.OfficeObservation;
+            var scope = new ResourceAuthorityScopeId("document", "d");
+            replacement.Evidence = new ResourceEvidence("replacement", scope, new ResourceRef("rna://context/document/d/selection", "r2"),
+                "text", ResourceCoverage.Whole(), true, 2, new PayloadRef(new string('a', 64), 4, "text/plain"));
+            ContextNormalizer.UpsertContextNote(context, replacement);
+            AssertEqual("r2", context.Notes[0].Evidence.Resource.Revision, "replacement also updates canonical observation identity");
+            var preference = new ContextNote { Role = ContextNoteRole.UserInstruction, Host = replacement.Host,
+                Kind = replacement.Kind, Reference = replacement.Reference, InstructionPayload = replacement.Evidence.Payload };
+            ContextNormalizer.UpsertContextNote(context, preference);
+            AssertEqual(2, context.Notes.Count, "instructions and observations are not merged by free-form kind/reference");
+            preference = new ContextNote { Role = ContextNoteRole.UserInstruction, Host = replacement.Host,
+                Kind = replacement.Kind, Reference = replacement.Reference, InstructionPayload = new PayloadRef(new string('b', 64), 5, "text/plain") };
+            ContextNormalizer.UpsertContextNote(context, preference);
+            AssertEqual(preference.InstructionPayload.Sha256, context.Notes[1].InstructionPayload.Sha256, "replacement updates exact instruction payload");
         }
 
         private static void ContextNormalizerUsesCoreModelsOnly()
@@ -383,6 +403,7 @@ namespace RNAssistant.Harness
             normalizer.NormalizeContextNote(note, "selection");
             AssertEqual("Excel", note.Host, "note host fallback");
             AssertEqual("selection", note.Kind, "note kind fallback");
+            AssertEqual(ContextNoteRole.Unspecified, note.Role, "normalization never certifies an untyped legacy note");
             AssertEqual("Harness.xlsx", note.Title, "note title fallback");
             AssertEqual("abcdef", ContextNormalizer.TrimForContext("abcdef", 10), "core trim short");
             AssertEqual("abc\n...[truncated]", ContextNormalizer.TrimForContext("abcdef", 3), "core trim long");
@@ -848,7 +869,7 @@ namespace RNAssistant.Harness
             var bridge = new AssistantWebBridge(controller, null);
             var token = BridgeToken(bridge);
             var responseJson = bridge.HandleMessageAsync(
-                "{\"id\":\"b4\",\"type\":\"addTextContext\",\"bridgeToken\":\"" + token + "\",\"payload\":{\"chatId\":\"chat-2\",\"kind\":\"note\",\"title\":\"T\",\"reference\":\"R\",\"text\":\"Body\",\"detailsJson\":\"{}\"}}")
+                "{\"id\":\"b4\",\"type\":\"addTextContext\",\"bridgeToken\":\"" + token + "\",\"payload\":{\"chatId\":\"chat-2\",\"role\":\"SuppliedData\",\"kind\":\"note\",\"title\":\"T\",\"reference\":\"R\",\"text\":\"Body\",\"detailsJson\":\"{}\"}}")
                 .GetAwaiter()
                 .GetResult();
 
@@ -856,9 +877,15 @@ namespace RNAssistant.Harness
             AssertTrue(response["ok"].Value<bool>(), "bridge response ok");
             AssertEqual("chat-2", controller.LastChatId, "chat id");
             AssertEqual("note", controller.LastContextKind, "context kind");
+            AssertEqual(ContextNoteRole.SuppliedData, controller.LastContextRole, "context role is explicit, not inferred from kind");
             AssertEqual("T", controller.LastContextTitle, "context title");
             AssertEqual("R", controller.LastContextReference, "context reference");
             AssertEqual("Body", controller.LastContextText, "context text");
+            var oldResponse = JObject.Parse(bridge.HandleMessageAsync(
+                "{\"id\":\"old\",\"type\":\"addTextContext\",\"bridgeToken\":\"" + token + "\",\"payload\":{\"kind\":\"note\",\"text\":\"Legacy\"}}")
+                .GetAwaiter().GetResult());
+            AssertTrue(!oldResponse["ok"].Value<bool>(), "untyped bridge context is explicitly rejected");
+            AssertEqual("Body", controller.LastContextText, "old payload never reaches the controller");
         }
 
         private static void BridgeUsesTypedPromptContextInspectorPayload()

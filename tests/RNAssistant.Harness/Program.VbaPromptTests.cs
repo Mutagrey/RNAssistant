@@ -3043,6 +3043,9 @@ namespace RNAssistant.Harness
                 AssertContains(waiting.DataJson, selected.BackupId, "restore confirmation identifies the pinned backup");
                 AssertTrue(waiting.DataJson.IndexOf("Sub Selected", StringComparison.Ordinal) < 0,
                     "restore confirmation preview does not duplicate backup source");
+                var origin = JsonConvert.DeserializeObject<VbaNativePreparedState>(pending.Record.PreparedStateJson).RestoredFrom;
+                AssertTrue(origin.IsExact && origin.Uri.EndsWith("/backup/" + selected.BackupId, StringComparison.Ordinal),
+                    "standalone backup has its own exact retained restore origin before confirmation");
 
                 backupStore.Save("Excel", "doc", "Harness.xlsx", "Module1", "StdModule", "Sub Newer()\nEnd Sub");
                 var restored = ToolRunResultFactory.Create(
@@ -3051,6 +3054,51 @@ namespace RNAssistant.Harness
                 AssertTrue(restored.Success, "pinned restore succeeds");
                 AssertContains(adapter.VbaModuleCode, "Selected", "confirmation restores the originally selected backup");
                 AssertTrue(adapter.VbaModuleCode.IndexOf("Newer", StringComparison.Ordinal) < 0, "newer backup does not replace confirmed target");
+                var scope = executor.ResourceAuthority.Scope(session, true);
+                var head = executor.ResourceAuthority.Store.GetHead(scope, VbaResourceProvider.ComponentIdentity(session.DocumentAuthorityId, "Module1"));
+                var revisions = (IResourceRevisionStore)executor.ResourceAuthority.Store;
+                AssertEqual(origin.Revision, revisions.GetRevision(scope, head.Revision).RestoredFrom.Revision, "terminal publication keeps the pinned backup origin");
+                var retained = executor.ResourceGateway.Read(session, new ResourceReadRequest { Reference = origin,
+                    Representation = ResourceRepresentations.Source, MaxChars = 32000 }).Result;
+                AssertContains(retained.Text, "Sub Selected", "exact restore origin remains readable through the gateway");
+            });
+        }
+
+        private static void VbaRestorePreservesExactSourceLineage()
+        {
+            WithTempPaths(paths =>
+            {
+                const string original = "Sub Original()\nEnd Sub";
+                var adapter = new FakeOfficeAdapter { VbaModuleCode = original };
+                var journal = new VbaJournalStore(paths);
+                var executor = new OfficeToolExecutor(adapter, journal, new SkillStore(paths));
+                var session = NewSession(adapter);
+                var first = ReadVbaSource(executor, session, "Module1").Resource.Reference;
+                adapter.VbaModuleCode = "Sub Intermediate()\nEnd Sub";
+                ReadVbaSource(executor, session, "Module1");
+                adapter.VbaModuleCode = original;
+                var selected = ReadVbaSource(executor, session, "Module1").Resource.Reference;
+                AssertTrue(first.Revision != selected.Revision, "equal bytes after observed drift have distinct lineage");
+                var write = executor.ExecuteManual(Command(VbaToolCatalog.WriteModule, "moduleName", "Module1", "code", "Sub Current()\nEnd Sub"),
+                    executor.GetControllerTools().ToList(), new AppSettings { AutoConfirmToolActions = true }, false, false, session);
+                AssertTrue(write.Success, "guarded source mutation succeeded: " + write.Message);
+                var backup = journal.List(adapter.HostName, adapter.DocumentKey).First();
+                AssertEqual(selected.Revision, backup.SourceResource.Revision, "prepared journal pins the exact pre-image, not the first matching hash");
+                var scope = executor.ResourceAuthority.Scope(session, true);
+                var beforeRestore = executor.ResourceAuthority.Store.GetHead(scope, selected.Identity).Revision;
+                var pending = PrepareVbaNative(executor, session, Command(VbaToolCatalog.RestoreBackup, "moduleName", "Module1"));
+                var pinned = JsonConvert.DeserializeObject<VbaNativePreparedState>(pending.Record.PreparedStateJson).RestoredFrom;
+                AssertEqual(selected.Revision, pinned.Revision, "confirmation pins the recorded module origin");
+                var restored = ConfirmVbaNative(pending);
+                AssertEqual(ToolExecutionOutcome.Ok, restored.Outcome, "restore succeeded");
+                var head = executor.ResourceAuthority.Store.GetHead(scope, selected.Identity).Revision;
+                var revisions = (IResourceRevisionStore)executor.ResourceAuthority.Store;
+                var metadata = revisions.GetRevision(scope, head);
+                AssertEqual(beforeRestore.Revision, metadata.Parent.Revision, "restore parent is the immediately preceding live head");
+                AssertEqual(selected.Revision, metadata.RestoredFrom.Revision, "restore retains the selected exact origin despite an older equal-content revision");
+                AssertTrue(head.Revision != selected.Revision && head.Revision != first.Revision, "restore publishes a new revision instead of reviving history");
+                AssertEqual(ResourceEffectOutcome.Restored, executor.ResourceAuthority.Store.Capture(scope).Commits.Last().Effect.Outcome,
+                    "shared authority owns the restored effect");
             });
         }
 

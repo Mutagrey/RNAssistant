@@ -114,6 +114,7 @@ namespace RNAssistant.Core.Models
         public string BeforeCodeSha256 { get; set; }
         public string BeforeComparableCodeSha256 { get; set; }
         public ChatBlobReference BeforeCodeReference { get; set; }
+        public ResourceRef BeforeResource { get; set; }
         public bool IntendedAfterExists { get; set; }
         public string IntendedAfterCodeSha256 { get; set; }
         public string IntendedAfterComparableCodeSha256 { get; set; }
@@ -243,6 +244,7 @@ namespace RNAssistant.Core.Models
         public string CodeSha256 { get; set; }
         public long CodeByteLength { get; set; }
         public ChatBlobReference CodeReference { get; set; }
+        public ResourceRef SourceResource { get; set; }
 
         [JsonIgnore]
         public string Code { get; set; }

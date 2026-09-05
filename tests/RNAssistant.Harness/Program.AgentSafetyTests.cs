@@ -375,9 +375,14 @@ namespace RNAssistant.Harness
         private static void ProtocolContextSeedsFullAcceptedTurn()
         {
             var session = ContextContinuationSession();
-            var checkpoint = new ContextCheckpoint { ThroughMessageId = session.Messages[3].Id, SummaryMarkdown = "Earlier reads summarized." };
+            session.Messages[4].RunId = session.Messages[3].RunId;
+            var checkpoint = new ContextCheckpoint { ThroughMessageId = session.Messages[4].Id, SummaryMarkdown = "Earlier reads summarized." };
             session.ContextCheckpoints.Add(checkpoint);
             session.ActiveContextCheckpointId = checkpoint.Id;
+            AssertTrue(ContextCompactionService.ActiveCheckpoint(session) == null,
+                "free-form legacy summary cannot become current context authority");
+            checkpoint.Claims.Add(new StructuredContextClaim { ClaimId = "earlier-read", Text = "Earlier read completed.",
+                SourceMessageIds = new List<string> { session.Messages[3].Id, session.Messages[4].Id } });
             AssertTrue(!ContextCompactionService.BuildActiveWindow(session).Any(message => message.Id == session.Messages[3].Id),
                 "compaction really excludes the earlier accepted call from the prompt window");
             session.Messages.Add(AgentTranscript.CreateAssistantMessage(V4Envelope(V4Call(arguments:
@@ -609,7 +614,10 @@ namespace RNAssistant.Harness
                 var originalOrigins = JsonConvert.SerializeObject(new[] { schemaCall.AcceptedCallOrigin, skillCall.AcceptedCallOrigin });
                 foreach (var message in session.Messages) message.RunId = "original_run";
                 var through = session.Messages.First(message => message.ProtocolMessage && message.Role != "assistant" && message.ToolCallId == schemaId);
-                var checkpoint = new ContextCheckpoint { ThroughMessageId = through.Id, SummaryMarkdown = "Schema discovery summarized." };
+                var checkpoint = new ContextCheckpoint { ThroughMessageId = through.Id, SummaryMarkdown = "Schema discovery summarized.",
+                    Claims = new List<StructuredContextClaim> { new StructuredContextClaim {
+                        ClaimId = "schema-discovery", Text = "Schema discovery completed; admission remains runtime-owned.",
+                        SourceMessageIds = new List<string> { schemaCall.Id, through.Id } } } };
                 session.Artifacts.Add(new ChatArtifact { Id = checkpoint.Id, Kind = ChatArtifactKinds.Compaction,
                     MimeType = "application/json", InlineText = JsonConvert.SerializeObject(checkpoint, Formatting.None) });
                 session.ContextCheckpoints.Add(checkpoint);

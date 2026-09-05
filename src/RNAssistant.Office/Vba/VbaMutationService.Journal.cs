@@ -42,6 +42,7 @@ namespace RNAssistant.Office.Vba
                         : request.IntendedComponentType ?? string.Empty,
                     BeforeExists = beforeExists,
                     BeforeCodeSha256 = beforeExists ? CodeSha256(request.Before.Code) : null,
+                    BeforeResource = beforeExists ? correlation.CaptureBeforeResource?.Invoke(request.ModuleName, CodeSha256(request.Before.Code)) : null,
                     BeforeComparableCodeSha256 = beforeExists
                         ? VbaTextCanonicalizer.VbeComparableCodeSha256(request.Before.Code)
                         : null,
@@ -237,6 +238,7 @@ namespace RNAssistant.Office.Vba
                 fallback = fallback ?? new VbaMutationCorrelation();
                 return new VbaMutationCorrelation
                 {
+                    CaptureBeforeResource = fallback.CaptureBeforeResource,
                     SessionId = fallback.SessionId,
                     RunId = fallback.RunId,
                     TurnId = fallback.TurnId,
@@ -246,6 +248,7 @@ namespace RNAssistant.Office.Vba
             }
             return new VbaMutationCorrelation
             {
+                CaptureBeforeResource = fallback?.CaptureBeforeResource,
                 SessionId = guard.SessionId,
                 RunId = guard.RunId,
                 TurnId = guard.TurnId,

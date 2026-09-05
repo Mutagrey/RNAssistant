@@ -459,6 +459,9 @@ namespace RNAssistant.Office.Contracts
 
     public sealed class TextContextPayload : ChatPayload
     {
+        [JsonProperty("role", Required = Required.Always)]
+        public ContextNoteRole Role { get; set; }
+
         [JsonProperty("kind")]
         public string Kind { get; set; }
 

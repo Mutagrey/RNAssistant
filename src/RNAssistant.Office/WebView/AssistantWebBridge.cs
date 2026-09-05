@@ -510,6 +510,7 @@ namespace RNAssistant.Office.WebView
                     case "addTextContext":
                         var textContext = Payload<TextContextPayload>(payload);
                         responsePayload = _controller.AddTextContext(
+                            textContext.Role,
                             textContext.Kind,
                             textContext.Title,
                             textContext.Reference,

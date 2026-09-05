@@ -87,6 +87,26 @@ namespace RNAssistant.Core.Models
         }
     }
 
+    // Exact copy provenance carried by the conversation event stream. This is not
+    // a current-head map; only ResourceAuthority commits establish currentness.
+    public sealed class ResourceCopyLink
+    {
+        public ResourceRef Source { get; private set; }
+        public ResourceRef Copy { get; private set; }
+        public IReadOnlyList<long> SourcePublicationPath { get; private set; }
+        [JsonConstructor]
+        public ResourceCopyLink(ResourceRef source, ResourceRef copy, IEnumerable<long> sourcePublicationPath)
+        {
+            if (source?.IsExact != true || copy?.IsExact != true)
+                throw new ArgumentException("Resource copy provenance requires exact references.");
+            Source = source.Copy(); Copy = copy.Copy();
+            var path = (sourcePublicationPath ?? new long[0]).ToArray();
+            if (path.Length == 0 || path.Length > 64 || path.Any(item => item <= 0))
+                throw new ArgumentException("Bounded source publication order is required.");
+            SourcePublicationPath = Array.AsReadOnly(path);
+        }
+    }
+
     public static class ResourceCoverageKinds
     {
         public const string Whole = "whole";
@@ -334,15 +354,23 @@ namespace RNAssistant.Core.Models
         public IReadOnlyList<ResourceDependency> Dependencies { get; private set; }
         public ResourceMutationReadBack(ResourceIdentity identity, bool exists, string view = null,
             string contentSha256 = null, PayloadRef payload = null, ResourceCoverage coverage = null,
-            IEnumerable<ResourceDependency> dependencies = null, IEnumerable<PayloadRef> parts = null)
+            IEnumerable<ResourceDependency> dependencies = null, IEnumerable<PayloadRef> parts = null, ResourceRef restoredFrom = null,
+            ResourceRef revision = null)
         {
             Identity = identity ?? throw new ArgumentNullException(nameof(identity));
+            if (restoredFrom != null && !restoredFrom.IsExact) throw new ArgumentException("Restore origin must be exact.", nameof(restoredFrom));
             Exists = exists; View = view; ContentSha256 = contentSha256; Payload = payload;
+            RestoredFrom = restoredFrom?.Copy();
+            if (revision != null && (!revision.IsExact || !identity.Equals(revision.Identity)))
+                throw new ArgumentException("Prepared revision must be exact and belong to the read-back identity.", nameof(revision));
+            Revision = revision?.Copy();
             Coverage = coverage ?? ResourceCoverage.Whole();
             Dependencies = Array.AsReadOnly((dependencies ?? new ResourceDependency[0]).ToArray());
             Parts = Array.AsReadOnly((parts ?? new PayloadRef[0]).ToArray());
         }
         public IReadOnlyList<PayloadRef> Parts { get; private set; }
+        public ResourceRef RestoredFrom { get; private set; }
+        public ResourceRef Revision { get; private set; }
     }
 
     public sealed class ResourceEffect

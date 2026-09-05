@@ -590,6 +590,7 @@ async function addSelectedSkillContextToContext() {
   }
 
   await addTextContext(
+    "SuppliedData",
     "skill_definition",
     "Skill: " + (skill.Id || "skill"),
     "skill:" + (skill.Id || "skill"),

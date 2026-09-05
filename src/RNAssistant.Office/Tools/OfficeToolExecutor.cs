@@ -217,11 +217,13 @@ namespace RNAssistant.Office.Tools
         internal T MutateChatResources<T>(ChatSession session, ChatResourceMutationIntent intent, Func<T> action)
         {
             if (intent == null) throw new ArgumentNullException(nameof(intent));
-            return MutateLocalResources(session, intent.Operation, intent.Arguments(), action);
+            if (intent.Fork != null && intent.Fork.TargetSessionId != session.Id)
+                throw new ArgumentException("Copy plan belongs to another chat.", nameof(intent));
+            return MutateLocalResources(session, intent.Operation, intent.Arguments(), action, intent.Fork?.ReadBack);
         }
 
         internal T MutateLocalResources<T>(ChatSession session, string operation,
-            IDictionary<string, object> arguments, Func<T> action)
+            IDictionary<string, object> arguments, Func<T> action, IReadOnlyList<ResourceMutationReadBack> preparedReadBack = null)
         {
             var historyMutation = ConversationResourceMutationDomain.IsHistoryMutation(operation);
             if (session == null || action == null || ConversationResourceMutationDomain.StateName(operation) == null && !historyMutation)
@@ -251,7 +253,7 @@ namespace RNAssistant.Office.Tools
                     publicationStarted = true;
                     observer.Complete(attempt, new ToolExecutionRecord(context, ToolExecutionOutcome.Ok, DateTime.UtcNow,
                         mayHaveDispatched: true, evidence: new ToolExecutionEvidence(ToolDispatchEvidence.MayHaveDispatched,
-                            changed ? ToolEffectEvidence.VerifiedChange : ToolEffectEvidence.VerifiedNoChange)));
+                            changed ? ToolEffectEvidence.VerifiedChange : ToolEffectEvidence.VerifiedNoChange), resourceReadBack: preparedReadBack));
                     return value;
                 }
             }

@@ -1,5 +1,7 @@
 using System;
 using System.Collections.Generic;
+using Newtonsoft.Json;
+using Newtonsoft.Json.Converters;
 
 namespace RNAssistant.Core.Models
 {
@@ -18,11 +20,15 @@ namespace RNAssistant.Core.Models
         }
     }
 
+    [JsonConverter(typeof(StringEnumConverter))]
+    public enum ContextNoteRole { Unspecified, UserInstruction, SuppliedData, OfficeObservation }
+
     public sealed class ContextNote
     {
         public string Id { get; set; }
         public string Host { get; set; }
         public string Kind { get; set; }
+        public ContextNoteRole Role { get; set; }
         public string Title { get; set; }
         public string Reference { get; set; }
         public string Source { get; set; }
@@ -30,6 +36,7 @@ namespace RNAssistant.Core.Models
         public string Preview { get; set; }
         public string DetailsJson { get; set; }
         public ResourceEvidence Evidence { get; set; }
+        public PayloadRef InstructionPayload { get; set; }
         public DateTime CreatedUtc { get; set; }
 
         public ContextNote()

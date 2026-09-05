@@ -26,6 +26,7 @@ namespace RNAssistant.Office.Services
                 ParentSessionId = session.ParentSessionId,
                 ParentSessionRevision = session.ParentSessionRevision,
                 ForkedThroughMessageId = session.ForkedThroughMessageId,
+                ResourceCopies = (session.ResourceCopies ?? new List<ResourceCopyLink>()).ToList(),
                 Host = session.Host,
                 DocumentKey = session.DocumentKey,
                 DocumentAuthorityId = session.DocumentAuthorityId,
@@ -127,9 +128,10 @@ namespace RNAssistant.Office.Services
             return HtmlWorkspaceCopyService.CloneCurrent(workspace);
         }
 
-        internal static void PrepareForkResources(ChatSession source, ChatSession fork,
-            Func<ChatSession, string, bool> loadArtifactBody)
+        internal static ResourceForkPlan PrepareForkResources(ChatSession source, ChatSession fork,
+            Func<ChatSession, string, bool> loadArtifactBody, ResourceForkService definitions)
         {
+            if (definitions == null) throw new ArgumentNullException(nameof(definitions));
             if (source == null || fork == null || source.Id == fork.Id || fork.ParentSessionId != source.Id)
                 throw new InvalidOperationException("An explicit source and unpublished child chat are required.");
             var checkpoint = HtmlWorkspaceArtifactService.CheckpointAtOrBefore(source, fork.Messages, fork.Messages.Count - 1);
@@ -150,6 +152,7 @@ namespace RNAssistant.Office.Services
                 foreach (var artifact in reachable.Where(item => item.Kind == ChatArtifactKinds.HtmlWorkspace || item.Kind == ChatArtifactKinds.TaskList))
                     loadArtifactBody(source, artifact.Id);
             fork.Artifacts = CloneArtifactsForMessages(source.Artifacts, fork.Messages, additional);
+            var plan = definitions.Prepare(source, fork, string.IsNullOrWhiteSpace(checkpoint) ? source.HtmlWorkspace : null);
             fork.ContextCheckpoints = CloneContextCheckpoints(source.ContextCheckpoints, fork.Messages);
             fork.ActiveContextCheckpointId = fork.ContextCheckpoints.OrderByDescending(item => item.CreatedUtc).Select(item => item.Id).FirstOrDefault();
             if (!string.IsNullOrWhiteSpace(checkpoint))
@@ -166,6 +169,7 @@ namespace RNAssistant.Office.Services
             ChatResourceReferenceService.LinkMessageResources(fork, 0);
             ChatResourceReferenceService.RestoreActiveTaskListFromMessages(fork);
             ChatResourceReferenceService.RestoreActivePlanDocumentFromMessages(fork);
+            return plan;
         }
 
         private static ChatRunRecord CloneRun(ChatRunRecord run)
@@ -445,6 +449,7 @@ namespace RNAssistant.Office.Services
                 Id = note.Id,
                 Host = note.Host,
                 Kind = note.Kind,
+                Role = note.Role,
                 Title = note.Title,
                 Reference = note.Reference,
                 Source = note.Source,
@@ -452,6 +457,7 @@ namespace RNAssistant.Office.Services
                 Preview = note.Preview,
                 DetailsJson = note.DetailsJson,
                 Evidence = note.Evidence == null ? null : JsonConvert.DeserializeObject<ResourceEvidence>(JsonConvert.SerializeObject(note.Evidence)),
+                InstructionPayload = note.InstructionPayload,
                 CreatedUtc = note.CreatedUtc
             };
         }

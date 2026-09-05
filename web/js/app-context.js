@@ -242,11 +242,12 @@ async function addSelectionContext(mode) {
   }
 }
 
-async function addTextContext(kind, title, reference, text, details) {
+async function addTextContext(role, kind, title, reference, text, details) {
   var targetChatId = state.activeChatId;
   if (!targetChatId) return false;
   var applied = applyContextResponse(await send("addTextContext", {
     chatId: targetChatId,
+    role: role,
     kind: kind,
     title: title,
     reference: reference,
@@ -266,6 +267,7 @@ async function addSelectedToolContextToContext() {
   }
 
   await addTextContext(
+    "SuppliedData",
     "tool_definition",
     "Tool: " + (skill.Id || "tool"),
     "tool:" + (skill.Id || "tool"),

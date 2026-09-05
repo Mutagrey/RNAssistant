@@ -57,9 +57,12 @@ namespace RNAssistant.Office.Services
                     "RESOURCE_AUTHORITY_NOT_READY", true);
         }
 
-        internal void ObserveNote(ChatSession session, ContextNote note, bool mutable, ChatBlobStore payloads)
+        internal void ObserveNote(ChatSession session, ContextNote note, ChatBlobStore payloads)
         {
             if (note == null || payloads == null) throw new ArgumentNullException();
+            if (note.Role != ContextNoteRole.OfficeObservation && note.Role != ContextNoteRole.SuppliedData)
+                throw new ArgumentException("Only typed observations or supplied data can become resource evidence.", nameof(note));
+            var mutable = note.Role == ContextNoteRole.OfficeObservation;
             var scope = Scope(session, mutable);
             var identity = new ResourceIdentity(ResourceUri.Create("context", scope.Kind, scope.Id, note.Id));
             var snapshot = _authority.Capture(scope);
@@ -72,6 +75,9 @@ namespace RNAssistant.Office.Services
                 AuthorityCommitReason.InitialObservation));
             note.Evidence = new ResourceEvidence("ev_" + Guid.NewGuid().ToString("N"), scope, reference,
                 "text", ResourceCoverage.Whole(), true, snapshot.Generation + 1, payload, immutable: !mutable);
+            note.InstructionPayload = null;
+            note.Preview = ContextNormalizer.TrimForContext(note.Text ?? note.Preview, 360);
+            note.Text = note.Preview; // UI preview only; the compiler reads the exact evidence payload.
         }
 
         internal IReadOnlyList<ResourceEvidence> Observe(ChatSession session, ResourceReadResult result, bool live)
@@ -470,14 +476,14 @@ namespace RNAssistant.Office.Services
                 var captured = readBack.FirstOrDefault(item => item.Identity.Equals(impact.Identity));
                 if (changed && ConversationResourceMutationDomain.IsHistoryMutation(attempt.Operation) &&
                     SameCapturedState((IResourceRevisionStore)authority.Store, attempt.ScopeId, before, captured)) continue;
-                var exact = changed ? returned.FirstOrDefault(item => item.Identity.Equals(impact.Identity)) : null;
+                var exact = changed ? captured?.Revision ?? returned.FirstOrDefault(item => item.Identity.Equals(impact.Identity)) : null;
                 ResourceHeadState after = before;
                 if (changed && (exact != null || captured != null && captured.Exists))
                 {
                     exact = exact ?? new ResourceRef(impact.Identity.Uri, "r_" + Guid.NewGuid().ToString("N"));
                     var revisions = (IResourceRevisionStore)authority.Store;
-                    ResourceRef restoredFrom = null;
-                    if (outcome == ResourceEffectOutcome.Restored && captured != null)
+                    ResourceRef restoredFrom = outcome == ResourceEffectOutcome.Restored ? captured?.RestoredFrom : null;
+                    if (outcome == ResourceEffectOutcome.Restored && captured != null && restoredFrom == null)
                     {
                         var source = captured.Dependencies.FirstOrDefault(item => item.Kind == "immutable-snapshot")?.Resource;
                         restoredFrom = snapshot.Commits.SelectMany(item => item.HeadChanges)

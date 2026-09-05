@@ -18,27 +18,25 @@ namespace RNAssistant.Office
             return AddSelectionContext(mode, chatId);
         }
 
-        public DocumentContext AddTextContext(string kind, string title, string reference, string text, string detailsJson, string chatId = null)
+        public DocumentContext AddTextContext(ContextNoteRole role, string kind, string title, string reference, string text, string detailsJson, string chatId = null)
         {
+            if (role != ContextNoteRole.UserInstruction && role != ContextNoteRole.SuppliedData)
+                throw new ArgumentException("Text context must explicitly be a user instruction or supplied data.", nameof(role));
             if (string.IsNullOrWhiteSpace(text))
             {
                 throw new ArgumentException("Context text is empty.", "text");
             }
             return WithReservedSession(LoadAddressedSession(chatId), session =>
             {
-                var settings = ResolveChatSettings(session);
                 var context = AddContextNote(session, new ContextNote
                 {
                     Host = _adapter.HostName,
+                    Role = role,
                     Kind = string.IsNullOrWhiteSpace(kind) ? "context" : kind.Trim(),
                     Title = string.IsNullOrWhiteSpace(title) ? "Context" : title.Trim(),
                     Reference = string.IsNullOrWhiteSpace(reference) ? title : reference.Trim(),
                     Source = string.IsNullOrWhiteSpace(reference) ? title : reference.Trim(),
-                    Text = ContextNormalizer.TrimForContext(
-                        text ?? string.Empty,
-                        ModelContextBudget.ApproximateTextCharacterCapacity(
-                            ModelContextBudget.InputBudgetTokens(settings),
-                            settings)),
+                    Text = text,
                     Preview = ContextNormalizer.TrimForContext(text ?? string.Empty, 360),
                     DetailsJson = detailsJson
                 }, kind);
@@ -78,7 +76,13 @@ namespace RNAssistant.Office
         {
             var context = LoadContext(session);
             _contextService.NormalizeContextNote(note, mode);
-            _toolExecutor.ResourceAuthority.ObserveNote(session, note, false, _toolExecutor.Payloads);
+            if (note.Role == ContextNoteRole.UserInstruction)
+            {
+                note.InstructionPayload = PayloadRef.FromBlob(_toolExecutor.Payloads.StoreText(note.Text, "text/plain; charset=utf-8"));
+                note.Evidence = null;
+                note.Text = note.Preview;
+            }
+            else _toolExecutor.ResourceAuthority.ObserveNote(session, note, _toolExecutor.Payloads);
             ContextNormalizer.UpsertContextNote(context, note);
             SaveSessionContext(session);
             return context;

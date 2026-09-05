@@ -122,6 +122,8 @@ namespace RNAssistant.Office.Services
         {
             if (IsHistoryMutation(operation))
             {
+                if (operation == "common.chat_fork" && snapshot.Generation != 0)
+                    throw new InvalidOperationException("Fork publication requires an unpublished target authority.");
                 foreach (var name in new[] { "html-workspace", "plan-document", "task-list", "artifacts" })
                     yield return new ResourceImpact(ResourceStateProvider.Identity(scope, name), ResourceImpactRelation.ContainerMembership);
                 // Clear removes active conversation-owned definitions as well, but never
@@ -129,6 +131,20 @@ namespace RNAssistant.Office.Services
                 if (operation == "common.chat_clear")
                     foreach (var head in snapshot.Heads.Values.Where(head => ResourceMutationDomains.Provider(head.Identity) == "state"))
                         yield return new ResourceImpact(head.Identity, ResourceImpactRelation.Exact);
+                object copies;
+                if (operation == "common.chat_fork" && arguments != null && arguments.TryGetValue("copiedResources", out copies) && copies != null)
+                {
+                    var references = copies as IEnumerable<ResourceRef>;
+                    if (references == null) throw new InvalidOperationException("Typed fork resource references are required.");
+                    foreach (var reference in references)
+                    {
+                        var address = ResourceUri.Parse(reference.Uri);
+                        if (!reference.IsExact || (address.Provider != "state" && address.Provider != "context") || address.Segments.Count != 3 ||
+                            address.Segments[0] != scope.Kind || address.Segments[1] != scope.Id)
+                            throw new InvalidOperationException("Copied resource belongs to another fork scope.");
+                        yield return new ResourceImpact(reference.Identity, ResourceImpactRelation.Exact);
+                    }
+                }
                 yield break;
             }
             yield return new ResourceImpact(ResourceStateProvider.Identity(scope, StateName(operation) ?? "artifacts"),

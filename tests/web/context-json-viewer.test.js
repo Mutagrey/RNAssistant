@@ -81,7 +81,7 @@ context.logToolResult = () => {};
 context.RNAssistantToolStructuredEditor = {
   create() { return { readRunArguments() { return {}; }, setMode() {}, syncSchemaDraft() {} }; }
 };
-for (const file of ["app-tools-actions.js", "app-tools.js", "app-vba-project.js"]) {
+for (const file of ["app-tools-actions.js", "app-tools-documentation.js", "app-tools.js", "app-vba-project.js"]) {
   vm.runInContext(fs.readFileSync(path.join(__dirname, "../../web/js", file), "utf8"), context, { filename: file });
 }
 
@@ -89,6 +89,27 @@ function button(root, text) { return root.querySelectorAll("button").find(node =
 function settle() { return new Promise(resolve => setImmediate(resolve)); }
 
 (async function () {
+  const contextRequests = [];
+  context.state.activeChatId = "context-chat";
+  context.send = (type, payload) => { contextRequests.push({ type, payload }); return Promise.resolve({ Notes: [] }); };
+  const applyContextResponse = context.applyContextResponse;
+  context.applyContextResponse = () => true;
+  context.syncActiveChatState = async () => {};
+  await context.addTextContext("SuppliedData", "skill_definition", "Draft", "skill:draft", "Data", {});
+  await context.addTextContext("UserInstruction", "note", "Preferences", "preferences", "Instruction", {});
+  assert.equal(contextRequests[0].type, "addTextContext");
+  assert.equal(contextRequests[0].payload.role, "SuppliedData");
+  assert.equal(contextRequests[1].payload.role, "UserInstruction");
+  context.state.tools = [{ Id: "demo" }];
+  context.state.selectedToolIndex = 0;
+  context.syncSelectedToolFromEditor = () => {};
+  context.selectedToolContext = () => "Draft tool data";
+  await context.addSelectedToolContextToContext();
+  assert.equal(contextRequests[2].payload.role, "SuppliedData", "attaching a draft definition cannot activate instructions");
+  assert.equal(contextRequests[2].payload.kind, "tool_definition");
+  context.applyContextResponse = applyContextResponse;
+  console.log("PASS context bridge: explicit roles distinguish data from user instructions");
+
   const stateProjection = { note: "</script><img onerror=1>", count: 9007199254740992 };
   const expectedProjection = JSON.stringify(stateProjection, null, 2);
   context.renderContextJson(stateProjection);
@@ -153,7 +174,9 @@ function settle() { return new Promise(resolve => setImmediate(resolve)); }
     state: actionState,
     syncSelected() {},
     setBusy() {},
-    send() { return Promise.resolve({ result: { status: "ok" }, tools: [{ Id: "demo" }] }); },
+    send() { return Promise.resolve({ result: { contractVersion: 1, status: "ok", effect: "verified_change" },
+      tools: { type: "rnassistant.toolLibrary", contractVersion: 1, items: [{ Id: "demo" }] } }); },
+    parseLibrary(value) { assert.equal(value.type, "rnassistant.toolLibrary"); return value.items; },
     renderTools() { actionOrder.push("renderTools"); },
     renderEditor() { actionOrder.push("renderEditor"); },
     setJsonOutput(value) { actionOrder.push("json:" + value.status); },
@@ -171,5 +194,5 @@ function settle() { return new Promise(resolve => setImmediate(resolve)); }
   assert.equal(/contextBox"\)\.textContent/.test(contextSource), false);
   assert.equal(/promptContextInspectorRawText"\)\.textContent/.test(inspectorSource), false);
   console.log("PASS context JSON viewer: replaced plain-pre paths are absent");
-  console.log("OK 6/6");
+  console.log("OK 7/7");
 })().catch(error => { console.error(error); process.exitCode = 1; });

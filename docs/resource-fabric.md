@@ -21,6 +21,9 @@ Domain owners retain typed guard/dispatch/read-back responsibilities.
 `DocumentAuthorityId`, runtime binding and physical locator are separate identities.
 A revision ID is not a content hash. Restoring equal bytes creates new lineage
 with Parent/RestoredFrom while the existing CAS deduplicates bytes.
+VBA journal preparations record the exact known preimage resource when proven.
+Restore pins that origin before confirmation, or pins the independently captured
+backup resource itself. Equal hashes never select a historical origin.
 Unknown heads never advertise an old revision as current.
 
 Descriptors separate physical type, capabilities, views, coverage, schema/mapping
@@ -53,9 +56,17 @@ publishes a new restore revision only for changed logical state. Failed publicat
 blocks fresh captures; recovery records Unknown and never replays the command.
 Fork keeps the live document authority and creates child conversation resources.
 Copied artifact bindings are rebased into a new workspace snapshot, not rewritten
-inside old immutable bodies. Missing exact checkpoints fail closed. Copying bound
-conversation-scoped schema/mapping/derived definitions is still open and explicitly
-rejected before fork publication; it never grants implicit parent-chat access.
+inside old immutable bodies. Missing exact checkpoints fail closed.
+`ResourceForkService` prepares the bounded dependency graph for schema/mapping/
+virtual and materialized derived resources plus supplied context. Required copy
+preparation retains exact CAS/revision metadata without publishing heads. One fork
+commit publishes all selected definitions and workspace state after persistence.
+`ResourceCopyLink` facts in conversation events preserve exact copy provenance and
+source publication order, including nested forks and multiple retained revisions;
+they never become a current-head store or an implicit cross-chat read alias.
+Only deliberately copied artifacts and references are rebound. Materialized data
+reuses its CAS body; typed definitions get new bodies when their internal refs change.
+Cycles, missing/unpublished dependencies and size/depth bounds fail before publication.
 
 `ConversationRunService` → `AgentKernel` remains the only lifecycle/outcome loop.
 `ConversationKernelAdapter` captures published catalogs at request boundaries.
@@ -69,6 +80,14 @@ frozen authority. Correctness filtering, terminal-write collapse and deduplicati
 precede budget selection and CAS hydration. `ContextReceipt` records generations,
 exclusions and hydration. Compaction retains structured source-grounded claims;
 free summary prose cannot resurrect superseded resource bodies.
+
+`ContextNote.Role` distinguishes explicit user instructions, supplied data and
+bound Office observations. Instructions use an exact `InstructionPayload`; data
+and observations use `ResourceEvidence.Payload`. The compiler hydrates these only
+after correctness filtering, never from mutable `Text`/`Preview`. Those fields are
+bounded UI previews. Draft skill/tool/prompt attachments remain data, not activation
+authority. Untyped old notes require explicit reattachment; normalization cannot
+infer their role. Upsert and fork preserve the typed role and exact payload/evidence.
 
 ## Ingestion and derived data
 
@@ -143,9 +162,7 @@ assembly; free-summary resource authority; inline large pending payload duplicat
 viewer text/base64 bridge transport; mutable-disk skill reference activation.
 No compatibility alias, dual-write or feature flag restores these paths.
 
-Still open within this same cutover: fork copying of conversation-scoped definitions,
-typed user-note/observation separation,
-remaining definition/domain read consumers, VBA restore-origin metadata, finer
+Still open within this same cutover: remaining definition/domain read consumers, finer
 Excel coverage/named resources, complete binary/raw view negotiation, standalone
 bound HTML export, remaining bulk upload/export surfaces, bounded history/retention
 optimization and final documentation cleanup. These are not permanent adapters.

@@ -370,6 +370,7 @@
     }
 
     await addTextContext(
+      "SuppliedData",
       "agent_prompt",
       "Prompt: " + def.label,
       "prompt:" + def.key,

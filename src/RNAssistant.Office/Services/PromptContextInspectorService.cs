@@ -338,10 +338,11 @@ namespace RNAssistant.Office.Services
                 if (messages[index] != null) history.Add(messages[index]);
             }
             var resourceContext = history.Where(item => (item.Content ?? string.Empty).StartsWith("USER_CONTEXT", StringComparison.Ordinal) ||
-                (item.Content ?? string.Empty).StartsWith("RESOURCE_EVIDENCE_UNAVAILABLE:", StringComparison.Ordinal)).ToList();
+                (item.Content ?? string.Empty).StartsWith("USER_INSTRUCTION:", StringComparison.Ordinal) ||
+                (item.Content ?? string.Empty).StartsWith("CONTEXT_UNAVAILABLE:", StringComparison.Ordinal)).ToList();
             var protocolHistory = history.Except(resourceContext).Where(IsProtocolMessage).ToList();
             var regularHistory = history.Except(resourceContext).Where(item => !IsProtocolMessage(item)).ToList();
-            AddMessageSection(sections, "document_context", "Контекст ресурсов", "Только evidence/markers из frozen compiler", resourceContext);
+            AddMessageSection(sections, "document_context", "Контекст документа", "Типизированные инструкции и evidence/markers из frozen compiler", resourceContext);
             AddMessageSection(sections, "history", "История чата", "Активное окно и checkpoint", regularHistory);
             AddMessageSection(sections, "tool_history", "Tool calls и результаты", "Только записи, повторно отправляемые модели", protocolHistory);
 

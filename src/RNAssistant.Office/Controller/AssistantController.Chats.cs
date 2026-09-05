@@ -230,12 +230,13 @@ namespace RNAssistant.Office
                 {
                     _attachmentStore.CloneMessageAttachments(message);
                 }
-                ChatCloneService.PrepareForkResources(source, fork, _chatStore.LoadArtifactBody);
+                var forkResources = ChatCloneService.PrepareForkResources(source, fork, _chatStore.LoadArtifactBody,
+                    new ResourceForkService(_toolExecutor.ResourceAuthority, _toolExecutor.Payloads));
                 NormalizeContext(fork.Context, fork);
                 // Cloning above is unpublished preparation. The first durable fork
                 // state and all of its logical heads share the normal commit barrier.
                 _toolExecutor.MutateChatResources(fork,
-                    new ChatResourceMutationIntent(ChatResourceMutationKind.Fork, fork.ForkedThroughMessageId, targetIndex, source: source), () => fork);
+                    new ChatResourceMutationIntent(ChatResourceMutationKind.Fork, fork.ForkedThroughMessageId, targetIndex, source: source, fork: forkResources), () => fork);
                 _chatSessions.NotifySaved(fork);
                 _chatSessions.SetActiveSession(fork);
             }

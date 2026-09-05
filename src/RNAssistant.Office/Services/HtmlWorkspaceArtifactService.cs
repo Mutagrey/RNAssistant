@@ -111,7 +111,7 @@ namespace RNAssistant.Office.Services
             return changed;
         }
 
-        private static ResourceRef ForkReference(ChatSession session, ResourceRef reference)
+        internal static ResourceRef ForkReference(ChatSession session, ResourceRef reference)
         {
             if (reference == null) return null;
             var address = ResourceUri.Parse(reference.Uri);
@@ -125,7 +125,15 @@ namespace RNAssistant.Office.Services
             }
             if ((address.Provider == "state" || address.Provider == "context") && address.Segments.Count >= 2 &&
                 address.Segments[0] == "conversation" && address.Segments[1] != session.Id)
-                throw new InvalidOperationException("RESOURCE_FORK_DEPENDENCY_UNAVAILABLE: copying bound conversation definitions is not yet supported.");
+            {
+                var copy = (session.ResourceCopies ?? new List<ResourceCopyLink>()).SingleOrDefault(item =>
+                    item.Source.Uri == reference.Uri && item.Source.Revision == reference.Revision)?.Copy;
+                var target = copy == null ? null : ResourceUri.Parse(copy.Uri);
+                if (target == null || target.Provider != address.Provider || target.Segments.Count != 3 ||
+                    target.Segments[0] != "conversation" || target.Segments[1] != session.Id)
+                    throw new InvalidOperationException("RESOURCE_FORK_DEPENDENCY_UNAVAILABLE: this exact conversation resource was not copied into the chat.");
+                return copy.Copy();
+            }
             return reference;
         }
 

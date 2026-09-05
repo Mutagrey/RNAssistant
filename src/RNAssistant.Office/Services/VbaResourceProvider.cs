@@ -318,12 +318,11 @@ namespace RNAssistant.Office.Services
 
         private string BackupUri(ChatSession session, string backupId)
         {
-            return ResourceUri.Create(
-                ProviderName,
-                _scope.DocumentToken(session),
-                "backup",
-                backupId);
+            return BackupIdentity(_scope.DocumentToken(session), backupId).Uri;
         }
+
+        internal static ResourceIdentity BackupIdentity(string authorityId, string backupId)
+        { return new ResourceIdentity(ResourceUri.Create("vba", authorityId, "backup", backupId)); }
 
         private static string ComponentKey(string moduleName)
         {

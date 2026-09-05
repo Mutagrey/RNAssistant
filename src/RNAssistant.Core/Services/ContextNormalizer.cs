@@ -140,12 +140,15 @@ namespace RNAssistant.Core.Services
 
             existing.Host = note.Host;
             existing.Kind = note.Kind;
+            existing.Role = note.Role;
             existing.Title = note.Title;
             existing.Reference = note.Reference;
             existing.Source = note.Source;
             existing.Text = note.Text;
             existing.Preview = note.Preview;
             existing.DetailsJson = note.DetailsJson;
+            existing.Evidence = note.Evidence;
+            existing.InstructionPayload = note.InstructionPayload;
         }
 
         public static string TrimForContext(string text, int maxChars)
@@ -166,6 +169,7 @@ namespace RNAssistant.Core.Services
             }
 
             return string.Equals(left.Host, right.Host, StringComparison.OrdinalIgnoreCase) &&
+                left.Role == right.Role &&
                 string.Equals(left.Kind, right.Kind, StringComparison.OrdinalIgnoreCase) &&
                 string.Equals(left.Reference, right.Reference, StringComparison.OrdinalIgnoreCase);
         }

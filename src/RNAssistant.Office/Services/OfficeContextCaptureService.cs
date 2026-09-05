@@ -28,7 +28,11 @@ namespace RNAssistant.Office.Services
                 catch (HostRuntime.MutationLockException) { throw; }
                 catch { }
                 var note = _adapter.CaptureSelectionContext(mode, maxChars);
-                if (note != null && session != null && _authority != null) _authority.ObserveNote(session, note, true, _payloads);
+                if (note != null)
+                {
+                    note.Role = ContextNoteRole.OfficeObservation;
+                    if (session != null && _authority != null) _authority.ObserveNote(session, note, _payloads);
+                }
                 return note;
             });
         }

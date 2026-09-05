@@ -806,6 +806,7 @@ namespace RNAssistant.Harness
                     };
                     var note = capture.CaptureSelection(target, "selection", 2000);
                     AssertTrue(note != null && !string.IsNullOrWhiteSpace(note.Text), "selection returned");
+                    AssertEqual(ContextNoteRole.OfficeObservation, note.Role, "only the bound capture owner assigns the Office observation role");
                     AssertTrue(calls.SequenceEqual(new[] { "prepare", "selection" }), "preparation and capture both gated");
                     AssertTrue(capture.CaptureOfficeContext() != null, "UI context capture succeeds");
                     AssertTrue(calls.Contains("context"), "UI context provider reached under gate");

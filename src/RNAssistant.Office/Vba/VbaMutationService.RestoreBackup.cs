@@ -434,6 +434,7 @@ namespace RNAssistant.Office.Vba
                 fallback = fallback ?? new VbaMutationCorrelation();
                 return new VbaMutationCorrelation
                 {
+                    CaptureBeforeResource = fallback.CaptureBeforeResource,
                     SessionId = fallback.SessionId,
                     RunId = fallback.RunId,
                     TurnId = fallback.TurnId,
@@ -443,6 +444,7 @@ namespace RNAssistant.Office.Vba
             }
             return new VbaMutationCorrelation
             {
+                CaptureBeforeResource = fallback?.CaptureBeforeResource,
                 SessionId = guard.SessionId,
                 RunId = guard.RunId,
                 TurnId = guard.TurnId,

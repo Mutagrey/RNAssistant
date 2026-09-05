@@ -112,6 +112,7 @@ namespace RNAssistant.Core.Storage
                 preparation.BeforeCodeReference = null;
                 preparation.BeforeCodeSha256 = null;
                 preparation.BeforeComparableCodeSha256 = null;
+                preparation.BeforeResource = null;
                 preparation.BackupId = null;
             }
             if (preparation.IntendedAfterExists)
@@ -372,6 +373,7 @@ namespace RNAssistant.Core.Storage
                     CodeSha256 = prepared.BeforeCodeSha256,
                     CodeByteLength = prepared.BeforeCodeReference.ByteLength,
                     CodeReference = prepared.BeforeCodeReference,
+                    SourceResource = prepared.BeforeResource?.Copy(),
                     CreatedUtc = prepared.CreatedUtc
                 });
             }

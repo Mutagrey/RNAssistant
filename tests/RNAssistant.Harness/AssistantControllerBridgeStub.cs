@@ -752,8 +752,9 @@ namespace RNAssistant.Office
         public DocumentContext GetContext(string chatId = null) { return new DocumentContext { DocumentKey = chatId ?? string.Empty }; }
         public DocumentContext AddSelectionContextFromBridge(string mode, string chatId = null) { return new DocumentContext { Title = mode ?? string.Empty }; }
 
-        public DocumentContext AddTextContext(string kind, string title, string reference, string text, string detailsJson, string chatId = null)
+        public DocumentContext AddTextContext(ContextNoteRole role, string kind, string title, string reference, string text, string detailsJson, string chatId = null)
         {
+            LastContextRole = role;
             LastContextKind = kind;
             LastContextTitle = title;
             LastContextReference = reference;
@@ -761,6 +762,8 @@ namespace RNAssistant.Office
             LastChatId = chatId;
             return new DocumentContext { Title = kind ?? string.Empty };
         }
+
+        public ContextNoteRole LastContextRole { get; private set; }
 
         public DocumentContext RemoveContextItem(string id, string chatId = null) { return new DocumentContext { Title = id ?? string.Empty }; }
         public DocumentContext ClearContext(string chatId = null) { return new DocumentContext { DocumentKey = chatId ?? string.Empty }; }
