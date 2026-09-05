@@ -61,7 +61,7 @@ namespace RNAssistant.Office
                 };
                 var note = _officeContextCapture.CaptureSelection(target, mode,
                     ModelContextBudget.ApproximateTextCharacterCapacity(
-                        ModelContextBudget.InputBudgetTokens(settings), settings));
+                        ModelContextBudget.InputBudgetTokens(settings), settings), session);
                 if (note == null)
                 {
                     throw new InvalidOperationException("No selectable Office context was found.");
@@ -78,6 +78,7 @@ namespace RNAssistant.Office
         {
             var context = LoadContext(session);
             _contextService.NormalizeContextNote(note, mode);
+            _toolExecutor.ResourceAuthority.ObserveNote(session, note, false, _toolExecutor.Payloads);
             ContextNormalizer.UpsertContextNote(context, note);
             SaveSessionContext(session);
             return context;

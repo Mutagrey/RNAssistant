@@ -52,7 +52,7 @@ namespace RNAssistant.Office.Tools
                     var outcome = _service.Execute(
                         _toolId, context.Arguments, _session,
                         context.MarkDispatchPossible, cancellationToken);
-                    return Task.FromResult(Project(outcome));
+                    return Task.FromResult(context.Complete(Project(outcome)));
                 }
             }
             catch (OperationCanceledException)

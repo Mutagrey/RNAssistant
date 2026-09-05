@@ -77,13 +77,21 @@ namespace RNAssistant.Harness
             int maxChars,
             string revision = null)
         {
-            return gateway.Read(session, new ResourceReadRequest
+            var read = gateway.Read(session, new ResourceReadRequest
             {
                 Reference = new ResourceRef(uri, revision),
                 Representation = representation,
                 Cursor = cursor,
                 MaxChars = maxChars
             });
+            // Fixture reads represent accepted observations, not a runtime guard read.
+            session.Messages.Add(new ChatMessage
+            {
+                Role = "tool", ToolName = "common.resources_read",
+                Content = read.Result.Text,
+                ResourceEvidence = gateway.Evidence(session, read.Result).ToList()
+            });
+            return read;
         }
 
         private static ResourceSearchResult SearchVbaSource(

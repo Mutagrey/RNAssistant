@@ -858,7 +858,7 @@ namespace RNAssistant.Harness
                     var runtime = new HostRuntime(adapter, paths);
                     var store = new ToolStore(paths);
                     var executor = new OfficeToolExecutor(adapter, new VbaJournalStore(paths), new SkillStore(paths), store, paths: paths);
-                    var catalog = new ToolCatalogService(adapter, executor, store);
+                    var catalog = new ToolCatalogService(adapter, executor);
                     adapter.BeforeRead = kind =>
                     {
                         AssertTrue(dispatcher.CheckAccess, "VBA list and module read on owner STA");

@@ -225,7 +225,7 @@ namespace RNAssistant.Office.Services
             var complete = next >= content.Length && !sourceTruncated;
             var descriptor = Describe(session, target);
             descriptor.ContentSha256 = contentSha256;
-            descriptor.Reference.Revision = contentSha256;
+            descriptor.Reference = new ResourceRef(descriptor.Reference.Uri, contentSha256);
             return new ResourceReadSelection
             {
                 Result = new ResourceReadResult

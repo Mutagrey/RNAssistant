@@ -8,7 +8,7 @@ using RNAssistant.Core.Services;
 
 namespace RNAssistant.Office.Services
 {
-    internal sealed class ChatArtifactResourceProvider : IResourceProvider, IResourceMemberResolver
+    internal sealed class ChatArtifactResourceProvider : IResourceProvider, IResourceMemberResolver, IResourceIdentityResolver
     {
         public const string ProviderName = "chat";
         private const int MaximumListItems = 50;
@@ -188,7 +188,7 @@ namespace RNAssistant.Office.Services
             var maxChars = request == null ? 0 : request.MaxChars;
             representation = NormalizeRepresentation(representation, session, artifact);
             maxChars = Math.Max(
-                ResourceReadRequest.MinimumCharacters,
+                1,
                 Math.Min(
                     ResourceReadRequest.MaximumCharacters,
                     maxChars <= 0 ? ResourceReadRequest.DefaultCharacters : maxChars));
@@ -535,6 +535,19 @@ namespace RNAssistant.Office.Services
                     false);
             }
             return address;
+        }
+
+        public ResourceRef ResolveIdentity(ChatSession session, ResourceIdentity identity)
+        {
+            var address = ResourceUri.Parse(identity.Uri);
+            if (address.Provider != ProviderName || session == null || address.Segments.Count != 3 && address.Segments.Count != 6 ||
+                address.Segments[0] != session.Id || address.Segments[1] != "artifact")
+                throw new ResourceRequestException("The resource identity is outside this chat.", "RESOURCE_ACCESS_DENIED", false);
+            var artifact = FindExactArtifact(session, address.Segments[2]);
+            var exact = ChatResourceUri.CreateArtifactRevision(session, artifact);
+            if (address.Segments.Count == 3) return exact;
+            return new ResourceRef(ResourceUri.Create(ProviderName, session.Id, "artifact", artifact.Id, "revision",
+                exact.Revision, address.Segments[3], address.Segments[4], address.Segments[5]), exact.Revision);
         }
 
         private static ChatArtifact FindExactArtifact(

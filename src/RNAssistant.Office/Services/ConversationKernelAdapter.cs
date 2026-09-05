@@ -62,6 +62,8 @@ namespace RNAssistant.Office.Services
         private List<ToolCatalogEntry> _catalog;
         private ToolPackSnapshot _toolPack;
         private IReadOnlyList<SkillDefinition> _skills;
+        private SkillCatalogSnapshot _skillSnapshot;
+        private long _catalogGeneration;
         private ConversationModelSession _modelSession;
         private ModelProtocolResult _lastModel;
         private NativeToolRuntimeAdapter _nativeTools;
@@ -101,9 +103,19 @@ namespace RNAssistant.Office.Services
 
         private void UseInput(ConversationRunInput input)
         {
-            _input = input ?? throw new ArgumentNullException(nameof(input));
-            _catalog = ConversationRunService.PrepareToolsForRun(input.Tools);
-            _skills = _policy.SelectSkills(input.Skills);
+            if (input == null) throw new ArgumentNullException(nameof(input));
+            var publication = _executor.CaptureCatalogs();
+            _catalogGeneration = publication.Authority.Generation;
+            _input = new ConversationRunInput(PromptSettingsService.ApplyPublishedTemplates(input.Settings, publication.PromptsJson),
+                input.Context, input.Tools, input.Skills, input.Attachments);
+            // Host/document registrations are provided by their bound owner. Global packages
+            // must be replaced from this publication, including deletions, before activation.
+            var tools = input.Tools.Where(tool => !string.Equals(tool.Scope, "global", StringComparison.OrdinalIgnoreCase))
+                .Concat(_executor.CaptureRunnableCatalog(publication).Where(tool => tool.Scope == "global")).ToList();
+            _catalog = ConversationRunService.PrepareToolsForRun(tools);
+            var publishedSkills = _executor.CaptureSkills(publication);
+            _skills = _policy.SelectSkills(publishedSkills.Skills);
+            _skillSnapshot = new SkillCatalogSnapshot(_skills, publishedSkills.Generation);
             CapabilityCatalogService.ThrowOnCollision(_catalog, _skills);
             _catalog = _policy.SelectTools(_executor.AvailableConversationToolsForSession(_catalog, _session));
             CapabilityCatalogService.BindReadSchema(_catalog, _skills);

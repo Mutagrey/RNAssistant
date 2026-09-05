@@ -29,6 +29,58 @@
   var ensureSelection = workspaceModel.ensureSelection;
   var refreshLibraryHeadSelection = workspaceModel.refreshLibraryHeadSelection;
   var workspaceActions = null;
+  var resourceHandles = new Map();
+  var resourcePreviewEpoch = 0;
+
+  window.handleResourceAuthorityChanged = function (notice) {
+    var frame = $("htmlWorkspacePreviewFrame");
+    if (!frame || !frame.contentWindow) return;
+    var sources = dataSources();
+    var names = sources.filter(function (source) {
+      var binding = dataBinding(source) || {};
+      var reference = binding.resource || binding.Resource || {};
+      var uri = reference.uri || reference.Uri || "";
+      var identity = uri.replace(/\/revision\/[^/]+(?=\/|$)/, "");
+      return (binding.policy || binding.Policy) === "head" &&
+        ((notice.resources || []).indexOf(identity) >= 0 || notice.allInScope === true);
+    }).map(function (source) { return source.Name || source.name; });
+    if (names.length) frame.contentWindow.postMessage({ type: "rnassistant-resource-changed",
+      names: names, generation: notice.generation }, "*");
+  };
+
+  function closePreviewResources() {
+    resourcePreviewEpoch += 1;
+    resourceHandles.forEach(function (owner, leaseId) {
+      send("resourceDataClose", { chatId: owner.chatId, workspaceId: owner.workspaceId, leaseId: leaseId }).catch(function () {});
+    });
+    resourceHandles.clear();
+  }
+
+  window.addEventListener("message", function (event) {
+    var frame = $("htmlWorkspacePreviewFrame"), request = event.data || {};
+    if (!frame || event.source !== frame.contentWindow || request.type !== "rnassistant-resource-control" ||
+        !event.ports || event.ports.length !== 1) return;
+    var port = event.ports[0];
+    var requestEpoch = resourcePreviewEpoch;
+    var owner = { chatId: state.activeChatId, workspaceId: state.activeHtmlArtifactId };
+    var work;
+    if (request.operation === "open" && typeof request.bindingName === "string" && request.bindingName.length <= 128) {
+      work = send("resourceDataOpen", { chatId: owner.chatId, workspaceId: owner.workspaceId, bindingName: request.bindingName })
+        .then(function (lease) {
+          if (requestEpoch !== resourcePreviewEpoch || state.activeChatId !== owner.chatId || state.activeHtmlArtifactId !== owner.workspaceId) {
+            send("resourceDataClose", { chatId: owner.chatId, workspaceId: owner.workspaceId, leaseId: lease.leaseId }).catch(function () {});
+            throw new Error("RESOURCE_WORKSPACE_CHANGED");
+          }
+          resourceHandles.set(lease.leaseId, owner); return lease;
+        });
+    } else if (request.operation === "close" && resourceHandles.has(request.leaseId)) {
+      owner = resourceHandles.get(request.leaseId); resourceHandles.delete(request.leaseId);
+      work = send("resourceDataClose", { chatId: owner.chatId, workspaceId: owner.workspaceId, leaseId: request.leaseId });
+    } else work = Promise.reject(new Error("RESOURCE_ACCESS_DENIED"));
+    work.then(function (value) { port.postMessage({ ok: true, value: value }); },
+      function (error) { port.postMessage({ ok: false, error: error.detail || error.message }); })
+      .finally(function () { port.close(); });
+  });
 
   function submitPlanHandoff() {
     var input = $("chatInput");
@@ -45,6 +97,7 @@
     state: state,
     model: workspaceModel,
     preview: htmlPreview,
+    closeResources: closePreviewResources,
     artifacts: workspaceArtifacts,
     artifactActions: {
       artifactImageThumbnailState: function (uri) {
@@ -568,6 +621,7 @@
   window.renderHtmlWorkspace = renderHtmlWorkspace;
   window.bindHtmlWorkspaceActions = bindHtmlWorkspaceActions;
   window.saveHtmlWorkspaceSelection = workspaceActions.saveSelection;
+  window.closeArtifactViewerResources = workspaceActions.closeArtifactViewers;
   window.markHtmlWorkspaceDirty = markHtmlWorkspaceDirty;
   window.confirmDiscardHtmlWorkspaceChanges = confirmDiscardArtifactChanges;
   window.RNAssistantArtifactThumbnailRuntime = {

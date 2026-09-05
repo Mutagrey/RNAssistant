@@ -61,7 +61,7 @@ namespace RNAssistant.Harness
                 AssertEqual(0, store.Load().Count, "old pipelines skipped without sidecar parsing");
                 var adapter = FakeOfficeAdapter.ForHost("Excel");
                 var executor = new OfficeToolExecutor(adapter, new VbaJournalStore(paths), new SkillStore(paths), store);
-                AssertTrue(!HasTool(new ToolCatalogService(adapter, executor, store).GetVisibleTools(), pipeline.Id), "manual catalog excludes pipelines");
+                AssertTrue(!HasTool(new ToolCatalogService(adapter, executor).GetVisibleTools(), pipeline.Id), "manual catalog excludes pipelines");
                 AssertTrue(!HasTool(ConversationRunService.PrepareToolsForRun(new[] { pipeline }), pipeline.Id), "injected model catalog excludes pipelines");
                 AssertEqual(string.Empty, ToolPackSnapshotFactory.ExecutionFingerprint(new[] { pipeline }, pipeline.Id), "no resumable pipeline fingerprint");
                 var read = executor.ExecuteManual(Command(CapabilityToolCatalog.ReadToolId, "id", pipeline.Id),

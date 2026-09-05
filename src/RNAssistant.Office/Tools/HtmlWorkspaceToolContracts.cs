@@ -69,37 +69,5 @@ namespace RNAssistant.Office.Tools
         }
     }
 
-    internal sealed class HtmlDataSourceReadOutcome
-    {
-        internal bool Success { get; private set; }
-        internal string Message { get; private set; }
-        internal string DataJson { get; private set; }
-        internal string ErrorCode { get; private set; }
-        internal bool Retryable { get; private set; }
 
-        internal static HtmlDataSourceReadOutcome Ok(
-            string message, string dataJson)
-        {
-            return new HtmlDataSourceReadOutcome
-            {
-                Success = true,
-                Message = message ?? string.Empty,
-                DataJson = dataJson
-            };
-        }
-
-        internal static HtmlDataSourceReadOutcome Error(
-            string message, string dataJson, string errorCode, bool retryable)
-        {
-            return new HtmlDataSourceReadOutcome
-            {
-                Success = false,
-                Message = message ?? string.Empty,
-                DataJson = dataJson,
-                ErrorCode = string.IsNullOrWhiteSpace(errorCode)
-                    ? "html_data_source_failed" : errorCode,
-                Retryable = retryable
-            };
-        }
-    }
 }

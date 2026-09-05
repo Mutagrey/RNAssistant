@@ -26,7 +26,7 @@
   function defaultFileContent(kind) {
     if (kind === "css") return "body {\n  font-family: Segoe UI, Arial, sans-serif;\n}\n";
     if (kind === "script") {
-      return "(function () {\n  var data = window.RNAssistantData || {};\n  console.log(\"HTML workspace data\", data);\n}());\n";
+      return "(function () {\n  console.log(\"Resource bindings\", RN.resources.names());\n}());\n";
     }
     return "<!doctype html>\n<html>\n<head>\n  <meta charset=\"utf-8\">\n  <title>HTML Workspace</title>\n</head>\n<body>\n  <h1>HTML Workspace</h1>\n</body>\n</html>\n";
   }
@@ -522,6 +522,7 @@
       importUploadedHtml: importUploadedHtml,
       artifactImageThumbnailState: artifactViewers.artifactImageThumbnailState,
       artifactViewerState: artifactViewers.artifactViewerState,
+      closeArtifactViewers: artifactViewers.closeAll,
       changeArtifactPdfPage: artifactViewers.changeArtifactPdfPage,
       changeArtifactViewerPage: artifactViewers.changeArtifactViewerPage,
       downloadArtifactViewer: artifactViewers.downloadArtifactViewer,

@@ -7,14 +7,19 @@ namespace RNAssistant.Office.Services
     {
         private readonly IOfficeApplicationAdapter _adapter;
         private readonly HostRuntime _hostRuntime;
+        private readonly ResourceAuthorityService _authority;
+        private readonly RNAssistant.Core.Storage.ChatBlobStore _payloads;
 
-        internal OfficeContextCaptureService(IOfficeApplicationAdapter adapter, HostRuntime hostRuntime)
+        internal OfficeContextCaptureService(IOfficeApplicationAdapter adapter, HostRuntime hostRuntime,
+            ResourceAuthorityService authority = null, RNAssistant.Core.Storage.ChatBlobStore payloads = null)
         {
             _adapter = adapter;
             _hostRuntime = hostRuntime;
+            _authority = authority;
+            _payloads = payloads;
         }
 
-        internal ContextNote CaptureSelection(OfficeDocumentExecutionExpectation target, string mode, int maxChars)
+        internal ContextNote CaptureSelection(OfficeDocumentExecutionExpectation target, string mode, int maxChars, ChatSession session = null)
         {
             return _hostRuntime.ReadDocument(target, () =>
             {
@@ -22,7 +27,9 @@ namespace RNAssistant.Office.Services
                 catch (OfficeDocumentGuardException) { throw; }
                 catch (HostRuntime.MutationLockException) { throw; }
                 catch { }
-                return _adapter.CaptureSelectionContext(mode, maxChars);
+                var note = _adapter.CaptureSelectionContext(mode, maxChars);
+                if (note != null && session != null && _authority != null) _authority.ObserveNote(session, note, true, _payloads);
+                return note;
             });
         }
 

@@ -87,7 +87,7 @@ namespace RNAssistant.Office.Tools
                                 _source, arguments, false, context.Execution,
                                 _session, context.MarkDispatchPossible,
                                 cancellationToken);
-                        });
+                        }, terminalOutcome => context.Complete(new ToolHandlerResult(Result(terminalOutcome), Effect(terminalOutcome))), context.CompleteFailure);
                 if (result == null)
                     throw new InvalidOperationException(
                         "VBA package handler returned no typed result.");
@@ -109,7 +109,7 @@ namespace RNAssistant.Office.Tools
             }
         }
 
-        private static RuntimeResult Result(VbaPackageResult result)
+        internal static RuntimeResult Result(VbaPackageResult result)
         {
             if (result.Status == VbaMutationOutcomeStatus.Ok)
                 return RuntimeResult.Ok(result.Message, result.DataJson);
@@ -118,7 +118,7 @@ namespace RNAssistant.Office.Tools
             return RuntimeResult.Error(result.Message, result.DataJson);
         }
 
-        private static ToolEffectEvidence Effect(VbaPackageResult result)
+        internal static ToolEffectEvidence Effect(VbaPackageResult result)
         {
             return result.Effect == VbaPackageEffectEvidence.VerifiedChange
                 ? ToolEffectEvidence.VerifiedChange

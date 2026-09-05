@@ -1152,7 +1152,7 @@ namespace RNAssistant.Harness
 
                 // Many small messages overflow the prompt but leave a complete prefix
                 // within the compactor's bounded source budget, including the schema pair.
-                var unbounded = new ConversationPromptComposer().BuildMessages(
+                var unbounded = new ModelContextCompiler().BuildPreview(
                     ChatModes.Agent, "Continue.", adapter, loaded.Tools, null, NewContext(adapter), settings,
                     session, null, true, 100000, loaded.CapabilityContext(null));
                 while (ModelContextBudget.EstimateMessagesTokens(unbounded, settings) <= ModelContextBudget.InputBudgetTokens(settings) + 256)
@@ -1167,7 +1167,7 @@ namespace RNAssistant.Harness
                 {
                     AssertEqual("context_compaction", options.TracePurpose, "materialization calls only the compactor");
                     compactions++;
-                    return Task.FromResult(new LlmCompletionResult { Content = "{\"summary\":\"Earlier work summarized.\"}" });
+                    return Task.FromResult(CompactionReply(messages, "Earlier work summarized."));
                 };
                 using (var modelSession = ConversationModelSession.CreateAsync(adapter, new ContextCompactionService(completion),
                     new AttachmentAnalysisService(completion), EventStore(store), ChatModes.Agent, "Continue.", session, NewContext(adapter),

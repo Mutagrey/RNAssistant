@@ -212,7 +212,7 @@ namespace RNAssistant.Office.Services
                     Kind = DataKind,
                     Title = item.Name ?? item.Id,
                     ContentType = "application/json",
-                    Content = item.Json ?? "{}",
+                    Content = JsonConvert.SerializeObject(item.Binding),
                     CreatedUtc = item.CreatedUtc,
                     UpdatedUtc = item.UpdatedUtc,
                     Binding = item.Binding
@@ -293,8 +293,9 @@ namespace RNAssistant.Office.Services
             descriptor.Metadata["active"] = member.Active ? "true" : "false";
             if (member.Binding != null)
             {
-                descriptor.Metadata["bindingStatus"] = member.Binding.Status ?? string.Empty;
-                descriptor.Metadata["refreshPolicy"] = member.Binding.RefreshPolicy ?? string.Empty;
+                descriptor.Metadata["bindingPolicy"] = member.Binding.Policy;
+                descriptor.Metadata["bindingView"] = member.Binding.View;
+                descriptor.Metadata["boundResource"] = member.Binding.Resource?.Uri;
             }
             return descriptor;
         }

@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 using Newtonsoft.Json;
@@ -54,16 +55,18 @@ namespace RNAssistant.Office.Tools
             CancellationToken cancellationToken)
         {
             cancellationToken.ThrowIfCancellationRequested();
-            var outcome = _service.Execute(
-                _toolId, context.Arguments, _catalog, _skills, _session, _manualRun);
+            CapabilityToolOutcome outcome;
+            try { outcome = _service.Execute(_toolId, context.Arguments, _catalog, _skills, _session, _manualRun); }
+            catch (RNAssistant.Office.Services.ResourceRequestException error)
+            { outcome = CapabilityToolOutcome.Error(error.Message, null, error.ErrorCode, error.Retryable); }
             if (outcome == null)
                 throw new InvalidOperationException(
                     "Capability service returned no outcome.");
             var result = outcome.Status == CapabilityOutcomeStatus.Ok
-                ? RuntimeResult.Ok(outcome.Message, outcome.DataJson)
+                ? RuntimeResult.Ok(outcome.Message, outcome.DataJson, outcome.Evidence?.Select(item => item.Resource))
                 : RuntimeResult.Error(outcome.Message, ErrorData(outcome));
             return Task.FromResult(new ToolHandlerResult(
-                result, ToolEffectEvidence.None));
+                result, ToolEffectEvidence.None, resourceEvidence: outcome.Evidence));
         }
 
         private static string ErrorData(CapabilityToolOutcome outcome)

@@ -84,7 +84,6 @@ namespace RNAssistant.Core.Services
                 {
                     Id = dataSource.Id,
                     Name = dataSource.Name,
-                    Json = dataSource.Json,
                     Binding = CloneBinding(dataSource.Binding),
                     CreatedUtc = dataSource.CreatedUtc,
                     UpdatedUtc = dataSource.UpdatedUtc
@@ -98,21 +97,12 @@ namespace RNAssistant.Core.Services
             if (binding == null) return null;
             return new HtmlWorkspaceDataBinding
             {
-                ToolId = binding.ToolId,
-                ArgumentsJson = binding.ArgumentsJson,
-                Transform = binding.Transform,
-                Headers = binding.Headers,
-                RefreshPolicy = binding.RefreshPolicy,
-                Host = binding.Host,
-                DocumentKey = binding.DocumentKey,
-                DocumentTitle = binding.DocumentTitle,
-                Status = binding.Status,
-                LastError = binding.LastError,
-                PayloadCompleteness = binding.PayloadCompleteness,
-                ContentSha256 = binding.ContentSha256,
-                CreatedUtc = binding.CreatedUtc,
-                UpdatedUtc = binding.UpdatedUtc,
-                LastRefreshUtc = binding.LastRefreshUtc
+                Resource = binding.Resource?.Copy(),
+                Policy = binding.Policy,
+                View = binding.View,
+                ViewPath = binding.ViewPath,
+                Schema = binding.Schema?.Copy(),
+                Mapping = binding.Mapping?.Copy()
             };
         }
     }

@@ -49,7 +49,7 @@ namespace RNAssistant.Office
                 {
                     throw new InvalidOperationException("Pending tool was not found or was already resolved.");
                 }
-                ConversationProtocolContext.EnsureCanContinue(session, pending.Command);
+                ConversationProtocolContext.EnsureCanContinue(session, pending.Command, _toolExecutor.Payloads);
                 var settings = ResolveChatSettings(session);
                 settings.EnsureAgentPromptsReviewed();
                 var documentRuntimeKey = CaptureExpectedRuntimeDocumentKey(session);
@@ -399,7 +399,7 @@ namespace RNAssistant.Office
             }
         }
 
-        private static PendingAgentTool FindPendingAgentTool(ChatSession session, string pendingId)
+        private PendingAgentTool FindPendingAgentTool(ChatSession session, string pendingId)
         {
             if (session == null || session.Messages == null)
             {
@@ -518,7 +518,7 @@ namespace RNAssistant.Office
             return false;
         }
 
-        private static ToolInvocation CommandFromActivity(ChatActivity activity)
+        private ToolInvocation CommandFromActivity(ChatActivity activity)
         {
             if (activity == null || string.IsNullOrWhiteSpace(activity.ToolId) ||
                 string.IsNullOrWhiteSpace(activity.ToolCallId))
@@ -534,14 +534,15 @@ namespace RNAssistant.Office
                 RuntimeStepId = activity.StepId
             };
 
-            if (string.IsNullOrWhiteSpace(activity.ArgumentsJson))
+            var argumentsJson = RuntimePayloadService.ReadArguments(activity, _toolExecutor.Payloads);
+            if (string.IsNullOrWhiteSpace(argumentsJson))
             {
                 return command;
             }
 
             try
             {
-                using (var reader = new JsonTextReader(new StringReader(activity.ArgumentsJson)) { DateParseHandling = DateParseHandling.None })
+                using (var reader = new JsonTextReader(new StringReader(argumentsJson)) { DateParseHandling = DateParseHandling.None })
                 {
                     var args = JObject.Load(reader);
                     while (reader.Read()) { }
@@ -648,6 +649,8 @@ namespace RNAssistant.Office
             target.ToolId = source.ToolId;
             target.ToolCallId = source.ToolCallId;
             target.ArgumentsJson = source.ArgumentsJson;
+            target.ArgumentsPayload = source.ArgumentsPayload;
+            target.ResultPayload = source.ResultPayload;
             target.RuntimeGuardJson = source.RuntimeGuardJson;
             target.ResultMessage = source.ResultMessage;
             target.DataJson = source.DataJson;

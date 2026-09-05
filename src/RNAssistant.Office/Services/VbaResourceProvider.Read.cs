@@ -63,13 +63,6 @@ namespace RNAssistant.Office.Services
                         request,
                         position,
                         cursorBinding);
-                    if (selection.Result.Complete)
-                    {
-                        _source.ObserveCompleteResourceModule(
-                            session,
-                            target.Module.Name,
-                            source.CodeSha256);
-                    }
                     return selection;
                 }
                 var backup = ReadBackup(target.Backup);
@@ -428,7 +421,7 @@ namespace RNAssistant.Office.Services
             var next = offset + length;
             var complete = next >= content.Length && !sourceTruncated;
             descriptor.ContentSha256 = contentSha256;
-            if (descriptor.Reference != null) descriptor.Reference.Revision = contentSha256;
+            if (descriptor.Reference != null) descriptor.Reference = new ResourceRef(descriptor.Reference.Uri, contentSha256);
             return new ResourceReadSelection
             {
                 Result = new ResourceReadResult

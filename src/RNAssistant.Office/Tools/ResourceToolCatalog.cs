@@ -17,6 +17,7 @@ namespace RNAssistant.Office.Tools
                 ResourceFindToolHandler.Descriptor, ResourceFindToolHandler.Policy, "resources_find");
             yield return ControllerToolCatalogEntry.CreateReadProjection(
                 ResourceReadToolHandler.Descriptor, ResourceReadToolHandler.Policy, "resources_read");
+            foreach (var tool in ResourceDefinitionToolHandler.Catalog()) yield return tool;
         }
     }
 }

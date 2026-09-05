@@ -159,6 +159,8 @@ namespace RNAssistant.Office.WebView
             core.FrameNavigationStarting += OnFrameNavigationStarting;
             core.NewWindowRequested += OnNewWindowRequested;
             core.PermissionRequested += OnPermissionRequested;
+            core.AddWebResourceRequestedFilter("https://rnassistant.local-resource/*", CoreWebView2WebResourceContext.All);
+            core.WebResourceRequested += OnResourceDataRequested;
             core.Settings.IsScriptEnabled = true;
 #if DEBUG
             core.Settings.AreDevToolsEnabled = true;
@@ -180,6 +182,28 @@ namespace RNAssistant.Office.WebView
 
             RuntimeLog.Info("WebView navigating to " + indexPath);
             _webView.Source = new Uri(indexPath);
+        }
+
+        private async void OnResourceDataRequested(object sender, CoreWebView2WebResourceRequestedEventArgs e)
+        {
+            var deferral = e.GetDeferral();
+            try
+            {
+                var method = e.Request.Method;
+                var url = e.Request.Uri;
+                var response = await Task.Run(() => _controller.ReadResourceData(method, url, _lifetimeCancellation.Token));
+                if (_resourcesDisposed) { response.Body.Dispose(); return; }
+                e.Response = _webView.CoreWebView2.Environment.CreateWebResourceResponse(
+                    response.Body, response.StatusCode, response.Reason, response.Headers);
+            }
+            catch (Exception ex)
+            {
+                RuntimeLog.Error("Resource response failed: " + ex.GetType().Name);
+                if (!_resourcesDisposed)
+                    e.Response = _webView.CoreWebView2.Environment.CreateWebResourceResponse(
+                        new MemoryStream(), 503, "Resource unavailable", new Services.ResourceStreamResponse().Headers);
+            }
+            finally { deferral.Complete(); }
         }
 
         private void OnNavigationStarting(object sender, CoreWebView2NavigationStartingEventArgs e)
@@ -491,6 +515,7 @@ namespace RNAssistant.Office.WebView
                     core.FrameNavigationStarting -= OnFrameNavigationStarting;
                     core.NewWindowRequested -= OnNewWindowRequested;
                     core.PermissionRequested -= OnPermissionRequested;
+                    core.WebResourceRequested -= OnResourceDataRequested;
                 }
             }
             catch

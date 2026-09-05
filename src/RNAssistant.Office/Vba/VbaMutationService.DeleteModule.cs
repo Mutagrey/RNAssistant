@@ -35,10 +35,10 @@ namespace RNAssistant.Office.Vba
             var correlation = request.Correlation ?? new VbaMutationCorrelation();
             var currentHash = CodeSha256(current.Code);
             string observedHash;
-            if (TryGetObservation(correlation.SessionId, resolvedName, out observedHash) &&
+            if (TryGetObservation(correlation, resolvedName, out observedHash) &&
                 !string.Equals(observedHash, currentHash, StringComparison.OrdinalIgnoreCase))
             {
-                RemoveObservation(correlation.SessionId, resolvedName);
+                correlation.ObserveExternalDrift?.Invoke(resolvedName);
                 return DeleteModuleGuardFailure(StaleSnapshot(
                     resolvedName,
                     true,
@@ -182,7 +182,6 @@ namespace RNAssistant.Office.Vba
                     StringComparison.OrdinalIgnoreCase))
             {
                 var correlation = request.Correlation ?? new VbaMutationCorrelation();
-                RemoveObservation(correlation.SessionId, moduleName);
                 return StaleSnapshot(
                     moduleName,
                     guard.ModuleExists,

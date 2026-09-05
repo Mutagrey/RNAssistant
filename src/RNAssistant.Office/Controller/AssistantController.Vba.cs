@@ -149,9 +149,9 @@ namespace RNAssistant.Office
             command.Arguments["moduleName"] = moduleName;
             command.Arguments["code"] = code;
             command.Arguments["mode"] = "updateOnly";
+            command.ExpectedContentSha256 = expectedCodeSha256;
             return WithReservedSession(LoadSession(null), session =>
             {
-                _toolExecutor.ObserveVbaHash(session, moduleName, expectedCodeSha256);
                 var result = _toolExecutor.ExecuteManual(command, tools,
                     settings, false, true, session);
                 _toolCatalog.InvalidateDocumentVbaTools();

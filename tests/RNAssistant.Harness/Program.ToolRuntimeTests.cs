@@ -446,10 +446,10 @@ namespace RNAssistant.Harness
             var reference = new ResourceRef("rna://chat/session/artifact/body?revision=7", "7");
             var references = new List<ResourceRef> { reference };
             var typed = RuntimeResult.Ok("Question", "{\"value\":null}", references);
-            reference.Uri = "changed";
+            reference = new ResourceRef("changed");
             references.Clear();
             var exposed = typed.Resources[0];
-            exposed.Revision = "changed";
+            exposed = new ResourceRef(exposed.Uri, "changed");
             var f = new ToolRuntimeFixture();
             f.Handler.Run = (context, token) => Task.FromResult(new ToolHandlerResult(typed, ToolEffectEvidence.None, awaitingUser: true));
             var result = await f.Runtime.ExecuteAsync(f.Context(), CancellationToken.None);
@@ -603,8 +603,9 @@ namespace RNAssistant.Harness
                 ui.Status = "prepared";
                 ui.Message = "UI only";
                 ui.DataJson = "UI_ONLY";
-                ui.ModelResourceRefs[0].Uri = "rna://chat/ui-only";
-                ui.ModelResultResourceRef.Revision = "UI_ONLY";
+                AssertEqual(null, typeof(ResourceRef).GetProperty("Uri").GetSetMethod(false), "resource identity is immutable");
+                AssertEqual(null, typeof(ResourceRef).GetProperty("Revision").GetSetMethod(false),
+                    "exact resource references cannot be mutated by UI consumers");
                 var wire = ToolResultWire.Read(AgentJsonProtocol.BuildToolResult(
                     new ToolInvocation { ToolCallId = context.Call.Id, ToolId = context.Call.Name }, materialized));
                 AssertTrue(ReferenceEquals(parsedData, materialized.Data),

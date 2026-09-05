@@ -2,246 +2,85 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using Newtonsoft.Json;
-using Newtonsoft.Json.Linq;
-using RNAssistant.Core.ModelProtocol;
 using RNAssistant.Core.Models;
-using RNAssistant.Core.Storage;
 using RNAssistant.Office.Services;
 
 namespace RNAssistant.Office.Tools
 {
     internal sealed partial class CapabilityCatalogService
     {
-        private readonly SkillStore _skillStore;
         private readonly SkillCatalogService _skillCatalog;
+        private readonly ResourceGatewayService _resources;
+        internal SkillCatalogSnapshot CaptureSkills() { return _skillCatalog.Capture(); }
+        internal SkillCatalogSnapshot SelectPublishedSkills(SkillCatalogSnapshot published)
+        { return _skillCatalog.SelectPublished(published); }
 
-        internal CapabilityCatalogService(
-            IOfficeApplicationAdapter adapter,
-            SkillStore skillStore)
+        internal CapabilityCatalogService(IOfficeApplicationAdapter adapter,
+            Func<SkillCatalogSnapshot> publishedSkills, ResourceGatewayService resources)
         {
-            _skillStore = skillStore ??
-                throw new ArgumentNullException(nameof(skillStore));
-            _skillCatalog = new SkillCatalogService(
-                adapter ?? throw new ArgumentNullException(nameof(adapter)),
-                skillStore);
+            _resources = resources ?? throw new ArgumentNullException(nameof(resources));
+            _skillCatalog = new SkillCatalogService(adapter ?? throw new ArgumentNullException(nameof(adapter)), publishedSkills);
         }
 
-        private IReadOnlyList<SkillDefinition> CapabilitySkills(
-            bool manualRun,
-            IReadOnlyList<SkillDefinition> runtimeSkills)
+        private IReadOnlyList<SkillDefinition> CapabilitySkills(bool manualRun, IReadOnlyList<SkillDefinition> runtimeSkills)
         {
-            if (runtimeSkills != null)
-            {
-                return runtimeSkills
-                    .Where(item => item != null && item.Enabled)
-                    .ToList();
-            }
-            return manualRun
-                ? (IReadOnlyList<SkillDefinition>)_skillCatalog.GetVisibleSkills()
-                : new SkillDefinition[0];
+            if (runtimeSkills != null) return runtimeSkills.Where(item => item != null && item.Enabled).ToList();
+            return manualRun ? (IReadOnlyList<SkillDefinition>)_skillCatalog.GetVisibleSkills() : new SkillDefinition[0];
         }
 
-        private CapabilityToolOutcome ReadSkill(
-            IDictionary<string, object> arguments,
-            SkillDefinition skill,
-            ChatSession session)
+        private CapabilityToolOutcome ReadSkill(IDictionary<string, object> arguments, SkillDefinition skill, ChatSession session)
         {
-            if (skill == null)
-            {
-                return CapabilityToolOutcome.Error(
-                    "Skill reader is unavailable.", null,
-                    "capability_reader_unavailable", false);
-            }
-            if (HasArgument(arguments, "referencePath"))
-                return ReadSkillReference(arguments, skill, session);
-            if (HasArgument(arguments, "offset") ||
-                HasArgument(arguments, "maxChars"))
-            {
-                return CapabilityToolOutcome.Error(
-                    "Capability reference offsets and page sizes are runtime-owned.", null,
-                    "capability_runtime_state_not_allowed", false);
-            }
-
-            return CapabilityToolOutcome.Ok(
-                "Skill loaded: " + skill.Id +
-                    ". Tool schemas named by this skill are not loaded automatically.",
-                JsonConvert.SerializeObject(new
-                {
-                    kind = "skill",
-                    loaded = true,
-                    complete = true,
-                    truncated = false,
-                    id = skill.Id,
-                    host = skill.Host,
-                    name = skill.Name,
-                    description = skill.Description,
-                    version = string.IsNullOrWhiteSpace(skill.Version)
-                        ? "1.0.0" : skill.Version,
-                    revision = SkillRevision.Compute(skill),
-                    bodyChars = (skill.BodyMarkdown ?? string.Empty).Length,
-                    enabled = skill.Enabled,
-                    format = "markdown",
-                    references = (skill.References ??
-                        new List<SkillReferenceMetadata>()).Select(item => new
-                        {
-                            path = item.Path,
-                            byteLength = item.ByteLength,
-                            revision = item.Revision
-                        }).ToArray(),
-                    capabilityUse = new
-                    {
-                        toolSchemasLoadedByThisRead = false,
-                        instruction = "Before calling a tool id named in bodyMarkdown, ensure its schema is already callable. Otherwise call common.capabilities_read with that exact tool id, wait for a successful complete tool-schema result, and call the tool only in a later response."
-                    },
-                    bodyMarkdown = skill.BodyMarkdown ?? string.Empty
-                }));
+            if (skill == null) return CapabilityToolOutcome.Error("Skill reader is unavailable.", null, "capability_reader_unavailable", false);
+            if (HasArgument(arguments, "referencePath")) return ReadSkillReference(arguments, skill, session);
+            if (HasArgument(arguments, "offset") || HasArgument(arguments, "maxChars"))
+                return CapabilityToolOutcome.Error("Offsets and page sizes belong to resource continuation.", null, "capability_runtime_state_not_allowed", false);
+            var exact = CatalogResourceProvider.SkillResource(skill);
+            var result = _resources.Read(session, new ResourceReadRequest { Reference = exact, Representation = "text", MaxChars = 24000 }).Result;
+            return CapabilityToolOutcome.Ok(result.Complete ? "Skill loaded: " + skill.Id + ". No tool schema was admitted by this resource read." :
+                "Partial skill body. Read the skill target through common.resources_read for complete content.",
+                JsonConvert.SerializeObject(new {
+                    kind = "skill", loaded = result.Complete, complete = result.Complete, truncated = !result.Complete,
+                    id = skill.Id, host = skill.Host, name = skill.Name, description = skill.Description,
+                    version = skill.Version, revision = SkillRevision.Compute(skill), bodyChars = result.TotalCharacters,
+                    enabled = skill.Enabled, format = "markdown",
+                    references = (skill.References ?? new List<SkillReferenceMetadata>()).Select(item => new {
+                        path = item.Path, byteLength = item.ByteLength, revision = item.Revision }).ToArray(),
+                    bodyMarkdown = result.Text
+                }), _resources.Evidence(session, result));
         }
 
-        private CapabilityToolOutcome ReadSkillReference(
-            IDictionary<string, object> arguments,
-            SkillDefinition skill,
-            ChatSession session)
+        private CapabilityToolOutcome ReadSkillReference(IDictionary<string, object> arguments, SkillDefinition skill, ChatSession session)
         {
-            var referencePath = ToolArgumentReader.String(
-                arguments, "referencePath", string.Empty);
-            string content;
-            string error;
-            SkillReferenceMetadata metadata;
-            if (!_skillStore.TryReadReference(
-                skill, referencePath, out content, out metadata, out error))
-            {
-                var changed = (error ?? string.Empty).IndexOf(
-                    "changed after", StringComparison.OrdinalIgnoreCase) >= 0;
-                return CapabilityToolOutcome.Error(
-                    error, null,
-                    changed ? "skill_reference_changed" :
-                        "skill_reference_unavailable",
-                    false);
-            }
-
-            var action = ToolArgumentReader.String(
-                arguments, "action", "read").Trim().ToLowerInvariant();
-            var offset = 0;
+            var path = ToolArgumentReader.String(arguments, "referencePath", string.Empty);
+            var metadata = (skill.References ?? new List<SkillReferenceMetadata>()).SingleOrDefault(item => item.Path == path);
+            if (metadata == null) return CapabilityToolOutcome.Error("The selected reference is not part of this publication.", null, "skill_reference_unavailable", false);
+            var exact = CatalogResourceProvider.SkillResource(skill, path);
+            var action = ToolArgumentReader.String(arguments, "action", "read").Trim().ToLowerInvariant();
+            string cursor = null;
             if (action == "next")
             {
-                string continuationError;
-                string continuationCode;
-                if (!TryReferenceContinuation(
-                    session,
-                    skill,
-                    metadata,
-                    out offset,
-                    out continuationError,
-                    out continuationCode))
-                {
-                    return CapabilityToolOutcome.Error(
-                        continuationError,
-                        null,
-                        continuationCode,
-                        false);
-                }
+                var previous = (session?.Messages ?? new List<ChatMessage>()).Where(message => message.ToolName == CapabilityToolCatalog.ReadToolId)
+                    .Reverse().SelectMany(message => message.ResourceEvidence ?? new List<ResourceEvidence>())
+                    .FirstOrDefault(evidence => evidence.Resource.Identity.Equals(exact.Identity));
+                if (previous == null) return CapabilityToolOutcome.Error("No incomplete exact reference read exists.", null, "capability_continuation_missing", false);
+                if (previous.Resource.Revision != exact.Revision)
+                    return CapabilityToolOutcome.Error("The skill publication changed. Restart with action=read.", null, "skill_reference_changed", false);
+                if (previous.Complete) return CapabilityToolOutcome.Error("This reference read is complete.", null, "capability_continuation_complete", false);
+                if (!previous.Coverage.End.HasValue || previous.Coverage.End.Value <= 0 || previous.Coverage.End.Value > int.MaxValue)
+                    return CapabilityToolOutcome.Error("Exact reference coverage is unavailable.", null, "capability_continuation_invalid", false);
+                cursor = ResourceReadCursor.CreateRevisionBound((int)previous.Coverage.End.Value, previous.ContentSha256,
+                    ResourceReadCursor.ReadBinding(exact.Uri, "text"));
             }
-            if (offset < 0 || offset > (content ?? string.Empty).Length)
-            {
-                return CapabilityToolOutcome.Error(
-                    "Stored capability continuation is outside the current reference. Restart with action=read.", null,
-                    "capability_continuation_invalid", false);
-            }
-            const int maxChars = 24000;
-            var end = Math.Min(content.Length, offset + maxChars);
-            if (end > offset && end < content.Length &&
-                char.IsHighSurrogate(content[end - 1]) &&
-                char.IsLowSurrogate(content[end]))
-            {
-                end += 1;
-            }
-            var complete = end >= content.Length;
-            return CapabilityToolOutcome.Ok(
-                complete
-                    ? "Skill reference read: " + metadata.Path
-                    : "Skill reference chunk read. Call the same id and referencePath with action=next to continue.",
-                JsonConvert.SerializeObject(new
-                {
-                    kind = "reference",
-                    id = skill.Id,
-                    skillRevision = SkillRevision.Compute(skill),
-                    path = metadata.Path,
-                    revision = metadata.Revision,
-                    format = "markdown",
-                    returnedChars = end - offset,
-                    totalChars = content.Length,
-                    progressCharacters = end,
-                    complete = complete,
-                    hasMore = !complete,
-                    content = content.Substring(offset, end - offset)
-                }));
-        }
-
-        private static bool TryReferenceContinuation(
-            ChatSession session,
-            SkillDefinition skill,
-            SkillReferenceMetadata metadata,
-            out int offset,
-            out string error,
-            out string code)
-        {
-            offset = 0;
-            error = null;
-            code = null;
-            foreach (var message in (session == null
-                    ? new List<ChatMessage>()
-                    : session.Messages ?? new List<ChatMessage>())
-                .Where(item => item != null)
-                .Reverse())
-            {
-                ToolResultWireReadResult wire;
-                string parseError;
-                if (!ToolResultHistoryReader.TryRead(
-                        message, out wire, out parseError) ||
-                    !string.Equals(
-                        wire.Name,
-                        CapabilityToolCatalog.ReadToolId,
-                        StringComparison.Ordinal) ||
-                    wire.Result.Status != RNAssistant.Core.Tools.Contracts.ToolResultStatus.Ok ||
-                    string.IsNullOrWhiteSpace(wire.Result.DataJson)) continue;
-                JObject data;
-                try
-                {
-                    data = JObject.Parse(wire.Result.DataJson);
-                }
-                catch (JsonException)
-                {
-                    continue;
-                }
-                if (!string.Equals((string)data["kind"], "reference", StringComparison.Ordinal) ||
-                    !string.Equals((string)data["id"], skill.Id, StringComparison.Ordinal) ||
-                    !string.Equals((string)data["path"], metadata.Path, StringComparison.Ordinal)) continue;
-                if ((bool?)data["complete"] == true)
-                {
-                    error = "The latest read for this skill reference is already complete. Use action=read to start again.";
-                    code = "capability_continuation_complete";
-                    return false;
-                }
-                if (!string.Equals(
-                        (string)data["skillRevision"],
-                        SkillRevision.Compute(skill),
-                        StringComparison.Ordinal) ||
-                    !string.Equals(
-                        (string)data["revision"],
-                        metadata.Revision,
-                        StringComparison.Ordinal))
-                {
-                    error = "The skill reference changed after the previous chunk. Restart with action=read.";
-                    code = "skill_reference_changed";
-                    return false;
-                }
-                offset = (int?)data["progressCharacters"] ?? 0;
-                if (offset > 0) return true;
-                break;
-            }
-            error = "No incomplete accepted read exists for this skill reference. Start with action=read.";
-            code = "capability_continuation_missing";
-            return false;
+            var result = _resources.Read(session, new ResourceReadRequest {
+                Reference = exact, Representation = "text", Cursor = cursor, MaxChars = 24000 }).Result;
+            return CapabilityToolOutcome.Ok(result.Complete ? "Skill reference read: " + path :
+                "Reference chunk read. Continue the same id and referencePath with action=next.",
+                JsonConvert.SerializeObject(new {
+                    kind = "reference", id = skill.Id, skillRevision = SkillRevision.Compute(skill), path = path,
+                    revision = metadata.Revision, format = "markdown", returnedChars = result.ReturnedCharacters,
+                    totalChars = result.TotalCharacters, progressCharacters = result.Offset + result.ReturnedCharacters,
+                    complete = result.Complete, hasMore = !result.Complete, content = result.Text
+                }), _resources.Evidence(session, result));
         }
     }
 }

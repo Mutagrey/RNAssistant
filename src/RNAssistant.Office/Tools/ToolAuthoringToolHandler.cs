@@ -96,11 +96,11 @@ namespace RNAssistant.Office.Tools
             CancellationToken cancellationToken)
         {
             cancellationToken.ThrowIfCancellationRequested();
-            return Task.FromResult(ToolAuthoringToolProjection.Project(
+            return Task.FromResult(context.Complete(ToolAuthoringToolProjection.Project(
                 _service.ExecuteMutation(
                     _toolId, context.Arguments,
                     context.PreparedStateJson,
-                    context.MarkDispatchPossible)));
+                    context.MarkDispatchPossible))));
         }
     }
 

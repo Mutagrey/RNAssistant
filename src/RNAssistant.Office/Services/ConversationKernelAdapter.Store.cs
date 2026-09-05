@@ -201,6 +201,7 @@ namespace RNAssistant.Office.Services
             var message = AgentTranscript.CreateAssistantMessage(
                 ConversationRunProjection.AssistantMessage(summary),
                 diagnostic != null || _lastModel == null ? null : _lastModel.Completion, diagnostic, responseStatus);
+            if (_modelSession != null) _modelSession.AttachResponseEvidence(message);
             _session.Messages.Add(message);
         }
 

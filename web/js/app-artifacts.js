@@ -267,7 +267,7 @@
       var image = document.createElement("img");
       image.alt = title || "";
       image.loading = "lazy";
-      image.src = "data:" + thumbnail.imageMimeType + ";base64," + thumbnail.imageBase64Content;
+      image.src = thumbnail.data.url;
       node.appendChild(image);
       node.classList.add("is-ready");
     } else if (thumbnail && thumbnail.status === "error") {

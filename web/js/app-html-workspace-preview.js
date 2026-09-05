@@ -65,43 +65,101 @@
       .replace(/"/g, "&quot;");
   }
 
-  function dataScript(dataSources) {
-    var raw = Object.create(null);
-    var metadata = Object.create(null);
-    dataSources.forEach(function (source) {
-      var name = prop(source, "Name", "name", prop(source, "Id", "id", ""));
-      var json = prop(source, "Json", "json", "{}") || "{}";
-      var binding = prop(source, "Binding", "binding", null);
-      try {
-        JSON.parse(json);
-        raw[name] = json;
-      } catch (error) {
-        raw[name] = "null";
-      }
-      metadata[name] = binding ? {
-        bound: true,
-        sourceTool: prop(binding, "ToolId", "toolId", ""),
-        transform: prop(binding, "Transform", "transform", "raw"),
-        refreshPolicy: prop(binding, "RefreshPolicy", "refreshPolicy", "manual"),
-        status: prop(binding, "Status", "status", "ready"),
-        payloadCompleteness: prop(binding, "PayloadCompleteness", "payloadCompleteness", "bounded"),
-        contentSha256: prop(binding, "ContentSha256", "contentSha256", ""),
-        jsonCharacters: json.length,
-        lastError: prop(binding, "LastError", "lastError", ""),
-        lastRefreshUtc: prop(binding, "LastRefreshUtc", "lastRefreshUtc", null),
-        documentTitle: prop(binding, "DocumentTitle", "documentTitle", "")
-      } : { bound: false, status: "static", payloadCompleteness: "complete", jsonCharacters: json.length };
+  // The application sees only bounded resource handles, never an injected dataset.
+  function installResourceApi(names) {
+    var nativeFetch = window.fetch && window.fetch.bind(window);
+    var handles = new Set();
+    var subscribers = new Set();
+    window.addEventListener("message", function (event) {
+      if (event.source !== window.parent || !event.data || event.data.type !== "rnassistant-resource-changed") return;
+      var changed = (event.data.names || []).filter(function (name) { return names.indexOf(name) >= 0; });
+      if (changed.length) subscribers.forEach(function (listener) {
+        try { listener(Object.freeze({ names: changed.slice(), generation: event.data.generation })); } catch (_) {}
+      });
     });
-    return "<script>(function(){" +
-      "var raw=" + escapeScriptJson(JSON.stringify(raw)) + ",data=Object.create(null),meta=" + escapeScriptJson(JSON.stringify(metadata)) + ";" +
-      "Object.keys(raw).forEach(function(name){data[name]=JSON.parse(raw[name]);});" +
-      "function names(){return Object.keys(data);}" +
-      "function resolve(name){if(Object.prototype.hasOwnProperty.call(data,name))return name;var keys=names();if(keys.length===1){if(window.console&&console.warn)console.warn(\"RNAssistant.data.get('\"+String(name)+\"') used missing data source; falling back to '\"+keys[0]+\"'. Update workspace code to the exact name.\");return keys[0];}return name;}" +
-      "Object.freeze(raw);Object.freeze(data);Object.freeze(meta);" +
-      "window.RNAssistantData=data;window.RNAssistantDataRaw=raw;window.RNAssistantDataMeta=meta;" +
-      "window.RNAssistant={data:Object.freeze({get:function(name){return data[resolve(name)];},raw:function(name){var key=resolve(name);return raw[key]||null;},meta:function(name){var key=resolve(name);return meta[key]||null;},names:names,defaultName:function(){var keys=names();return keys.length===1?keys[0]:null;},first:function(){var key=this.defaultName();return key?data[key]:null;}})};" +
-      "Object.freeze(window.RNAssistant);" +
-      "}());<\/script>";
+    function control(operation, bindingName, leaseId) {
+      return new Promise(function (resolve, reject) {
+        if (window.parent === window) { reject(new Error("RESOURCE_HOST_REQUIRED: open this workspace in RNAssistant.")); return; }
+        var channel = new MessageChannel();
+        var timeout = setTimeout(function () { channel.port1.close(); reject(new Error("RESOURCE_CONTROL_TIMEOUT")); }, 15000);
+        channel.port1.onmessage = function (event) {
+          clearTimeout(timeout); channel.port1.close();
+          if (!event.data || !event.data.ok) reject(new Error(String(event.data && event.data.error || "RESOURCE_ACCESS_DENIED")));
+          else resolve(event.data.value);
+        };
+        window.parent.postMessage({ type: "rnassistant-resource-control", operation: operation,
+          bindingName: bindingName, leaseId: leaseId }, "*", [channel.port2]);
+      });
+    }
+    async function open(name) {
+      if (names.indexOf(name) < 0) throw new Error("RESOURCE_BINDING_UNKNOWN: " + name);
+      var lease = await control("open", name, null);
+      var closed = false, busy = false, offset = 0, done = false;
+      var handle = {
+        descriptor: Object.freeze(lease.descriptor),
+        async read(options) {
+          options = options || {};
+          if (closed || done) throw new Error("RESOURCE_LEASE_CLOSED");
+          if (busy) throw new Error("RESOURCE_BACKPRESSURE");
+          if (options.view && options.view !== lease.view) throw new Error("RESOURCE_VIEW_UNSUPPORTED");
+          if (options.path && options.path !== lease.path) throw new Error("RESOURCE_VIEW_PATH_UNSUPPORTED");
+          if (options.page !== undefined && String(options.page) !== lease.path) throw new Error("RESOURCE_VIEW_PATH_UNSUPPORTED");
+          var limit = options.limit || options.batchRows || lease.maxBatchItems;
+          var requestedOffset = options.offset === undefined ? offset : options.offset;
+          if (!Number.isInteger(limit) || limit < 1 || limit > lease.maxBatchItems || requestedOffset !== offset)
+            throw new Error("RESOURCE_BATCH_BOUNDS");
+          busy = true;
+          try {
+            var response = await nativeFetch(lease.url + "?offset=" + offset + "&limit=" + limit +
+              (options.fields ? "&fields=" + encodeURIComponent(JSON.stringify(options.fields)) : ""),
+              { method: "GET", credentials: "omit", cache: "no-store", signal: options.signal });
+            if (response.ok && lease.binary) {
+              var bytes = await response.arrayBuffer();
+              if (bytes.byteLength !== lease.binary.payload.byteLength || bytes.byteLength > lease.maxBatchBytes)
+                throw new Error("RESOURCE_BATCH_TOO_LARGE");
+              done = true;
+              return { resource: lease.descriptor.reference, view: lease.view, bytes: bytes,
+                mimeType: lease.binary.payload.contentType, width: lease.binary.width, height: lease.binary.height,
+                pageIndex: lease.binary.pageIndex, done: true };
+            }
+            var batch = await response.json();
+            if (!response.ok) throw new Error(batch.code + ": " + batch.message);
+            offset = batch.nextOffset; done = batch.done;
+            return batch;
+          } finally { busy = false; }
+        },
+        async *stream(options) {
+          var streamOptions = Object.assign({}, options || {});
+          if (streamOptions.offset !== undefined && streamOptions.offset !== offset) throw new Error("RESOURCE_BATCH_BOUNDS");
+          delete streamOptions.offset;
+          try { while (!done && !closed) yield await handle.read(streamOptions); }
+          finally { await handle.close(); }
+        },
+        async close() {
+          if (closed) return;
+          closed = true; handles.delete(handle);
+          await control("close", name, lease.leaseId);
+        }
+      };
+      handles.add(handle);
+      return Object.freeze(handle);
+    }
+    window.addEventListener("pagehide", function () {
+      handles.forEach(function (handle) { handle.close().catch(function () {}); });
+    });
+    Object.defineProperty(window, "RN", { value: Object.freeze({
+      resources: Object.freeze({ open: open, names: function () { return names.slice(); },
+        subscribe: function (listener) {
+          if (typeof listener !== "function") throw new Error("RESOURCE_LISTENER_INVALID");
+          subscribers.add(listener); return function () { subscribers.delete(listener); };
+        } })
+    }), writable: false, configurable: false });
+  }
+
+  function resourceScript(dataSources) {
+    var names = dataSources.map(function (source) { return prop(source, "Name", "name", ""); });
+    return "<script>(" + safeScript(installResourceApi.toString()) + ")(" +
+      escapeScriptJson(JSON.stringify(names)) + ");</script>";
   }
 
   function cssBlock(files) {
@@ -181,7 +239,7 @@
   }
 
   function previewContentSecurityPolicy() {
-    return "<meta http-equiv=\"Content-Security-Policy\" content=\"default-src 'none'; connect-src 'none'; img-src data: blob:; font-src data:; media-src data: blob:; style-src 'unsafe-inline'; script-src 'unsafe-inline' blob: data:; frame-src 'none'; child-src 'none'; object-src 'none'; base-uri 'none'; form-action 'none';\">";
+    return "<meta http-equiv=\"Content-Security-Policy\" content=\"default-src 'none'; connect-src https://rnassistant.local-resource/v1/; img-src data: blob: https://rnassistant.local-resource/v1/; font-src data:; media-src data: blob:; style-src 'unsafe-inline'; script-src 'unsafe-inline' blob: data:; frame-src 'none'; child-src 'none'; object-src 'none'; base-uri 'none'; form-action 'none';\">";
   }
 
   function networkBridgeScript() {
@@ -206,7 +264,7 @@
     var hostBridge = options.hostBridge === false ? "" : networkBridgeScript() + "\n";
     var chartRuntime = echartsScript(files);
     var headInject = previewContentSecurityPolicy() + "\n" + previewViewportReset() + "\n" +
-      chartRuntime + (chartRuntime ? "\n" : "") + hostBridge + dataScript(dataSources) + "\n" + cssBlock(files);
+      chartRuntime + (chartRuntime ? "\n" : "") + resourceScript(dataSources) + hostBridge + "\n" + cssBlock(files);
     var bodyInject = scriptBlock(files);
     if (!html.trim()) {
       html = "<div style=\"font-family:Segoe UI,Arial,sans-serif;padding:24px;color:#475467\">HTML workspace пуст.</div>";

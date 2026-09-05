@@ -15,6 +15,8 @@ namespace RNAssistant.Office.Tools
                 StringComparison.Ordinal)) return ResourceReadToolHandler.Binding;
             if (ExcelReadToolIds.Owns(toolId))
                 return ExcelReadToolHandler.BindingFor(toolId);
+            if (ResourceDefinitionToolHandler.Owns(toolId))
+                return ResourceDefinitionToolHandler.BindingFor(toolId);
             if (ExcelWriteToolIds.Owns(toolId))
                 return ExcelWriteToolHandler.Binding;
             if (ExcelFindReplaceToolIds.Owns(toolId))

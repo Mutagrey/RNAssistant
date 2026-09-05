@@ -63,7 +63,8 @@ namespace RNAssistant.Harness
                 },
                 DataSources = new List<HtmlWorkspaceDataSource>
                 {
-                    new HtmlWorkspaceDataSource { Id = "rows", Name = "rows", Json = "{\"value\":1}" }
+                    new HtmlWorkspaceDataSource { Id = "rows", Name = "rows", Binding = new HtmlWorkspaceDataBinding {
+                        Resource = new ResourceRef("rna://state/conversation/test/rows", "r1"), Policy = "exact", View = "text" } }
                 },
                 History = new List<HtmlWorkspaceSnapshot> { new HtmlWorkspaceSnapshot { Label = "old" } }
             };
@@ -73,9 +74,9 @@ namespace RNAssistant.Harness
             AssertTrue(!object.ReferenceEquals(sourceWorkspace.Files[0], clonedWorkspace.Files[0]), "workspace file cloned");
             AssertTrue(!object.ReferenceEquals(sourceWorkspace.DataSources[0], clonedWorkspace.DataSources[0]), "workspace data cloned");
             sourceWorkspace.Files[0].Content = "changed html";
-            sourceWorkspace.DataSources[0].Json = "{\"value\":2}";
+            sourceWorkspace.DataSources[0].Binding.Resource = new ResourceRef("rna://state/conversation/test/rows", "r2");
             AssertEqual("original html", clonedWorkspace.Files[0].Content, "workspace file clone independent");
-            AssertEqual("{\"value\":1}", clonedWorkspace.DataSources[0].Json, "workspace data clone independent");
+            AssertEqual("r1", clonedWorkspace.DataSources[0].Binding.Resource.Revision, "workspace binding clone independent");
 
             var snapshot = HtmlWorkspaceCopyService.CaptureSnapshot(clonedWorkspace, "checkpoint");
             var restoredWorkspace = HtmlWorkspaceCopyService.CreateWorkspaceFromSnapshot(snapshot);
@@ -1091,6 +1092,8 @@ namespace RNAssistant.Harness
             AssertEqual("32000", controller.LastArtifactViewerCursor, "artifact viewer forwards opaque continuation");
             AssertEqual("markdown", (string)envelope["payload"]["viewerKind"],
                 "artifact viewer returns typed viewer kind");
+            AssertTrue(envelope["payload"]["text"] == null && envelope["payload"]["data"]["url"] != null,
+                "text pages use the data plane, never bridge body transport");
 
             const string imageUri = "rna://chat/chat-view/artifact/image-r1/revision/1";
             response = bridge.HandleMessageAsync(
@@ -1141,6 +1144,31 @@ namespace RNAssistant.Harness
             AssertTrue(envelope["ok"].Value<bool>(), "artifact PDF thumbnail bridge response ok");
             AssertEqual(160, envelope["payload"]["width"].Value<int>(),
                 "artifact PDF thumbnail returns bounded preview width");
+        }
+
+        private static void BridgeCoalescesResourceAuthorityNotifications()
+        {
+            var controller = new AssistantController();
+            var delivered = new System.Threading.Tasks.TaskCompletionSource<string>();
+            using (var bridge = new AssistantWebBridge(controller, json => delivered.TrySetResult(json)))
+            {
+                var scope = new ResourceAuthorityScopeId("document", "notice-test");
+                for (var generation = 1; generation <= 2; generation++)
+                {
+                    var changes = Enumerable.Range((generation - 1) * 40, 40).Select(index => {
+                        var identity = new ResourceIdentity("rna://document/notice-test/" + index);
+                        return new ResourceHeadChange(identity, null, ResourceHeadState.Unknown(identity, generation, "drift"));
+                    }).ToArray();
+                    controller.RaiseResourceChange(ResourceAuthorityCommit.Create(scope, generation - 1, null, changes,
+                        AuthorityCommitReason.ExternalDrift));
+                }
+                AssertTrue(delivered.Task.Wait(3000), "coalesced metadata notification is delivered");
+                var payload = JObject.Parse(delivered.Task.Result);
+                AssertEqual("resourceChanged", (string)payload["type"], "notification is a typed control-plane event");
+                AssertEqual(2L, (long)payload["generation"], "notification keeps the latest generation");
+                AssertTrue((bool)payload["allInScope"] && ((JArray)payload["resources"]).Count == 0,
+                    "bursts coalesce to bounded scope metadata, never unbounded resources or bodies");
+            }
         }
 
         private static void BridgeUsesTypedHtmlNetworkPayloads()

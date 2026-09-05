@@ -43,6 +43,14 @@ namespace RNAssistant.Office.Tools
         private readonly IReadOnlyList<ToolCatalogEntry> _controllerTools;
         private readonly ISet<string> _controllerToolIds;
         private readonly HostRuntime _hostRuntime;
+        private readonly ResourceAuthorityService _resourceAuthority;
+        private readonly ResourceMutationJournal _resourceMutationJournal;
+        private readonly DocumentAuthorityRegistry _documentAuthorities;
+        private readonly Action<ChatSession> _persistResourceFacts;
+        private readonly CatalogPublicationService _catalogPublication;
+        private readonly ToolStore _toolStore;
+        internal ResourceAuthorityService ResourceAuthority { get { return _resourceAuthority; } }
+        internal ChatBlobStore Payloads { get; private set; }
 
         internal HostRuntime DocumentRuntime { get { return _hostRuntime; } }
         internal VbaReader VbaReader { get { return _vbaExecutor.Reader; } }
@@ -56,16 +64,20 @@ namespace RNAssistant.Office.Tools
             Action<AppSettings> saveSettings = null,
             AppDataPaths paths = null,
             Func<ChatSession, string, bool> loadArtifactBody = null,
-            Func<ChatAttachment, int, string> readAttachmentText = null)
+            Func<ChatAttachment, int, string> readAttachmentText = null,
+            ResourceAuthorityStore resourceAuthorityStore = null,
+            Action<ChatSession> persistResourceFacts = null,
+            Func<ChatAttachment, byte[]> readAttachmentBytes = null)
         {
+            if (vbaJournalStore == null) throw new ArgumentNullException(nameof(vbaJournalStore));
+            paths = paths ?? vbaJournalStore.Paths;
+            _persistResourceFacts = persistResourceFacts;
+            _toolStore = toolStore;
             _adapter = adapter;
             _adapterTools = OfficeToolCatalog.ForHost(
                 _adapter.HostName).ToArray();
             _controllerToolIds = new HashSet<string>(
                 StringComparer.OrdinalIgnoreCase);
-            _vbaExecutor = new VbaToolExecutor(adapter, vbaJournalStore);
-            _capabilityCatalogService = new CapabilityCatalogService(
-                adapter, skillStore);
             _toolAuthoringService = new ToolAuthoringService(
                 adapter, toolStore, id => IsProtectedToolId(id));
             _skillAuthoringService = new SkillAuthoringService(
@@ -76,13 +88,25 @@ namespace RNAssistant.Office.Tools
             _promptSettingsService = new PromptSettingsService(
                 loadSettings, saveSettings);
             _hostRuntime = new HostRuntime(adapter, paths);
+            resourceAuthorityStore = resourceAuthorityStore ?? new ResourceAuthorityStore(paths);
+            _resourceMutationJournal = new ResourceMutationJournal(paths);
+            _resourceAuthority = new ResourceAuthorityService(resourceAuthorityStore, resourceAuthorityStore, _resourceMutationJournal,
+                vbaJournalStore.Payloads);
+            _vbaExecutor = new VbaToolExecutor(adapter, vbaJournalStore, _resourceAuthority);
+            ResourceMutationAuthorityObserver.ReconcileInterrupted(_resourceAuthority, _resourceMutationJournal);
+            _documentAuthorities = new DocumentAuthorityRegistry(paths);
+            Payloads = vbaJournalStore.Payloads;
+            _catalogPublication = new CatalogPublicationService(_resourceAuthority, _resourceMutationJournal,
+                toolStore, skillStore, _promptSettingsService.CaptureTemplates, adapter);
             _resourceGateway = new ResourceGatewayService(
                 adapter,
                 _vbaExecutor,
                 vbaJournalStore,
                 loadArtifactBody,
                 readAttachmentText,
-                BeginLiveOfficeRead);
+                BeginLiveOfficeRead,
+                _resourceAuthority, _catalogPublication, readAttachmentBytes);
+            _capabilityCatalogService = new CapabilityCatalogService(adapter, _catalogPublication.CaptureSkills, _resourceGateway);
             var excelBackends = _adapter as IExcelBackendProvider;
             _excelReadAdapter = excelBackends == null || excelBackends.ExcelReadBackend == null
                 ? null : new ExcelReadToolAdapter(excelBackends.ExcelReadBackend);
@@ -115,7 +139,7 @@ namespace RNAssistant.Office.Tools
                 outlookBackend.OutlookBackend == null
                 ? null : new OutlookToolAdapter(outlookBackend.OutlookBackend);
             _htmlWorkspaceService = new HtmlWorkspaceToolService(
-                _adapter, _adapterTools, null, ExecuteHtmlDataSource);
+                _resourceGateway);
             var controllerTools = new List<ToolCatalogEntry>();
             if (_vbaExecutor.HostSupportsVba())
                 RegisterControllerTools(controllerTools,
@@ -169,6 +193,8 @@ namespace RNAssistant.Office.Tools
             bool manualRun = false,
             bool dryRun = false)
         {
+            session = BoundManualSession(session);
+            BindResourceAuthority(session);
             return new NativeToolRuntimeAdapter(_resourceGateway, _excelReadAdapter, _excelWriteAdapter,
                 _excelFindReplaceAdapter, _excelSheetAdapter,
                 _excelRangeMutationAdapter, _excelTableAdapter,
@@ -178,7 +204,99 @@ namespace RNAssistant.Office.Tools
                 _toolAuthoringService, _skillAuthoringService,
                 discoveryCatalog, skillCatalog,
                 manualRun, dryRun, _hostRuntime,
-                session, snapshot, settings, mode, pendingRegistrar, trace);
+                session, snapshot, settings, mode, pendingRegistrar, trace,
+                session == null
+                    ? null
+                    : new ResourceMutationAuthorityObserver(
+                        _resourceAuthority, _resourceMutationJournal, session, Payloads, _persistResourceFacts,
+                        _catalogPublication.CaptureReadBack));
+        }
+
+        // Explicit UI resource commands share the mutation journal/commit owner.
+        // The caller holds its exact chat reservation; this is not a second tool runtime.
+        internal T MutateLocalResources<T>(ChatSession session, string operation,
+            IDictionary<string, object> arguments, Func<T> action)
+        {
+            if (session == null || action == null || ConversationResourceMutationDomain.StateName(operation) == null)
+                throw new ArgumentException("An explicit local resource mutation is required.");
+            BindResourceAuthority(session);
+            var id = Guid.NewGuid().ToString("N");
+            arguments = arguments ?? new Dictionary<string, object>();
+            var context = new ToolExecutionContext(new RNAssistant.Core.Agent.ToolCall(id, operation, JsonConvert.SerializeObject(arguments)),
+                new ToolPolicySnapshot(operation, "resource-ui-v1", new ToolPolicy(ToolEffect.Write, ToolVerification.Tool,
+                    false, false, new[] { "agent" }, 1)), id, id, id, DateTime.UtcNow, true, 1);
+            var observer = new ResourceMutationAuthorityObserver(_resourceAuthority, _resourceMutationJournal, session, Payloads, _persistResourceFacts);
+            var attempt = observer.Prepare(context, arguments);
+            var publicationStarted = false;
+            var dispatched = false;
+            var before = session.ActiveHtmlArtifactId + "|" + session.ActivePlanDocumentArtifactId + "|" + session.ActiveTaskListArtifactId;
+            try
+            {
+                using (DocumentAccessGate.BeginOperation())
+                {
+                    observer.MarkDispatchMayHaveOccurred(attempt);
+                    dispatched = true;
+                    var value = action();
+                    var after = session.ActiveHtmlArtifactId + "|" + session.ActivePlanDocumentArtifactId + "|" + session.ActiveTaskListArtifactId;
+                    var changed = before != after || operation.EndsWith("_restore", StringComparison.Ordinal) || operation.EndsWith("_redo", StringComparison.Ordinal);
+                    publicationStarted = true;
+                    observer.Complete(attempt, new ToolExecutionRecord(context, ToolExecutionOutcome.Ok, DateTime.UtcNow,
+                        mayHaveDispatched: true, evidence: new ToolExecutionEvidence(ToolDispatchEvidence.MayHaveDispatched,
+                            changed ? ToolEffectEvidence.VerifiedChange : ToolEffectEvidence.VerifiedNoChange)));
+                    return value;
+                }
+            }
+            catch
+            {
+                if (dispatched && !publicationStarted)
+                {
+                    publicationStarted = true;
+                    observer.Complete(attempt, new ToolExecutionRecord(context, ToolExecutionOutcome.Unknown, DateTime.UtcNow,
+                        mayHaveDispatched: true, evidence: new ToolExecutionEvidence(ToolDispatchEvidence.MayHaveDispatched, ToolEffectEvidence.Unknown)));
+                }
+                throw;
+            }
+            finally { observer.ReleaseUnresolved(attempt); }
+        }
+
+        internal SkillCatalogSnapshot CapturePublishedSkills() { return _catalogPublication.CaptureSkills(); }
+        internal PublishedCatalogSnapshot CaptureCatalogs() { return _catalogPublication.Capture(); }
+        internal IReadOnlyList<ToolCatalogEntry> CapturePublishedTools() { return _catalogPublication.CaptureTools(); }
+        internal long CaptureCatalogGeneration() { return _catalogPublication.CaptureGeneration(); }
+        internal IReadOnlyList<ToolCatalogEntry> CaptureRunnableCatalog()
+        { return new ToolCatalogService(_adapter, this).GetFreshConversationTools(); }
+        internal IReadOnlyList<ToolCatalogEntry> CaptureRunnableCatalog(PublishedCatalogSnapshot publication)
+        { return new ToolCatalogService(_adapter, this).GetVisibleTools(publication.Tools); }
+        internal SkillCatalogSnapshot CaptureSkills(PublishedCatalogSnapshot publication = null)
+        {
+            var published = publication == null ? _capabilityCatalogService.CaptureSkills() :
+                _capabilityCatalogService.SelectPublishedSkills(publication.Skills);
+            return new SkillCatalogSnapshot(published.Skills.Where(skill => skill.Enabled), published.Generation);
+        }
+
+        internal void BindResourceAuthority(ChatSession session)
+        {
+            if (session == null) return;
+            var provider = _adapter as IOfficeDocumentSessionProvider;
+            var isCurrent = string.Equals(session.Host, _adapter.HostName, StringComparison.OrdinalIgnoreCase) &&
+                string.Equals(session.DocumentKey, _adapter.DocumentKey, StringComparison.OrdinalIgnoreCase);
+            var runtime = !isCurrent ? null : provider == null || provider.DocumentSession == null
+                ? _adapter.RuntimeDocumentKey : provider.DocumentSession.RuntimeDocumentId;
+            session.DocumentAuthorityId = _documentAuthorities.Resolve(session.Host, runtime,
+                session.DocumentPath, session.DocumentAuthorityId).Id;
+        }
+
+        private ChatSession BoundManualSession(ChatSession session)
+        {
+            if (session != null) return session;
+            var manual = new ChatSession
+            {
+                Id = "manual_" + Guid.NewGuid().ToString("N"),
+                Host = _adapter.HostName, DocumentKey = _adapter.DocumentKey,
+                DocumentTitle = _adapter.DocumentTitle
+            };
+            BindResourceAuthority(manual);
+            return manual;
         }
 
         internal NativeToolRuntimeAdapter CreateNativeRuntime(ChatSession session, IEnumerable<ToolCatalogEntry> catalog,
@@ -367,11 +485,6 @@ namespace RNAssistant.Office.Tools
             return _vbaExecutor.BackupSemanticTarget(backupId);
         }
 
-        public void ObserveVbaHash(ChatSession session, string moduleName, string codeSha256)
-        {
-            _vbaExecutor.ObserveExpectedHash(session, moduleName, codeSha256);
-        }
-
         internal ToolRunResult ReadVbaProjectForEditor(ChatSession session)
         {
             return ExecuteLiveVbaEditorRead(
@@ -429,13 +542,23 @@ namespace RNAssistant.Office.Tools
         internal SkillManualMutationResult ExecuteSkillLibraryMutation(
             SkillLibraryCoreMutation mutation)
         {
-            return _skillAuthoringService.ExecuteManualCoreMutation(mutation);
+            return MutateCatalog(mutation.Kind == "delete" ? "common.skills_delete" : "common.skills_upsert",
+                new Dictionary<string, object> { ["kind"] = mutation.Kind, ["id"] = mutation.BaseId,
+                    ["expectedRevision"] = mutation.ExpectedRevision, ["intended"] = mutation.Intended },
+                () => _skillAuthoringService.ExecuteManualCoreMutation(mutation), value => value.DispatchPossible,
+                value => SkillEffect(value.Outcome.Effect));
         }
 
         internal ToolManualMutationResult ExecuteToolLibraryMutation(
             ToolLibraryCoreMutation mutation)
         {
-            return _toolAuthoringService.ExecuteManualCoreMutation(mutation);
+            return MutateCatalog(mutation.Kind == "delete" ? "common.tools_delete" : "common.tools_upsert",
+                new Dictionary<string, object> { ["kind"] = mutation.Kind, ["id"] = mutation.BaseId,
+                    ["expectedRevision"] = mutation.ExpectedRevision, ["intended"] = mutation.Intended },
+                () => _toolAuthoringService.ExecuteManualCoreMutation(mutation), value => value.DispatchPossible,
+                value => value.Outcome.Effect == ToolAuthoringEffect.VerifiedChange ? ToolEffectEvidence.VerifiedChange :
+                    value.Outcome.Effect == ToolAuthoringEffect.VerifiedNoChange ? ToolEffectEvidence.VerifiedNoChange :
+                    value.Outcome.Effect == ToolAuthoringEffect.Unknown ? ToolEffectEvidence.Unknown : ToolEffectEvidence.None);
         }
 
         internal SkillReferenceReadResult ReadSkillLibraryReference(
@@ -449,8 +572,66 @@ namespace RNAssistant.Office.Tools
             string kind, string skillId, string path, string content,
             string expectedRevision)
         {
-            return _skillAuthoringService.ExecuteManualReferenceMutation(
-                kind, skillId, path, content, expectedRevision);
+            return MutateCatalog(kind == "delete" ? "common.skills_reference_delete" : "common.skills_reference_upsert", new Dictionary<string, object> {
+                    ["kind"] = kind, ["id"] = skillId, ["path"] = path, ["content"] = content, ["expectedRevision"] = expectedRevision },
+                () => _skillAuthoringService.ExecuteManualReferenceMutation(kind, skillId, path, content, expectedRevision),
+                value => value.DispatchPossible, value => SkillEffect(value.Outcome.Effect));
+        }
+
+        private static ToolEffectEvidence SkillEffect(SkillAuthoringEffect effect)
+        {
+            return effect == SkillAuthoringEffect.VerifiedChange ? ToolEffectEvidence.VerifiedChange :
+                effect == SkillAuthoringEffect.VerifiedNoChange ? ToolEffectEvidence.VerifiedNoChange :
+                effect == SkillAuthoringEffect.Unknown ? ToolEffectEvidence.Unknown : ToolEffectEvidence.None;
+        }
+
+        internal void SaveSettingsPublication(AppSettings intended, Action save)
+        {
+            // The durable intent contains only editable templates, never credentials/settings secrets.
+            MutateCatalog("common.prompts_save", new Dictionary<string, object> {
+                ["templates"] = JsonConvert.DeserializeObject<Dictionary<string, string>>(PromptSettingsService.CaptureTemplates(intended)) },
+                () => {
+                    var before = _promptSettingsService.CaptureTemplates();
+                    save();
+                    return before == _promptSettingsService.CaptureTemplates()
+                        ? ToolEffectEvidence.VerifiedNoChange : ToolEffectEvidence.VerifiedChange;
+                }, value => true, value => value);
+        }
+
+        private T MutateCatalog<T>(string operation, object arguments, Func<T> action,
+            Func<T, bool> wasDispatched, Func<T, ToolEffectEvidence> effect)
+        {
+            var session = BoundManualSession(null);
+            var id = Guid.NewGuid().ToString("N");
+            var json = JsonConvert.SerializeObject(arguments);
+            var args = JsonConvert.DeserializeObject<Dictionary<string, object>>(json);
+            var context = new ToolExecutionContext(new RNAssistant.Core.Agent.ToolCall(id, operation, json),
+                new ToolPolicySnapshot(operation, "catalog-ui-v1", new ToolPolicy(ToolEffect.Write, ToolVerification.Tool,
+                    false, false, new[] { "agent" }, 1)), id, id, id, DateTime.UtcNow, true, 1);
+            var observer = new ResourceMutationAuthorityObserver(_resourceAuthority, _resourceMutationJournal, session, Payloads,
+                captureCatalog: _catalogPublication.CaptureReadBack);
+            var attempt = observer.Prepare(context, args);
+            var publicationStarted = false;
+            var dispatched = false;
+            try
+            {
+                observer.MarkDispatchMayHaveOccurred(attempt);
+                dispatched = true;
+                var result = action();
+                publicationStarted = true;
+                observer.Complete(attempt, new ToolExecutionRecord(context, ToolExecutionOutcome.Ok, DateTime.UtcNow,
+                    mayHaveDispatched: wasDispatched(result), evidence: new ToolExecutionEvidence(
+                        wasDispatched(result) ? ToolDispatchEvidence.MayHaveDispatched : ToolDispatchEvidence.NotDispatched, effect(result))));
+                return result;
+            }
+            catch
+            {
+                if (dispatched && !publicationStarted)
+                    observer.Complete(attempt, new ToolExecutionRecord(context, ToolExecutionOutcome.Unknown, DateTime.UtcNow,
+                        mayHaveDispatched: true, evidence: new ToolExecutionEvidence(ToolDispatchEvidence.MayHaveDispatched, ToolEffectEvidence.Unknown)));
+                throw;
+            }
+            finally { observer.ReleaseUnresolved(attempt); }
         }
 
         internal bool RequiresSessionLeaseForManualRun(
@@ -483,7 +664,9 @@ namespace RNAssistant.Office.Tools
             ChatSession session = null,
             CancellationToken cancellationToken = default(CancellationToken))
         {
-            return ExecutePackageMutation(source, session, dryRun,
+            session = BoundManualSession(session);
+            BindResourceAuthority(session);
+            return ExecutePackageMutation(source, session, dryRun, "common.vba_package_install",
                 cancellationToken, markDispatch =>
                     _vbaExecutor.InstallCustomPackage(
                         source, dryRun, session,
@@ -496,7 +679,9 @@ namespace RNAssistant.Office.Tools
             ChatSession session = null,
             CancellationToken cancellationToken = default(CancellationToken))
         {
-            return ExecutePackageMutation(source, session, false,
+            session = BoundManualSession(session);
+            BindResourceAuthority(session);
+            return ExecutePackageMutation(source, session, false, "common.vba_package_remove",
                 cancellationToken, markDispatch =>
                     _vbaExecutor.RemoveCustomPackage(
                         source, session,
@@ -577,11 +762,45 @@ namespace RNAssistant.Office.Tools
             ToolPackageSource source,
             ChatSession session,
             bool dryRun,
+            string operation,
             CancellationToken cancellationToken,
             Func<Action, VbaPackageResult> action)
         {
             var dispatched = false;
-            Action markDispatch = delegate { dispatched = true; };
+            ResourceMutationAuthorityObserver observer = null;
+            string attempt = null;
+            var published = false;
+            ToolExecutionContext execution = null;
+            if (!dryRun)
+            {
+                observer = new ResourceMutationAuthorityObserver(_resourceAuthority, _resourceMutationJournal, session, Payloads);
+                var args = new Dictionary<string, object> { ["modules"] = source.Components.Select(item => item.Name).ToArray(),
+                    ["packageRevision"] = source.Revision };
+                var id = Guid.NewGuid().ToString("N");
+                execution = new ToolExecutionContext(new RNAssistant.Core.Agent.ToolCall(id, operation, JsonConvert.SerializeObject(args)),
+                    new ToolPolicySnapshot(operation, source.Revision, new ToolPolicy(ToolEffect.Write, ToolVerification.Tool,
+                        false, false, new[] { "agent" }, 3)), session.LastRun?.RunId ?? id, session.LastRun?.TurnId ?? id,
+                    id, DateTime.UtcNow, true, 1);
+                attempt = observer.Prepare(execution, args);
+            }
+            Action markDispatch = delegate
+            {
+                if (!dispatched && observer != null) observer.MarkDispatchMayHaveOccurred(attempt);
+                dispatched = true;
+            };
+            Action<VbaPackageResult> publish = result =>
+            {
+                published = true;
+                if (!dispatched) { observer.AbandonBeforeDispatch(attempt); return; }
+                var effect = VbaPackageToolHandler.Effect(result);
+                observer.Complete(attempt, new ToolExecutionRecord(execution,
+                    result.Status == VbaMutationOutcomeStatus.Ok ? ToolExecutionOutcome.Ok :
+                        result.Status == VbaMutationOutcomeStatus.Unknown ? ToolExecutionOutcome.Unknown : ToolExecutionOutcome.Error,
+                    DateTime.UtcNow, mayHaveDispatched: true,
+                    evidence: new ToolExecutionEvidence(ToolDispatchEvidence.MayHaveDispatched, effect),
+                    result: VbaPackageToolHandler.Result(result), resourceReadBack: effect == ToolEffectEvidence.VerifiedChange
+                        ? _vbaExecutor.CaptureModules(session, source.Components.Select(item => item.Name)) : null));
+            };
             try
             {
                 if (dryRun)
@@ -592,7 +811,8 @@ namespace RNAssistant.Office.Tools
                 }
                 return _hostRuntime.ExecuteDocumentMutation(
                     DocumentTarget(session), cancellationToken,
-                    () => action(markDispatch));
+                    () => action(markDispatch), publish,
+                    error => publish(VbaPackageResult.Error(source, error.Message, "tool_effect_uncertain", false, dispatched)));
             }
             catch (HostRuntime.MutationLockException ex)
             {
@@ -616,10 +836,16 @@ namespace RNAssistant.Office.Tools
                         "vba_package_operation_failed",
                     false, dispatched);
             }
+            finally
+            {
+                if (observer != null && !published && !dispatched) observer.AbandonBeforeDispatch(attempt);
+                if (observer != null) observer.ReleaseUnresolved(attempt);
+            }
         }
 
         private IDisposable BeginLiveOfficeRead(ChatSession session)
         {
+            BindResourceAuthority(session);
             try
             {
                 return _hostRuntime.BeginDocumentAccess(DocumentTarget(session));
@@ -635,105 +861,6 @@ namespace RNAssistant.Office.Tools
                     ex.Retryable ? "tool_mutation_busy" : "tool_mutation_lock_unavailable",
                     ex.Retryable);
             }
-        }
-
-        private HtmlDataSourceReadOutcome ExecuteHtmlDataSource(
-            ChatSession session,
-            string toolId,
-            IDictionary<string, object> arguments,
-            CancellationToken cancellationToken)
-        {
-            try
-            {
-                return _hostRuntime.ReadDocument(
-                    DocumentTarget(session), cancellationToken,
-                    () => ExecuteHtmlDataSourceUnderCurrentAccess(
-                        toolId, arguments, cancellationToken));
-            }
-            catch (OfficeDocumentGuardException ex)
-            {
-                throw new ResourceRequestException(
-                    ex.Message, ex.ErrorCode, ex.Retryable);
-            }
-            catch (HostRuntime.MutationLockException ex)
-            {
-                throw new ResourceRequestException(
-                    ex.Message,
-                    ex.Retryable ? "tool_mutation_busy" :
-                        "tool_mutation_lock_unavailable",
-                    ex.Retryable);
-            }
-        }
-
-        private HtmlDataSourceReadOutcome ExecuteHtmlDataSourceUnderCurrentAccess(
-            string toolId,
-            IDictionary<string, object> arguments,
-            CancellationToken cancellationToken)
-        {
-            cancellationToken.ThrowIfCancellationRequested();
-            if (ExcelReadToolIds.Owns(toolId))
-            {
-                if (_excelReadAdapter == null)
-                    return HtmlDataSourceReadOutcome.Error(
-                        "The bound Excel read backend is unavailable.", null,
-                        "excel_backend_unavailable", false);
-                var outcome = _excelReadAdapter.ExecuteOutcome(
-                    toolId, arguments);
-                return outcome.Success
-                    ? HtmlDataSourceReadOutcome.Ok(
-                        outcome.Message, outcome.DataJson)
-                    : HtmlDataSourceReadOutcome.Error(
-                        outcome.Message, outcome.DataJson,
-                        outcome.ErrorCode, outcome.Retryable);
-            }
-            if (WordToolIds.IsRead(toolId))
-            {
-                if (_wordAdapter == null)
-                    return HtmlDataSourceReadOutcome.Error(
-                        "The bound Word read backend is unavailable.", null,
-                        "word_backend_unavailable", false);
-                var outcome = _wordAdapter.Execute(
-                    toolId, arguments, null, cancellationToken);
-                return outcome.Status == WordOutcomeStatus.Ok
-                    ? HtmlDataSourceReadOutcome.Ok(
-                        outcome.Message, outcome.DataJson)
-                    : HtmlDataSourceReadOutcome.Error(
-                        outcome.Message, outcome.DataJson,
-                        outcome.ErrorCode, outcome.Retryable);
-            }
-            if (PowerPointToolIds.IsRead(toolId))
-            {
-                if (_powerPointAdapter == null)
-                    return HtmlDataSourceReadOutcome.Error(
-                        "The bound PowerPoint read backend is unavailable.", null,
-                        "powerpoint_backend_unavailable", false);
-                var outcome = _powerPointAdapter.Execute(
-                    toolId, arguments, null, cancellationToken);
-                return outcome.Status == PowerPointOutcomeStatus.Ok
-                    ? HtmlDataSourceReadOutcome.Ok(
-                        outcome.Message, outcome.DataJson)
-                    : HtmlDataSourceReadOutcome.Error(
-                        outcome.Message, outcome.DataJson,
-                        outcome.ErrorCode, outcome.Retryable);
-            }
-            if (OutlookToolIds.IsRead(toolId))
-            {
-                if (_outlookAdapter == null)
-                    return HtmlDataSourceReadOutcome.Error(
-                        "The bound Outlook read backend is unavailable.", null,
-                        "outlook_backend_unavailable", false);
-                var outcome = _outlookAdapter.Execute(
-                    toolId, arguments, null, cancellationToken);
-                return outcome.Status == OutlookOutcomeStatus.Ok
-                    ? HtmlDataSourceReadOutcome.Ok(
-                        outcome.Message, outcome.DataJson)
-                    : HtmlDataSourceReadOutcome.Error(
-                        outcome.Message, outcome.DataJson,
-                        outcome.ErrorCode, outcome.Retryable);
-            }
-            return HtmlDataSourceReadOutcome.Error(
-                "HTML data source tool has no typed backend: " + toolId + ".",
-                null, "html_data_source_backend_missing", false);
         }
 
         private static string DeepestMessage(Exception exception)

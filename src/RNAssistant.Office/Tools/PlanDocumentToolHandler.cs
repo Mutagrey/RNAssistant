@@ -53,7 +53,7 @@ namespace RNAssistant.Office.Tools
             {
                 using (DocumentAccessGate.BeginOperation())
                 {
-                    return Task.FromResult(Project(Execute(context), context));
+                    return Task.FromResult(context.Complete(Project(Execute(context), context)));
                 }
             }
             catch (InvalidOperationException ex) when (!context.MayHaveDispatched)

@@ -234,7 +234,10 @@ namespace RNAssistant.Harness
                     .List(session, ChatArtifactResourceProvider.ProviderName, ChatHtmlResourceCatalog.DataKind, null, 10)
                     .Items.Single(item => item.Title == "rows");
                 var readResult = ReadResource(gateway, session, dataResource.Reference.Uri, "text", null, 8000).Result;
-                AssertContains(readResult.Text, "items", "html data reads through the resource gateway");
+                AssertContains(readResult.Text, "Resource", "HTML data member exposes canonical binding metadata");
+                var boundRead = executor.ResourceGateway.Read(session, new ResourceReadRequest {
+                    Reference = session.HtmlWorkspace.DataSources.Single().Binding.Resource, Representation = "text", MaxChars = 128 });
+                AssertContains(boundRead.Result.Text, "items", "bound payload is read through the same gateway");
 
                 var removedRead = executor.ExecuteManual(
                     new ToolInvocation { ToolId = "common.html_workspace_read" },
@@ -267,151 +270,33 @@ namespace RNAssistant.Harness
                 HtmlWorkspaceToolService.RestoreSnapshot(session, session.HtmlWorkspace.History[0].Id);
                 AssertEqual(1, session.HtmlWorkspace.DataSources.Count, "html data delete can be undone");
 
-                var boundSession = new ChatSession
-                {
-                    Host = adapter.HostName,
-                    DocumentKey = adapter.DocumentKey,
-                    DocumentTitle = adapter.DocumentTitle,
-                    Title = "Bound HTML data"
-                };
-                var sourceArguments = new JObject
-                {
-                    ["sheet"] = "Data",
-                    ["address"] = "A1:B4",
-                    ["content"] = "values"
-                };
-                var directRead = executor.ExecuteManual(Command("excel.read_range", "sheet", "Data", "address", "A1:B4", "content", "values"), tools, new AppSettings(), false, false, boundSession);
-                AssertTrue(directRead.Success, "published excel.read_range contract executes directly");
-                AppendAcceptedHtmlSource(boundSession, "bound_html_run",
-                    "bound_source", "excel.read_range", sourceArguments,
-                    RNAssistant.Core.Tools.Contracts.ToolResult.Ok(
-                        directRead.Message, directRead.DataJson));
-
-                var invalidBind = new ToolInvocation { ToolId = HtmlWorkspaceToolCatalog.BindDataToolId };
-                invalidBind.Arguments["name"] = "invalid";
-                invalidBind.Arguments["sourceTool"] = "excel.read_range";
-                invalidBind.Arguments["sourceArguments"] = new JObject
-                {
-                    ["sheet"] = "Data",
-                    ["address"] = "A1:B4",
-                    ["content"] = "values",
-                    ["kind"] = "range"
-                };
-                var invalidBindResult = executor.ExecuteManual(invalidBind, tools, new AppSettings(), false, false, boundSession);
-                AssertTrue(!invalidBindResult.Success, "HTML bind rejects nested source execution arguments");
-                AssertContains(invalidBindResult.Message, "unsupported property sourceTool", "HTML bind reports the retired nested source field");
-
-                var bindDefinition = executor.GetControllerTools().Single(item => item.Id == HtmlWorkspaceToolCatalog.BindDataToolId);
-                var bindSchema = JObject.Parse(bindDefinition.ArgumentSchemaJson);
-                AssertTrue(bindSchema.SelectToken("properties.sourceTool") == null,
-                    "HTML bind schema has no nested source tool");
-                AssertTrue(bindSchema.SelectToken("properties.sourceArguments") == null,
-                    "HTML bind schema has no nested source arguments");
-                AssertEqual("name", string.Join(",", ((JArray)bindSchema["required"]).Values<string>()),
-                    "HTML bind requires only its semantic data name");
-
-                var bind = new ToolInvocation { ToolId = HtmlWorkspaceToolCatalog.BindDataToolId };
-                bind.Arguments["name"] = "sales";
-                bind.Arguments["transform"] = "table";
-                bind.Arguments["headers"] = "firstRow";
-                var bindResult = executor.ExecuteManual(bind, tools, new AppSettings(), false, false, boundSession);
-                AssertTrue(bindResult.Success, "html Office data binding succeeds");
-                AssertEqual("excel.read_range", boundSession.HtmlWorkspace.DataSources[0].Binding.ToolId, "html binding source persisted");
-                var table = JObject.Parse(boundSession.HtmlWorkspace.DataSources[0].Json);
-                AssertEqual("rnassistant.table.v1", (string)table["schema"], "html table transform schema");
-                AssertEqual(3, table["rowCount"].Value<int>(), "html table transform row count");
-                AssertEqual("Jan", (string)table["rows"][0]["month"], "html table header becomes stable key");
-                AssertEqual("Jan", (string)table["rows"][0]["Month"], "html table keeps the source header label alias");
-                AssertEqual("120", (string)table["rows"][0]["Sales"], "html table keeps numeric header label aliases for generated dashboards");
-                AssertEqual("bounded", boundSession.HtmlWorkspace.DataSources[0].Binding.PayloadCompleteness,
-                    "binding makes unknown source completeness explicit");
-
-                var truncatedSource = OfficeToolCatalog.ForHost(adapter.HostName).Single(item => item.Id == "excel.inspect");
-                var truncatedHtml = new HtmlWorkspaceToolService(
-                    adapter,
-                    new[] { truncatedSource },
-                    null,
-                    (ignoredSession, ignoredTool, ignoredArguments,
-                        ignoredCancellation) =>
-                        HtmlDataSourceReadOutcome.Ok(
-                        "Bounded source.",
-                        "{\"kind\":\"sheets\",\"returnedCount\":200,\"truncated\":true,\"items\":[]}"));
-                var truncatedSession = new ChatSession
-                {
-                    Host = adapter.HostName,
-                    DocumentKey = adapter.DocumentKey,
-                    DocumentTitle = adapter.DocumentTitle
-                };
-                AppendAcceptedHtmlSource(truncatedSession, "truncated_run",
-                    "truncated_source", "excel.inspect",
-                    new JObject { ["kind"] = "sheets" },
-                    RNAssistant.Core.Tools.Contracts.ToolResult.Ok(
-                        "Bounded source.",
-                        "{\"kind\":\"sheets\",\"returnedCount\":200,\"truncated\":true,\"items\":[]}"));
-                var truncatedBind = new ToolInvocation { ToolId = HtmlWorkspaceToolCatalog.BindDataToolId };
-                truncatedBind.Arguments["name"] = "boundedSheets";
-                var truncatedBindResult = truncatedHtml.Execute(
-                    truncatedBind.ToolId, truncatedBind.Arguments,
-                    truncatedSession, delegate { }, CancellationToken.None);
-                AssertEqual(HtmlWorkspaceOutcomeStatus.Ok,
-                    truncatedBindResult.Status,
-                    "explicitly truncated source remains usable as bounded data");
-                AssertEqual("truncated", truncatedSession.HtmlWorkspace.DataSources.Single().Binding.PayloadCompleteness,
-                    "binding retains explicit source truncation evidence");
-
-                var inconsistent = HtmlWorkspaceCopyService.CloneCurrent(boundSession.HtmlWorkspace);
-                inconsistent.DataSources[0].Binding.ContentSha256 = new string('0', 64);
-                HtmlWorkspaceToolService.NormalizeWorkspace(inconsistent);
-                AssertEqual("error", inconsistent.DataSources[0].Binding.Status,
-                    "recovery marks mismatched binding payload evidence as error");
-                AssertContains(inconsistent.DataSources[0].Binding.LastError, "integrity check",
-                    "recovery explains binding payload mismatch");
-
-                var gateEntries = 0;
-                var gateExits = 0;
-                var gatedHtml = new HtmlWorkspaceToolService(
-                    adapter,
-                    OfficeToolCatalog.ForHost(adapter.HostName),
-                    ignoredSession =>
-                    {
-                        gateEntries += 1;
-                        return new CallbackDisposable(() => gateExits += 1);
-                    });
-                var gatedSession = new ChatSession
-                {
-                    Host = adapter.HostName,
-                    DocumentKey = adapter.DocumentKey,
-                    DocumentTitle = adapter.DocumentTitle
-                };
-                AppendAcceptedHtmlSource(gatedSession, "gated_run",
-                    "gated_source", "excel.read_range", sourceArguments,
-                    RNAssistant.Core.Tools.Contracts.ToolResult.Ok(
-                        directRead.Message, directRead.DataJson));
-                var gatedBindResult = gatedHtml.Execute(
-                    bind.ToolId, bind.Arguments, gatedSession,
-                    delegate { }, CancellationToken.None);
-                AssertEqual(HtmlWorkspaceOutcomeStatus.Ok,
-                    gatedBindResult.Status,
-                    "HTML binding reuses accepted source evidence");
-                AssertEqual(0, gateEntries, "HTML bind does not execute a nested Office read");
-                AssertEqual(0, gateExits, "HTML bind does not enter the live-document read gate");
-
-                var write = executor.ExecuteManual(Command("excel.write_range", "kind", "value", "sheet", "Data",
-                    "address", "B2", "value", "999"), tools, new AppSettings(), false, false, boundSession);
-                AssertTrue(write.Success, "HTML refresh fixture writes through the typed Excel owner");
-                var historyBeforeRefresh = boundSession.HtmlWorkspace.History.Count;
-                var refresh = new ToolInvocation { ToolId = HtmlWorkspaceToolCatalog.RefreshDataToolId };
-                refresh.Arguments["name"] = "sales";
-                var refreshResult = executor.ExecuteManual(refresh, tools, new AppSettings(), false, false, boundSession);
-                AssertTrue(refreshResult.Success, "bound HTML data refresh succeeds");
-                AssertContains(boundSession.HtmlWorkspace.DataSources[0].Json, "999", "bound HTML data refreshes without model rewrite");
-                AssertEqual(historyBeforeRefresh, boundSession.HtmlWorkspace.History.Count, "automatic data refresh does not spam undo history");
-
-                var freeze = new ToolInvocation { ToolId = HtmlWorkspaceToolCatalog.FreezeDataToolId };
-                freeze.Arguments["name"] = "sales";
-                var freezeResult = executor.ExecuteManual(freeze, tools, new AppSettings(), false, false, boundSession);
-                AssertTrue(freezeResult.Success, "bound HTML data can be frozen");
-                AssertTrue(boundSession.HtmlWorkspace.DataSources[0].Binding == null, "freeze keeps JSON and removes binding");
+                var boundSession = NewSession(adapter);
+                var sourceArtifact = new ChatArtifact { Kind = ChatArtifactKinds.File, Title = "sales.json",
+                    MimeType = "application/json", InlineText = "[{\"month\":\"Jan\",\"sales\":120}]" };
+                boundSession.Artifacts.Add(sourceArtifact);
+                var target = executor.ResourceGateway.Find(boundSession, "sales.json", "conversation").Items.Single().Target;
+                var definition = executor.GetControllerTools().Single(item => item.Id == HtmlWorkspaceToolCatalog.BindDataToolId);
+                var schema = JObject.Parse(definition.ArgumentSchemaJson);
+                AssertEqual("name,target", string.Join(",", ((JArray)schema["required"]).Values<string>()), "binding takes a semantic target");
+                var invalidBind = Command(HtmlWorkspaceToolCatalog.BindDataToolId, "name", "bad", "sourceTool", "excel.read_range");
+                AssertTrue(!executor.ExecuteManual(invalidBind, tools, new AppSettings(), false, false, boundSession).Success,
+                    "retired nested source execution arguments are rejected");
+                var bind = Command(HtmlWorkspaceToolCatalog.BindDataToolId, "name", "sales", "target", target, "policy", "head");
+                var bound = executor.ExecuteManual(bind, tools, new AppSettings(), false, false, boundSession);
+                AssertTrue(bound.Success, "resource binding succeeds: " + bound.Message);
+                var binding = boundSession.HtmlWorkspace.DataSources.Single().Binding;
+                AssertEqual("head", binding.Policy, "explicit head policy persists");
+                AssertTrue(binding.Resource != null && !binding.Resource.IsExact, "head binding contains identity only");
+                var beforeRefresh = boundSession.ActiveHtmlArtifactId;
+                var refresh = executor.ExecuteManual(Command(HtmlWorkspaceToolCatalog.RefreshDataToolId, "name", "sales"),
+                    tools, new AppSettings(), false, false, boundSession);
+                AssertTrue(refresh.Success, "gateway refresh succeeds");
+                AssertEqual(beforeRefresh, boundSession.ActiveHtmlArtifactId, "source resolution never rewrites workspace history");
+                var freeze = executor.ExecuteManual(Command(HtmlWorkspaceToolCatalog.FreezeDataToolId, "name", "sales"),
+                    tools, new AppSettings(), false, false, boundSession);
+                AssertTrue(freeze.Success, "binding freeze succeeds: " + freeze.Message);
+                binding = boundSession.HtmlWorkspace.DataSources.Single().Binding;
+                AssertTrue(binding.Policy == "exact" && binding.Resource.IsExact, "freeze pins a canonical resource; it never removes provenance");
 
                 var invalidData = new ToolInvocation { ToolId = HtmlWorkspaceToolCatalog.WriteDataToolId };
                 invalidData.Arguments["name"] = "bad";

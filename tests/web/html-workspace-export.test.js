@@ -23,30 +23,19 @@ vm.runInContext(fs.readFileSync(path.join(root, "web/js/app-html-workspace-actio
     files: [{ id: "index.html", path: "index.html", kind: "html", content: "<main>export</main>" }],
     dataSources: [{
       id: "bound", name: "bound", json: exactJson,
-      binding: {
-        toolId: "excel.inspect",
-        status: "ready",
-        payloadCompleteness: "truncated",
-        contentSha256: "b".repeat(64)
-      }
+      binding: { resource: { uri: "rna://test/data", revision: "r1" }, policy: "exact", view: "table" }
     }],
     hostBridge: false
   });
-  const rawMatch = assembled.match(/var raw=(.*?),data=Object\.create\(null\),meta=/);
-  assert.ok(rawMatch, "raw payload map is embedded");
-  const raw = JSON.parse(rawMatch[1]);
-  assert.equal(raw.bound, exactJson);
-  assert.ok(!assembled.includes("9007199254740992"), "large integer lexeme is not rounded during assembly");
-  console.log("PASS HTML export: standalone assembly preserves exact raw JSON lexemes");
-
-  const metaMatch = assembled.match(/,meta=(.*?);Object\.keys\(raw\)/);
-  assert.ok(metaMatch, "binding metadata is embedded");
-  const metadata = JSON.parse(metaMatch[1]);
-  assert.equal(metadata.bound.payloadCompleteness, "truncated");
-  assert.equal(metadata.bound.jsonCharacters, exactJson.length);
-  assert.equal(metadata.bound.contentSha256, "b".repeat(64));
-  assert.match(assembled, /RNAssistantDataRaw=raw/);
-  console.log("PASS HTML export: binding completeness and exact raw access remain explicit");
+  assert.ok(!assembled.includes(exactJson), "resource payloads are never embedded in workspace HTML");
+  assert.doesNotMatch(assembled, /RNAssistantData|RNAssistant\.data|rna:\/\/test/);
+  console.log("PASS HTML export: reference-only assembly has no legacy eager dataset");
+  const detached = vm.createContext({ addEventListener() {}, setTimeout, clearTimeout });
+  detached.window = detached; detached.parent = detached;
+  for (const match of assembled.matchAll(/<script(?:\s[^>]*)?>([\s\S]*?)<\/script>/gi)) vm.runInContext(match[1], detached);
+  assert.deepEqual(Array.from(detached.RN.resources.names()), ["bound"]);
+  await assert.rejects(detached.RN.resources.open("bound"), /RESOURCE_HOST_REQUIRED/);
+  console.log("PASS HTML export: missing resource transport is explicit, never an empty-data fallback");
 
   const calls = [];
   const downloads = [];
@@ -72,7 +61,7 @@ vm.runInContext(fs.readFileSync(path.join(root, "web/js/app-html-workspace-actio
         workspace: {
           activeFileId: "index.html",
           files: [{ id: "index.html", path: "index.html", kind: "html", content: "<main>exact</main>" }],
-          dataSources: [{ id: "bound", name: "bound", json: exactJson }]
+          dataSources: [{ id: "bound", name: "bound", binding: { resource: { uri: "rna://test/data", revision: "r1" }, policy: "exact", view: "table" } }]
         }
       };
     },
@@ -91,7 +80,8 @@ vm.runInContext(fs.readFileSync(path.join(root, "web/js/app-html-workspace-actio
   assert.equal(calls[0].payload.chatId, "chat-export");
   assert.equal(calls[0].payload.expectedActiveHtmlArtifactId, "html-r3");
   assert.equal(downloads[0].revisionArtifactId, "html-r4");
-  assert.equal(downloads[0].workspace.dataSources[0].json, exactJson);
+  assert.equal(downloads[0].workspace.dataSources[0].binding.resource.revision, "r1");
+  assert.equal(downloads[0].workspace.dataSources[0].json, undefined);
   console.log("PASS HTML export: download uses the guarded server checkpoint payload");
 
   state.htmlWorkspaceDirty = true;

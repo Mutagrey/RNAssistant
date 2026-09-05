@@ -54,10 +54,9 @@ namespace RNAssistant.Core.ModelProtocol
                     IReadOnlyList<ChatMessage> attemptMessages = accepted;
                     if (lastError != null)
                     {
-                        attemptMessages = new List<ChatMessage>(accepted)
-                        {
-                            CreateFormatRepairMessage(lastError, attempt, budget.ProtocolAttemptLimit)
-                        };
+                        if (request.CompileRepair == null)
+                            throw new InvalidOperationException("Protocol repair requires the owning frozen context compiler.");
+                        attemptMessages = request.CompileRepair(CreateFormatRepairMessage(lastError, attempt, budget.ProtocolAttemptLimit));
                     }
                     LlmCompletionResult completion;
                     while (true)

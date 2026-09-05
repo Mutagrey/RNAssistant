@@ -33,21 +33,22 @@ namespace RNAssistant.Office.Tools
                 Session,
                 ToolArgumentReader.String(context.Arguments, "query", string.Empty),
                 ToolArgumentReader.String(context.Arguments, "scope", "all"));
-            return Completed(RuntimeResult.Ok(
+            return new ToolHandlerResult(RuntimeResult.Ok(
                 result.Empty
                     ? "No resources matched the semantic scope."
                     : result.Partial
                         ? "Resource find completed with unavailable scopes."
                         : "Resource find completed.",
                 Serialize(result),
-                ExactReferences(result.ResourceRefs)));
+                ExactReferences(result.ResourceRefs)), ToolEffectEvidence.None, resourceEvidence: result.Items.SelectMany(item => item.Evidence ??
+                    new RNAssistant.Core.Models.ResourceEvidence[0]));
         }
 
         private static string Parameters()
         {
             return "{\"type\":\"object\",\"properties\":{" +
                 "\"query\":{\"type\":\"string\",\"description\":\"Optional literal text from the resource name, metadata, or readable body. Omit to browse the selected semantic scope.\",\"minLength\":1,\"maxLength\":500}," +
-                "\"scope\":{\"type\":\"string\",\"description\":\"Optional user-level resource category.\",\"enum\":[\"all\",\"conversation\",\"document\",\"selection\",\"html\",\"vba\",\"backups\"],\"default\":\"all\"}" +
+                "\"scope\":{\"type\":\"string\",\"description\":\"Optional user-level resource category. Catalog bodies are historical resources, not callable admission.\",\"enum\":[\"all\",\"conversation\",\"document\",\"selection\",\"html\",\"vba\",\"backups\",\"catalogs\"],\"default\":\"all\"}" +
                 "},\"required\":[],\"additionalProperties\":false}";
         }
     }

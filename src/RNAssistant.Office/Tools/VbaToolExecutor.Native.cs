@@ -16,7 +16,7 @@ namespace RNAssistant.Office.Tools
             string toolId,
             IDictionary<string, object> arguments,
             ToolExecutionContext execution,
-            string sessionId,
+            RNAssistant.Core.Models.ChatSession session,
             CancellationToken cancellationToken)
         {
             cancellationToken.ThrowIfCancellationRequested();
@@ -25,7 +25,7 @@ namespace RNAssistant.Office.Tools
                     VbaNativeOutcome.Error("Unsupported VBA tool: " + toolId,
                         "unknown_tool", false));
 
-            var correlation = MutationCorrelation(execution, sessionId);
+            var correlation = MutationCorrelation(execution, session);
             var state = new VbaNativePreparedState
             {
                 Version = 1,
@@ -174,7 +174,7 @@ namespace RNAssistant.Office.Tools
             string toolId,
             IDictionary<string, object> arguments,
             ToolExecutionContext execution,
-            string sessionId,
+            RNAssistant.Core.Models.ChatSession session,
             string preparedStateJson,
             Action markDispatchPossible,
             CancellationToken cancellationToken)
@@ -236,7 +236,7 @@ namespace RNAssistant.Office.Tools
             {
                 return VbaNativeOutcome.From(ExecutePreparedMutation(
                     toolId, arguments, state,
-                    MutationCorrelation(execution, sessionId),
+                    MutationCorrelation(execution, session),
                     false, cancellationToken));
             }
         }
@@ -310,15 +310,57 @@ namespace RNAssistant.Office.Tools
                 }, cancellationToken);
         }
 
-        private static VbaMutationCorrelation MutationCorrelation(
+        internal IReadOnlyList<RNAssistant.Core.Models.ResourceMutationReadBack> CaptureMutationReadBack(
+            RNAssistant.Core.Models.ChatSession session, string preparedStateJson)
+        {
+            var state = JsonConvert.DeserializeObject<VbaNativePreparedState>(preparedStateJson);
+            var result = new List<RNAssistant.Core.Models.ResourceMutationReadBack>();
+            if (state == null || state.ToolId == VbaToolCatalog.RunMacro) return result;
+            var names = new[] { state.ModuleName, state.TargetModuleName, state.RestoreGuard?.ModuleName }
+                .Where(name => !string.IsNullOrWhiteSpace(name)).Distinct(StringComparer.OrdinalIgnoreCase);
+            return CaptureModules(session, names);
+        }
+
+        internal IReadOnlyList<RNAssistant.Core.Models.ResourceMutationReadBack> CaptureModules(
+            RNAssistant.Core.Models.ChatSession session, IEnumerable<string> names)
+        {
+            var result = new List<RNAssistant.Core.Models.ResourceMutationReadBack>();
+            var reader = new VbaMutationHostReader(_reader);
+            foreach (var name in names)
+            {
+                var identity = RNAssistant.Office.Services.VbaResourceProvider.ComponentIdentity(session.DocumentAuthorityId, name);
+                var read = reader.ReadModule(name, 1000000);
+                if (read == null) continue;
+                if (read.IsNotFound) result.Add(new RNAssistant.Core.Models.ResourceMutationReadBack(identity, false));
+                else if (read.Success && read.Module != null && !read.Module.Truncated)
+                {
+                    var payload = RNAssistant.Core.Models.PayloadRef.FromBlob(_vbaJournalStore.Payloads.StoreText(
+                        read.Module.Code, "text/plain; charset=utf-8"));
+                    result.Add(new RNAssistant.Core.Models.ResourceMutationReadBack(identity, true,
+                        RNAssistant.Core.Models.ResourceRepresentations.Source,
+                        VbaTextCanonicalizer.LiveCodeSha256(read.Module.Code), payload));
+                }
+            }
+            return result;
+        }
+
+        private VbaMutationCorrelation MutationCorrelation(
             ToolExecutionContext execution,
-            string sessionId)
+            RNAssistant.Core.Models.ChatSession session)
         {
             return new VbaMutationCorrelation
             {
-                SessionId = sessionId ?? string.Empty,
-                RunId = execution == null ? null : execution.RunId,
-                TurnId = execution == null ? null : execution.TurnId,
+                SessionId = session == null ? string.Empty : session.Id,
+                DocumentAuthorityId = session == null ? null : session.DocumentAuthorityId,
+                Authority = _authority.Store.CaptureMany(new[] { _authority.Scope(session, true) }),
+                Evidence = session == null ? new RNAssistant.Core.Models.ResourceEvidence[0] :
+                    session.Messages.SelectMany(message => message.ResourceEvidence ??
+                        new List<RNAssistant.Core.Models.ResourceEvidence>()).ToArray(),
+                ExpectedContentSha256 = execution == null ? null : execution.ExpectedContentSha256,
+                ObserveExternalDrift = module => _authority.ReportExternalDrift(_authority.Scope(session, true),
+                    RNAssistant.Office.Services.VbaResourceProvider.ComponentIdentity(session.DocumentAuthorityId, module)),
+                RunId = execution == null ? session?.LastRun?.RunId : execution.RunId,
+                TurnId = execution == null ? session?.LastRun?.TurnId : execution.TurnId,
                 StepId = execution == null ? null : execution.StepId,
                 ToolCallId = execution == null || execution.Call == null
                     ? null : execution.Call.Id

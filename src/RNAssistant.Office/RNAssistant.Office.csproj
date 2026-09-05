@@ -108,6 +108,7 @@
     <Compile Include="Tools\ResourceToolHandlerBase.cs" />
     <Compile Include="Tools\ResourceFindToolHandler.cs" />
     <Compile Include="Tools\ResourceReadToolHandler.cs" />
+    <Compile Include="Tools\ResourceDefinitionToolHandler.cs" />
     <Compile Include="Domains\Excel\ExcelReadContracts.cs" />
     <Compile Include="Domains\Excel\ExcelReadService.cs" />
     <Compile Include="Domains\Excel\ExcelBackendProvider.cs" />
@@ -216,6 +217,19 @@
     <Compile Include="Services\VbaResourceProvider.Read.cs" />
     <Compile Include="Services\ChatResourceIngestionService.cs" />
     <Compile Include="Services\ResourceGatewayService.cs" />
+    <Compile Include="Services\ResourceGatewayService.Binary.cs" />
+    <Compile Include="Services\ResourceAuthorityService.cs" />
+    <Compile Include="Services\ResourceMutationDomains.cs" />
+    <Compile Include="Services\ResourceDataPlaneService.cs" />
+    <Compile Include="Services\ResourceDataRouter.cs" />
+    <Compile Include="Services\ResourceStateProvider.cs" />
+    <Compile Include="Services\ResourceStructuredViewService.cs" />
+    <Compile Include="Services\ResourceDerivedViewService.cs" />
+    <Compile Include="Services\ResourceDefinitionReader.cs" />
+    <Compile Include="Services\CatalogPublicationService.cs" />
+    <Compile Include="Services\CatalogResourceProvider.cs" />
+    <Compile Include="Services\ExcelResourceProvider.cs" />
+    <Compile Include="Contracts\BridgeDtos.ResourceData.cs" />
     <Compile Include="Services\ResourceGatewayService.Intent.cs" />
     <Compile Include="Services\ResourceProviderRegistry.cs" />
     <Compile Include="Services\ResourceReadCursor.cs" />
@@ -233,6 +247,7 @@
     <Compile Include="Services\ConversationKernelAdapter.Tools.cs" />
     <Compile Include="Services\ConversationKernelAdapter.Store.cs" />
     <Compile Include="Services\ConversationModelSession.cs" />
+    <Compile Include="Services\ModelContextCompiler.cs" />
     <Compile Include="Services\ConversationProtocolContext.cs" />
     <Compile Include="Services\ConversationStreamProgressProjector.cs" />
     <Compile Include="Services\ConversationRunPolicy.cs" />
@@ -301,7 +316,6 @@
     <Compile Include="Tools\PromptToolHandler.cs" />
     <Compile Include="Tools\ResourceToolCatalog.cs" />
     <Compile Include="Tools\HtmlWorkspaceToolCatalog.cs" />
-    <Compile Include="Tools\HtmlAcceptedReadSourceResolver.cs" />
     <Compile Include="Tools\HtmlWorkspaceToolContracts.cs" />
     <Compile Include="Tools\HtmlWorkspaceToolHandler.cs" />
     <Compile Include="Tools\HtmlWorkspaceToolService.cs" />
@@ -319,7 +333,6 @@
     <Compile Include="Tools\VbaToolExecutor.Native.cs" />
     <Compile Include="Tools\VbaHostDomainAdapters.cs" />
     <Compile Include="Tools\VbaPackageToolHandler.cs" />
-    <Compile Include="Tools\VbaToolExecutor.Observations.cs" />
     <Compile Include="Tools\VbaToolExecutor.Journal.cs" />
     <Compile Include="Tools\VbaToolExecutor.Packages.cs" />
     <Compile Include="Tools\VbaToolCatalog.Schemas.cs" />

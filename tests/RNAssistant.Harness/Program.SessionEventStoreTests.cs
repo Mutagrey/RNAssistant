@@ -53,7 +53,8 @@ namespace RNAssistant.Harness
                     modelCalls++;
                     var persisted = new ChatStore(FixturePaths.Value).Load(session.Host, session.DocumentKey, session.Id);
                     AssertEqual(RunLifecycle.Running, persisted.LastRun.KernelState.Summary.Lifecycle, "summary saved before every model dispatch");
-                    AssertEqual(modelCalls, persisted.LastRun.KernelState.Summary.IterationsUsed, "model cursor saved before dispatch");
+                    AssertEqual(modelCalls, persisted.LastRun.KernelState.Summary.IterationsUsed,
+                        "model cursor saved before dispatch: " + (messages.LastOrDefault()?.Content ?? string.Empty));
                     return Task.FromResult(new LlmCompletionResult { Content = responses.Dequeue() });
                 });
                 ChatTurnResult result;
@@ -72,7 +73,9 @@ namespace RNAssistant.Harness
                                 "durable call origin matches the dispatch step");
                         }).GetAwaiter().GetResult();
                 var replay = AssertKernelReplay(session);
-                AssertEqual(RunLifecycle.Completed, replay.LastRun.KernelState.Summary.Lifecycle, "model ending closes loop only");
+                AssertEqual(RunLifecycle.Completed, replay.LastRun.KernelState.Summary.Lifecycle,
+                    "model ending closes loop only: " + replay.LastRun.KernelState.Summary.Reason + " " +
+                    string.Join(" | ", replay.Messages.Where(message => message.Activity?.Kind == "diagnostic").Select(message => message.Content)));
                 AssertEqual(outcome == "ok" ? "clean" :
                     outcome == "error" ? "errors" : "unknown",
                     result.RunViewState.ExecutionHealth,

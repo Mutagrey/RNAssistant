@@ -69,8 +69,8 @@ namespace RNAssistant.Office.Tools
                 _toolId, context.Arguments,
                 context.PreparedStateJson,
                 context.MarkDispatchPossible);
-            return Task.FromResult(new ToolHandlerResult(
-                Result(outcome), Effect(outcome.Effect)));
+            return Task.FromResult(context.Complete(new ToolHandlerResult(
+                Result(outcome), Effect(outcome.Effect))));
         }
 
         private static RuntimeResult Result(SkillAuthoringOutcome outcome)

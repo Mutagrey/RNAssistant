@@ -8,13 +8,6 @@
     return node;
   }
 
-  function bytesFromBase64(content) {
-    var binary = window.atob(String(content || ""));
-    var bytes = new Uint8Array(binary.length);
-    for (var index = 0; index < binary.length; index += 1) bytes[index] = binary.charCodeAt(index);
-    return bytes;
-  }
-
   function fileName(title, fallback) {
     var name = String(title || fallback).split(/[\\/]/).pop().replace(/[<>:"|?*\u0000-\u001f]/g, "_");
     return name || fallback;
@@ -30,9 +23,10 @@
   function createImage(options) {
     options = options || {};
     if (typeof window.Viewer !== "function") throw new Error("Viewer.js is unavailable.");
-    var bytes = bytesFromBase64(options.base64Content);
-    if (bytes.byteLength !== Number(options.byteLength || 0)) throw new Error("Image byte length is inconsistent.");
-    var objectUrl = URL.createObjectURL(new Blob([bytes], { type: options.mimeType }));
+    var objectUrl = options.data && options.data.url;
+    if (!/^https:\/\/rnassistant\.local-resource\/v1\/[a-f0-9]{64}$/.test(objectUrl || "")) {
+      throw new Error("An exact resource image lease is required.");
+    }
     var root = element("div", "rn-image-viewer");
     if (options.documentPage) root.classList.add("is-document-page");
     var toolbar = element("div", "rn-resource-viewer-toolbar");
@@ -289,7 +283,7 @@
       sequenceController = null;
       if (vendorViewer && typeof vendorViewer.destroy === "function") vendorViewer.destroy();
       vendorViewer = null;
-      URL.revokeObjectURL(objectUrl);
+      // The cache owns this resource lease; destroying a render does not close it.
     }
     window.addEventListener("beforeunload", release);
     return {
@@ -415,16 +409,11 @@
     function pdfThumbnailUrl(page) {
       var key = String(page.pageIndex) + ":" + String(page.imageContentSha256 || "");
       if (thumbnailUrls[key]) return thumbnailUrls[key];
-      var bytes = bytesFromBase64(page.imageBase64Content);
-      if (bytes.byteLength !== Number(page.imageByteLength || 0)) {
-        throw new Error("PDF thumbnail byte length is inconsistent.");
-      }
-      thumbnailUrls[key] = URL.createObjectURL(new Blob([bytes], { type: page.imageMimeType }));
+      thumbnailUrls[key] = page.data.url;
       return thumbnailUrls[key];
     }
 
     function releaseThumbnailUrls() {
-      Object.keys(thumbnailUrls).forEach(function (key) { URL.revokeObjectURL(thumbnailUrls[key]); });
       thumbnailUrls = {};
     }
 
@@ -447,7 +436,7 @@
         title: fileName(options.title, "document.pdf") + ".page-" + (Number(page.pageIndex || 0) + 1) + ".jpg",
         mimeType: page.imageMimeType,
         byteLength: page.imageByteLength,
-        base64Content: page.imageBase64Content,
+        data: page.data,
         downloadLabel: "Скачать страницу",
         documentPage: true,
         navigation: {

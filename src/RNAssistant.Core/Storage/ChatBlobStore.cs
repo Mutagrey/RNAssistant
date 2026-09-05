@@ -6,7 +6,7 @@ using RNAssistant.Core.Models;
 
 namespace RNAssistant.Core.Storage
 {
-    internal sealed class ChatBlobStore
+    public sealed class ChatBlobStore
     {
         private static readonly UTF8Encoding Utf8 = new UTF8Encoding(false);
         private static readonly UTF8Encoding StrictUtf8 = new UTF8Encoding(false, true);

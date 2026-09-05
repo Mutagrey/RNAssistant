@@ -1,0 +1,176 @@
+using System;
+using System.Collections.Generic;
+using System.Linq;
+using Newtonsoft.Json;
+using RNAssistant.Core.Models;
+using RNAssistant.Core.Services;
+
+namespace RNAssistant.Office.Services
+{
+    // Reading a stored publication never activates a tool, skill or schema.
+    internal sealed class CatalogResourceProvider : IResourceProvider
+    {
+        private readonly CatalogPublicationService _catalogs;
+        private readonly RNAssistant.Core.Storage.ChatBlobStore _payloads;
+        public string Id { get { return "catalog"; } }
+        internal CatalogResourceProvider(CatalogPublicationService catalogs, ResourceAuthorityService authority)
+        { _catalogs = catalogs; _payloads = authority.Payloads; }
+
+        private string[] Kinds { get { return new[] { "tools", "skills", "prompts", _catalogs.BuiltInKind }; } }
+        private bool SkillKind(string kind) { return kind == "skills" || kind == _catalogs.BuiltInKind; }
+
+        public ResourceListPage List(ChatSession session, string kind, string cursor, int limit)
+        {
+            var items = new List<ResourceDescriptor>();
+            foreach (var name in Kinds)
+            {
+                var root = _catalogs.Current(name);
+                items.Add(DescribeRoot(root));
+                if (!SkillKind(name)) continue;
+                foreach (var skill in Skills(root))
+                {
+                    items.Add(DescribeSkill(root, skill, null));
+                    foreach (var reference in skill.References ?? new List<SkillReferenceMetadata>())
+                        items.Add(DescribeSkill(root, skill, reference));
+                }
+            }
+            items = items.Where(item => string.IsNullOrEmpty(kind) || item.Kind == kind).ToList();
+            var binding = ResourceReadCursor.ListBinding(Id, kind);
+            var position = ResourceReadCursor.ParseRevisionBound(cursor, binding);
+            var revision = ResourceReadCursor.CollectionRevision(items);
+            ResourceReadCursor.ValidateContinuation(position, revision);
+            ResourceReadCursor.ValidateCollectionOffset(position, items.Count);
+            var selected = items.Skip(position.Offset).Take(Math.Max(1, Math.Min(50, limit <= 0 ? 20 : limit))).ToList();
+            var next = position.Offset + selected.Count;
+            return new ResourceListPage { Items = selected, Total = items.Count, Truncated = next < items.Count,
+                NextCursor = next < items.Count ? ResourceReadCursor.CreateRevisionBound(next, revision, binding) : null };
+        }
+
+        public ResourceDescriptor Resolve(ChatSession session, string uri)
+        {
+            var address = Address(uri);
+            return Describe(new ResourceRef(uri, _catalogs.Current(address.Segments[0]).Revision));
+        }
+
+        public ResourceSearchResult Search(ChatSession session, string query, string kind, int limit, int maxCharsPerMatch)
+        {
+            var results = new List<ResourceSearchMatch>();
+            var cursor = (string)null;
+            do
+            {
+                var page = List(session, kind, cursor, 50);
+                results.AddRange(page.Items.Where(item => item.Title.IndexOf(query ?? "", StringComparison.OrdinalIgnoreCase) >= 0)
+                    .Select(item => new ResourceSearchMatch { Reference = item.Reference, Title = item.Title, Kind = item.Kind }));
+                cursor = page.NextCursor;
+            } while (cursor != null && results.Count < Math.Max(1, Math.Min(20, limit)));
+            return new ResourceSearchResult { Query = query, Matches = results.Take(Math.Max(1, Math.Min(20, limit))).ToList() };
+        }
+
+        public ResourceReadSelection Read(ChatSession session, ResourceReadRequest request)
+        {
+            var address = Address(request.Reference.Uri);
+            var exact = request.Reference.IsExact ? request.Reference :
+                new ResourceRef(request.Reference.Uri, _catalogs.Current(address.Segments[0]).Revision);
+            if (!string.IsNullOrEmpty(request.Representation) && request.Representation != "auto" && request.Representation != "text")
+                throw Error("Catalog definitions expose a bounded text view.", "RESOURCE_VIEW_UNAVAILABLE");
+            var descriptor = Describe(exact);
+            string text;
+            if (address.Segments.Count == 1) text = _catalogs.ReadPublic(exact);
+            else
+            {
+                var root = new ResourceRef(ResourceUri.Create("catalog", address.Segments[0]), exact.Revision);
+                var skill = FindSkill(root, address.Segments[1]);
+                if (address.Segments.Count == 3) text = skill.BodyMarkdown ?? string.Empty;
+                else
+                {
+                    var reference = FindReference(skill, address.Segments[3]);
+                    if (reference.Payload == null || reference.Payload.ByteLength > RNAssistant.Core.Storage.SkillStore.MaximumSkillReferenceBytes)
+                        throw Error("This publication has no retained reference payload.", "RESOURCE_SNAPSHOT_UNAVAILABLE");
+                    text = _payloads.ReadText(reference.Payload.ToBlobReference());
+                    if (text == null) throw Error("The exact skill reference payload is unavailable.", "RESOURCE_SNAPSHOT_UNAVAILABLE");
+                }
+            }
+            var payload = PayloadRef.FromBlob(_payloads.StoreText(text, descriptor.MimeType));
+            var binding = ResourceReadCursor.ReadBinding(exact.Uri, "text");
+            var position = ResourceReadCursor.ParseRevisionBound(request, binding);
+            ResourceReadCursor.ValidateContinuation(position, payload.Sha256);
+            if (position.Offset > text.Length) throw Error("Catalog cursor exceeds the exact snapshot.", "RESOURCE_CURSOR_INVALID");
+            var count = Math.Min(text.Length - position.Offset, Math.Max(1, Math.Min(32000, request.MaxChars <= 0 ? 32000 : request.MaxChars)));
+            var next = position.Offset + count;
+            descriptor.Payload = payload;
+            return new ResourceReadSelection { Result = new ResourceReadResult {
+                Resource = descriptor, Representation = "text", Text = text.Substring(position.Offset, count),
+                Offset = position.Offset, ReturnedCharacters = count, TotalCharacters = text.Length,
+                Complete = next == text.Length, Truncated = next < text.Length, ContentSha256 = payload.Sha256,
+                RawContentIncluded = true, CompleteViewPayload = payload,
+                NextCursor = next < text.Length ? ResourceReadCursor.CreateRevisionBound(next, payload.Sha256, binding) : null
+            }, ResourceRefs = new[] { exact.Copy() } };
+        }
+
+        internal static ResourceRef SkillResource(SkillDefinition skill, string referencePath = null)
+        {
+            if (skill?.Publication == null || !skill.Publication.IsExact)
+                throw Error("The skill has no active publication.", "RESOURCE_SNAPSHOT_UNAVAILABLE");
+            var root = ResourceUri.Parse(skill.Publication.Uri).Segments[0];
+            return new ResourceRef(referencePath == null ? ResourceUri.Create("catalog", root, skill.Id, "body") :
+                ResourceUri.Create("catalog", root, skill.Id, "reference", ReferenceName(referencePath)), skill.Publication.Revision);
+        }
+
+        private ResourceAddress Address(string uri)
+        {
+            var parsed = ResourceUri.Parse(uri);
+            if (parsed.Provider != Id || parsed.Segments.Count < 1 || !Kinds.Contains(parsed.Segments[0]) ||
+                parsed.Segments.Count != 1 && (!SkillKind(parsed.Segments[0]) ||
+                !(parsed.Segments.Count == 3 && parsed.Segments[2] == "body" ||
+                  parsed.Segments.Count == 4 && parsed.Segments[2] == "reference")))
+                throw Error("Unknown catalog resource.", "RESOURCE_NOT_FOUND");
+            return parsed;
+        }
+
+        private ResourceDescriptor Describe(ResourceRef exact)
+        {
+            var address = Address(exact.Uri);
+            if (address.Segments.Count == 1) return DescribeRoot(exact);
+            var root = new ResourceRef(ResourceUri.Create("catalog", address.Segments[0]), exact.Revision);
+            var skill = FindSkill(root, address.Segments[1]);
+            return DescribeSkill(root, skill, address.Segments.Count == 4 ? FindReference(skill, address.Segments[3]) : null);
+        }
+
+        private SkillDefinition[] Skills(ResourceRef root)
+        { return JsonConvert.DeserializeObject<SkillDefinition[]>(_catalogs.Read(root)); }
+        private SkillDefinition FindSkill(ResourceRef root, string id)
+        {
+            var values = Skills(root).Where(item => item.Id == id).Take(2).ToArray();
+            if (values.Length != 1) throw Error("The exact skill definition is unavailable or ambiguous.", "RESOURCE_SNAPSHOT_UNAVAILABLE");
+            return values[0];
+        }
+        private static string ReferenceName(string path) { return (path ?? "").Replace('\\', '/').Split('/').Last(); }
+        private static SkillReferenceMetadata FindReference(SkillDefinition skill, string name)
+        {
+            var matches = (skill.References ?? new List<SkillReferenceMetadata>()).Where(item => ReferenceName(item.Path) == name).Take(2).ToArray();
+            if (matches.Length != 1) throw Error("The exact reference is unavailable or ambiguous.", "RESOURCE_SNAPSHOT_UNAVAILABLE");
+            return matches[0];
+        }
+        private static ResourceDescriptor DescribeSkill(ResourceRef root, SkillDefinition skill, SkillReferenceMetadata reference)
+        {
+            skill.Publication = root.Copy();
+            var descriptor = new ResourceDescriptor { Reference = SkillResource(skill, reference?.Path), Provider = "catalog",
+                Title = skill.Id + (reference == null ? "" : " / " + reference.Path),
+                Kind = reference == null ? "skill" : "skill-reference", MimeType = "text/markdown", Mutable = false,
+                ByteLength = reference?.ByteLength, Tracking = "strongly-tracked" };
+            descriptor.Representations.Add("text"); descriptor.Capabilities.Add("read");
+            descriptor.Dependencies.Add(new ResourceDependency(root, "text", ResourceCoverage.Whole(), "catalog-publication"));
+            return descriptor;
+        }
+        private static ResourceDescriptor DescribeRoot(ResourceRef exact)
+        {
+            var name = ResourceUri.Parse(exact.Uri).Segments[0];
+            var result = new ResourceDescriptor { Reference = exact.Copy(), Provider = "catalog", Title = name,
+                Kind = "catalog", MimeType = "application/json", Mutable = true, Tracking = "strongly-tracked" };
+            result.Representations.Add("text"); result.Capabilities.Add("read");
+            return result;
+        }
+        private static ResourceRequestException Error(string message, string code)
+        { return new ResourceRequestException(message, code, false); }
+    }
+}

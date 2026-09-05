@@ -65,6 +65,21 @@ namespace RNAssistant.Office.Services
                 }
                 if (message.ResponseProtocolVersion != AgentResponseProtocol.CurrentVersion)
                     throw HistoryFailure("История содержит ответ другой или неизвестной версии протокола.");
+                if (message.AcceptedCallPayload != null)
+                {
+                    if (!message.ProtocolMessage || message.ArgumentPayload == null || message.AcceptedCallOrigin == null ||
+                        string.IsNullOrWhiteSpace(message.ToolCallId) || string.IsNullOrWhiteSpace(message.ToolName) ||
+                        message.ToolResultProtocolVersion != ToolResultWire.CurrentVersion ||
+                        message.ToolResultRole != ToolResultRoles.User && message.ToolResultRole != ToolResultRoles.Developer &&
+                        message.ToolResultRole != ToolResultRoles.Tool || message.ToolCalls == null || message.ToolCalls.Count != 0 ||
+                        calls.ContainsKey(message.ToolCallId) || message.AcceptedCallPayload.ContentType != "application/vnd.rnassistant.accepted-call+json")
+                        throw HistoryFailure("Неполная reference-first запись принятого вызова.");
+                    calls.Add(message.ToolCallId, message);
+                    var archivedOrigin = message.AcceptedCallOrigin;
+                    if (!origins.Add(Tuple.Create(archivedOrigin.StepId, archivedOrigin.ModelAttemptId, archivedOrigin.CallIndex)))
+                        throw HistoryFailure("Повторная запись принятого вызова.");
+                    continue;
+                }
                 var parsed = ConversationResponseHistoryReader.Read(message);
                 if (!parsed.Success) throw HistoryFailure("Неполная запись принятого ответа: " + parsed.Error);
                 foreach (var call in parsed.Response.ToolCalls)
@@ -95,12 +110,12 @@ namespace RNAssistant.Office.Services
             }
         }
 
-        internal static void EnsureCanContinue(ChatSession session, ToolInvocation command)
+        internal static void EnsureCanContinue(ChatSession session, ToolInvocation command, RNAssistant.Core.Storage.ChatBlobStore payloads = null)
         {
-            RestoreContinuation(session, command);
+            RestoreContinuation(session, command, payloads);
         }
 
-        internal static AgentRunContinuation RestoreContinuation(ChatSession session, ToolInvocation command)
+        internal static AgentRunContinuation RestoreContinuation(ChatSession session, ToolInvocation command, RNAssistant.Core.Storage.ChatBlobStore payloads = null)
         {
             EnsureCurrentHistory(session);
             var state = session.LastRun == null ? null : session.LastRun.KernelState;
@@ -124,6 +139,7 @@ namespace RNAssistant.Office.Services
                 if (message.Activity != null) continue;
                 if (string.Equals(message.Role, "assistant", StringComparison.OrdinalIgnoreCase))
                 {
+                    message = RNAssistant.Core.Storage.AcceptedCallPayloadService.Hydrate(message, payloads);
                     var parsed = ConversationResponseHistoryReader.Read(message);
                     if (!parsed.Success) throw HistoryFailure("Cannot reconstruct accepted calls: " + parsed.Error);
                     history.Add(AgentMessage.Assistant(parsed.Response));

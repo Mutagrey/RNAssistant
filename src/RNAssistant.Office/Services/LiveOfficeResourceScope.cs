@@ -74,10 +74,9 @@ namespace RNAssistant.Office.Services
         {
             return Read(session, delegate
             {
-                var documentKey = string.IsNullOrWhiteSpace(session.DocumentKey)
-                    ? _adapter.DocumentKey
-                    : session.DocumentKey;
-                return TokenFor(documentKey);
+                if (string.IsNullOrWhiteSpace(session.DocumentAuthorityId))
+                    throw new ResourceRequestException("Document authority is not bound.", "RESOURCE_AUTHORITY_NOT_READY", false);
+                return session.DocumentAuthorityId;
             });
         }
 
@@ -85,23 +84,9 @@ namespace RNAssistant.Office.Services
         {
             return Read(session, delegate
             {
-                var currentDocumentKey = string.IsNullOrWhiteSpace(session.DocumentKey)
-                    ? _adapter.DocumentKey
-                    : session.DocumentKey;
-                if (string.Equals(token, TokenFor(currentDocumentKey), StringComparison.Ordinal)) return true;
-                foreach (var documentKey in session.PreviousDocumentKeys ?? new System.Collections.Generic.List<string>())
-                {
-                    if (string.Equals(token, TokenFor(documentKey), StringComparison.Ordinal)) return true;
-                }
-                return false;
+                return !string.IsNullOrWhiteSpace(session.DocumentAuthorityId) &&
+                    string.Equals(token, session.DocumentAuthorityId, StringComparison.Ordinal);
             });
-        }
-
-        private string TokenFor(string documentKey)
-        {
-            return RNAssistant.Core.Tools.TextPatternEngine.Sha256(
-                (_adapter.HostName ?? string.Empty).ToLowerInvariant() + "\n" +
-                (documentKey ?? string.Empty).ToLowerInvariant());
         }
     }
 }

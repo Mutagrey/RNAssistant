@@ -49,6 +49,8 @@ namespace RNAssistant.Core.Storage
         private readonly AppDataPaths _paths;
         private readonly ChatBlobStore _blobs;
         private readonly Func<StorageProtector> _protectionProvider;
+        public AppDataPaths Paths { get { return _paths; } }
+        public ChatBlobStore Payloads { get { return _blobs; } }
 
         public VbaJournalStore(AppDataPaths paths)
             : this(paths, null)

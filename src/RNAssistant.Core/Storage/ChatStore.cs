@@ -778,6 +778,8 @@ namespace RNAssistant.Core.Storage
             if (session == null) throw new ArgumentNullException("session");
             lock (PersistenceSync)
             {
+                foreach (var message in session.Messages ?? new List<ChatMessage>())
+                    RuntimePayloadService.ExternalizeActivity(message.Activity, _blobs);
                 NormalizeSession(session, session.Host, session.DocumentKey, session.DocumentTitle);
                 var path = explicitPath ?? GetSessionPath(session.Host, session.DocumentKey, session.Id);
                 using (AcquireDocumentPathLock(path))

@@ -506,11 +506,8 @@ namespace RNAssistant.Harness
                     store.ListMutations(adapter.HostName, adapter.DocumentKey).Single().Terminal.Status,
                     "domain workflow owns the terminal journal result");
 
-                service.RecordObservation(
-                    correlation.SessionId,
-                    preparation.ResolvedModuleName,
-                    VbaTextCanonicalizer.LiveCodeSha256(
-                        adapter.GetVbaModuleCode(preparation.ResolvedModuleName)));
+                correlation.ExpectedContentSha256 = VbaTextCanonicalizer.LiveCodeSha256(
+                    adapter.GetVbaModuleCode(preparation.ResolvedModuleName));
 
                 var existingPreparation = service.PrepareWholeModuleWriteGuard(
                     new VbaWholeModuleWriteGuardRequest
@@ -1584,6 +1581,7 @@ namespace RNAssistant.Harness
                 var deleteObserved = Command("common.vba_delete_module", "moduleName", "Module2");
                 var stale = executor.ExecuteManual(deleteObserved, tools, settings, false, false, session);
                 AssertEqual("stale_vba_module", stale.ErrorCode, "runtime uses an optional prior delete snapshot without a hash argument");
+                ReadVbaSource(executor, session, "Module2");
                 AssertContains(adapter.GetVbaModuleCode("Module2"), "ChangedAfterRead", "stale delete keeps the changed module");
                 AssertTrue(executor.ExecuteManual(deleteObserved, tools, settings, false, false, session).Success,
                     "same-tool retry deletes after the stale warning");
@@ -1768,7 +1766,7 @@ namespace RNAssistant.Harness
                     false,
                     false);
 
-                AssertTrue(result.Success, "ordered exact hunks patch successfully");
+                AssertTrue(result.Success, "ordered exact hunks patch successfully: " + result.Message);
                 AssertEqual(
                     "Option Explicit\r\nPublic Sub Run()\r\nDim value As Long\r\nDebug.Print 1\r\nvalue = 2\r\nEnd Sub",
                     adapter.VbaModuleCode,
@@ -2503,7 +2501,7 @@ namespace RNAssistant.Harness
                     false,
                     false,
                     session);
-                AssertTrue(first.Success, "first mutation succeeds and verifies read-back");
+                AssertTrue(first.Success, "first mutation succeeds and verifies read-back: " + first.Message);
 
                 var blocked = executor.ExecuteManual(
                     Command("common.vba_apply_patch",
@@ -3391,7 +3389,7 @@ namespace RNAssistant.Harness
                     }
 
                     AssertTrue(writeTask.GetAwaiter().GetResult().Success, "first mutation succeeds");
-                    AssertEqual("stale_vba_module", queuedTask.GetAwaiter().GetResult().ErrorCode,
+                    AssertEqual("vba_snapshot_refresh_required", queuedTask.GetAwaiter().GetResult().ErrorCode,
                         "queued preparation checks the changed source after acquiring the gate");
                     AssertEqual(1, writeCalls, "stale queued mutation never dispatches a second write");
                     AssertEqual(after, adapter.VbaModuleCode, "first mutation source is preserved");

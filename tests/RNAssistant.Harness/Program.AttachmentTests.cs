@@ -87,7 +87,7 @@ namespace RNAssistant.Harness
                 var durable = new ChatStore(paths).Load(session.Host, session.DocumentKey, session.Id);
                 var artifact = durable.Artifacts.Single(item => item.Id == "attachment_" + staged.Id);
                 var uri = ArtifactUri(durable, artifact);
-                var modelRequest = new ConversationPromptComposer().BuildMessages(
+                var modelRequest = new ModelContextCompiler().BuildPreview(
                     ChatModes.Chat,
                     user.Content,
                     adapter,
@@ -464,7 +464,7 @@ namespace RNAssistant.Harness
             AssertTrue(analysis == null, "no auxiliary evidence is created");
             AssertEqual(0, helperCalls, "no duplicate model call");
 
-            var prompt = new ConversationPromptComposer().BuildMessages(
+            var prompt = new ModelContextCompiler().BuildPreview(
                 ChatModes.Chat,
                 sourceMessage.Content,
                 null,

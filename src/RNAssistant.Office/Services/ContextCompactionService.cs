@@ -10,6 +10,8 @@ using RNAssistant.Core.Llm;
 using RNAssistant.Core.ModelProtocol;
 using RNAssistant.Core.Models;
 using RNAssistant.Core.Services;
+using RNAssistant.Core.Storage;
+using RNAssistant.Core.Tools;
 
 namespace RNAssistant.Office.Services
 {
@@ -20,14 +22,24 @@ namespace RNAssistant.Office.Services
 
         private const int MaximumCheckpointResourceReferences = 32;
         private const string SummarySchema =
-            "{\"type\":\"object\",\"additionalProperties\":false,\"required\":[\"summary\"],\"properties\":{" +
-            "\"summary\":{\"type\":\"string\"}}}";
+            "{\"type\":\"object\",\"additionalProperties\":false,\"required\":[\"claims\"],\"properties\":{" +
+            "\"claims\":{\"type\":\"array\",\"minItems\":1,\"maxItems\":64,\"items\":{\"type\":\"object\",\"additionalProperties\":false," +
+            "\"required\":[\"text\",\"sourceIds\"],\"properties\":{\"text\":{\"type\":\"string\"},\"sourceIds\":{\"type\":\"array\",\"minItems\":1,\"items\":{\"type\":\"string\"}}}}}}}";
 
         private readonly LlmCompletionDelegate _completeAsync;
+        private readonly ResourceAuthorityService _authority;
+        private readonly ModelContextCompiler _compiler;
+        private readonly Func<ChatSession, CallableToolPack> _captureTools;
+        private readonly Func<SkillCatalogSnapshot> _captureSkills;
 
-        public ContextCompactionService(LlmCompletionDelegate completeAsync)
+        public ContextCompactionService(LlmCompletionDelegate completeAsync,
+            ResourceAuthorityService authority = null, ChatBlobStore payloads = null,
+            Func<ChatSession, CallableToolPack> captureTools = null, Func<SkillCatalogSnapshot> captureSkills = null)
         {
             _completeAsync = completeAsync ?? throw new ArgumentNullException(nameof(completeAsync));
+            _authority = authority;
+            _compiler = new ModelContextCompiler(payloads);
+            _captureTools = captureTools; _captureSkills = captureSkills;
         }
 
         public async Task<ContextCheckpoint> EnsureWithinBudgetAsync(
@@ -36,7 +48,8 @@ namespace RNAssistant.Office.Services
             string incomingText,
             bool force,
             Action<string, string, ChatActivity> progress,
-            CancellationToken cancellationToken)
+            CancellationToken cancellationToken, ModelAuthoritySnapshot authoritySnapshot = null,
+            IReadOnlyList<ToolCatalogEntry> runnableCatalog = null)
         {
             if (session == null || session.Messages == null || session.Messages.Count == 0)
             {
@@ -49,6 +62,18 @@ namespace RNAssistant.Office.Services
             }
 
             var window = BuildReplayTail(session);
+            var evidence = window.SelectMany(item => item.ResourceEvidence ?? new List<ResourceEvidence>())
+                .Concat((ActiveCheckpoint(session)?.Claims ?? new List<StructuredContextClaim>()).SelectMany(item => item.Evidence))
+                .GroupBy(item => item.EvidenceId, StringComparer.Ordinal).Select(group => group.First()).ToArray();
+            var scopes = evidence.Select(item => item.ScopeId).Concat(new[] { new ResourceAuthorityScopeId("conversation", session.Id), CatalogPublicationService.ScopeId }).Distinct().ToList();
+            if (!string.IsNullOrEmpty(session.DocumentAuthorityId)) scopes.Add(ResourceAuthorityScopeId.Document(new DocumentAuthorityId(session.DocumentAuthorityId)));
+            var resources = authoritySnapshot?.Resources ?? (_authority == null ? new ResourceAuthoritySnapshotSet(new ResourceAuthoritySnapshot[0]) : _authority.CaptureMany(scopes));
+            var pack = authoritySnapshot == null ? (_captureTools == null ? CallableToolPack.Create(session.Mode, session.Host, session.LastRun?.RunId, new ToolCatalogEntry[0]) : _captureTools(session)) : null;
+            var frozen = authoritySnapshot ?? new ModelAuthoritySnapshot(resources, pack.Revision,
+                _captureSkills == null ? new SkillCatalogSnapshot(null) : _captureSkills(), ResourceStateProvider.CaptureSchemas(resources), session.Revision);
+            runnableCatalog = runnableCatalog ?? pack?.Catalog ?? new ToolCatalogEntry[0];
+            window = _compiler.Compile(frozen, new ChatMessage[0], window, null, runnableCatalog,
+                settings, ModelContextBudget.InputBudgetTokens(settings), false).Messages.ToList();
             var projectedWindow = window.Select(message => ProjectMessage(session, message)).ToList();
             var inputBudget = Math.Max(1024, ModelContextBudget.InputBudgetTokens(settings));
             var activeCheckpoint = ActiveCheckpoint(session);
@@ -97,12 +122,13 @@ namespace RNAssistant.Office.Services
                 Status = "running"
             });
 
+            Dictionary<string, StructuredContextClaim> sourceClaims;
             var source = BuildCompactionSource(
                 session,
                 prefix,
                 sourceTokenBudget,
-                settings);
-            var prompt = CompactionPrompt(settings);
+                settings, frozen, out sourceClaims);
+            var prompt = CompactionPrompt(settings) + "\nRequired output contract: claims[{text,sourceIds}], never a free-form summary. Use only supplied sourceId values; runtime attaches their exact evidence and authority generations.";
             var request = new List<ChatMessage>
             {
                 new ChatMessage { Role = InstructionRole(settings), Content = prompt },
@@ -120,19 +146,20 @@ namespace RNAssistant.Office.Services
                 TraceSession = session,
                 TracePurpose = "context_compaction"
             };
-            var completion = await _completeAsync(settings, request, options, null, cancellationToken).ConfigureAwait(false);
-            var summary = ParseSummary(completion == null ? null : completion.Content);
-            summary["summary"] = ModelContextBudget.TruncateText(
-                (string)summary["summary"] ?? string.Empty,
-                Math.Max(256, Math.Min(4096, inputBudget / 4)),
-                settings);
-            var summaryJson = summary.ToString(Formatting.None);
-            var summaryMarkdown = RenderSummary(summary);
+            var compiled = _compiler.Compile(frozen, request, new ChatMessage[0], null, new ToolCatalogEntry[0],
+                settings, inputBudget);
+            var completion = await _completeAsync(settings, compiled.Messages, options, null, cancellationToken).ConfigureAwait(false);
+            var claims = ParseClaims(completion?.Content, sourceClaims);
+            var summaryJson = JsonConvert.SerializeObject(claims);
+            var summaryMarkdown = string.Join("\n", claims.Select(claim => claim.Text));
+            if (ModelContextBudget.EstimateTextTokens(summaryMarkdown, settings) > Math.Max(256, Math.Min(4096, inputBudget / 4)))
+                throw new InvalidOperationException("Structured compaction exceeds its claim budget; the previous checkpoint remains intact.");
             var checkpoint = new ContextCheckpoint
             {
                 ThroughMessageId = through.Id,
                 SummaryJson = summaryJson,
                 SummaryMarkdown = summaryMarkdown,
+                Claims = claims,
                 Model = settings.Model,
                 PromptVersion = ContextCheckpoint.CurrentPromptVersion,
                 SourceMessageCount = prefix.Count,
@@ -213,7 +240,8 @@ namespace RNAssistant.Office.Services
                         "TOOL_SCHEMA_NOTICE: The runtime rematerializes schemas from the latest valid durable admission event for this logical turn. " +
                         "Raw schema evidence in the replay tail is never admission authority. If a catalog item is still marked unloaded, call common.capabilities_read " +
                         "with its exact tool id and wait for a new TOOL_PACK_STATE admitted=true before use.",
-                    ResourceRefs = CollectCheckpointResourceRefs(session, checkpoint)
+                    ResourceRefs = CollectCheckpointResourceRefs(session, checkpoint),
+                    ContextClaims = checkpoint.Claims.ToList()
                 }
             };
             result.AddRange(messages);
@@ -242,6 +270,7 @@ namespace RNAssistant.Office.Services
                 return null;
             }
             return session.ContextCheckpoints.FirstOrDefault(item => item != null &&
+                item.PromptVersion == ContextCheckpoint.CurrentPromptVersion && item.Claims != null && item.Claims.Count > 0 &&
                 string.Equals(item.Id, session.ActiveContextCheckpointId, StringComparison.OrdinalIgnoreCase));
         }
 
@@ -349,93 +378,38 @@ namespace RNAssistant.Office.Services
             ChatSession session,
             IEnumerable<ChatMessage> prefix,
             int sourceTokenBudget,
-            AppSettings settings)
+            AppSettings settings, ModelAuthoritySnapshot authority, out Dictionary<string, StructuredContextClaim> sources)
         {
             var builder = new StringBuilder();
+            sources = new Dictionary<string, StructuredContextClaim>(StringComparer.Ordinal);
             var prefixMessages = (prefix ?? new ChatMessage[0]).Where(message => message != null).ToList();
             var active = ActiveCheckpoint(session);
-            if (active != null && !string.IsNullOrWhiteSpace(active.SummaryJson))
+            if (active != null)
             {
-                builder.AppendLine("PRIOR_CHECKPOINT:");
-                builder.AppendLine(ModelContextBudget.TruncateText(
-                    active.SummaryJson,
-                    Math.Max(128, sourceTokenBudget / 8),
-                    settings));
+                builder.AppendLine("PRIOR_CURRENT_CLAIMS:");
+                foreach (var claim in active.Claims.Where(item => CurrentClaim(item, authority)))
+                {
+                    sources.Add(claim.ClaimId, claim);
+                    builder.AppendLine(JsonConvert.SerializeObject(new { sourceId = claim.ClaimId, text = claim.Text }));
+                }
             }
-            var referencedArtifactIds = new HashSet<string>(
-                prefixMessages.SelectMany(message => ChatResourceUri.CurrentArtifactIds(
-                    session,
-                    message.ResourceRefs ?? new List<ResourceRef>())),
-                StringComparer.OrdinalIgnoreCase);
-            if (session != null && !string.IsNullOrWhiteSpace(session.ActiveHtmlArtifactId)) referencedArtifactIds.Add(session.ActiveHtmlArtifactId);
-            if (session != null && !string.IsNullOrWhiteSpace(session.ActiveTaskListArtifactId)) referencedArtifactIds.Add(session.ActiveTaskListArtifactId);
-            if (session != null && !string.IsNullOrWhiteSpace(session.ActivePlanDocumentArtifactId)) referencedArtifactIds.Add(session.ActivePlanDocumentArtifactId);
-            var artifacts = (session == null || session.Artifacts == null ? new List<ChatArtifact>() : session.Artifacts)
-                .Where(artifact => artifact != null && referencedArtifactIds.Contains(artifact.Id) &&
-                    !PlanDocumentService.IsRemoved(session, artifact))
-                .ToList();
             builder.AppendLine("TRANSCRIPT:");
             foreach (var message in prefixMessages)
             {
-                if (message == null) continue;
                 var projected = ProjectMessage(session, message);
-                builder.Append('[').Append(projected.Role ?? "unknown").Append("] ");
-                builder.Append(projected.Content);
-                var toolCalls = (projected.ToolCalls ?? new List<LlmToolCall>())
-                    .Where(call => call != null)
-                    .Select(call => new
-                    {
-                        id = call.Id,
-                        name = call.Name,
-                        argumentsJson = call.ArgumentsJson
-                    })
-                    .ToList();
-                if (toolCalls.Count > 0)
-                {
-                    builder.Append(" [tool_calls:").Append(JsonConvert.SerializeObject(toolCalls)).Append(']');
-                }
-                builder.AppendLine();
+                var toolDependent = !string.IsNullOrEmpty(message.ToolName) || (message.ToolCalls?.Count ?? 0) > 0 || message.ResourceEffect != null;
+                sources.Add(message.Id, new StructuredContextClaim { ClaimId = message.Id, Text = projected.Content,
+                    SourceMessageIds = new List<string> { message.Id }, Evidence = message.ResourceEvidence ?? new List<ResourceEvidence>(),
+                    ToolGeneration = toolDependent ? authority.ToolGeneration : null,
+                    SkillGeneration = toolDependent ? authority.Skills.Generation : null,
+                    SchemaGeneration = toolDependent ? authority.SchemaGeneration : null });
+                builder.AppendLine(JsonConvert.SerializeObject(new { sourceId = message.Id, role = projected.Role,
+                    text = projected.Content, toolCalls = projected.ToolCalls, resources = message.ResourceRefs }));
             }
-            var artifactIndex = new StringBuilder();
-            artifactIndex.AppendLine("ARTIFACT_INDEX:");
-            if (artifacts.Count == 0)
-            {
-                artifactIndex.AppendLine("none");
-            }
-            else
-            {
-                var descriptors = (session == null || session.Artifacts == null
-                        ? new List<ChatArtifact>()
-                        : session.Artifacts.Where(item => item != null &&
-                            !string.IsNullOrWhiteSpace(item.Id)).ToList())
-                    .GroupBy(artifact => artifact.Id, StringComparer.OrdinalIgnoreCase)
-                    .Where(group => group.Count() == 1)
-                    .Select(group => group.Single())
-                    .ToDictionary(artifact => artifact.Id, artifact => new ResourceDescriptor
-                    {
-                        Kind = artifact.Kind,
-                        Title = artifact.Title,
-                        CreatedUtc = artifact.CreatedUtc
-                    }, StringComparer.OrdinalIgnoreCase);
-                foreach (var artifact in artifacts.Take(100))
-                {
-                    ResourceDescriptor descriptor;
-                    if (!descriptors.TryGetValue(artifact.Id, out descriptor)) continue;
-                    artifactIndex.AppendLine(
-                        "target=" + ModelContextBudget.TruncateText(
-                            ResourceGatewayService.IntentTarget(descriptor),
-                            256,
-                            settings) + " | type=" + ResourceGatewayService.IntentType(descriptor));
-                }
-                if (artifacts.Count > 100) artifactIndex.AppendLine("[additional artifacts omitted]");
-            }
-            builder.AppendLine(ModelContextBudget.TruncateText(
-                artifactIndex.ToString(),
-                Math.Max(128, sourceTokenBudget / 8),
-                settings));
             var source = builder.ToString();
-            if (ModelContextBudget.EstimateTextTokens(source, settings) <= sourceTokenBudget) return source;
-            return ModelContextBudget.TruncateText(source, sourceTokenBudget, settings) + "\n[compaction_source_truncated]";
+            if (ModelContextBudget.EstimateTextTokens(source, settings) > sourceTokenBudget)
+                throw new InvalidOperationException("The fully included compaction sources exceed their budget. No partial source or checkpoint was published.");
+            return source;
         }
 
         private static List<ChatMessage> TakeFullyIncludedPrefix(
@@ -466,7 +440,7 @@ namespace RNAssistant.Office.Services
             return ModelToolResultProjection.Project(message);
         }
 
-        private static JObject ParseSummary(string content)
+        private static List<StructuredContextClaim> ParseClaims(string content, IDictionary<string, StructuredContextClaim> sources)
         {
             if (string.IsNullOrWhiteSpace(content))
             {
@@ -481,21 +455,39 @@ namespace RNAssistant.Office.Services
             {
                 throw new InvalidOperationException("Context compaction returned invalid JSON.", ex);
             }
-            if (value.Properties().Any(property => !string.Equals(property.Name, "summary", StringComparison.Ordinal)))
+            if (value.Properties().Any(property => !string.Equals(property.Name, "claims", StringComparison.Ordinal)))
             {
                 throw new InvalidOperationException("Context compaction response contains unexpected fields.");
             }
-            var summary = value["summary"];
-            if (summary == null || summary.Type != JTokenType.String || string.IsNullOrWhiteSpace(summary.Value<string>()))
+            var drafts = value["claims"] as JArray;
+            if (drafts == null || drafts.Count == 0 || drafts.Count > 64)
+                throw new InvalidOperationException("Context compaction requires bounded structured claims, not a free-form summary.");
+            var result = new List<StructuredContextClaim>();
+            foreach (var draft in drafts.OfType<JObject>())
             {
-                throw new InvalidOperationException("Context compaction response is missing a non-empty summary.");
+                var ids = draft["sourceIds"] as JArray;
+                if (draft.Properties().Any(property => property.Name != "text" && property.Name != "sourceIds") ||
+                    draft["text"]?.Type != JTokenType.String || string.IsNullOrWhiteSpace((string)draft["text"]) || ids == null || ids.Count == 0 ||
+                    ids.Any(id => id.Type != JTokenType.String || !sources.ContainsKey((string)id)))
+                    throw new InvalidOperationException("Every compacted claim requires exact, fully included source provenance.");
+                var provenance = ids.Select(id => sources[(string)id]).ToArray();
+                result.Add(new StructuredContextClaim { ClaimId = "claim_" + Guid.NewGuid().ToString("N"), Text = ((string)draft["text"]).Trim(),
+                    SourceMessageIds = provenance.SelectMany(item => item.SourceMessageIds).Distinct(StringComparer.Ordinal).ToList(),
+                    Evidence = provenance.SelectMany(item => item.Evidence).GroupBy(item => item.EvidenceId, StringComparer.Ordinal).Select(group => group.First()).ToList(),
+                    ToolGeneration = provenance.Select(item => item.ToolGeneration).FirstOrDefault(item => item != null),
+                    SkillGeneration = provenance.Select(item => item.SkillGeneration).FirstOrDefault(item => item != null),
+                    SchemaGeneration = provenance.Select(item => item.SchemaGeneration).FirstOrDefault(item => item != null) });
             }
-            return value;
+            if (result.Count != drafts.Count) throw new InvalidOperationException("Malformed context claim.");
+            return result;
         }
 
-        private static string RenderSummary(JObject summary)
+        private static bool CurrentClaim(StructuredContextClaim claim, ModelAuthoritySnapshot authority)
         {
-            return Convert.ToString(summary["summary"]).Trim();
+            return (claim.ToolGeneration == null || claim.ToolGeneration == authority.ToolGeneration) &&
+                (claim.SkillGeneration == null || claim.SkillGeneration == authority.Skills.Generation) &&
+                (claim.SchemaGeneration == null || claim.SchemaGeneration == authority.SchemaGeneration) &&
+                claim.Evidence.All(evidence => new EvidenceStateReducer().Reduce(evidence, authority.Resources).State == EvidenceState.Current);
         }
 
         private static string CompactionPrompt(AppSettings settings)

@@ -75,6 +75,7 @@ namespace RNAssistant.Core.Models
         public string Path { get; set; }
         public long ByteLength { get; set; }
         public string Revision { get; set; }
+        public PayloadRef Payload { get; set; }
     }
 
     public sealed class SkillDefinition
@@ -85,6 +86,7 @@ namespace RNAssistant.Core.Models
         public string Description { get; set; }
         public string Version { get; set; }
         public string BodyMarkdown { get; set; }
+        public ResourceRef Publication { get; set; }
         public string StoragePath { get; set; }
         public bool Enabled { get; set; }
         public bool BuiltIn { get; set; }

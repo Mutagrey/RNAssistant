@@ -68,7 +68,7 @@ namespace RNAssistant.Office.Tools
                                 _toolId, context.Arguments,
                                 context.MarkDispatchPossible,
                                 cancellationToken);
-                        })
+                        }, terminalOutcome => context.Complete(Result(terminalOutcome)), context.CompleteFailure)
                     : _runtime.ReadDocument(
                         target, cancellationToken, delegate
                         {

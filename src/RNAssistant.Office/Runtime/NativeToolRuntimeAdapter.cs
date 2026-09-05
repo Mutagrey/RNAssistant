@@ -68,7 +68,8 @@ namespace RNAssistant.Office.Runtime
             HostRuntime hostRuntime, ChatSession session,
             ToolPackSnapshot snapshot, AppSettings settings, string mode,
             Func<ToolExecutionContext, ToolPreparationResult, string> pendingRegistrar = null,
-            bool trace = true)
+            bool trace = true,
+            IToolMutationObserver mutationObserver = null)
         {
             if (snapshot == null) throw new ArgumentNullException(nameof(snapshot));
             var registry = new ToolHandlerRegistry();
@@ -98,6 +99,10 @@ namespace RNAssistant.Office.Runtime
                     if (excelReads == null || hostRuntime == null)
                         throw new InvalidOperationException("Excel read handler dependencies are unavailable.");
                     handler = new ExcelReadToolHandler(registration.Descriptor.Id, excelReads, hostRuntime, session);
+                }
+                else if (ResourceDefinitionToolHandler.Owns(registration.Descriptor.Id))
+                {
+                    handler = new ResourceDefinitionToolHandler(gateway, session, registration.Descriptor.Id);
                 }
                 else if (ExcelFindReplaceToolIds.Owns(registration.Descriptor.Id))
                 {
@@ -269,7 +274,7 @@ namespace RNAssistant.Office.Runtime
             var policy = ConversationRunPolicy.For(mode);
             _runtime = new ToolRuntime(registry, policy.Mode,
                 settings != null && settings.AutoConfirmToolActions,
-                policy.AllowsConfirmation, pendingRegistrar);
+                policy.AllowsConfirmation, pendingRegistrar, mutationObserver);
             _session = session;
             _trace = trace;
         }
@@ -278,6 +283,7 @@ namespace RNAssistant.Office.Runtime
         {
             return string.Equals(toolId, ResourceToolCatalog.FindToolId, StringComparison.Ordinal) ||
                 string.Equals(toolId, ResourceToolCatalog.ReadToolId, StringComparison.Ordinal) ||
+                ResourceDefinitionToolHandler.Owns(toolId) ||
                 ExcelReadToolIds.Owns(toolId) || ExcelWriteToolIds.Owns(toolId) ||
                 ExcelFindReplaceToolIds.Owns(toolId) || ExcelSheetToolIds.Owns(toolId) ||
                 ExcelRangeMutationToolIds.Owns(toolId) ||
@@ -352,7 +358,8 @@ namespace RNAssistant.Office.Runtime
                     ? identity : _session.LastRun.TurnId;
             var context = new ToolExecutionContext(call, policy, runId, turnId,
                 string.IsNullOrWhiteSpace(command.RuntimeStepId) ? identity : command.RuntimeStepId,
-                DateTime.UtcNow, confirmed, remainingSteps);
+                DateTime.UtcNow, confirmed, remainingSteps,
+                expectedContentSha256: command.ExpectedContentSha256);
             var record = ExecuteAsync(context, token).GetAwaiter().GetResult();
             var materialized = TakeMaterialization(record);
             return ToolRunResultFactory.Create(record, materialized);
@@ -367,7 +374,8 @@ namespace RNAssistant.Office.Runtime
                 _resourceReadAttachments.TryGetValue(record.Context.Call.Id, out attachments);
                 _resourceReadAttachments.Remove(record.Context.Call.Id);
             }
-            return new ToolResultMaterialization(record.Result, attachments);
+            return new ToolResultMaterialization(record.Result, attachments, resourceEvidence: record.ResourceEvidence,
+                resourceEffect: record.ResourceEffect, authorityCommitId: record.AuthorityCommitId);
         }
 
         private void CaptureResourceReadAttachments(string callId, IReadOnlyList<ChatAttachment> attachments)

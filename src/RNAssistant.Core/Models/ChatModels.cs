@@ -111,6 +111,13 @@ namespace RNAssistant.Core.Models
         public List<ChatAttachment> Attachments { get; set; }
         public AttachmentAnalysisContext AttachmentAnalysis { get; set; }
         public List<ResourceRef> ResourceRefs { get; set; }
+        public List<ResourceEvidence> ResourceEvidence { get; set; } = new List<ResourceEvidence>();
+        public List<StructuredContextClaim> ContextClaims { get; set; } = new List<StructuredContextClaim>();
+        public PayloadRef ArgumentPayload { get; set; }
+        public PayloadRef AcceptedCallPayload { get; set; }
+        public PayloadRef ResultPayload { get; set; }
+        public ResourceEffect ResourceEffect { get; set; }
+        public string AuthorityCommitId { get; set; }
         public ResourceRef HtmlWorkspaceCheckpoint { get; set; }
         public ChatActivity Activity { get; set; }
         public int? PromptTokens { get; set; }
@@ -208,6 +215,10 @@ namespace RNAssistant.Core.Models
         public string ToolId { get; set; }
         public string ToolCallId { get; set; }
         public string ArgumentsJson { get; set; }
+        [JsonProperty(NullValueHandling = NullValueHandling.Ignore)]
+        public PayloadRef ArgumentsPayload { get; set; }
+        [JsonProperty(NullValueHandling = NullValueHandling.Ignore)]
+        public PayloadRef ResultPayload { get; set; }
         [JsonProperty(DefaultValueHandling = DefaultValueHandling.Ignore)]
         public string RuntimeGuardJson { get; set; }
         public string ResultMessage { get; set; }
@@ -241,6 +252,8 @@ namespace RNAssistant.Core.Models
         public string ForkedThroughMessageId { get; set; }
         public string Host { get; set; }
         public string DocumentKey { get; set; }
+        public string DocumentAuthorityId { get; set; }
+        public ContextReceipt LastContextReceipt { get; set; }
         public List<string> PreviousDocumentKeys { get; set; }
         public string DocumentTitle { get; set; }
         public string DocumentPath { get; set; }
@@ -282,12 +295,13 @@ namespace RNAssistant.Core.Models
 
     public sealed class ContextCheckpoint
     {
-        public const string CurrentPromptVersion = "context-compaction-v1";
+        public const string CurrentPromptVersion = "context-claims-v3";
 
         public string Id { get; set; }
         public string ThroughMessageId { get; set; }
         public string SummaryJson { get; set; }
         public string SummaryMarkdown { get; set; }
+        public List<StructuredContextClaim> Claims { get; set; } = new List<StructuredContextClaim>();
         public string Model { get; set; }
         public string PromptVersion { get; set; }
         public int SourceMessageCount { get; set; }
@@ -497,7 +511,6 @@ namespace RNAssistant.Core.Models
     {
         public string Id { get; set; }
         public string Name { get; set; }
-        public string Json { get; set; }
         public HtmlWorkspaceDataBinding Binding { get; set; }
         public DateTime CreatedUtc { get; set; }
         public DateTime UpdatedUtc { get; set; }
@@ -509,34 +522,14 @@ namespace RNAssistant.Core.Models
         }
     }
 
+    // Configuration only. Bodies and freshness are owned by canonical resources.
     public sealed class HtmlWorkspaceDataBinding
     {
-        public string ToolId { get; set; }
-        public string ArgumentsJson { get; set; }
-        public string Transform { get; set; }
-        public string Headers { get; set; }
-        public string RefreshPolicy { get; set; }
-        public string Host { get; set; }
-        public string DocumentKey { get; set; }
-        public string DocumentTitle { get; set; }
-        public string Status { get; set; }
-        public string LastError { get; set; }
-        public string PayloadCompleteness { get; set; }
-        public string ContentSha256 { get; set; }
-        public DateTime CreatedUtc { get; set; }
-        public DateTime UpdatedUtc { get; set; }
-        public DateTime? LastRefreshUtc { get; set; }
-
-        public HtmlWorkspaceDataBinding()
-        {
-            ArgumentsJson = "{}";
-            Transform = "raw";
-            Headers = "firstRow";
-            RefreshPolicy = "on_preview";
-            Status = "ready";
-            PayloadCompleteness = "bounded";
-            CreatedUtc = DateTime.UtcNow;
-            UpdatedUtc = CreatedUtc;
-        }
+        public ResourceRef Resource { get; set; }
+        public string Policy { get; set; } = "exact";
+        public string View { get; set; } = "text";
+        public string ViewPath { get; set; }
+        public ResourceRef Schema { get; set; }
+        public ResourceRef Mapping { get; set; }
     }
 }

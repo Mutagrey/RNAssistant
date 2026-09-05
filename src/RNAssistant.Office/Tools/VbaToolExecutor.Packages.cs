@@ -128,25 +128,5 @@ namespace RNAssistant.Office.Tools
                         ? null : documentSource.Components));
         }
 
-        private static VbaMutationCorrelation MutationCorrelation(
-            ToolExecutionContext execution,
-            ChatSession session)
-        {
-            return new VbaMutationCorrelation
-            {
-                SessionId = SessionId(session),
-                RunId = execution == null
-                    ? session == null || session.LastRun == null
-                        ? null : session.LastRun.RunId
-                    : execution.RunId,
-                TurnId = execution == null
-                    ? session == null || session.LastRun == null
-                        ? null : session.LastRun.TurnId
-                    : execution.TurnId,
-                StepId = execution == null ? null : execution.StepId,
-                ToolCallId = execution == null || execution.Call == null
-                    ? null : execution.Call.Id
-            };
-        }
     }
 }

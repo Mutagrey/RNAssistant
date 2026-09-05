@@ -46,7 +46,7 @@ namespace RNAssistant.Office.Contracts
         [JsonProperty("title")] public string Title { get; set; }
         [JsonProperty("mimeType")] public string MimeType { get; set; }
         [JsonProperty("contentSha256")] public string ContentSha256 { get; set; }
-        [JsonProperty("text")] public string Text { get; set; }
+        [JsonProperty("data")] public ResourceDataOpenResponse Data { get; set; }
         [JsonProperty("offset")] public int Offset { get; set; }
         [JsonProperty("returnedCharacters")] public int ReturnedCharacters { get; set; }
         [JsonProperty("totalCharacters")] public int TotalCharacters { get; set; }
@@ -67,7 +67,8 @@ namespace RNAssistant.Office.Contracts
         [JsonProperty("mimeType")] public string MimeType { get; set; }
         [JsonProperty("contentSha256")] public string ContentSha256 { get; set; }
         [JsonProperty("byteLength")] public long ByteLength { get; set; }
-        [JsonProperty("base64Content")] public string Base64Content { get; set; }
+        [JsonProperty("data")] public ResourceDataOpenResponse Data { get; set; }
+        [JsonIgnore] internal byte[] Bytes { get; set; }
     }
 
     public sealed class ArtifactImageThumbnailDto
@@ -80,7 +81,8 @@ namespace RNAssistant.Office.Contracts
         [JsonProperty("imageMimeType")] public string ImageMimeType { get; set; }
         [JsonProperty("imageContentSha256")] public string ImageContentSha256 { get; set; }
         [JsonProperty("imageByteLength")] public long ImageByteLength { get; set; }
-        [JsonProperty("imageBase64Content")] public string ImageBase64Content { get; set; }
+        [JsonProperty("data")] public ResourceDataOpenResponse Data { get; set; }
+        [JsonIgnore] internal byte[] Bytes { get; set; }
     }
 
     public sealed class ArtifactPdfViewerDto
@@ -111,6 +113,7 @@ namespace RNAssistant.Office.Contracts
         [JsonProperty("imageMimeType")] public string ImageMimeType { get; set; }
         [JsonProperty("imageContentSha256")] public string ImageContentSha256 { get; set; }
         [JsonProperty("imageByteLength")] public long ImageByteLength { get; set; }
-        [JsonProperty("imageBase64Content")] public string ImageBase64Content { get; set; }
+        [JsonProperty("data")] public ResourceDataOpenResponse Data { get; set; }
+        [JsonIgnore] internal byte[] Bytes { get; set; }
     }
 }

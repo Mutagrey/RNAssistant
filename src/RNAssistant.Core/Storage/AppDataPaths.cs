@@ -19,6 +19,7 @@ namespace RNAssistant.Core.Storage
         public string ChatBlobDirectory { get; private set; }
         public string WebViewUserDataDirectory { get; private set; }
         public string AttachmentDirectory { get; private set; }
+        public string ResourceAuthorityDirectory { get; private set; }
 
         public static AppDataPaths CreateDefault()
         {
@@ -46,6 +47,7 @@ namespace RNAssistant.Core.Storage
                 ChatDirectory = Path.Combine(root, "chats"),
                 ChatBlobDirectory = Path.Combine(root, "chat-blobs"),
                 AttachmentDirectory = Path.Combine(root, "attachments"),
+                ResourceAuthorityDirectory = Path.Combine(root, "resource-authority"),
                 WebViewUserDataDirectory = Path.Combine(root, "webview")
             };
             paths.Ensure();
@@ -61,6 +63,7 @@ namespace RNAssistant.Core.Storage
             EnsureManagedDirectory(ChatDirectory);
             EnsureManagedDirectory(ChatBlobDirectory);
             EnsureManagedDirectory(AttachmentDirectory);
+            EnsureManagedDirectory(ResourceAuthorityDirectory);
             EnsureManagedDirectory(WebViewUserDataDirectory);
         }
 
@@ -70,6 +73,7 @@ namespace RNAssistant.Core.Storage
             ClearDirectory(ChatBlobDirectory);
             ClearDirectory(VbaJournalDirectory);
             ClearDirectory(AttachmentDirectory);
+            ClearDirectory(ResourceAuthorityDirectory);
             ClearDirectory(WebViewUserDataDirectory);
             Ensure();
         }

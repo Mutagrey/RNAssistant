@@ -1,0 +1,211 @@
+using System;
+using System.Collections.Generic;
+using System.Linq;
+using System.Security.Cryptography;
+using System.Text;
+using System.Threading;
+using Newtonsoft.Json;
+using RNAssistant.Core.Models;
+using RNAssistant.Office.Contracts;
+using RNAssistant.Office.Runtime;
+
+namespace RNAssistant.Office.Services
+{
+    // Transient access/batch ownership only. Revisions, bodies and freshness belong
+    // to the gateway, its providers, the authority journal and the existing CAS.
+    internal sealed class ResourceDataPlaneService : IDisposable
+    {
+        internal const string Origin = "https://rnassistant.local-resource";
+        internal const int MaximumBatchBytes = 8 * 1024 * 1024;
+        internal const int MaximumBatchItems = 32000;
+        private readonly ResourceGatewayService _gateway;
+        private readonly Func<string, string, bool> _ownerIsActive;
+        private readonly object _sync = new object();
+        private readonly Dictionary<string, Access> _access = new Dictionary<string, Access>(StringComparer.Ordinal);
+        private readonly List<Opening> _openings = new List<Opening>();
+        private bool _disposed;
+
+        internal ResourceDataPlaneService(ResourceGatewayService gateway, Func<string, string, bool> ownerIsActive = null)
+        { _gateway = gateway ?? throw new ArgumentNullException(nameof(gateway)); _ownerIsActive = ownerIsActive; }
+
+        internal ResourceDataOpenResponse Open(ChatSession session, string workspaceId, ResourceRef reference, string view,
+            string viewPath = null, CancellationToken cancellationToken = default(CancellationToken),
+            string initialCursor = null, Action<ResourceReadResult> validate = null)
+        {
+            if (session == null || string.IsNullOrWhiteSpace(workspaceId) || reference == null ||
+                _ownerIsActive != null && !_ownerIsActive(session.Id, workspaceId))
+                throw Error("RESOURCE_ACCESS_DENIED", "An explicit workspace owner and bound resource are required.");
+            cancellationToken.ThrowIfCancellationRequested();
+            var opening = new Opening { Owner = session.Id + ":" + workspaceId };
+            lock (_sync)
+            {
+                EnsureActive(); Expire();
+                if (_access.Count + _openings.Count >= 64) throw Error("RESOURCE_LEASE_LIMIT", "Close unused resource handles before opening more.");
+                if (_openings.Count >= 4) throw Error("RESOURCE_BACKPRESSURE", "Only four resource opens may be in flight.");
+                _openings.Add(opening);
+            }
+            try
+            {
+                ResourceReadSelection first;
+                using (DocumentAccessGate.BeginOperation())
+                    first = _gateway.Read(session, new ResourceReadRequest { Reference = reference.Copy(),
+                        Representation = view, ViewPath = viewPath, Cursor = initialCursor, MaxChars = MaximumBatchItems, MaxRows = 500 });
+                cancellationToken.ThrowIfCancellationRequested();
+                if (first?.Result?.Resource?.Reference == null || !first.Result.Resource.Reference.IsExact)
+                    throw Error("RESOURCE_REVISION_UNAVAILABLE", "The provider did not establish an exact view revision.");
+                validate?.Invoke(first.Result);
+                var token = new byte[32];
+                using (var random = RandomNumberGenerator.Create()) random.GetBytes(token);
+                var id = BitConverter.ToString(token).Replace("-", string.Empty).ToLowerInvariant();
+                var lease = new ResourceLease(id, first.Result.Resource.Reference, new[] { first.Result.Representation },
+                    first.Result.Resource.Coverage ?? ResourceCoverage.Whole(), session.Id + ":" + workspaceId, DateTime.UtcNow.AddMinutes(10));
+                // Never call the controller/owner while holding the lease lock.
+                if (_ownerIsActive != null && !_ownerIsActive(session.Id, workspaceId))
+                    throw Error("RESOURCE_LEASE_EXPIRED", "The resource owner closed during capture.");
+                lock (_sync)
+                {
+                    EnsureActive();
+                    Expire();
+                    cancellationToken.ThrowIfCancellationRequested();
+                    if (opening.Cancelled)
+                        throw Error("RESOURCE_LEASE_EXPIRED", "The resource owner closed during capture.");
+                    _access.Add(id, new Access { Lease = lease, Session = session, WorkspaceId = workspaceId, First = first,
+                        ViewPath = viewPath, Offset = first.Result.Offset, Cursor = initialCursor });
+                }
+                return new ResourceDataOpenResponse { LeaseId = id, Url = Origin + "/v1/" + id,
+                    Descriptor = first.Result.Resource, View = first.Result.Representation, ViewPath = viewPath ?? "$", ExpiresUtc = lease.ExpiresUtc,
+                    MaxBatchBytes = first.Result.Binary == null ? MaximumBatchBytes : checked((int)first.Result.Binary.Payload.ByteLength),
+                    MaxBatchItems = MaximumBatchItems, Binary = first.Result.Binary };
+            }
+            finally { lock (_sync) _openings.Remove(opening); }
+        }
+
+        internal byte[] Read(string leaseId, int offset, int limit, CancellationToken cancellationToken,
+            IReadOnlyList<string> fields = null)
+        {
+            string contentType;
+            return Read(leaseId, offset, limit, cancellationToken, fields, out contentType);
+        }
+
+        internal byte[] Read(string leaseId, int offset, int limit, CancellationToken cancellationToken,
+            IReadOnlyList<string> fields, out string contentType)
+        {
+            contentType = "application/json; charset=utf-8";
+            Access access;
+            lock (_sync)
+            {
+                EnsureActive(); Expire();
+                if (!_access.TryGetValue(leaseId ?? string.Empty, out access))
+                    throw Error("RESOURCE_LEASE_EXPIRED", "The resource lease is unknown, closed or expired.");
+            }
+            if (limit < 1 || limit > MaximumBatchItems || offset < 0)
+                throw Error("RESOURCE_BATCH_TOO_LARGE", "The requested batch exceeds the negotiated bounds.");
+            if (!access.Serial.Wait(0)) throw Error("RESOURCE_BACKPRESSURE", "Only one batch may be in flight per resource handle.");
+            try
+            {
+                cancellationToken.ThrowIfCancellationRequested();
+                if (access.Cancelled || access.Lease.ExpiresUtc <= DateTime.UtcNow ||
+                    _ownerIsActive != null && !_ownerIsActive(access.Session.Id, access.WorkspaceId))
+                    throw Error("RESOURCE_LEASE_EXPIRED", "The resource lease is closed or expired.");
+                var first = access.First;
+                if (first?.Result?.Binary != null)
+                {
+                    if (offset != 0 || fields != null && fields.Count != 0)
+                        throw Error("RESOURCE_VIEW_INVALID", "Binary image/page views do not accept record selectors.");
+                    var payload = first.Result.Binary.Payload;
+                    var binaryBytes = _gateway.Authority.Payloads.ReadBytes(payload.ToBlobReference());
+                    if (binaryBytes == null || binaryBytes.LongLength != payload.ByteLength)
+                        throw Error("RESOURCE_SNAPSHOT_UNAVAILABLE", "The pinned binary payload is unavailable.");
+                    cancellationToken.ThrowIfCancellationRequested();
+                    if (access.Cancelled) throw Error("RESOURCE_LEASE_EXPIRED", "The resource handle was closed during the read.");
+                    contentType = payload.ContentType;
+                    return binaryBytes;
+                }
+                if (access.Done || offset != access.Offset)
+                    throw Error("RESOURCE_CURSOR_INVALID", "Read offsets must continue this exact lease in sequence.");
+                ResourceReadSelection selected;
+                if (first != null && limit >= Count(first.Result) && (fields == null || fields.Count == 0))
+                { selected = first; access.First = null; }
+                else
+                {
+                    access.First = null;
+                    using (DocumentAccessGate.BeginOperation())
+                        selected = _gateway.Read(access.Session, new ResourceReadRequest {
+                            Reference = access.Lease.Resource.Copy(), Representation = access.Lease.Views[0],
+                            Cursor = access.Cursor, MaxChars = limit, MaxRows = limit, RowOffset = offset,
+                            Fields = fields?.ToList(), ViewPath = access.ViewPath });
+                }
+                var result = selected.Result;
+                if (result.Resource.Reference.Revision != access.Lease.Resource.Revision ||
+                    result.Offset != access.Offset || Count(result) > limit)
+                    throw Error("RESOURCE_REVISION_CHANGED", "The provider could not continue the pinned resource view.");
+                var batch = new ResourceDataBatch { Resource = access.Lease.Resource.Copy(), View = result.Representation,
+                    Text = result.Text, Offset = access.Offset, NextOffset = access.Offset + Count(result),
+                    Done = result.Complete, Coverage = result.Coverage,
+                    Rows = result.Table?.Rows, Columns = result.Table?.Columns };
+                var bytes = Encoding.UTF8.GetBytes(JsonConvert.SerializeObject(batch));
+                if (bytes.Length > MaximumBatchBytes) throw Error("RESOURCE_BATCH_TOO_LARGE", "The provider batch exceeds its byte limit.");
+                cancellationToken.ThrowIfCancellationRequested();
+                if (access.Cancelled) throw Error("RESOURCE_LEASE_EXPIRED", "The resource handle was closed during the read.");
+                access.Offset = checked((int)batch.NextOffset); access.Cursor = result.NextCursor; access.Done = result.Complete;
+                return bytes;
+            }
+            finally { access.Serial.Release(); }
+        }
+
+        internal void Close(string sessionId, string workspaceId, string leaseId)
+        {
+            lock (_sync)
+            {
+                Access access;
+                if (!_access.TryGetValue(leaseId ?? string.Empty, out access)) return;
+                if (access.Lease.Owner != sessionId + ":" + workspaceId)
+                    throw Error("RESOURCE_ACCESS_DENIED", "The resource handle belongs to another workspace.");
+                access.Cancelled = true; access.First = null; _access.Remove(leaseId);
+            }
+        }
+
+        internal void CloseWorkspace(string sessionId, string workspaceId)
+        {
+            lock (_sync)
+            {
+                foreach (var opening in _openings.Where(item => item.Owner == sessionId + ":" + workspaceId)) opening.Cancelled = true;
+                foreach (var access in _access.Values.Where(item => item.Lease.Owner == sessionId + ":" + workspaceId).ToArray())
+                    Close(sessionId, workspaceId, access.Lease.LeaseId);
+            }
+        }
+
+        public void Dispose()
+        {
+            lock (_sync)
+            {
+                _disposed = true;
+                foreach (var opening in _openings) opening.Cancelled = true;
+                foreach (var access in _access.Values) { access.Cancelled = true; access.First = null; }
+                _access.Clear();
+            }
+        }
+        private void Expire()
+        {
+            foreach (var access in _access.Values.Where(item => item.Lease.ExpiresUtc <= DateTime.UtcNow).ToArray())
+            { access.Cancelled = true; access.First = null; _access.Remove(access.Lease.LeaseId); }
+        }
+        private void EnsureActive() { if (_disposed) throw new ObjectDisposedException(nameof(ResourceDataPlaneService)); }
+        private static int Count(ResourceReadResult result) { return result.Table == null ? result.ReturnedCharacters : result.Table.Rows.Count; }
+        private static ResourceRequestException Error(string code, string message) { return new ResourceRequestException(message, code, false); }
+        private sealed class Opening { internal string Owner; internal bool Cancelled; }
+        private sealed class Access
+        {
+            internal string ViewPath;
+            internal ResourceLease Lease;
+            internal ChatSession Session;
+            internal string WorkspaceId;
+            internal ResourceReadSelection First;
+            internal string Cursor;
+            internal int Offset;
+            internal bool Done;
+            internal volatile bool Cancelled;
+            internal readonly SemaphoreSlim Serial = new SemaphoreSlim(1, 1);
+        }
+    }
+}

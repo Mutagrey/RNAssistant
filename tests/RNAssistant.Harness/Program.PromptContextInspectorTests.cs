@@ -17,6 +17,8 @@ namespace RNAssistant.Harness
     {
         private static void PromptContextInspectorBuildsAgentSnapshot()
         {
+            WithTempPaths(paths =>
+            {
             var adapter = FakeOfficeAdapter.ForHost("Excel");
             var session = NewSession(adapter);
             session.Mode = ChatModes.Agent;
@@ -76,7 +78,7 @@ namespace RNAssistant.Harness
                 AgentResponseMode = AgentResponseModes.JsonSchema
             };
 
-            var result = new PromptContextInspectorService(adapter, null).Inspect(
+            var result = new PromptContextInspectorService(adapter, paths).Inspect(
                 session,
                 context,
                 settings,
@@ -107,6 +109,8 @@ namespace RNAssistant.Harness
             AssertEqual(result.UsedTokens, result.Sections.Where(section => section.Included).Sum(section => section.Tokens),
                 "included section totals match prompt estimate");
             AssertTrue(result.RawRequestJson == null, "raw request is not built by default");
+            AssertTrue(result.ResourceContextReceipt != null, "inspector exposes the same frozen compiler receipt");
+            });
         }
 
         private static void PromptContextInspectorRawJsonIsOptIn()
@@ -116,8 +120,9 @@ namespace RNAssistant.Harness
                 var session = NewSession(adapter);
                 session.Mode = ChatModes.Chat;
                 session.Messages.Add(new ChatMessage { Role = "user", Content = "История" });
-                var service = new PromptContextInspectorService(adapter, null);
+                var service = new PromptContextInspectorService(adapter, FixturePaths.Value, executor.ResourceAuthority, executor.Payloads);
                 var tools = OfficeToolCatalog.ForHost(adapter.HostName).Concat(executor.GetControllerTools()).ToList();
+                var publication = executor.CaptureSkills();
 
                 var compact = service.Inspect(
                     session,
@@ -127,7 +132,7 @@ namespace RNAssistant.Harness
                     new SkillDefinition[0],
                     new ChatAttachment[0],
                     "Новый вопрос",
-                    false);
+                    false, publication);
                 var raw = service.Inspect(
                     session,
                     NewContext(adapter),
@@ -136,9 +141,11 @@ namespace RNAssistant.Harness
                     new SkillDefinition[0],
                     new ChatAttachment[0],
                     "Новый вопрос",
-                    true);
+                    true, publication);
 
                 AssertTrue(compact.RawRequestJson == null, "compact inspection skips raw serialization");
+                AssertEqual(new SkillCatalogSnapshot(new SkillDefinition[0], publication.Generation).Generation,
+                    raw.ResourceContextReceipt.SkillGeneration, "inspector preserves the same published generation seed as the run compiler");
                 AssertContains(raw.RawRequestJson, "Новый вопрос", "raw structure is generated explicitly");
                 AssertTrue(raw.Sections.Any(section => section.Id == "tools"),
                     "chat inspector shows read-only resource schemas");
@@ -153,6 +160,8 @@ namespace RNAssistant.Harness
 
         private static void PromptContextInspectorIsolatesConcurrentSettings()
         {
+            WithTempPaths(paths =>
+            {
             var adapter = FakeOfficeAdapter.ForHost("Excel");
             var session = NewSession(adapter);
             session.Mode = ChatModes.Chat;
@@ -168,15 +177,15 @@ namespace RNAssistant.Harness
                 AutoCalibrateTokenEstimate = false,
                 TokenEstimateMultiplier = 2
             };
-            var expectedBase = new PromptContextInspectorService(adapter, null).Inspect(
+            var expectedBase = new PromptContextInspectorService(adapter, paths).Inspect(
                 session, context, baseSettings, new ToolCatalogEntry[0], new SkillDefinition[0],
                 new ChatAttachment[0], "question", false).UsedTokens;
-            var expectedScaled = new PromptContextInspectorService(adapter, null).Inspect(
+            var expectedScaled = new PromptContextInspectorService(adapter, paths).Inspect(
                 session, context, scaledSettings, new ToolCatalogEntry[0], new SkillDefinition[0],
                 new ChatAttachment[0], "question", false).UsedTokens;
             AssertTrue(expectedScaled > expectedBase, "test settings produce distinct estimates");
 
-            var service = new PromptContextInspectorService(adapter, null);
+            var service = new PromptContextInspectorService(adapter, paths);
             using (var start = new ManualResetEventSlim(false))
             {
                 var tasks = Enumerable.Range(0, 12).Select(index => Task.Run(() =>
@@ -195,6 +204,7 @@ namespace RNAssistant.Harness
                         "parallel inspection keeps its own token settings");
                 }
             }
+            });
         }
     }
 }

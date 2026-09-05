@@ -254,16 +254,16 @@ namespace RNAssistant.Office.Vba
             string requestedName)
         {
             var currentHash = CodeSha256(existing == null ? string.Empty : existing.Code);
-            if (RequiresObservationRefresh(correlation.SessionId, moduleName))
+            if (RequiresObservationRefresh(correlation, moduleName))
             {
                 return WholeModuleWriteGuardFailure(
                     SnapshotRefreshRequired(moduleName));
             }
             string observedHash;
-            if (TryGetObservation(correlation.SessionId, moduleName, out observedHash) &&
+            if (TryGetObservation(correlation, moduleName, out observedHash) &&
                 !string.Equals(observedHash, currentHash, StringComparison.OrdinalIgnoreCase))
             {
-                MarkObservationStale(correlation.SessionId, moduleName, currentHash);
+                correlation.ObserveExternalDrift?.Invoke(moduleName);
                 return WholeModuleWriteGuardFailure(StaleSnapshot(
                     moduleName,
                     true,
@@ -318,7 +318,7 @@ namespace RNAssistant.Office.Vba
                     StringComparison.OrdinalIgnoreCase))
             {
                 var correlation = request.Correlation ?? new VbaMutationCorrelation();
-                MarkObservationStale(correlation.SessionId, moduleName, actualHash);
+                correlation.ObserveExternalDrift?.Invoke(moduleName);
                 return StaleSnapshot(
                     moduleName,
                     guard.ModuleExists,

@@ -52,6 +52,11 @@ const copied = [];
 const downloads = [];
 const objectUrls = [];
 const revokedUrls = [];
+function binaryLease(uri = "rna://chat/chat-text/artifact/image/revision/1", length = 3, hash = "d".repeat(64)) {
+  return { leaseId: "a".repeat(64), url: "https://rnassistant.local-resource/v1/" + "a".repeat(64),
+    descriptor: { reference: { uri, revision: "1" } }, expiresUtc: new Date(Date.now() + 600000).toISOString(),
+    binary: { payload: { byteLength: length, sha256: hash } } };
+}
 const vendorViewerInstances = [];
 const body = new Element("body");
 const context = vm.createContext({
@@ -169,7 +174,7 @@ function settle() { return new Promise(resolve => setImmediate(resolve)); }
 
   const imageHost = new Element("div");
   context.RNAssistantViewerRegistry.mount("image", imageHost, {
-    title: "pixel.png", mimeType: "image/png", byteLength: 3, base64Content: "AQID"
+    title: "pixel.png", mimeType: "image/png", byteLength: 3, data: binaryLease()
   });
   const image = imageHost.querySelector("img");
   const imageStage = imageHost.querySelector(".rn-image-viewer-stage-shell");
@@ -192,7 +197,7 @@ function settle() { return new Promise(resolve => setImmediate(resolve)); }
   assert.equal(body.querySelector("a"), null);
   context.RNAssistantViewerRegistry.unmount(imageHost);
   assert.equal(imageVendor.destroyed, true);
-  assert.deepEqual(revokedUrls, [objectUrls[0]]);
+  assert.deepEqual(revokedUrls, [], "render teardown does not close a cache-owned resource lease");
   const imageUri = "rna://chat/chat-text/artifact/image/revision/1";
   const detail = new Element("div");
   context.RNAssistantHtmlWorkspaceArtifacts.renderDetail(detail, {
@@ -202,7 +207,7 @@ function settle() { return new Promise(resolve => setImmediate(resolve)); }
     artifactViewerState() {
       return {
         status: "ready", resourceUri: imageUri, viewerKind: "image", title: "pixel.png",
-        mimeType: "image/png", contentSha256: "d".repeat(64), byteLength: 3, base64Content: "AQID"
+        mimeType: "image/png", contentSha256: "d".repeat(64), byteLength: 3, data: binaryLease(imageUri)
       };
     }
   });
@@ -223,8 +228,8 @@ function settle() { return new Promise(resolve => setImmediate(resolve)); }
   }, "", {});
   assert.equal(detail.classList.contains("is-image-preview"), false);
   assert.equal(detail.classList.contains("is-media-preview"), false);
-  assert.deepEqual(revokedUrls, [objectUrls[0], objectUrls[1]]);
-  console.log("PASS artifact image viewer: local Blob preview supports dimensions, zoom, download and URL revocation");
+  assert.deepEqual(revokedUrls, []);
+  console.log("PASS artifact image viewer: scoped resource preview supports dimensions, zoom and download");
 
   let nextPdfPage = 0;
   let selectedPdfPage = -1;
@@ -242,7 +247,7 @@ function settle() { return new Promise(resolve => setImmediate(resolve)); }
     onTabChange(tab) { activePdfTab = tab; },
     page: {
       pageIndex: 0, width: 800, height: 600, imageMimeType: "image/jpeg",
-      imageByteLength: 4, imageBase64Content: "/9j/2Q=="
+      imageByteLength: 4, data: binaryLease()
     },
     onNext() { nextPdfPage += 1; return true; },
     onPageSelect(pageIndex) { selectedPdfPage = pageIndex; return true; },
@@ -252,7 +257,7 @@ function settle() { return new Promise(resolve => setImmediate(resolve)); }
   assert.ok(pdfHost.querySelector(".rn-pdf-thumbnail-rail"));
   assert.equal(pdfHost.querySelectorAll(".rn-sequence-item").length, 8);
   assert.equal(pdfHost.querySelector(".rn-sequence-track").style.height, "1260000px");
-  assert.equal(objectUrls.length, 3, "current thumbnail reuses the main-page Blob URL");
+  assert.equal(objectUrls.length, 0, "page and thumbnails use scoped data URLs without re-encoding bytes");
   assert.deepEqual(requestedPdfThumbnails, [1, 2, 3, 4, 5, 6, 7]);
   pdfHost.querySelectorAll(".rn-sequence-item")[1].click();
   assert.equal(selectedPdfPage, 1);
@@ -283,7 +288,7 @@ function settle() { return new Promise(resolve => setImmediate(resolve)); }
   assert.equal(activePdfTab, "text");
   assert.equal(pdfHost.querySelector(".rn-text-viewer-content").textContent, "[PDF page 1]\nVisible");
   context.RNAssistantViewerRegistry.unmount(pdfHost);
-  assert.ok(revokedUrls.includes(objectUrls[2]));
+  assert.equal(revokedUrls.length, 0);
 
   const pdfUri = "rna://chat/chat-text/artifact/pdf/revision/1";
   const pdfDetail = new Element("div");
@@ -300,7 +305,7 @@ function settle() { return new Promise(resolve => setImmediate(resolve)); }
         pages: [{ text: "visible", offset: 0, startLine: 1, totalCharacters: 7 }],
         pdfPage: {
           pageIndex: 0, width: 800, height: 600, imageMimeType: "image/jpeg",
-          imageByteLength: 4, imageBase64Content: "/9j/2Q=="
+          imageByteLength: 4, data: binaryLease()
         }
       };
     },
@@ -309,12 +314,11 @@ function settle() { return new Promise(resolve => setImmediate(resolve)); }
   assert.ok(pdfDetail.querySelector(".rn-pdf-viewer"));
   assert.equal(pdfDetail.classList.contains("is-media-preview"), true);
   assert.ok(pdfDetail.querySelector(".rn-pdf-thumbnail-rail"));
-  const detailMainUrl = objectUrls.at(-1);
   context.RNAssistantHtmlWorkspaceArtifacts.renderDetail(pdfDetail, {
     type: "artifact", item: { Kind: "file", Title: "unknown.bin", MimeType: "application/octet-stream", Revision: 1 }
   }, "", {});
-  assert.ok(revokedUrls.includes(detailMainUrl));
-  console.log("PASS artifact PDF viewer: pages are primary, extracted text is secondary and page URLs are revoked");
+  assert.equal(revokedUrls.length, 0);
+  console.log("PASS artifact PDF viewer: pages and thumbnails share the binary resource data plane");
 
   const galleryUri = "rna://chat/chat-text/artifact/gallery-current/revision/1";
   const galleryItems = ["previous", "current", "next"].map((name, index) => ({
@@ -335,13 +339,13 @@ function settle() { return new Promise(resolve => setImmediate(resolve)); }
     artifactViewerState() {
       return {
         status: "ready", resourceUri: galleryUri, viewerKind: "image", title: "current.png",
-        mimeType: "image/png", contentSha256: "d".repeat(64), byteLength: 3, base64Content: "AQID"
+        mimeType: "image/png", contentSha256: "d".repeat(64), byteLength: 3, data: binaryLease(galleryUri)
       };
     },
     imageGalleryContext() { return { items: galleryItems, currentIndex: 1, scrollOffset: 0 }; },
     artifactImageThumbnailState(uri) {
       return uri === galleryItems[0].resourceUri
-        ? { status: "ready", resourceUri: uri, imageMimeType: "image/jpeg", imageBase64Content: "/9j/2Q==", contentSha256: "d".repeat(64) }
+        ? { status: "ready", resourceUri: uri, imageMimeType: "image/jpeg", data: binaryLease(uri), contentSha256: "d".repeat(64) }
         : null;
     },
     loadArtifactImageThumbnail(request) { requestedGalleryThumbnails.push(request.resourceUri); },
@@ -395,11 +399,34 @@ function settle() { return new Promise(resolve => setImmediate(resolve)); }
   const deferredImageThumbnails = [];
   let deferImageThumbnails = false;
   const thumbnailChanges = [];
+  const textBatches = new Map();
+  let textLeaseSequence = 0;
+  function textLease(resourceUri, text, offset, total) {
+    const leaseId = (++textLeaseSequence).toString(16).padStart(64, "0");
+    const data = { leaseId, url: "https://rnassistant.local-resource/v1/" + leaseId,
+      descriptor: { reference: { uri: resourceUri, revision: "1" } }, view: "text",
+      expiresUtc: new Date(Date.now() + 600000).toISOString(), maxBatchItems: 32000, maxBatchBytes: 8 * 1024 * 1024 };
+    textBatches.set(data.url, { resource: data.descriptor.reference, view: "text", text, offset,
+      nextOffset: offset + text.length, done: offset + text.length === total });
+    return data;
+  }
   const state = { activeChatId: "chat-text", bridgeUnavailable: false };
   const actions = actionContext.RNAssistantHtmlWorkspaceActions.create({
     state,
+    fetch: async url => {
+      const parsed = new URL(url);
+      const batch = textBatches.get(parsed.origin + parsed.pathname);
+      assert.ok(batch, "data-plane access requires a granted exact text lease");
+      assert.equal(Number(parsed.searchParams.get("offset")), batch.offset);
+      assert.equal(Number(parsed.searchParams.get("limit")), 32000);
+      return { ok: true, text: async () => JSON.stringify(batch) };
+    },
     send: async (method, payload) => {
       calls.push({ method, payload: JSON.parse(JSON.stringify(payload)) });
+      if (method === "resourceDataClose") {
+        textBatches.delete("https://rnassistant.local-resource/v1/" + payload.leaseId);
+        return { closed: true };
+      }
       if (method === "readArtifactImage") {
         return {
           resourceUri: payload.resourceUri,
@@ -408,7 +435,7 @@ function settle() { return new Promise(resolve => setImmediate(resolve)); }
           mimeType: "image/png",
           contentSha256: "d".repeat(64),
           byteLength: 3,
-          base64Content: "AQID"
+          data: binaryLease(payload.resourceUri)
         };
       }
       if (method === "readArtifactImageThumbnail") {
@@ -421,7 +448,7 @@ function settle() { return new Promise(resolve => setImmediate(resolve)); }
           imageMimeType: "image/jpeg",
           imageContentSha256: "b".repeat(64),
           imageByteLength: 4,
-          imageBase64Content: "/9j/2Q=="
+          data: binaryLease(payload.resourceUri, 4, "b".repeat(64))
         };
         if (deferImageThumbnails) {
           return new Promise(resolve => deferredImageThumbnails.push({ resolve, response }));
@@ -456,7 +483,7 @@ function settle() { return new Promise(resolve => setImmediate(resolve)); }
           imageMimeType: "image/jpeg",
           imageContentSha256: "a".repeat(64),
           imageByteLength: 4,
-          imageBase64Content: "/9j/2Q=="
+          data: binaryLease(payload.resourceUri, 4, "a".repeat(64))
         };
       }
       if (method === "readArtifactPdfThumbnail") {
@@ -471,7 +498,7 @@ function settle() { return new Promise(resolve => setImmediate(resolve)); }
           imageMimeType: "image/jpeg",
           imageContentSha256: "b".repeat(64),
           imageByteLength: 4,
-          imageBase64Content: "/9j/2Q=="
+          data: binaryLease(payload.resourceUri, 4, "b".repeat(64))
         };
         if (deferPdfThumbnails) {
           return new Promise(resolve => deferredPdfThumbnails.push({ resolve, response }));
@@ -487,7 +514,7 @@ function settle() { return new Promise(resolve => setImmediate(resolve)); }
           title: "exact.pdf",
           mimeType: "application/pdf",
           contentSha256: "f".repeat(64),
-          text,
+          data: textLease(payload.resourceUri, text, offset, pdfExtracted.length),
           offset,
           returnedCharacters: text.length,
           totalCharacters: pdfExtracted.length,
@@ -508,7 +535,7 @@ function settle() { return new Promise(resolve => setImmediate(resolve)); }
         title: "notes.txt",
         mimeType: "text/plain",
         contentSha256: "c".repeat(64),
-        text,
+        data: textLease(uri, text, offset, exact.length),
         offset,
         returnedCharacters: text.length,
         totalCharacters: exact.length,
@@ -531,7 +558,8 @@ function settle() { return new Promise(resolve => setImmediate(resolve)); }
   assert.equal(actions.artifactViewerState(uri).pages.length, 1);
   assert.equal(await actions.loadArtifactViewerFull({ resourceUri: uri }), true);
   assert.equal(actions.artifactViewerState(uri).fullText, exact);
-  assert.equal(calls[1].payload.cursor, "32000");
+  assert.equal(calls.filter(call => call.method === "readArtifactViewerPage")[1].payload.cursor, "32000");
+  assert.equal(textBatches.size, 0, "each bounded text page closes its lease after consumption");
   assert.equal(applied.at(-1).text, exact);
   actions.downloadArtifactViewer({ resourceUri: uri });
   assert.equal(downloaded[0].resourceUri, uri);
@@ -557,7 +585,7 @@ function settle() { return new Promise(resolve => setImmediate(resolve)); }
   deferredImageThumbnails.shift().resolve({
     resourceUri: queuedImageUris[4], viewerKind: "image", contentSha256: "d".repeat(64),
     width: 160, height: 120, imageMimeType: "image/jpeg", imageContentSha256: "b".repeat(64),
-    imageByteLength: 4, imageBase64Content: "/9j/2Q=="
+    imageByteLength: 4, data: binaryLease(queuedImageUris[4], 4, "b".repeat(64))
   });
   assert.deepEqual(await Promise.all(queuedImageLoads), [true, true, true, true, true]);
   deferImageThumbnails = false;
@@ -565,23 +593,24 @@ function settle() { return new Promise(resolve => setImmediate(resolve)); }
   for (let index = 0; index < 50; index += 1) {
     assert.equal(await actions.loadArtifactImageThumbnail({ resourceUri: actionImageUri + "-lru-" + index }), true);
   }
-  assert.equal(state.artifactViewerThumbnails.order.length, 48);
+  assert.equal(state.artifactViewerThumbnails.order.length, 24);
   assert.equal(Object.values(state.artifactViewerThumbnails.items)
-    .filter(item => item.status === "ready" || item.status === "error").length, 48);
+    .filter(item => item.status === "ready" || item.status === "error").length, 24);
   const actionPdfUri = "rna://chat/chat-text/artifact/pdf-action/revision/1";
   assert.equal(await actions.loadArtifactPdf({ resourceUri: actionPdfUri }), true);
   assert.equal(actions.artifactViewerState(actionPdfUri).pdfPage.pageIndex, 0);
   assert.equal(actions.artifactViewerState(actionPdfUri).pages.length, 1);
   assert.equal(await actions.changeArtifactViewerPage({ resourceUri: actionPdfUri, direction: "next" }), true);
   assert.equal(actions.artifactViewerState(actionPdfUri).pages.length, 2);
-  assert.equal(calls.at(-1).method, "readArtifactViewerPage");
+  assert.equal(calls.at(-2).method, "readArtifactViewerPage");
+  assert.equal(calls.at(-1).method, "resourceDataClose");
   assert.equal(await actions.loadArtifactPdfThumbnail({ resourceUri: actionPdfUri, pageIndex: 1 }), true);
   assert.equal(actions.artifactViewerState(actionPdfUri).pdfThumbnails["1"].width, 160);
   assert.equal(calls.at(-1).method, "readArtifactPdfThumbnail");
   for (let pageIndex = 2; pageIndex < 27; pageIndex += 1) {
     assert.equal(await actions.loadArtifactPdfThumbnail({ resourceUri: actionPdfUri, pageIndex }), true);
   }
-  assert.equal(actions.artifactViewerState(actionPdfUri).pdfThumbnailOrder.length, 24);
+  assert.equal(actions.artifactViewerState(actionPdfUri).pdfThumbnailOrder.length, 12);
   assert.equal(actions.artifactViewerState(actionPdfUri).pdfThumbnails["1"], undefined);
   const actionPdfViewer = actions.artifactViewerState(actionPdfUri);
   actionPdfViewer.pdfThumbnails = {};
@@ -599,7 +628,8 @@ function settle() { return new Promise(resolve => setImmediate(resolve)); }
   deferPdfThumbnails = false;
   assert.equal(await actions.selectArtifactPdfPage({ resourceUri: actionPdfUri, pageIndex: 1 }), true);
   assert.equal(actions.artifactViewerState(actionPdfUri).pdfPage.pageIndex, 1);
-  assert.equal(calls.at(-1).method, "readArtifactPdfPage");
+  assert.equal(calls.filter(call => call.method !== "resourceDataClose").at(-1).method, "readArtifactPdfPage");
+  assert.equal(calls.at(-1).method, "resourceDataClose", "previous page lease is closed after navigation");
   console.log("PASS artifact viewer owner: exact pinned pages assemble contiguously before full copy/download");
 
   const index = fs.readFileSync(path.join(root, "web/index.html"), "utf8");

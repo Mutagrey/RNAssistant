@@ -1,5 +1,6 @@
 using System.Collections.Generic;
 using System.Linq;
+using Newtonsoft.Json;
 using RNAssistant.Core.Llm;
 using RNAssistant.Core.Models;
 using RNAssistant.Core.Services;
@@ -26,6 +27,9 @@ namespace RNAssistant.Office.Services
                 ForkedThroughMessageId = session.ForkedThroughMessageId,
                 Host = session.Host,
                 DocumentKey = session.DocumentKey,
+                DocumentAuthorityId = session.DocumentAuthorityId,
+                LastContextReceipt = session.LastContextReceipt == null ? null :
+                    JsonConvert.DeserializeObject<ContextReceipt>(JsonConvert.SerializeObject(session.LastContextReceipt)),
                 PreviousDocumentKeys = (session.PreviousDocumentKeys ?? new List<string>()).ToList(),
                 DocumentTitle = session.DocumentTitle,
                 DocumentPath = session.DocumentPath,
@@ -87,6 +91,7 @@ namespace RNAssistant.Office.Services
                     ThroughMessageId = checkpoint.ThroughMessageId,
                     SummaryJson = checkpoint.SummaryJson,
                     SummaryMarkdown = checkpoint.SummaryMarkdown,
+                    Claims = JsonConvert.DeserializeObject<List<StructuredContextClaim>>(JsonConvert.SerializeObject(checkpoint.Claims)) ?? new List<StructuredContextClaim>(),
                     Model = checkpoint.Model,
                     PromptVersion = checkpoint.PromptVersion,
                     SourceMessageCount = checkpoint.SourceMessageCount,
@@ -246,6 +251,13 @@ namespace RNAssistant.Office.Services
                     : message.Attachments.Select(CloneAttachment).ToList(),
                 AttachmentAnalysis = CloneAttachmentAnalysis(message.AttachmentAnalysis),
                 ResourceRefs = CloneResourceRefs(message.ResourceRefs),
+                ResourceEvidence = JsonConvert.DeserializeObject<List<ResourceEvidence>>(JsonConvert.SerializeObject(message.ResourceEvidence)) ?? new List<ResourceEvidence>(),
+                ContextClaims = JsonConvert.DeserializeObject<List<StructuredContextClaim>>(JsonConvert.SerializeObject(message.ContextClaims)) ?? new List<StructuredContextClaim>(),
+                ArgumentPayload = message.ArgumentPayload,
+                AcceptedCallPayload = message.AcceptedCallPayload,
+                ResultPayload = message.ResultPayload,
+                ResourceEffect = message.ResourceEffect,
+                AuthorityCommitId = message.AuthorityCommitId,
                 HtmlWorkspaceCheckpoint = CloneResourceRef(message.HtmlWorkspaceCheckpoint),
                 Activity = CloneActivity(message.Activity),
                 PromptTokens = message.PromptTokens,
@@ -369,6 +381,8 @@ namespace RNAssistant.Office.Services
                 ToolId = activity.ToolId,
                 ToolCallId = activity.ToolCallId,
                 ArgumentsJson = activity.ArgumentsJson,
+                ArgumentsPayload = activity.ArgumentsPayload,
+                ResultPayload = activity.ResultPayload,
                 RuntimeGuardJson = activity.RuntimeGuardJson,
                 ResultMessage = activity.ResultMessage,
                 DataJson = activity.DataJson,
@@ -394,6 +408,7 @@ namespace RNAssistant.Office.Services
                 Text = note.Text,
                 Preview = note.Preview,
                 DetailsJson = note.DetailsJson,
+                Evidence = note.Evidence == null ? null : JsonConvert.DeserializeObject<ResourceEvidence>(JsonConvert.SerializeObject(note.Evidence)),
                 CreatedUtc = note.CreatedUtc
             };
         }

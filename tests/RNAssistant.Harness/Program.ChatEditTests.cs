@@ -69,7 +69,7 @@ namespace RNAssistant.Harness
                     Kind = "html",
                     Content = "<h1>Before edited turn</h1>"
                 });
-                session.HtmlWorkspace.DataSources.Add(new HtmlWorkspaceDataSource { Id = "data", Name = "data", Json = "{\"version\":1}" });
+                HtmlWorkspaceToolService.UpsertDataSource(session, "data", "{\"version\":1}");
                 var workspaceBeforeTarget = HtmlWorkspaceArtifactService.CaptureCurrent(session, "Before edited turn");
 
                 var targetAttachment = attachmentStore.Import(
@@ -113,7 +113,7 @@ namespace RNAssistant.Harness
                 session.LastRun = new ChatRunRecord { RunId = "stale-run", Status = "waiting" };
                 session.HtmlWorkspace.Files[0].Content = "<h1>After edited turn</h1>";
                 session.HtmlWorkspace.Files.Add(new HtmlWorkspaceFile { Id = "later", Path = "later.html", Kind = "html", Content = "later" });
-                session.HtmlWorkspace.DataSources.Add(new HtmlWorkspaceDataSource { Id = "later-data", Name = "later-data", Json = "{}" });
+                HtmlWorkspaceToolService.UpsertDataSource(session, "later-data", "{}");
                 var workspaceAfterTarget = HtmlWorkspaceArtifactService.CaptureCurrent(session, "After edited turn");
                 ChatResourceReferenceService.LinkMessageResources(session, 0);
                 var targetAttachmentArtifactId = "attachment_" + targetAttachment.Id;
@@ -156,7 +156,7 @@ namespace RNAssistant.Harness
                 AssertEqual(1, session.HtmlWorkspace.Files.Count, "html files restored to exact pre-turn revision");
                 AssertEqual("<h1>Before edited turn</h1>", session.HtmlWorkspace.Files[0].Content, "pre-turn html content restored");
                 AssertEqual(1, session.HtmlWorkspace.DataSources.Count, "html data restored to exact pre-turn revision");
-                AssertEqual("{\"version\":1}", session.HtmlWorkspace.DataSources[0].Json, "pre-turn html data restored");
+                AssertEqual("exact", session.HtmlWorkspace.DataSources[0].Binding.Policy, "pre-turn exact binding restored");
                 AssertEqual(workspaceBeforeTarget, session.ActiveHtmlArtifactId, "pre-turn artifact is active");
                 AssertTrue(session.Artifacts.Any(artifact => artifact.Id == workspaceBeforeTarget), "active html revision remains reachable");
                 AssertTrue(!session.Artifacts.Any(artifact => artifact.Id == workspaceAfterTarget), "future html revision is pruned");

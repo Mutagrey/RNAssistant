@@ -196,8 +196,6 @@ namespace RNAssistant.Office.Vba
                     prepared,
                     assessment);
                 terminalData["terminalRecorded"] = false;
-                RemoveObservation(sessionId, prepared.Components[0].ModuleName);
-                RemoveObservation(sessionId, prepared.Components[1].ModuleName);
                 return VbaMutationOutcome.Unknown(
                     "The VBA rename effect was inspected, but its terminal journal record could not be saved. Inspect both component identities before retrying. " + ex.Message,
                     terminalData,
@@ -216,8 +214,6 @@ namespace RNAssistant.Office.Vba
                 VbaMutationStatuses.Committed,
                 StringComparison.Ordinal))
             {
-                RemoveObservation(sessionId, sourceName);
-                MarkObservationStale(sessionId, targetName, sourceHash);
                 if (actionResult.Status == VbaMutationActionStatus.Error ||
                     actionResult.Status == VbaMutationActionStatus.Unknown)
                 {
@@ -238,8 +234,6 @@ namespace RNAssistant.Office.Vba
                 VbaMutationStatuses.Unknown,
                 StringComparison.Ordinal))
             {
-                RemoveObservation(sessionId, sourceName);
-                RemoveObservation(sessionId, targetName);
                 return VbaMutationOutcome.Unknown(
                     (actionResult.Message ?? "VBA rename failed.") +
                     " Final component identity state is mixed or unknown; inspect both names before retrying.",

@@ -124,9 +124,20 @@ namespace RNAssistant.Office.Runtime
         }
 
         internal T ExecuteDocumentMutation<T>(OfficeDocumentExecutionExpectation target,
-            CancellationToken cancellationToken, Func<T> action)
+            CancellationToken cancellationToken, Func<T> action, Action<T> publish = null, Action<Exception> publishFailure = null)
         {
-            return ExecuteDocumentOperation(target, cancellationToken, action);
+            return ExecuteDocumentOperation(target, cancellationToken, () =>
+            {
+                T result;
+                try { result = action(); }
+                catch (Exception ex)
+                {
+                    if (publishFailure != null) publishFailure(ex);
+                    throw;
+                }
+                if (publish != null) publish(result);
+                return result;
+            });
         }
 
         private T ExecuteDocumentOperation<T>(OfficeDocumentExecutionExpectation target,

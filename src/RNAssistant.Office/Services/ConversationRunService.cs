@@ -131,7 +131,7 @@ namespace RNAssistant.Office.Services
             if (session == null || ChatModes.Normalize(session.Mode) != ChatModes.Agent)
                 throw new InvalidOperationException("Only Agent mode can continue a confirmed tool call.");
             input.Settings.EnsureAgentPromptsReviewed();
-            var continuation = ConversationProtocolContext.RestoreContinuation(session, command);
+            var continuation = ConversationProtocolContext.RestoreContinuation(session, command, _toolExecutor.Payloads);
             if (continuation.Summary.PendingConfirmation.PendingId != pendingId)
                 throw new InvalidOperationException("Pending tool was not found or was already resolved.");
             using (var ports = CreatePorts(ChatModes.Agent, LatestUserRequest(session), session, input,

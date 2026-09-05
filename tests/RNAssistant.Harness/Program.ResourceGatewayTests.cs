@@ -881,8 +881,9 @@ namespace RNAssistant.Harness
             var uri = ChatResourceUri.CreateArtifactRevisionUri(session, artifact);
             var viewerGateway = new ResourceGatewayService();
             var viewer = new ArtifactViewerService(viewerGateway);
+            var dataPlane = new ResourceDataPlaneService(viewerGateway);
 
-            var first = viewer.ReadPage(session, uri, null);
+            var first = viewer.ReadPage(session, uri, null, dataPlane);
             AssertEqual(ArtifactViewerKinds.Markdown, first.ViewerKind, "viewer classifies Markdown without sniffing");
             AssertEqual(uri, first.ResourceUri, "viewer preserves exact canonical URI");
             AssertEqual(0, first.Offset, "viewer first page offset");
@@ -895,12 +896,13 @@ namespace RNAssistant.Harness
                 first.NextCursor.Split(':').Last(),
                 "viewer continuation remains bound to its exact URI and representation");
 
-            var second = viewer.ReadPage(session, uri, first.NextCursor);
+            var second = viewer.ReadPage(session, uri, first.NextCursor, dataPlane);
             AssertEqual(first.ReturnedCharacters, second.Offset, "viewer continuation is contiguous");
             AssertTrue(second.Complete && second.SourceComplete, "second page completes exact Markdown");
-            AssertEqual(markdown, first.Text + second.Text, "viewer pages preserve exact Markdown bytes as text");
+            AssertEqual(markdown, ReadViewerBatch(dataPlane, first) + ReadViewerBatch(dataPlane, second),
+                "viewer pages preserve exact Markdown through the data plane");
             RuntimeThrows<InvalidOperationException>(() => viewer.ReadPage(
-                session, uri.Replace(session.Id, "other-chat"), null));
+                session, uri.Replace(session.Id, "other-chat"), null, dataPlane));
 
             var extracted = "attachment exact text";
             var attachment = new ChatAttachment
@@ -934,7 +936,7 @@ namespace RNAssistant.Harness
             session.Messages.Add(message);
             session.Artifacts.Add(attachmentArtifact);
             var attachmentPage = viewer.ReadPage(
-                session, ChatResourceUri.CreateArtifactRevisionUri(session, attachmentArtifact), null);
+                session, ChatResourceUri.CreateArtifactRevisionUri(session, attachmentArtifact), null, dataPlane);
             AssertEqual(ArtifactViewerKinds.Text, attachmentPage.ViewerKind, "viewer classifies admitted text source");
             AssertEqual(attachment.ExtractedTextSha256, attachmentPage.ContentSha256,
                 "text viewer pins the extracted representation hash, not binary attachment hash");
@@ -972,7 +974,7 @@ namespace RNAssistant.Harness
             var reboundUri = ChatResourceUri.CreateArtifactRevisionUri(session, reboundArtifact);
             AssertEqual("metadata", string.Join(",", viewerGateway.Resolve(session, reboundUri).Resource.Representations),
                 "attachment id cannot rebind an artifact to a different source message");
-            RuntimeThrows<InvalidOperationException>(() => viewer.ReadPage(session, reboundUri, null));
+            RuntimeThrows<InvalidOperationException>(() => viewer.ReadPage(session, reboundUri, null, dataPlane));
 
             var mismatchedArtifact = new ChatArtifact
             {
@@ -989,7 +991,7 @@ namespace RNAssistant.Harness
             var mismatchedUri = ChatResourceUri.CreateArtifactRevisionUri(session, mismatchedArtifact);
             AssertEqual("metadata", string.Join(",", viewerGateway.Resolve(session, mismatchedUri).Resource.Representations),
                 "attachment binary evidence must match the immutable artifact revision");
-            RuntimeThrows<InvalidOperationException>(() => viewer.ReadPage(session, mismatchedUri, null));
+            RuntimeThrows<InvalidOperationException>(() => viewer.ReadPage(session, mismatchedUri, null, dataPlane));
 
             var truncatedText = "bounded extraction";
             var truncatedAttachment = new ChatAttachment
@@ -1024,7 +1026,7 @@ namespace RNAssistant.Harness
             session.Messages.Add(truncatedMessage);
             session.Artifacts.Add(truncated);
             var truncatedPage = viewer.ReadPage(
-                session, ChatResourceUri.CreateArtifactRevisionUri(session, truncated), null);
+                session, ChatResourceUri.CreateArtifactRevisionUri(session, truncated), null, dataPlane);
             AssertTrue(!truncatedPage.SourceComplete && !truncatedPage.Complete && !truncatedPage.FullReadAllowed,
                 "truncated extraction cannot masquerade as full copy/download authority");
 
@@ -1046,13 +1048,13 @@ namespace RNAssistant.Harness
             var boundedEnd = viewer.ReadPage(
                 session,
                 oversizedUri,
-                ResourceReadCursor.CreateImmutable(480000, oversizedBinding));
+                ResourceReadCursor.CreateImmutable(480000, oversizedBinding), dataPlane);
             AssertTrue(boundedEnd.ViewerLimitReached && boundedEnd.NextCursor == null && !boundedEnd.FullReadAllowed,
                 "viewer stops paging at the explicit document bound");
             RuntimeThrows<InvalidOperationException>(() => viewer.ReadPage(
                 session,
                 oversizedUri,
-                ResourceReadCursor.CreateImmutable(512000, oversizedBinding)));
+                ResourceReadCursor.CreateImmutable(512000, oversizedBinding), dataPlane));
 
             var html = new ChatArtifact
             {
@@ -1065,7 +1067,14 @@ namespace RNAssistant.Harness
             };
             session.Artifacts.Add(html);
             RuntimeThrows<InvalidOperationException>(() => viewer.ReadPage(
-                session, ChatResourceUri.CreateArtifactRevisionUri(session, html), null));
+                session, ChatResourceUri.CreateArtifactRevisionUri(session, html), null, dataPlane));
+        }
+
+        private static string ReadViewerBatch(ResourceDataPlaneService plane, ArtifactViewerPageDto page)
+        {
+            var json = System.Text.Encoding.UTF8.GetString(plane.Read(page.Data.LeaseId, page.Offset,
+                ArtifactViewerService.PageCharacters, CancellationToken.None));
+            return (string)JObject.Parse(json)["text"];
         }
 
         private static void ArtifactViewerReadsExactImageBytes()
@@ -1113,7 +1122,7 @@ namespace RNAssistant.Harness
             AssertEqual(uri, image.ResourceUri, "image viewer pins exact canonical URI");
             AssertEqual(hash, image.ContentSha256, "image viewer preserves binary hash evidence");
             AssertEqual(bytes.LongLength, image.ByteLength, "image viewer preserves exact byte length");
-            AssertEqual(Convert.ToBase64String(bytes), image.Base64Content, "image viewer returns exact local bytes");
+            AssertTrue(bytes.SequenceEqual(image.Bytes), "image provider captures exact local bytes without bridge encoding");
 
             var jpeg = new byte[] { 0xff, 0xd8, 0x01, 0x02, 0xff, 0xd9 };
             var requestedDimension = 0;
@@ -1137,7 +1146,7 @@ namespace RNAssistant.Harness
             AssertEqual(uri, thumbnail.ResourceUri, "image thumbnail pins exact canonical URI");
             AssertEqual(hash, thumbnail.ContentSha256, "image thumbnail preserves source hash evidence");
             AssertEqual(160, thumbnail.Width, "image thumbnail returns bounded width");
-            AssertEqual(Convert.ToBase64String(jpeg), thumbnail.ImageBase64Content,
+            AssertTrue(jpeg.SequenceEqual(thumbnail.Bytes),
                 "image thumbnail returns the separately rendered JPEG");
 
             RuntimeThrows<InvalidOperationException>(() =>
@@ -1219,15 +1228,16 @@ namespace RNAssistant.Harness
             AssertEqual(ArtifactViewerKinds.Pdf, info.ViewerKind, "PDF viewer returns typed kind");
             AssertEqual(2, info.PageCount, "PDF viewer returns exact page count");
             AssertTrue(!info.TextTruncated, "complete PDF extraction stays complete");
-            var textPage = viewer.ReadPage(session, uri, null);
+            var textPlane = new ResourceDataPlaneService(new ResourceGatewayService());
+            var textPage = viewer.ReadPage(session, uri, null, textPlane);
             AssertEqual(ArtifactViewerKinds.Pdf, textPage.ViewerKind,
                 "PDF extracted text uses the bounded generic viewer kind");
-            AssertEqual(extracted, textPage.Text, "PDF viewer returns exact bounded extracted text");
+            AssertEqual(extracted, ReadViewerBatch(textPlane, textPage), "PDF viewer returns exact bounded extracted text through the data plane");
 
             var page = viewer.ReadPdfPage(session, uri, 1);
             AssertEqual(1, page.PageIndex, "PDF viewer renders requested zero-based page");
             AssertEqual(600, page.Width, "PDF viewer preserves bounded render width");
-            AssertEqual(Convert.ToBase64String(jpeg), page.ImageBase64Content,
+            AssertTrue(jpeg.SequenceEqual(page.Bytes),
                 "PDF viewer returns exact rendered JPEG bytes");
             var thumbnail = viewer.ReadPdfThumbnail(session, uri, 1);
             AssertEqual(120, thumbnail.Width, "PDF viewer renders a separately bounded thumbnail width");
@@ -1466,7 +1476,7 @@ namespace RNAssistant.Harness
             AssertEqual(0, empty.TotalCharacters, "empty attachment length remains exact");
             AssertTrue(empty.Complete && !empty.Truncated, "empty attachment read is complete");
             AssertEqual(emptyHash, empty.ContentSha256, "empty attachment keeps representation hash");
-            var emptyPage = new ArtifactViewerService(gateway).ReadPage(session, emptyUri, null);
+            var emptyPage = new ArtifactViewerService(gateway).ReadPage(session, emptyUri, null, new ResourceDataPlaneService(gateway));
             AssertTrue(emptyPage.Complete && emptyPage.FullReadAllowed,
                 "empty exact text remains viewable and downloadable");
 
@@ -1549,11 +1559,11 @@ namespace RNAssistant.Harness
                     128).Result;
                 AssertTrue(!string.IsNullOrWhiteSpace(documentText.Text), "live document text is readable on demand");
                 AssertTrue(!string.IsNullOrWhiteSpace(documentText.ContentSha256) &&
-                    string.Equals(
+                    !string.Equals(
                         documentText.ContentSha256,
                         documentText.Resource.Reference.Revision,
                         StringComparison.Ordinal),
-                    "live document read carries exact revision evidence");
+                    "logical revision is distinct from the view content hash");
                 AssertTrue(!string.IsNullOrWhiteSpace(documentText.NextCursor),
                     "long live document read exposes a revision-bound continuation");
                 adapter.AddExcelSheetForTest("ResourceDrift");
@@ -1584,7 +1594,7 @@ namespace RNAssistant.Harness
                         ResourceRepresentations.Text,
                         null,
                         128,
-                        documentText.ContentSha256);
+                        documentText.Resource.Reference.Revision);
                 }
                 catch (ResourceRequestException ex)
                 {
@@ -1875,7 +1885,7 @@ namespace RNAssistant.Harness
             historicMessage.ResourceRefs.Add(ArtifactReference(session, session.Artifacts.Last()));
             var historicUri = ArtifactUri(session, session.Artifacts.Last());
 
-            var prompt = new ConversationPromptComposer().BuildMessages(
+            var prompt = new ModelContextCompiler().BuildPreview(
                 ChatModes.Agent,
                 "New request", adapter, new ToolCatalogEntry[0], new SkillDefinition[0],
                 new DocumentContext(), new AppSettings(), session, null);

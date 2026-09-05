@@ -308,11 +308,12 @@ namespace RNAssistant.Office.Services
 
         private string ComponentUri(ChatSession session, string moduleName)
         {
-            return ResourceUri.Create(
-                ProviderName,
-                _scope.DocumentToken(session),
-                "component",
-                ComponentKey(moduleName));
+            return ComponentIdentity(_scope.DocumentToken(session), moduleName).Uri;
+        }
+
+        internal static ResourceIdentity ComponentIdentity(string authorityId, string moduleName)
+        {
+            return new ResourceIdentity(ResourceUri.Create("vba", authorityId, "component", ComponentKey(moduleName)));
         }
 
         private string BackupUri(ChatSession session, string backupId)

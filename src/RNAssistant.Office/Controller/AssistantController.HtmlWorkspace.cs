@@ -15,6 +15,36 @@ namespace RNAssistant.Office
 {
     public sealed partial class AssistantController
     {
+        public ResourceDataOpenResponse OpenResourceData(ResourceDataOpenRequest request,
+            CancellationToken cancellationToken = default(CancellationToken))
+        {
+            if (request == null || string.IsNullOrWhiteSpace(request.ChatId) ||
+                string.IsNullOrWhiteSpace(request.WorkspaceId) || string.IsNullOrWhiteSpace(request.BindingName))
+                throw new InvalidOperationException("RESOURCE_ACCESS_DENIED: explicit workspace binding required.");
+            var session = LoadSession(request.ChatId);
+            if (!string.Equals(session.ActiveHtmlArtifactId, request.WorkspaceId, StringComparison.Ordinal))
+                throw new InvalidOperationException("RESOURCE_ACCESS_DENIED: the workspace revision is no longer active.");
+            var matches = session.HtmlWorkspace.DataSources.Where(item => item.Name == request.BindingName).ToArray();
+            if (matches.Length != 1) throw new InvalidOperationException("RESOURCE_ACCESS_DENIED: binding is unknown or ambiguous.");
+            var binding = matches[0].Binding;
+            HtmlWorkspaceToolService.NormalizeBinding(binding, matches[0]);
+            _toolExecutor.BindResourceAuthority(session);
+            return _resourceData.Open(session, request.WorkspaceId,
+                binding.Policy == "head" ? new ResourceRef(binding.Resource.Identity.Uri) : binding.Resource.Copy(), binding.View, binding.ViewPath, cancellationToken);
+        }
+
+        public ResourceDataCloseResponse CloseResourceData(ResourceDataCloseRequest request)
+        {
+            if (request == null || string.IsNullOrWhiteSpace(request.ChatId) || string.IsNullOrWhiteSpace(request.WorkspaceId))
+                throw new InvalidOperationException("RESOURCE_ACCESS_DENIED: explicit workspace owner required.");
+            if (string.IsNullOrWhiteSpace(request.LeaseId)) _resourceData.CloseWorkspace(request.ChatId, request.WorkspaceId);
+            else _resourceData.Close(request.ChatId, request.WorkspaceId, request.LeaseId);
+            return new ResourceDataCloseResponse { Closed = true };
+        }
+
+        internal ResourceStreamResponse ReadResourceData(string method, string url, CancellationToken cancellationToken)
+        { return _resourceDataRouter.Handle(method, url, cancellationToken); }
+
         public Task<HtmlFetchResponse> HtmlFetchAsync(HtmlFetchRequest request, CancellationToken cancellationToken)
         {
             return _htmlNetwork.FetchAsync(request, cancellationToken);
@@ -39,7 +69,8 @@ namespace RNAssistant.Office
         {
             return WithReservedSession(LoadSession(chatId), session =>
             {
-                HtmlWorkspaceToolService.UpsertFile(session, path, kind, content, setActive);
+                _toolExecutor.MutateLocalResources(session, "common.html_workspace_write_file", new Dictionary<string, object> { ["path"] = path, ["kind"] = kind, ["content"] = content, ["setActive"] = setActive },
+                    () => HtmlWorkspaceToolService.UpsertFile(session, path, kind, content, setActive));
                 SaveSessionChanges(session);
                 return HtmlWorkspaceState(session);
             });
@@ -49,7 +80,8 @@ namespace RNAssistant.Office
         {
             return WithReservedSession(LoadSession(chatId), session =>
             {
-                HtmlWorkspaceToolService.UpsertDataSource(session, name, json);
+                _toolExecutor.MutateLocalResources(session, "common.html_data_write", new Dictionary<string, object> { ["name"] = name, ["json"] = json },
+                    () => HtmlWorkspaceToolService.UpsertDataSource(session, name, json));
                 SaveSessionChanges(session);
                 return HtmlWorkspaceState(session);
             });
@@ -70,11 +102,9 @@ namespace RNAssistant.Office
         {
             return WithReservedSession(LoadSession(chatId), session =>
             {
-                var imported = _uploadedHtmlResources.Import(
-                    session,
-                    sourceResourceUri,
-                    expectedActiveHtmlArtifactId,
-                    targetPath);
+                var imported = _toolExecutor.MutateLocalResources(session, "common.html_workspace_import",
+                    new Dictionary<string, object> { ["source"] = sourceResourceUri, ["expected"] = expectedActiveHtmlArtifactId, ["path"] = targetPath },
+                    () => _uploadedHtmlResources.Import(session, sourceResourceUri, expectedActiveHtmlArtifactId, targetPath));
                 SaveSessionChanges(session);
                 var response = HtmlWorkspaceState(session);
                 response.ImportedPath = imported.ImportedPath;
@@ -90,9 +120,9 @@ namespace RNAssistant.Office
             return WithReservedSession(LoadSession(chatId), session =>
             {
                 var previousArtifactId = session.ActiveHtmlArtifactId;
-                var exportArtifactId = HtmlWorkspaceArtifactService.PrepareExport(
-                    session,
-                    expectedActiveHtmlArtifactId);
+                var exportArtifactId = _toolExecutor.MutateLocalResources(session, "common.html_workspace_export",
+                    new Dictionary<string, object> { ["expected"] = expectedActiveHtmlArtifactId },
+                    () => HtmlWorkspaceArtifactService.PrepareExport(session, expectedActiveHtmlArtifactId));
                 if (!string.Equals(previousArtifactId, exportArtifactId, System.StringComparison.OrdinalIgnoreCase))
                 {
                     SaveSessionChanges(session);
@@ -113,7 +143,8 @@ namespace RNAssistant.Office
         {
             return WithReservedSession(LoadSession(chatId), session =>
             {
-                HtmlWorkspaceToolService.DeleteFile(session, path);
+                _toolExecutor.MutateLocalResources(session, "common.html_workspace_delete", new Dictionary<string, object> { ["target"] = path },
+                    () => HtmlWorkspaceToolService.DeleteFile(session, path));
                 SaveSessionChanges(session);
                 return HtmlWorkspaceState(session);
             });
@@ -123,7 +154,8 @@ namespace RNAssistant.Office
         {
             return WithReservedSession(LoadSession(chatId), session =>
             {
-                HtmlWorkspaceToolService.DeleteDataSource(session, name);
+                _toolExecutor.MutateLocalResources(session, "common.html_workspace_delete", new Dictionary<string, object> { ["target"] = name },
+                    () => HtmlWorkspaceToolService.DeleteDataSource(session, name));
                 SaveSessionChanges(session);
                 return HtmlWorkspaceState(session);
             });
@@ -133,7 +165,8 @@ namespace RNAssistant.Office
         {
             return WithReservedSession(LoadSession(chatId), session =>
             {
-                HtmlWorkspaceToolService.SetActiveFile(session, path);
+                _toolExecutor.MutateLocalResources(session, "common.html_workspace_select", new Dictionary<string, object> { ["path"] = path },
+                    () => HtmlWorkspaceToolService.SetActiveFile(session, path));
                 SaveSessionChanges(session);
                 return HtmlWorkspaceState(session);
             });
@@ -162,11 +195,13 @@ namespace RNAssistant.Office
                 {
                     throw new System.InvalidOperationException("HTML workspace snapshot was not found.");
                 }
-                string error;
-                if (!_chatStore.TryActivateHtmlWorkspaceRevision(session, targetId, out error))
-                {
-                    throw new System.InvalidOperationException(error ?? "HTML workspace artifact body is missing or corrupt.");
-                }
+                _toolExecutor.MutateLocalResources(session, "common.html_workspace_restore",
+                    new Dictionary<string, object> { ["snapshotId"] = targetId }, () => {
+                        string error;
+                        if (!_chatStore.TryActivateHtmlWorkspaceRevision(session, targetId, out error))
+                            throw new InvalidOperationException(error ?? "HTML workspace artifact body is missing or corrupt.");
+                        return true;
+                    });
                 SaveSessionChanges(session);
                 return HtmlWorkspaceState(session);
             });
@@ -189,11 +224,13 @@ namespace RNAssistant.Office
                     throw new System.InvalidOperationException("HTML workspace redo target must be a direct child revision.");
                 }
                 var targetId = branch.Id;
-                string error;
-                if (!_chatStore.TryActivateHtmlWorkspaceRevision(session, targetId, out error))
-                {
-                    throw new System.InvalidOperationException(error ?? "HTML workspace artifact body is missing or corrupt.");
-                }
+                _toolExecutor.MutateLocalResources(session, "common.html_workspace_restore",
+                    new Dictionary<string, object> { ["snapshotId"] = targetId }, () => {
+                        string error;
+                        if (!_chatStore.TryActivateHtmlWorkspaceRevision(session, targetId, out error))
+                            throw new InvalidOperationException(error ?? "HTML workspace artifact body is missing or corrupt.");
+                        return true;
+                    });
                 SaveSessionChanges(session);
                 return HtmlWorkspaceState(session);
             });

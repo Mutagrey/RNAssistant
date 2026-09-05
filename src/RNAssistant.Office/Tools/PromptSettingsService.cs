@@ -37,6 +37,26 @@ namespace RNAssistant.Office.Tools
 
         internal bool CanRead { get { return _loadSettings != null; } }
 
+        internal string CaptureTemplates()
+        { return JsonConvert.SerializeObject(ToPayload(_loadSettings == null ? new AppSettings() : _loadSettings())); }
+
+        internal static string CaptureTemplates(AppSettings settings)
+        { return JsonConvert.SerializeObject(ToPayload(settings)); }
+
+        internal static AppSettings ApplyPublishedTemplates(AppSettings source, string json)
+        {
+            var values = JsonConvert.DeserializeObject<Dictionary<string, string>>(json);
+            var result = (source ?? new AppSettings()).Clone();
+            foreach (var key in EditableFields)
+            {
+                string value;
+                if (values == null || !values.TryGetValue(key, out value))
+                    throw new InvalidOperationException("The published prompt snapshot is incomplete.");
+                SetValue(result, key, value);
+            }
+            return result;
+        }
+
         internal PromptToolOutcome Read(
             IDictionary<string, object> arguments)
         {

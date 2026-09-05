@@ -5,6 +5,7 @@ using System.Linq;
 using RNAssistant.Core.Models;
 using RNAssistant.Office.Contracts;
 using RNAssistant.Office.Services;
+using RNAssistant.Office.Tools;
 
 namespace RNAssistant.Office
 {
@@ -27,13 +28,16 @@ namespace RNAssistant.Office
 
             IReadOnlyList<ToolCatalogEntry> tools = new ToolCatalogEntry[0];
             IReadOnlyList<SkillDefinition> skills = new SkillDefinition[0];
+            var publication = _toolExecutor.CaptureCatalogs();
+            settings = PromptSettingsService.ApplyPublishedTemplates(settings, publication.PromptsJson);
+            var publishedSkills = _toolExecutor.CaptureSkills(publication);
             if (ChatModes.Normalize(session.Mode) != ChatModes.Chat)
             {
-                tools = _toolCatalog.GetVisibleTools().Where(item => item.Enabled).ToList();
-                skills = _skillCatalog.GetVisibleSkills().Where(item => item.Enabled).ToList();
+                tools = _toolCatalog.GetVisibleTools(publication.Tools).Where(item => item.Enabled).ToList();
+                skills = publishedSkills.Skills;
             }
 
-            return new PromptContextInspectorService(_adapter, _paths).Inspect(
+            return new PromptContextInspectorService(_adapter, _paths, _toolExecutor.ResourceAuthority, _toolExecutor.Payloads).Inspect(
                 session,
                 LoadContext(session),
                 settings,
@@ -41,7 +45,7 @@ namespace RNAssistant.Office
                 skills,
                 attachments,
                 text,
-                includeRaw);
+                includeRaw, publishedSkills);
         }
     }
 }

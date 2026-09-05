@@ -41,10 +41,7 @@ namespace RNAssistant.Office.Tools
 
         internal static bool RequiresOfficeDocument(string toolId)
         {
-            return string.Equals(toolId, BindDataToolId,
-                    StringComparison.Ordinal) ||
-                string.Equals(toolId, RefreshDataToolId,
-                    StringComparison.Ordinal);
+            return false; // The gateway negotiates and guards each bound provider.
         }
 
         internal static IEnumerable<ToolCatalogEntry> GetTools(
@@ -74,11 +71,11 @@ namespace RNAssistant.Office.Tools
                     "html_data_bind", true, 0);
             }
             yield return Projection(RefreshDataToolId,
-                "Workspace: Re-run a bound read-only Office source, replace its JSON, and capture an authoritative workspace head for preview/read-back (a new revision only when payload or binding status changed). Omit name to refresh all bound sources; refresh policy is runtime-owned.",
+                "Workspace: Resolve resource bindings through canonical authority. Omit name to resolve all; reopen RN.resources handles to consume current head-bound revisions.",
                 RefreshSchema(),
                 "html_data_refresh", true, 0);
             yield return Projection(FreezeDataToolId,
-                "Workspace: Keep the current JSON of one bound data source but remove its Office binding so future refreshes cannot overwrite it.",
+                "Workspace: Change a head binding to an exact canonical revision. Future source changes do not change this snapshot binding.",
                 FreezeSchema(),
                 "html_data_freeze", true, 0);
         }

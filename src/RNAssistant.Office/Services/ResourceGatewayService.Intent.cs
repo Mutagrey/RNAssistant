@@ -30,6 +30,11 @@ namespace RNAssistant.Office.Services
             }
             var states = EnumerateIntentResources(
                 session, plans, unavailable, null, ref sourceTruncated);
+            if ((scope == "all" || scope == "document") && query.IndexOf('!') > 0)
+            {
+                var excel = _registry.All().OfType<ExcelResourceProvider>().SingleOrDefault();
+                if (excel != null) AddIntentState(states, WithProvider(excel, session, () => excel.ResolveRange(session, query)));
+            }
             AssignIntentTargets(states);
 
             Dictionary<string, ResourceSearchMatch> matches = null;
@@ -93,6 +98,14 @@ namespace RNAssistant.Office.Services
                     "Exact resource URIs are runtime-owned and cannot be used as model targets. Run common.resources_find and pass one exact returned semantic target.",
                     "resource_target_runtime_owned",
                     true);
+            }
+            if (target.StartsWith("Excel range: ", StringComparison.Ordinal))
+            {
+                var excel = _registry.All().OfType<ExcelResourceProvider>().SingleOrDefault();
+                if (excel == null) throw new ResourceRequestException("Excel resource provider is unavailable.", "RESOURCE_PROVIDER_UNAVAILABLE", false);
+                var descriptor = WithProvider(excel, session, () => excel.ResolveRange(session, target));
+                return new ResourceIntentTarget { Target = IntentTarget(descriptor), Type = "Excel range", Scope = "document",
+                    Descriptor = descriptor, Reference = descriptor.Reference };
             }
             var unavailable = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
             var failures = new Dictionary<string, ResourceRequestException>(
@@ -163,11 +176,7 @@ namespace RNAssistant.Office.Services
                     var cursor = string.Empty;
                     do
                     {
-                        var page = WithProvider(plan.Provider, session, delegate
-                        {
-                            return plan.Provider.List(
-                                session, plan.Kind, cursor, IntentPageSize);
-                        });
+                        var page = List(session, plan.Provider.Id, plan.Kind, cursor, IntentPageSize);
                         foreach (var descriptor in page.Items ??
                             new List<ResourceDescriptor>())
                         {
@@ -213,15 +222,7 @@ namespace RNAssistant.Office.Services
             {
                 try
                 {
-                    var result = WithProvider(plan.Provider, session, delegate
-                    {
-                        return plan.Provider.Search(
-                            session,
-                            query,
-                            plan.Kind,
-                            MaximumIntentResults,
-                            IntentSnippetCharacters);
-                    });
+                    var result = Search(session, plan.Provider.Id, query, plan.Kind, MaximumIntentResults, IntentSnippetCharacters);
                     truncated = truncated || result.ScanTruncated;
                     foreach (var match in result.Matches ??
                         new List<ResourceSearchMatch>())
@@ -266,6 +267,14 @@ namespace RNAssistant.Office.Services
                     yield return new ResourceIntentPlan(provider, null, "vba");
                     yield return new ResourceIntentPlan(provider, VbaResourceProvider.BackupKind, "backups");
                 }
+                else if (provider is ExcelResourceProvider)
+                {
+                    yield return new ResourceIntentPlan(provider, null, "document");
+                }
+                else if (provider is CatalogResourceProvider)
+                {
+                    yield return new ResourceIntentPlan(provider, null, "catalogs");
+                }
                 else
                 {
                     yield return new ResourceIntentPlan(provider, null, "conversation");
@@ -306,6 +315,7 @@ namespace RNAssistant.Office.Services
         {
             if (descriptor == null || descriptor.Reference == null ||
                 string.IsNullOrWhiteSpace(descriptor.Reference.Uri)) return;
+            if (states.Any(state => state.Reference.Uri == descriptor.Reference.Uri)) return;
             var type = IntentType(descriptor);
             states.Add(new ResourceIntentState
             {
@@ -343,9 +353,10 @@ namespace RNAssistant.Office.Services
                     new List<string>()).ToList(),
                 MatchRepresentation = match == null ? null : match.Representation,
                 Snippet = match == null ? null : match.Snippet,
+                Evidence = match == null ? null : match.Evidence,
                 Reference = new ResourceRef(
                     state.Reference.Uri,
-                    state.Reference.Revision)
+                    match == null ? state.Reference.Revision : match.Reference.Revision)
             };
         }
 
@@ -406,6 +417,7 @@ namespace RNAssistant.Office.Services
                 case "vba":
                 case "html":
                 case "backups":
+                case "catalogs":
                     return value;
                 default:
                     throw new ResourceRequestException(
@@ -428,6 +440,10 @@ namespace RNAssistant.Office.Services
             switch (type)
             {
                 case "document": return "document";
+                case "Excel range": return "document";
+                case "catalog":
+                case "skill":
+                case "skill reference": return "catalogs";
                 case "selection": return "selection";
                 case "VBA project":
                 case "VBA module": return "vba";
@@ -444,7 +460,11 @@ namespace RNAssistant.Office.Services
             var kind = (descriptor.Kind ?? string.Empty).Trim().ToLowerInvariant();
             switch (kind)
             {
+                case "catalog": return "catalog";
+                case "skill": return "skill";
+                case "skill-reference": return "skill reference";
                 case LiveDocumentResourceProvider.DocumentKind: return "document";
+                case ExcelResourceProvider.RangeKind: return "Excel range";
                 case LiveDocumentResourceProvider.SelectionKind: return "selection";
                 case VbaResourceProvider.ProjectKind: return "VBA project";
                 case VbaResourceProvider.ComponentKind: return "VBA module";
@@ -467,7 +487,8 @@ namespace RNAssistant.Office.Services
             ResourceDescriptor descriptor,
             string type)
         {
-            if (string.Equals(type, "document", StringComparison.Ordinal)) return "document";
+            if (descriptor.Provider == "catalog") return "catalogs";
+            if (string.Equals(type, "document", StringComparison.Ordinal) || type == "Excel range") return "document";
             if (string.Equals(type, "selection", StringComparison.Ordinal)) return "selection";
             if (string.Equals(type, "VBA backup", StringComparison.Ordinal)) return "backups";
             if (string.Equals(type, "VBA module", StringComparison.Ordinal) ||
@@ -545,6 +566,8 @@ namespace RNAssistant.Office.Services
 
     internal sealed class ResourceIntentCandidate
     {
+        [Newtonsoft.Json.JsonIgnore]
+        public IReadOnlyList<ResourceEvidence> Evidence { get; set; }
         [Newtonsoft.Json.JsonProperty("target")]
         public string Target { get; set; }
         [Newtonsoft.Json.JsonProperty("type")]

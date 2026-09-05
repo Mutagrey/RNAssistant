@@ -7,10 +7,6 @@ using Newtonsoft.Json.Linq;
 using RNAssistant.Core.Models;
 using RNAssistant.Core.Services;
 using RNAssistant.Core.Tools;
-using RNAssistant.Office.Domains.Excel;
-using RNAssistant.Office.Domains.Word;
-using RNAssistant.Office.Domains.PowerPoint;
-using RNAssistant.Office.Domains.Outlook;
 using RNAssistant.Office.Services;
 
 namespace RNAssistant.Office.Tools
@@ -22,71 +18,12 @@ namespace RNAssistant.Office.Tools
         private const int MaxWorkspaceItems = 100;
         private const int MaxWorkspaceCharacters = 1500000;
 
-        private readonly IOfficeApplicationAdapter _adapter;
-        private readonly Dictionary<string, ToolCatalogEntry> _dataSourceTools;
-        private readonly Func<ChatSession, IDisposable> _beginLiveOfficeRead;
-        private readonly Func<ChatSession, string, IDictionary<string, object>,
-            CancellationToken, HtmlDataSourceReadOutcome> _executeOfficeDataSource;
-        private readonly ExcelReadToolAdapter _standaloneExcelRead;
-        private readonly WordToolAdapter _standaloneWordRead;
-        private readonly PowerPointToolAdapter _standalonePowerPointRead;
-        private readonly OutlookToolAdapter _standaloneOutlookRead;
+        private readonly ResourceGatewayService _resources;
 
-        public HtmlWorkspaceToolService()
-            : this(null, null, null, null)
-        {
-        }
+        internal HtmlWorkspaceToolService(ResourceGatewayService resources = null)
+        { _resources = resources; }
 
-        public HtmlWorkspaceToolService(
-            IOfficeApplicationAdapter adapter,
-            IEnumerable<ToolCatalogEntry> adapterTools)
-            : this(adapter, adapterTools, null, null)
-        {
-        }
-
-        internal HtmlWorkspaceToolService(
-            IOfficeApplicationAdapter adapter,
-            IEnumerable<ToolCatalogEntry> adapterTools,
-            Func<ChatSession, IDisposable> beginLiveOfficeRead)
-            : this(adapter, adapterTools, beginLiveOfficeRead, null)
-        {
-        }
-
-        internal HtmlWorkspaceToolService(
-            IOfficeApplicationAdapter adapter,
-            IEnumerable<ToolCatalogEntry> adapterTools,
-            Func<ChatSession, IDisposable> beginLiveOfficeRead,
-            Func<ChatSession, string, IDictionary<string, object>, CancellationToken,
-                HtmlDataSourceReadOutcome> executeOfficeDataSource)
-        {
-            _adapter = adapter;
-            _beginLiveOfficeRead = beginLiveOfficeRead;
-            _executeOfficeDataSource = executeOfficeDataSource;
-            var excel = adapter as IExcelBackendProvider;
-            _standaloneExcelRead = excel == null || excel.ExcelReadBackend == null
-                ? null : new ExcelReadToolAdapter(excel.ExcelReadBackend);
-            var word = adapter as IWordBackendProvider;
-            _standaloneWordRead = word == null || word.WordBackend == null
-                ? null : new WordToolAdapter(word.WordBackend);
-            var powerPoint = adapter as IPowerPointBackendProvider;
-            _standalonePowerPointRead = powerPoint == null ||
-                powerPoint.PowerPointBackend == null
-                ? null : new PowerPointToolAdapter(
-                    powerPoint.PowerPointBackend);
-            var outlook = adapter as IOutlookBackendProvider;
-            _standaloneOutlookRead = outlook == null ||
-                outlook.OutlookBackend == null
-                ? null : new OutlookToolAdapter(outlook.OutlookBackend);
-            _dataSourceTools = (adapterTools ?? new ToolCatalogEntry[0])
-                .Where(IsEligibleDataSourceTool)
-                .OrderBy(tool => tool.Id, StringComparer.OrdinalIgnoreCase)
-                .ToDictionary(tool => tool.Id, tool => tool.Clone(), StringComparer.OrdinalIgnoreCase);
-        }
-
-        internal bool HasDataSourceTools
-        {
-            get { return _dataSourceTools.Count > 0; }
-        }
+        internal bool HasDataSourceTools { get { return _resources != null; } }
 
         internal HtmlWorkspaceToolOutcome Execute(
             string toolId,
@@ -239,7 +176,7 @@ namespace RNAssistant.Office.Tools
                     "Invalid HTML workspace JSON data source: " + ex.Message,
                     "invalid_html_workspace_json", true);
             }
-            catch (HtmlAcceptedReadSourceException ex)
+            catch (ResourceRequestException ex)
             {
                 return Failure(dispatched, ex.Message,
                     ex.ErrorCode, false);
@@ -309,7 +246,6 @@ namespace RNAssistant.Office.Tools
             {
                 dataSource.Name = NormalizeDataName(string.IsNullOrWhiteSpace(dataSource.Name) ? dataSource.Id : dataSource.Name);
                 dataSource.Id = DataSourceId(dataSource.Name);
-                dataSource.Json = dataSource.Json ?? "{}";
                 if (dataSource.Binding != null)
                 {
                     NormalizeBinding(dataSource.Binding, dataSource);
@@ -421,8 +357,15 @@ namespace RNAssistant.Office.Tools
             }
 
             data.Name = normalizedName;
-            data.Json = json ?? "{}";
-            data.Binding = null;
+            var artifact = new ChatArtifact
+            {
+                Kind = ChatArtifactKinds.File, Title = normalizedName + ".json",
+                MimeType = "application/json", InlineText = json ?? "{}", Revision = 1
+            };
+            if (session.Artifacts == null) session.Artifacts = new List<ChatArtifact>();
+            session.Artifacts.Add(artifact);
+            data.Binding = new HtmlWorkspaceDataBinding
+            { Resource = ChatResourceUri.CreateArtifactRevision(session, artifact), Policy = "exact", View = "text" };
             data.UpdatedUtc = now;
             session.HtmlWorkspace.UpdatedUtc = now;
             HtmlWorkspaceArtifactService.CaptureCurrent(session, "HTML data: " + normalizedName);
@@ -605,7 +548,6 @@ namespace RNAssistant.Office.Tools
                 {
                     dataSource.Name = NormalizeDataName(string.IsNullOrWhiteSpace(dataSource.Name) ? dataSource.Id : dataSource.Name);
                     dataSource.Id = DataSourceId(dataSource.Name);
-                    dataSource.Json = dataSource.Json ?? "{}";
                     if (dataSource.Binding != null) NormalizeBinding(dataSource.Binding, dataSource);
                 }
             }
@@ -648,7 +590,7 @@ namespace RNAssistant.Office.Tools
             }
 
             long characters = files.Sum(item => (long)(item.Content ?? string.Empty).Length) +
-                dataSources.Sum(item => (long)(item.Json ?? string.Empty).Length);
+                dataSources.Sum(item => (long)JsonConvert.SerializeObject(item.Binding).Length);
             if (!string.IsNullOrWhiteSpace(replacingFileId))
             {
                 var existing = files.FirstOrDefault(item => string.Equals(item.Id, replacingFileId, StringComparison.OrdinalIgnoreCase));
@@ -658,8 +600,8 @@ namespace RNAssistant.Office.Tools
             if (!string.IsNullOrWhiteSpace(replacingDataId))
             {
                 var existing = dataSources.FirstOrDefault(item => string.Equals(item.Id, replacingDataId, StringComparison.OrdinalIgnoreCase));
-                characters -= existing == null ? 0 : (existing.Json ?? string.Empty).Length;
-                characters += (dataJson ?? string.Empty).Length;
+                characters -= existing == null ? 0 : JsonConvert.SerializeObject(existing.Binding).Length;
+                characters += 2048; // bounded binding metadata; payload lives in the resource CAS
             }
             if (characters > MaxWorkspaceCharacters)
             {

@@ -18,6 +18,9 @@ namespace RNAssistant.Core.Tools
         [JsonIgnore]
         public string RuntimeStepId { get; set; }
 
+        [JsonIgnore]
+        public string ExpectedContentSha256 { get; set; }
+
         public ToolInvocation()
         {
             Arguments = new Dictionary<string, object>(

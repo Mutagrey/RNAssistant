@@ -16,6 +16,11 @@ testing или migration; [архитектура](architecture.md) — для �
 owners или dependencies. Не читай оба документа автоматически для каждой задачи.
 Старые phase reports и ADR не являются текущим контрактом.
 
+Для текущего единого Resource direct cutover сначала прочитай
+[Resource MASTER](stabilization/resource-cutover/MASTER.md), затем его три
+нормативных документа в заданном порядке. [Resource Fabric](resource-fabric.md)
+содержит карту текущих владельцев и незакрытых consumers, а не отдельную реализацию.
+
 ## Канонические документы
 
 | Область | Владелец текущего контракта |

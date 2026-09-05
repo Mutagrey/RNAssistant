@@ -33,7 +33,7 @@ namespace RNAssistant.Office.Tools
                 ["type"] = "object",
                 ["properties"] = new JObject
                 {
-                    ["name"] = new JObject { ["type"] = "string", ["description"] = "Stable name exposed through window.RNAssistantData.", ["minLength"] = 1, ["maxLength"] = 128 },
+                    ["name"] = new JObject { ["type"] = "string", ["description"] = "Stable binding name opened through RN.resources.open(name).", ["minLength"] = 1, ["maxLength"] = 128 },
                     ["json"] = new JObject { ["type"] = "string", ["description"] = "Complete exact valid JSON value serialized as text. Escape its quotes and backslashes for the outer response JSON; runtime validates and stores the decoded text unchanged.", ["minLength"] = 1, ["maxLength"] = MaxDataChars }
                 },
                 ["required"] = new JArray("name", "json"),

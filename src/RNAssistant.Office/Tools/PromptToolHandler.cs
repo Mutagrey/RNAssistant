@@ -59,9 +59,9 @@ namespace RNAssistant.Office.Tools
             CancellationToken cancellationToken)
         {
             cancellationToken.ThrowIfCancellationRequested();
-            return Task.FromResult(PromptToolProjection.Project(
+            return Task.FromResult(context.Complete(PromptToolProjection.Project(
                 _service.Save(context.Arguments, context.PreparedStateJson,
-                    context.MarkDispatchPossible)));
+                    context.MarkDispatchPossible))));
         }
     }
 

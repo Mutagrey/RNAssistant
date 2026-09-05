@@ -328,6 +328,10 @@ if (window.chrome && window.chrome.webview) {
       }
       return;
     }
+    if (response && response.type === "resourceChanged") {
+      if (typeof handleResourceAuthorityChanged === "function") handleResourceAuthorityChanged(response);
+      return;
+    }
     if (response && response.type === "progress") {
       var progress = response.payload || {};
       var progressPending = state.pending[response.id];

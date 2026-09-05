@@ -283,7 +283,6 @@ namespace RNAssistant.Office.Vba
                     StringComparison.OrdinalIgnoreCase))
             {
                 var correlation = request.Correlation ?? new VbaMutationCorrelation();
-                RemoveObservation(correlation.SessionId, moduleName);
                 return StaleSnapshot(
                     moduleName,
                     guard.ModuleExists,

@@ -116,7 +116,7 @@
     if (thumbnail && thumbnail.status === "ready") {
       var image = document.createElement("img");
       image.alt = title || "";
-      image.src = "data:" + thumbnail.imageMimeType + ";base64," + thumbnail.imageBase64Content;
+      image.src = thumbnail.data.url;
       root.appendChild(image);
       return "ready";
     }
@@ -243,7 +243,7 @@
         mimeType: viewer.mimeType,
         contentSha256: viewer.contentSha256,
         byteLength: viewer.byteLength,
-        base64Content: viewer.base64Content,
+        data: viewer.data,
         navigation: sequence ? {
           label: (galleryIndex + 1) + " / " + galleryItems.length,
           hasPrevious: galleryIndex > 0,

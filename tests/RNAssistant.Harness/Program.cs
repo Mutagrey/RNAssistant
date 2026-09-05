@@ -275,7 +275,7 @@ namespace RNAssistant.Harness
                 Test("settings: prompt review preserves stored text", SettingsPromptReviewPreservesStoredText),
                 Test("settings: prompt review gates conversation dispatch", SettingsPromptReviewGatesConversationDispatch),
                 Test("settings: invalid numeric values are normalized", SettingsNormalizeInvalidNumericValues),
-                Test("context: compaction uses one summary field", SimpleCompactionUsesOneSummaryField),
+                Test("context: compaction uses structured source claims", CompactionUsesStructuredSourceClaims),
                 Test("context: compaction preserves tool protocol pairs", CompactionPreservesToolProtocolPairs),
                 Test("context inspector: builds agent snapshot", PromptContextInspectorBuildsAgentSnapshot),
                 Test("context inspector: raw JSON is opt-in", PromptContextInspectorRawJsonIsOptIn),
@@ -622,6 +622,19 @@ namespace RNAssistant.Harness
                 Test("context: normalize and upsert", ContextServiceNormalizesAndUpserts),
                 Test("context: trim helper", ContextServiceTrimsText),
                 Test("resources: canonical URI roundtrip", ResourceUriRoundTripsCanonicalAddress),
+                Test("resource cutover: atomic authority and replay", ResourceAuthorityAtomicCommitAndReplay),
+                Test("resource cutover: frozen evidence and coverage", ResourceEvidenceUsesFrozenAuthority),
+                Test("resource cutover: correctness before budget", ResourceCompilerFiltersBeforeBudget),
+                Test("resource cutover: document identity SaveAs and copy", DocumentAuthoritySurvivesSaveAsAndSeparatesCopy),
+                Test("resource cutover: bounded table lease snapshot", ResourceBoundedTableLeaseUsesOneSnapshot),
+                Test("resource cutover: local restore logical lineage", LocalResourceRestorePublishesNewLogicalRevision),
+                Test("resource cutover: schema mapping derived publication", ResourceSchemaMappingDerivedPublication),
+                Test("resource cutover: large completed call stays reference only", ResourceCompletedCallDoesNotHydrateArguments),
+                Test("resource cutover: immutable skill catalog publication", ResourceSkillCatalogPublication),
+                Test("resource cutover: frozen prompt publication", ResourcePromptPublicationIsFrozen),
+                Test("resource cutover: runtime payload storage and exact hydration", ResourceRuntimePayloadStorage),
+                Test("resource cutover: unpublished revision retention roots", ResourceUnpublishedRevisionRetention),
+                Test("resource cutover: canonical binary data plane", ResourceBinaryLeaseUsesCanonicalViews),
                 Test("resources: rejects ambiguous URI", ResourceUriRejectsAmbiguousAddresses),
                 Test("resources: reference pins revision", ResourceReferencePinsRevision),
                 Test("resources: registry rejects duplicate providers", ResourceRegistryRejectsDuplicateProviders),
@@ -650,6 +663,7 @@ namespace RNAssistant.Harness
                 Test("bridge: typed tools and skills", BridgeUsesTypedToolAndSkillPayloads),
                 Test("bridge: typed context", BridgeUsesTypedContextPayload),
                 Test("bridge: typed prompt context inspector", BridgeUsesTypedPromptContextInspectorPayload),
+                Test("bridge: bounded resource authority notifications", BridgeCoalescesResourceAuthorityNotifications),
                 Test("bridge: typed vba", BridgeUsesTypedVbaPayload),
                 Test("bridge: typed html delete", BridgeUsesTypedHtmlWorkspaceDeletePayloads),
                 Test("bridge: typed html import", BridgeUsesTypedUploadedHtmlPayloads),
@@ -700,6 +714,7 @@ namespace RNAssistant.Harness
                 {
                     failed += 1;
                     Console.WriteLine("FAIL " + test.Name + ": " + ex.Message);
+                    if (Environment.GetEnvironmentVariable("RNA_HARNESS_TRACE") == "1") Console.WriteLine(ex);
                 }
             }
             Console.WriteLine((failed == 0 ? "OK" : "FAILED") + " passed=" + (selected.Count - failed) +

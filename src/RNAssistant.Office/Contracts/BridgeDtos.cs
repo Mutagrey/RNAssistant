@@ -150,6 +150,9 @@ namespace RNAssistant.Office.Contracts
 
     public sealed class PromptContextInspectorResponse
     {
+        [JsonProperty("resourceContextReceipt")]
+        public ContextReceipt ResourceContextReceipt { get; set; }
+
         [JsonProperty("chatId")]
         public string ChatId { get; set; }
 

@@ -14,6 +14,7 @@ namespace RNAssistant.Office.Services
         private readonly IOfficeApplicationAdapter _adapter;
         private readonly IConversationStore _conversations;
         private readonly VbaJournalStore _vbaJournalStore;
+        private readonly DocumentAuthorityRegistry _documentAuthorityRegistry;
         private string _activeSessionId;
         private string _activeHost;
         private string _activeDocumentKey;
@@ -43,10 +44,20 @@ namespace RNAssistant.Office.Services
             IOfficeApplicationAdapter adapter,
             IConversationStore conversations,
             VbaJournalStore vbaJournalStore)
+            : this(adapter, conversations, vbaJournalStore, null)
+        {
+        }
+
+        public ChatSessionService(
+            IOfficeApplicationAdapter adapter,
+            IConversationStore conversations,
+            VbaJournalStore vbaJournalStore,
+            DocumentAuthorityRegistry documentAuthorityRegistry)
         {
             _adapter = adapter ?? throw new ArgumentNullException(nameof(adapter));
             _conversations = conversations ?? throw new ArgumentNullException(nameof(conversations));
             _vbaJournalStore = vbaJournalStore;
+            _documentAuthorityRegistry = documentAuthorityRegistry;
         }
 
         public void ReconcileInterruptedRuns(string runtimeId)
@@ -416,6 +427,8 @@ namespace RNAssistant.Office.Services
                 session = _conversations.LoadOrCreateActive(host, documentKey, title);
             }
 
+            BindDocumentAuthority(session, host, runtimeKey, documentPath);
+
             session.Mode = ChatModes.Normalize(session.Mode);
             if (makeActive && migrationDeferred)
             {
@@ -438,6 +451,7 @@ namespace RNAssistant.Office.Services
                 _adapter.DocumentKey,
                 _adapter.DocumentTitle,
                 string.IsNullOrWhiteSpace(title) ? "New chat" : title.Trim());
+            BindDocumentAuthority(session, _adapter.HostName, _adapter.RuntimeDocumentKey, CurrentDocumentPath());
             UpdateCurrentDocumentMetadata(session);
             SetActiveSession(session);
             return session;
@@ -458,8 +472,22 @@ namespace RNAssistant.Office.Services
                 string.IsNullOrWhiteSpace(documentTitle) ? "Document" : documentTitle.Trim(),
                 string.IsNullOrWhiteSpace(title) ? "New chat" : title.Trim());
             session.DocumentPath = string.IsNullOrWhiteSpace(documentPath) ? null : documentPath.Trim();
+            BindDocumentAuthority(session, host, null, session.DocumentPath);
             SetActiveSession(session);
             return session;
+        }
+
+        private void BindDocumentAuthority(ChatSession session, string host, string runtimeKey, string locator)
+        {
+            if (session == null) return;
+            if (_documentAuthorityRegistry == null)
+            {
+                if (string.IsNullOrWhiteSpace(session.DocumentAuthorityId))
+                    session.DocumentAuthorityId = DocumentAuthorityId.Create().Id;
+                return;
+            }
+            session.DocumentAuthorityId = _documentAuthorityRegistry.Resolve(
+                host, runtimeKey, locator, session.DocumentAuthorityId).Id;
         }
 
         public ChatSession DeleteAndSelectNext(string sessionId)

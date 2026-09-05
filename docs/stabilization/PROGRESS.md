@@ -2,12 +2,63 @@
 
 Current target: 16.1.0
 Current phase: Milestone WQ — обязательный Phase 11 existing-tool migration route и final active-legacy cleanup через 11T10 завершены host-neutral; Phase 12 ещё не начат
-Current task: user-reported R77 VBA write-integrity regression is complete host-neutral. Internal read-back no longer refreshes model-visible source authority; a complete current resource read is required before a second same-module source mutation, replacement failures retain rollback diagnostics, macro dispatch is bound-document qualified, unsafe VBA syntax is rejected before COM, failed verified-no-change no longer projects as unknown, and unsupported Outlook VBA qualification is N/A.
+Current task: user-authorized unified Resource Architecture direct cutover, in progress on `stab/11-resource-direct-cutover`. The execution order is [Resource MASTER](resource-cutover/MASTER.md); its three normative architecture contracts are [URF](resource-cutover/UNIVERSAL_RESOURCE_FABRIC.md), [Authority](resource-cutover/RESOURCE_AUTHORITY.md), then [Evidence/Compiler](resource-cutover/EVIDENCE_CONTEXT_COMPILER.md). This is one replacement workstream: shared authority/compiler, reference-first HTML, bounded table transport and schema/mapping/derived publication are integrated; remaining consumer/catalog/retention cutover and final cleanup are open. R77 remains the preceding completed host-neutral correction.
 Execution mode: mandatory host-neutral route 0–11T10, WQ-A1–A5, R61/11O0–11O7, the separately approved D05.1–D05.6 slices and R65–R70 corrections завершены. WQ0 не блокировал implementation: текущий `RuntimeKey` exact bound Excel/Word/PowerPoint/Outlook object or window принят как lifetime assumption. Накопленные Windows gates по §16.1 теперь квалифицируют только итоговый post-cutover catalog/UI; до их evidence Phase 12 remains blocked.
 
-Next step for tools: final post-cutover Windows rebuild/live-provider/WebView2 qualification, including R61 Library UX plus the accumulated R62/R63, R65–R77 complex-dashboard/completion/VBA-write/chat/artifact/startup-responsiveness retests; then collect final Milestone WQ evidence. Phase 12 remains blocked until those gates close.
-Required context: [11O7 evidence](PHASE_11O7_TOOL_LIBRARY_UX.md), [Tool Library contract](../tool-library.md#mandatory-all-tool-contract-audit-r61), [R61 audit](R61_TOOL_CONTRACT_AUDIT.md), [Qualification](../qualification.md) and the exact Windows gate instructions only.
-Open gates / remaining legacy: active tool execution/catalog/result legacy is empty. All current Excel, Word, PowerPoint, Outlook, public VBA/macro, custom VBA package and controller-owned tools use direct typed owners. `ThisAddIn` active-window/document lookup remains only VSTO pane lifecycle discovery, never execution target fallback, and is part of Windows UI/session qualification. Permanent narrow journal ports and current model-compatibility diagnostics share the canonical authority and are not legacy. R61 11O0–11O7 are complete host-neutral; final post-cutover live-provider/WQ-PACK and real WebView2 evidence remain. R62 is fixed host-neutral but requires the exact Windows WebView model/tool-error retest. R63/R68/R69/R70/R71/R72/R73/R74/R75/R76 are fixed host-neutral. Exact real Excel bind, edited-cell toolbar refresh, WebView rerender, Artifact Library chart preview, run resource-card count, downloaded ECharts export, target-model v5 final/checkpoint behavior, schema 27 final-quality behavior, real VBE duplicate-source rejection and real chat/artifact/tab/startup responsiveness remain open on Windows. R65/R67/R70/R71/R72/R73/R74 are contained in prompt/schema/skill/tool guidance; explicit saved-prompt review/reset and a real complex Excel/VBA → HTML bind run on the target model remain open. R66 passes local Chromium but still requires the exact Windows WebView2 dashboard preview/export retest. R51 remains open for audio, other committed-resource removal and Windows WebView image-gallery/thumbnail/PDF/lifecycle qualification; 11D2 image, 11D3 PDF and their thumbnail/sequence navigation remain complete host-neutral and are not removed. R64 has matching exact-package x86 PDFium/Skia wired, but exact Windows x86 PDF extraction/preview/scanned-page/model-send execution remains open. Production OfficeHosts/VSTO build, actual COM marshal/cleanup, real DocumentSession lifetime, WQ0, WQ-SESSION, WQ-EXCEL, WQ-WORD, WQ-POWERPOINT and WQ-OUTLOOK are open evidence. Full Phase 6 Windows/VBE, Phase 8 WQ-PACK, Phase 9/R45–R48 WebView/restart/multi-window and R28/R29/R32 live-provider/UI gates remain open. R52 Host Fabric, R53 Local Automation, R54 Skill Library, R56 Tool Library, R57 Issue Center and R58 typed-facade risk remain open. Product 16.1.0-dev, no release/tag.
+Next step for tools: finish the unified resource cutover in MASTER order: complete remaining authority/compiler integration, replace HTML/bulk transport (Wave 4), then schema/mapping/derived/catalog integration and cleanup (Wave 5). Only then run final post-cutover Windows rebuild/live-provider/WebView2 qualification, including the accumulated R61–R77 retests. Phase 12 remains blocked.
+Required context: [Resource MASTER](resource-cutover/MASTER.md), its three normative documents in the specified order, [resource owner map](../resource-fabric.md), and the exact owning source contour. Previous WQ evidence remains valid only for unchanged contours.
+Open gates / remaining legacy: the preceding 11T tool-dispatch adapter cleanup is complete; the unified Resource direct-cutover consumer/removal gates below are still OPEN. This is not an assertion that resource/catalog/result legacy is empty. All current Excel, Word, PowerPoint, Outlook, public VBA/macro, custom VBA package and controller-owned tools use direct typed owners. `ThisAddIn` active-window/document lookup remains only VSTO pane lifecycle discovery, never execution target fallback, and is part of Windows UI/session qualification. Permanent narrow journal ports and current model-compatibility diagnostics share the canonical authority and are not legacy. R61 11O0–11O7 are complete host-neutral; final post-cutover live-provider/WQ-PACK and real WebView2 evidence remain. R62 is fixed host-neutral but requires the exact Windows WebView model/tool-error retest. R63/R68/R69/R70/R71/R72/R73/R74/R75/R76 are fixed host-neutral. Exact real Excel bind, edited-cell toolbar refresh, WebView rerender, Artifact Library chart preview, run resource-card count, downloaded ECharts export, target-model v5 final/checkpoint behavior, schema 27 final-quality behavior, real VBE duplicate-source rejection and real chat/artifact/tab/startup responsiveness remain open on Windows. R65/R67/R70/R71/R72/R73/R74 are contained in prompt/schema/skill/tool guidance; explicit saved-prompt review/reset and a real complex Excel/VBA → HTML bind run on the target model remain open. R66 passes local Chromium but still requires the exact Windows WebView2 dashboard preview/export retest. R51 remains open for audio, other committed-resource removal and Windows WebView image-gallery/thumbnail/PDF/lifecycle qualification; 11D2 image, 11D3 PDF and their thumbnail/sequence navigation remain complete host-neutral and are not removed. R64 has matching exact-package x86 PDFium/Skia wired, but exact Windows x86 PDF extraction/preview/scanned-page/model-send execution remains open. Production OfficeHosts/VSTO build, actual COM marshal/cleanup, real DocumentSession lifetime, WQ0, WQ-SESSION, WQ-EXCEL, WQ-WORD, WQ-POWERPOINT and WQ-OUTLOOK are open evidence. Full Phase 6 Windows/VBE, Phase 8 WQ-PACK, Phase 9/R45–R48 WebView/restart/multi-window and R28/R29/R32 live-provider/UI gates remain open. R52 Host Fabric, R53 Local Automation, R54 Skill Library, R56 Tool Library, R57 Issue Center and R58 typed-facade risk remain open. Product 16.1.0-dev, no release/tag.
+
+Unified Resource Architecture work in progress (2026-09-05, explicit user authorization):
+append-only shared authority/revision/view journals and mutation-attempt publication;
+logical document identity independent of locator/runtime; pure evidence reducer and
+one frozen model-context compiler; retained view payloads reuse the existing CAS.
+The per-session VBA hash/refresh dictionaries and callbacks are removed. Accepted
+conversation evidence supplies model observations; editor hashes are explicit guards.
+Verified VBA read-back is captured before authority publication; affected views
+without captured replacement become Unknown, not invented Known revisions. Manual
+package lifecycle operations use the same attempt/commit barrier. Retained historical
+reads do not move current heads. PromptBudgetComposer no longer assembles history;
+protocol repair delegates to the owning frozen compiler. HTML bindings now contain
+resource references only; `RN.resources` uses revision-pinned bounded leases and an
+internal WebView data route. Record views use CAS indexes, published schemas and
+exact mappings; virtual/materialized derived views preserve source dependencies.
+Catalog activation uses committed CAS generations. Built-in/custom skill bodies
+and reference Markdown are exact catalog resources; authoring file drift cannot
+change an active publication. Request-boundary catalog capture freezes tools,
+skills and editable prompt templates together. Manual settings save uses the same
+mutation/commit owner; Inspector preserves the published skill-generation seed.
+Compaction emits structured source-grounded claims after correctness filtering.
+Large accepted-call arguments, activity payloads and persisted in-flight commands
+use the existing CAS.
+Text/Markdown/PDF text, images and PDF page/thumbnail viewers now use the same
+gateway/data plane. Bridge DTOs contain metadata/leases, not text/base64 bodies.
+Lease capacity is checked before capture; cancellation/owner-close invalidates
+in-flight opens. Text leases close per bounded page; media leases close on cache
+eviction, replacement and chat change, including late responses. Cache budgets fit
+the shared lease limit. Bounded/coalesced in-process authority notifications reach
+the UI and authorized RN.resources subscribers. Authority readers catch up journal
+tails, and Known-head publication now requires durable exact revision metadata.
+The canonical owner map and active removal gates are updated in resource-fabric.md
+and MIGRATION_MAP.md.
+Still open: remaining definition/domain read and bulk upload/export consumers,
+controller clear/edit/fork logical mutations, typed user-note/observation separation,
+VBA restore-origin metadata, finer
+Excel coverage/named resources, complete binary/raw view negotiation, bounded
+cold replay/checkpoint/retention optimization, standalone bound HTML export,
+cross-process push qualification, and final cross-document cleanup.
+This is NOT a completed cutover; no Windows gate is closed by these changes.
+Focused checks so far: VBA 98/98 (before latest manual-package/drift integration),
+resources 10/10 (earlier), resource cutover 13/13 including publication and lease
+cancellation/capacity, kernel replay 10/10, Inspector 3/3, artifact viewer 3/3,
+skill-reference publication/continuation 1/1, bounded bridge notifications 1/1,
+typed artifact-viewer bridge 1/1; compaction 4/4 (earlier) and package journal 1/1
+(earlier). Web checks: artifact viewer 10/10, media gallery 2/2, resource data plane,
+HTML ECharts 7/7, HTML export contract 7/7 and chat sync 4/4. The export contract
+check verifies explicit missing-host failure, NOT functional offline bound export.
+These are focused host-neutral checks, not end-to-end qualification. The integrated
+work is checkpointed by an explicit user-requested commit; no Office/VSTO/Windows
+validation, release or tag. Implementation continues in the same cutover workstream.
 
 R77 VBA write-integrity correction (2026-09-04, user-reported host-neutral):
 complete model-visible source observation is separated from runtime guard/read-back.

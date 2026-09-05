@@ -46,7 +46,7 @@ namespace RNAssistant.Office.Tools
                             context.Arguments,
                             context.MarkDispatchPossible,
                             cancellationToken);
-                    });
+                    }, terminalOutcome => context.Complete(Result(terminalOutcome)), context.CompleteFailure);
                 return Task.FromResult(Result(outcome));
             }
             catch (OfficeDocumentGuardException ex) when (!context.MayHaveDispatched)

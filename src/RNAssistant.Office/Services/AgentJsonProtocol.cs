@@ -95,6 +95,9 @@ namespace RNAssistant.Office.Services
                 ToolName = command.ToolId,
                 ToolResultRole = normalizedRole,
                 ToolResultProtocolVersion = ToolResultWire.CurrentVersion,
+                ResourceEvidence = new List<ResourceEvidence>(result.ResourceEvidence ?? new ResourceEvidence[0]),
+                ResourceEffect = result.ResourceEffect,
+                AuthorityCommitId = result.AuthorityCommitId,
                 Content = native ? resultJson : "TOOL_RESULT:\n" + resultJson,
                 ProtocolMessage = true
             };

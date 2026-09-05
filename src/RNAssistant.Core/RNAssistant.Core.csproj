@@ -83,6 +83,13 @@
     <Compile Include="Models\AppSettings.cs" />
     <Compile Include="Models\ArtifactModels.cs" />
     <Compile Include="Models\ResourceModels.cs" />
+    <Compile Include="Models\ResourceArchitectureModels.cs" />
+    <Compile Include="Models\ResourceDefinitionModels.cs" />
+    <Compile Include="Models\ResourceAuthorityModels.cs" />
+    <Compile Include="Models\ResourceEvidenceModels.cs" />
+    <Compile Include="Models\ModelContextModels.cs" />
+    <Compile Include="Services\EvidenceStateReducer.cs" />
+    <Compile Include="Services\ResourceSchemaValidator.cs" />
     <Compile Include="Models\AgentResponseModels.cs" />
     <Compile Include="Models\ChatModels.cs" />
     <Compile Include="Models\RunViewState.cs" />
@@ -105,6 +112,7 @@
     <Compile Include="Tools\ToolPackSnapshot.cs" />
     <Compile Include="Tools\ToolExecutionEvidence.cs" />
     <Compile Include="Tools\ToolHandlerContracts.cs" />
+    <Compile Include="Tools\ToolMutationObserver.cs" />
     <Compile Include="Tools\Contracts\ToolResult.cs" />
     <Compile Include="Tools\IToolRuntime.cs" />
     <Compile Include="Persistence\IRunStore.cs" />
@@ -174,6 +182,11 @@
     <Compile Include="Storage\ChatStore.SessionProjection.cs" />
     <Compile Include="Storage\ChatStore.TraceLifecycle.cs" />
     <Compile Include="Storage\ChatBlobStore.cs" />
+    <Compile Include="Storage\ResourceAuthorityStore.cs" />
+    <Compile Include="Storage\AcceptedCallPayloadService.cs" />
+    <Compile Include="Storage\RuntimePayloadService.cs" />
+    <Compile Include="Storage\DocumentAuthorityRegistry.cs" />
+    <Compile Include="Storage\ResourceMutationJournal.cs" />
     <Compile Include="Storage\CasMaintenanceService.cs" />
     <Compile Include="Storage\DisposablePair.cs" />
     <Compile Include="Storage\EventProtectionSupport.cs" />

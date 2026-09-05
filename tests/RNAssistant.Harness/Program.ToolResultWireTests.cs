@@ -85,8 +85,7 @@ namespace RNAssistant.Harness
             var source = new ResourceRef(WireResultUri, "0007");
             var unversioned = new ResourceRef("rna://future-provider/opaque/Item%201");
             var result = TerminalResult.Ok("bounded", "{\"truncated\":true}", new[] { source, unversioned, source });
-            source.Uri = "rna://chat/changed";
-            source.Revision = "changed";
+            source = new ResourceRef("rna://chat/changed", "changed");
             var resultRef = new ResourceRef(WireResultUri, "0007");
             var wire = ToolResultWire.Write("call_resources", "test.read", result, resultRef);
             var resources = (JArray)WireJson(wire)["resources"];
@@ -100,9 +99,9 @@ namespace RNAssistant.Harness
             AssertTrue(parsed.Success, "resource-bearing result reads");
             AssertEqual(WireResultUri, parsed.ResultResource.Uri, "result relation returns the exact reference");
             AssertEqual("0007", parsed.ResultResource.Revision, "result relation retains revision");
-            parsed.ResultResource.Uri = "rna://chat/changed";
-            parsed.Result.Resources[0].Revision = "changed";
-            resultRef.Uri = "rna://chat/changed";
+            AssertEqual(null, typeof(ResourceRef).GetProperty("Uri").GetSetMethod(false), "URI has no mutable public setter");
+            AssertEqual(null, typeof(ResourceRef).GetProperty("Revision").GetSetMethod(false), "revision has no mutable public setter");
+            resultRef = new ResourceRef("rna://chat/changed");
             AssertEqual(wire, ToolResultWire.Write(parsed.ToolCallId, parsed.Name, parsed.Result, parsed.ResultResource),
                 "read result and resource snapshots are immutable");
             var empty = WireEnvelope();

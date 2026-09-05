@@ -174,6 +174,11 @@ namespace RNAssistant.Office.Vba
 
     internal sealed class VbaMutationCorrelation
     {
+        public string DocumentAuthorityId { get; set; }
+        public RNAssistant.Core.Models.ResourceAuthoritySnapshotSet Authority { get; set; }
+        public IReadOnlyList<RNAssistant.Core.Models.ResourceEvidence> Evidence { get; set; }
+        public string ExpectedContentSha256 { get; set; }
+        public Action<string> ObserveExternalDrift { get; set; }
         public string SessionId { get; set; }
         public string RunId { get; set; }
         public string TurnId { get; set; }

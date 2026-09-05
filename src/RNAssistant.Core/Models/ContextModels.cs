@@ -29,6 +29,7 @@ namespace RNAssistant.Core.Models
         public string Text { get; set; }
         public string Preview { get; set; }
         public string DetailsJson { get; set; }
+        public ResourceEvidence Evidence { get; set; }
         public DateTime CreatedUtc { get; set; }
 
         public ContextNote()

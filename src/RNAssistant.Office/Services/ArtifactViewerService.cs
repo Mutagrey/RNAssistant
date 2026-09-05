@@ -114,7 +114,7 @@ namespace RNAssistant.Office.Services
                 MimeType = mimeType,
                 ContentSha256 = attachment.ContentSha256,
                 ByteLength = bytes.LongLength,
-                Base64Content = Convert.ToBase64String(bytes)
+                Bytes = bytes
             };
         }
 
@@ -158,11 +158,12 @@ namespace RNAssistant.Office.Services
                 ImageMimeType = "image/jpeg",
                 ImageContentSha256 = Sha256(rendered.Bytes),
                 ImageByteLength = rendered.Bytes.LongLength,
-                ImageBase64Content = Convert.ToBase64String(rendered.Bytes)
+                Bytes = rendered.Bytes
             };
         }
 
-        public ArtifactViewerPageDto ReadPage(ChatSession session, string resourceUri, string cursor)
+        public ArtifactViewerPageDto ReadPage(ChatSession session, string resourceUri, string cursor,
+            ResourceDataPlaneService dataPlane, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken))
         {
             var artifact = ResolveExactArtifact(session, resourceUri);
             var revision = Math.Max(1, artifact.Revision);
@@ -174,15 +175,18 @@ namespace RNAssistant.Office.Services
             {
                 exactPdfAttachment = _pdfViewer.ValidateTextRead(session, artifact, descriptor);
             }
-            var request = new ResourceReadRequest
-            {
-                Reference = new ResourceRef(resourceUri, revision.ToString(CultureInfo.InvariantCulture)),
-                Representation = ResourceRepresentations.Text,
-                Cursor = cursor,
-                MaxChars = PageCharacters
-            };
-            var selection = _gateway.Read(session, request);
-            var result = selection == null ? null : selection.Result;
+            ArtifactViewerPageDto metadata = null;
+            var data = dataPlane.Open(session, "viewer",
+                new ResourceRef(resourceUri, revision.ToString(CultureInfo.InvariantCulture)), ResourceRepresentations.Text,
+                cancellationToken: cancellationToken, initialCursor: cursor,
+                validate: result => { metadata = ValidatePage(session, resourceUri, descriptor, artifact, viewerKind, exactPdfAttachment, result); });
+            metadata.Data = data;
+            return metadata;
+        }
+
+        private static ArtifactViewerPageDto ValidatePage(ChatSession session, string resourceUri, ResourceDescriptor descriptor,
+            ChatArtifact artifact, string viewerKind, ChatAttachment exactPdfAttachment, ResourceReadResult result)
+        {
             if (result == null || !result.RawContentIncluded || result.Resource == null ||
                 result.Resource.Reference == null ||
                 !string.Equals(result.Resource.Reference.Uri, resourceUri, StringComparison.Ordinal))
@@ -228,7 +232,6 @@ namespace RNAssistant.Office.Services
                 Title = descriptor.Title ?? artifact.Title ?? string.Empty,
                 MimeType = descriptor.MimeType ?? artifact.MimeType ?? "text/plain",
                 ContentSha256 = result.ContentSha256,
-                Text = text,
                 Offset = offset,
                 ReturnedCharacters = text.Length,
                 TotalCharacters = result.TotalCharacters,

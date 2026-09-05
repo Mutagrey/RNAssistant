@@ -10,23 +10,44 @@ namespace RNAssistant.Core.Models
         public const string Structure = "structure";
         public const string Media = "media";
         public const string Source = "source";
+        public const string Image = "image";
+        public const string Thumbnail = "thumbnail";
+        public const string RenderPage = "render-page";
+        public const string PageThumbnail = "page-thumbnail";
     }
 
     public sealed class ResourceRef
     {
         [Newtonsoft.Json.JsonProperty("uri")]
-        public string Uri { get; set; }
+        public string Uri { get; private set; }
         [Newtonsoft.Json.JsonProperty("revision")]
-        public string Revision { get; set; }
+        public string Revision { get; private set; }
 
-        public ResourceRef()
+        [Newtonsoft.Json.JsonIgnore]
+        public string RevisionId
         {
+            get { return Revision; }
         }
 
+        [Newtonsoft.Json.JsonIgnore]
+        public ResourceIdentity Identity
+        {
+            get { return string.IsNullOrWhiteSpace(Uri) ? null : new ResourceIdentity(Uri); }
+        }
+
+        [Newtonsoft.Json.JsonIgnore]
+        public bool IsExact { get { return !string.IsNullOrWhiteSpace(Uri) && !string.IsNullOrWhiteSpace(Revision); } }
+
+        [Newtonsoft.Json.JsonConstructor]
         public ResourceRef(string uri, string revision = null)
         {
             Uri = uri;
             Revision = revision;
+        }
+
+        public ResourceRef Copy()
+        {
+            return new ResourceRef(Uri, Revision);
         }
     }
 
@@ -50,6 +71,20 @@ namespace RNAssistant.Core.Models
         public DateTime? CreatedUtc { get; set; }
         [Newtonsoft.Json.JsonProperty("contentSha256")]
         public string ContentSha256 { get; set; }
+        [Newtonsoft.Json.JsonProperty("payload", NullValueHandling = Newtonsoft.Json.NullValueHandling.Ignore)]
+        public PayloadRef Payload { get; set; }
+        [Newtonsoft.Json.JsonProperty("coverage", NullValueHandling = Newtonsoft.Json.NullValueHandling.Ignore)]
+        public ResourceCoverage Coverage { get; set; }
+        [Newtonsoft.Json.JsonProperty("capabilities")]
+        public List<string> Capabilities { get; set; }
+        [Newtonsoft.Json.JsonProperty("viewCapabilities")]
+        public List<ResourceViewCapability> ViewCapabilities { get; set; }
+        [Newtonsoft.Json.JsonProperty("tracking")]
+        public string Tracking { get; set; }
+        [Newtonsoft.Json.JsonProperty("schema", NullValueHandling = Newtonsoft.Json.NullValueHandling.Ignore)]
+        public ResourceRef Schema { get; set; }
+        [Newtonsoft.Json.JsonProperty("dependencies")]
+        public List<ResourceDependency> Dependencies { get; set; }
         [Newtonsoft.Json.JsonProperty("sourceMessageId")]
         public string SourceMessageId { get; set; }
         [Newtonsoft.Json.JsonProperty("parent")]
@@ -66,6 +101,9 @@ namespace RNAssistant.Core.Models
             Representations = new List<string>();
             Related = new List<ResourceRef>();
             Metadata = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+            Capabilities = new List<string>();
+            ViewCapabilities = new List<ResourceViewCapability>();
+            Dependencies = new List<ResourceDependency>();
         }
     }
 
@@ -83,18 +121,41 @@ namespace RNAssistant.Core.Models
         public string Cursor { get; set; }
         [Newtonsoft.Json.JsonProperty("maxChars")]
         public int MaxChars { get; set; }
+        [Newtonsoft.Json.JsonProperty("maxRows")]
+        public int MaxRows { get; set; }
+        [Newtonsoft.Json.JsonProperty("path")]
+        public string ViewPath { get; set; }
+        [Newtonsoft.Json.JsonProperty("fields")]
+        public List<string> Fields { get; set; }
+        [Newtonsoft.Json.JsonProperty("rowOffset")]
+        public int RowOffset { get; set; }
     }
 
     public sealed class ResourceReadResult
     {
+        [Newtonsoft.Json.JsonIgnore]
+        public long? AuthorityGeneration { get; set; }
+        // Provider read-back ownership only, never proof of consumer observation.
+        [Newtonsoft.Json.JsonIgnore]
+        public PayloadRef CompleteViewPayload { get; set; }
         [Newtonsoft.Json.JsonProperty("resource")]
         public ResourceDescriptor Resource { get; set; }
         [Newtonsoft.Json.JsonProperty("representation")]
         public string Representation { get; set; }
         [Newtonsoft.Json.JsonProperty("text")]
         public string Text { get; set; }
+        [Newtonsoft.Json.JsonProperty("table", NullValueHandling = Newtonsoft.Json.NullValueHandling.Ignore)]
+        public ResourceTableBatch Table { get; set; }
+        [Newtonsoft.Json.JsonProperty("binary", NullValueHandling = Newtonsoft.Json.NullValueHandling.Ignore)]
+        public ResourceBinaryView Binary { get; set; }
         [Newtonsoft.Json.JsonProperty("contentSha256")]
         public string ContentSha256 { get; set; }
+        [Newtonsoft.Json.JsonProperty("payload", NullValueHandling = Newtonsoft.Json.NullValueHandling.Ignore)]
+        public PayloadRef Payload { get; set; }
+        [Newtonsoft.Json.JsonProperty("coverage", NullValueHandling = Newtonsoft.Json.NullValueHandling.Ignore)]
+        public ResourceCoverage Coverage { get; set; }
+        [Newtonsoft.Json.JsonProperty("leaseId", NullValueHandling = Newtonsoft.Json.NullValueHandling.Ignore)]
+        public string LeaseId { get; set; }
         [Newtonsoft.Json.JsonIgnore]
         public int Offset { get; set; }
         [Newtonsoft.Json.JsonProperty("returnedCharacters")]
@@ -118,6 +179,29 @@ namespace RNAssistant.Core.Models
         {
             Related = new List<ResourceRef>();
         }
+    }
+
+    public sealed class ResourceBinaryView
+    {
+        [Newtonsoft.Json.JsonProperty("payload")] public PayloadRef Payload { get; set; }
+        [Newtonsoft.Json.JsonProperty("width")] public int Width { get; set; }
+        [Newtonsoft.Json.JsonProperty("height")] public int Height { get; set; }
+        [Newtonsoft.Json.JsonProperty("pageIndex")] public int? PageIndex { get; set; }
+        [Newtonsoft.Json.JsonProperty("pageCount")] public int? PageCount { get; set; }
+    }
+
+    public sealed class ResourceTableColumn
+    {
+        [Newtonsoft.Json.JsonProperty("key")] public string Key { get; set; }
+        [Newtonsoft.Json.JsonProperty("label")] public string Label { get; set; }
+        [Newtonsoft.Json.JsonProperty("type")] public string Type { get; set; }
+    }
+
+    public sealed class ResourceTableBatch
+    {
+        [Newtonsoft.Json.JsonProperty("columns")] public IReadOnlyList<ResourceTableColumn> Columns { get; set; }
+        [Newtonsoft.Json.JsonProperty("rows")] public IReadOnlyList<IDictionary<string, object>> Rows { get; set; }
+        [Newtonsoft.Json.JsonProperty("totalRows")] public int TotalRows { get; set; }
     }
 
     public sealed class ResourceListPage
@@ -154,6 +238,8 @@ namespace RNAssistant.Core.Models
 
     public sealed class ResourceSearchMatch
     {
+        [Newtonsoft.Json.JsonIgnore]
+        public IReadOnlyList<ResourceEvidence> Evidence { get; set; }
         [Newtonsoft.Json.JsonProperty("reference")]
         public ResourceRef Reference { get; set; }
         [Newtonsoft.Json.JsonProperty("kind")]

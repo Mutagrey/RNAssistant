@@ -88,7 +88,7 @@ namespace RNAssistant.Harness
                     CustomTool("Word", "word.hidden")
                 });
                 var executor = new OfficeToolExecutor(adapter, new VbaJournalStore(paths), new SkillStore(paths));
-                var catalog = new ToolCatalogService(adapter, executor, toolStore).GetVisibleTools();
+                var catalog = new ToolCatalogService(adapter, executor).GetVisibleTools();
 
                 AssertTrue(HasTool(catalog, "excel.add_sheet"), "built-in tool visible");
                 AssertTrue(HasTool(catalog, "common.vba_apply_patch"), "common controller VBA tool visible");
@@ -187,7 +187,7 @@ namespace RNAssistant.Harness
                 store.SaveOne(shadow);
                 var executor = new OfficeToolExecutor(adapter, new VbaJournalStore(paths), new SkillStore(paths), store);
 
-                var catalogTool = FindTool(new ToolCatalogService(adapter, executor, store).GetVisibleTools(), shadow.Id);
+                var catalogTool = FindTool(new ToolCatalogService(adapter, executor).GetVisibleTools(), shadow.Id);
                 AssertTrue(catalogTool != null && catalogTool.BuiltIn, "catalog keeps built-in definition");
                 var command = new ToolInvocation { ToolId = shadow.Id };
                 command.Arguments["name"] = "Protected";
@@ -376,7 +376,7 @@ namespace RNAssistant.Harness
             {
                 var tools = new List<ToolCatalogEntry>(OfficeToolCatalog.ForHost(fake.HostName));
                 tools.AddRange(executor.GetControllerTools());
-                var prompt = FlattenMessages(new ConversationPromptComposer().BuildMessages(
+                var prompt = FlattenMessages(new ModelContextCompiler().BuildPreview(
                     ChatModes.Agent,
                     "Test request",
                     fake,
@@ -1515,24 +1515,27 @@ namespace RNAssistant.Harness
                 var adapter = FakeOfficeAdapter.ForHost("Excel");
                 var executor = new OfficeToolExecutor(adapter, new VbaJournalStore(paths), store, new ToolStore(paths));
                 var tools = OfficeToolCatalog.ForHost(adapter.HostName).Concat(executor.GetControllerTools()).ToList();
-                var runtimeSkills = new[] { stored };
+                var runtimeSkills = executor.CaptureSkills().Skills;
                 var main = executor.ExecuteManual(
                     Command("common.capabilities_read", "id", stored.Id), tools, new AppSettings(), false, false,
-                    new ChatSession(), 40, runtimeSkills, CancellationToken.None);
+                    NewSession(adapter), 40, runtimeSkills, CancellationToken.None);
+                AssertTrue(main.Success, "published skill body read: " + main.ErrorCode + " " + main.Message + " " + main.DataJson);
                 var mainData = JObject.Parse(main.DataJson);
                 AssertEqual(true, (bool)mainData["loaded"], "complete core read declares loaded state");
                 AssertEqual("references/details.md", (string)mainData.SelectToken("references[0].path"),
                     "core read lists references without their bodies");
 
-                var readSession = new ChatSession();
+                var readSession = NewSession(adapter);
                 var firstCommand = Command("common.capabilities_read",
                     "id", stored.Id,
                     "referencePath", "references/details.md");
                 firstCommand.ToolCallId = "skill_reference_first";
-                var first = executor.ExecuteManual(
-                    firstCommand,
-                    tools, new AppSettings(), false, false, readSession, 40, runtimeSkills, CancellationToken.None);
-                var firstData = JObject.Parse(first.DataJson);
+                var runtime = executor.CreateNativeRuntime(readSession,
+                    ToolPackSnapshotFactory.Capture("agent", adapter.HostName, tools), new AppSettings(), "agent",
+                    false, discoveryCatalog: tools, skillCatalog: runtimeSkills);
+                var first = ExecuteHtmlNative(runtime, firstCommand.ToolId, JObject.FromObject(firstCommand.Arguments));
+                AssertEqual(ToolExecutionOutcome.Ok, first.Outcome, "published reference read succeeds");
+                var firstData = JObject.Parse(first.Result.DataJson);
                 AssertEqual("reference", (string)firstData["kind"], "reference result kind");
                 AssertEqual(24000, (int)firstData["returnedChars"], "reference chunk uses the runtime bound");
                 AssertEqual(false, (bool)firstData["complete"], "first reference chunk is incomplete");
@@ -1540,12 +1543,9 @@ namespace RNAssistant.Harness
                 AssertTrue(firstData["offset"] == null && firstData["nextOffset"] == null,
                     "reference result exposes no caller-owned offset");
                 AssertTrue(firstData["loaded"] == null, "reference chunk does not load the core skill");
-                readSession.Messages.Add(AgentJsonProtocol.CreateToolResultMessage(
-                    firstCommand,
-                    RNAssistant.Core.Tools.Contracts.ToolResult.Ok(
-                        first.Message,
-                        first.DataJson,
-                        first.ModelResourceRefs)));
+                var firstMessage = AgentJsonProtocol.CreateToolResultMessage(firstCommand, first.Result);
+                firstMessage.ResourceEvidence = first.ResourceEvidence.ToList();
+                readSession.Messages.Add(firstMessage);
 
                 var rest = executor.ExecuteManual(
                     Command("common.capabilities_read", "id", stored.Id,
@@ -1558,15 +1558,32 @@ namespace RNAssistant.Harness
 
                 var traversal = executor.ExecuteManual(
                     Command("common.capabilities_read", "id", stored.Id, "referencePath", "references/../secret.md"),
-                    tools, new AppSettings(), false, false, new ChatSession(), 40, runtimeSkills, CancellationToken.None);
+                    tools, new AppSettings(), false, false, NewSession(adapter), 40, runtimeSkills, CancellationToken.None);
                 AssertTrue(!traversal.Success, "reference traversal is rejected");
 
                 var referencePath = Path.Combine(stored.StoragePath, "references", "details.md");
                 File.WriteAllText(referencePath, "# Details\n\nChanged");
-                var stale = executor.ExecuteManual(
+                var retained = executor.ExecuteManual(
                     Command("common.capabilities_read", "id", stored.Id, "referencePath", "references/details.md"),
-                    tools, new AppSettings(), false, false, new ChatSession(), 40, runtimeSkills, CancellationToken.None);
-                AssertEqual("skill_reference_changed", stale.ErrorCode, "stale reference snapshot is rejected");
+                    tools, new AppSettings(), false, false, NewSession(adapter), 40, runtimeSkills, CancellationToken.None);
+                AssertTrue(retained.Success, "authoring disk changes cannot alter an active publication");
+                AssertEqual(referenceContent.Substring(0, 24000), (string)JObject.Parse(retained.DataJson)["content"],
+                    "published reference remains exact CAS content after disk drift");
+                var frozenReference = first.ResourceEvidence.Single();
+                stored = store.Load().Single(item => item.Id == "common.reference_test");
+                var published = executor.ExecuteSkillLibraryReferenceMutation("upsert", stored.Id,
+                    "references/details.md", "# Explicit publication v2", SkillRevision.Compute(stored));
+                AssertEqual(SkillAuthoringEffect.VerifiedChange, published.Outcome.Effect, "explicit reference publication verifies");
+                AssertEqual(EvidenceState.Superseded, new EvidenceStateReducer().Reduce(frozenReference,
+                    executor.ResourceAuthority.CaptureMany(new[] { CatalogPublicationService.ScopeId })).State,
+                    "reference freshness follows its exact catalog publication dependency");
+                var historical = executor.ResourceGateway.Read(readSession, new ResourceReadRequest {
+                    Reference = frozenReference.Resource, Representation = "text", MaxChars = 32000 }).Result;
+                AssertEqual(referenceContent, historical.Text, "old reference remains readable after new publication");
+                var stale = executor.ExecuteManual(
+                    Command("common.capabilities_read", "id", stored.Id, "referencePath", "references/details.md", "action", "next"),
+                    tools, new AppSettings(), false, false, readSession, 40, executor.CaptureSkills().Skills, CancellationToken.None);
+                AssertEqual("skill_reference_changed", stale.ErrorCode, "continuation never mixes publication revisions");
 
                 stored = store.Load().Single(item => item.Id == "common.reference_test");
                 string deleteError;

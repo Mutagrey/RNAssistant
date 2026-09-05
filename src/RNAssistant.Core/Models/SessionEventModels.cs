@@ -60,7 +60,7 @@ namespace RNAssistant.Core.Models
 
     public sealed class SessionEvent
     {
-        public const int CurrentSchemaVersion = 3;
+        public const int CurrentSchemaVersion = 4;
 
         public int SchemaVersion { get; set; }
         public string SessionId { get; set; }

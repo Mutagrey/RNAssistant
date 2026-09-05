@@ -61,7 +61,7 @@ namespace RNAssistant.Office.Tools
                     {
                         return _executor.PrepareNativeTool(
                             _toolId, context.Arguments, context.Execution,
-                            _session == null ? string.Empty : _session.Id,
+                            _session,
                             cancellationToken);
                     });
                 if (preparation == null || preparation.Outcome == null)
@@ -88,27 +88,21 @@ namespace RNAssistant.Office.Tools
         {
             try
             {
+                ToolHandlerResult terminal = null;
                 var outcome = _runtime.ExecuteDocumentMutation(
                     Target(_session), cancellationToken, delegate
                     {
                         return _executor.ExecuteNativeTool(
                             _toolId, context.Arguments, context.Execution,
-                            _session == null ? string.Empty : _session.Id,
+                            _session,
                             context.PreparedStateJson,
                             context.MarkDispatchPossible, cancellationToken);
-                    });
-                if (outcome == null)
-                    throw new InvalidOperationException(
-                        "VBA execution returned no outcome.");
-                if (string.Equals(_toolId, VbaToolCatalog.RunMacro,
-                    StringComparison.Ordinal) && context.MayHaveDispatched)
-                {
-                    return Task.FromResult(new ToolHandlerResult(
-                        RuntimeResult.Unknown(outcome.Message, outcome.DataJson),
-                        ToolEffectEvidence.Unknown));
-                }
-                return Task.FromResult(new ToolHandlerResult(
-                    Result(outcome), Effect(outcome, context.MayHaveDispatched)));
+                    }, terminalOutcome =>
+                    {
+                        terminal = ProjectOutcome(terminalOutcome, context);
+                        context.Complete(terminal);
+                    }, context.CompleteFailure);
+                return Task.FromResult(terminal);
             }
             catch (OfficeDocumentGuardException ex)
                 when (!context.MayHaveDispatched)
@@ -123,6 +117,16 @@ namespace RNAssistant.Office.Tools
                         "tool_mutation_lock_unavailable",
                     ex.Retryable);
             }
+        }
+
+        private ToolHandlerResult ProjectOutcome(VbaNativeOutcome outcome, ToolHandlerContext context)
+        {
+            if (outcome == null) throw new InvalidOperationException("VBA execution returned no outcome.");
+            if (string.Equals(_toolId, VbaToolCatalog.RunMacro, StringComparison.Ordinal) && context.MayHaveDispatched)
+                return new ToolHandlerResult(RuntimeResult.Unknown(outcome.Message, outcome.DataJson), ToolEffectEvidence.Unknown);
+            return new ToolHandlerResult(Result(outcome), Effect(outcome, context.MayHaveDispatched),
+                resourceReadBack: outcome.Status == VbaNativeOutcomeStatus.Ok && context.MayHaveDispatched
+                    ? _executor.CaptureMutationReadBack(_session, context.PreparedStateJson) : null);
         }
 
         private static RuntimeResult Result(VbaNativeOutcome outcome)

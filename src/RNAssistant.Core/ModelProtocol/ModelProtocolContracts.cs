@@ -23,6 +23,8 @@ namespace RNAssistant.Core.ModelProtocol
     {
         public AppSettings Settings { get; set; }
         public IReadOnlyList<ChatMessage> AcceptedMessages { get; set; }
+        public ModelContextSnapshot ContextSnapshot { get; set; }
+        public Func<ChatMessage, IReadOnlyList<ChatMessage>> CompileRepair { get; set; }
         public IReadOnlyList<ToolCatalogEntry> CallableTools { get; set; }
         public IReadOnlyList<ToolCatalogEntry> RunnableCatalog { get; set; }
         // Required before raw dispatch, supplied by local execution authority.

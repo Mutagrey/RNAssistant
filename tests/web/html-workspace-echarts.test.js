@@ -60,13 +60,12 @@ const documentChart = context.RNAssistantHtmlWorkspacePreview.build({
     },
     {
       id: "dashboard.js", path: "dashboard.js", kind: "script",
-      content: "var table=RNAssistant.data.get('sales'); window.__workspaceScriptRan={version:echarts.version,value:table.rows[0].amount,columns:table.columns.length};"
+      content: "window.__workspaceScriptRan={version:echarts.version,name:RN.resources.names()[0]};"
     }
   ],
   dataSources: [{
     id: "sales", name: "sales",
-    json: "{\"schema\":\"rnassistant.table.v1\",\"source\":{\"sheet\":\"Data\"},\"columns\":[{\"key\":\"amount\",\"label\":\"Amount\",\"type\":\"number\"}],\"rows\":[{\"amount\":42}],\"rowCount\":1}",
-    binding: { status: "ready", transform: "table", payloadCompleteness: "complete" }
+    binding: { resource: { uri: "rna://test/data", revision: "r1" }, policy: "exact", view: "table" }
   }],
   hostBridge: false
 });
@@ -76,34 +75,34 @@ const bodyClose = documentChart.toLowerCase().lastIndexOf("</body>");
 assert.ok(vendorClose >= 0 && vendorClose < workspaceOpen && workspaceOpen < bodyClose,
   "workspace scripts follow the complete vendor script and precede the actual body close");
 const documentScripts = Array.from(documentChart.matchAll(/<script(?:\s[^>]*)?>([\s\S]*?)<\/script>/gi), match => match[1]);
-const documentRuntime = vm.createContext({ Deno: {} });
+const documentRuntime = vm.createContext({ Deno: {}, addEventListener() {} });
 documentRuntime.window = documentRuntime;
 for (const source of documentScripts) vm.runInContext(source, documentRuntime, { timeout: 5000 });
 assert.equal(documentRuntime.echarts.version, "5.6.0");
 assert.deepEqual(JSON.parse(JSON.stringify(documentRuntime.__workspaceScriptRan)),
-  { version: "5.6.0", value: 42, columns: 1 });
+  { version: "5.6.0", name: "sales" });
 assert.doesNotMatch(documentChart, /rnassistant-html-fetch/);
-console.log("PASS HTML ECharts: standalone assembly executes the local runtime and bound table before workspace code");
+console.log("PASS HTML ECharts: assembly installs the local runtime and resource API before workspace code");
 
 const fallbackChart = context.RNAssistantHtmlWorkspacePreview.build({
   activeFileId: "dashboard.html",
   files: [
     { id: "dashboard.html", path: "dashboard.html", kind: "html", content: "<main></main>" },
-    { id: "dashboard.js", path: "dashboard.js", kind: "script", content: "var table=RNAssistant.data.get('demoSalesData'); window.__fallbackData={name:RNAssistant.data.defaultName(),value:table.rows[0].Sales};" }
+    { id: "dashboard.js", path: "dashboard.js", kind: "script", content: "window.__knownNames=RN.resources.names();" }
   ],
   dataSources: [{
     id: "sales", name: "sales",
-    json: "{\"schema\":\"rnassistant.table.v1\",\"columns\":[{\"key\":\"sales\",\"label\":\"Sales\",\"type\":\"number\"}],\"rows\":[{\"sales\":120,\"Sales\":120}],\"rowCount\":1}"
+    binding: { resource: { uri: "rna://test/data", revision: "r1" }, policy: "exact", view: "table" }
   }],
   hostBridge: false
 });
-const fallbackRuntime = vm.createContext({ Deno: {}, console: { warn(message) { this.last = message; } } });
+const fallbackRuntime = vm.createContext({ Deno: {}, addEventListener() {} });
 fallbackRuntime.window = fallbackRuntime;
 Array.from(fallbackChart.matchAll(/<script(?:\s[^>]*)?>([\s\S]*?)<\/script>/gi), match => match[1])
   .forEach(source => vm.runInContext(source, fallbackRuntime, { timeout: 5000 }));
-assert.deepEqual(JSON.parse(JSON.stringify(fallbackRuntime.__fallbackData)), { name: "sales", value: 120 });
-assert.match(fallbackRuntime.console.last, /missing data source/);
-console.log("PASS HTML ECharts: a single bound data source survives a stale generated data name");
+assert.deepEqual(Array.from(fallbackRuntime.__knownNames), ["sales"]);
+assert.equal(fallbackRuntime.RNAssistantData, undefined);
+console.log("PASS HTML ECharts: only exact binding names are exposed, without data-name fallback");
 
 const missingRuntime = vm.createContext({});
 missingRuntime.window = missingRuntime;

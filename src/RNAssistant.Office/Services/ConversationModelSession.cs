@@ -10,6 +10,7 @@ using RNAssistant.Core.Llm;
 using RNAssistant.Core.ModelProtocol;
 using RNAssistant.Core.Models;
 using RNAssistant.Core.Persistence;
+using RNAssistant.Core.Storage;
 using RNAssistant.Office.Tools;
 
 namespace RNAssistant.Office.Services
@@ -19,7 +20,6 @@ namespace RNAssistant.Office.Services
     internal sealed class ConversationModelSession : IDisposable
     {
         private readonly IOfficeApplicationAdapter _adapter;
-        private readonly ConversationPromptComposer _promptComposer = new ConversationPromptComposer();
         private readonly ContextCompactionService _contextCompactionService;
         private readonly AttachmentAnalysisService _attachmentAnalysisService;
         private readonly ToolPackAdmissionJournal _toolPackJournal;
@@ -29,8 +29,18 @@ namespace RNAssistant.Office.Services
         private AppSettings _settings;
         private IReadOnlyList<ToolCatalogEntry> _runnableCatalog;
         private IReadOnlyList<SkillDefinition> _skills;
+        private SkillCatalogSnapshot _skillSnapshot;
         private Action<string, string, ChatActivity> _progress;
-        private List<ChatMessage> _messages;
+        private ModelContextCompiler _compiler;
+        private ResourceAuthorityService _authority;
+        private ChatBlobStore _payloads;
+        private ModelContextSnapshot _lastSnapshot;
+        private ModelAuthoritySnapshot _currentAuthority;
+        private DocumentContext _context;
+        private IReadOnlyList<ChatAttachment> _currentAttachments;
+        private string _currentUserId;
+        private ChatMessage _packState;
+        private List<ResourceEvidence> _responseEvidence = new List<ResourceEvidence>();
         private CallableToolPack _toolPack;
         private LlmRunCache _runCache;
 
@@ -59,7 +69,9 @@ namespace RNAssistant.Office.Services
             IReadOnlyList<ChatAttachment> attachments,
             bool replayCurrentUserInHistory,
             Action<string, string, ChatActivity> progress,
-            CancellationToken cancellationToken)
+            CancellationToken cancellationToken,
+            ResourceAuthorityService authority = null, ChatBlobStore payloads = null,
+            Func<SkillCatalogSnapshot> captureSkills = null)
         {
             var owner = new ConversationModelSession(adapter, contextCompactionService, attachmentAnalysisService,
                 eventStore, session)
@@ -72,6 +84,10 @@ namespace RNAssistant.Office.Services
                 _skills = skills ?? new SkillDefinition[0],
                 _progress = progress
             };
+            owner._authority = authority;
+            owner._payloads = payloads;
+            owner._skillSnapshot = captureSkills == null ? new SkillCatalogSnapshot(skills) : captureSkills();
+            owner._compiler = new ModelContextCompiler(payloads);
             await owner.BuildMessagesAsync(mode, text, session, context, settings, runnableCatalog,
                 skills, attachments, replayCurrentUserInHistory, progress, cancellationToken).ConfigureAwait(false);
             owner._runCache = new LlmRunCache();
@@ -81,12 +97,21 @@ namespace RNAssistant.Office.Services
         internal ModelProtocolRequest CreateRequest(string stepId, ModelProtocolCallContext callContext)
         {
             var activeTools = _toolPack.Tools;
+            _lastSnapshot = CompileCurrent(true);
+            var snapshot = _lastSnapshot;
+            _session.LastContextReceipt = snapshot.Receipt;
+            _responseEvidence = snapshot.Messages.SelectMany(item => item.ResourceEvidence ?? new List<ResourceEvidence>())
+                .Where(item => new RNAssistant.Core.Services.EvidenceStateReducer().Reduce(item, snapshot.Authority.Resources).State == EvidenceState.Current)
+                .GroupBy(item => item.EvidenceId, StringComparer.Ordinal).Select(group => group.First()).ToList();
             var options = BuildRequestOptions(_mode, _settings.AgentResponseMode, activeTools, _session, _runCache);
             options.TraceStepId = stepId;
             return new ModelProtocolRequest
             {
                 Settings = _settings,
-                AcceptedMessages = _messages,
+                AcceptedMessages = _lastSnapshot.Messages,
+                ContextSnapshot = snapshot,
+                CompileRepair = notice => _compiler.Compile(snapshot.Authority, snapshot.Messages, new[] { notice },
+                    null, _runnableCatalog, _settings, RequestMessageBudget(activeTools)).Messages,
                 CallableTools = activeTools,
                 RunnableCatalog = _runnableCatalog,
                 CallContext = callContext,
@@ -94,19 +119,40 @@ namespace RNAssistant.Office.Services
             };
         }
 
+        internal void RebindAuthority(IReadOnlyList<ToolCatalogEntry> catalog, SkillCatalogSnapshot skills,
+            AppSettings settings, DocumentContext context)
+        {
+            var pack = CallableToolPack.Create(_mode, _adapter.HostName, _session.LastRun?.RunId, catalog,
+                _toolPackJournal.ReadAccepted());
+            _runnableCatalog = catalog; _toolPack = pack; _skillSnapshot = skills; _skills = skills.Skills;
+            _settings = settings;
+            _context = context == null ? null : JsonConvert.DeserializeObject<DocumentContext>(JsonConvert.SerializeObject(context));
+            _packState = null;
+        }
+
         internal void AppendToolCall(AgentToolCall call, string message, LlmCompletionResult completion,
             AcceptedToolCallOrigin origin)
         {
             var accepted = AgentJsonProtocol.CreateToolCallMessage(call, message, completion, _settings.ToolResultRole, origin);
+            var arguments = JsonConvert.SerializeObject(call.Arguments);
+            if (_payloads != null && arguments.Length > 8192)
+            {
+                accepted.ArgumentPayload = PayloadRef.FromBlob(_payloads.StoreText(arguments, "application/json"));
+                AcceptedCallPayloadService.Externalize(accepted, _payloads);
+            }
             _session.Messages.Add(accepted);
-            _messages.Add(accepted);
         }
 
         internal void AppendNoToolCheckpoint(string message, LlmCompletionResult completion)
         {
             var accepted = AgentJsonProtocol.CreateNoToolCheckpointMessage(message, completion);
+            AttachResponseEvidence(accepted);
             _session.Messages.Add(accepted);
-            _messages.Add(accepted);
+        }
+
+        internal void AttachResponseEvidence(ChatMessage message)
+        {
+            if (message != null) message.ResourceEvidence = _responseEvidence.ToList();
         }
 
         internal void AppendConfirmedResult(ToolInvocation command, ToolResultMaterialization result)
@@ -117,7 +163,6 @@ namespace RNAssistant.Office.Services
             var accepted = MaterializeToolResultMessage(
                 command, result, out model);
             _session.Messages.Add(accepted);
-            _messages.Add(model);
         }
 
         internal async Task<PreparedToolResult> PrepareToolResultAsync(
@@ -183,12 +228,10 @@ namespace RNAssistant.Office.Services
                 : _session.LastRun.RunId;
             model.RunId = accepted.RunId;
             AppendPairedResult(_session.Messages, accepted);
-            AppendPairedResult(_messages, model);
-            _toolPack.StageReadResult(accepted);
+            _toolPack.StageReadResult(model);
             if (prepared.Media != null && result.Result.Status == RNAssistant.Core.Tools.Contracts.ToolResultStatus.Ok)
             {
                 _session.Messages.Add(prepared.Media);
-                _messages.Add(ProjectMediaForModel(prepared.Media));
             }
         }
 
@@ -210,7 +253,7 @@ namespace RNAssistant.Office.Services
             // live pack unchanged and prevents the next request from being sent.
             _toolPackJournal.Append(admission, nextStepId);
             _toolPack.Publish(admission);
-            if (admission.StateMessage != null) _messages.Add(admission.StateMessage);
+            _packState = admission.StateMessage;
         }
 
         internal static void ReleasePreviousMedia(ChatSession session)
@@ -220,8 +263,8 @@ namespace RNAssistant.Office.Services
 
         internal void ReleaseRequestMedia()
         {
-            ReleaseHydratedArtifactMedia(_messages);
             ReleaseHydratedArtifactMedia(_session == null ? null : _session.Messages);
+            _lastSnapshot = null;
         }
 
         public void Dispose()
@@ -271,190 +314,103 @@ namespace RNAssistant.Office.Services
             Action<string, string, ChatActivity> progress,
             CancellationToken cancellationToken)
         {
+            _context = context == null ? null : JsonConvert.DeserializeObject<DocumentContext>(JsonConvert.SerializeObject(context));
+            _currentAttachments = attachments;
+            _currentUserId = (session.Messages ?? new List<ChatMessage>()).LastOrDefault(item =>
+                item != null && item.Role == "user" && !item.ProtocolMessage && item.Activity == null)?.Id;
             var restoredAdmissions = _toolPackJournal.ReadAccepted();
-            var toolPack = CallableToolPack.Create(
+            _toolPack = CallableToolPack.Create(
                 mode,
                 _adapter == null ? string.Empty : _adapter.HostName,
                 session == null || session.LastRun == null ? null : session.LastRun.RunId,
                 runnableCatalog,
                 restoredAdmissions);
-            var messageBudget = RequestMessageBudget(toolPack.Tools);
             try
             {
-                _messages = _promptComposer.BuildMessages(
-                    mode,
-                    text,
-                    _adapter,
-                    toolPack.Tools,
-                    skills,
-                    context,
-                    settings,
-                    session,
-                    attachments,
-                    replayCurrentUserInHistory,
-                    messageBudget,
-                    toolPack.CapabilityContext(skills));
-                ProjectDurableResults(_messages, session, runnableCatalog, skills);
-                AppendRestorationState(_messages, toolPack);
-                EnsureToolPackFits(_messages, toolPack, true);
-                _toolPack = toolPack;
+                _lastSnapshot = CompileCurrent(true);
+                EnsureToolPackFits(_lastSnapshot.Messages, _toolPack, true);
             }
             catch (PromptBudgetExceededException ex) when (
                 ex.CanCompact && settings.AutoCompressContext && _contextCompactionService != null)
             {
                 var checkpoint = await _contextCompactionService.EnsureWithinBudgetAsync(
-                    session, settings, string.Empty, true, progress, cancellationToken).ConfigureAwait(false);
+                    session, settings, string.Empty, true, progress, cancellationToken, _currentAuthority, _runnableCatalog).ConfigureAwait(false);
                 if (checkpoint == null) throw;
-                toolPack = CallableToolPack.Create(
-                    mode,
-                    _adapter == null ? string.Empty : _adapter.HostName,
-                    session == null || session.LastRun == null ? null : session.LastRun.RunId,
-                    runnableCatalog,
-                    restoredAdmissions);
-                messageBudget = RequestMessageBudget(toolPack.Tools);
-                _messages = _promptComposer.BuildMessages(
-                    mode,
-                    text,
-                    _adapter,
-                    toolPack.Tools,
-                    skills,
-                    context,
-                    settings,
-                    session,
-                    attachments,
-                    replayCurrentUserInHistory,
-                    messageBudget,
-                    toolPack.CapabilityContext(skills));
-                ProjectDurableResults(_messages, session, runnableCatalog, skills);
-                AppendRestorationState(_messages, toolPack);
-                EnsureToolPackFits(_messages, toolPack, false);
-                _toolPack = toolPack;
+                _lastSnapshot = CompileCurrent(true);
+                EnsureToolPackFits(_lastSnapshot.Messages, _toolPack, false);
             }
         }
 
-        private static void AppendRestorationState(ICollection<ChatMessage> messages, CallableToolPack toolPack)
-        {
-            var state = toolPack == null ? null : toolPack.RestorationStateMessage;
-            if (state != null) messages.Add(state);
-        }
+        internal ContextReceipt LastReceipt { get { return _lastSnapshot == null ? null : _lastSnapshot.Receipt; } }
 
-        private static void ProjectDurableResults(
-            IList<ChatMessage> messages,
-            ChatSession session,
-            IReadOnlyList<ToolCatalogEntry> tools,
-            IReadOnlyList<SkillDefinition> skills)
+        private ModelContextSnapshot CompileCurrent(bool enforceBudget = false)
         {
-            var durableById = ((session == null ? null : session.Messages) ?? new List<ChatMessage>())
-                .Where(item => item != null && item.ToolResultProtocolVersion == ToolResultWire.CurrentVersion &&
-                    !string.IsNullOrWhiteSpace(item.Id))
-                .GroupBy(item => item.Id, StringComparer.Ordinal)
-                .ToDictionary(group => group.Key, group => group.Last(), StringComparer.Ordinal);
-            for (var index = 0; index < (messages == null ? 0 : messages.Count); index++)
+            var tools = _toolPack.Tools;
+            var skills = _skillSnapshot;
+            _skills = skills.Skills;
+            var facts = PromptBudgetComposer.ConversationHistory(_session, true, false);
+            facts = JsonConvert.DeserializeObject<List<ChatMessage>>(JsonConvert.SerializeObject(facts));
+            var current = facts.FirstOrDefault(item => item.Id == _currentUserId);
+            if (current == null && _currentUserId == null)
             {
-                var message = messages[index];
-                ChatMessage durable;
-                if (message != null && !string.IsNullOrWhiteSpace(message.Id) &&
-                    durableById.TryGetValue(message.Id, out durable))
-                {
-                    messages[index] = ModelToolResultProjection.Project(durable, tools, skills);
-                }
+                current = new ChatMessage { Role = "user", Content = _userText };
+                facts.Add(current);
             }
+            if (current != null && _currentAttachments != null) current.Attachments = _currentAttachments.ToList();
+            var scopes = facts.SelectMany(item => item.ResourceEvidence ?? new List<ResourceEvidence>())
+                .Concat((_context?.Notes ?? new List<ContextNote>()).Where(item => item.Evidence != null).Select(item => item.Evidence))
+                .Select(item => item.ScopeId).ToList();
+            scopes.Add(new ResourceAuthorityScopeId("conversation", _session.Id));
+            scopes.Add(CatalogPublicationService.ScopeId);
+            if (!string.IsNullOrWhiteSpace(_session.DocumentAuthorityId))
+                scopes.Add(ResourceAuthorityScopeId.Document(new DocumentAuthorityId(_session.DocumentAuthorityId)));
+            var resources = _authority == null ? new ResourceAuthoritySnapshotSet(scopes.Distinct().Select(scope =>
+                new ResourceAuthoritySnapshot(scope, 0, null, 0, new ResourceHeadState[0]))) : _authority.CaptureMany(scopes);
+            var frozen = new ModelAuthoritySnapshot(resources, _toolPack.Revision, skills, ResourceStateProvider.CaptureSchemas(resources),
+                _session.Revision);
+            _currentAuthority = frozen;
+            var required = new ConversationPromptComposer().BuildRequiredMessages(_mode, _userText, null,
+                tools, skills.Skills, null, _settings, _session, null, true, 0, _toolPack.CapabilityContext(skills.Skills));
+            var state = _packState ?? _toolPack.RestorationStateMessage;
+            if (state != null) required.Add(state);
+            return _compiler.Compile(frozen, required, facts, _context?.Notes, _runnableCatalog,
+                _settings, RequestMessageBudget(tools), enforceBudget);
         }
+
+        private IReadOnlyList<ChatMessage> CurrentMessages { get { return CompileCurrent().Messages; } }
 
         private ChatMessage MaterializeToolResultMessage(
-            ToolInvocation command,
-            ToolResultMaterialization result,
-            out ChatMessage modelMessage)
+            ToolInvocation command, ToolResultMaterialization result, out ChatMessage modelMessage)
         {
-            var exactEvidence = ToolResultResourceService.IsExactReadEvidence(command);
-            var availableForData = AvailableToolResultDataTokens();
-            var maxDataTokens = exactEvidence
-                ? int.MaxValue
-                : Math.Min(AgentJsonProtocol.DefaultMaxToolResultDataTokens, availableForData);
-            var artifact = ToolResultResourceService.ExternalizeIfNeeded(
-                _session,
-                command,
-                result,
-                maxDataTokens,
-                _settings);
-            var modelResult = ModelToolResultProjection.ForModel(
-                command.ToolId, result, _runnableCatalog, _skills);
-            var selectedDataTokens = maxDataTokens;
-            modelMessage = AgentJsonProtocol.CreateToolResultMessage(
-                command, modelResult, selectedDataTokens,
+            var artifact = ToolResultResourceService.ExternalizeIfNeeded(_session, command, result,
+                AgentJsonProtocol.DefaultMaxToolResultDataTokens, _settings);
+            var message = AgentJsonProtocol.CreateToolResultMessage(command, result, int.MaxValue,
                 _settings.ToolResultRole, _settings);
-            if (!RequestFits(modelMessage) && !exactEvidence)
-            {
-                if (artifact == null)
-                {
-                    artifact = ToolResultResourceService.ExternalizeIfNeeded(
-                        _session,
-                        command,
-                        result,
-                        0,
-                        _settings);
-                }
-                if (artifact != null)
-                {
-                    modelMessage = LargestFittingExternalizedResultMessage(
-                        command, modelResult, maxDataTokens,
-                        out selectedDataTokens);
-                }
-            }
-            if (!RequestFits(modelMessage) && exactEvidence &&
-                result.Result.Status == RNAssistant.Core.Tools.Contracts.ToolResultStatus.Ok)
-            {
-                ReplaceOversizedReadEvidence(
-                    command, result, availableForData, false);
-                modelResult = ModelToolResultProjection.ForModel(
-                    command.ToolId, result, _runnableCatalog, _skills);
-                selectedDataTokens = int.MaxValue;
-                modelMessage = AgentJsonProtocol.CreateToolResultMessage(
-                    command, modelResult, selectedDataTokens,
-                    _settings.ToolResultRole, _settings);
-                if (!RequestFits(modelMessage))
-                {
-                    ReplaceOversizedReadEvidence(
-                        command, result, availableForData, true);
-                    modelResult = ModelToolResultProjection.ForModel(
-                        command.ToolId, result, _runnableCatalog, _skills);
-                    modelMessage = AgentJsonProtocol.CreateToolResultMessage(
-                        command, modelResult, selectedDataTokens,
-                        _settings.ToolResultRole, _settings);
-                }
-            }
-            if (!RequestFits(modelMessage))
-            {
-                var candidateMessages = new List<ChatMessage>(_messages)
-                {
-                    modelMessage
-                };
-                var candidateTokens = EstimatedAdmittedRequestTokens(candidateMessages, _toolPack.Tools);
-                throw new PromptBudgetExceededException(
-                    "Tool result cannot be projected without removing evidence or the mandatory continuation reserve. " +
-                    "The candidate request uses ≈" + candidateTokens + " tokens at an input limit of " +
-                    ModelContextBudget.InputBudgetTokens(_settings) + " (inline data allowance ≈" +
-                    availableForData + "). Select narrower evidence, compact the context, " +
-                    "or use a larger-context model.",
-                    false);
-            }
-            var message = AgentJsonProtocol.CreateToolResultMessage(
-                command, result, selectedDataTokens,
-                _settings.ToolResultRole, _settings);
-            modelMessage.Id = message.Id;
-            modelMessage.CreatedUtc = message.CreatedUtc;
             message.ResourceRefs = AgentTranscript.CloneResourceRefs(result.Result.Resources);
-            if (artifact != null && !string.Equals(
-                artifact.Kind,
-                ChatArtifactKinds.Chart,
-                StringComparison.OrdinalIgnoreCase))
+            // Admission validates runtime-owned descriptor/revision evidence before
+            // archival externalization. Model projection deliberately strips these
+            // fields and can never be callable authority.
+            modelMessage = HistoricalContextProjector.Project(message);
+            if (_payloads != null && message.Content.Length > 8192)
+            {
+                message.ResultPayload = PayloadRef.FromBlob(_payloads.StoreText(message.Content, "application/vnd.rnassistant.tool-result+json"));
+                var compact = new JObject {
+                    ["payload_externalized"] = true,
+                    ["complete"] = result.ResourceEvidence.All(item => item.Complete),
+                    ["characters"] = message.Content.Length };
+                var envelope = new RNAssistant.Core.Tools.Contracts.ToolResult(result.Result.Status,
+                    result.Result.Message, compact.ToString(Formatting.None), result.Result.Resources);
+                var json = ToolResultWire.WriteParsed(command.ToolCallId, command.ToolId, envelope, compact, result.ResultResource);
+                message.Content = message.Role == "tool" ? json : "TOOL_RESULT:\n" + json;
+            }
+            if (artifact != null && !string.Equals(artifact.Kind, ChatArtifactKinds.Chart, StringComparison.OrdinalIgnoreCase))
                 artifact.SourceMessageId = message.Id;
             return message;
         }
 
         private bool CanPublishToolPack(IReadOnlyList<ToolCatalogEntry> candidateTools, ChatMessage stateMessage)
         {
-            var candidateMessages = new List<ChatMessage>(_messages);
+            var candidateMessages = new List<ChatMessage>(CurrentMessages);
             if (stateMessage != null) candidateMessages.Add(stateMessage);
             return EstimatedAdmittedRequestTokens(candidateMessages, candidateTools) <=
                 ModelContextBudget.InputBudgetTokens(_settings);
@@ -495,104 +451,6 @@ namespace RNAssistant.Office.Services
                 ModelProtocolClient.EstimateFormatRepairOverheadTokens(_settings) +
                 ModelContextBudget.ContinuationReserveTokens(_settings);
             return Math.Max(1, ModelContextBudget.InputBudgetTokens(_settings) - fixedTokens);
-        }
-
-        private int AvailableToolResultDataTokens()
-        {
-            var admitted = EstimatedAdmittedRequestTokens(_messages, _toolPack.Tools);
-            return Math.Max(0, ModelContextBudget.InputBudgetTokens(_settings) - admitted);
-        }
-
-        private bool RequestFits(ChatMessage resultMessage)
-        {
-            var messages = new List<ChatMessage>(_messages) { resultMessage };
-            return EstimatedAdmittedRequestTokens(messages, _toolPack.Tools) <=
-                ModelContextBudget.InputBudgetTokens(_settings);
-        }
-
-        private ChatMessage LargestFittingExternalizedResultMessage(
-            ToolInvocation command,
-            ToolResultMaterialization modelResult,
-            int maximumDataTokens,
-            out int selectedDataTokens)
-        {
-            selectedDataTokens = 0;
-            var best = AgentJsonProtocol.CreateToolResultMessage(
-                command, modelResult, 0, _settings.ToolResultRole, _settings);
-            if (!RequestFits(best)) return best;
-            var low = 1;
-            var high = Math.Max(0, maximumDataTokens);
-            while (low <= high)
-            {
-                var middle = low + (high - low) / 2;
-                var candidate = AgentJsonProtocol.CreateToolResultMessage(
-                    command, modelResult, middle,
-                    _settings.ToolResultRole, _settings);
-                if (RequestFits(candidate))
-                {
-                    best = candidate;
-                    selectedDataTokens = middle;
-                    low = middle + 1;
-                }
-                else
-                {
-                    high = middle - 1;
-                }
-            }
-            return best;
-        }
-
-        private void ReplaceOversizedReadEvidence(
-            ToolInvocation command,
-            ToolResultMaterialization materialized,
-            int availableDataTokens,
-            bool compactError)
-        {
-            var result = materialized.Result;
-            var original = materialized.Data as JObject;
-            var capability = !ToolResultResourceService.IsResourceEvidence(command);
-            var data = new JObject
-            {
-                ["code"] = capability
-                    ? "capability_evidence_context_too_large"
-                    : "resource_evidence_context_too_large",
-                ["complete"] = false
-            };
-            if (!compactError)
-            {
-                var originalJson = materialized.Data.ToString(Formatting.None);
-                data["original_chars"] = originalJson.Length;
-                data["original_estimated_tokens"] =
-                    ModelContextBudget.EstimateTextTokens(originalJson, _settings);
-                data["available_tokens"] = Math.Max(0, availableDataTokens);
-            }
-            if (capability)
-            {
-                if (!compactError)
-                {
-                    data["kind"] = original == null || original["kind"] == null
-                        ? JValue.CreateNull() : original["kind"].DeepClone();
-                    data["id"] = original == null || original["id"] == null
-                        ? JValue.CreateNull() : original["id"].DeepClone();
-                    data["revision"] = original == null || original["revision"] == null
-                        ? JValue.CreateNull() : original["revision"].DeepClone();
-                    data["truncated"] = true;
-                }
-                data["loaded"] = false;
-            }
-            var message = compactError
-                ? capability
-                    ? "Capability evidence did not fit the reserved model context."
-                    : "Resource evidence did not fit the reserved model context; choose a narrower semantic resource or compact context."
-                : capability
-                    ? "Capability evidence did not fit the request with mandatory reserves and was not loaded. Reduce context or use a larger-context model; do not retry unchanged."
-                    : "Resource evidence did not fit the request with mandatory reserves. Refine the semantic find query, compact context, or retry the read in a larger-context model.";
-            materialized.ReplaceResult(
-                RNAssistant.Core.Tools.Contracts.ToolResult.Error(
-                    message,
-                    data.ToString(Formatting.None),
-                    capability ? result.Resources : new ResourceRef[0]),
-                data);
         }
 
         private async Task<ChatMessage> BuildArtifactMediaMessageAsync(
@@ -641,26 +499,6 @@ namespace RNAssistant.Office.Services
             var target = ((string)(data == null ? null : data["target"]) ?? string.Empty)
                 .Replace('\r', ' ').Replace('\n', ' ').Trim();
             return target.Length == 0 ? string.Empty : "\nsemantic_target:" + target;
-        }
-
-        private static ChatMessage ProjectMediaForModel(ChatMessage source)
-        {
-            if (source == null) return null;
-            return new ChatMessage
-            {
-                Id = source.Id,
-                Role = source.Role,
-                Content = source.Content,
-                ExcludeFromModelContext = source.ExcludeFromModelContext,
-                ProtocolMessage = source.ProtocolMessage,
-                Attachments = (source.Attachments ?? new List<ChatAttachment>()).ToList(),
-                AttachmentAnalysis = source.AttachmentAnalysis,
-                ResourceRefs = new List<ResourceRef>(),
-                HtmlWorkspaceCheckpoint = null,
-                RunId = source.RunId,
-                Sequence = source.Sequence,
-                CreatedUtc = source.CreatedUtc
-            };
         }
 
         private static void ReleaseHydratedArtifactMedia(IEnumerable<ChatMessage> messages)

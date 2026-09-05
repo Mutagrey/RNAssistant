@@ -146,7 +146,7 @@ namespace RNAssistant.Office.Services
                 ImageMimeType = "image/jpeg",
                 ImageContentSha256 = ArtifactViewerService.Sha256(rendered.Bytes),
                 ImageByteLength = rendered.Bytes.LongLength,
-                ImageBase64Content = Convert.ToBase64String(rendered.Bytes)
+                Bytes = rendered.Bytes
             };
         }
 

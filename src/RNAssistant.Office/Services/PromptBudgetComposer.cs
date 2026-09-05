@@ -19,55 +19,6 @@ namespace RNAssistant.Office.Services
 
     internal sealed class PromptBudgetComposer
     {
-        public void AddConversationHistory(
-            List<ChatMessage> messages,
-            int insertIndex,
-            ChatSession session,
-            AppSettings settings,
-            int inputBudgetTokens = 0,
-            bool includeProtocolMessages = true,
-            bool excludeLatestUser = true)
-        {
-            if (messages == null)
-            {
-                return;
-            }
-
-            var budget = inputBudgetTokens > 0 ? inputBudgetTokens : ModelContextBudget.InputBudgetTokens(settings);
-            var used = EstimateMessages(messages, settings);
-            if (used > budget)
-            {
-                throw new PromptBudgetExceededException(
-                    "The current request and required runtime context exceed the model input budget. No conversation history was removed.",
-                    false);
-            }
-            var history = ConversationHistory(session, includeProtocolMessages, excludeLatestUser);
-            var available = Math.Max(0, budget - used);
-            if (history.Count == 0)
-            {
-                return;
-            }
-            if (available <= 0)
-            {
-                throw new PromptBudgetExceededException(
-                    "Active conversation context exceeds the request budget. Run context compaction before this model turn.",
-                    true);
-            }
-
-            var candidates = history.Select(message => ModelToolResultProjection.Project(message)).ToList();
-            var required = EstimateMessages(candidates, settings);
-            if (required > available)
-            {
-                throw new PromptBudgetExceededException(
-                    "Active conversation context exceeds the request budget. Run context compaction before this model turn.",
-                    true);
-            }
-            for (var index = 0; index < candidates.Count; index++)
-            {
-                messages.Insert(insertIndex, candidates[index]);
-                insertIndex += 1;
-            }
-        }
 
         public int EstimateMessages(IEnumerable<ChatMessage> messages, AppSettings settings = null)
         {

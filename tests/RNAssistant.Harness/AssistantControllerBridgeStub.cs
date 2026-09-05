@@ -14,6 +14,9 @@ namespace RNAssistant.Office
     public sealed class AssistantController
     {
         internal event Action<LlmRequestDiagnosticUpdate> ModelRequestDiagnostics;
+        public event EventHandler<ResourceAuthorityChangedEventArgs> ResourceAuthorityChanged;
+        internal void RaiseResourceChange(ResourceAuthorityCommit commit)
+        { ResourceAuthorityChanged?.Invoke(this, new ResourceAuthorityChangedEventArgs(commit)); }
 
         public string LastToolId { get; private set; }
         public string LastArgumentsJson { get; private set; }
@@ -569,6 +572,8 @@ namespace RNAssistant.Office
             LastModuleName = macroName;
             return ToolRunResult.Ok("ran macro");
         }
+        public ResourceDataOpenResponse OpenResourceData(ResourceDataOpenRequest request, CancellationToken cancellationToken = default(CancellationToken)) { return new ResourceDataOpenResponse(); }
+        public ResourceDataCloseResponse CloseResourceData(ResourceDataCloseRequest request) { return new ResourceDataCloseResponse { Closed = true }; }
         public HtmlWorkspaceResponse GetHtmlWorkspace(string chatId = null) { return new HtmlWorkspaceResponse { ActiveChatId = chatId ?? string.Empty, Workspace = HtmlWorkspaceDto.From(null) }; }
         public HtmlWorkspaceResponse SaveHtmlWorkspaceFile(string chatId, string path, string kind, string content, bool setActive) { return new HtmlWorkspaceResponse { ActiveChatId = chatId ?? string.Empty, Workspace = HtmlWorkspaceDto.From(new HtmlWorkspace { ActiveFileId = path ?? string.Empty }) }; }
         public HtmlWorkspaceResponse SaveHtmlWorkspaceData(string chatId, string name, string json) { return new HtmlWorkspaceResponse { ActiveChatId = chatId ?? string.Empty, Workspace = HtmlWorkspaceDto.From(null) }; }
@@ -583,7 +588,8 @@ namespace RNAssistant.Office
                 Complete = true
             };
         }
-        public ArtifactViewerPageDto ReadArtifactViewerPage(string chatId, string resourceUri, string cursor)
+        public ArtifactViewerPageDto ReadArtifactViewerPage(string chatId, string resourceUri, string cursor,
+            System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken))
         {
             LastChatId = chatId;
             LastArtifactViewerResourceUri = resourceUri;
@@ -595,7 +601,8 @@ namespace RNAssistant.Office
                 Title = "Plan.md",
                 MimeType = "text/markdown",
                 ContentSha256 = new string('b', 64),
-                Text = "# Exact",
+                Data = new ResourceDataOpenResponse { LeaseId = new string('a', 64),
+                    Url = "https://rnassistant.local-resource/v1/" + new string('a', 64) },
                 Offset = 32000,
                 ReturnedCharacters = 7,
                 TotalCharacters = 32007,
@@ -605,7 +612,7 @@ namespace RNAssistant.Office
                 MaximumDocumentCharacters = 512000
             };
         }
-        public ArtifactImageViewerDto ReadArtifactImage(string chatId, string resourceUri)
+        public ArtifactImageViewerDto ReadArtifactImage(string chatId, string resourceUri, CancellationToken cancellationToken = default(CancellationToken))
         {
             LastChatId = chatId;
             LastArtifactViewerResourceUri = resourceUri;
@@ -617,10 +624,10 @@ namespace RNAssistant.Office
                 MimeType = "image/png",
                 ContentSha256 = new string('c', 64),
                 ByteLength = 3,
-                Base64Content = "AQID"
+                Data = new ResourceDataOpenResponse { LeaseId = new string('a', 64), Url = "https://rnassistant.local-resource/v1/" + new string('a', 64) }
             };
         }
-        public ArtifactImageThumbnailDto ReadArtifactImageThumbnail(string chatId, string resourceUri)
+        public ArtifactImageThumbnailDto ReadArtifactImageThumbnail(string chatId, string resourceUri, CancellationToken cancellationToken = default(CancellationToken))
         {
             LastChatId = chatId;
             LastArtifactViewerResourceUri = resourceUri;
@@ -634,7 +641,7 @@ namespace RNAssistant.Office
                 ImageMimeType = "image/jpeg",
                 ImageContentSha256 = new string('f', 64),
                 ImageByteLength = 4,
-                ImageBase64Content = "/9j/2Q=="
+                Data = new ResourceDataOpenResponse { LeaseId = new string('a', 64), Url = "https://rnassistant.local-resource/v1/" + new string('a', 64) }
             };
         }
         public ArtifactPdfViewerDto ReadArtifactPdfInfo(string chatId, string resourceUri)
@@ -655,7 +662,7 @@ namespace RNAssistant.Office
                 ExtractedCharacters = 5
             };
         }
-        public ArtifactPdfPageDto ReadArtifactPdfPage(string chatId, string resourceUri, int pageIndex)
+        public ArtifactPdfPageDto ReadArtifactPdfPage(string chatId, string resourceUri, int pageIndex, CancellationToken cancellationToken = default(CancellationToken))
         {
             LastChatId = chatId;
             LastArtifactViewerResourceUri = resourceUri;
@@ -671,10 +678,10 @@ namespace RNAssistant.Office
                 ImageMimeType = "image/jpeg",
                 ImageContentSha256 = new string('f', 64),
                 ImageByteLength = 4,
-                ImageBase64Content = "/9j/2Q=="
+                Data = new ResourceDataOpenResponse { LeaseId = new string('a', 64), Url = "https://rnassistant.local-resource/v1/" + new string('a', 64) }
             };
         }
-        public ArtifactPdfPageDto ReadArtifactPdfThumbnail(string chatId, string resourceUri, int pageIndex)
+        public ArtifactPdfPageDto ReadArtifactPdfThumbnail(string chatId, string resourceUri, int pageIndex, CancellationToken cancellationToken = default(CancellationToken))
         {
             LastChatId = chatId;
             LastArtifactViewerResourceUri = resourceUri;
@@ -690,7 +697,7 @@ namespace RNAssistant.Office
                 ImageMimeType = "image/jpeg",
                 ImageContentSha256 = new string('a', 64),
                 ImageByteLength = 4,
-                ImageBase64Content = "/9j/2Q=="
+                Data = new ResourceDataOpenResponse { LeaseId = new string('a', 64), Url = "https://rnassistant.local-resource/v1/" + new string('a', 64) }
             };
         }
         public HtmlWorkspaceResponse ImportUploadedHtmlToWorkspace(

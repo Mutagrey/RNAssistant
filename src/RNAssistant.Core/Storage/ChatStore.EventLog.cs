@@ -76,7 +76,7 @@ namespace RNAssistant.Core.Storage
                     sessionEvent.ProtectionKeyId,
                     sessionEvent.EncryptedData))
             {
-                throw new ChatConcurrencyException("The chat event log contains an unsupported record.");
+                throw new ChatConcurrencyException("The chat event log uses an unsupported contract. Resource cutover requires schema 4; open a new chat. Existing files were not migrated or deleted.");
             }
             var expectedSequence = previous == null ? 1 : previous.Sequence + 1;
             var expectedPreviousHash = previous == null ? null : previous.Hash;

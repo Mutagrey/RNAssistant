@@ -8,17 +8,10 @@ namespace RNAssistant.Office.Vba
     internal sealed class VbaVerifier
     {
         private readonly IVbaMutationReader _reader;
-        private readonly Action<string, string, string> _markObservationStale;
-        private readonly Action<string, string> _removeObservation;
 
-        public VbaVerifier(
-            IVbaMutationReader reader,
-            Action<string, string, string> markObservationStale,
-            Action<string, string> removeObservation)
+        public VbaVerifier(IVbaMutationReader reader)
         {
             _reader = reader ?? throw new ArgumentNullException(nameof(reader));
-            _markObservationStale = markObservationStale;
-            _removeObservation = removeObservation;
         }
 
         public VbaMutationActionResult VerifyModuleWrite(
@@ -31,10 +24,6 @@ namespace RNAssistant.Office.Vba
             string sessionId = null)
         {
             var expectedHash = VbaTextCanonicalizer.LiveCodeSha256(expectedCode);
-            if (_markObservationStale != null)
-            {
-                _markObservationStale(sessionId, moduleName, expectedHash);
-            }
             var expectedComparableHash = VbaTextCanonicalizer.VbeComparableCodeSha256(expectedCode);
             var expectedLineCount = VbaTextCanonicalizer.LiveCodeLineCount(expectedCode);
             var read = _reader.ReadModule(moduleName, 1000000);
@@ -273,10 +262,6 @@ namespace RNAssistant.Office.Vba
                     (string.IsNullOrWhiteSpace(read.Message) ? moduleName : read.Message),
                     VerificationData(moduleName, null, null, successData, null, null, null, null),
                     "vba_delete_verify_failed");
-            }
-            if (_removeObservation != null)
-            {
-                _removeObservation(sessionId, moduleName);
             }
             var data = VbaMutationData.Clone(successData);
             data["moduleName"] = moduleName ?? string.Empty;

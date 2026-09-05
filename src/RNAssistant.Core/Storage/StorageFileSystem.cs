@@ -9,6 +9,21 @@ namespace RNAssistant.Core.Storage
 {
     internal static class StorageFileSystem
     {
+        internal static IDisposable AcquireWriteLock(string path)
+        {
+            EnsureRegularDirectory(Path.GetDirectoryName(path));
+            var deadline = DateTime.UtcNow.AddSeconds(10);
+            while (true)
+            {
+                try { return new FileStream(path, FileMode.OpenOrCreate, FileAccess.ReadWrite, FileShare.None); }
+                catch (IOException)
+                {
+                    if (DateTime.UtcNow >= deadline) throw;
+                    System.Threading.Thread.Sleep(20);
+                }
+            }
+        }
+
         public static void WriteAllTextAtomic(string path, string content)
         {
             WriteAllTextAtomic(path, content, null);

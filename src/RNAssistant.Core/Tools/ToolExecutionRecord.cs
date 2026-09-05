@@ -1,4 +1,5 @@
 using System;
+using System.Linq;
 using Newtonsoft.Json;
 using RNAssistant.Core.Agent;
 
@@ -64,11 +65,12 @@ namespace RNAssistant.Core.Tools
         public bool IsConfirmed { get; private set; }
         public int RemainingToolSteps { get; private set; }
         public string PreparedStateJson { get; private set; }
+        public string ExpectedContentSha256 { get; private set; }
 
         [JsonConstructor]
         public ToolExecutionContext(ToolCall call, ToolPolicySnapshot policy, string runId, string turnId,
             string stepId, DateTime startedUtc, bool isConfirmed, int remainingToolSteps,
-            string preparedStateJson = null)
+            string preparedStateJson = null, string expectedContentSha256 = null)
         {
             if (call == null || policy == null || !string.Equals(call.Name, policy.ToolId, StringComparison.Ordinal) ||
                 string.IsNullOrWhiteSpace(runId) || string.IsNullOrWhiteSpace(turnId) || string.IsNullOrWhiteSpace(stepId) || remainingToolSteps < 0)
@@ -85,6 +87,7 @@ namespace RNAssistant.Core.Tools
             IsConfirmed = isConfirmed;
             RemainingToolSteps = remainingToolSteps;
             PreparedStateJson = preparedStateJson;
+            ExpectedContentSha256 = expectedContentSha256;
         }
     }
 
@@ -107,6 +110,10 @@ namespace RNAssistant.Core.Tools
         public bool AwaitingUser { get; private set; }
         public int ToolStepsConsumed { get; private set; }
         public ToolExecutionEvidence Evidence { get; private set; }
+        public System.Collections.Generic.IReadOnlyList<RNAssistant.Core.Models.ResourceEvidence> ResourceEvidence { get; private set; }
+        public RNAssistant.Core.Models.ResourceEffect ResourceEffect { get; private set; }
+        public System.Collections.Generic.IReadOnlyList<RNAssistant.Core.Models.ResourceMutationReadBack> ResourceReadBack { get; private set; }
+        public string AuthorityCommitId { get; private set; }
         [JsonIgnore]
         public Contracts.ToolResult Result { get; private set; }
 
@@ -114,7 +121,10 @@ namespace RNAssistant.Core.Tools
             string message = null, string modelResultJson = null, bool mayHaveDispatched = true,
             string pendingId = null, bool awaitingUser = false, int toolStepsConsumed = 1, string documentRuntimeId = null,
             ToolExecutionEvidence evidence = null, Contracts.ToolResult result = null,
-            string preparedStateJson = null, string confirmationDataJson = null)
+            string preparedStateJson = null, string confirmationDataJson = null,
+            System.Collections.Generic.IReadOnlyList<RNAssistant.Core.Models.ResourceEvidence> resourceEvidence = null,
+            RNAssistant.Core.Models.ResourceEffect resourceEffect = null, string authorityCommitId = null,
+            System.Collections.Generic.IReadOnlyList<RNAssistant.Core.Models.ResourceMutationReadBack> resourceReadBack = null)
         {
             Context = context ?? throw new ArgumentNullException(nameof(context));
             if (!Enum.IsDefined(typeof(ToolExecutionOutcome), outcome)) throw new ArgumentOutOfRangeException(nameof(outcome));
@@ -153,6 +163,23 @@ namespace RNAssistant.Core.Tools
             DocumentRuntimeId = documentRuntimeId;
             Evidence = evidence ?? new ToolExecutionEvidence(dispatch, ToolEffectEvidence.Unreported);
             Result = result;
+            ResourceEvidence = resourceEvidence ?? new RNAssistant.Core.Models.ResourceEvidence[0];
+            ResourceEffect = resourceEffect;
+            AuthorityCommitId = authorityCommitId;
+            ResourceReadBack = resourceReadBack ?? new RNAssistant.Core.Models.ResourceMutationReadBack[0];
+        }
+
+        public ToolExecutionRecord WithAuthorityCommit(RNAssistant.Core.Models.ResourceAuthorityCommit commit)
+        {
+            if (commit == null) return this;
+            var committedResult = Result == null ? null : new RNAssistant.Core.Tools.Contracts.ToolResult(
+                Result.Status, Result.Message, Result.DataJson, Result.Resources.Concat(commit.HeadChanges
+                    .Where(change => change.After.Knowledge == RNAssistant.Core.Models.HeadKnowledge.Known)
+                    .Select(change => change.After.Revision)).GroupBy(reference => reference.Uri + "@" + reference.Revision)
+                    .Select(group => group.First()));
+            return new ToolExecutionRecord(Context, Outcome, CompletedUtc, Message, ModelResultJson,
+                MayHaveDispatched, PendingId, AwaitingUser, ToolStepsConsumed, DocumentRuntimeId, Evidence,
+                committedResult, PreparedStateJson, ConfirmationDataJson, ResourceEvidence, commit.Effect, commit.CommitId, ResourceReadBack);
         }
     }
 }

@@ -7,6 +7,7 @@ using Newtonsoft.Json.Linq;
 using RNAssistant.Core.Agent;
 using RNAssistant.Core.ModelProtocol;
 using RNAssistant.Core.Models;
+using RNAssistant.Core.Services;
 using RNAssistant.Core.Storage;
 using RNAssistant.Core.Tools;
 using RNAssistant.Office.Services;
@@ -63,13 +64,11 @@ namespace RNAssistant.Harness
                     var bindDefinition = definitions.Single(definition =>
                         definition.Id == HtmlWorkspaceToolCatalog.BindDataToolId);
                     AssertContains(bindDefinition.Description,
-                        "rnassistant.table.v1 envelope",
-                        "HTML bind describes its page-facing table result");
-                    AssertContains((string)JObject.Parse(
-                            bindDefinition.ArgumentSchemaJson)
-                            ["properties"]["transform"]["description"],
-                        "rows:[{...}]",
-                        "HTML bind schema defines the table envelope instead of implying an array");
+                        "RN.resources.open(name)",
+                        "HTML bind describes its bounded resource API");
+                    AssertTrue(JObject.Parse(bindDefinition.ArgumentSchemaJson)["properties"]["target"] != null &&
+                        JObject.Parse(bindDefinition.ArgumentSchemaJson)["properties"]["transform"] == null,
+                        "HTML binding selects a resource view, not a second transform pipeline");
 
                     var allTools = OfficeToolCatalog.ForHost(adapter.HostName)
                         .Concat(executor.GetControllerTools()).ToList();
@@ -179,111 +178,22 @@ namespace RNAssistant.Harness
                         unchanged.Evidence.Effect,
                         "no-change HTML patch is explicit");
 
-                    var noSourceBind = ExecuteHtmlNative(runtime,
-                        HtmlWorkspaceToolCatalog.BindDataToolId,
-                        new JObject { ["name"] = "missingSource" });
-                    AssertEqual(ToolExecutionOutcome.Error,
-                        noSourceBind.Outcome,
-                        "HTML bind fails without an accepted read");
-                    AssertContains(noSourceBind.Result.DataJson,
-                        "html_data_source_read_required",
-                        "HTML bind reports the stable missing-read code");
-
-                    adapter.ExcelBackendCalls.Clear();
-                    var sourceArguments = new JObject
-                    {
-                        ["sheet"] = "Data",
-                        ["address"] = "A1:B4",
-                        ["content"] = "values"
-                    };
-                    var source = ExecuteHtmlNative(runtime,
-                        "excel.read_range", sourceArguments);
-                    AssertEqual(ToolExecutionOutcome.Ok, source.Outcome,
-                        "HTML source read succeeds before bind");
-                    AppendAcceptedHtmlSource(session, "html_run",
-                        "html_source", "excel.read_range",
-                        sourceArguments, source.Result);
-                    AssertEqual(1, adapter.ExcelBackendCalls.Count(operation =>
-                            operation == FakeOfficeAdapter.ExcelRangeReadOperation),
-                        "source is read once before binding");
-                    var bind = ExecuteHtmlNative(runtime,
-                        HtmlWorkspaceToolCatalog.BindDataToolId,
-                        new JObject
-                        {
-                            ["name"] = "sales",
-                            ["transform"] = "table"
-                        });
-                    AssertEqual(ToolExecutionOutcome.Ok, bind.Outcome,
-                        "native HTML bind succeeds");
-                    AssertEqual(ToolEffectEvidence.VerifiedChange,
-                        bind.Evidence.Effect,
-                        "native HTML bind verifies its workspace revision");
-                    AssertEqual(1, adapter.ExcelBackendCalls.Count(operation =>
-                            operation == FakeOfficeAdapter.ExcelRangeReadOperation),
-                        "HTML bind reuses accepted data without a nested read");
-                    var boundTable = JObject.Parse(session.HtmlWorkspace.DataSources.Single(item =>
-                        string.Equals(item.Name, "sales", StringComparison.OrdinalIgnoreCase)).Json);
-                    AssertEqual("120", (string)boundTable["rows"][0]["Sales"],
-                        "bound table rows keep first-row header labels as aliases for dashboard code");
-
-                    var boundArtifactId = session.ActiveHtmlArtifactId;
-                    var boundArtifact = session.Artifacts.Single(item =>
-                        string.Equals(item.Id, boundArtifactId,
-                            StringComparison.OrdinalIgnoreCase));
-                    var historyCount = session.HtmlWorkspace.History.Count;
-                    adapter.SetExcelCellForTest("Data", "B2", 999);
-                    var refresh = ExecuteHtmlNative(runtime,
-                        HtmlWorkspaceToolCatalog.RefreshDataToolId,
+                    var sourceArtifact = new ChatArtifact { Kind = ChatArtifactKinds.File, Title = "native-sales.json",
+                        MimeType = "application/json", InlineText = "[{\"sales\":120}]" };
+                    session.Artifacts.Add(sourceArtifact);
+                    var target = executor.ResourceGateway.Find(session, "native-sales.json", "conversation").Items.Single().Target;
+                    var bind = ExecuteHtmlNative(runtime, HtmlWorkspaceToolCatalog.BindDataToolId,
+                        new JObject { ["name"] = "sales", ["target"] = target, ["policy"] = "head" });
+                    AssertEqual(ToolExecutionOutcome.Ok, bind.Outcome, "native canonical binding succeeds: " + bind.Result.Message + " " + bind.Result.DataJson);
+                    AssertEqual(ToolEffectEvidence.VerifiedChange, bind.Evidence.Effect, "binding change is verified");
+                    var binding = session.HtmlWorkspace.DataSources.Single(item => item.Name == "sales").Binding;
+                    AssertContains(binding.Resource.Uri, sourceArtifact.Id, "binding points to resource, not a tool result");
+                    var head = session.ActiveHtmlArtifactId;
+                    var refresh = ExecuteHtmlNative(runtime, HtmlWorkspaceToolCatalog.RefreshDataToolId,
                         new JObject { ["name"] = "sales" });
-                    AssertEqual(ToolExecutionOutcome.Ok, refresh.Outcome,
-                        "native HTML refresh succeeds after the Office value changes");
-                    AssertEqual(ToolEffectEvidence.VerifiedChange,
-                        refresh.Evidence.Effect,
-                        "changed HTML refresh reports a verified revision change");
-                    AssertTrue(refresh.Result.Resources.Any(reference =>
-                            reference.Uri.IndexOf("/artifact/",
-                                StringComparison.Ordinal) >= 0),
-                        "HTML refresh exposes its authoritative revision resource");
-                    AssertContains(session.HtmlWorkspace.DataSources.Single(item =>
-                            string.Equals(item.Name, "sales",
-                                StringComparison.OrdinalIgnoreCase)).Json,
-                        "999",
-                        "HTML refresh replaces the live workspace JSON");
-                    AssertTrue(!string.Equals(boundArtifactId,
-                            session.ActiveHtmlArtifactId,
-                            StringComparison.OrdinalIgnoreCase),
-                        "HTML refresh captures a new authoritative workspace revision");
-                    var refreshedArtifact = session.Artifacts.Single(item =>
-                        string.Equals(item.Id, session.ActiveHtmlArtifactId,
-                            StringComparison.OrdinalIgnoreCase));
-                    AssertEqual(boundArtifact.ParentArtifactId,
-                        refreshedArtifact.ParentArtifactId,
-                        "HTML refresh replaces the active data head without adding an undo step");
-                    AssertEqual(historyCount, session.HtmlWorkspace.History.Count,
-                        "HTML refresh keeps user-authored undo history stable");
-                    var refreshedSnapshot = JsonConvert.DeserializeObject<HtmlWorkspaceSnapshot>(
-                        refreshedArtifact.InlineText);
-                    AssertContains(refreshedSnapshot.DataSources.Single(item =>
-                            string.Equals(item.Name, "sales",
-                                StringComparison.OrdinalIgnoreCase)).Json,
-                        "999",
-                        "the refreshed value survives artifact-backed workspace reload");
-                    var refreshedArtifactCount = session.Artifacts.Count;
-                    var unchangedRefresh = ExecuteHtmlNative(runtime,
-                        HtmlWorkspaceToolCatalog.RefreshDataToolId,
-                        new JObject { ["name"] = "sales" });
-                    AssertEqual(ToolExecutionOutcome.Ok,
-                        unchangedRefresh.Outcome,
-                        "unchanged HTML refresh still succeeds");
-                    AssertEqual(ToolEffectEvidence.VerifiedNoChange,
-                        unchangedRefresh.Evidence.Effect,
-                        "unchanged HTML refresh reports verified no-change");
-                    AssertEqual(refreshedArtifact.Id,
-                        session.ActiveHtmlArtifactId,
-                        "unchanged HTML refresh keeps the current head");
-                    AssertEqual(refreshedArtifactCount,
-                        session.Artifacts.Count,
-                        "unchanged HTML refresh creates no artifact spam");
+                    AssertEqual(ToolExecutionOutcome.Ok, refresh.Outcome, "canonical refresh succeeds");
+                    AssertEqual(ToolEffectEvidence.VerifiedNoChange, refresh.Evidence.Effect, "refresh observes source; it does not mutate workspace");
+                    AssertEqual(head, session.ActiveHtmlArtifactId, "refresh does not duplicate workspace history");
                 });
         }
 

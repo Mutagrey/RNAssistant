@@ -20,13 +20,15 @@ namespace RNAssistant.Core.Storage
         private static readonly string[] MetadataProperties =
         {
             "FormatVersion", "Id", "ParentSessionId", "ParentSessionRevision", "ForkedThroughMessageId",
-            "Host", "DocumentKey", "PreviousDocumentKeys", "DocumentTitle", "DocumentPath",
+            "Host", "DocumentKey", "PreviousDocumentKeys", "DocumentTitle", "DocumentPath", "DocumentAuthorityId", "LastContextReceipt",
             "Title", "Model", "Mode", "ReasoningEnabled", "CreatedUtc", "UpdatedUtc"
         };
 
-        private static JObject ToProjectionToken(ChatSession session)
+        private JObject ToProjectionToken(ChatSession session)
         {
-            return JObject.FromObject(session, JsonSerializer.Create(ProjectionJsonSettings));
+            var root = JObject.FromObject(session, JsonSerializer.Create(ProjectionJsonSettings));
+            RuntimePayloadService.ExternalizeProjection(root, _blobs);
+            return root;
         }
 
         private static JObject ReplayProjectionRoot(IEnumerable<SessionEvent> events, JObject seedRoot)
@@ -67,7 +69,7 @@ namespace RNAssistant.Core.Storage
             bool rebuildDerivedProjections)
         {
             if (root == null) return null;
-            var session = root.ToObject<ChatSession>();
+            var session = RuntimePayloadService.HydrateActiveExecution(root, _blobs).ToObject<ChatSession>();
             session.Revision = sequence;
             session.StorageHeadHash = headHash;
             session.StorageTailByteOffset = tailByteOffset;
@@ -89,7 +91,7 @@ namespace RNAssistant.Core.Storage
             return session;
         }
 
-        private static List<SessionOperation> BuildOperations(ChatSession beforeSession, ChatSession afterSession)
+        private List<SessionOperation> BuildOperations(ChatSession beforeSession, ChatSession afterSession)
         {
             var before = ToProjectionToken(beforeSession);
             var after = ToProjectionToken(afterSession);

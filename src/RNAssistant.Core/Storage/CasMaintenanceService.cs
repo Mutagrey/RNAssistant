@@ -113,6 +113,8 @@ namespace RNAssistant.Core.Storage
             var reachability = new CasReachabilityScan();
             _chatStore.ScanCasReferences(reachability);
             _vbaJournalStore.ScanCasReferences(reachability);
+            new ResourceAuthorityStore(_paths).ScanCasReferences(reachability);
+            new ResourceMutationJournal(_paths).ScanCasReferences(reachability);
 
             var issues = new List<CasHealthIssue>(reachability.Issues);
             var stored = EnumerateStoredBlobs(issues);
@@ -400,6 +402,7 @@ namespace RNAssistant.Core.Storage
             if (root != null)
             {
                 AddPair(root, "Sha256", "ByteLength", null, sourceType, sourceId, location);
+                AddPair(root, "sha256", "byteLength", "contentType", sourceType, sourceId, location);
                 AddPair(root, "ContentSha256", "ContentByteLength", "MimeType", sourceType, sourceId, location);
                 AddPair(root, "ExtractedTextSha256", "ExtractedTextByteLength", null, sourceType, sourceId, location);
             }
@@ -439,8 +442,8 @@ namespace RNAssistant.Core.Storage
                 Sha256 = (string)hashToken,
                 ByteLength = lengthToken != null && lengthToken.Type == JTokenType.Integer ? (long)lengthToken : -1,
                 ContentType = contentTypeProperty == null ? null : (string)value[contentTypeProperty],
-                Encryption = (string)value["Encryption"],
-                ProtectionKeyId = (string)value["ProtectionKeyId"]
+                Encryption = (string)value[hashProperty == "sha256" ? "encryption" : "Encryption"],
+                ProtectionKeyId = (string)value[hashProperty == "sha256" ? "protectionKeyId" : "ProtectionKeyId"]
             };
             AddReference(reference, sourceType, sourceId, location + "." + hashProperty);
         }

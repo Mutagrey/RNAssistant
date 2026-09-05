@@ -11,11 +11,14 @@ namespace RNAssistant.Office.Services
     {
         private readonly ResourceProviderRegistry _registry;
         private readonly Func<ChatSession, IDisposable> _beginLiveOfficeRead;
+        private readonly ResourceAuthorityService _authority;
+        private readonly ArtifactViewerService _mediaViews;
+        internal ResourceAuthorityService Authority { get { return _authority; } }
 
         public ResourceGatewayService(
             Func<ChatSession, string, bool> loadArtifactBody = null,
             Func<ChatAttachment, int, string> readAttachmentText = null)
-            : this(null, null, null, loadArtifactBody, readAttachmentText, null)
+            : this(null, null, null, loadArtifactBody, readAttachmentText, null, null)
         {
         }
 
@@ -25,15 +28,21 @@ namespace RNAssistant.Office.Services
             VbaJournalStore vbaJournalStore,
             Func<ChatSession, string, bool> loadArtifactBody = null,
             Func<ChatAttachment, int, string> readAttachmentText = null,
-            Func<ChatSession, IDisposable> beginLiveOfficeRead = null)
+            Func<ChatSession, IDisposable> beginLiveOfficeRead = null,
+            ResourceAuthorityService authority = null, CatalogPublicationService catalogs = null,
+            Func<ChatAttachment, byte[]> readAttachmentBytes = null)
         {
             var providers = new List<IResourceProvider>
             {
                 new ChatArtifactResourceProvider(loadArtifactBody, readAttachmentText)
             };
+            if (authority?.Payloads != null) providers.Add(new ResourceStateProvider(authority, authority.Payloads));
+            if (catalogs != null) providers.Add(new CatalogResourceProvider(catalogs, authority));
             if (adapter != null)
             {
                 providers.Add(new LiveDocumentResourceProvider(adapter));
+                var excel = adapter as RNAssistant.Office.Domains.Excel.IExcelBackendProvider;
+                if (excel?.ExcelReadBackend != null) providers.Add(new ExcelResourceProvider(adapter, excel.ExcelReadBackend, authority?.Payloads));
                 if (vbaSource != null && VbaResourceProvider.SupportsHost(adapter.HostName))
                 {
                     providers.Add(new VbaResourceProvider(adapter, vbaSource, vbaJournalStore));
@@ -41,11 +50,20 @@ namespace RNAssistant.Office.Services
             }
             _registry = new ResourceProviderRegistry(providers);
             _beginLiveOfficeRead = beginLiveOfficeRead;
+            _authority = authority;
+            if (readAttachmentBytes != null) _mediaViews = new ArtifactViewerService(this, readAttachmentBytes);
         }
 
         internal ResourceGatewayService(IEnumerable<IResourceProvider> providers)
+            : this(providers, null)
+        {
+        }
+
+        internal ResourceGatewayService(IEnumerable<IResourceProvider> providers,
+            ResourceAuthorityService authority)
         {
             _registry = new ResourceProviderRegistry(providers);
+            _authority = authority;
         }
 
         public ResourceListPage List(ChatSession session, string providerId, string kind, string cursor, int limit)
@@ -73,13 +91,16 @@ namespace RNAssistant.Office.Services
             });
             result.Provider = provider.Id;
             result.Providers = providers.Select(item => item.Id).ToList();
+            if (_authority != null)
+                foreach (var descriptor in result.Items)
+                    _authority.ApplyHead(descriptor, session, provider is ILiveOfficeResourceProvider);
             return result;
         }
 
         public ResourceResolveResult Resolve(ChatSession session, string resourceUri)
         {
             var provider = ProviderFor(resourceUri);
-            return WithProvider(provider, session, delegate
+            var resolved = WithProvider(provider, session, delegate
             {
                 return new ResourceResolveResult
                 {
@@ -87,6 +108,9 @@ namespace RNAssistant.Office.Services
                     Complete = true
                 };
             });
+            if (_authority != null) _authority.ApplyHead(resolved.Resource, session,
+                provider is ILiveOfficeResourceProvider);
+            return resolved;
         }
 
         public ResourceResolveResult ResolveMember(ChatSession session, string parentUri,
@@ -102,7 +126,7 @@ namespace RNAssistant.Office.Services
                     "resource_member_resolve_unsupported",
                     false);
             }
-            return WithProvider(provider, session, delegate
+            var result = WithProvider(provider, session, delegate
             {
                 return new ResourceResolveResult
                 {
@@ -110,6 +134,8 @@ namespace RNAssistant.Office.Services
                     Complete = true
                 };
             });
+            if (_authority != null) _authority.ApplyHead(result.Resource, session, provider is ILiveOfficeResourceProvider);
+            return result;
         }
 
         public ResourceSearchResult Search(
@@ -123,7 +149,21 @@ namespace RNAssistant.Office.Services
             var provider = SelectProvider(providerId);
             var result = WithProvider(provider, session, delegate
             {
-                return provider.Search(session, query, kind, limit, maxCharsPerMatch);
+                if (_authority != null) _authority.CaptureMany(new[] { _authority.Scope(session, provider is ILiveOfficeResourceProvider) });
+                var found = provider.Search(session, query, kind, limit, maxCharsPerMatch);
+                if (_authority != null && provider is ILiveOfficeResourceProvider)
+                    foreach (var match in found.Matches.Where(item => item.Reference != null && item.Reference.IsExact))
+                    {
+                        var observation = new ResourceReadSelection { Result = new ResourceReadResult {
+                            Resource = new ResourceDescriptor { Reference = match.Reference, Provider = provider.Id, Kind = match.Kind, Title = match.Title },
+                            Representation = match.Representation, ContentSha256 = match.Reference.Revision,
+                            Text = match.Snippet, Offset = match.SnippetOffset, ReturnedCharacters = (match.Snippet ?? string.Empty).Length,
+                            Complete = false } };
+                        _authority.PublishRead(session, observation, null, true);
+                        match.Reference = observation.Result.Resource.Reference;
+                        match.Evidence = _authority.Observe(session, observation.Result, true);
+                    }
+                return found;
             });
             result.Provider = provider.Id;
             return result;
@@ -139,10 +179,38 @@ namespace RNAssistant.Office.Services
                     true);
             }
             var provider = ProviderFor(request.Reference.Uri);
+            var identityResolver = provider as IResourceIdentityResolver;
+            if (identityResolver != null && !request.Reference.IsExact && request.Reference.Uri == request.Reference.Identity.Uri)
+            {
+                request = new ResourceReadRequest { Reference = identityResolver.ResolveIdentity(session, request.Reference.Identity),
+                    Representation = request.Representation, Cursor = request.Cursor, MaxChars = request.MaxChars,
+                    MaxRows = request.MaxRows, RowOffset = request.RowOffset, ViewPath = request.ViewPath, Fields = request.Fields };
+            }
+            var live = provider is ILiveOfficeResourceProvider;
+            if (IsBinaryView(request.Representation)) return ReadBinaryView(session, request);
+            if (request.Representation == "table" || request.Representation == "records")
+            {
+                if (_authority?.Payloads == null) throw new ResourceRequestException("Canonical snapshot storage is required for structural views.", "RESOURCE_VIEW_UNAVAILABLE", false);
+                var derived = ResourceDerivedViewService.TryRead(this, _authority, session, request);
+                if (derived != null) return derived;
+                return new ResourceStructuredViewService(this, _authority).Read(session, request, live);
+            }
+            var retained = _authority == null ? null : _authority.ReadRetained(session, request, live);
+            if (retained != null) return retained;
             return WithProvider(provider, session, delegate
             {
-                return provider.Read(session, request);
+                var providerRequest = _authority == null ? request : _authority.PrepareRead(session, request, live);
+                var result = provider.Read(session, providerRequest);
+                return _authority == null ? result : _authority.PublishRead(session, result, request, live);
             });
+        }
+
+        internal IReadOnlyList<ResourceEvidence> Evidence(ChatSession session, ResourceReadResult result)
+        {
+            if (_authority != null) _authority.RetainView(session, result,
+                ProviderFor(result.Resource.Reference.Uri) is ILiveOfficeResourceProvider);
+            return _authority == null ? new ResourceEvidence[0] :
+                _authority.Observe(session, result, ProviderFor(result.Resource.Reference.Uri) is ILiveOfficeResourceProvider);
         }
 
         private T WithProvider<T>(IResourceProvider provider, ChatSession session, Func<T> action)

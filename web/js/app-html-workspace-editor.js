@@ -67,7 +67,7 @@
       } else if (selected.type === "artifact" || selected.type === "collection") {
         return;
       } else if (selected.type === "data") {
-        setDataJson(selected.item, value);
+        return;
       } else {
         setFileContent(selected.item, value);
       }
@@ -75,7 +75,7 @@
 
     function markHtmlWorkspaceDirty() {
       var selected = selectedItem();
-      if (!selected || selected.type === "artifact" || selected.type === "collection") return;
+      if (!selected || selected.type === "artifact" || selected.type === "collection" || selected.type === "data") return;
       if (recoveryBlocked() && selected.type !== "plan") return;
       syncHtmlEditorToState();
       state.htmlWorkspaceDirty = true;
@@ -279,13 +279,11 @@
       }
       if (meta) {
         var binding = selected && selected.type === "data" ? dataBinding(selected.item) : null;
-        var bindingStatus = binding ? String(bindingValue(binding, "Status", "status", "ready")) : "";
-        var payloadCompleteness = binding ? String(bindingValue(binding, "PayloadCompleteness", "payloadCompleteness", "bounded")) : "";
         meta.textContent = selected
           ? (isCollection ? "Коллекция · " + workspaceArtifacts.collectionCount(selected.item.id, options.artifactActions) + " ресурсов" :
-            (isPlan ? "План · Markdown · v" + artifactRevision(selected.item) : (isArtifact ? workspaceArtifacts.typeLabel(artifactKind(selected.item)) + " · только чтение" : (selected.type === "data" ? (binding ? "JSON · " + bindingValue(binding, "ToolId", "toolId", "Office") + " · " + bindingStatus + " · " + payloadCompleteness + " · " + bindingValue(binding, "RefreshPolicy", "refreshPolicy", "manual") : "JSON data source · static") : (fileKind(selected.item) || "file")))))
+            (isPlan ? "План · Markdown · v" + artifactRevision(selected.item) : (isArtifact ? workspaceArtifacts.typeLabel(artifactKind(selected.item)) + " · только чтение" : (selected.type === "data" ? ("Ресурс · " + bindingValue(binding, "View", "view", "text") + " · " + bindingValue(binding, "Policy", "policy", "exact")) : (fileKind(selected.item) || "file")))))
           : "";
-        meta.title = binding && bindingValue(binding, "LastError", "lastError", "") ? bindingValue(binding, "LastError", "lastError", "") : "";
+        meta.title = binding ? dataJson(selected.item) : "";
       }
       var previewButton = document.querySelector('.html-workspace-mode-button[data-html-mode="preview"]');
       var editButton = document.querySelector('.html-workspace-mode-button[data-html-mode="edit"]');
@@ -302,7 +300,7 @@
       }
       if (isPlan && artifactInlineTruncated(selected.item)) state.htmlWorkspaceMode = "preview";
       if (isArtifact || isCollection) state.htmlWorkspaceMode = "preview";
-      if ($("saveHtmlWorkspaceButton")) $("saveHtmlWorkspaceButton").classList.toggle("hidden", isArtifact || isCollection);
+      if ($("saveHtmlWorkspaceButton")) $("saveHtmlWorkspaceButton").classList.toggle("hidden", isArtifact || isCollection || selected && selected.type === "data");
       if ($("deleteHtmlWorkspaceButton")) $("deleteHtmlWorkspaceButton").classList.toggle("hidden", isArtifact || isCollection);
       if (typeof setCodeEditorValue === "function") {
         setCodeEditorValue("htmlWorkspaceEditorInput", isArtifact || isCollection ? "" : selectedEditorValue(selected));
@@ -310,11 +308,12 @@
         $("htmlWorkspaceEditorInput").value = isArtifact || isCollection ? "" : selectedEditorValue(selected);
       }
       if (typeof setCodeEditorReadOnly === "function") setCodeEditorReadOnly("htmlWorkspaceEditorInput",
-        isArtifact || isCollection || (blocked && !isPlan));
+        isArtifact || isCollection || selected && selected.type === "data" || (blocked && !isPlan));
       renderHtmlWorkspacePreview();
     }
 
     function renderHtmlWorkspacePreview() {
+      if (options.closeResources) options.closeResources();
       var frame = $("htmlWorkspacePreviewFrame");
       var detail = $("artifactDetailPreview");
       if (!frame || !detail) {

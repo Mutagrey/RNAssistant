@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 using Newtonsoft.Json;
@@ -18,6 +19,10 @@ namespace RNAssistant.Office.WebView
         private readonly Action<string> _postMessageJson;
         private readonly BridgeRequestCancellationRegistry _cancellations;
         private readonly string _bridgeToken;
+        private readonly object _resourceChangesSync = new object();
+        private readonly Dictionary<string, ResourceChangedMessage> _resourceChanges = new Dictionary<string, ResourceChangedMessage>();
+        private readonly Timer _resourceChangesTimer;
+        private bool _resourceChangesDisposed;
 
         public AssistantWebBridge(AssistantController controller, Action<string> postMessageJson)
         {
@@ -25,7 +30,9 @@ namespace RNAssistant.Office.WebView
             _postMessageJson = postMessageJson;
             _cancellations = new BridgeRequestCancellationRegistry();
             _bridgeToken = Guid.NewGuid().ToString("N");
+            _resourceChangesTimer = new Timer(ignored => FlushResourceChanges(), null, Timeout.Infinite, Timeout.Infinite);
             _controller.ModelRequestDiagnostics += ReportModelRequestDiagnostics;
+            _controller.ResourceAuthorityChanged += ReportResourceChanged;
         }
 
         public async Task<string> HandleMessageAsync(string requestJson)
@@ -371,6 +378,12 @@ namespace RNAssistant.Office.WebView
                             Payload<RunVbaMacroPayload>(payload).MacroName,
                             cancellationToken);
                         break;
+                    case "resourceDataOpen":
+                        responsePayload = _controller.OpenResourceData(Payload<ResourceDataOpenRequest>(payload), cancellationToken);
+                        break;
+                    case "resourceDataClose":
+                        responsePayload = _controller.CloseResourceData(Payload<ResourceDataCloseRequest>(payload));
+                        break;
                     case "getHtmlWorkspace":
                         responsePayload = _controller.GetHtmlWorkspace(Payload<ChatPayload>(payload).ChatId);
                         break;
@@ -401,19 +414,19 @@ namespace RNAssistant.Office.WebView
                         responsePayload = _controller.ReadArtifactViewerPage(
                             artifactViewerPage.ChatId,
                             artifactViewerPage.ResourceUri,
-                            artifactViewerPage.Cursor);
+                            artifactViewerPage.Cursor, cancellationToken);
                         break;
                     case "readArtifactImage":
                         var artifactImage = Payload<ArtifactImageViewerPayload>(payload);
                         responsePayload = _controller.ReadArtifactImage(
                             artifactImage.ChatId,
-                            artifactImage.ResourceUri);
+                            artifactImage.ResourceUri, cancellationToken);
                         break;
                     case "readArtifactImageThumbnail":
                         var artifactImageThumbnail = Payload<ArtifactImageThumbnailPayload>(payload);
                         responsePayload = _controller.ReadArtifactImageThumbnail(
                             artifactImageThumbnail.ChatId,
-                            artifactImageThumbnail.ResourceUri);
+                            artifactImageThumbnail.ResourceUri, cancellationToken);
                         break;
                     case "readArtifactPdfInfo":
                         var artifactPdf = Payload<ArtifactPdfViewerPayload>(payload);
@@ -426,14 +439,14 @@ namespace RNAssistant.Office.WebView
                         responsePayload = _controller.ReadArtifactPdfPage(
                             artifactPdfPage.ChatId,
                             artifactPdfPage.ResourceUri,
-                            artifactPdfPage.PageIndex);
+                            artifactPdfPage.PageIndex, cancellationToken);
                         break;
                     case "readArtifactPdfThumbnail":
                         var artifactPdfThumbnail = Payload<ArtifactPdfPagePayload>(payload);
                         responsePayload = _controller.ReadArtifactPdfThumbnail(
                             artifactPdfThumbnail.ChatId,
                             artifactPdfThumbnail.ResourceUri,
-                            artifactPdfThumbnail.PageIndex);
+                            artifactPdfThumbnail.PageIndex, cancellationToken);
                         break;
                     case "importUploadedHtmlToWorkspace":
                         var htmlImport = Payload<HtmlWorkspaceImportPayload>(payload);
@@ -566,6 +579,13 @@ namespace RNAssistant.Office.WebView
         public void Dispose()
         {
             _controller.ModelRequestDiagnostics -= ReportModelRequestDiagnostics;
+            _controller.ResourceAuthorityChanged -= ReportResourceChanged;
+            lock (_resourceChangesSync)
+            {
+                _resourceChangesDisposed = true;
+                _resourceChanges.Clear();
+                _resourceChangesTimer.Dispose();
+            }
             _cancellations.Dispose();
         }
 
@@ -624,6 +644,48 @@ namespace RNAssistant.Office.WebView
                         : null
                 }
             }));
+        }
+
+        private void ReportResourceChanged(object sender, ResourceAuthorityChangedEventArgs change)
+        {
+            if (_postMessageJson == null || change == null) return;
+            ResourceChangedMessage[] overflow = null;
+            lock (_resourceChangesSync)
+            {
+                if (_resourceChangesDisposed) return;
+                var scope = change.ScopeId.ToString();
+                ResourceChangedMessage pending;
+                if (!_resourceChanges.TryGetValue(scope, out pending))
+                {
+                    if (_resourceChanges.Count >= 16) { overflow = _resourceChanges.Values.ToArray(); _resourceChanges.Clear(); }
+                    pending = new ResourceChangedMessage { Scope = scope, Resources = new string[0] };
+                    if (_resourceChanges.Count == 0) _resourceChangesTimer.Change(100, Timeout.Infinite);
+                    _resourceChanges.Add(scope, pending);
+                }
+                var resources = pending.Resources.Concat(change.AffectedResources.Select(item => item.Uri)).Distinct().Take(65).ToArray();
+                pending.AllInScope |= resources.Length > 64;
+                pending.Resources = pending.AllInScope ? new string[0] : resources;
+                if (change.Generation >= pending.Generation) { pending.Generation = change.Generation; pending.CommitId = change.CommitId; }
+            }
+            if (overflow != null) PostResourceChanges(overflow);
+        }
+
+        private void FlushResourceChanges()
+        {
+            ResourceChangedMessage[] messages;
+            lock (_resourceChangesSync)
+            {
+                if (_resourceChangesDisposed) return;
+                messages = _resourceChanges.Values.ToArray(); _resourceChanges.Clear();
+            }
+            PostResourceChanges(messages);
+        }
+
+        private void PostResourceChanges(IEnumerable<ResourceChangedMessage> messages)
+        {
+            foreach (var message in messages)
+                try { _postMessageJson(JsonConvert.SerializeObject(message)); }
+                catch { /* Advisory only; fresh requests still capture shared authority. */ }
         }
 
         private void ReportModelRequestDiagnostics(LlmRequestDiagnosticUpdate update)

@@ -82,10 +82,10 @@ namespace RNAssistant.Office.Vba
             var correlation = request.Correlation ?? new VbaMutationCorrelation();
             var sourceHash = CodeSha256(source.Code);
             string observedHash;
-            if (TryGetObservation(correlation.SessionId, sourceName, out observedHash) &&
+            if (TryGetObservation(correlation, sourceName, out observedHash) &&
                 !string.Equals(observedHash, sourceHash, StringComparison.OrdinalIgnoreCase))
             {
-                RemoveObservation(correlation.SessionId, sourceName);
+                correlation.ObserveExternalDrift?.Invoke(sourceName);
                 return RenameGuardFailure(StaleSnapshot(
                     sourceName,
                     true,
@@ -288,7 +288,6 @@ namespace RNAssistant.Office.Vba
                     StringComparison.OrdinalIgnoreCase))
             {
                 var correlation = request.Correlation ?? new VbaMutationCorrelation();
-                RemoveObservation(correlation.SessionId, sourceName);
                 return VbaMutationOutcome.Error(
                     "The VBA source or rename destination changed after confirmation was prepared. The rename was not applied; retry it against current state.",
                     new JObject

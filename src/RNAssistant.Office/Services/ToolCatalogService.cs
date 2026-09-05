@@ -2,7 +2,6 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using RNAssistant.Core.Models;
-using RNAssistant.Core.Storage;
 using RNAssistant.Core.Tools;
 using RNAssistant.Office.Tools;
 using RNAssistant.Office.Runtime;
@@ -17,22 +16,23 @@ namespace RNAssistant.Office.Services
         private readonly IOfficeApplicationAdapter _adapter;
         private readonly OfficeToolExecutor _toolExecutor;
         private readonly VbaReader _vbaReader;
-        private readonly ToolStore _toolStore;
         private readonly object _documentVbaCacheSync = new object();
         private string _documentVbaCacheKey;
         private DateTime _documentVbaCacheUtc;
         private long _documentVbaCacheGeneration;
         private List<ToolCatalogEntry> _documentVbaCache = new List<ToolCatalogEntry>();
 
-        public ToolCatalogService(IOfficeApplicationAdapter adapter, OfficeToolExecutor toolExecutor, ToolStore toolStore)
+        public ToolCatalogService(IOfficeApplicationAdapter adapter, OfficeToolExecutor toolExecutor)
         {
             _adapter = adapter;
             _toolExecutor = toolExecutor;
             _vbaReader = toolExecutor.VbaReader;
-            _toolStore = toolStore;
         }
 
         public List<ToolCatalogEntry> GetVisibleTools()
+        { return GetVisibleTools(_toolExecutor.CapturePublishedTools()); }
+
+        internal List<ToolCatalogEntry> GetVisibleTools(IReadOnlyList<ToolCatalogEntry> published)
         {
             var result = new Dictionary<string, ToolCatalogEntry>(StringComparer.OrdinalIgnoreCase);
             foreach (var tool in _toolExecutor.GetHostTools())
@@ -45,7 +45,7 @@ namespace RNAssistant.Office.Services
                 result[tool.Id] = tool;
             }
 
-            foreach (var tool in _toolStore.Load().Where(s =>
+            foreach (var tool in published.Where(s =>
                 !string.Equals(s.Executor, "pipeline", StringComparison.OrdinalIgnoreCase) &&
                 (string.Equals(s.Host, _adapter.HostName, StringComparison.OrdinalIgnoreCase) ||
                 string.Equals(s.Host, "Common", StringComparison.OrdinalIgnoreCase))))

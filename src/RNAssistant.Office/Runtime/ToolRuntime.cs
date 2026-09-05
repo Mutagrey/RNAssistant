@@ -22,9 +22,11 @@ namespace RNAssistant.Office.Runtime
         private readonly bool _autoConfirm;
         private readonly bool _allowsConfirmation;
         private readonly Func<ToolExecutionContext, ToolPreparationResult, string> _pendingRegistrar;
+        private readonly IToolMutationObserver _mutationObserver;
 
         public ToolRuntime(ToolHandlerRegistry registry, string mode, bool autoConfirm, bool allowsConfirmation,
-            Func<ToolExecutionContext, ToolPreparationResult, string> pendingRegistrar = null)
+            Func<ToolExecutionContext, ToolPreparationResult, string> pendingRegistrar = null,
+            IToolMutationObserver mutationObserver = null)
         {
             _registry = registry ?? throw new ArgumentNullException(nameof(registry));
             if (mode != "agent" && mode != "plan" && mode != "chat") throw new ArgumentException("A supported conversation mode is required.", nameof(mode));
@@ -32,6 +34,7 @@ namespace RNAssistant.Office.Runtime
             _autoConfirm = autoConfirm;
             _allowsConfirmation = allowsConfirmation;
             _pendingRegistrar = pendingRegistrar;
+            _mutationObserver = mutationObserver;
         }
 
         public ToolPolicySnapshot Describe(ToolCall call)
@@ -144,8 +147,22 @@ namespace RNAssistant.Office.Runtime
                 }
             }
 
-            var handlerContext = new ToolHandlerContext(context, arguments,
-                context.PreparedStateJson ?? (preparation == null ? null : preparation.PreparedStateJson));
+            string mutationAttemptId = null;
+            if (policy.MayHaveSideEffects && _mutationObserver != null)
+                mutationAttemptId = _mutationObserver.Prepare(context, arguments);
+            ToolExecutionRecord publishedTerminal = null;
+            var publicationAttempted = false;
+            ToolHandlerContext handlerContext = null;
+            handlerContext = new ToolHandlerContext(context, arguments,
+                context.PreparedStateJson ?? (preparation == null ? null : preparation.PreparedStateJson),
+                mutationAttemptId == null ? (Action)null : () =>
+                    _mutationObserver.MarkDispatchMayHaveOccurred(mutationAttemptId), completed =>
+                    {
+                        if (publicationAttempted) throw new InvalidOperationException("Mutation terminal was published twice.");
+                        publicationAttempted = true;
+                        publishedTerminal = CompleteMutation(mutationAttemptId, FromHandler(context, policy, handlerContext, completed));
+                    });
+            ToolExecutionRecord terminal;
             try
             {
                 cancellationToken.ThrowIfCancellationRequested();
@@ -153,18 +170,38 @@ namespace RNAssistant.Office.Runtime
                 if (result == null) throw new InvalidOperationException("Handler returned no terminal result.");
                 // Cancellation cannot discard a terminal result/effect that the
                 // handler already established. The kernel observes lifecycle next.
-                return FromHandler(context, policy, handlerContext, result);
+                terminal = FromHandler(context, policy, handlerContext, result);
             }
             catch (Exception ex)
             {
+                if (publicationAttempted)
+                {
+                    if (publishedTerminal != null) return publishedTerminal;
+                    if (mutationAttemptId != null) _mutationObserver.ReleaseUnresolved(mutationAttemptId);
+                    throw;
+                }
                 if (ex is OperationCanceledException && !handlerContext.MayHaveDispatched)
-                    return NotDispatched(context, "Cancelled before a possible effect.");
-                var unknown = policy.MayHaveSideEffects && handlerContext.MayHaveDispatched;
-                var result = unknown ? ToolResult.Unknown(ex.Message, Code("handler_effect_unknown"))
-                    : ToolResult.Error(ex.Message, Code("handler_failed"));
-                return Record(context, unknown ? ToolExecutionOutcome.Unknown : ToolExecutionOutcome.Error,
-                    result, handlerContext.MayHaveDispatched, unknown ? ToolEffectEvidence.Unknown : ToolEffectEvidence.None);
+                    terminal = NotDispatched(context, "Cancelled before a possible effect.");
+                else
+                {
+                    var unknown = policy.MayHaveSideEffects && handlerContext.MayHaveDispatched;
+                    var result = unknown ? ToolResult.Unknown(ex.Message, Code("handler_effect_unknown"))
+                        : ToolResult.Error(ex.Message, Code("handler_failed"));
+                    terminal = Record(context, unknown ? ToolExecutionOutcome.Unknown : ToolExecutionOutcome.Error,
+                        result, handlerContext.MayHaveDispatched, unknown ? ToolEffectEvidence.Unknown : ToolEffectEvidence.None);
+                }
             }
+            return publishedTerminal ?? CompleteMutation(mutationAttemptId, terminal);
+        }
+
+        private ToolExecutionRecord CompleteMutation(string attemptId, ToolExecutionRecord record)
+        {
+            if (string.IsNullOrWhiteSpace(attemptId) || _mutationObserver == null) return record;
+            if (record != null && record.MayHaveDispatched)
+                return record.WithAuthorityCommit(_mutationObserver.Complete(attemptId, record));
+            else
+                _mutationObserver.AbandonBeforeDispatch(attemptId);
+            return record;
         }
 
         private static ToolExecutionRecord FromHandler(ToolExecutionContext context, ToolPolicy policy,
@@ -203,7 +240,8 @@ namespace RNAssistant.Office.Runtime
             var outcome = result.Status == ToolResultStatus.Ok ? ToolExecutionOutcome.Ok
                 : result.Status == ToolResultStatus.Unknown ? ToolExecutionOutcome.Unknown : ToolExecutionOutcome.Error;
             return Record(context, outcome, result, dispatched, effect,
-                awaitingUser: completed.AwaitingUser && outcome == ToolExecutionOutcome.Ok);
+                awaitingUser: completed.AwaitingUser && outcome == ToolExecutionOutcome.Ok,
+                resourceEvidence: completed.ResourceEvidence, resourceReadBack: completed.ResourceReadBack);
         }
 
         private static JObject ParseArguments(string json)
@@ -233,14 +271,17 @@ namespace RNAssistant.Office.Runtime
 
         private static ToolExecutionRecord Record(ToolExecutionContext context, ToolExecutionOutcome outcome,
             ToolResult result, bool dispatched, ToolEffectEvidence effect, string pendingId = null, bool awaitingUser = false,
-            string message = null, string preparedStateJson = null, string confirmationDataJson = null)
+            string message = null, string preparedStateJson = null, string confirmationDataJson = null,
+            IReadOnlyList<RNAssistant.Core.Models.ResourceEvidence> resourceEvidence = null,
+            IReadOnlyList<RNAssistant.Core.Models.ResourceMutationReadBack> resourceReadBack = null)
         {
             var completed = DateTime.UtcNow;
             if (completed < context.StartedUtc) completed = context.StartedUtc;
             return new ToolExecutionRecord(context, outcome, completed, message ?? (result == null ? string.Empty : result.Message),
                 mayHaveDispatched: dispatched, pendingId: pendingId, awaitingUser: awaitingUser,
                 evidence: new ToolExecutionEvidence(dispatched ? ToolDispatchEvidence.MayHaveDispatched : ToolDispatchEvidence.NotDispatched, effect),
-                result: result, preparedStateJson: preparedStateJson, confirmationDataJson: confirmationDataJson);
+                result: result, preparedStateJson: preparedStateJson, confirmationDataJson: confirmationDataJson,
+                resourceEvidence: resourceEvidence, resourceReadBack: resourceReadBack);
         }
     }
 }

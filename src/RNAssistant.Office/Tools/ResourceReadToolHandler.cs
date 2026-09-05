@@ -18,7 +18,7 @@ namespace RNAssistant.Office.Tools
         private const int MaximumWholeReadPages = 128;
         internal static readonly ToolDescriptor Descriptor = new ToolDescriptor(
             ResourceToolCatalog.ReadToolId,
-            "Read-only: Read one semantic target supplied by RUNTIME_CONTEXT or returned by common.resources_find as one complete representation. For a project-wide VBA request, read RUNTIME_CONTEXT.document.vba_project_target directly with representation=structure before searching individual modules. Internal paging, exact URI, revision, cursor, and page size remain runtime-owned. If the complete representation cannot fit the model request, the read fails explicitly instead of returning a partial success. Media is hydrated only for the next model step and base64 is never embedded in JSON.",
+            "Read-only: Read a semantic target supplied by RUNTIME_CONTEXT or common.resources_find. table/records return bounded row coverage with optional semantic path, fields, offset and limit. Text/source/structure require one complete representation; oversized requests fail explicitly. For a project-wide VBA request, read RUNTIME_CONTEXT.document.vba_project_target with representation=structure first. Exact URI, revision, cursor and guards remain runtime-owned. Media is hydrated only for the next model step; base64 is never embedded in JSON.",
             Parameters());
         internal static readonly ToolPolicy Policy = new ToolPolicy(ToolEffect.Read, ToolVerification.None,
             false, true, new[] { "agent", "plan", "chat" });
@@ -37,23 +37,30 @@ namespace RNAssistant.Office.Tools
             var target = ToolArgumentReader.String(
                 context.Arguments, "target", string.Empty).Trim();
             var selected = Gateway.ResolveIntentTarget(Session, target);
-            var selection = ReadWhole(
-                selected.Reference,
-                ToolArgumentReader.String(
-                    context.Arguments, "representation", "auto"));
+            var representation = ToolArgumentReader.String(context.Arguments, "representation", "auto");
+            var structured = representation == "table" || representation == "records";
+            if (!structured && new[] { "limit", "offset", "path", "fields" }.Any(context.Arguments.ContainsKey))
+                throw new ResourceRequestException("Structural selectors require representation=table or records.", "RESOURCE_VIEW_UNSUPPORTED", false);
+            var selection = structured
+                ? Gateway.Read(Session, new ResourceReadRequest { Reference = selected.Reference, Representation = representation,
+                    MaxRows = ToolArgumentReader.Int32(context.Arguments, "limit", 500),
+                    RowOffset = ToolArgumentReader.Int32(context.Arguments, "offset", 0),
+                    ViewPath = ToolArgumentReader.String(context.Arguments, "path", "$"),
+                    Fields = Fields(context.Arguments) })
+                : ReadWhole(selected.Reference, representation);
             var projection = Project(
                 selection,
                 selected.Target,
                 selected.Type,
                 selected.Scope);
             var result = RuntimeResult.Ok(
-                "Complete resource representation read.",
+                structured ? "Bounded exact structural view read." : "Complete resource representation read.",
                 Serialize(projection),
                 selection.ResourceRefs);
             var attachments = selection.ModelAttachments ?? new ChatAttachment[0];
             if (_captureAttachments != null && attachments.Count > 0)
                 _captureAttachments(context.Execution.Call.Id, attachments);
-            return Completed(result);
+            return new ToolHandlerResult(result, ToolEffectEvidence.None, resourceEvidence: Gateway.Evidence(Session, selection.Result));
         }
 
         private ResourceReadSelection ReadWhole(
@@ -110,6 +117,8 @@ namespace RNAssistant.Office.Tools
                     throw WholeReadFailure(
                         "Resource provider changed representation during one whole read.");
                 }
+                if (first.Resource.Reference.Revision != result.Resource.Reference.Revision)
+                    throw WholeReadFailure("Resource provider crossed exact revisions during one whole read.");
                 var pageText = result.Text ?? string.Empty;
                 if (result.Offset != text.Length ||
                     result.ReturnedCharacters != pageText.Length ||
@@ -168,6 +177,7 @@ namespace RNAssistant.Office.Tools
                     Representation = first.Representation,
                     Text = text.ToString(),
                     ContentSha256 = last.ContentSha256,
+                    AuthorityGeneration = first.AuthorityGeneration,
                     Offset = 0,
                     ReturnedCharacters = text.Length,
                     TotalCharacters = last.TotalCharacters,
@@ -221,6 +231,9 @@ namespace RNAssistant.Office.Tools
                 Scope = scope,
                 Representation = result.Representation,
                 Text = result.Text,
+                Table = result.Table,
+                Coverage = result.Coverage,
+                Offset = result.Offset,
                 ReturnedCharacters = result.ReturnedCharacters,
                 TotalCharacters = result.TotalCharacters,
                 Complete = result.Complete,
@@ -233,8 +246,17 @@ namespace RNAssistant.Office.Tools
         {
             return "{\"type\":\"object\",\"properties\":{" +
                 "\"target\":{\"type\":\"string\",\"description\":\"Exact readable target supplied by RUNTIME_CONTEXT or returned by common.resources_find.\",\"minLength\":1,\"maxLength\":1000}," +
-                "\"representation\":{\"type\":\"string\",\"description\":\"Complete meaningful representation to read; omission selects the preferred form.\",\"enum\":[\"metadata\",\"text\",\"structure\",\"source\",\"media\"]}" +
+                "\"representation\":{\"type\":\"string\",\"description\":\"Meaningful view; table/records return bounded rows with explicit coverage.\",\"enum\":[\"metadata\",\"text\",\"structure\",\"source\",\"media\",\"formulas\",\"table\",\"records\"]}," +
+                "\"limit\":{\"type\":\"integer\",\"description\":\"Maximum rows in a table/records batch.\",\"minimum\":1,\"maximum\":5000},\"offset\":{\"type\":\"integer\",\"description\":\"Zero-based table/records row offset.\",\"minimum\":0}," +
+                "\"path\":{\"type\":\"string\",\"description\":\"Explicit JSON property path for a record array, default $.\",\"maxLength\":256},\"fields\":{\"type\":\"array\",\"description\":\"Structural field keys to project.\",\"maxItems\":128,\"items\":{\"type\":\"string\",\"maxLength\":128}}" +
                 "},\"required\":[\"target\"],\"additionalProperties\":false}";
+        }
+
+        private static List<string> Fields(IDictionary<string, object> arguments)
+        {
+            object value;
+            if (!arguments.TryGetValue("fields", out value) || value == null) return null;
+            return JsonConvert.DeserializeObject<List<string>>(JsonConvert.SerializeObject(value));
         }
 
         private sealed class ResourceReadProjection
@@ -251,6 +273,12 @@ namespace RNAssistant.Office.Tools
             public string Representation { get; set; }
             [JsonProperty("text")]
             public string Text { get; set; }
+            [JsonProperty("table", NullValueHandling = NullValueHandling.Ignore)]
+            public ResourceTableBatch Table { get; set; }
+            [JsonProperty("coverage")]
+            public ResourceCoverage Coverage { get; set; }
+            [JsonProperty("offset")]
+            public int Offset { get; set; }
             [JsonProperty("returnedCharacters")]
             public int ReturnedCharacters { get; set; }
             [JsonProperty("totalCharacters")]

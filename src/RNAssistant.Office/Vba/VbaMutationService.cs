@@ -1,5 +1,8 @@
 using System;
 using System.Collections.Generic;
+using System.Linq;
+using RNAssistant.Core.Models;
+using RNAssistant.Core.Services;
 using RNAssistant.Core.Tools;
 using RNAssistant.Office.Services;
 
@@ -13,11 +16,6 @@ namespace RNAssistant.Office.Vba
         private readonly IVbaRenameJournal _renameJournal;
         private readonly IVbaMutationReader _reader;
         private readonly VbaVerifier _verifier;
-        private readonly object _observationsSync = new object();
-        private readonly Dictionary<string, string> _observedModuleHashes =
-            new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
-        private readonly HashSet<string> _modulesRequiringRefresh =
-            new HashSet<string>(StringComparer.OrdinalIgnoreCase);
 
         internal VbaMutationService(
             IVbaMutationDocumentContext document,
@@ -40,7 +38,7 @@ namespace RNAssistant.Office.Vba
             _reader = reader ?? throw new ArgumentNullException(nameof(reader));
             _backend = backend ?? throw new ArgumentNullException(nameof(backend));
             _renameJournal = renameJournal;
-            _verifier = new VbaVerifier(reader, MarkObservationStale, RemoveObservation);
+            _verifier = new VbaVerifier(reader);
         }
 
         public VbaMutationOutcome TryReadExistingModule(
@@ -97,74 +95,44 @@ namespace RNAssistant.Office.Vba
                 true);
         }
 
-        public void RecordObservation(string sessionId, string moduleName, string hash)
+        private static IEnumerable<ResourceEvidence> ModuleEvidence(VbaMutationCorrelation correlation, string moduleName)
         {
-            if (string.IsNullOrWhiteSpace(moduleName) || string.IsNullOrWhiteSpace(hash)) return;
-            var key = ObservationKey(sessionId, moduleName);
-            lock (_observationsSync)
-            {
-                if (_observedModuleHashes.Count >= 1024 && !_observedModuleHashes.ContainsKey(key))
-                {
-                    _observedModuleHashes.Clear();
-                    _modulesRequiringRefresh.Clear();
-                }
-                _observedModuleHashes[key] = hash;
-                _modulesRequiringRefresh.Remove(key);
-            }
+            if (correlation == null || string.IsNullOrWhiteSpace(correlation.DocumentAuthorityId))
+                return Enumerable.Empty<ResourceEvidence>();
+            var identity = VbaResourceProvider.ComponentIdentity(correlation.DocumentAuthorityId, moduleName);
+            return (correlation.Evidence ?? new ResourceEvidence[0]).Where(item =>
+                item.Resource.Identity.Equals(identity) && item.Complete &&
+                item.Coverage.Kind == ResourceCoverageKinds.Whole && item.View == ResourceRepresentations.Source);
         }
 
-        public void MarkObservationStale(string sessionId, string moduleName, string hash)
+        private static bool TryGetObservation(VbaMutationCorrelation correlation, string moduleName, out string hash)
         {
-            if (string.IsNullOrWhiteSpace(moduleName)) return;
-            var key = ObservationKey(sessionId, moduleName);
-            lock (_observationsSync)
-            {
-                if (_modulesRequiringRefresh.Count >= 1024 &&
-                    !_modulesRequiringRefresh.Contains(key))
-                {
-                    _observedModuleHashes.Clear();
-                    _modulesRequiringRefresh.Clear();
-                }
-                if (!string.IsNullOrWhiteSpace(hash))
-                    _observedModuleHashes[key] = hash;
-                _modulesRequiringRefresh.Add(key);
-            }
+            // An editor's explicit expected hash is a guard, never a model observation.
+            hash = correlation == null ? null : correlation.ExpectedContentSha256;
+            if (!string.IsNullOrWhiteSpace(hash)) return true;
+            var reducer = new EvidenceStateReducer();
+            var evidence = ModuleEvidence(correlation, moduleName).LastOrDefault(item =>
+                reducer.Reduce(item, correlation.Authority).State == EvidenceState.Current);
+            hash = evidence == null ? null : evidence.ContentSha256;
+            return !string.IsNullOrWhiteSpace(hash);
         }
 
-        public bool RequiresObservationRefresh(string sessionId, string moduleName)
+        private static bool RequiresObservationRefresh(VbaMutationCorrelation correlation, string moduleName)
         {
-            lock (_observationsSync)
-            {
-                return _modulesRequiringRefresh.Contains(
-                    ObservationKey(sessionId, moduleName));
-            }
-        }
-
-        public bool TryGetObservation(string sessionId, string moduleName, out string hash)
-        {
-            lock (_observationsSync)
-            {
-                return _observedModuleHashes.TryGetValue(ObservationKey(sessionId, moduleName), out hash);
-            }
-        }
-
-        public void RemoveObservation(string sessionId, string moduleName)
-        {
-            lock (_observationsSync)
-            {
-                _observedModuleHashes.Remove(ObservationKey(sessionId, moduleName));
-                _modulesRequiringRefresh.Remove(ObservationKey(sessionId, moduleName));
-            }
-        }
-
-        private string ObservationKey(string sessionId, string moduleName)
-        {
-            var runtimeKey = _document.RuntimeDocumentKey ?? string.Empty;
-            var documentIdentity = string.IsNullOrWhiteSpace(runtimeKey)
-                ? "document:" + (_document.DocumentKey ?? string.Empty)
-                : "runtime:" + runtimeKey;
-            return (sessionId ?? string.Empty) + "|" +
-                (_document.HostName ?? string.Empty) + "|" + documentIdentity + "|" + (moduleName ?? string.Empty);
+            string hash;
+            if (TryGetObservation(correlation, moduleName, out hash)) return false;
+            if (correlation == null || correlation.Authority == null ||
+                string.IsNullOrWhiteSpace(correlation.DocumentAuthorityId)) return false;
+            var identity = VbaResourceProvider.ComponentIdentity(correlation.DocumentAuthorityId, moduleName);
+            var scope = correlation.Authority.Get(ResourceAuthorityScopeId.Document(
+                new DocumentAuthorityId(correlation.DocumentAuthorityId)));
+            // A head advanced by a committed effect must be observed in the model's
+            // conversation again. Runtime read-back does not grant model knowledge.
+            return ModuleEvidence(correlation, moduleName).Any() || scope != null &&
+                scope.Commits.Any(commit => commit.Effect != null &&
+                    commit.Effect.Outcome != ResourceEffectOutcome.VerifiedNoChange &&
+                    commit.Effect.Outcome != ResourceEffectOutcome.FailedNoEffect &&
+                    commit.Effect.Impacts.Any(impact => impact.Identity.Equals(identity)));
         }
 
         private static VbaMutationOutcome ReadFailure(VbaMutationReadResult error)

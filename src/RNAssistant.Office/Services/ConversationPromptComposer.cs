@@ -13,7 +13,7 @@ namespace RNAssistant.Office.Services
 {
     internal sealed class ConversationPromptComposer
     {
-        public List<ChatMessage> BuildMessages(
+        public List<ChatMessage> BuildRequiredMessages(
             string mode,
             string userText,
             IOfficeApplicationAdapter adapter,
@@ -53,14 +53,6 @@ namespace RNAssistant.Office.Services
                         Content = instruction + "\n\nRUNTIME_CONTEXT:\n" + runtimeContext
                     });
                 }
-                new PromptBudgetComposer().AddConversationHistory(
-                    messages,
-                    messages.Count,
-                    session,
-                    settings,
-                    historyBudgetTokens,
-                    true,
-                    false);
                 return messages;
             }
 
@@ -77,14 +69,7 @@ namespace RNAssistant.Office.Services
                     ? new List<ChatAttachment>()
                     : new List<ChatAttachment>(attachments)
             };
-            var currentIndex = messages.Count;
             messages.Add(current);
-            new PromptBudgetComposer().AddConversationHistory(
-                messages,
-                currentIndex,
-                session,
-                settings,
-                historyBudgetTokens);
             return messages;
         }
 
@@ -152,17 +137,17 @@ namespace RNAssistant.Office.Services
             JObject capabilityCatalog = null)
         {
             mode = ChatModes.Normalize(mode);
-            var adapterHost = SafeAdapterValue(adapter, item => item.HostName);
-            var adapterDocumentTitle = SafeAdapterValue(adapter, item => item.DocumentTitle);
+            var adapterHost = session == null ? SafeAdapterValue(adapter, item => item.HostName) : session.Host;
+            var adapterDocumentTitle = session == null ? SafeAdapterValue(adapter, item => item.DocumentTitle) : session.DocumentTitle;
             var host = session != null && !string.IsNullOrWhiteSpace(session.Host)
                 ? session.Host
                 : adapterHost;
             var documentTitle = session != null && !string.IsNullOrWhiteSpace(session.DocumentTitle)
                 ? session.DocumentTitle
                 : adapterDocumentTitle;
-            var officeToolsAvailable = session == null
-                ? adapter != null
-                : OfficeDocumentExecutionGuardState.SessionMatchesAdapter(adapter, session);
+            var officeToolsAvailable = adapter == null ? session != null && session.LastRun != null &&
+                !string.IsNullOrWhiteSpace(session.LastRun.DocumentRuntimeKey) : session == null ||
+                OfficeDocumentExecutionGuardState.SessionMatchesAdapter(adapter, session);
             var document = new JObject
             {
                 ["title"] = documentTitle ?? string.Empty,
@@ -193,7 +178,7 @@ namespace RNAssistant.Office.Services
                         ["total"] = 0,
                         ["truncated"] = false
                     },
-                ["user_context"] = BuildUserContext(context)
+                ["context_policy"] = "User-selected document observations are compiled separately against current resource authority."
             };
             var artifactBudget = Math.Max(
                 192,
@@ -295,19 +280,6 @@ namespace RNAssistant.Office.Services
             if (!string.IsNullOrWhiteSpace(tool.DoNotUseWhen)) parts.Add("Do not use when: " + tool.DoNotUseWhen.Trim());
             if (!string.IsNullOrWhiteSpace(tool.Limitations)) parts.Add("Limitations: " + tool.Limitations.Trim());
             return string.Join(" ", parts.ToArray());
-        }
-
-        private static JArray BuildUserContext(DocumentContext context)
-        {
-            return new JArray((context == null ? new List<ContextNote>() : context.Notes ?? new List<ContextNote>())
-                .Where(note => note != null)
-                .Select(note => new JObject
-                {
-                    ["title"] = note.Title ?? string.Empty,
-                    ["kind"] = note.Kind ?? string.Empty,
-                    ["reference"] = note.Reference ?? string.Empty,
-                    ["content"] = !string.IsNullOrWhiteSpace(note.Text) ? note.Text : note.Preview ?? string.Empty
-                }));
         }
 
         private static string NormalizeInstructionRole(string role)

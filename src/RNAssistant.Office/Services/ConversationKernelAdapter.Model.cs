@@ -23,6 +23,18 @@ namespace RNAssistant.Office.Services
             catch (Exception ex) { return AgentModelResult.Failed(ModelProtocolFailureKind.Infrastructure, ex.Message); }
             try
             {
+                if (_catalogGeneration != _executor.CaptureCatalogGeneration())
+                {
+                    // Publish complete descriptor/schema/binding and skill snapshots together at
+                    // the request boundary. Exact admitted optional schemas are reconstructed by
+                    // the existing admission journal; changed ones must be admitted again.
+                    var fresh = _refresh == null
+                        ? new ConversationRunInput(_input.Settings, _input.Context, _executor.CaptureRunnableCatalog(),
+                            _executor.CaptureSkills().Skills, _input.Attachments)
+                        : await _refresh(cancellationToken).ConfigureAwait(false);
+                    UseInput(fresh);
+                    _modelSession.RebindAuthority(_catalog, _skillSnapshot, _input.Settings, _input.Context);
+                }
                 _lastModel = await _protocol.GetResponseAsync(
                     _modelSession.CreateRequest(request.StepId,
                         new ModelProtocolCallContext(ConversationProtocolContext.BatchSafeReadIds(_catalog))),
@@ -51,7 +63,8 @@ namespace RNAssistant.Office.Services
                 UseInput(await _refresh(cancellationToken).ConfigureAwait(false));
             _modelSession = await ConversationModelSession.CreateAsync(_adapter, _compaction, _attachments, _eventStore,
                 _policy.Mode, _text, _session, _input.Context, _input.Settings, _catalog, _skills,
-                _input.Attachments, _confirmedCommand != null, _progress, cancellationToken).ConfigureAwait(false);
+                _input.Attachments, _confirmedCommand != null, _progress, cancellationToken,
+                _executor.ResourceAuthority, _executor.Payloads, () => _skillSnapshot).ConfigureAwait(false);
         }
 
     }

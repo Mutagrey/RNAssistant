@@ -648,7 +648,7 @@ namespace RNAssistant.Harness
 
         private static ModelProtocolRequest NewProtocolRequest(int attempts = 2, bool strict = false)
         {
-            return new ModelProtocolRequest
+            var request = new ModelProtocolRequest
             {
                 Settings = new AppSettings { MaxAgentFormatRetries = attempts, FallbackToJsonObject = true,
                     AgentResponseMode = strict ? AgentResponseModes.JsonSchema : AgentResponseModes.JsonObject },
@@ -668,6 +668,12 @@ namespace RNAssistant.Harness
                     TraceStepId = Guid.NewGuid().ToString("N")
                 }
             };
+            request.CompileRepair = notice => new ModelContextCompiler().Compile(
+                new ModelAuthoritySnapshot(new ResourceAuthoritySnapshotSet(new ResourceAuthoritySnapshot[0]),
+                    "test-tools", new SkillCatalogSnapshot(new SkillDefinition[0]), null, request.AcceptedMessages.Count),
+                request.AcceptedMessages, new[] { notice }, null, request.CallableTools, request.Settings,
+                ModelContextBudget.InputBudgetTokens(request.Settings)).Messages;
+            return request;
         }
 
         private static async Task ModelProtocolValidatesV4Context()
@@ -1524,8 +1530,11 @@ namespace RNAssistant.Harness
                 AssertEqual(call.Name, read.Name, "reader retains canonical name for " + role);
                 ConversationProtocolContext.EnsureCurrentHistory(session);
                 var projected = session.Messages.Select(HistoricalContextProjector.Project).ToList();
-                var prompt = new List<ChatMessage>();
-                new PromptBudgetComposer().AddConversationHistory(prompt, 0, session, new AppSettings(), 4096, true, false);
+                var authority = new ModelAuthoritySnapshot(new ResourceAuthoritySnapshotSet(new ResourceAuthoritySnapshot[0]),
+                    "test-tools", new SkillCatalogSnapshot(new SkillDefinition[0]), null, session.Messages.Count);
+                var prompt = new ModelContextCompiler().Compile(authority, new ChatMessage[0],
+                    PromptBudgetComposer.ConversationHistory(session, true, false), null, new ToolCatalogEntry[0],
+                    new AppSettings(), 4096, true).Messages.ToList();
                 foreach (var projection in new[] { projected, prompt })
                 {
                     AssertEqual(2, projection.Count, role + " projection retains the call/result pair");

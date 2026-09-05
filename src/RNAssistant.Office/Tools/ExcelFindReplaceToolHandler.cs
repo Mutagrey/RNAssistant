@@ -100,14 +100,8 @@ namespace RNAssistant.Office.Tools
                             context.Arguments,
                             context.MarkDispatchPossible,
                             cancellationToken);
-                    });
-                RuntimeResult result;
-                if (outcome.Status == ExcelReplaceOutcomeStatus.Ok)
-                    result = RuntimeResult.Ok(outcome.Message, outcome.DataJson);
-                else if (outcome.Status == ExcelReplaceOutcomeStatus.Unknown)
-                    result = RuntimeResult.Unknown(outcome.Message, outcome.DataJson);
-                else result = RuntimeResult.Error(outcome.Message, outcome.DataJson);
-                return Task.FromResult(new ToolHandlerResult(result, Effect(outcome.Effect)));
+                    }, terminalOutcome => context.Complete(ProjectReplace(terminalOutcome)), context.CompleteFailure);
+                return Task.FromResult(ProjectReplace(outcome));
             }
             catch (OfficeDocumentGuardException ex) when (!context.MayHaveDispatched)
             {
@@ -119,6 +113,17 @@ namespace RNAssistant.Office.Tools
                     ex.Retryable ? "tool_mutation_busy" : "tool_mutation_lock_unavailable",
                     ex.Retryable);
             }
+        }
+
+        private static ToolHandlerResult ProjectReplace(ExcelReplaceOutcome outcome)
+        {
+            RuntimeResult result;
+            if (outcome.Status == ExcelReplaceOutcomeStatus.Ok)
+                result = RuntimeResult.Ok(outcome.Message, outcome.DataJson);
+            else if (outcome.Status == ExcelReplaceOutcomeStatus.Unknown)
+                result = RuntimeResult.Unknown(outcome.Message, outcome.DataJson);
+            else result = RuntimeResult.Error(outcome.Message, outcome.DataJson);
+            return new ToolHandlerResult(result, Effect(outcome.Effect));
         }
 
         private static ToolEffectEvidence Effect(ExcelReplaceEffect effect)

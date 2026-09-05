@@ -60,14 +60,7 @@ namespace RNAssistant.Office.Domains.Excel
                 return Failure("content must be values, formulas, or profile.", "excel_range_content_invalid", false);
             try
             {
-                var snapshot = _backend.ReadRange(new ExcelRangeReadRequest
-                {
-                    Sheet = sheet ?? string.Empty,
-                    Address = address ?? string.Empty,
-                    Content = content,
-                    MaxCells = MaxReadCells
-                });
-                ValidateRange(snapshot, content);
+                var snapshot = CaptureRange(sheet, address, content);
                 return ExcelReadOutcome.Ok(RangeMessage(snapshot, content),
                     RangeOutput(snapshot, content).ToString(Formatting.None));
             }
@@ -79,6 +72,26 @@ namespace RNAssistant.Office.Domains.Excel
             {
                 return Failure("Excel range read failed: " + ex.Message, "excel_read_failed", true);
             }
+        }
+
+        internal ExcelRangeSnapshot CaptureRange(string sheet, string address, string content)
+        {
+            if (content != "values" && content != "formulas" && content != "profile")
+                throw new ExcelReadBackendException("Unsupported range view.", "excel_range_content_invalid", false);
+            var snapshot = _backend.ReadRange(new ExcelRangeReadRequest {
+                Sheet = sheet ?? string.Empty, Address = address ?? string.Empty,
+                Content = content, MaxCells = MaxReadCells });
+            ValidateRange(snapshot, content);
+            return snapshot;
+        }
+
+        internal ExcelInspectSnapshot CaptureStructure(string kind)
+        {
+            if (kind != "sheets" && kind != "tables")
+                throw new ExcelReadBackendException("Unsupported structure view.", "excel_inspect_kind_invalid", false);
+            var snapshot = _backend.Inspect(new ExcelInspectRequest { Kind = kind, MaxItems = MaxInspectItems, MaxSeries = MaxChartSeries });
+            ValidateInspect(snapshot, kind, false);
+            return snapshot;
         }
 
         private static void ValidateInspect(ExcelInspectSnapshot snapshot, string kind, bool chartDetail)

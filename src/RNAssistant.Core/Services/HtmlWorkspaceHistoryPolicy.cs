@@ -37,7 +37,7 @@ namespace RNAssistant.Core.Services
             foreach (var dataSource in snapshot.DataSources ?? new List<HtmlWorkspaceDataSource>())
             {
                 if (dataSource == null) continue;
-                total += TextLength(dataSource.Id) + TextLength(dataSource.Name) + TextLength(dataSource.Json);
+                total += TextLength(dataSource.Id) + TextLength(dataSource.Name) + TextLength(Newtonsoft.Json.JsonConvert.SerializeObject(dataSource.Binding));
             }
             return total;
         }

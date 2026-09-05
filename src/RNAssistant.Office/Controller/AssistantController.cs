@@ -33,6 +33,15 @@ namespace RNAssistant.Office
         private readonly ArtifactViewerService _artifactViewer;
         private readonly ToolStore _toolStore;
         private readonly VbaJournalStore _vbaJournalStore;
+        private readonly DocumentAuthorityRegistry _documentAuthorityRegistry;
+        private readonly ResourceAuthorityStore _resourceAuthorityStore;
+        private readonly ResourceDataPlaneService _resourceData;
+        private readonly ResourceDataRouter _resourceDataRouter;
+        public event EventHandler<ResourceAuthorityChangedEventArgs> ResourceAuthorityChanged
+        {
+            add { _resourceAuthorityStore.Changed += value; }
+            remove { _resourceAuthorityStore.Changed -= value; }
+        }
         private readonly CasMaintenanceService _casMaintenanceService;
         private readonly ITrajectoryQuery _trajectoryQuery;
         private readonly TrajectoryExportService _trajectoryExportService;
@@ -80,6 +89,8 @@ namespace RNAssistant.Office
             _toolStore = new ToolStore(_paths);
             var skillStore = new SkillStore(_paths);
             _vbaJournalStore = new VbaJournalStore(_paths, () => _settingsService.LoadStorageProtector());
+            _documentAuthorityRegistry = new DocumentAuthorityRegistry(_paths);
+            _resourceAuthorityStore = new ResourceAuthorityStore(_paths);
             _toolExecutor = new OfficeToolExecutor(
                 _adapter,
                 _vbaJournalStore,
@@ -89,16 +100,25 @@ namespace RNAssistant.Office
                 settings => _settingsService.Save(settings),
                 _paths,
                 _chatStore.LoadArtifactBody,
-                (attachment, maxChars) => _attachmentStore.ReadExtractedText(attachment, maxChars));
+                (attachment, maxChars) => _attachmentStore.ReadExtractedText(attachment, maxChars),
+                _resourceAuthorityStore,
+                session => _conversationStore.Save(session),
+                attachment => _attachmentStore.ReadBytes(attachment));
+            _resourceData = new ResourceDataPlaneService(_toolExecutor.ResourceGateway,
+                (chatId, workspaceId) => Volatile.Read(ref _disposed) == 0 &&
+                    (workspaceId == "viewer" ? LoadSession(chatId) != null :
+                    string.Equals(LoadSession(chatId).ActiveHtmlArtifactId, workspaceId, StringComparison.Ordinal)));
+            _resourceDataRouter = new ResourceDataRouter(_resourceData);
             _uploadedHtmlResources = new UploadedHtmlResourceService(
                 _toolExecutor.ResourceGateway,
                 (attachment, maxChars) => _attachmentStore.ReadExtractedText(attachment, maxChars));
             _artifactViewer = new ArtifactViewerService(
                 _toolExecutor.ResourceGateway,
                 attachment => _attachmentStore.ReadBytes(attachment));
-            _toolCatalog = new ToolCatalogService(_adapter, _toolExecutor, _toolStore);
-            _officeContextCapture = new OfficeContextCaptureService(_adapter, _toolExecutor.DocumentRuntime);
-            _skillCatalog = new SkillCatalogService(_adapter, skillStore);
+            _toolCatalog = new ToolCatalogService(_adapter, _toolExecutor);
+            _officeContextCapture = new OfficeContextCaptureService(_adapter, _toolExecutor.DocumentRuntime,
+                _toolExecutor.ResourceAuthority, _toolExecutor.Payloads);
+            _skillCatalog = new SkillCatalogService(_adapter, _toolExecutor.CapturePublishedSkills);
             _chatRuns = new ChatRunRegistry(_paths);
             _casMaintenanceService = new CasMaintenanceService(
                 _paths,
@@ -112,7 +132,8 @@ namespace RNAssistant.Office
                 _paths,
                 () => _settingsService.LoadStorageProtector(),
                 _trajectoryQuery);
-            _chatSessions = new ChatSessionService(_adapter, _conversationStore, _vbaJournalStore);
+            _chatSessions = new ChatSessionService(_adapter, _conversationStore, _vbaJournalStore,
+                _documentAuthorityRegistry);
             _qualification = new QualificationApplicationService(
                 _eventStore, _adapter as IQualificationHostPort);
             _lifetimeCancellation = new CancellationTokenSource();
@@ -174,7 +195,15 @@ namespace RNAssistant.Office
             };
             _llmCompletion = completion;
             _attachmentAnalysisService = new AttachmentAnalysisService(completion);
-            _contextCompactionService = new ContextCompactionService(completion);
+            _contextCompactionService = new ContextCompactionService(completion, _toolExecutor.ResourceAuthority, _toolExecutor.Payloads,
+                session => {
+                    var policy = ConversationRunPolicy.For(session.Mode);
+                    var skills = policy.SelectSkills(_skillCatalog.Capture().Skills);
+                    var tools = policy.SelectTools(_toolCatalog.GetFreshConversationTools());
+                    CapabilityCatalogService.BindReadSchema(tools, skills);
+                    return CallableToolPack.Create(policy.Mode, session.Host, session.LastRun?.RunId, tools,
+                        new ToolPackAdmissionJournal(_eventStore, session).ReadAccepted());
+                }, _skillCatalog.Capture);
             _conversationRunService = new ConversationRunService(
                 _adapter,
                 _toolExecutor,

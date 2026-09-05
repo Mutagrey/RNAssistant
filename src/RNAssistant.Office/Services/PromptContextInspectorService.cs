@@ -26,20 +26,28 @@ namespace RNAssistant.Office.Services
         private readonly IOfficeApplicationAdapter _adapter;
         private readonly AppDataPaths _paths;
         private readonly AppSettings _estimationSettings;
+        private readonly ResourceAuthorityService _authority;
+        private readonly ChatBlobStore _payloads;
+        private ModelAuthoritySnapshot _frozen;
+        private ContextReceipt _receipt;
 
-        public PromptContextInspectorService(IOfficeApplicationAdapter adapter, AppDataPaths paths)
-            : this(adapter, paths, null)
+        public PromptContextInspectorService(IOfficeApplicationAdapter adapter, AppDataPaths paths,
+            ResourceAuthorityService authority = null, ChatBlobStore payloads = null)
+            : this(adapter, paths, null, authority, payloads)
         {
         }
 
         private PromptContextInspectorService(
             IOfficeApplicationAdapter adapter,
             AppDataPaths paths,
-            AppSettings estimationSettings)
+            AppSettings estimationSettings, ResourceAuthorityService authority, ChatBlobStore payloads)
         {
             _adapter = adapter;
             _paths = paths;
             _estimationSettings = estimationSettings;
+            _payloads = payloads ?? new ChatBlobStore(paths);
+            var store = authority == null ? new ResourceAuthorityStore(paths) : null;
+            _authority = authority ?? new ResourceAuthorityService(store, store, new ResourceMutationJournal(paths), _payloads);
         }
 
         public PromptContextInspectorResponse Inspect(
@@ -50,10 +58,11 @@ namespace RNAssistant.Office.Services
             IReadOnlyList<SkillDefinition> skills,
             IReadOnlyList<ChatAttachment> attachments,
             string draftText,
-            bool includeRaw)
+            bool includeRaw,
+            SkillCatalogSnapshot publishedSkills = null)
         {
             settings = settings ?? new AppSettings();
-            var inspection = new PromptContextInspectorService(_adapter, _paths, settings);
+            var inspection = new PromptContextInspectorService(_adapter, _paths, settings, _authority, _payloads);
             return inspection.InspectCore(
                 session,
                 context,
@@ -62,7 +71,7 @@ namespace RNAssistant.Office.Services
                 skills,
                 attachments,
                 draftText,
-                includeRaw);
+                includeRaw, publishedSkills);
         }
 
         private PromptContextInspectorResponse InspectCore(
@@ -73,7 +82,7 @@ namespace RNAssistant.Office.Services
             IReadOnlyList<SkillDefinition> skills,
             IReadOnlyList<ChatAttachment> attachments,
             string draftText,
-            bool includeRaw)
+            bool includeRaw, SkillCatalogSnapshot publishedSkills)
         {
             settings = settings ?? new AppSettings();
             session = session ?? new ChatSession();
@@ -102,6 +111,14 @@ namespace RNAssistant.Office.Services
                 null,
                 runnableCatalog);
             var runnableTools = toolPack.Tools;
+            var evidence = previewSession.Messages.SelectMany(message => message.ResourceEvidence ?? new List<ResourceEvidence>())
+                .Concat(previewSession.Messages.SelectMany(message => message.ContextClaims ?? new List<StructuredContextClaim>()).SelectMany(claim => claim.Evidence))
+                .Concat((context?.Notes ?? new List<ContextNote>()).Where(note => note.Evidence != null).Select(note => note.Evidence));
+            var scopes = evidence.Select(item => item.ScopeId).Concat(new[] { new ResourceAuthorityScopeId("conversation", session.Id), CatalogPublicationService.ScopeId }).Distinct().ToList();
+            if (!string.IsNullOrEmpty(session.DocumentAuthorityId)) scopes.Add(ResourceAuthorityScopeId.Document(new DocumentAuthorityId(session.DocumentAuthorityId)));
+            var resources = _authority.CaptureMany(scopes);
+            _frozen = new ModelAuthoritySnapshot(resources, toolPack.Revision,
+                new SkillCatalogSnapshot(enabledSkills, publishedSkills?.Generation), ResourceStateProvider.CaptureSchemas(resources), session.Revision);
             var capabilityCatalog = toolPack.CapabilityContext(enabledSkills);
             var options = ConversationModelSession.BuildRequestOptions(
                 mode,
@@ -175,6 +192,7 @@ namespace RNAssistant.Office.Services
 
             var response = new PromptContextInspectorResponse
             {
+                ResourceContextReceipt = _receipt,
                 ChatId = session.Id,
                 SessionRevision = session.Revision,
                 Mode = mode,
@@ -231,7 +249,7 @@ namespace RNAssistant.Office.Services
             int historyBudgetTokens,
             JObject capabilityCatalog)
         {
-            return new ConversationPromptComposer().BuildMessages(
+            return new ModelContextCompiler(_payloads).BuildPreview(
                 mode,
                 draftText,
                 _adapter,
@@ -243,7 +261,7 @@ namespace RNAssistant.Office.Services
                 attachments,
                 false,
                 historyBudgetTokens,
-                capabilityCatalog);
+                capabilityCatalog, _frozen, receipt => _receipt = receipt);
         }
 
         private List<PromptContextSectionDto> BuildSections(
@@ -319,8 +337,11 @@ namespace RNAssistant.Office.Services
             {
                 if (messages[index] != null) history.Add(messages[index]);
             }
-            var protocolHistory = history.Where(IsProtocolMessage).ToList();
-            var regularHistory = history.Where(item => !IsProtocolMessage(item)).ToList();
+            var resourceContext = history.Where(item => (item.Content ?? string.Empty).StartsWith("USER_CONTEXT", StringComparison.Ordinal) ||
+                (item.Content ?? string.Empty).StartsWith("RESOURCE_EVIDENCE_UNAVAILABLE:", StringComparison.Ordinal)).ToList();
+            var protocolHistory = history.Except(resourceContext).Where(IsProtocolMessage).ToList();
+            var regularHistory = history.Except(resourceContext).Where(item => !IsProtocolMessage(item)).ToList();
+            AddMessageSection(sections, "document_context", "Контекст ресурсов", "Только evidence/markers из frozen compiler", resourceContext);
             AddMessageSection(sections, "history", "История чата", "Активное окно и checkpoint", regularHistory);
             AddMessageSection(sections, "tool_history", "Tool calls и результаты", "Только записи, повторно отправляемые модели", protocolHistory);
 

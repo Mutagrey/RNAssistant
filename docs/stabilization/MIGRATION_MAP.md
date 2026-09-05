@@ -1,6 +1,6 @@
 # Current-to-target migration map
 
-ModelProtocol работает на v4; live v2/v3 и pipelines удалены. Phase 3B2 подключает
+ModelProtocol работает на v5; старые streams требуют explicit new/reset, pipelines отключены. Phase 3B2 подключает
 `AgentKernel` к production start/confirmation через Office model/tool/store ports.
 Новый summary replay проверен на существующих events; старый loop, builder,
 mutable ID bookkeeping и Failure.Cause удалены без fallback. Phases 4/8/9 и
@@ -8,7 +8,23 @@ mutable ID bookkeeping и Failure.Cause удалены без fallback. Phases 4
 wire, resource data plane, persistence/UI и все active tool paths host-neutral.
 Ниже остаются current owners, удалённые seams, permanent narrow ports и их evidence
 gates; active tool compatibility adapter отсутствует. Windows/Office qualification
-не закрыта.
+не закрыта. Для текущего Resource direct cutover прежнее отсутствие tool-dispatch
+adapters не означает завершение resource-consumer cleanup. Порядок задаёт
+[Resource MASTER](resource-cutover/MASTER.md), владельцев — [Resource Fabric](../resource-fabric.md).
+
+## Unified resource cutover — active removal gates
+
+| Replaced/pending contour | Canonical owner | Consumers / removal gate | State |
+|---|---|---|---|
+| Per-session VBA observed hashes and refresh callbacks | Shared ResourceAuthority + immutable conversation evidence | VBA guard/read-back, next model request | Removed; no parallel hash authority |
+| HTML accepted tool-result binding/current dataset JSON | ResourceRef bindings → Gateway/data plane | HTML bind/refresh, RN.resources | Removed; standalone bound export still open |
+| Viewer text/base64 bridge bodies | ResourceDataPlaneService → Gateway/CAS views | Text, images, PDF pages/thumbnails | Removed; metadata-only bridge, bounded leases and close/cancel lifecycle |
+| Mutable-disk skill reference activation | CatalogPublicationService → exact CAS resources | Skill catalog, capability reads, compiler, Inspector | Removed; publication dependencies control freshness |
+| Independent history/repair/free-summary authority | ModelContextCompiler + EvidenceStateReducer | Normal request, repair, compaction, Inspector | Removed in compiler path; remaining definition/domain read projections must finish switching |
+| Controller clear/edit/fork logical mutations | Domain owner + journal/authority commit | Chat/workspace lifecycle | Open; same-cutover removal gate, no compatibility adapter authorized |
+| Remaining definition/domain reads and bulk upload/export | Gateway + domain providers/data plane | Authoring/Office read surfaces, export/import UI | Open; switch consumers and remove old transport before completion |
+| Full history/cold replay and conservative CAS retention | Existing event store/CAS + rebuildable projections | Long histories, compaction, GC | Journal-tail catch-up implemented; checkpoints/retention optimization open |
+| Cross-process notifications and real provider/WebView behavior | Shared authority + HostRuntime/WebView | Office/desktop windows | Fresh captures preserve correctness; Windows evidence open |
 
 Правило удаления: [master plan §15.1](STABILIZATION_MASTER_PLAN.md#151-обязательная-локальная-чистка-после-каждого-подэтапа). Заменённый путь удаляется в подэтапе переключения последних consumers после проверки; Phase 10 — только финальная структурная сверка. Совместимость со старыми чатами не является причиной удерживать adapter. Статусы ниже описывают зафиксированную реализацию, а новые removal gates — план, не выполненное удаление.
 

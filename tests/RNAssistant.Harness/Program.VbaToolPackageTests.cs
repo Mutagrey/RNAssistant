@@ -445,7 +445,7 @@ namespace RNAssistant.Harness
                 var toolStore = new ToolStore(paths);
                 toolStore.SaveOne(tool);
                 var catalogExecutor = new OfficeToolExecutor(adapter, store, new SkillStore(paths), toolStore);
-                var catalogStatus = new ToolCatalogService(adapter, catalogExecutor, toolStore)
+                var catalogStatus = new ToolCatalogService(adapter, catalogExecutor)
                     .GetVisibleTools()
                     .Single(item => string.Equals(item.Id, tool.Id, StringComparison.OrdinalIgnoreCase))
                     .InstallationStatus;
@@ -1379,7 +1379,7 @@ namespace RNAssistant.Harness
                 adapter.SetVbaModule("RNA_EchoService", tool.Components[1].Code, "ClassModule");
                 var store = new ToolStore(paths);
                 var executor = new OfficeToolExecutor(adapter, new VbaJournalStore(paths), new SkillStore(paths), store);
-                var catalogService = new ToolCatalogService(adapter, executor, store);
+                var catalogService = new ToolCatalogService(adapter, executor);
                 var catalog = catalogService.GetVisibleTools();
                 var discovered = catalog.FirstOrDefault(item => string.Equals(item.Id, tool.Id, StringComparison.OrdinalIgnoreCase));
 

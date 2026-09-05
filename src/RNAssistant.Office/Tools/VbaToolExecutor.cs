@@ -23,10 +23,13 @@ namespace RNAssistant.Office.Tools
         private readonly VbaPackageService _packageService;
         private readonly IVbaHostBackend _backend;
         private readonly VbaDispatchBoundary _dispatchBoundary;
+        private readonly ResourceAuthorityService _authority;
 
-        public VbaToolExecutor(IOfficeApplicationAdapter adapter, VbaJournalStore vbaJournalStore)
+        public VbaToolExecutor(IOfficeApplicationAdapter adapter, VbaJournalStore vbaJournalStore,
+            ResourceAuthorityService authority)
         {
             _adapter = adapter;
+            _authority = authority ?? throw new ArgumentNullException(nameof(authority));
             _vbaJournalStore = vbaJournalStore;
             _dispatchBoundary = new VbaDispatchBoundary();
             _backend = VbaBackendProvider.Resolve(adapter);
@@ -50,14 +53,6 @@ namespace RNAssistant.Office.Tools
         public string ToolId(string suffix)
         {
             return "common." + suffix;
-        }
-
-        public void ObserveExpectedHash(ChatSession session, string moduleName, string codeSha256)
-        {
-            if (!string.IsNullOrWhiteSpace(moduleName) && !string.IsNullOrWhiteSpace(codeSha256))
-            {
-                RecordObservation(session, moduleName, codeSha256);
-            }
         }
 
         ToolRunResult IVbaResourceSource.ListResourceModules()
@@ -89,14 +84,6 @@ namespace RNAssistant.Office.Tools
             ToolRunResult result;
             if (!_reader.TryReadResourceModule(moduleName, maxChars, out module, out result)) return result;
             return result;
-        }
-
-        void IVbaResourceSource.ObserveCompleteResourceModule(
-            ChatSession session,
-            string moduleName,
-            string codeSha256)
-        {
-            RecordObservation(session, moduleName, codeSha256);
         }
 
         private static IReadOnlyList<VbaPatchOperationRequest> ParsePatchOperations(JArray patch)
@@ -224,20 +211,6 @@ namespace RNAssistant.Office.Tools
                 return VbaWholeModuleWriteMode.Upsert;
             }
             return VbaWholeModuleWriteMode.Unknown;
-        }
-
-        private static VbaMutationCorrelation MutationCorrelation(
-            ToolInvocation command,
-            ChatSession session)
-        {
-            return new VbaMutationCorrelation
-            {
-                SessionId = SessionId(session),
-                RunId = session == null || session.LastRun == null ? null : session.LastRun.RunId,
-                TurnId = session == null || session.LastRun == null ? null : session.LastRun.TurnId,
-                StepId = command == null ? null : command.RuntimeStepId,
-                ToolCallId = command == null ? null : command.ToolCallId
-            };
         }
 
         private static string SessionId(ChatSession session)

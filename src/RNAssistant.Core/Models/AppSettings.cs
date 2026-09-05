@@ -355,7 +355,7 @@ namespace RNAssistant.Core.Models
                 "- Omit hidden reasoning and obsolete retries.\n" +
                 "- Do not claim skill instructions or reference content remain available after their capability-read results leave active context.\n" +
                 "- Do not preserve resource URIs, revisions, hashes, cursors, guards, package/schema revisions, or internal ids. Preserve exact public tool/skill ids only; call common.capabilities_read again and wait for a new admission before optional tool reuse.\n" +
-                "- Return one JSON object with one non-empty `summary` string.";
+                "- Return one JSON object with `claims`: an array of concise `{text, sourceIds}` objects. Each sourceIds list must name fully included sourceId values supplied by the runtime. Never invent provenance. Keep independent facts in separate claims.";
             AttachmentAnalysisPrompt = AgentPromptDefaults.AttachmentAnalysisInstructions;
             SystemPromptRole = "developer";
             AgentResponseMode = AgentResponseModes.JsonObject;

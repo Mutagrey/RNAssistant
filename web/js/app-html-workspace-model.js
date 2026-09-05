@@ -151,7 +151,7 @@
     }
 
     function dataJson(data) {
-      return prop(data, "Json", "json", "{}") || "{}";
+      return JSON.stringify(dataBinding(data), null, 2);
     }
 
     function dataBinding(data) {
@@ -166,7 +166,7 @@
       return dataSources().filter(function (data) {
         var binding = dataBinding(data);
         if (!binding) return false;
-        return !refreshPolicy || String(bindingValue(binding, "RefreshPolicy", "refreshPolicy", "manual")).toLowerCase() === String(refreshPolicy).toLowerCase();
+        return !refreshPolicy || bindingValue(binding, "Policy", "policy", "exact") === "head";
       });
     }
 
@@ -174,11 +174,7 @@
       if (!data) {
         return;
       }
-      if (data.json !== undefined || data.Json === undefined) {
-        data.json = value || "{}";
-      } else {
-        data.Json = value || "{}";
-      }
+      throw new Error("Resource bindings are read-only here; use resource binding actions.");
     }
 
     function selectedItem() {

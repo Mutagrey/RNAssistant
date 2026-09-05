@@ -27,9 +27,7 @@ namespace RNAssistant.Office.Tools
         private static readonly Regex ModuleSyntaxPattern = InspectionRegex("^\\s*(?:import(?=\\s|\\{|\\*)|export(?=\\s|\\{|\\*))", RegexOptions.Multiline);
         private static readonly Regex GetElementByIdPattern = InspectionRegex("\\bgetElementById\\s*\\(\\s*(?:\"(?<value>[^\"]+)\"|'(?<value>[^']+)')", RegexOptions.None);
         private static readonly Regex QuerySelectorIdPattern = InspectionRegex("\\bquerySelector(?:All)?\\s*\\(\\s*(?:\"#(?<value>[A-Za-z0-9_-]+)\"|'#(?<value>[A-Za-z0-9_-]+)')", RegexOptions.None);
-        private static readonly Regex DataPropertyPattern = InspectionRegex("\\bRNAssistantData\\s*\\.\\s*(?<value>[A-Za-z_$][A-Za-z0-9_$]*)", RegexOptions.None);
-        private static readonly Regex DataIndexPattern = InspectionRegex("\\bRNAssistantData\\s*\\[\\s*(?:\"(?<value>[^\"]+)\"|'(?<value>[^']+)')\\s*\\]", RegexOptions.None);
-        private static readonly Regex DataAccessorPattern = InspectionRegex("\\bRNAssistant\\s*\\.\\s*data\\s*\\.\\s*(?:get|meta)\\s*\\(\\s*(?:\"(?<value>[^\"]+)\"|'(?<value>[^']+)')", RegexOptions.None);
+        private static readonly Regex DataAccessorPattern = InspectionRegex("\\bRN\\s*\\.\\s*resources\\s*\\.\\s*open\\s*\\(\\s*(?:\"(?<value>[^\"]+)\"|'(?<value>[^']+)')", RegexOptions.None);
 
         internal static HtmlWorkspaceToolOutcome InspectForPreview(
             ChatSession session, CancellationToken cancellationToken)
@@ -341,8 +339,6 @@ namespace RNAssistant.Office.Tools
             InspectMissingReferences(QuerySelectorIdPattern, searchable, "script.dom_id_missing", "DOM id", name, kind, locationSource, baseOffset, ids, seenDomIds, collector);
 
             var seenDataNames = new HashSet<string>(StringComparer.Ordinal);
-            InspectMissingReferences(DataPropertyPattern, searchable, "script.data_source_missing", "Data source", name, kind, locationSource, baseOffset, dataNames, seenDataNames, collector);
-            InspectMissingReferences(DataIndexPattern, searchable, "script.data_source_missing", "Data source", name, kind, locationSource, baseOffset, dataNames, seenDataNames, collector);
             InspectMissingReferences(DataAccessorPattern, searchable, "script.data_source_missing", "Data source", name, kind, locationSource, baseOffset, dataNames, seenDataNames, collector);
         }
 
@@ -378,16 +374,11 @@ namespace RNAssistant.Office.Tools
         {
             try
             {
-                JToken.Parse(data.Json ?? string.Empty);
+                NormalizeBinding(data.Binding, data);
             }
-            catch (JsonException ex)
+            catch (InvalidOperationException ex)
             {
-                collector.Add("error", "data.invalid_json", "Data source is not valid JSON: " + ShortValue(ex.Message), data.Name, "data", null, -1);
-            }
-            if (data.Binding != null && string.Equals(data.Binding.Status, "error", StringComparison.OrdinalIgnoreCase))
-            {
-                var detail = string.IsNullOrWhiteSpace(data.Binding.LastError) ? "Bound data refresh failed." : data.Binding.LastError;
-                collector.Add("error", "data.binding_error", ShortValue(detail), data.Name, "data", null, -1);
+                collector.Add("error", "data.invalid_binding", ShortValue(ex.Message), data.Name, "data", null, -1);
             }
         }
 

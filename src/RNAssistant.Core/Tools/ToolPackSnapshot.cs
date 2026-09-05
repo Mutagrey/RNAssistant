@@ -19,6 +19,7 @@ namespace RNAssistant.Core.Tools
         public string Mode { get; private set; }
         public string Host { get; private set; }
         public string Revision { get; private set; }
+        public string Generation { get { return Revision; } }
         public IReadOnlyList<ToolRegistration> Registrations
         {
             get { return Array.AsReadOnly(_registrations); }

@@ -32,7 +32,7 @@ namespace RNAssistant.Office.Vba
 
             var correlation = request.Correlation ?? new VbaMutationCorrelation();
             var currentHash = CodeSha256(current.Code);
-            if (RequiresObservationRefresh(correlation.SessionId, resolvedName))
+            if (RequiresObservationRefresh(correlation, resolvedName))
             {
                 return new VbaApplyPatchGuardPreparation
                 {
@@ -40,10 +40,10 @@ namespace RNAssistant.Office.Vba
                 };
             }
             string observedHash;
-            if (TryGetObservation(correlation.SessionId, resolvedName, out observedHash) &&
+            if (TryGetObservation(correlation, resolvedName, out observedHash) &&
                 !string.Equals(observedHash, currentHash, StringComparison.OrdinalIgnoreCase))
             {
-                RemoveObservation(correlation.SessionId, resolvedName);
+                correlation.ObserveExternalDrift?.Invoke(resolvedName);
                 return new VbaApplyPatchGuardPreparation
                 {
                     Error = StaleSnapshot(
@@ -86,14 +86,14 @@ namespace RNAssistant.Office.Vba
             if (guard == null)
             {
                 string observedHash;
-                if (!TryGetObservation(correlation.SessionId, moduleName, out observedHash))
+                if (!TryGetObservation(correlation, moduleName, out observedHash))
                 {
                     return SnapshotRequired(moduleName);
                 }
                 var actualHash = CodeSha256(current.Code);
                 if (!string.Equals(observedHash, actualHash, StringComparison.OrdinalIgnoreCase))
                 {
-                    RemoveObservation(correlation.SessionId, moduleName);
+                    correlation.ObserveExternalDrift?.Invoke(moduleName);
                     return StaleSnapshot(
                         moduleName,
                         true,
@@ -127,7 +127,7 @@ namespace RNAssistant.Office.Vba
             if (!guard.ModuleExists ||
                 !string.Equals(guard.CodeSha256, currentHash, StringComparison.OrdinalIgnoreCase))
             {
-                RemoveObservation(correlation.SessionId, moduleName);
+                correlation.ObserveExternalDrift?.Invoke(moduleName);
                 return StaleSnapshot(
                     moduleName,
                     guard.ModuleExists,

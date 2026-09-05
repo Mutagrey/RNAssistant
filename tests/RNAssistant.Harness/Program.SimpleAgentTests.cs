@@ -416,7 +416,7 @@ namespace RNAssistant.Harness
                     Enabled = true
                 }
             };
-            var messages = new ConversationPromptComposer().BuildMessages(
+            var messages = new ModelContextCompiler().BuildPreview(
                 ChatModes.Agent,
                 "Create a report.", adapter, tools, skills, new DocumentContext(), new AppSettings(),
                 NewSession(adapter), null);
@@ -602,7 +602,7 @@ namespace RNAssistant.Harness
                     ArgumentSchemaJson = "{\"type\":\"object\",\"properties\":{\"value\":{\"type\":\"string\"}},\"required\":[],\"additionalProperties\":false}"
                 }
             };
-            var prompt = FlattenSimple(new ConversationPromptComposer().BuildMessages(
+            var prompt = FlattenSimple(new ModelContextCompiler().BuildPreview(
                 ChatModes.Agent,
                 "Test", adapter, tools, null, new DocumentContext(), new AppSettings(), NewSession(adapter), null));
             AssertContains(prompt, "excel.good", "valid tool included");
@@ -1582,12 +1582,12 @@ namespace RNAssistant.Harness
                     currentPack.Tools.Select(tool => tool.Id), StringComparer.Ordinal);
                 legacyCoreIds.UnionWith(legacyVbaIds);
                 var legacyCore = runnable.Where(tool => legacyCoreIds.Contains(tool.Id)).ToArray();
-                var composer = new ConversationPromptComposer();
-                var currentMessages = composer.BuildMessages(
+                var composer = new ModelContextCompiler();
+                var currentMessages = composer.BuildPreview(
                     ChatModes.Agent, userText, adapter, currentPack.Tools, null, context,
                     settings, session, null, false, 60000,
                     currentPack.CapabilityContext(null));
-                var legacyMessages = composer.BuildMessages(
+                var legacyMessages = composer.BuildPreview(
                     ChatModes.Agent, userText, adapter, legacyCore, null, context,
                     settings, session, null, false, 60000,
                     CapabilityCatalogService.BuildPromptCatalog(runnable, null, legacyCore));
@@ -2524,16 +2524,21 @@ namespace RNAssistant.Harness
             });
         }
 
-        private static void SimpleCompactionUsesOneSummaryField()
+        private static LlmCompletionResult CompactionReply(IEnumerable<ChatMessage> messages, string text)
+        {
+            var match = System.Text.RegularExpressions.Regex.Match(FlattenSimple(messages), "\"sourceId\":\"([^\"]+)\"");
+            AssertTrue(match.Success, "compaction supplies runtime source provenance");
+            return new LlmCompletionResult { Content = new JObject { ["claims"] = new JArray(new JObject {
+                ["text"] = text, ["sourceIds"] = new JArray(match.Groups[1].Value) }) }.ToString() };
+        }
+
+        private static void CompactionUsesStructuredSourceClaims()
         {
             IReadOnlyList<ChatMessage> captured = null;
             LlmCompletionDelegate completion = (settings, messages, options, stream, cancellationToken) =>
             {
                 captured = messages.ToList();
-                return Task.FromResult(new LlmCompletionResult
-                {
-                    Content = "{\"summary\":\"Goal preserved; first step complete.\"}"
-                });
+                return Task.FromResult(CompactionReply(messages, "Goal preserved; first step complete."));
             };
             var session = NewSession(FakeOfficeAdapter.ForHost("Excel"));
             var compactedArtifact = new ChatArtifact
@@ -2607,7 +2612,8 @@ namespace RNAssistant.Harness
             AssertTrue(checkpoint != null, "checkpoint created");
             AssertEqual("Goal preserved; first step complete.", checkpoint.SummaryMarkdown, "summary used directly");
             var request = FlattenSimple(captured);
-            AssertContains(request, "\"required\":[\"summary\"]", "single-field schema requested");
+            AssertContains(request, "\"required\":[\"claims\"]", "structured claims schema requested");
+            AssertTrue(checkpoint.Claims.Count == 1 && checkpoint.Claims[0].SourceMessageIds.Count > 0, "claim carries runtime-owned provenance");
             AssertContains(request, "COMPACTION_TOOL_ARGUMENT", "native tool arguments preserved for compaction");
             AssertContains(request, "COMPACTION_TOOL_ARGUMENT_2", "all native tool calls preserved for compaction");
             AssertTrue(request.IndexOf("\"goals\"", StringComparison.Ordinal) < 0, "no fixed summary sections");
@@ -2630,7 +2636,7 @@ namespace RNAssistant.Harness
             LlmCompletionDelegate completion = (settings, messages, options, stream, cancellationToken) =>
             {
                 captured = messages.ToList();
-                return Task.FromResult(new LlmCompletionResult { Content = "{\"summary\":\"Earlier context.\"}" });
+                return Task.FromResult(CompactionReply(messages, "Earlier context."));
             };
             var session = NewSession(FakeOfficeAdapter.ForHost("Excel"));
             session.Messages.Add(new ChatMessage { Role = "user", Content = "First request." });
@@ -2689,7 +2695,7 @@ namespace RNAssistant.Harness
             LlmCompletionDelegate danglingCompletion = (settings, messages, options, stream, cancellationToken) =>
             {
                 danglingCaptured = messages.ToList();
-                return Task.FromResult(new LlmCompletionResult { Content = "{\"summary\":\"Safe prefix.\"}" });
+                return Task.FromResult(CompactionReply(messages, "Safe prefix."));
             };
             var dangling = NewSession(FakeOfficeAdapter.ForHost("Excel"));
             dangling.Messages.Add(new ChatMessage { Role = "user", Content = "Old request." });
