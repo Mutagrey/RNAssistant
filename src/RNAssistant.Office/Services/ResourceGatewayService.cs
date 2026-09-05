@@ -209,15 +209,9 @@ namespace RNAssistant.Office.Services
                     true);
             }
             var provider = ProviderFor(request.Reference.Uri);
-            var identityResolver = provider as IResourceIdentityResolver;
-            if (identityResolver != null && !request.Reference.IsExact && request.Reference.Uri == request.Reference.Identity.Uri)
-            {
-                request = new ResourceReadRequest { Reference = identityResolver.ResolveIdentity(session, request.Reference.Identity),
-                    Representation = request.Representation, Cursor = request.Cursor, MaxChars = request.MaxChars,
-                    MaxRows = request.MaxRows, RowOffset = request.RowOffset, ViewPath = request.ViewPath, Fields = request.Fields };
-            }
             var live = provider is ILiveOfficeResourceProvider;
-            if (IsBinaryView(request.Representation)) return ReadBinaryView(session, request);
+            // Structural owners validate the caller's exact continuation before a
+            // floating artifact identity can be resolved to its current revision.
             if (request.Representation == "table" || request.Representation == "records")
             {
                 if (_authority?.Payloads == null) throw new ResourceRequestException("Canonical snapshot storage is required for structural views.", "RESOURCE_VIEW_UNAVAILABLE", false);
@@ -225,6 +219,14 @@ namespace RNAssistant.Office.Services
                 if (derived != null) return derived;
                 return new ResourceStructuredViewService(this, _authority).Read(session, request, live);
             }
+            var identityResolver = provider as IResourceIdentityResolver;
+            if (identityResolver != null && !request.Reference.IsExact && request.Reference.Uri == request.Reference.Identity.Uri)
+            {
+                request = new ResourceReadRequest { Reference = identityResolver.ResolveIdentity(session, request.Reference.Identity),
+                    Representation = request.Representation, Cursor = request.Cursor, MaxChars = request.MaxChars,
+                    MaxRows = request.MaxRows, RowOffset = request.RowOffset, ViewPath = request.ViewPath, Fields = request.Fields };
+            }
+            if (IsBinaryView(request.Representation)) return ReadBinaryView(session, request);
             var retained = _authority == null ? null : _authority.ReadRetained(session, request, live);
             if (retained != null) return retained;
             return WithProvider(provider, session, delegate

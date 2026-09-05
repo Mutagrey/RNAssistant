@@ -124,12 +124,19 @@ Existing ingestion promotes chat drafts before model dispatch. Immutable bodies
 reuse `ChatBlobStore` CAS, without a second resource payload store.
 `ResourceStructuredViewService` stores bounded indexes/parts for record/table
 views; ambiguous JSON paths/properties and unsafe integer precision fail explicitly.
-Excel snapshot bounds remain explicit.
+Structured/virtual continuations use shared exact-reference guards before source
+capture, index/definition CAS hydration or implicit artifact identity resolution.
+Their binding pins URI, view and the requested projection: JSON path and ordered
+field names remain case-sensitive; omitted/empty fields both mean all fields.
+The first head read rebinds outgoing cursors to its resolved exact address.
+Collection-style guards and lowercased projection bindings are removed without
+compatibility tokens. Excel snapshot bounds remain explicit.
 
 `ResourceDefinitionToolHandler` owns draft/validated publication. Only exact
 published schema heads enter `SchemaRegistrySnapshot`. Mappings pin source/schema
 revisions. `ResourceDerivedViewService` preserves transitive dependencies for
-virtual/materialized views; drafts have no authority before publication.
+virtual/materialized views; drafts have no authority before publication. Virtual
+tables expose only the root record projection and reject unsupported paths.
 
 ## Context and storage
 
@@ -213,8 +220,7 @@ separate state/Office retained text readers, externally hash-bound Office/state/
 continuations, and read-side exposure of prepared state/context/catalog identities.
 No compatibility alias, dual-write or feature flag restores these paths.
 
-Still open within this same cutover: exact continuation guards for structured/derived
-views, remaining definition/domain read consumers, finer
+Still open within this same cutover: remaining definition/domain read consumers, finer
 Excel coverage/named resources, complete binary/raw view negotiation,
 remaining bulk upload/export surfaces, bounded history/retention
 optimization and final documentation cleanup. These are not permanent adapters.

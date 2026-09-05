@@ -336,6 +336,26 @@ namespace RNAssistant.Harness
                 var materialized = publish(ResourceDefinitionToolHandler.Derive, new JObject { ["name"] = "saved-sales", ["mapping"] = target(mapping), ["mode"] = "materialized" });
                 AssertEqual(2, gateway.Read(session, new ResourceReadRequest { Reference = materialized, Representation = "table", MaxRows = 10 }).Result.Table.Rows.Count,
                     "materialized output is an immutable resource snapshot");
+                foreach (var reference in new[] { derived, materialized })
+                {
+                    var page = gateway.Read(session, new ResourceReadRequest { Reference = reference, Representation = "table",
+                        Fields = new List<string> { "sales" }, MaxRows = 1 }).Result;
+                    var tail = gateway.Read(session, new ResourceReadRequest { Reference = reference, Representation = "table",
+                        Fields = new List<string> { "sales" }, ViewPath = "$", Cursor = page.NextCursor, MaxRows = 1 }).Result;
+                    AssertEqual(14L, Convert.ToInt64(tail.Table.Rows.Single()["sales"]), "virtual and materialized continuations preserve the exact projection");
+                    AssertEqual("RESOURCE_CURSOR_INVALID", RuntimeThrows<ResourceRequestException>(() => gateway.Read(session,
+                        new ResourceReadRequest { Reference = new ResourceRef(reference.Uri), Representation = "table",
+                            Fields = new List<string> { "sales" }, Cursor = page.NextCursor })).ErrorCode, "derived continuations cannot float to a current head");
+                    AssertEqual("RESOURCE_REVISION_CHANGED", RuntimeThrows<ResourceRequestException>(() => gateway.Read(session,
+                        new ResourceReadRequest { Reference = new ResourceRef(reference.Uri, reference.Revision.ToUpperInvariant()), Representation = "table",
+                            Fields = new List<string> { "sales" }, Cursor = page.NextCursor })).ErrorCode, "logical revision comparison is case-sensitive before metadata lookup");
+                    AssertEqual("resource_cursor_invalid", RuntimeThrows<ResourceRequestException>(() => gateway.Read(session,
+                        new ResourceReadRequest { Reference = reference, Representation = "table", Fields = new List<string> { "Sales" },
+                            Cursor = page.NextCursor })).ErrorCode, "derived projection is checked before field lookup or source reads");
+                }
+                AssertEqual("RESOURCE_VIEW_UNSUPPORTED", RuntimeThrows<ResourceRequestException>(() => gateway.Read(session,
+                    new ResourceReadRequest { Reference = derived, Representation = "table", ViewPath = "$.ignored" })).ErrorCode,
+                    "virtual views do not silently ignore an unsupported record path");
                 using (var currentData = new ResourceDataPlaneService(gateway))
                 {
                     var current = currentData.Open(session, "preview", new ResourceRef(derived.Identity.Uri), "table");
@@ -465,6 +485,10 @@ namespace RNAssistant.Harness
                 var failedState = executor.ResourceAuthority.Store.Capture(executor.ResourceAuthority.Scope(failed, false));
                 AssertTrue(failedPlan.Heads.All(item => failedState.GetHead(item.Identity).Knowledge == HeadKnowledge.Unknown),
                     "fork failure cannot leave a partially activated schema/mapping graph");
+                System.IO.File.Delete(executor.Payloads.PathFor(revisions.GetRevision(scope, derived).Payload.Sha256));
+                AssertEqual("resource_cursor_invalid", RuntimeThrows<ResourceRequestException>(() => gateway.Read(session,
+                    new ResourceReadRequest { Reference = derived, Representation = "table", Cursor = read.NextCursor,
+                        Fields = new List<string> { "Sales" } })).ErrorCode, "virtual continuation guards run before definition CAS hydration");
             });
         }
 
@@ -523,7 +547,7 @@ namespace RNAssistant.Harness
                     var first = JObject.Parse(System.Text.Encoding.UTF8.GetString(data.Read(lease.LeaseId, 0, 2, System.Threading.CancellationToken.None)));
                     var next = JObject.Parse(System.Text.Encoding.UTF8.GetString(data.Read(lease.LeaseId, 2, 2, System.Threading.CancellationToken.None)));
                     AssertEqual(before.Revision, (string)next["resource"]["revision"], "export stream keeps its exact pre-change revision");
-                    AssertTrue(first.ToString().IndexOf("999", StringComparison.Ordinal) < 0, "new live values do not enter an old export");
+                    AssertEqual("120", (string)first["rows"][1]["c2"], "export retains exact pre-change B2, independently of random resource IDs");
                     data.Close(session.Id, workspaceId, lease.LeaseId);
                     binding.Binding.Policy = "exact"; binding.Binding.Resource = before;
                     var historical = export.Open(session, workspaceId, System.Threading.CancellationToken.None);
@@ -578,8 +602,16 @@ namespace RNAssistant.Harness
                     var next = JObject.Parse(System.Text.Encoding.UTF8.GetString(data.Read(lease.LeaseId, 2, 2, System.Threading.CancellationToken.None)));
                     AssertEqual((string)first["resource"]["revision"], (string)next["resource"]["revision"], "lease never mixes revisions");
                     AssertEqual(1, adapter.ExcelBackendCalls.Count(item => item == FakeOfficeAdapter.ExcelRangeReadOperation), "continuation uses indexed CAS parts, not Office");
-                    var fresh = executor.ResourceGateway.Read(session, new ResourceReadRequest { Reference = target.Reference, Representation = "table", MaxRows = 4 });
+                    var fresh = executor.ResourceGateway.Read(session, new ResourceReadRequest { Reference = target.Reference, Representation = "table", MaxRows = 1 });
                     AssertTrue(fresh.Result.Resource.Reference.Revision != (string)first["resource"]["revision"], "new head observes external drift");
+                    var backendCalls = adapter.ExcelBackendCalls.Count;
+                    AssertEqual("RESOURCE_CURSOR_INVALID", RuntimeThrows<ResourceRequestException>(() => executor.ResourceGateway.Read(session,
+                        new ResourceReadRequest { Reference = target.Reference, Representation = "table", Cursor = fresh.Result.NextCursor })).ErrorCode,
+                        "floating structural continuation is rejected before live capture");
+                    AssertEqual("RESOURCE_REVISION_CHANGED", RuntimeThrows<ResourceRequestException>(() => executor.ResourceGateway.Read(session,
+                        new ResourceReadRequest { Reference = new ResourceRef(target.Reference.Uri, "r_unseen"), Representation = "table",
+                            Cursor = fresh.Result.NextCursor })).ErrorCode, "cross-revision structural continuation is rejected before live capture");
+                    AssertEqual(backendCalls, adapter.ExcelBackendCalls.Count, "invalid table continuations never dispatch Office reads");
                     RuntimeThrows<ResourceRequestException>(() => data.Close(session.Id, "other-workspace", lease.LeaseId));
                     data.Close(session.Id, "workspace", lease.LeaseId);
                     RuntimeThrows<ResourceRequestException>(() => data.Read(lease.LeaseId, 4, 1, System.Threading.CancellationToken.None));
@@ -588,6 +620,70 @@ namespace RNAssistant.Harness
                     AssertEqual(403, router.Handle("GET", "https://rnassistant.local-resource/v1/x/../" + lease.LeaseId,
                         System.Threading.CancellationToken.None).StatusCode, "router rejects traversal");
                 }
+            });
+        }
+
+        private static void ResourceStructuredContinuationsPinProjection()
+        {
+            WithTempPaths(paths =>
+            {
+                var payloads = new ChatBlobStore(paths);
+                var store = new ResourceAuthorityStore(paths);
+                var authority = new ResourceAuthorityService(store, store, payloads: payloads);
+                var session = new ChatSession();
+                var scope = authority.Scope(session, false);
+                var gateway = new ResourceGatewayService(null, null, null, authority: authority);
+                var identity = ResourceStateProvider.Identity(scope, "projection-test");
+                var r1 = new ResourceRef(identity.Uri, "r_projection");
+                var r2 = new ResourceRef(identity.Uri, "r_projection_restore");
+                var body = "{\"Rows\":[{\"Amount\":1,\"amount\":11},{\"Amount\":2,\"amount\":22}],\"rows\":[{\"Amount\":3,\"amount\":33},{\"Amount\":4,\"amount\":44}]}";
+                var payload = PayloadRef.FromBlob(payloads.StoreText(body, "application/json"));
+                Action<ResourceRef, ResourceRef> publish = (reference, previous) => {
+                    store.RegisterRevision(scope, new ResourceRevisionMetadata(reference, payload.Sha256, payload, previous, previous));
+                    var snapshot = store.Capture(scope);
+                    store.Publish(ResourceAuthorityCommit.Create(scope, snapshot.Generation, null,
+                        new[] { new ResourceHeadChange(identity, snapshot.GetHead(identity), ResourceHeadState.Known(reference, snapshot.Generation + 1)) },
+                        previous == null ? AuthorityCommitReason.InitialObservation : AuthorityCommitReason.Restore));
+                };
+                Func<ResourceRef, string, string, string[], ResourceReadResult> read = (reference, cursor, path, fields) => gateway.Read(session,
+                    new ResourceReadRequest { Reference = reference, Representation = "records", ViewPath = path,
+                        Fields = fields?.ToList(), Cursor = cursor, MaxRows = 1 }).Result;
+                publish(r1, null);
+                var first = read(new ResourceRef(identity.Uri), null, "$.Rows", new[] { "Amount" });
+                AssertEqual(1L, Convert.ToInt64(first.Table.Rows.Single()["Amount"]), "first page resolves the requested case-sensitive path and field");
+                AssertEqual(2L, Convert.ToInt64(read(r1, first.NextCursor, "$.Rows", new[] { "Amount" }).Table.Rows.Single()["Amount"]), "exact page keeps its projection");
+                AssertEqual("resource_cursor_invalid", RuntimeThrows<ResourceRequestException>(() => read(r1, first.NextCursor, "$.rows", new[] { "Amount" })).ErrorCode,
+                    "JSON path case cannot change under the same cursor");
+                AssertEqual("resource_cursor_invalid", RuntimeThrows<ResourceRequestException>(() => read(r1, first.NextCursor, "$.Rows", new[] { "amount" })).ErrorCode,
+                    "valid fields differing only by case cannot exchange cursors");
+                AssertEqual("resource_cursor_invalid", RuntimeThrows<ResourceRequestException>(() => gateway.Read(session,
+                    new ResourceReadRequest { Reference = r1, Representation = "table", ViewPath = "$.Rows", Fields = new List<string> { "Amount" },
+                        Cursor = first.NextCursor })).ErrorCode, "table and records tokens stay view-bound");
+                AssertEqual("RESOURCE_CURSOR_INVALID", RuntimeThrows<ResourceRequestException>(() => read(new ResourceRef(r1.Uri), first.NextCursor, "$.Rows", new[] { "Amount" })).ErrorCode,
+                    "a structural continuation requires an explicit exact ref");
+                publish(r2, r1);
+                AssertEqual("RESOURCE_REVISION_CHANGED", RuntimeThrows<ResourceRequestException>(() => read(r2, first.NextCursor, "$.Rows", new[] { "Amount" })).ErrorCode,
+                    "equal-byte restore is not the original cursor revision");
+                var restored = read(r2, null, "$.Rows", new[] { "Amount" });
+                AssertEqual(2L, Convert.ToInt64(read(r2, restored.NextCursor, "$.Rows", new[] { "Amount" }).Table.Rows.Single()["Amount"]), "restore has its own valid continuation");
+                AssertEqual(2L, Convert.ToInt64(read(r1, first.NextCursor, "$.Rows", new[] { "Amount" }).Table.Rows.Single()["Amount"]), "historical continuation survives a restore");
+                var all = read(r1, null, "$.Rows", null);
+                AssertEqual(2, read(r1, all.NextCursor, "$.Rows", new string[0]).Table.Rows.Single().Count, "null and empty field selections mean the same all-fields projection");
+                var artifact = new ChatArtifact { Kind = ChatArtifactKinds.File, Title = "projection.json", MimeType = "application/json", InlineText = body };
+                session.Artifacts.Add(artifact);
+                var artifactRef = ChatResourceUri.CreateArtifactRevision(session, artifact);
+                var artifactFirst = read(new ResourceRef(artifactRef.Identity.Uri), null, "$.Rows", null);
+                AssertEqual(2, read(artifactFirst.Resource.Reference, artifactFirst.NextCursor, "$.Rows", null).Table.Rows.Single().Count,
+                    "a first artifact read rebinds outgoing continuation to its resolved exact URI");
+                AssertEqual("resource_cursor_invalid", RuntimeThrows<ResourceRequestException>(() => read(new ResourceRef(artifactRef.Identity.Uri),
+                    artifactFirst.NextCursor, "$.Rows", null)).ErrorCode, "artifact identity resolution cannot silently supply a continuation's missing revision");
+                var generation = store.Capture(scope).Generation;
+                System.IO.File.Delete(payloads.PathFor(store.GetView(scope, r1, "record-index-v1:$.Rows").Payload.Sha256));
+                AssertEqual("resource_cursor_invalid", RuntimeThrows<ResourceRequestException>(() => read(r1, first.NextCursor, "$.Rows", new[] { "amount" })).ErrorCode,
+                    "projection guards run before structural index CAS hydration");
+                AssertEqual("RESOURCE_SNAPSHOT_UNAVAILABLE", RuntimeThrows<ResourceRequestException>(() => read(r1, first.NextCursor, "$.Rows", new[] { "Amount" })).ErrorCode,
+                    "valid continuation with missing exact index fails explicitly");
+                AssertEqual(generation, store.Capture(scope).Generation, "continuations and failures cannot publish heads");
             });
         }
 

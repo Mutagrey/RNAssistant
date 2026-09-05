@@ -35,6 +35,19 @@ namespace RNAssistant.Office.Services
                 (representation ?? string.Empty).Trim().ToLowerInvariant());
         }
 
+        internal static string ProjectionBinding(ResourceReadRequest request, string exactUri = null)
+        {
+            var fields = request.Fields ?? new List<string>();
+            // Bind the requested projection before inspecting its index/definition.
+            // JSON paths and field names are case-sensitive, unlike view names.
+            return CreateBinding("read-projection", new[] {
+                exactUri ?? request.Reference.Uri,
+                (request.Representation ?? string.Empty).Trim().ToLowerInvariant(),
+                string.IsNullOrWhiteSpace(request.ViewPath) ? "$" : request.ViewPath,
+                fields.Count == 0 ? "all" : "fields"
+            }.Concat(fields).ToArray());
+        }
+
         public static int ParseImmutable(ResourceReadRequest request, string binding)
         {
             var cursor = request == null ? null : request.Cursor;

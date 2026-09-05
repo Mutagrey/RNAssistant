@@ -43,8 +43,8 @@ The canonical owner map and active removal gates are updated in resource-fabric.
 and MIGRATION_MAP.md.
 Checkpoint commits: `ec8b179` (integrated foundation), `332b911` (lifecycle),
 `904e1ae` (exact lineage across restore/context/fork), `b59e26d` (exact HTML
-data-plane export), `75e2aef` (shared context/state reads) and `d266895` (exact Office
-continuations); user-requested checkpoints,
+data-plane export), `75e2aef` (shared context/state reads), `d266895` (exact Office
+continuations) and `bde3348` (committed catalog reads); user-requested checkpoints,
 not a completed cutover. The lifecycle checkpoint switches controller clear/edit/message-delete/
 fork to typed history intents through the same journal/authority observer. History
 and fork preparation belong to ChatHistoryEditService/ChatCloneService; active
@@ -124,7 +124,7 @@ native semantic resource tools, Agent large whole read and resource evidence rep
 1/1 each; VBA restore 4/4; HTML export 2/2; production source inclusion 1/1 — 41/41.
 No full harness, Office/VSTO or Windows validation. The required version-format gate
 passed before the user-requested commit; its tree was verified clean before continuing.
-Catalog-publication checkpoint after `d266895`: root/skill/reference text
+Catalog-publication checkpoint `bde3348`: root/skill/reference text
 cursors and capability reference next bind exact publication revisions, including
 equal-byte restores. Child head reads use the common immutable/dependency reducer,
 without independent child heads. Visibility requires a canonical committed
@@ -137,9 +137,23 @@ native semantic resources and Agent full skill read 1/1 each; HTML export 2/2;
 Inspector 3/3; production source inclusion 1/1 — 41/41. No full harness, Office/VSTO
 or Windows validation. The required version-format gate passed for the
 user-requested catalog checkpoint commit.
-Next host-neutral read contour: structured/derived views still use collection-style
-continuation validation; enforce exact-reference guards through their existing
-owners, then remaining definition/domain reads and bulk transport in MASTER order.
+Structured-projection checkpoint after `bde3348`: record/table and virtual derived
+continuations validate exact refs before source capture and index/definition CAS
+hydration. URI/view/path/ordered-field bindings preserve JSON case; omitted/empty
+fields mean the same all-fields projection. First artifact reads rebind to the
+resolved exact URI, but a cursor cannot trigger implicit current-identity resolution.
+Virtual tables reject non-root paths. Collection-style validation and lowercased
+projection bindings are removed. Equal-byte restores remain distinct; historical
+continuations and leases stay pinned. The export fixture now checks exact B2 rather
+than searching random resource IDs for a numeric substring.
+Checks: resource cutover 23/23, resources 10/10, native semantic resources 1/1,
+HTML export 2/2 and production source inclusion 1/1 — 37/37. No full harness,
+Office/VSTO or Windows validation. The required version-format gate passed before
+the user-requested checkpoint commit.
+Next host-neutral read contour: remaining definition reads, starting with publication
+visibility and missing-payload handling of retained structural/virtual views through
+their existing authority owners; then remaining domain reads and bulk transport in
+MASTER order.
 Still open: remaining definition/domain read and bulk upload/export consumers,
 finer Excel coverage/named resources, complete binary/raw view negotiation, bounded
 cold replay/checkpoint/retention optimization,

@@ -34,6 +34,8 @@ namespace RNAssistant.Office.Services
             var path = string.IsNullOrWhiteSpace(request.ViewPath) ? "$" : request.ViewPath;
             if (path.Length > 256 || !Regex.IsMatch(path, @"\A\$(?:\.[A-Za-z_][A-Za-z0-9_]*)*\z"))
                 throw Error("RESOURCE_VIEW_UNSUPPORTED", "Only an explicit object-property path is supported by this records view.");
+            var binding = ResourceReadCursor.ProjectionBinding(request);
+            var position = ResourceReadCursor.ParseExact(request, binding);
             var scope = _authority.ScopeFor(session, request.Reference, live);
             _authority.CaptureMany(new[] { scope });
             var reference = request.Reference;
@@ -85,9 +87,8 @@ namespace RNAssistant.Office.Services
             if (fields.Length > 1024 || fields.Distinct(StringComparer.Ordinal).Count() != fields.Length ||
                 fields.Any(field => !index.Columns.Any(column => column.Key == field)))
                 throw Error("RESOURCE_FIELD_UNAVAILABLE", "The requested fields are not present in this exact view.");
-            var binding = ResourceReadCursor.ReadBinding(reference.Uri, request.Representation + path + JsonConvert.SerializeObject(fields));
-            var position = ResourceReadCursor.ParseRevisionBound(request.Cursor, binding);
-            ResourceReadCursor.ValidateContinuation(position, reference.Revision);
+            // The first read may resolve a logical artifact URI to its exact address.
+            binding = ResourceReadCursor.ProjectionBinding(request, reference.Uri);
             var offset = string.IsNullOrEmpty(request.Cursor) ? request.RowOffset : position.Offset;
             var limit = request.MaxRows <= 0 ? 500 : request.MaxRows;
             if (offset < 0 || offset > index.RowCount || limit < 1 || limit > 32000)

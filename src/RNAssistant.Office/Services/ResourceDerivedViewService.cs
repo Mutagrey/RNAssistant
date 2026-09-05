@@ -20,12 +20,16 @@ namespace RNAssistant.Office.Services
             if (address.Provider != "state") return null;
             if (address.Segments.Count != 3 || address.Segments[0] != "conversation" || address.Segments[1] != session.Id)
                 throw Error("RESOURCE_ACCESS_DENIED", "The derived resource belongs to another scope.");
+            var binding = ResourceReadCursor.ProjectionBinding(request);
+            var position = ResourceReadCursor.ParseExact(request, binding);
             var scope = authority.Scope(session, false);
             var frozen = authority.CaptureMany(new[] { scope }).Get(scope);
             var reference = request.Reference.IsExact ? request.Reference : frozen.GetHead(request.Reference.Identity)?.Revision;
             if (reference == null) return null;
             var metadata = ((IResourceRevisionStore)authority.Store).GetRevision(scope, reference);
             if (metadata?.Payload?.ContentType != VirtualContentType) return null;
+            if (!string.IsNullOrWhiteSpace(request.ViewPath) && request.ViewPath != "$")
+                throw Error("RESOURCE_VIEW_UNSUPPORTED", "A virtual derived table exposes only its root record projection.");
             if (++_depth > 16) { _depth--; throw Error("RESOURCE_DERIVATION_DEPTH", "The exact derivation exceeds its bounded dependency depth."); }
             try
             {
@@ -36,9 +40,6 @@ namespace RNAssistant.Office.Services
                 var fields = request.Fields == null || request.Fields.Count == 0 ? definition.Fields.Select(item => item.Field).ToList() : request.Fields;
                 if (fields.Any(field => !definition.Fields.Any(item => item.Field == field)) || fields.Distinct().Count() != fields.Count)
                     throw Error("RESOURCE_FIELD_UNAVAILABLE", "The field is not defined by this exact mapping.");
-                var binding = ResourceReadCursor.ReadBinding(reference.Uri, request.Representation + JsonConvert.SerializeObject(fields));
-                var position = ResourceReadCursor.ParseRevisionBound(request.Cursor, binding);
-                ResourceReadCursor.ValidateContinuation(position, reference.Revision);
                 var offset = string.IsNullOrEmpty(request.Cursor) ? request.RowOffset : position.Offset;
                 var table = Project(gateway, session, definition, offset, request.MaxRows <= 0 ? 500 : request.MaxRows, fields);
                 var next = offset + table.Rows.Count;

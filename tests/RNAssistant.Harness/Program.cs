@@ -633,6 +633,7 @@ namespace RNAssistant.Harness
                 Test("resource cutover: live and retained logical continuations", ResourceLiveContinuationsUseLogicalRevisions),
                 Test("resource cutover: document identity SaveAs and copy", DocumentAuthoritySurvivesSaveAsAndSeparatesCopy),
                 Test("resource cutover: bounded table lease snapshot", ResourceBoundedTableLeaseUsesOneSnapshot),
+                Test("resource cutover: exact structured projection continuations", ResourceStructuredContinuationsPinProjection),
                 Test("resource cutover: local restore logical lineage", LocalResourceRestorePublishesNewLogicalRevision),
                 Test("resource cutover: chat lifecycle atomic publication", ResourceChatLifecyclePublication),
                 Test("resource cutover: chat lifecycle persistence failure", ResourceChatLifecyclePersistenceFailure),
