@@ -1,6 +1,8 @@
 using System;
 using System.Collections.Generic;
+using System.IO;
 using System.Linq;
+using System.Security.Cryptography;
 using Newtonsoft.Json;
 using RNAssistant.Core.Models;
 using RNAssistant.Core.Services;
@@ -149,11 +151,39 @@ namespace RNAssistant.Office.Services
 
         internal string Read(ResourceRef exact)
         {
+            if (exact?.IsExact != true) throw Unavailable("An exact catalog publication is required.");
+            var address = ResourceUri.Parse(exact.Uri);
+            if (address.Provider != "catalog" || address.Segments.Count != 1)
+                throw Unavailable("A catalog publication root is required.");
+            // Visibility is proven by the canonical commit history, not merely by
+            // prepared metadata or a mutable catalog file. Old commits remain valid.
+            var snapshot = _authority.Store.Capture(ScopeId);
+            var head = snapshot.GetHead(exact.Identity);
+            if (!(head?.Knowledge == HeadKnowledge.Known && head.Revision.Revision == exact.Revision) &&
+                !snapshot.Commits.Any(commit => commit.HeadChanges.Any(change => change.After.Knowledge == HeadKnowledge.Known &&
+                    change.After.Revision.Uri == exact.Uri && change.After.Revision.Revision == exact.Revision)))
+                throw Unavailable("The exact catalog revision has not crossed its publication barrier.");
             var metadata = ((IResourceRevisionStore)_authority.Store).GetRevision(ScopeId, exact);
-            if (metadata?.Payload == null || metadata.Payload.ByteLength > 8L * 1024 * 1024)
-                throw new ResourceRequestException("The exact catalog payload is unavailable or exceeds the bounded catalog view.", "RESOURCE_SNAPSHOT_UNAVAILABLE", false);
-            return _authority.Payloads.ReadText(metadata.Payload.ToBlobReference());
+            return ReadPayload(metadata?.Payload, 8L * 1024 * 1024);
         }
+
+        internal string ReadReference(SkillReferenceMetadata reference)
+        { return ReadPayload(reference?.Payload, SkillStore.MaximumSkillReferenceBytes); }
+
+        private string ReadPayload(PayloadRef payload, long maximumBytes)
+        {
+            if (payload == null || payload.ByteLength > maximumBytes)
+                throw Unavailable("The exact catalog payload is unavailable or exceeds its bound.");
+            string text;
+            try { text = _authority.Payloads.ReadText(payload.ToBlobReference()); }
+            catch (Exception error) when (error is IOException || error is InvalidDataException || error is CryptographicException || error is System.Text.DecoderFallbackException)
+            { throw Unavailable("The exact catalog payload is unavailable or corrupt."); }
+            if (text == null) throw Unavailable("The exact catalog payload is unavailable.");
+            return text;
+        }
+
+        private static ResourceRequestException Unavailable(string message)
+        { return new ResourceRequestException(message, "RESOURCE_SNAPSHOT_UNAVAILABLE", false); }
 
         internal string ReadPublic(ResourceRef exact)
         {

@@ -30,13 +30,14 @@ namespace RNAssistant.Office.Services
             var snapshot = frozen.Get(scope);
             // A metadata-only currentness query, not a published complete-body observation.
             var evidence = new ResourceEvidence("data-plane-read", scope, resource.Reference, view,
-                resource.Coverage, false, snapshot.Generation, dependencies: resource.Dependencies);
+                resource.Coverage, false, snapshot.Generation, dependencies: resource.Dependencies,
+                immutable: ResourceAuthorityService.IsImmutable(scope, resource));
             var projection = new EvidenceStateReducer().Reduce(evidence, frozen);
             if (projection.State == EvidenceState.Current) return;
             var head = snapshot.GetHead(resource.Reference.Identity);
             var code = projection.State == EvidenceState.Unknown ? "RESOURCE_EFFECT_UNKNOWN" :
                 projection.State == EvidenceState.Unavailable ? "RESOURCE_SNAPSHOT_UNAVAILABLE" :
-                head?.Revision?.Revision != resource.Reference.Revision ? "RESOURCE_REVISION_CHANGED" : "RESOURCE_DEPENDENCY_STALE";
+                head?.Knowledge == HeadKnowledge.Known && head.Revision.Revision != resource.Reference.Revision ? "RESOURCE_REVISION_CHANGED" : "RESOURCE_DEPENDENCY_STALE";
             throw new ResourceRequestException("The selected head or its dependencies are not current. Open an exact historical revision explicitly or reconcile the source.", code, false);
         }
 

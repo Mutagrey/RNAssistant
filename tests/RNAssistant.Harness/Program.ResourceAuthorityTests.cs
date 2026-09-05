@@ -136,6 +136,137 @@ namespace RNAssistant.Harness
             });
         }
 
+        private static void ResourceCatalogContinuationsPinPublication()
+        {
+            WithTempPaths(paths =>
+            {
+                var store = new SkillStore(paths);
+                var body = "# Equal publication body\n" + new string('x', 600);
+                var details = "# Equal reference body\n" + new string('y', 600);
+                var skill = store.SaveOne(new SkillDefinition { Id = "common.catalog_cursor", Host = "Common", Name = "Original name",
+                    Description = "Catalog revision cursor test.", BodyMarkdown = body, Enabled = true });
+                string error; SkillReferenceMetadata referenceMetadata;
+                AssertTrue(store.TrySaveReference(skill, "references/details.md", details, out referenceMetadata, out error), "reference setup: " + error);
+                var adapter = FakeOfficeAdapter.ForHost("Word");
+                var executor = new OfficeToolExecutor(adapter, new VbaJournalStore(paths), store, new ToolStore(paths));
+                var session = NewSession(adapter);
+                var gateway = executor.ResourceGateway;
+                var authority = executor.ResourceAuthority;
+                var scope = CatalogPublicationService.ScopeId;
+                var revisions = (IResourceRevisionStore)authority.Store;
+                var active = executor.CaptureSkills();
+                var publishedSkill = active.Skills.Single(item => item.Id == skill.Id);
+                var r1 = publishedSkill.Publication;
+                var references = new[] { r1, CatalogResourceProvider.SkillResource(publishedSkill),
+                    CatalogResourceProvider.SkillResource(publishedSkill, "references/details.md") };
+                Func<ResourceRef, string, int, ResourceReadResult> read = (reference, cursor, max) => gateway.Read(session,
+                    new ResourceReadRequest { Reference = reference, Representation = "text", Cursor = cursor, MaxChars = max }).Result;
+                var first = references.Select(reference => read(reference, null, 8)).ToArray();
+                var expected = first.Select(page => page.Text + read(page.Resource.Reference, page.NextCursor, 32000).Text).ToArray();
+                AssertTrue(!expected[0].Contains("Equal publication body") && !expected[0].Contains("StoragePath"), "public root projection does not expose skill bodies or authoring paths");
+                AssertEqual(body, expected[1], "skill body is an independent exact resource");
+                AssertEqual(details, expected[2], "reference is an independent exact resource");
+                foreach (var page in first)
+                    AssertEqual(r1.Revision, ResourceReadCursor.ParseRevisionBound(page.NextCursor,
+                        ResourceReadCursor.ReadBinding(page.Resource.Reference.Uri, "text")).Revision, "all catalog views use publication revision cursors");
+                using (var plane = new ResourceDataPlaneService(gateway))
+                {
+                    var leases = references.Skip(1).Select(reference => plane.Open(session, "catalog-preview", new ResourceRef(reference.Uri), "text")).ToArray();
+                    AssertTrue(references.Skip(1).All(reference => authority.Store.GetHead(scope, reference.Identity) == null),
+                        "head reads of catalog members use publication dependencies, never synthetic member heads");
+                    var changed = executor.ExecuteManual(Command("common.skills_upsert", "id", skill.Id, "host", "Common", "name", "Changed name",
+                        "description", skill.Description, "version", "1.0.0", "bodyMarkdown", body, "enabled", true),
+                        executor.GetControllerTools().ToList(), new AppSettings(), false, true, session);
+                    AssertTrue(changed.Success, "metadata-only skill publication: " + changed.Message);
+                    var r2 = executor.CaptureSkills().Skills.Single(item => item.Id == skill.Id).Publication;
+                    AssertTrue(r1.Revision != r2.Revision, "changing metadata publishes a new catalog revision even when member bytes are equal");
+                    for (var index = 1; index < first.Length; index++)
+                    {
+                        var nextReference = new ResourceRef(references[index].Uri, r2.Revision);
+                        AssertEqual(expected[index], read(nextReference, null, 32000).Text, "unchanged member bytes are reused in the next publication");
+                        AssertEqual("RESOURCE_REVISION_CHANGED", RuntimeThrows<ResourceRequestException>(() => read(nextReference, first[index].NextCursor, 8)).ErrorCode,
+                            "a member cannot consume another publication's cursor even for equal bytes");
+                    }
+                    var r3 = new ResourceRef(r1.Uri, "r_catalog_restore");
+                    var original = revisions.GetRevision(scope, r1);
+                    revisions.RegisterRevision(scope, new ResourceRevisionMetadata(r3, original.ContentSha256, original.Payload, r2, r1));
+                    var before = authority.Store.Capture(scope);
+                    authority.Store.Publish(ResourceAuthorityCommit.Create(scope, before.Generation, null,
+                        new[] { new ResourceHeadChange(r1.Identity, before.GetHead(r1.Identity), ResourceHeadState.Known(r3, before.Generation + 1)) }, AuthorityCommitReason.Restore));
+                    for (var index = 0; index < first.Length; index++)
+                    {
+                        var restored = new ResourceRef(references[index].Uri, r3.Revision);
+                        AssertEqual(expected[index], read(restored, null, 32000).Text, "restored publication preserves all exact public bytes");
+                        AssertEqual("RESOURCE_REVISION_CHANGED", RuntimeThrows<ResourceRequestException>(() => read(restored, first[index].NextCursor, 8)).ErrorCode,
+                            "restored equal root/member bytes still have distinct logical cursors");
+                        AssertEqual(expected[index].Substring(8), read(references[index], first[index].NextCursor, 32000).Text, "historical continuation remains at its publication");
+                    }
+                    var frozen = authority.CaptureMany(new[] { scope });
+                    foreach (var page in first.Skip(1))
+                        AssertEqual("RESOURCE_DEPENDENCY_STALE", RuntimeThrows<ResourceRequestException>(() => gateway.RequireCurrent(session,
+                            page.Resource, "text", frozen)).ErrorCode, "member currentness is rejected by the shared publication dependency reducer");
+                    for (var index = 0; index < leases.Length; index++)
+                    {
+                        var page = JObject.Parse(System.Text.Encoding.UTF8.GetString(plane.Read(leases[index].LeaseId, 0, 8, System.Threading.CancellationToken.None)));
+                        var tail = JObject.Parse(System.Text.Encoding.UTF8.GetString(plane.Read(leases[index].LeaseId, 8, 32000, System.Threading.CancellationToken.None)));
+                        AssertEqual(expected[index + 1], (string)page["text"] + (string)tail["text"], "open member leases survive publication changes as exact snapshots");
+                        plane.Close(session.Id, "catalog-preview", leases[index].LeaseId);
+                    }
+                    var hashCursor = ResourceReadCursor.CreateRevisionBound(8, first[0].ContentSha256, ResourceReadCursor.ReadBinding(r1.Uri, "text"));
+                    AssertEqual("RESOURCE_REVISION_CHANGED", RuntimeThrows<ResourceRequestException>(() => read(r3, hashCursor, 8)).ErrorCode, "old hash-bound catalog tokens are rejected");
+                    AssertEqual("RESOURCE_CURSOR_INVALID", RuntimeThrows<ResourceRequestException>(() => read(new ResourceRef(r1.Uri), first[0].NextCursor, 8)).ErrorCode, "continuation cannot float through Current");
+                    RuntimeThrows<ResourceRequestException>(() => read(references[1], first[2].NextCursor, 8));
+                    var generation = authority.Store.Capture(scope).Generation;
+                    read(references[1], null, 32000);
+                    AssertEqual(r3.Revision, executor.CaptureSkills().Skills.Single(item => item.Id == skill.Id).Publication.Revision, "reading historical skill resources cannot reactivate an old generation");
+                    AssertEqual(generation, authority.Store.Capture(scope).Generation, "historical reads do not publish authority changes");
+                    authority.ReportExternalDrift(scope, r1.Identity);
+                    AssertEqual("RESOURCE_HEAD_UNKNOWN", RuntimeThrows<ResourceRequestException>(() => plane.Open(session, "catalog-preview",
+                        new ResourceRef(references[1].Uri), "text")).ErrorCode, "member head reads do not heal an unknown publication");
+                    AssertEqual(body, read(references[1], null, 32000).Text, "committed historical member remains readable under unknown current authority");
+                    AssertEqual(HeadKnowledge.Unknown, authority.Store.GetHead(scope, r1.Identity).Knowledge, "historical catalog reads leave unknown authority unchanged");
+                }
+            });
+        }
+
+        private static void ResourceCatalogSnapshotsFailClosed()
+        {
+            WithTempPaths(paths =>
+            {
+                var store = new SkillStore(paths);
+                var skill = store.SaveOne(new SkillDefinition { Id = "common.missing_catalog", Host = "Common", Name = "Missing catalog",
+                    Description = "Missing catalog payload test.", BodyMarkdown = "# Canonical body", Enabled = true });
+                string error; SkillReferenceMetadata reference;
+                AssertTrue(store.TrySaveReference(skill, "references/details.md", "# Unique reference payload", out reference, out error), "reference setup: " + error);
+                var adapter = FakeOfficeAdapter.ForHost("Word");
+                var executor = new OfficeToolExecutor(adapter, new VbaJournalStore(paths), store, new ToolStore(paths));
+                var session = NewSession(adapter);
+                var active = executor.CaptureCatalogs();
+                var scope = CatalogPublicationService.ScopeId;
+                var revisions = (IResourceRevisionStore)executor.ResourceAuthority.Store;
+                var root = active.Authority.GetHead(new ResourceIdentity("rna://catalog/prompts")).Revision;
+                var metadata = revisions.GetRevision(scope, root);
+                var prepared = new ResourceRef(root.Uri, "r_unpublished_catalog");
+                revisions.RegisterRevision(scope, new ResourceRevisionMetadata(prepared, metadata.ContentSha256, metadata.Payload, root));
+                Func<ResourceRef, ResourceReadSelection> read = exact => executor.ResourceGateway.Read(session,
+                    new ResourceReadRequest { Reference = exact, Representation = "text", MaxChars = 128 });
+                var generation = executor.ResourceAuthority.Store.Capture(scope).Generation;
+                AssertEqual("RESOURCE_SNAPSHOT_UNAVAILABLE", RuntimeThrows<ResourceRequestException>(() => read(prepared)).ErrorCode,
+                    "prepared catalog metadata cannot be exposed as a committed publication");
+                AssertTrue(revisions.GetView(scope, prepared, "text") == null, "failed publication check cannot retain a public text view");
+                System.IO.File.Delete(executor.Payloads.PathFor(metadata.Payload.Sha256));
+                AssertEqual("RESOURCE_SNAPSHOT_UNAVAILABLE", RuntimeThrows<ResourceRequestException>(() => read(root)).ErrorCode,
+                    "missing prompt CAS cannot become an empty successful catalog body");
+                AssertTrue(revisions.GetView(scope, root, "text") == null, "missing root payload is not replaced by an invented empty view");
+                var publishedSkill = active.Skills.Skills.Single(item => item.Id == skill.Id);
+                System.IO.File.WriteAllText(executor.Payloads.PathFor(publishedSkill.References.Single().Payload.Sha256), "CORRUPT CAS");
+                AssertEqual("RESOURCE_SNAPSHOT_UNAVAILABLE", RuntimeThrows<ResourceRequestException>(() => read(
+                    CatalogResourceProvider.SkillResource(publishedSkill, "references/details.md"))).ErrorCode, "corrupt reference CAS has a typed unavailable result");
+                AssertEqual(generation, executor.ResourceAuthority.Store.Capture(scope).Generation, "missing/corrupt catalog reads cannot advance authority");
+                AssertEqual(root.Revision, executor.ResourceAuthority.Store.GetHead(scope, root.Identity).Revision.Revision, "failures never replace a catalog head");
+            });
+        }
+
         private static void ResourcePromptPublicationIsFrozen()
         {
             WithTempPaths(paths =>

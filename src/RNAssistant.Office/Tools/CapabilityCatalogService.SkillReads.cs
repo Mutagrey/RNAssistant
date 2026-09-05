@@ -68,7 +68,7 @@ namespace RNAssistant.Office.Tools
                 if (previous.Complete) return CapabilityToolOutcome.Error("This reference read is complete.", null, "capability_continuation_complete", false);
                 if (!previous.Coverage.End.HasValue || previous.Coverage.End.Value <= 0 || previous.Coverage.End.Value > int.MaxValue)
                     return CapabilityToolOutcome.Error("Exact reference coverage is unavailable.", null, "capability_continuation_invalid", false);
-                cursor = ResourceReadCursor.CreateRevisionBound((int)previous.Coverage.End.Value, previous.ContentSha256,
+                cursor = ResourceReadCursor.CreateRevisionBound((int)previous.Coverage.End.Value, previous.Resource.Revision,
                     ResourceReadCursor.ReadBinding(exact.Uri, "text"));
             }
             var result = _resources.Read(session, new ResourceReadRequest {

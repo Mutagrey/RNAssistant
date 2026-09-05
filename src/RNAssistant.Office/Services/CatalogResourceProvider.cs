@@ -69,31 +69,25 @@ namespace RNAssistant.Office.Services
         public ResourceReadSelection Read(ChatSession session, ResourceReadRequest request)
         {
             var address = Address(request.Reference.Uri);
-            var exact = request.Reference.IsExact ? request.Reference :
-                new ResourceRef(request.Reference.Uri, _catalogs.Current(address.Segments[0]).Revision);
             if (!string.IsNullOrEmpty(request.Representation) && request.Representation != "auto" && request.Representation != "text")
                 throw Error("Catalog definitions expose a bounded text view.", "RESOURCE_VIEW_UNAVAILABLE");
-            var descriptor = Describe(exact);
+            var binding = ResourceReadCursor.ReadBinding(request.Reference.Uri, "text");
+            var position = ResourceReadCursor.ParseExact(request, binding);
+            var exact = request.Reference.IsExact ? request.Reference :
+                new ResourceRef(request.Reference.Uri, _catalogs.Current(address.Segments[0]).Revision);
+            ResourceDescriptor descriptor;
             string text;
-            if (address.Segments.Count == 1) text = _catalogs.ReadPublic(exact);
+            if (address.Segments.Count == 1)
+            { descriptor = DescribeRoot(exact); text = _catalogs.ReadPublic(exact); }
             else
             {
                 var root = new ResourceRef(ResourceUri.Create("catalog", address.Segments[0]), exact.Revision);
                 var skill = FindSkill(root, address.Segments[1]);
-                if (address.Segments.Count == 3) text = skill.BodyMarkdown ?? string.Empty;
-                else
-                {
-                    var reference = FindReference(skill, address.Segments[3]);
-                    if (reference.Payload == null || reference.Payload.ByteLength > RNAssistant.Core.Storage.SkillStore.MaximumSkillReferenceBytes)
-                        throw Error("This publication has no retained reference payload.", "RESOURCE_SNAPSHOT_UNAVAILABLE");
-                    text = _payloads.ReadText(reference.Payload.ToBlobReference());
-                    if (text == null) throw Error("The exact skill reference payload is unavailable.", "RESOURCE_SNAPSHOT_UNAVAILABLE");
-                }
+                var reference = address.Segments.Count == 4 ? FindReference(skill, address.Segments[3]) : null;
+                descriptor = DescribeSkill(root, skill, reference);
+                text = reference == null ? skill.BodyMarkdown ?? string.Empty : _catalogs.ReadReference(reference);
             }
             var payload = PayloadRef.FromBlob(_payloads.StoreText(text, descriptor.MimeType));
-            var binding = ResourceReadCursor.ReadBinding(exact.Uri, "text");
-            var position = ResourceReadCursor.ParseRevisionBound(request, binding);
-            ResourceReadCursor.ValidateContinuation(position, payload.Sha256);
             if (position.Offset > text.Length) throw Error("Catalog cursor exceeds the exact snapshot.", "RESOURCE_CURSOR_INVALID");
             var count = Math.Min(text.Length - position.Offset, Math.Max(1, Math.Min(32000, request.MaxChars <= 0 ? 32000 : request.MaxChars)));
             var next = position.Offset + count;
@@ -103,7 +97,7 @@ namespace RNAssistant.Office.Services
                 Offset = position.Offset, ReturnedCharacters = count, TotalCharacters = text.Length,
                 Complete = next == text.Length, Truncated = next < text.Length, ContentSha256 = payload.Sha256,
                 RawContentIncluded = true, CompleteViewPayload = payload,
-                NextCursor = next < text.Length ? ResourceReadCursor.CreateRevisionBound(next, payload.Sha256, binding) : null
+                NextCursor = next < text.Length ? ResourceReadCursor.CreateRevisionBound(next, exact.Revision, binding) : null
             }, ResourceRefs = new[] { exact.Copy() } };
         }
 

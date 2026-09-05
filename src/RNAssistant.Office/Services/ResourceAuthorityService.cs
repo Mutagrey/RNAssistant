@@ -87,10 +87,12 @@ namespace RNAssistant.Office.Services
             return new[] { new ResourceEvidence("ev_" + Guid.NewGuid().ToString("N"), scope,
                 result.Resource.Reference, result.Representation ?? "content",
                 result.Coverage ?? CoverageFor(result), result.Complete, result.AuthorityGeneration ?? snapshot.Generation,
-                result.Payload, result.Resource.Dependencies, immutable: scope.Kind != "document" && !result.Resource.Mutable &&
-                    ResourceUri.Parse(result.Resource.Reference.Uri).Provider != "state",
+                result.Payload, result.Resource.Dependencies, immutable: IsImmutable(scope, result.Resource),
                 contentSha256: result.ContentSha256 ?? result.Resource.ContentSha256) };
         }
+
+        internal static bool IsImmutable(ResourceAuthorityScopeId scope, ResourceDescriptor resource)
+        { return scope.Kind != "document" && !resource.Mutable && ResourceUri.Parse(resource.Reference.Uri).Provider != "state"; }
 
         internal ResourceAuthorityScopeId Scope(ChatSession session, bool documentScoped)
         {

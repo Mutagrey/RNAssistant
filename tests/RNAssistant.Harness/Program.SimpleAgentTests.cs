@@ -543,10 +543,15 @@ namespace RNAssistant.Harness
                 };
                 var tools = OfficeToolCatalog.ForHost(adapter.HostName).Concat(executor.GetControllerTools()).ToList();
                 var session = NewSession(adapter);
+                var published = executor.ExecuteManual(Command("common.skills_upsert", "id", skill.Id,
+                    "host", "Common", "name", skill.Name, "description", skill.Description, "version", skill.Version,
+                    "bodyMarkdown", skill.BodyMarkdown, "enabled", true), tools, new AppSettings(), false, true, session);
+                AssertEqual("ok", published.Status, "skill fixture crosses the publication barrier");
+                skill = executor.CaptureSkills().Skills.Single(item => item.Id == skill.Id);
                 var result = CreateConversationRunService(adapter, executor, completion).ExecuteAsync(
                     ChatModes.Agent,
                     "Do the test workflow.", session, NewContext(adapter), new AppSettings(),
-                    tools, null, null, null, new[] { skill }, CancellationToken.None, true).GetAwaiter().GetResult();
+                    tools, null, null, null, null, CancellationToken.None, true).GetAwaiter().GetResult();
 
                 AssertEqual("Инструкции учтены.", result.AssistantText, "skill-assisted response");
                 var revision = SkillRevision.Compute(skill);
@@ -563,7 +568,7 @@ namespace RNAssistant.Harness
                     "model result hides skill revision");
                 AssertContains(replay, "\"loaded\":true", "loaded skill result is explicit");
                 AssertContains(replay, "\"complete\":true", "loaded skill body is complete");
-                AssertContains(replay, "\"toolSchemasLoadedByThisRead\":false",
+                AssertContains(replay, "No tool schema was admitted by this resource read.",
                     "skill result explicitly keeps referenced tool schemas unloaded");
                 AssertContains(replay, "common.capabilities_read",
                     "skill result gives adjacent tool-schema loading guidance");
@@ -575,8 +580,19 @@ namespace RNAssistant.Harness
                 string durableError;
                 AssertTrue(ToolResultHistoryReader.TryRead(durableMessage, out durable, out durableError),
                     "durable skill result remains readable");
+                AssertContains(durable.Result.DataJson, "\"payload_externalized\":true", "large skill result is reference-first");
+                AssertTrue(durableMessage.ResultPayload != null && !durableMessage.Content.Contains("TEST_SKILL_SENTINEL"),
+                    "history does not duplicate the full skill payload");
+                var hydrated = HistoricalContextProjector.Project(durableMessage);
+                hydrated.Content = executor.Payloads.ReadText(durableMessage.ResultPayload.ToBlobReference());
+                AssertTrue(ToolResultHistoryReader.TryRead(hydrated, out durable, out durableError),
+                    "exact CAS skill result remains readable");
                 AssertContains(durable.Result.DataJson, "\"revision\":\"" + revision + "\"",
                     "durable skill result retains exact revision");
+                var exactSkill = CatalogResourceProvider.SkillResource(skill);
+                AssertTrue(durableMessage.ResourceEvidence.Any(evidence => evidence.Resource.Uri == exactSkill.Uri &&
+                    evidence.Resource.Revision == exactSkill.Revision),
+                    "durable skill evidence pins the committed publication");
             });
         }
 

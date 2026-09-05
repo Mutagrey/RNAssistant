@@ -43,7 +43,8 @@ The canonical owner map and active removal gates are updated in resource-fabric.
 and MIGRATION_MAP.md.
 Checkpoint commits: `ec8b179` (integrated foundation), `332b911` (lifecycle),
 `904e1ae` (exact lineage across restore/context/fork), `b59e26d` (exact HTML
-data-plane export) and `75e2aef` (shared context/state reads); user-requested checkpoints,
+data-plane export), `75e2aef` (shared context/state reads) and `d266895` (exact Office
+continuations); user-requested checkpoints,
 not a completed cutover. The lifecycle checkpoint switches controller clear/edit/message-delete/
 fork to typed history intents through the same journal/authority observer. History
 and fork preparation belong to ChatHistoryEditService/ChatCloneService; active
@@ -109,7 +110,7 @@ resource tools (including multi-page context) 1/1; Agent large whole read 1/1;
 native resource evidence replay 1/1; HTML export 2/2 and production source inclusion
 1/1. No full harness, Office/VSTO or Windows validation. The required version-format
 gate passed before the user-requested context-read checkpoint commit.
-Office-cursor checkpoint after `75e2aef`: Gateway Office text/source continuations
+Office-cursor checkpoint `d266895`: Gateway Office text/source continuations
 now bind exact logical revision plus URI/view. Missing exact refs and old hash-bound
 or cross-revision tokens fail before Office dispatch, including equal-byte restores.
 Physical view guards remain private to PrepareRead/provider dispatch; PublishRead
@@ -121,12 +122,24 @@ shared authority fails closed. Existing bounded-read fixtures now pass exact ref
 Continuation checks: resource cutover 20/20; resources 10/10; bounded VBA source,
 native semantic resource tools, Agent large whole read and resource evidence replay
 1/1 each; VBA restore 4/4; HTML export 2/2; production source inclusion 1/1 — 41/41.
-No full harness, Office/VSTO or Windows validation. The checkpoint is being committed
-at the user's request after the required version-format gate.
-Next host-neutral read contour: catalog text/skill/reference continuations still
-bind payload hashes; switch this remaining consumer to exact publication revision
-rules through the same catalog/Gateway owners, then remaining definition/domain
-reads and bulk transport in MASTER order.
+No full harness, Office/VSTO or Windows validation. The required version-format gate
+passed before the user-requested commit; its tree was verified clean before continuing.
+Catalog-publication checkpoint after `d266895`: root/skill/reference text
+cursors and capability reference next bind exact publication revisions, including
+equal-byte restores. Child head reads use the common immutable/dependency reducer,
+without independent child heads. Visibility requires a canonical committed
+publication; prepared metadata and missing/corrupt CAS fail closed. Historical
+reads/open leases stay exact and cannot activate a generation or heal Unknown.
+Duplicate root hydration is removed. The Agent skill fixture now publishes through
+the real owner and checks full CAS-backed replay plus exact publication evidence.
+Checks: resource cutover 22/22; resources 10/10; skill-reference continuation,
+native semantic resources and Agent full skill read 1/1 each; HTML export 2/2;
+Inspector 3/3; production source inclusion 1/1 — 41/41. No full harness, Office/VSTO
+or Windows validation. The required version-format gate passed for the
+user-requested catalog checkpoint commit.
+Next host-neutral read contour: structured/derived views still use collection-style
+continuation validation; enforce exact-reference guards through their existing
+owners, then remaining definition/domain reads and bulk transport in MASTER order.
 Still open: remaining definition/domain read and bulk upload/export consumers,
 finer Excel coverage/named resources, complete binary/raw view negotiation, bounded
 cold replay/checkpoint/retention optimization,

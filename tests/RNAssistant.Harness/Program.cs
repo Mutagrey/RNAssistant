@@ -640,6 +640,8 @@ namespace RNAssistant.Harness
                 Test("resource cutover: schema mapping derived publication", ResourceSchemaMappingDerivedPublication),
                 Test("resource cutover: large completed call stays reference only", ResourceCompletedCallDoesNotHydrateArguments),
                 Test("resource cutover: immutable skill catalog publication", ResourceSkillCatalogPublication),
+                Test("resource cutover: exact catalog publication continuations", ResourceCatalogContinuationsPinPublication),
+                Test("resource cutover: unavailable catalog snapshots fail closed", ResourceCatalogSnapshotsFailClosed),
                 Test("resource cutover: frozen prompt publication", ResourcePromptPublicationIsFrozen),
                 Test("resource cutover: runtime payload storage and exact hydration", ResourceRuntimePayloadStorage),
                 Test("resource cutover: unpublished revision retention roots", ResourceUnpublishedRevisionRetention),

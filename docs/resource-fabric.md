@@ -59,10 +59,20 @@ Model discovery/read uses `common.resources_find/read` with runtime-resolved
 semantic targets and exact internal references/continuations. A mutable semantic
 target captures its current head on the first read, then pins all internal pages
 to that exact revision; it cannot get stuck on discovery's previous observation.
-The `catalogs`
-scope discovers definitions without execution admission. `CatalogResourceProvider`
-serves committed metadata, exact skill bodies and reference Markdown, including
-historical publications. Remaining domain-specific read consumers are tracked below.
+The `catalogs` scope discovers definitions without execution admission.
+`CatalogResourceProvider` serves committed metadata, exact skill bodies and reference
+Markdown, including historical publications. Its text continuations bind publication
+revision plus URI/view through the shared exact cursor rules, not payload hashes;
+equal-byte publications/restores remain distinct. Capability reference `action=next`
+reconstructs the same logical cursor from durable evidence. Catalog children have
+no synthetic heads: the common reducer checks their immutable identity and exact
+root-publication dependency. Open leases remain pinned after publication changes.
+`CatalogPublicationService` proves visibility from canonical authority commits,
+never prepared metadata alone; missing/corrupt CAS fails with
+`RESOURCE_SNAPSHOT_UNAVAILABLE`. Historical reads neither activate a generation nor
+heal Unknown authority. Each member read hydrates its root once; public root
+projection remains in the catalog owner. Remaining domain-specific read consumers
+are tracked below.
 
 ## Conversation loop
 
@@ -199,12 +209,12 @@ callbacks; `VbaToolExecutor.Observations`; `HtmlAcceptedReadSourceResolver`; HTM
 binding tool IDs/arguments/transforms/current JSON; independent model history/repair
 assembly; free-summary resource authority; inline large pending payload duplication;
 viewer text/base64 bridge transport; mutable-disk skill reference activation;
-separate state/Office retained text readers, externally hash-bound Office/state
-continuations, and read-side activation of prepared state/context identities.
+separate state/Office retained text readers, externally hash-bound Office/state/catalog
+continuations, and read-side exposure of prepared state/context/catalog identities.
 No compatibility alias, dual-write or feature flag restores these paths.
 
-Still open within this same cutover: catalog text logical-continuation normalization,
-remaining definition/domain read consumers, finer
+Still open within this same cutover: exact continuation guards for structured/derived
+views, remaining definition/domain read consumers, finer
 Excel coverage/named resources, complete binary/raw view negotiation,
 remaining bulk upload/export surfaces, bounded history/retention
 optimization and final documentation cleanup. These are not permanent adapters.
