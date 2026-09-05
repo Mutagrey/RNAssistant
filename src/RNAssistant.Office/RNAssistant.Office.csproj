@@ -221,6 +221,7 @@
     <Compile Include="Services\ResourceAuthorityService.cs" />
     <Compile Include="Services\ResourceMutationDomains.cs" />
     <Compile Include="Services\ResourceDataPlaneService.cs" />
+    <Compile Include="Services\ResourceDataPlaneService.Uploads.cs" />
     <Compile Include="Services\ResourceDataRouter.cs" />
     <Compile Include="Services\ResourceStateProvider.cs" />
     <Compile Include="Services\ResourceSnapshotReadService.cs" />

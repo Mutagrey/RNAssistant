@@ -75,7 +75,7 @@ namespace RNAssistant.Harness
                 var targetAttachment = attachmentStore.Import(
                     "edit.txt",
                     "text/plain",
-                    Convert.ToBase64String(Encoding.UTF8.GetBytes("TARGET_ATTACHMENT")),
+                    Encoding.UTF8.GetBytes("TARGET_ATTACHMENT"),
                     session.Id);
                 var target = new ChatMessage
                 {
@@ -102,7 +102,7 @@ namespace RNAssistant.Harness
                 var tailAttachment = attachmentStore.Import(
                     "tail.txt",
                     "text/plain",
-                    Convert.ToBase64String(Encoding.UTF8.GetBytes("TAIL_ATTACHMENT")),
+                    Encoding.UTF8.GetBytes("TAIL_ATTACHMENT"),
                     session.Id);
                 var tail = new ChatMessage { Role = "user", Content = "Третий вопрос" };
                 tail.Attachments.Add(tailAttachment);

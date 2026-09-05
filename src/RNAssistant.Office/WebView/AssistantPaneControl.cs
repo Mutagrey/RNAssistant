@@ -191,7 +191,15 @@ namespace RNAssistant.Office.WebView
             {
                 var method = e.Request.Method;
                 var url = e.Request.Uri;
-                var response = await Task.Run(() => _controller.ReadResourceData(method, url, _lifetimeCancellation.Token));
+                // WebView request.Content may wrap an apartment-bound COM stream. Consume only
+                // a validated, bounded upload chunk on this STA; never hand that stream to Task.Run.
+                Services.ResourceStreamResponse response;
+                if (method == "POST")
+                {
+                    using (var body = e.Request.Content)
+                        response = _controller.HandleResourceData(method, url, _lifetimeCancellation.Token, body);
+                }
+                else response = await Task.Run(() => _controller.HandleResourceData(method, url, _lifetimeCancellation.Token));
                 if (_resourcesDisposed) { response.Body.Dispose(); return; }
                 e.Response = _webView.CoreWebView2.Environment.CreateWebResourceResponse(
                     response.Body, response.StatusCode, response.Reason, response.Headers);

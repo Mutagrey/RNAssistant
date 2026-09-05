@@ -5,6 +5,33 @@ using RNAssistant.Core.Models;
 
 namespace RNAssistant.Office.Contracts
 {
+    public sealed class ResourceUploadOpenRequest : ChatPayload
+    {
+        [JsonProperty("fileName")] public string FileName { get; set; }
+        [JsonProperty("contentType")] public string ContentType { get; set; }
+        [JsonProperty("byteLength")] public long ByteLength { get; set; }
+    }
+
+    public sealed class ResourceUploadLeaseRequest : ChatPayload
+    {
+        [JsonProperty("leaseId")] public string LeaseId { get; set; }
+    }
+
+    public sealed class ResourceUploadOpenResponse
+    {
+        [JsonProperty("leaseId")] public string LeaseId { get; set; }
+        [JsonProperty("url")] public string Url { get; set; }
+        [JsonProperty("byteLength")] public long ByteLength { get; set; }
+        [JsonProperty("maxChunkBytes")] public int MaxChunkBytes { get; set; }
+        [JsonProperty("expiresUtc")] public DateTime ExpiresUtc { get; set; }
+    }
+
+    public sealed class ResourceUploadBatchResponse
+    {
+        [JsonProperty("leaseId")] public string LeaseId { get; set; }
+        [JsonProperty("nextOffset")] public int NextOffset { get; set; }
+    }
+
     public sealed class ResourceChangedMessage
     {
         [JsonProperty("type")] public string Type { get { return "resourceChanged"; } }

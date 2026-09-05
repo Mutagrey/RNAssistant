@@ -14,8 +14,10 @@ namespace RNAssistant.Office.Services
         internal string Reason;
         internal Stream Body;
         internal string ContentType = "application/json; charset=utf-8";
+        internal string AllowedHeaders = string.Empty;
         internal string Headers { get { return "Content-Type: " + ContentType + "\r\nCache-Control: no-store\r\n" +
-            "Access-Control-Allow-Origin: null\r\nX-Content-Type-Options: nosniff\r\nContent-Security-Policy: default-src 'none'";
+            "Access-Control-Allow-Origin: null\r\n" + AllowedHeaders +
+            "X-Content-Type-Options: nosniff\r\nContent-Security-Policy: default-src 'none'";
         } }
     }
 
@@ -24,11 +26,10 @@ namespace RNAssistant.Office.Services
     {
         private readonly ResourceDataPlaneService _data;
         internal ResourceDataRouter(ResourceDataPlaneService data) { _data = data; }
-        internal ResourceStreamResponse Handle(string method, string url, CancellationToken token)
+        internal ResourceStreamResponse Handle(string method, string url, CancellationToken token, Stream body = null)
         {
             try
             {
-                if (method != "GET") return Failure(405, "RESOURCE_METHOD_NOT_ALLOWED", "Only GET batch reads are supported.");
                 Uri uri;
                 if (url == null || url.Length > 8192 || !Uri.TryCreate(url, UriKind.Absolute, out uri) ||
                     uri.GetLeftPart(UriPartial.Authority) != ResourceDataPlaneService.Origin || !string.IsNullOrEmpty(uri.Fragment))
@@ -36,8 +37,11 @@ namespace RNAssistant.Office.Services
                 var path = uri.AbsolutePath.Split('/');
                 if (System.Text.RegularExpressions.Regex.IsMatch(Uri.UnescapeDataString(url), @"/\.\.?(/|$)"))
                     return Failure(403, "RESOURCE_ACCESS_DENIED", "Path traversal is not a resource route.");
+                if (path.Length == 4 && path[1] == "v1" && path[2] == "upload" && IsLeaseId(path[3]))
+                    return Upload(method, uri, path[3], body, token);
+                if (method != "GET") return Failure(405, "RESOURCE_METHOD_NOT_ALLOWED", "Only GET batch reads are supported on read leases.");
                 if (path.Length != 3 || path[1] != "v1" || path[2].Length != 64 ||
-                    !System.Text.RegularExpressions.Regex.IsMatch(path[2], "\\A[0-9a-f]{64}\\z"))
+                    !IsLeaseId(path[2]))
                     return Failure(403, "RESOURCE_ACCESS_DENIED", "Invalid resource capability route.");
                 int offset = 0, limit = ResourceDataPlaneService.MaximumBatchItems;
                 System.Collections.Generic.List<string> fields = null;
@@ -71,6 +75,38 @@ namespace RNAssistant.Office.Services
             catch (Exception error) when (error is IOException || error is InvalidOperationException || error is JsonException)
             { return Failure(503, "RESOURCE_SNAPSHOT_UNAVAILABLE", "The exact resource view is unavailable."); }
         }
+        private ResourceStreamResponse Upload(string method, Uri uri, string id, Stream body, CancellationToken token)
+        {
+            if (method != "POST" && method != "OPTIONS")
+                return Failure(405, "RESOURCE_METHOD_NOT_ALLOWED", "Upload capabilities only accept POST chunks.");
+            int offset = -1, count = -1;
+            var fields = uri.Query.TrimStart('?').Split('&');
+            if (fields.Length != 2) return Failure(400, "RESOURCE_CURSOR_INVALID", "An exact byte offset and count are required.");
+            foreach (var field in fields)
+            {
+                var parts = field.Split('=');
+                int value;
+                if (parts.Length != 2 || !int.TryParse(parts[1], NumberStyles.None, CultureInfo.InvariantCulture, out value))
+                    return Failure(400, "RESOURCE_CURSOR_INVALID", "Invalid bounded upload selector.");
+                if (parts[0] == "offset" && offset == -1) offset = value;
+                else if (parts[0] == "count" && count == -1) count = value;
+                else return Failure(400, "RESOURCE_CURSOR_INVALID", "Unknown or duplicated upload selector.");
+            }
+            if (offset < 0 || count < 1 || count > ResourceDataPlaneService.MaximumUploadChunkBytes)
+                return Failure(400, "RESOURCE_BATCH_TOO_LARGE", "Invalid upload chunk bounds.");
+            token.ThrowIfCancellationRequested();
+            if (method == "OPTIONS")
+            {
+                _data.ValidateUpload(id);
+                return new ResourceStreamResponse { StatusCode = 204, Reason = "No Content", Body = new MemoryStream(),
+                    AllowedHeaders = "Access-Control-Allow-Methods: POST\r\nAccess-Control-Allow-Headers: Content-Type\r\n" };
+            }
+            var result = _data.WriteUpload(id, offset, count, body, token);
+            return new ResourceStreamResponse { StatusCode = 200, Reason = "OK",
+                Body = new MemoryStream(Encoding.UTF8.GetBytes(JsonConvert.SerializeObject(result)), false) };
+        }
+        private static bool IsLeaseId(string id)
+        { return System.Text.RegularExpressions.Regex.IsMatch(id, "\\A[0-9a-f]{64}\\z"); }
         private static ResourceStreamResponse Failure(int code, string error, string message)
         {
             return new ResourceStreamResponse { StatusCode = code, Reason = "Resource request failed",

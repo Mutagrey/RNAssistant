@@ -392,6 +392,10 @@ namespace RNAssistant.Harness
                 Test("chat sessions: saved run boundary preserves protocol", InterruptedRunAtSavedBoundaryPreservesProtocol),
 
                 Test("attachments: import commit delete", AttachmentImportCommitDelete),
+                Test("attachments: upload uses the bounded resource data plane", ResourceUploadStagesThroughDataPlane),
+                Test("attachments: upload rejects invalid chunks before staging", ResourceUploadRejectsInvalidChunks),
+                Test("attachments: upload lease bounds cancellation and expiry", ResourceUploadLeaseLifecycle),
+                Test("attachments: upload discards cancelled completion", ResourceUploadDiscardsCancelledCompletion),
                 Test("attachments: resource link precedes model dispatch", AttachmentPromotionLinksResourceBeforeModelDispatch),
                 Test("attachments: immutable identity cannot be rebound", AttachmentIdentityCannotBeRebound),
                 Test("attachments: fork artifact reuses shared blob", ForkedAttachmentArtifactTracksCopiedFile),

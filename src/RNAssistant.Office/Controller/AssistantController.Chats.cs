@@ -453,6 +453,7 @@ namespace RNAssistant.Office
             {
                 var sessionId = current.Id;
                 var selected = _chatSessions.DeleteAndSelectNext(sessionId);
+                _resourceData.CloseUploads(sessionId);
                 RemovePendingAgentToolsForSession(sessionId);
                 return selected;
             });
@@ -477,6 +478,7 @@ namespace RNAssistant.Office
                 _conversationStore.DeleteDocument(host, documentKey);
                 foreach (var header in sessions)
                 {
+                    _resourceData.CloseUploads(header.Id);
                     RemovePendingAgentToolsForSession(header.Id);
                 }
             }

@@ -41,24 +41,10 @@ namespace RNAssistant.Core.Storage
             CleanupExpiredDrafts(DateTime.UtcNow.AddDays(-1));
         }
 
-        public ChatAttachment Import(string fileName, string contentType, string base64, string draftChatId)
+        public ChatAttachment Import(string fileName, string contentType, byte[] bytes, string draftChatId)
         {
             draftChatId = RequireDraftChatId(draftChatId);
-            if (string.IsNullOrWhiteSpace(base64) || base64.Length > ((MaxFileBytes + 2) / 3) * 4 + 16)
-            {
-                throw new InvalidOperationException("Attachment must be between 1 byte and 20 MB.");
-            }
-            byte[] bytes;
-            try
-            {
-                bytes = Convert.FromBase64String(base64 ?? string.Empty);
-            }
-            catch (FormatException ex)
-            {
-                throw new InvalidOperationException("Attachment data is not valid base64.", ex);
-            }
-
-            if (bytes.LongLength == 0 || bytes.LongLength > MaxFileBytes)
+            if (bytes == null || bytes.LongLength == 0 || bytes.LongLength > MaxFileBytes)
             {
                 throw new InvalidOperationException("Attachment must be between 1 byte and 20 MB.");
             }
@@ -83,7 +69,8 @@ namespace RNAssistant.Core.Storage
             attachment.RelativePath = Path.Combine("staging", attachment.Id + extension);
             var path = AbsolutePath(attachment.RelativePath);
             Directory.CreateDirectory(Path.GetDirectoryName(path));
-            File.WriteAllBytes(path, bytes);
+            try { File.WriteAllBytes(path, bytes); }
+            catch { DeleteDraftFiles(attachment.Id); throw; }
 
             try
             {

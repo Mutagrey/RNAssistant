@@ -19,11 +19,16 @@ namespace RNAssistant.Office.Services
             ChatSession session,
             string fileName,
             string contentType,
-            string base64)
+            byte[] bytes)
         {
             var chatId = RequireChatId(session);
-            var resource = _attachments.Import(fileName, contentType, base64, chatId);
-            _attachments.SaveDraftMetadata(resource);
+            var resource = _attachments.Import(fileName, contentType, bytes, chatId);
+            try { _attachments.SaveDraftMetadata(resource); }
+            catch
+            {
+                _attachments.DeleteDrafts(new ChatMessage { Attachments = new List<ChatAttachment> { resource } });
+                throw;
+            }
             return resource;
         }
 

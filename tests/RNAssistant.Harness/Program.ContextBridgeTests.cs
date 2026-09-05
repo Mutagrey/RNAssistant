@@ -276,7 +276,7 @@ namespace RNAssistant.Harness
                 var attachment = store.Import(
                     "notes.txt",
                     "text/plain",
-                    Convert.ToBase64String(System.Text.Encoding.UTF8.GetBytes("fork data")),
+                    System.Text.Encoding.UTF8.GetBytes("fork data"),
                     source.Id);
                 message.Attachments.Add(attachment);
                 source.Messages.Add(message);
@@ -581,17 +581,32 @@ namespace RNAssistant.Harness
             var controller = new AssistantController();
             var bridge = new AssistantWebBridge(controller, null);
             var token = BridgeToken(bridge);
-            var stagedJson = bridge.HandleMessageAsync(
-                "{\"id\":\"stage-resource\",\"type\":\"stageChatResource\",\"bridgeToken\":\"" + token +
-                "\",\"payload\":{\"chatId\":\"chat-resource\",\"fileName\":\"image.png\",\"contentType\":\"image/png\",\"base64\":\"AQ==\"}}")
+            var openedJson = bridge.HandleMessageAsync(
+                "{\"id\":\"open-upload\",\"type\":\"beginChatResourceUpload\",\"bridgeToken\":\"" + token +
+                "\",\"payload\":{\"chatId\":\"chat-resource\",\"fileName\":\"image.png\",\"contentType\":\"image/png\",\"byteLength\":262145}}")
                 .GetAwaiter()
                 .GetResult();
-
+            var opened = JObject.Parse(openedJson);
+            AssertTrue(opened["ok"].Value<bool>(), "metadata-only upload open response ok");
+            AssertEqual(262145L, opened["payload"]["byteLength"].Value<long>(), "exact declared length reaches typed payload");
+            AssertEqual("chat-resource", controller.LastChatId, "upload is chat-scoped");
+            AssertEqual("image.png", controller.LastResourceFileName, "resource file name reaches typed payload");
+            var leaseId = opened["payload"]["leaseId"].Value<string>();
+            var stagedJson = bridge.HandleMessageAsync(
+                "{\"id\":\"complete-upload\",\"type\":\"completeChatResourceUpload\",\"bridgeToken\":\"" + token +
+                "\",\"payload\":{\"chatId\":\"chat-resource\",\"leaseId\":\"" + leaseId + "\"}}").GetAwaiter().GetResult();
             var staged = JObject.Parse(stagedJson);
             AssertTrue(staged["ok"].Value<bool>(), "resource staging response ok");
             AssertEqual("resource-draft", staged["payload"]["resource"]["Id"].Value<string>(), "resource draft returned");
-            AssertEqual("chat-resource", controller.LastChatId, "resource draft is chat-scoped");
-            AssertEqual("image.png", controller.LastResourceFileName, "resource file name reaches typed payload");
+            AssertEqual(leaseId, controller.LastResourceDraftId, "completion receives only the exact upload lease");
+            var cancelledJson = bridge.HandleMessageAsync(
+                "{\"id\":\"cancel-upload\",\"type\":\"cancelChatResourceUpload\",\"bridgeToken\":\"" + token +
+                "\",\"payload\":{\"chatId\":\"chat-resource\",\"leaseId\":\"" + leaseId + "\"}}").GetAwaiter().GetResult();
+            AssertTrue(JObject.Parse(cancelledJson)["payload"]["closed"].Value<bool>(), "typed upload close response");
+            var legacyJson = bridge.HandleMessageAsync(
+                "{\"id\":\"legacy-upload\",\"type\":\"stageChatResource\",\"bridgeToken\":\"" + token +
+                "\",\"payload\":{\"chatId\":\"chat-resource\",\"base64\":\"AQ==\"}}").GetAwaiter().GetResult();
+            AssertTrue(!JObject.Parse(legacyJson)["ok"].Value<bool>(), "the base64 staging route has no compatibility alias");
 
             var discardedJson = bridge.HandleMessageAsync(
                 "{\"id\":\"discard-resource\",\"type\":\"discardChatResourceDraft\",\"bridgeToken\":\"" + token +

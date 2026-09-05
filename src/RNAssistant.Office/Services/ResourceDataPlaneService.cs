@@ -13,20 +13,28 @@ namespace RNAssistant.Office.Services
 {
     // Transient access/batch ownership only. Revisions, bodies and freshness belong
     // to the gateway, its providers, the authority journal and the existing CAS.
-    internal sealed class ResourceDataPlaneService : IDisposable
+    internal sealed partial class ResourceDataPlaneService : IDisposable
     {
         internal const string Origin = "https://rnassistant.local-resource";
         internal const int MaximumBatchBytes = 8 * 1024 * 1024;
         internal const int MaximumBatchItems = 32000;
         private readonly ResourceGatewayService _gateway;
         private readonly Func<string, string, bool> _ownerIsActive;
+        private readonly Func<DateTime> _utcNow;
+        private readonly Timer _expiryTimer;
         private readonly object _sync = new object();
         private readonly Dictionary<string, Access> _access = new Dictionary<string, Access>(StringComparer.Ordinal);
         private readonly List<Opening> _openings = new List<Opening>();
         private bool _disposed;
 
-        internal ResourceDataPlaneService(ResourceGatewayService gateway, Func<string, string, bool> ownerIsActive = null)
-        { _gateway = gateway ?? throw new ArgumentNullException(nameof(gateway)); _ownerIsActive = ownerIsActive; }
+        internal ResourceDataPlaneService(ResourceGatewayService gateway, Func<string, string, bool> ownerIsActive = null,
+            Func<DateTime> utcNow = null)
+        {
+            _gateway = gateway ?? throw new ArgumentNullException(nameof(gateway));
+            _ownerIsActive = ownerIsActive; _utcNow = utcNow ?? (() => DateTime.UtcNow);
+            _expiryTimer = new Timer(_ => { lock (_sync) { if (!_disposed) Expire(); } },
+                null, TimeSpan.FromMinutes(1), TimeSpan.FromMinutes(1));
+        }
 
         internal ResourceDataOpenResponse Open(ChatSession session, string workspaceId, ResourceRef reference, string view,
             string viewPath = null, CancellationToken cancellationToken = default(CancellationToken),
@@ -40,7 +48,7 @@ namespace RNAssistant.Office.Services
             lock (_sync)
             {
                 EnsureActive(); Expire();
-                if (_access.Count + _openings.Count >= 64) throw Error("RESOURCE_LEASE_LIMIT", "Close unused resource handles before opening more.");
+                if (_access.Count + _openings.Count + _uploads.Count >= 64) throw Error("RESOURCE_LEASE_LIMIT", "Close unused resource handles before opening more.");
                 if (_openings.Count >= 4) throw Error("RESOURCE_BACKPRESSURE", "Only four resource opens may be in flight.");
                 _openings.Add(opening);
             }
@@ -57,11 +65,9 @@ namespace RNAssistant.Office.Services
                     _gateway.RequireCurrent(session, first.Result.Resource, first.Result.Representation,
                         _gateway.CaptureAuthorityFor(session, new[] { first.Result.Resource }));
                 validate?.Invoke(first.Result);
-                var token = new byte[32];
-                using (var random = RandomNumberGenerator.Create()) random.GetBytes(token);
-                var id = BitConverter.ToString(token).Replace("-", string.Empty).ToLowerInvariant();
+                var id = NewLeaseId();
                 var lease = new ResourceLease(id, first.Result.Resource.Reference, new[] { first.Result.Representation },
-                    first.Result.Resource.Coverage ?? ResourceCoverage.Whole(), session.Id + ":" + workspaceId, DateTime.UtcNow.AddMinutes(10));
+                    first.Result.Resource.Coverage ?? ResourceCoverage.Whole(), session.Id + ":" + workspaceId, _utcNow().AddMinutes(10));
                 // Never call the controller/owner while holding the lease lock.
                 if (_ownerIsActive != null && !_ownerIsActive(session.Id, workspaceId))
                     throw Error("RESOURCE_LEASE_EXPIRED", "The resource owner closed during capture.");
@@ -107,7 +113,7 @@ namespace RNAssistant.Office.Services
             try
             {
                 cancellationToken.ThrowIfCancellationRequested();
-                if (access.Cancelled || access.Lease.ExpiresUtc <= DateTime.UtcNow ||
+                if (access.Cancelled || access.Lease.ExpiresUtc <= _utcNow() ||
                     _ownerIsActive != null && !_ownerIsActive(access.Session.Id, access.WorkspaceId))
                     throw Error("RESOURCE_LEASE_EXPIRED", "The resource lease is closed or expired.");
                 var first = access.First;
@@ -183,15 +189,24 @@ namespace RNAssistant.Office.Services
             lock (_sync)
             {
                 _disposed = true;
+                _expiryTimer.Dispose();
                 foreach (var opening in _openings) opening.Cancelled = true;
                 foreach (var access in _access.Values) { access.Cancelled = true; access.First = null; }
                 _access.Clear();
+                foreach (var upload in _uploads.Values.ToArray()) CancelUpload(upload);
             }
         }
         private void Expire()
         {
-            foreach (var access in _access.Values.Where(item => item.Lease.ExpiresUtc <= DateTime.UtcNow).ToArray())
+            foreach (var access in _access.Values.Where(item => item.Lease.ExpiresUtc <= _utcNow()).ToArray())
             { access.Cancelled = true; access.First = null; _access.Remove(access.Lease.LeaseId); }
+            foreach (var upload in _uploads.Values.Where(item => item.ExpiresUtc <= _utcNow()).ToArray()) CancelUpload(upload);
+        }
+        private static string NewLeaseId()
+        {
+            var token = new byte[32];
+            using (var random = RandomNumberGenerator.Create()) random.GetBytes(token);
+            return BitConverter.ToString(token).Replace("-", string.Empty).ToLowerInvariant();
         }
         private void EnsureActive() { if (_disposed) throw new ObjectDisposedException(nameof(ResourceDataPlaneService)); }
         private static int Count(ResourceReadResult result) { return result.Table == null ? result.ReturnedCharacters : result.Table.Rows.Count; }

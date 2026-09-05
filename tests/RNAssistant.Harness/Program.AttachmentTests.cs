@@ -26,7 +26,7 @@ namespace RNAssistant.Harness
                 var attachment = store.Import(
                     "notes.txt",
                     "text/plain",
-                    Convert.ToBase64String(System.Text.Encoding.UTF8.GetBytes("hello attachment")),
+                    System.Text.Encoding.UTF8.GetBytes("hello attachment"),
                     "chat-a");
                 store.SaveDraftMetadata(attachment);
                 var drafts = store.LoadDrafts(new[] { attachment.Id }, "chat-a");
@@ -73,7 +73,7 @@ namespace RNAssistant.Harness
                     session,
                     "notes.txt",
                     "text/plain",
-                    Convert.ToBase64String(System.Text.Encoding.UTF8.GetBytes("durable resource body")));
+                    System.Text.Encoding.UTF8.GetBytes("durable resource body"));
                 var user = new ChatMessage
                 {
                     Role = "user",
@@ -174,7 +174,7 @@ namespace RNAssistant.Harness
                 var attachment = new AttachmentStore(paths).Import(
                     "image.png",
                     "image/png",
-                    Convert.ToBase64String(png), "image-test");
+                    png, "image-test");
                 AssertEqual("image", attachment.Kind, "image kind");
                 AssertEqual("ready", attachment.Status, "image import status");
                 AssertTrue(string.IsNullOrWhiteSpace(attachment.Error), "image import has no pdf extraction error");
@@ -503,7 +503,7 @@ namespace RNAssistant.Harness
             {
                 var store = new AttachmentStore(paths);
                 var wav = System.Text.Encoding.ASCII.GetBytes("RIFF0000WAVEdata");
-                var attachment = store.Import("recording.wav", "audio/wav", Convert.ToBase64String(wav), "audio-test");
+                var attachment = store.Import("recording.wav", "audio/wav", wav, "audio-test");
                 AssertEqual("audio", attachment.Kind, "wav detected by signature");
                 AssertEqual("audio/wav", attachment.ContentType, "wav content type normalized");
 
@@ -523,7 +523,7 @@ namespace RNAssistant.Harness
                 mp3Bytes[10] = 0xff;
                 mp3Bytes[11] = 0xfb;
                 mp3Bytes[12] = 0x90;
-                var mp3 = store.Import("recording.mp3", "audio/mpeg", Convert.ToBase64String(mp3Bytes), "audio-test");
+                var mp3 = store.Import("recording.mp3", "audio/mpeg", mp3Bytes, "audio-test");
                 AssertEqual("audio", mp3.Kind, "mp3 detected by signature");
                 AssertEqual("audio/mpeg", mp3.ContentType, "mp3 content type normalized");
             });
@@ -540,7 +540,7 @@ namespace RNAssistant.Harness
                 var pdf = builder.Build();
 
                 var store = new AttachmentStore(paths);
-                var attachment = store.Import("sample.pdf", "application/pdf", Convert.ToBase64String(pdf), "pdf-test");
+                var attachment = store.Import("sample.pdf", "application/pdf", pdf, "pdf-test");
                 AssertTrue(
                     (attachment.ExtractedText ?? string.Empty).IndexOf("hello pdf attachment", StringComparison.OrdinalIgnoreCase) >= 0,
                     "pdf extracted text");
@@ -555,20 +555,20 @@ namespace RNAssistant.Harness
             {
                 var store = new AttachmentStore(paths);
                 var source = store.Import("sample.cs", "application/octet-stream",
-                    Convert.ToBase64String(System.Text.Encoding.UTF8.GetBytes("class Sample {}")), "text-test");
+                    System.Text.Encoding.UTF8.GetBytes("class Sample {}"), "text-test");
                 AssertEqual("text", source.Kind, "source kind");
                 var unknown = store.Import("sample.customtext", "application/octet-stream",
-                    Convert.ToBase64String(System.Text.Encoding.UTF8.GetBytes("plain utf8 content")), "text-test");
+                    System.Text.Encoding.UTF8.GetBytes("plain utf8 content"), "text-test");
                 AssertEqual("text", unknown.Kind, "content-detected text kind");
 
                 var utf16Bytes = System.Text.Encoding.Unicode.GetPreamble()
                     .Concat(System.Text.Encoding.Unicode.GetBytes("ключ: значение"))
                     .ToArray();
-                var yaml = store.Import("sample.yaml", "application/octet-stream", Convert.ToBase64String(utf16Bytes), "text-test");
+                var yaml = store.Import("sample.yaml", "application/octet-stream", utf16Bytes, "text-test");
                 AssertContains(store.ReadExtractedText(yaml), "значение", "utf16 text");
 
                 var cp1251 = new byte[] { 0xcf, 0xf0, 0xe8, 0xe2, 0xe5, 0xf2 };
-                var log = store.Import("sample.log", "application/octet-stream", Convert.ToBase64String(cp1251), "text-test");
+                var log = store.Import("sample.log", "application/octet-stream", cp1251, "text-test");
                 AssertEqual("Привет", store.ReadExtractedText(log), "windows-1251 text");
             });
         }
@@ -580,7 +580,7 @@ namespace RNAssistant.Harness
                 var store = new AttachmentStore(paths);
                 var full = new string('x', 5000);
                 var attachment = store.Import("large.txt", "text/plain",
-                    Convert.ToBase64String(System.Text.Encoding.UTF8.GetBytes(full)), "sidecar-test");
+                    System.Text.Encoding.UTF8.GetBytes(full), "sidecar-test");
                 AssertEqual(4000, attachment.ExtractedText.Length, "inline preview length");
                 AssertEqual(5000, attachment.ExtractedCharCount, "extracted char count");
                 AssertEqual(full, store.ReadExtractedText(attachment), "sidecar full text");
@@ -646,7 +646,7 @@ namespace RNAssistant.Harness
                 var rejected = false;
                 try
                 {
-                    store.Import("program.exe", "application/octet-stream", Convert.ToBase64String(new byte[] { 1, 2, 3 }), "reject-test");
+                    store.Import("program.exe", "application/octet-stream", new byte[] { 1, 2, 3 }, "reject-test");
                 }
                 catch (InvalidOperationException)
                 {
@@ -657,7 +657,7 @@ namespace RNAssistant.Harness
                 rejected = false;
                 try
                 {
-                    store.Import("archive.txt", "text/plain", Convert.ToBase64String(new byte[] { 0x50, 0x4b, 0x03, 0x04, 1, 2 }), "reject-test");
+                    store.Import("archive.txt", "text/plain", new byte[] { 0x50, 0x4b, 0x03, 0x04, 1, 2 }, "reject-test");
                 }
                 catch (InvalidOperationException)
                 {
@@ -668,7 +668,7 @@ namespace RNAssistant.Harness
                 rejected = false;
                 try
                 {
-                    store.Import("fake.mp3", "audio/mpeg", Convert.ToBase64String(System.Text.Encoding.UTF8.GetBytes("not audio")), "reject-test");
+                    store.Import("fake.mp3", "audio/mpeg", System.Text.Encoding.UTF8.GetBytes("not audio"), "reject-test");
                 }
                 catch (InvalidOperationException)
                 {
@@ -686,7 +686,7 @@ namespace RNAssistant.Harness
                 var attachment = store.Import(
                     "old.txt",
                     "text/plain",
-                    Convert.ToBase64String(System.Text.Encoding.UTF8.GetBytes("old")),
+                    System.Text.Encoding.UTF8.GetBytes("old"),
                     "cleanup-test");
                 store.SaveDraftMetadata(attachment);
                 var staging = Path.Combine(paths.AttachmentDirectory, "staging");

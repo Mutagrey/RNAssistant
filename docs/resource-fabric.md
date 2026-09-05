@@ -182,6 +182,26 @@ them. `ResourceDataPlaneService`/`ResourceDataRouter` serve the internal
 Access is owner-scoped, exact, sequential and cancellable: one read per handle,
 four opens, 64 leases and ten-minute expiry bound work.
 
+Attachment ingestion uses the same router at `/v1/upload/<opaque-lease>`.
+`beginChatResourceUpload`, `completeChatResourceUpload` and cancellation carry only
+typed metadata/capabilities. Binary POST chunks have an exact acknowledged byte
+offset and count, at most 256 KiB each; CORS preflight admits only POST/Content-Type
+from the opaque local origin. There is one in-flight operation per upload, at most
+four uploads and 50 MiB of reserved buffers within the shared 64-lease budget.
+The existing 20 MiB/file and 50 MiB/message limits remain. Ten-minute expiry is
+checked on access and swept periodically; close/dispose releases idle buffers.
+A cancelled busy lease retains its reservation until the operation actually exits.
+
+Incomplete, malformed or cancelled uploads cannot create a resource publication.
+Completion consumes the capability and stages managed bytes through the existing
+`ChatResourceIngestionService`/`AttachmentStore`; CAS promotion and message resource
+linking still happen only at send. Known late drafts are discarded, uncertain
+chunks/completion are not replayed. The UI awaits staging in the addressed chat,
+even if another chat becomes active. Extraction runs off the UI thread; the bounded
+WebView request stream is consumed on its STA. No base64 staging route/adapter or
+second durable upload store remains. Real Windows POST/preflight/close-during-PDF
+qualification is still open.
+
 Text/Markdown/PDF text pages, images, thumbnails and PDF renders travel through
 that data plane. Typed bridge DTOs carry metadata/leases, not page text or base64.
 Text leases close after each bounded page; media leases close on replacement,
@@ -227,7 +247,8 @@ Removed in touched contours: per-chat VBA observation/refresh hash dictionaries 
 callbacks; `VbaToolExecutor.Observations`; `HtmlAcceptedReadSourceResolver`; HTML
 binding tool IDs/arguments/transforms/current JSON; independent model history/repair
 assembly; free-summary resource authority; inline large pending payload duplication;
-viewer text/base64 bridge transport; mutable-disk skill reference activation;
+viewer text/base64 bridge transport; attachment base64 staging bridge and decoder;
+mutable-disk skill reference activation;
 separate state/Office retained text readers, externally hash-bound Office/state/catalog
 continuations, and read-side exposure of prepared state/context/catalog identities.
 No compatibility alias, dual-write or feature flag restores these paths.

@@ -232,17 +232,37 @@ namespace RNAssistant.Office
             }
         }
 
-        public ChatResourceDraftResponse StageChatResource(
-            string chatId,
-            string fileName,
-            string contentType,
-            string base64)
+        public ResourceUploadOpenResponse BeginChatResourceUpload(ResourceUploadOpenRequest request,
+            CancellationToken cancellationToken = default(CancellationToken))
         {
-            var session = LoadAddressedSession(chatId);
-            return new ChatResourceDraftResponse
+            if (request == null || string.IsNullOrWhiteSpace(request.ChatId))
+                throw new InvalidOperationException("RESOURCE_ACCESS_DENIED: an explicit chat is required.");
+            return WithReservedSession(LoadAddressedSession(request.ChatId), session =>
+                _resourceData.OpenUpload(session, request, cancellationToken));
+        }
+
+        public async Task<ChatResourceDraftResponse> CompleteChatResourceUploadAsync(ResourceUploadLeaseRequest request,
+            CancellationToken cancellationToken = default(CancellationToken))
+        {
+            if (request == null || string.IsNullOrWhiteSpace(request.ChatId))
+                throw new InvalidOperationException("RESOURCE_ACCESS_DENIED: an explicit chat is required.");
+            var session = LoadAddressedSession(request.ChatId);
+            using (ReserveChatOperation(session))
             {
-                Resource = _chatResourceIngestion.Stage(session, fileName, contentType, base64)
-            };
+                session = ReloadReservedSession(session);
+                // The WebView body has already been consumed on its STA. Extraction operates
+                // only on bounded managed bytes and keeps this chat reserved until cleanup ends.
+                return await Task.Run(() => _resourceData.CompleteUpload(session, request.LeaseId,
+                    _chatResourceIngestion, cancellationToken), cancellationToken).ConfigureAwait(false);
+            }
+        }
+
+        public ResourceDataCloseResponse CancelChatResourceUpload(ResourceUploadLeaseRequest request)
+        {
+            if (request == null || string.IsNullOrWhiteSpace(request.ChatId))
+                throw new InvalidOperationException("RESOURCE_ACCESS_DENIED: an explicit chat is required.");
+            _resourceData.CloseUpload(request.ChatId, request.LeaseId);
+            return new ResourceDataCloseResponse { Closed = true };
         }
 
         public DeleteResponse DiscardChatResourceDraft(string chatId, string id)

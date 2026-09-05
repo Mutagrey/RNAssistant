@@ -11,6 +11,7 @@ namespace RNAssistant.Office
             using (_chatRuns.ReserveMaintenance())
             {
                 EnsureNoActiveRuns();
+                _resourceData.CloseUploads();
                 _paths.ClearRuntimeData();
                 _chatSessions.Reset();
                 lock (_syncRoot)

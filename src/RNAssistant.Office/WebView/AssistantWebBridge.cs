@@ -195,13 +195,14 @@ namespace RNAssistant.Office.WebView
                             cancellationToken,
                             runId);
                         break;
-                    case "stageChatResource":
-                        var stageResource = Payload<StageChatResourcePayload>(payload);
-                        responsePayload = _controller.StageChatResource(
-                            stageResource.ChatId,
-                            stageResource.FileName,
-                            stageResource.ContentType,
-                            stageResource.Base64);
+                    case "beginChatResourceUpload":
+                        responsePayload = _controller.BeginChatResourceUpload(Payload<ResourceUploadOpenRequest>(payload), cancellationToken);
+                        break;
+                    case "completeChatResourceUpload":
+                        responsePayload = await _controller.CompleteChatResourceUploadAsync(Payload<ResourceUploadLeaseRequest>(payload), cancellationToken).ConfigureAwait(false);
+                        break;
+                    case "cancelChatResourceUpload":
+                        responsePayload = _controller.CancelChatResourceUpload(Payload<ResourceUploadLeaseRequest>(payload));
                         break;
                     case "discardChatResourceDraft":
                         var discardResource = Payload<DiscardChatResourceDraftPayload>(payload);

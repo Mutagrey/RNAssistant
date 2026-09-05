@@ -379,18 +379,6 @@ namespace RNAssistant.Office.Contracts
         public List<string> ResourceDraftIds { get; set; }
     }
 
-    public sealed class StageChatResourcePayload : ChatPayload
-    {
-        [JsonProperty("fileName")]
-        public string FileName { get; set; }
-
-        [JsonProperty("contentType")]
-        public string ContentType { get; set; }
-
-        [JsonProperty("base64")]
-        public string Base64 { get; set; }
-    }
-
     public sealed class DiscardChatResourceDraftPayload : ChatPayload
     {
         [JsonProperty("id")]

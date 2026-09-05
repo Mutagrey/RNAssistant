@@ -854,18 +854,31 @@ namespace RNAssistant.Office
             });
         }
 
-        public ChatResourceDraftResponse StageChatResource(
-            string chatId,
-            string fileName,
-            string contentType,
-            string base64)
+        public ResourceUploadOpenResponse BeginChatResourceUpload(ResourceUploadOpenRequest request,
+            CancellationToken cancellationToken = default(CancellationToken))
         {
-            LastChatId = chatId;
-            LastResourceFileName = fileName;
-            return new ChatResourceDraftResponse
+            LastChatId = request.ChatId;
+            LastResourceFileName = request.FileName;
+            return new ResourceUploadOpenResponse { LeaseId = new string('a', 64), ByteLength = request.ByteLength,
+                MaxChunkBytes = 256 * 1024, Url = "https://rnassistant.local-resource/v1/upload/" + new string('a', 64) };
+        }
+
+        public Task<ChatResourceDraftResponse> CompleteChatResourceUploadAsync(ResourceUploadLeaseRequest request,
+            CancellationToken cancellationToken = default(CancellationToken))
+        {
+            LastChatId = request.ChatId;
+            LastResourceDraftId = request.LeaseId;
+            return Task.FromResult(new ChatResourceDraftResponse
             {
-                Resource = new ChatAttachment { Id = "resource-draft", FileName = fileName, ContentType = contentType, Kind = "image" }
-            };
+                Resource = new ChatAttachment { Id = "resource-draft", FileName = LastResourceFileName, ContentType = "image/png", Kind = "image" }
+            });
+        }
+
+        public ResourceDataCloseResponse CancelChatResourceUpload(ResourceUploadLeaseRequest request)
+        {
+            LastChatId = request.ChatId;
+            LastResourceDraftId = request.LeaseId;
+            return new ResourceDataCloseResponse { Closed = true };
         }
 
         public object DiscardChatResourceDraft(string chatId, string id)

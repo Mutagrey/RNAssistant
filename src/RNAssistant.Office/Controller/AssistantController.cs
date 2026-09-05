@@ -104,10 +104,7 @@ namespace RNAssistant.Office
                 _resourceAuthorityStore,
                 session => _conversationStore.Save(session),
                 attachment => _attachmentStore.ReadBytes(attachment));
-            _resourceData = new ResourceDataPlaneService(_toolExecutor.ResourceGateway,
-                (chatId, workspaceId) => Volatile.Read(ref _disposed) == 0 &&
-                    (workspaceId == "viewer" ? LoadSession(chatId) != null :
-                    string.Equals(LoadSession(chatId).ActiveHtmlArtifactId, workspaceId, StringComparison.Ordinal)));
+            _resourceData = new ResourceDataPlaneService(_toolExecutor.ResourceGateway, ResourceOwnerIsActive);
             _resourceDataRouter = new ResourceDataRouter(_resourceData);
             _uploadedHtmlResources = new UploadedHtmlResourceService(
                 _toolExecutor.ResourceGateway,

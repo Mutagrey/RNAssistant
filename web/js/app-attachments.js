@@ -18,16 +18,77 @@ function formatAttachmentSize(bytes) {
   return (bytes / (1024 * 1024)).toFixed(1) + " МБ";
 }
 
-function fileToBase64(file) {
-  return new Promise(function (resolve, reject) {
-    var reader = new FileReader();
-    reader.onload = function () {
-      var value = String(reader.result || "");
-      resolve(value.substring(value.indexOf(",") + 1));
-    };
-    reader.onerror = function () { reject(reader.error || new Error("Не удалось прочитать файл.")); };
-    reader.readAsDataURL(file);
-  });
+async function uploadChatResourceFile(chatId, file, signal) {
+  var lease, draft, pendingRequestId, completed = false;
+  var lifetime = new AbortController();
+  var cancel = function () {
+    lifetime.abort();
+    if (pendingRequestId) cancelBridgeRequest(pendingRequestId).catch(function () {});
+    if (lease && lease.leaseId)
+      send("cancelChatResourceUpload", { chatId: chatId, leaseId: lease.leaseId }).catch(function () {});
+  };
+  if (signal) signal.addEventListener("abort", cancel, { once: true });
+  window.addEventListener("pagehide", cancel, { once: true });
+  function active() {
+    if (lifetime.signal.aborted || signal && signal.aborted) throw new Error("RESOURCE_UPLOAD_CANCELLED");
+  }
+  try {
+    active();
+    var opening = send("beginChatResourceUpload", {
+      chatId: chatId, fileName: file.name || ("clipboard-" + Date.now() + ".png"),
+      contentType: file.type || "application/octet-stream", byteLength: file.size
+    });
+    pendingRequestId = opening.requestId;
+    lease = await opening;
+    pendingRequestId = null;
+    active();
+    if (!lease || !/^[a-f0-9]{64}$/.test(lease.leaseId) ||
+        lease.url !== "https://rnassistant.local-resource/v1/upload/" + lease.leaseId ||
+        lease.byteLength !== file.size || !Number.isInteger(lease.maxChunkBytes) ||
+        lease.maxChunkBytes < 1 || lease.maxChunkBytes > 256 * 1024)
+      throw new Error("RESOURCE_UPLOAD_INVALID");
+    for (var offset = 0; offset < file.size;) {
+      active();
+      var count = Math.min(lease.maxChunkBytes, file.size - offset);
+      var chunk = new AbortController();
+      var abortChunk = function () { chunk.abort(); };
+      lifetime.signal.addEventListener("abort", abortChunk, { once: true });
+      var timer = setTimeout(abortChunk, 30000);
+      try {
+        var response = await fetch(lease.url + "?offset=" + offset + "&count=" + count, {
+          method: "POST", body: file.slice(offset, offset + count, "application/octet-stream"),
+          credentials: "omit", cache: "no-store", redirect: "error", signal: chunk.signal
+        });
+        if (!response.ok) throw new Error("RESOURCE_UPLOAD_FAILED: " + response.status);
+        var ack = await response.json();
+        active();
+        if (ack.leaseId !== lease.leaseId || ack.nextOffset !== offset + count)
+          throw new Error("RESOURCE_CURSOR_INVALID");
+        offset = ack.nextOffset;
+      } finally {
+        clearTimeout(timer);
+        lifetime.signal.removeEventListener("abort", abortChunk);
+      }
+    }
+    active();
+    var finishing = send("completeChatResourceUpload", { chatId: chatId, leaseId: lease.leaseId });
+    pendingRequestId = finishing.requestId;
+    draft = await finishing;
+    pendingRequestId = null;
+    active();
+    completed = true;
+    return draft;
+  } finally {
+    if (signal) signal.removeEventListener("abort", cancel);
+    window.removeEventListener("pagehide", cancel);
+    if (!completed && lease && lease.leaseId) {
+      // No retry of an uncertain chunk or completion. Cancelling releases transient
+      // buffers; a known late draft is discarded through its existing owner.
+      await send("cancelChatResourceUpload", { chatId: chatId, leaseId: lease.leaseId }).catch(function () {});
+      if (draft && (draft.resource || draft.Resource))
+        await send("discardChatResourceDraft", { chatId: chatId, id: attachmentId(draft.resource || draft.Resource) }).catch(function () {});
+    }
+  }
 }
 
 function chatResourceIngestionQueue() {
@@ -60,12 +121,7 @@ async function stageChatResourceFiles(targetChatId, files) {
   try {
     for (var index = 0; index < files.length; index += 1) {
       var file = files[index];
-      var response = await send("stageChatResource", {
-        chatId: targetChatId,
-        fileName: file.name || ("clipboard-" + Date.now() + ".png"),
-        contentType: file.type || "application/octet-stream",
-        base64: await fileToBase64(file)
-      });
+      var response = await uploadChatResourceFile(targetChatId, file);
       var attachment = response.resource || response.Resource;
       if (file.type.indexOf("image/") === 0) attachment.previewUrl = URL.createObjectURL(file);
       if (state.activeChatId === targetChatId) {

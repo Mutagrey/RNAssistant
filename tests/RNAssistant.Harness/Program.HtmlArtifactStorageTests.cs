@@ -25,7 +25,7 @@ namespace RNAssistant.Harness
                 var attachment = attachmentStore.Import(
                     "landing.html",
                     "text/html; charset=utf-8",
-                    Convert.ToBase64String(Encoding.UTF8.GetBytes(sourceText)),
+                    Encoding.UTF8.GetBytes(sourceText),
                     session.Id);
                 var message = new ChatMessage
                 {

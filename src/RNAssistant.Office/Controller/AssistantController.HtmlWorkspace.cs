@@ -42,8 +42,22 @@ namespace RNAssistant.Office
             return new ResourceDataCloseResponse { Closed = true };
         }
 
-        internal ResourceStreamResponse ReadResourceData(string method, string url, CancellationToken cancellationToken)
-        { return _resourceDataRouter.Handle(method, url, cancellationToken); }
+        internal ResourceStreamResponse HandleResourceData(string method, string url, CancellationToken cancellationToken,
+            System.IO.Stream body = null)
+        { return _resourceDataRouter.Handle(method, url, cancellationToken, body); }
+
+        private bool ResourceOwnerIsActive(string chatId, string workspaceId)
+        {
+            if (Volatile.Read(ref _disposed) != 0 || string.IsNullOrWhiteSpace(chatId)) return false;
+            try
+            {
+                // Lease checks never select a different chat or fall back to the active one.
+                var session = LoadAddressedSession(chatId);
+                return session != null && (workspaceId == "viewer" || workspaceId == ResourceDataPlaneService.UploadOwner ||
+                    string.Equals(session.ActiveHtmlArtifactId, workspaceId, StringComparison.Ordinal));
+            }
+            catch (InvalidOperationException) { return false; }
+        }
 
         public Task<HtmlFetchResponse> HtmlFetchAsync(HtmlFetchRequest request, CancellationToken cancellationToken)
         {

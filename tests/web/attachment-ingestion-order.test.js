@@ -13,19 +13,14 @@ function createContext(stageFails) {
   const sent = [];
   const logs = [];
   const input = { value: "", focus() {} };
-  const context = vm.createContext({ Promise, console, setImmediate });
+  const context = vm.createContext({ Promise, console, setImmediate, AbortController, setTimeout, clearTimeout });
   context.window = context;
+  context.addEventListener = context.removeEventListener = () => {};
   context.state = {
     activeChatId: "chat-a", draftAttachments: [], activeSends: {}, messages: [],
     modelSaving: false, modeSaving: false, reasoningSaving: false, bridgeUnavailable: false
   };
   context.$ = id => id === "chatInput" ? input : null;
-  context.FileReader = class {
-    readAsDataURL() {
-      this.result = "data:application/pdf;base64,JVBERg==";
-      this.onload();
-    }
-  };
   context.URL = { createObjectURL: () => "blob:test", revokeObjectURL() {} };
   context.chatDraftStore = () => (context.state.chatDrafts = context.state.chatDrafts || {});
   context.log = (message, level) => logs.push({ message, level });
@@ -42,13 +37,22 @@ function createContext(stageFails) {
   context.setChatInputText = value => { input.value = value; };
   context.clearDraftAttachments = () => { context.state.draftAttachments = []; };
   context.send = (type, payload) => {
-    assert.equal(type, "stageChatResource");
     assert.equal(payload.chatId, "chat-a");
+    assert.equal(payload.base64, undefined, "control requests never carry bulk bytes");
+    if (type === "beginChatResourceUpload") return Promise.resolve({ leaseId: "a".repeat(64),
+      url: "https://rnassistant.local-resource/v1/upload/" + "a".repeat(64), byteLength: 7, maxChunkBytes: 4 });
+    if (type === "cancelChatResourceUpload") return Promise.resolve({ closed: true });
+    assert.equal(type, "completeChatResourceUpload");
     return new Promise((resolve, reject) => {
       resolveStage = resolve;
       rejectStage = reject;
     });
   };
+  context.fetch = async url => {
+    const query = new URL(url).searchParams;
+    return { ok: true, json: async () => ({ leaseId: "a".repeat(64), nextOffset: Number(query.get("offset")) + Number(query.get("count")) }) };
+  };
+  context.FileReader = class { constructor() { throw new Error("base64 ingestion must not return"); } };
 
   for (const file of ["app-attachments.js", "app-chat-run.js"]) {
     vm.runInContext(fs.readFileSync(path.join(root, "web/js", file), "utf8"), context, { filename: file });
@@ -75,7 +79,7 @@ async function settle() {
   {
     const fixture = createContext(false);
     const ingestion = fixture.context.ingestChatResourceFiles([
-      { name: "sample.pdf", type: "application/pdf", size: 7 }
+      { name: "sample.pdf", type: "application/pdf", size: 7, slice: () => "raw bytes" }
     ]);
     const submission = fixture.context.submitChatInput();
     await settle();
@@ -97,7 +101,7 @@ async function settle() {
     const fixture = createContext(true);
     fixture.input.value = "Прочитай PDF";
     const ingestion = fixture.context.ingestChatResourceFiles([
-      { name: "broken.pdf", type: "application/pdf", size: 7 }
+      { name: "broken.pdf", type: "application/pdf", size: 7, slice: () => "raw bytes" }
     ]);
     const submission = fixture.context.submitChatInput();
     await settle();
@@ -124,11 +128,10 @@ async function settle() {
   }
 
   const index = fs.readFileSync(path.join(root, "web/index.html"), "utf8");
-  ["app-attachments.js", "app-chat-composer.js"].forEach(asset => {
-    assert.ok(index.includes(asset + "?v=multi-chat-20260902-1"), asset + " has the multi-chat cache key");
-  });
+  assert.ok(index.includes("app-attachments.js?v=resource-upload-20260905-1"), "attachment upload has the direct-cutover cache key");
+  assert.ok(index.includes("app-chat-composer.js?v=multi-chat-20260902-1"), "composer retains its unchanged cache key");
   assert.ok(index.includes("app-chat-run.js?v=chat-sync-20260903-1"), "app-chat-run.js has the chat sync cache key");
-  console.log("PASS attachment staging: changed UI modules use one cache key");
+  console.log("PASS attachment staging: changed UI modules have current cache keys");
   console.log("OK 4/4");
 }()).catch(error => {
   console.error(error.stack || error);

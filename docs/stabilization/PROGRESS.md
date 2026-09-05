@@ -151,7 +151,7 @@ Checks: resource cutover 23/23, resources 10/10, native semantic resources 1/1,
 HTML export 2/2 and production source inclusion 1/1 — 37/37. No full harness,
 Office/VSTO or Windows validation. The required version-format gate passed before
 the user-requested checkpoint commit.
-Definition-publication checkpoint after `6a1617e`: retained text, structural indexes,
+Definition-publication checkpoint `831e5d0`: retained text, structural indexes,
 virtual definitions and catalog roots share exact publication proof in the existing
 authority owner. Prepared revisions cannot borrow an older head or cached index.
 Fork preparation reuses the same proof/order; existing event-backed copy provenance
@@ -165,10 +165,23 @@ HTML export 2/2, skill-reference continuation 1/1, Agent full skill 1/1, Inspect
 chat editing 5/5 and production source inclusion 1/1 — 48/48. No full harness,
 Office/VSTO or Windows validation. The required version-format gate passed before
 the user-requested checkpoint commit.
-Next host-neutral contour: remaining domain/authoring read consumers and bulk
-upload/export transport through the existing Gateway/data plane, then finer Excel
+Attachment-upload slice (2026-09-05): the base64 staging bridge/decoder is removed.
+Typed begin/complete/cancel and binary POST chunks use the existing data plane;
+256 KiB chunks, four uploads/50 MiB reservations, shared lease capacity and exact
+chat ownership bound the work. Cancellation/expiry/close cannot release a busy
+reservation early or promote partial data. Completion is single-use; extraction
+runs off the UI thread, then the existing draft owner handles CAS/linking at send.
+UI pre-send ordering and addressed-chat isolation remain. No upload store or
+legacy fallback was added. Windows POST/CORS/request-stream/PDF-close gates remain.
+Checks: attachments 22/22; shared table/binary leases 2/2, typed ingestion bridge 1/1,
+WebView policy/cancellation 1/1, chat editing 5/5, HTML import 1/1 and source inclusion
+1/1 — 33/33 host-neutral. UI upload 6/6 and ingestion ordering 4/4 also pass.
+Version-format and diff checks pass; no full harness or Office/VSTO validation.
+Next host-neutral contour: remaining domain/authoring read consumers and other bulk
+upload/export transport (including trajectory export) through the existing
+Gateway/data plane, then finer Excel
 coverage/named resources and binary/raw view negotiation in MASTER order.
-Still open: remaining definition/domain read and bulk upload/export consumers,
+Still open: remaining definition/domain read and other bulk upload/export consumers,
 finer Excel coverage/named resources, complete binary/raw view negotiation, bounded
 cold replay/checkpoint/retention optimization,
 cross-process push qualification, and final cross-document cleanup.

@@ -13,6 +13,8 @@ namespace RNAssistant.Office.WebView
             "runVbaMacro",
             "htmlFetch",
             "resourceDataOpen",
+            "beginChatResourceUpload",
+            "completeChatResourceUpload",
             "readArtifactViewerPage",
             "readArtifactImage",
             "readArtifactImageThumbnail",
