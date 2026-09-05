@@ -1099,6 +1099,10 @@ namespace RNAssistant.Harness
             AssertEqual("html-r3", controller.LastExpectedHtmlArtifactId, "HTML export forwards exact active guard");
             AssertEqual("html-r3", (string)envelope["payload"]["exportRevisionArtifactId"],
                 "HTML export returns the guarded checkpoint id");
+            var lease = envelope["payload"]["resourceExport"]["bindings"][0]["lease"];
+            AssertEqual("r1", (string)lease["descriptor"]["reference"]["revision"], "export returns an exact resource capability");
+            AssertTrue(lease["url"] != null && lease["rows"] == null && lease["text"] == null,
+                "export controls contain capability metadata, never resource bodies");
         }
 
         private static void BridgeUsesTypedArtifactViewerPayload()

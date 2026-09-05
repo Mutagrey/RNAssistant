@@ -14,6 +14,31 @@ namespace RNAssistant.Office.Services
         private readonly ResourceAuthorityService _authority;
         private readonly ArtifactViewerService _mediaViews;
         internal ResourceAuthorityService Authority { get { return _authority; } }
+        internal ResourceAuthorityScopeId ScopeFor(ChatSession session, ResourceRef reference)
+        { return _authority.ScopeFor(session, reference, ProviderFor(reference.Uri) is ILiveOfficeResourceProvider); }
+
+        internal ResourceAuthoritySnapshotSet CaptureAuthorityFor(ChatSession session, IEnumerable<ResourceDescriptor> resources)
+        {
+            var references = resources.SelectMany(item => new[] { item.Reference }.Concat(
+                item.Dependencies.Where(dependency => dependency.Kind != "immutable-snapshot").Select(dependency => dependency.Resource)));
+            return _authority.CaptureMany(references.Select(reference => ScopeFor(session, reference)).Distinct().ToArray());
+        }
+
+        internal void RequireCurrent(ChatSession session, ResourceDescriptor resource, string view, ResourceAuthoritySnapshotSet frozen)
+        {
+            var scope = ScopeFor(session, resource.Reference);
+            var snapshot = frozen.Get(scope);
+            // A metadata-only currentness query, not a published complete-body observation.
+            var evidence = new ResourceEvidence("data-plane-read", scope, resource.Reference, view,
+                resource.Coverage, false, snapshot.Generation, dependencies: resource.Dependencies);
+            var projection = new EvidenceStateReducer().Reduce(evidence, frozen);
+            if (projection.State == EvidenceState.Current) return;
+            var head = snapshot.GetHead(resource.Reference.Identity);
+            var code = projection.State == EvidenceState.Unknown ? "RESOURCE_EFFECT_UNKNOWN" :
+                projection.State == EvidenceState.Unavailable ? "RESOURCE_SNAPSHOT_UNAVAILABLE" :
+                head?.Revision?.Revision != resource.Reference.Revision ? "RESOURCE_REVISION_CHANGED" : "RESOURCE_DEPENDENCY_STALE";
+            throw new ResourceRequestException("The selected head or its dependencies are not current. Open an exact historical revision explicitly or reconcile the source.", code, false);
+        }
 
         public ResourceGatewayService(
             Func<ChatSession, string, bool> loadArtifactBody = null,

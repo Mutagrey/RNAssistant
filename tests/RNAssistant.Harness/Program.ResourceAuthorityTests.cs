@@ -205,12 +205,27 @@ namespace RNAssistant.Harness
                 var materialized = publish(ResourceDefinitionToolHandler.Derive, new JObject { ["name"] = "saved-sales", ["mapping"] = target(mapping), ["mode"] = "materialized" });
                 AssertEqual(2, gateway.Read(session, new ResourceReadRequest { Reference = materialized, Representation = "table", MaxRows = 10 }).Result.Table.Rows.Count,
                     "materialized output is an immutable resource snapshot");
+                using (var currentData = new ResourceDataPlaneService(gateway))
+                {
+                    var current = currentData.Open(session, "preview", new ResourceRef(derived.Identity.Uri), "table");
+                    currentData.Close(session.Id, "preview", current.LeaseId);
+                }
                 publish(ResourceDefinitionToolHandler.Mapping, new JObject { ["name"] = "sales", ["schema"] = target(schema), ["source"] = source,
                     ["mapping"] = new JArray(new JObject { ["field"] = "sales", ["sourceField"] = "backup" }) });
                 AssertEqual(EvidenceState.Superseded, new EvidenceStateReducer().Reduce(evidence, executor.ResourceAuthority.CaptureMany(new[] { scope })).State,
                     "mapping publication invalidates derived currentness without changing its historical body");
                 AssertEqual(12L, Convert.ToInt64(gateway.Read(session, new ResourceReadRequest { Reference = derived, Representation = "table", MaxRows = 1 }).Result.Table.Rows[0]["sales"]),
                     "historical exact derived view does not silently follow a new mapping");
+                using (var staleData = new ResourceDataPlaneService(gateway))
+                {
+                    foreach (var reference in new[] { derived, materialized })
+                    {
+                        var stale = RuntimeThrows<ResourceRequestException>(() => staleData.Open(session, "preview", new ResourceRef(reference.Identity.Uri), "table"));
+                        AssertEqual("RESOURCE_DEPENDENCY_STALE", stale.ErrorCode, "data-plane head reads use canonical dependency currentness");
+                        var exact = staleData.Open(session, "preview", reference, "table");
+                        staleData.Close(session.Id, "preview", exact.LeaseId);
+                    }
+                }
                 AssertEqual(1, frozen.Schemas.Count, "captured schema registry stays immutable");
 
                 var note = new ContextNote { Role = ContextNoteRole.SuppliedData, Text = "FORKED_DATA", Title = "Draft" };
@@ -223,6 +238,16 @@ namespace RNAssistant.Harness
                 HtmlWorkspaceArtifactService.CaptureCurrent(session, "Fork source");
                 var originalSnapshotId = session.ActiveHtmlArtifactId;
                 var originalSnapshotBody = session.Artifacts.Single(item => item.Id == originalSnapshotId).InlineText;
+                using (var exportData = new ResourceDataPlaneService(gateway))
+                {
+                    session.HtmlWorkspace.DataSources[0].Binding.Policy = "head";
+                    var exporter = new HtmlWorkspaceExportService(gateway, exportData);
+                    var rejected = RuntimeThrows<ResourceRequestException>(() => exporter.Open(session, originalSnapshotId, System.Threading.CancellationToken.None));
+                    AssertEqual("RESOURCE_DEPENDENCY_STALE", rejected.ErrorCode, "export cannot label a derived snapshot with stale dependencies as current");
+                    session.HtmlWorkspace.DataSources[0].Binding.Policy = "exact";
+                    foreach (var binding in exporter.Open(session, originalSnapshotId, System.Threading.CancellationToken.None).Bindings)
+                        exportData.Close(session.Id, originalSnapshotId, binding.Lease.LeaseId);
+                }
                 var chats = new ChatStore(FixturePaths.Value);
                 chats.Save(session);
                 var child = NewSession(adapter);
@@ -325,6 +350,75 @@ namespace RNAssistant.Harness
                 var compiled = new ModelContextCompiler().Compile(frozen, new ChatMessage[0], new[] { call, result }, null, new ToolCatalogEntry[0], new AppSettings(), 1024);
                 AssertEqual(0, compiled.Receipt.HydratedPayloads, "terminal frame compiles without even a payload reader");
                 AssertTrue(string.Join("", compiled.Messages.Select(item => item.Content)).Length < 4096, "completed large source is not reserialized into prompt");
+            });
+        }
+
+        private static void HtmlExportDataPlaneCapture()
+        {
+            WithTempExecutor(FakeOfficeAdapter.ForHost("Excel"), (executor, adapter) =>
+            {
+                var session = NewSession(adapter);
+                executor.MutateLocalResources(session, "common.html_workspace_write_file", null,
+                    () => HtmlWorkspaceToolService.UpsertFile(session, "index.html", "html", "<p>export</p>", true));
+                var target = executor.ResourceGateway.ResolveIntentTarget(session, "Excel range: Data!A1:B4");
+                var binding = new HtmlWorkspaceDataSource { Id = "cells", Name = "cells", Binding =
+                    new HtmlWorkspaceDataBinding { Resource = new ResourceRef(target.Reference.Identity.Uri), Policy = "head", View = "table" } };
+                executor.MutateLocalResources(session, "common.html_workspace_bind_data", null, () => {
+                    session.HtmlWorkspace.DataSources.Add(binding);
+                    return HtmlWorkspaceArtifactService.CaptureCurrent(session, "Export binding");
+                });
+                var workspaceId = session.ActiveHtmlArtifactId;
+                using (var data = new ResourceDataPlaneService(executor.ResourceGateway))
+                {
+                    var export = new HtmlWorkspaceExportService(executor.ResourceGateway, data);
+                    var prepared = export.Open(session, workspaceId, System.Threading.CancellationToken.None);
+                    var lease = prepared.Bindings.Single().Lease;
+                    AssertTrue(lease.Descriptor.Reference.IsExact, "head export resolves one exact revision");
+                    AssertEqual("head", binding.Binding.Policy, "export does not rewrite live binding policy");
+                    AssertEqual(workspaceId, session.ActiveHtmlArtifactId, "export capabilities are not workspace revisions");
+                    AssertTrue(prepared.Generations.Count == 1, "export records the frozen authority stamp");
+                    var before = lease.Descriptor.Reference.Copy();
+                    adapter.SetExcelCellForTest("Data", "B2", 999);
+                    var fresh = executor.ResourceGateway.Read(session, new ResourceReadRequest {
+                        Reference = binding.Binding.Resource, Representation = "table", MaxRows = 4 });
+                    AssertTrue(before.Revision != fresh.Result.Resource.Reference.Revision, "source head can advance after export preparation");
+                    var first = JObject.Parse(System.Text.Encoding.UTF8.GetString(data.Read(lease.LeaseId, 0, 2, System.Threading.CancellationToken.None)));
+                    var next = JObject.Parse(System.Text.Encoding.UTF8.GetString(data.Read(lease.LeaseId, 2, 2, System.Threading.CancellationToken.None)));
+                    AssertEqual(before.Revision, (string)next["resource"]["revision"], "export stream keeps its exact pre-change revision");
+                    AssertTrue(first.ToString().IndexOf("999", StringComparison.Ordinal) < 0, "new live values do not enter an old export");
+                    data.Close(session.Id, workspaceId, lease.LeaseId);
+                    binding.Binding.Policy = "exact"; binding.Binding.Resource = before;
+                    var historical = export.Open(session, workspaceId, System.Threading.CancellationToken.None);
+                    AssertEqual(before.Revision, historical.Bindings.Single().Lease.Descriptor.Reference.Revision,
+                        "explicit historical export never borrows a newer head");
+                    data.Close(session.Id, workspaceId, historical.Bindings.Single().Lease.LeaseId);
+                    // Failure after opening the first binding must not exhaust the shared lease pool.
+                    session.HtmlWorkspace.DataSources.Add(new HtmlWorkspaceDataSource { Id = "missing", Name = "missing", Binding =
+                        new HtmlWorkspaceDataBinding { Resource = new ResourceRef(before.Uri, "missing-revision"), Policy = "exact", View = "table" } });
+                    for (var index = 0; index < 65; index++)
+                    {
+                        var error = RuntimeThrows<ResourceRequestException>(() => export.Open(session, workspaceId, System.Threading.CancellationToken.None));
+                        AssertTrue(error.ErrorCode != "RESOURCE_LEASE_LIMIT", "failed export releases earlier capabilities");
+                    }
+                    session.HtmlWorkspace.DataSources.RemoveAt(1);
+                    RuntimeThrows<OperationCanceledException>(() => export.Open(session, workspaceId, new System.Threading.CancellationToken(true)));
+                    var final = export.Open(session, workspaceId, System.Threading.CancellationToken.None);
+                    data.Close(session.Id, workspaceId, final.Bindings.Single().Lease.LeaseId);
+                    RuntimeThrows<ResourceRequestException>(() => export.Open(session, "wrong-workspace", System.Threading.CancellationToken.None));
+                    binding.Binding.Policy = "head"; binding.Binding.Resource = new ResourceRef(before.Identity.Uri);
+                    session.HtmlWorkspace.DataSources.Add(new HtmlWorkspaceDataSource { Id = "pinned", Name = "pinned", Binding =
+                        new HtmlWorkspaceDataBinding { Resource = before, Policy = "exact", View = "table" } });
+                    var ownerChecks = 0;
+                    using (var racingData = new ResourceDataPlaneService(executor.ResourceGateway, (_, __) => {
+                        if (++ownerChecks == 4) executor.ResourceAuthority.ReportExternalDrift(executor.ResourceAuthority.Scope(session, true), before.Identity);
+                        return true;
+                    }))
+                    {
+                        var raced = RuntimeThrows<ResourceRequestException>(() =>
+                            new HtmlWorkspaceExportService(executor.ResourceGateway, racingData).Open(session, workspaceId, System.Threading.CancellationToken.None));
+                        AssertEqual("RESOURCE_EFFECT_UNKNOWN", raced.ErrorCode, "unknown head capture never yields an export manifest");
+                    }
+                }
             });
         }
 

@@ -369,6 +369,7 @@ namespace RNAssistant.Harness
                 Test("storage: compaction projects from artifact", CompactionProjectsFromArtifact),
                 Test("html import: inert preview and exact provenance", UploadedHtmlImportPreservesExactSource),
                 Test("html export: exact binding checkpoint and recovery", HtmlExportCheckpointOwnsExactBindingPayload),
+                Test("html export: exact data-plane capture and failure cleanup", HtmlExportDataPlaneCapture),
                 Test("html lineage: branches use unique monotonic revisions", HtmlWorkspaceBranchesUseUniqueMonotonicRevisions),
                 Test("storage: html navigation projects from artifacts", HtmlNavigationProjectsFromArtifacts),
                 Test("storage: html redo branches are explicit and lazy", HtmlRedoBranchesAreExplicitAndLazy),

@@ -44,7 +44,7 @@
 
   function escapeScriptJson(value) {
     return String(value || "")
-      .replace(/<\/script/gi, "<\\/script")
+      .replace(/</g, "\\u003c")
       .replace(/\u2028/g, "\\u2028")
       .replace(/\u2029/g, "\\u2029");
   }
@@ -66,11 +66,12 @@
   }
 
   // The application sees only bounded resource handles, never an injected dataset.
-  function installResourceApi(names) {
+  function installResourceApi(names, transport) {
     var nativeFetch = window.fetch && window.fetch.bind(window);
     var handles = new Set();
     var subscribers = new Set();
     window.addEventListener("message", function (event) {
+      if (transport) return; // Exported snapshots have no mutable head subscriptions.
       if (event.source !== window.parent || !event.data || event.data.type !== "rnassistant-resource-changed") return;
       var changed = (event.data.names || []).filter(function (name) { return names.indexOf(name) >= 0; });
       if (changed.length) subscribers.forEach(function (listener) {
@@ -78,6 +79,9 @@
       });
     });
     function control(operation, bindingName, leaseId) {
+      if (transport) return Promise.resolve().then(function () {
+        return operation === "open" ? transport.open(bindingName) : transport.close(leaseId);
+      });
       return new Promise(function (resolve, reject) {
         if (window.parent === window) { reject(new Error("RESOURCE_HOST_REQUIRED: open this workspace in RNAssistant.")); return; }
         var channel = new MessageChannel();
@@ -104,17 +108,21 @@
           if (options.view && options.view !== lease.view) throw new Error("RESOURCE_VIEW_UNSUPPORTED");
           if (options.path && options.path !== lease.path) throw new Error("RESOURCE_VIEW_PATH_UNSUPPORTED");
           if (options.page !== undefined && String(options.page) !== lease.path) throw new Error("RESOURCE_VIEW_PATH_UNSUPPORTED");
-          var limit = options.limit || options.batchRows || lease.maxBatchItems;
+          var limit = options.limit !== undefined ? options.limit :
+            options.batchRows !== undefined ? options.batchRows : lease.maxBatchItems;
           var requestedOffset = options.offset === undefined ? offset : options.offset;
           if (!Number.isInteger(limit) || limit < 1 || limit > lease.maxBatchItems || requestedOffset !== offset)
             throw new Error("RESOURCE_BATCH_BOUNDS");
           busy = true;
           try {
-            var response = await nativeFetch(lease.url + "?offset=" + offset + "&limit=" + limit +
+            if (options.signal && options.signal.aborted) throw new Error("RESOURCE_READ_CANCELLED");
+            var response = transport ? await transport.read(lease, offset, limit, options) : await nativeFetch(lease.url + "?offset=" + offset + "&limit=" + limit +
               (options.fields ? "&fields=" + encodeURIComponent(JSON.stringify(options.fields)) : ""),
               { method: "GET", credentials: "omit", cache: "no-store", signal: options.signal });
             if (response.ok && lease.binary) {
               var bytes = await response.arrayBuffer();
+              if (closed) throw new Error("RESOURCE_LEASE_CLOSED");
+              if (options.signal && options.signal.aborted) throw new Error("RESOURCE_READ_CANCELLED");
               if (bytes.byteLength !== lease.binary.payload.byteLength || bytes.byteLength > lease.maxBatchBytes)
                 throw new Error("RESOURCE_BATCH_TOO_LARGE");
               done = true;
@@ -123,6 +131,8 @@
                 pageIndex: lease.binary.pageIndex, done: true };
             }
             var batch = await response.json();
+            if (closed) throw new Error("RESOURCE_LEASE_CLOSED");
+            if (options.signal && options.signal.aborted) throw new Error("RESOURCE_READ_CANCELLED");
             if (!response.ok) throw new Error(batch.code + ": " + batch.message);
             offset = batch.nextOffset; done = batch.done;
             return batch;
@@ -156,8 +166,12 @@
     }), writable: false, configurable: false });
   }
 
-  function resourceScript(dataSources) {
+  function resourceScript(dataSources, snapshot) {
     var names = dataSources.map(function (source) { return prop(source, "Name", "name", ""); });
+    if (snapshot) {
+      if (!window.RNAssistantHtmlResourceExport) throw new Error("RESOURCE_EXPORT_RUNTIME_UNAVAILABLE");
+      return window.RNAssistantHtmlResourceExport.script(snapshot, installResourceApi, names, escapeScriptJson);
+    }
     return "<script>(" + safeScript(installResourceApi.toString()) + ")(" +
       escapeScriptJson(JSON.stringify(names)) + ");</script>";
   }
@@ -238,8 +252,11 @@
     return "<style data-rn-preview-reset>html,body{min-height:100%;margin:0;}*,*::before,*::after{box-sizing:border-box;}</style>";
   }
 
-  function previewContentSecurityPolicy() {
-    return "<meta http-equiv=\"Content-Security-Policy\" content=\"default-src 'none'; connect-src https://rnassistant.local-resource/v1/; img-src data: blob: https://rnassistant.local-resource/v1/; font-src data:; media-src data: blob:; style-src 'unsafe-inline'; script-src 'unsafe-inline' blob: data:; frame-src 'none'; child-src 'none'; object-src 'none'; base-uri 'none'; form-action 'none';\">";
+  function previewContentSecurityPolicy(standalone) {
+    return "<meta http-equiv=\"Content-Security-Policy\" content=\"default-src 'none'; connect-src " +
+      (standalone ? "'none'" : "https://rnassistant.local-resource/v1/") + "; img-src data: blob:" +
+      (standalone ? "" : " https://rnassistant.local-resource/v1/") +
+      "; font-src data:; media-src data: blob:; style-src 'unsafe-inline'; script-src 'unsafe-inline' blob: data:; frame-src 'none'; child-src 'none'; object-src 'none'; base-uri 'none'; form-action 'none';\">";
   }
 
   function networkBridgeScript() {
@@ -254,6 +271,8 @@
     options = options || {};
     var files = options.files || [];
     var dataSources = options.dataSources || [];
+    if (options.hostBridge === false && dataSources.length && !options.resourceSnapshot)
+      throw new Error("RESOURCE_EXPORT_REQUIRED: capture exact resource bindings before standalone export.");
     var file = activeHtmlFile(files, options.activeFileId || "");
     var html = file ? fileContent(file) : "";
     if (options.hostBridge === false && usesECharts(files) &&
@@ -263,8 +282,8 @@
     }
     var hostBridge = options.hostBridge === false ? "" : networkBridgeScript() + "\n";
     var chartRuntime = echartsScript(files);
-    var headInject = previewContentSecurityPolicy() + "\n" + previewViewportReset() + "\n" +
-      chartRuntime + (chartRuntime ? "\n" : "") + resourceScript(dataSources) + hostBridge + "\n" + cssBlock(files);
+    var headInject = '<meta charset="utf-8">' + previewContentSecurityPolicy(options.hostBridge === false) + "\n" + previewViewportReset() + "\n" +
+      chartRuntime + (chartRuntime ? "\n" : "") + resourceScript(dataSources, options.resourceSnapshot) + hostBridge + "\n" + cssBlock(files);
     var bodyInject = scriptBlock(files);
     if (!html.trim()) {
       html = "<div style=\"font-family:Segoe UI,Arial,sans-serif;padding:24px;color:#475467\">HTML workspace пуст.</div>";
@@ -282,7 +301,7 @@
       }
       return html;
     }
-    return "<!doctype html><html><head><meta charset=\"utf-8\"><meta name=\"viewport\" content=\"width=device-width,initial-scale=1\">" + headInject + "</head><body>" + html + "\n" + bodyInject + "</body></html>";
+    return "<!doctype html><html><head><meta name=\"viewport\" content=\"width=device-width,initial-scale=1\">" + headInject + "</head><body>" + html + "\n" + bodyInject + "</body></html>";
   }
 
   window.RNAssistantHtmlWorkspacePreview = {

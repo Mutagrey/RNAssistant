@@ -321,14 +321,16 @@
       var chatId = state.activeChatId;
       var expectedArtifactId = state.activeHtmlArtifactId;
       state.htmlWorkspaceExportPending = true;
+      var resourceExport = null, exportArtifactId = "";
       if (options.render) options.render();
       try {
         var response = await options.send("prepareHtmlWorkspaceExport", {
           chatId: chatId,
           expectedActiveHtmlArtifactId: expectedArtifactId
         });
-        if (state.activeChatId !== chatId) return false;
-        var exportArtifactId = value(response, "ExportRevisionArtifactId", "exportRevisionArtifactId", "") || "";
+        exportArtifactId = value(response, "ExportRevisionArtifactId", "exportRevisionArtifactId", "") || "";
+        resourceExport = value(response, "ResourceExport", "resourceExport", null);
+        if (state.activeChatId !== chatId || state.htmlWorkspaceDirty || state.activeHtmlArtifactId !== expectedArtifactId) return false;
         var responseArtifactId = value(response, "ActiveHtmlArtifactId", "activeHtmlArtifactId", "") || "";
         var resourceUri = value(response, "ExportResourceUri", "exportResourceUri", "") || "";
         var contentSha256 = value(response, "ExportContentSha256", "exportContentSha256", "") || "";
@@ -342,8 +344,10 @@
         if (typeof options.downloadHtmlExport !== "function") {
           throw new Error("HTML export download is unavailable.");
         }
-        options.downloadHtmlExport({
+        await options.downloadHtmlExport({
+          chatId: chatId,
           workspace: state.htmlWorkspace,
+          resourceExport: resourceExport,
           revisionArtifactId: exportArtifactId,
           resourceUri: resourceUri,
           contentSha256: contentSha256
@@ -355,6 +359,10 @@
         window.alert(error.message || "HTML не экспортирован.");
         return false;
       } finally {
+        await Promise.all((resourceExport && resourceExport.bindings || []).map(function (binding) {
+          return options.send("resourceDataClose", { chatId: chatId, workspaceId: exportArtifactId,
+            leaseId: binding.lease.leaseId }).catch(function () {});
+        }));
         state.htmlWorkspaceExportPending = false;
         if (options.render) options.render();
       }

@@ -231,20 +231,13 @@ are preview frames, never child artifacts or independently durable revisions.
 - Uploaded HTML: escaped source only by default. Preview requires explicit import
   into the HTML workspace; untrusted upload source is never inserted into the main
   DOM or granted network access.
-- HTML workspace: sandboxed rendered preview, exact HTML/CSS/JS/JSON editors,
-  binding status, revision/branch history and export. Network origins retain the
-  existing explicit allowlist and last-good binding behavior. `transform=table`
-  exposes one stable `rnassistant.table.v1` envelope (`columns`, object `rows`,
-  `rowCount`, scalar `source` metadata), available to page code through
-  `RNAssistant.data.get(name)`. New page code should read row values by
-  `columns[].key`; first-row source labels are also copied as row aliases when
-  they differ from the canonical key so generated dashboards using labels such as
-  `Продажи` keep rendering. A one-data-source workspace also exposes
-  `RNAssistant.data.first()` and `defaultName()` to avoid guessed names. Refresh
-  rereads the stored exact Office source,
-  captures a replacement authoritative workspace head when JSON or binding status
-  changes without adding an Undo step, and creates no artifact for verified
-  no-change. The UI reloads that head before rebuilding the preview. A
+- HTML workspace: sandboxed rendered preview, exact HTML/CSS/JS editors,
+  ResourceRef bindings, revision/branch history and export. Hosted network access
+  retains its explicit allowlist. The unified [Resource Fabric](resource-fabric.md)
+  replaces eager dataset JSON, table aliases and independent last-good state.
+  Page code opens explicit names through `RN.resources`, then reads bounded exact
+  batches/streams. Refresh reconciles source authority and reopens head bindings;
+  it does not manufacture a workspace revision or replace an exact binding. A
   workspace whose
   HTML/JavaScript references `echarts` receives the exact local ECharts 5.6.0 bundle
   as classic JavaScript before workspace scripts in its sandbox and standalone
@@ -254,9 +247,12 @@ are preview frames, never child artifacts or independently durable revisions.
   loading is unsupported. Full-document assembly inserts workspace scripts against
   the original document's last closing body/html tag before adding the vendor head
   block, so tag-shaped strings inside the bundled source cannot capture the
-  insertion. Standalone export contains the exact current JSON snapshot and no live
-  Office bridge; it fails closed instead of downloading a chart page when the pinned
-  ECharts runtime is unavailable.
+  insertion. Standalone export pulls exact resources through the same data plane
+  into bounded inert snapshot parts, served lazily by the same `RN.resources` API.
+  It has no live Office/network fallback; incomplete, oversized or mixed-revision
+  capture prevents download. Missing/tampered parts and an unavailable pinned
+  ECharts runtime fail explicitly. Actual downloaded-file/WebView2 qualification
+  remains open.
 
 ViewerRegistry remains UI-only dispatch. Fetching bounded text/media and checking
 the exact revision belong to the Artifact Library owner and the shared resource
@@ -400,14 +396,13 @@ Phase 11 is implemented as separate changes:
      revision with exact source URI/hash/relation provenance.
      [Evidence](stabilization/PHASE_11C2_HTML_IMPORT_PREVIEW.md).
    - 11C3 — done host-neutral: storage cannot synthesize workspace revisions;
-     binding JSON carries exact hash and explicit completeness; explicit export
-     checkpoints the exact guarded workspace through the sole lineage owner and
-     returns its pinned URI/CAS hash before standalone assembly. Raw JSON strings
-     are not parsed/stringified during export.
+     export checkpoints the guarded workspace through the sole lineage owner.
+     Its former inline binding-JSON transport is replaced by the unified Resource
+     cutover: typed exact leases, bounded pulls and inert standalone snapshot parts.
      [Evidence](stabilization/PHASE_11C3_HTML_BINDING_EXPORT.md).
    - R61/11O3 — done host-neutral: model authoring uses separate semantic file/data
      writes, exact patch/delete and identity-free bind/refresh/freeze. Inspection and
-     active selection are internal; bind consumes exact accepted read evidence while
+     active selection are internal; bind now resolves the canonical resource target while
      URI/revision/hash/source arguments remain durable/runtime-only.
      [Evidence](stabilization/PHASE_11O3_HTML_SEMANTIC_INTENTS.md).
 4. Typed viewers:

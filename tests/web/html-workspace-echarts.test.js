@@ -17,6 +17,7 @@ assert.equal(typeof context.define, "function", "capture remains installed until
 vm.runInContext(fs.readFileSync(path.join(root, "web/js/vendor/echarts.min.js"), "utf8"), context,
   { filename: "echarts.min.js", timeout: 5000 });
 context.RNAssistantEChartsSandboxRuntime.finish();
+vm.runInContext(fs.readFileSync(path.join(root, "web/js/app-html-resource-export.js"), "utf8"), context);
 vm.runInContext(fs.readFileSync(path.join(root, "web/js/app-html-workspace-preview.js"), "utf8"), context,
   { filename: "app-html-workspace-preview.js" });
 
@@ -51,7 +52,15 @@ vm.runInContext(runtime[1], child, { timeout: 5000 });
 assert.equal(child.echarts.version, "5.6.0");
 console.log("PASS HTML ECharts: sandbox/export assembly receives the exact local bundle without CDN");
 
+// Resource capture/reading is covered by html-workspace-export; this fixture pins
+// an empty view to exercise standalone dependency/script ordering.
+const reference = { uri: "rna://test/data", revision: "r1" };
+const resourceSnapshot = { version: 1, resources: [{ name: "sales", descriptor: { reference }, view: "table", path: "$",
+  maxBatchItems: 32000, maxBatchBytes: 4096, parts: [{ id: "rn-export-part-0", offset: 0, nextOffset: 0, done: true }] }],
+  parts: [{ id: "rn-export-part-0", text: JSON.stringify({ resource: reference, view: "table", rows: [], columns: [],
+    offset: 0, nextOffset: 0, done: true, coverage: { kind: "record-range", start: 0, end: 0 } }) }] };
 const documentChart = context.RNAssistantHtmlWorkspacePreview.build({
+  resourceSnapshot,
   activeFileId: "dashboard.html",
   files: [
     {
@@ -74,7 +83,7 @@ const workspaceOpen = documentChart.indexOf('data-rn-path="dashboard.js"');
 const bodyClose = documentChart.toLowerCase().lastIndexOf("</body>");
 assert.ok(vendorClose >= 0 && vendorClose < workspaceOpen && workspaceOpen < bodyClose,
   "workspace scripts follow the complete vendor script and precede the actual body close");
-const documentScripts = Array.from(documentChart.matchAll(/<script(?:\s[^>]*)?>([\s\S]*?)<\/script>/gi), match => match[1]);
+const documentScripts = Array.from(documentChart.matchAll(/<script(?![^>]*type=)(?:\s[^>]*)?>([\s\S]*?)<\/script>/gi), match => match[1]);
 const documentRuntime = vm.createContext({ Deno: {}, addEventListener() {} });
 documentRuntime.window = documentRuntime;
 for (const source of documentScripts) vm.runInContext(source, documentRuntime, { timeout: 5000 });
@@ -85,6 +94,7 @@ assert.doesNotMatch(documentChart, /rnassistant-html-fetch/);
 console.log("PASS HTML ECharts: assembly installs the local runtime and resource API before workspace code");
 
 const fallbackChart = context.RNAssistantHtmlWorkspacePreview.build({
+  resourceSnapshot,
   activeFileId: "dashboard.html",
   files: [
     { id: "dashboard.html", path: "dashboard.html", kind: "html", content: "<main></main>" },
@@ -98,7 +108,7 @@ const fallbackChart = context.RNAssistantHtmlWorkspacePreview.build({
 });
 const fallbackRuntime = vm.createContext({ Deno: {}, addEventListener() {} });
 fallbackRuntime.window = fallbackRuntime;
-Array.from(fallbackChart.matchAll(/<script(?:\s[^>]*)?>([\s\S]*?)<\/script>/gi), match => match[1])
+Array.from(fallbackChart.matchAll(/<script(?![^>]*type=)(?:\s[^>]*)?>([\s\S]*?)<\/script>/gi), match => match[1])
   .forEach(source => vm.runInContext(source, fallbackRuntime, { timeout: 5000 }));
 assert.deepEqual(Array.from(fallbackRuntime.__knownNames), ["sales"]);
 assert.equal(fallbackRuntime.RNAssistantData, undefined);
@@ -132,7 +142,7 @@ const index = fs.readFileSync(path.join(root, "web/index.html"), "utf8");
 const captureIndex = index.indexOf("app-echarts-sandbox-runtime.js?v=ui-lazy-20260903-1");
 const vendorIndex = index.indexOf("js/vendor/echarts.min.js");
 const finishIndex = index.indexOf("RNAssistantEChartsSandboxRuntime.finish()");
-const previewIndex = index.indexOf("app-html-workspace-preview.js?v=ui-lazy-20260903-1");
+const previewIndex = index.indexOf("app-html-workspace-preview.js?v=resource-export-20260905-1");
 assert.ok(captureIndex >= 0 && captureIndex < previewIndex);
 assert.equal(vendorIndex, -1, "ECharts vendor is not parsed during main WebView startup");
 assert.equal(finishIndex, -1, "ECharts capture is finalized by the on-demand loader");

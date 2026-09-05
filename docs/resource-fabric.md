@@ -145,6 +145,26 @@ Authority notifications coalesce to bounded scope/generation metadata.
 a pushed dataset or another freshness cache. Notifications currently reach
 in-process windows; other processes catch up on fresh shared authority capture.
 
+`HtmlWorkspaceExportService` prepares export leases through the same data plane.
+After capture, all head bindings must match one frozen authority tuple; explicitly
+historical bindings stay exact. Head opens and the final export set use the common
+`EvidenceStateReducer` against resource and dependency scopes. Matching the derived
+head alone cannot pass when its schema/mapping/source has changed or is unknown.
+Exact historical views remain readable. Export never changes binding policy or creates a
+second head/body store. The UI pulls the complete export in bounded sequential
+batches: at most 32 bindings, 1024 parts, 32 MiB of transport bytes and 8 MiB per
+part. Failure, cancellation/chat change or mixed revisions prevent download and
+release prepared leases. No bulk body crosses the ordinary control bridge.
+
+The standalone HTML contains inert, integrity-checked snapshot parts plus exact
+resource/coverage metadata. The same `RN.resources` handles/streams use a read-only
+snapshot transport; parts hydrate only when read, with field/row/character bounds,
+expiry and close/backpressure. Text/source, table/records and negotiated binary
+views are supported. There is no live host/network fallback or head subscription.
+Integrity checks require Web Crypto; missing/tampered parts fail explicitly.
+ECharts remains the pinned local dependency. These host-neutral contracts do not
+qualify actual Windows WebView2 capture or downloaded-file browser behavior.
+
 ## Audit decisions
 
 The three normative contracts supersede conflicting pre-cutover area explanations.
@@ -163,8 +183,8 @@ viewer text/base64 bridge transport; mutable-disk skill reference activation.
 No compatibility alias, dual-write or feature flag restores these paths.
 
 Still open within this same cutover: remaining definition/domain read consumers, finer
-Excel coverage/named resources, complete binary/raw view negotiation, standalone
-bound HTML export, remaining bulk upload/export surfaces, bounded history/retention
+Excel coverage/named resources, complete binary/raw view negotiation,
+remaining bulk upload/export surfaces, bounded history/retention
 optimization and final documentation cleanup. These are not permanent adapters.
 
 ## Delivery order

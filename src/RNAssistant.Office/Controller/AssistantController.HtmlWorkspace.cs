@@ -115,7 +115,8 @@ namespace RNAssistant.Office
 
         public HtmlWorkspaceResponse PrepareHtmlWorkspaceExport(
             string chatId,
-            string expectedActiveHtmlArtifactId)
+            string expectedActiveHtmlArtifactId,
+            CancellationToken cancellationToken = default(CancellationToken))
         {
             return WithReservedSession(LoadSession(chatId), session =>
             {
@@ -125,7 +126,7 @@ namespace RNAssistant.Office
                     () => HtmlWorkspaceArtifactService.PrepareExport(session, expectedActiveHtmlArtifactId));
                 if (!string.Equals(previousArtifactId, exportArtifactId, System.StringComparison.OrdinalIgnoreCase))
                 {
-                    SaveSessionChanges(session);
+                    _chatSessions.NotifySaved(session); // The mutation barrier already persisted the checkpoint.
                 }
                 var artifact = (session.Artifacts ?? new System.Collections.Generic.List<ChatArtifact>()).Single(item =>
                     item != null &&
@@ -135,6 +136,8 @@ namespace RNAssistant.Office
                 response.ExportRevisionArtifactId = artifact.Id;
                 response.ExportResourceUri = ChatResourceUri.CreateArtifactRevision(session, artifact).Uri;
                 response.ExportContentSha256 = artifact.ContentSha256;
+                response.ResourceExport = new HtmlWorkspaceExportService(_toolExecutor.ResourceGateway, _resourceData)
+                    .Open(session, artifact.Id, cancellationToken);
                 return response;
             });
         }

@@ -41,8 +41,9 @@ the UI and authorized RN.resources subscribers. Authority readers catch up journ
 tails, and Known-head publication now requires durable exact revision metadata.
 The canonical owner map and active removal gates are updated in resource-fabric.md
 and MIGRATION_MAP.md.
-Checkpoint commits: `ec8b179` (integrated foundation) and `332b911` (lifecycle;
-both user-requested, not a completed cutover). The lifecycle checkpoint switches controller clear/edit/message-delete/
+Checkpoint commits: `ec8b179` (integrated foundation), `332b911` (lifecycle) and
+`904e1ae` (exact lineage across restore/context/fork); user-requested checkpoints,
+not a completed cutover. The lifecycle checkpoint switches controller clear/edit/message-delete/
 fork to typed history intents through the same journal/authority observer. History
 and fork preparation belong to ChatHistoryEditService/ChatCloneService; active
 workspace, plan, task and membership heads publish atomically after conversation
@@ -71,12 +72,31 @@ immutable materialized CAS and old workspace bodies remain unchanged. Unavailabl
 unpublished dependencies, cycles and graph bounds fail closed; failed publication
 cannot partially activate a copied graph. The blanket unsupported-definition path
 and optional fork-preparation bypass are removed.
+Wave 4 export checkpoint after `904e1ae`: standalone HTML export captures
+typed exact leases through the same resource data plane. Head bindings must agree
+with one frozen authority tuple; historical bindings stay pinned. Export pulls
+bounded table/text/binary parts, never workspace JSON or control-message bodies.
+The downloaded file uses the same RN.resources API over inert integrity-checked
+snapshot parts, without a new head store/live fallback. Bounds are 32 bindings,
+1024 parts, 32 MiB transport total and 8 MiB per part. Cancel/chat change, tampering,
+missing snapshots and mixed revisions fail closed; all prepared leases close on
+success/failure, including late responses. The redundant export checkpoint save
+after mutation publication is removed. Data-plane head opens and final export
+capture use the shared EvidenceStateReducer, including dependency scopes: stale
+virtual/materialized heads are rejected without losing exact historical access.
+Resource cutover 17/17 includes that preview/export dependency-currentness check.
+Actual downloaded-file/WebView2 behavior
+remains a Windows qualification gate.
+Export checks: host-neutral exact capture/failure cleanup 2/2; typed export bridge
+1/1 and production source inclusion 1/1. Web export 11/11, ECharts 7/7 and hosted
+resource data-plane contract pass; related static UI fixtures: Plan 8/8, Artifact
+Library 5/5, HTML import 5/5. No full harness or Office/VSTO validation.
 Still open: remaining definition/domain read and bulk upload/export consumers,
 finer Excel coverage/named resources, complete binary/raw view negotiation, bounded
-cold replay/checkpoint/retention optimization, standalone bound HTML export,
+cold replay/checkpoint/retention optimization,
 cross-process push qualification, and final cross-document cleanup.
 This is NOT a completed cutover; no Windows gate is closed by these changes.
-Latest continuation checks: VBA restore 4/4, mutation 11/11, journal 4/4;
+Exact-lineage checkpoint checks: VBA restore 4/4, mutation 11/11, journal 4/4;
 typed context exact-payload/event replay 1/1, context/continuation 12/12, Inspector
 3/3, typed context bridge 1/1 and Web context/viewer 7/7. Resource cutover 17/17
 includes exact graph copy, nested forks, immutable snapshot restore, event replay

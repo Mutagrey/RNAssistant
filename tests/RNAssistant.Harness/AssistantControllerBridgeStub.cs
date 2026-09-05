@@ -718,7 +718,8 @@ namespace RNAssistant.Office
                 Workspace = HtmlWorkspaceDto.From(null)
             };
         }
-        public HtmlWorkspaceResponse PrepareHtmlWorkspaceExport(string chatId, string expectedActiveHtmlArtifactId)
+        public HtmlWorkspaceResponse PrepareHtmlWorkspaceExport(string chatId, string expectedActiveHtmlArtifactId,
+            CancellationToken cancellationToken = default(CancellationToken))
         {
             LastChatId = chatId;
             LastExpectedHtmlArtifactId = expectedActiveHtmlArtifactId;
@@ -729,6 +730,13 @@ namespace RNAssistant.Office
                 ExportRevisionArtifactId = expectedActiveHtmlArtifactId,
                 ExportResourceUri = "rna://chat/" + chatId + "/artifact/" + expectedActiveHtmlArtifactId + "/revision/3",
                 ExportContentSha256 = new string('a', 64),
+                ResourceExport = new HtmlResourceExport {
+                    Generations = new Dictionary<string, long> { ["conversation:" + chatId] = 1 },
+                    Bindings = new[] { new HtmlResourceExportBinding { Name = "data", Lease = new ResourceDataOpenResponse {
+                        LeaseId = "export-lease", Url = "https://rnassistant.local-resource/v1/export-lease",
+                        Descriptor = new ResourceDescriptor { Reference = new ResourceRef("rna://state/conversation/" + chatId + "/data", "r1") },
+                        View = "table", MaxBatchItems = 500, MaxBatchBytes = 8192 } } }
+                },
                 Workspace = HtmlWorkspaceDto.From(null)
             };
         }

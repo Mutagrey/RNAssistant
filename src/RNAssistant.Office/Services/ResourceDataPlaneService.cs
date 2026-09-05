@@ -53,6 +53,9 @@ namespace RNAssistant.Office.Services
                 cancellationToken.ThrowIfCancellationRequested();
                 if (first?.Result?.Resource?.Reference == null || !first.Result.Resource.Reference.IsExact)
                     throw Error("RESOURCE_REVISION_UNAVAILABLE", "The provider did not establish an exact view revision.");
+                if (!reference.IsExact && _gateway.Authority != null)
+                    _gateway.RequireCurrent(session, first.Result.Resource, first.Result.Representation,
+                        _gateway.CaptureAuthorityFor(session, new[] { first.Result.Resource }));
                 validate?.Invoke(first.Result);
                 var token = new byte[32];
                 using (var random = RandomNumberGenerator.Create()) random.GetBytes(token);

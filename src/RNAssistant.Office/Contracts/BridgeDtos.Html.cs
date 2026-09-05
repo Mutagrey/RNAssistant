@@ -178,6 +178,21 @@ namespace RNAssistant.Office.Contracts
 
         [JsonProperty("exportContentSha256", NullValueHandling = NullValueHandling.Ignore)]
         public string ExportContentSha256 { get; set; }
+
+        [JsonProperty("resourceExport", NullValueHandling = NullValueHandling.Ignore)]
+        public HtmlResourceExport ResourceExport { get; set; }
+    }
+
+    public sealed class HtmlResourceExport
+    {
+        [JsonProperty("bindings")] public IReadOnlyList<HtmlResourceExportBinding> Bindings { get; set; }
+        [JsonProperty("generations")] public IReadOnlyDictionary<string, long> Generations { get; set; }
+    }
+
+    public sealed class HtmlResourceExportBinding
+    {
+        [JsonProperty("name")] public string Name { get; set; }
+        [JsonProperty("lease")] public ResourceDataOpenResponse Lease { get; set; }
     }
 
     public sealed class HtmlWorkspacePreflightDto

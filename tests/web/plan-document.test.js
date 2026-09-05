@@ -74,9 +74,9 @@ vm.runInContext(source, context, { filename: "app-html-workspace-artifacts.js" }
   ["app-task-list.js", "app-agent-activity.js"].forEach(asset => {
     assert.ok(index.includes(asset + "?v=planning-intents-20260902-1"), asset + " has the current planning-intent cache key");
   });
-  assert.ok(index.includes("app-html-workspace-actions.js?v=artifact-gallery-20260902-1"),
+  assert.ok(index.includes("app-html-workspace-actions.js?v=resource-export-20260905-1"),
     "app-html-workspace-actions.js has the current preview cache key");
-  assert.ok(index.includes("app-html-workspace.js?v=ui-lazy-20260903-1"),
+  assert.ok(index.includes("app-html-workspace.js?v=resource-export-20260905-1"),
     "app-html-workspace.js has the current preview cache key");
   assert.ok(index.includes("app-html-workspace.css?v=html-export-20260831-1"), "Plan/HTML actions have the matching CSS cache key");
   assert.match(workspace, /switchChatMode:\s*function\s*\(mode\)/);

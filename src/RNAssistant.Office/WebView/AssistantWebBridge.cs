@@ -460,7 +460,7 @@ namespace RNAssistant.Office.WebView
                         var htmlExport = Payload<HtmlWorkspaceExportPayload>(payload);
                         responsePayload = _controller.PrepareHtmlWorkspaceExport(
                             htmlExport.ChatId,
-                            htmlExport.ExpectedActiveHtmlArtifactId);
+                            htmlExport.ExpectedActiveHtmlArtifactId, cancellationToken);
                         break;
                     case "deleteHtmlWorkspaceFile":
                         var deleteHtmlFile = Payload<HtmlWorkspaceDeleteFilePayload>(payload);
