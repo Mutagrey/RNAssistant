@@ -44,6 +44,19 @@ historical publications. Remaining domain-specific read consumers are tracked be
 
 ## Conversation loop
 
+Controller clear/edit/message-delete/fork use typed `ChatResourceMutationIntent`
+through the existing mutation observer/journal. `ChatHistoryEditService` and
+`ChatCloneService` own history/resource preparation; conversation state is durable
+before workspace/plan/task/membership heads become visible in one commit. Clear
+removes active conversation definitions too, retaining exact revisions/CAS. Edit
+publishes a new restore revision only for changed logical state. Failed publication
+blocks fresh captures; recovery records Unknown and never replays the command.
+Fork keeps the live document authority and creates child conversation resources.
+Copied artifact bindings are rebased into a new workspace snapshot, not rewritten
+inside old immutable bodies. Missing exact checkpoints fail closed. Copying bound
+conversation-scoped schema/mapping/derived definitions is still open and explicitly
+rejected before fork publication; it never grants implicit parent-chat access.
+
 `ConversationRunService` → `AgentKernel` remains the only lifecycle/outcome loop.
 `ConversationKernelAdapter` captures published catalogs at request boundaries.
 `ConversationModelSession` freezes history/high-water, resource authority, tool pack,
@@ -130,7 +143,7 @@ assembly; free-summary resource authority; inline large pending payload duplicat
 viewer text/base64 bridge transport; mutable-disk skill reference activation.
 No compatibility alias, dual-write or feature flag restores these paths.
 
-Still open within this same cutover: controller clear/edit/fork logical mutations,
+Still open within this same cutover: fork copying of conversation-scoped definitions,
 typed user-note/observation separation,
 remaining definition/domain read consumers, VBA restore-origin metadata, finer
 Excel coverage/named resources, complete binary/raw view negotiation, standalone

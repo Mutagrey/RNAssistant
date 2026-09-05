@@ -293,6 +293,163 @@ namespace RNAssistant.Harness
             });
         }
 
+        private static void ResourceChatLifecyclePublication()
+        {
+            WithTempPaths(paths =>
+            {
+                var adapter = FakeOfficeAdapter.ForHost("Word");
+                var chats = new ChatStore(paths);
+                var store = new ResourceAuthorityStore(paths);
+                long? expectedGenerationDuringSave = null;
+                var executor = new OfficeToolExecutor(adapter, new VbaJournalStore(paths), new SkillStore(paths),
+                    paths: paths, resourceAuthorityStore: store, loadArtifactBody: chats.LoadArtifactBody,
+                    persistResourceFacts: saved =>
+                    {
+                        if (expectedGenerationDuringSave.HasValue)
+                            AssertEqual(expectedGenerationDuringSave.Value, store.Capture(new ResourceAuthorityScopeId("conversation", saved.Id)).Generation,
+                                "conversation state persists before authority becomes visible");
+                        chats.Save(saved);
+                    });
+                var session = NewSession(adapter);
+                var edits = new ChatHistoryEditService(_ => { }, (_, reason) => { }, chats.LoadArtifactBody);
+                executor.MutateLocalResources(session, "common.html_workspace_write_file", null,
+                    () => HtmlWorkspaceToolService.UpsertFile(session, "index.html", "html", "<p>one</p>", true));
+                executor.MutateLocalResources(session, "common.html_workspace_bind_data", null,
+                    () => HtmlWorkspaceToolService.UpsertDataSource(session, "data", "{\"count\":1}"));
+                executor.MutateLocalResources(session, "common.plan_doc_save", null,
+                    () => new PlanDocumentService().Save(session, "Plan", "# Plan", "draft", () => { }));
+                executor.MutateLocalResources(session, "common.task_list_set", null,
+                    () => new TaskListService().Set(session, "Goal", new[] { "Read", "Change", "Verify" }
+                        .Select(text => new ChatTaskStep { Text = text }).ToList(), () => { }));
+                var scope = executor.ResourceAuthority.Scope(session, false);
+                var html = ResourceStateProvider.Identity(scope, "html-workspace");
+                var plan = ResourceStateProvider.Identity(scope, "plan-document");
+                var tasks = ResourceStateProvider.Identity(scope, "task-list");
+                var first = store.GetHead(scope, html).Revision;
+                var planBefore = store.GetHead(scope, plan).Revision;
+                var tasksBefore = store.GetHead(scope, tasks).Revision;
+                session.Messages.Add(new ChatMessage { Role = "user", Content = "Start" });
+                session.Messages.Add(new ChatMessage { Role = "assistant", Content = "Ready", ResourceRefs = new List<ResourceRef> {
+                    ChatResourceUri.ResolveArtifactRevision(session, session.ActivePlanDocumentArtifactId),
+                    ChatResourceUri.ResolveArtifactRevision(session, session.ActiveTaskListArtifactId) } });
+                var target = new ChatMessage { Role = "user", Content = "Continue",
+                    HtmlWorkspaceCheckpoint = ChatResourceUri.ResolveArtifactRevision(session, session.ActiveHtmlArtifactId) };
+                session.Messages.Add(target);
+                executor.MutateLocalResources(session, "common.html_workspace_write_file", null,
+                    () => HtmlWorkspaceToolService.UpsertFile(session, "index.html", "html", "<p>two</p>", true));
+                session.Messages.Add(new ChatMessage { Role = "assistant", Content = "Changed" });
+                var second = store.GetHead(scope, html).Revision;
+                expectedGenerationDuringSave = store.Capture(scope).Generation;
+                executor.MutateChatResources(session, new ChatResourceMutationIntent(ChatResourceMutationKind.Edit, target.Id, text: "Replay"),
+                    () => edits.RewriteUserMessage(session, session.Id, target.Id, -1, "Replay"));
+                expectedGenerationDuringSave = null;
+                var restored = store.GetHead(scope, html).Revision;
+                var metadata = store.GetRevision(scope, restored);
+                AssertEqual(first.Revision, metadata.RestoredFrom.Revision, "edit has exact restore origin");
+                AssertEqual(second.Revision, metadata.Parent.Revision, "edit advances, never rewinds, logical lineage");
+                AssertEqual(planBefore.Revision, store.GetHead(scope, plan).Revision.Revision, "unchanged plan has no spurious revision");
+                AssertEqual(tasksBefore.Revision, store.GetHead(scope, tasks).Revision.Revision, "unchanged task list has no spurious revision");
+                AssertEqual("Replay", chats.Load(session.Id).Messages.Last().Content, "rewritten history is durable before return");
+
+                var sourceGeneration = store.Capture(scope).Generation;
+                var fork = NewSession(adapter);
+                fork.ParentSessionId = session.Id; fork.ParentSessionRevision = session.Revision;
+                fork.DocumentAuthorityId = session.DocumentAuthorityId;
+                fork.Messages = ChatCloneService.CloneMessages(session.Messages);
+                ChatCloneService.PrepareForkResources(session, fork, chats.LoadArtifactBody);
+                AssertTrue(fork.HtmlWorkspace.DataSources.Single().Binding.Resource.Uri != session.HtmlWorkspace.DataSources.Single().Binding.Resource.Uri,
+                    "copied artifact bindings are explicitly rebound to child resources");
+                AssertTrue(fork.Artifacts.Any(item => item.Id == session.ActiveHtmlArtifactId &&
+                    item.InlineText == session.Artifacts.Single(source => source.Id == session.ActiveHtmlArtifactId).InlineText),
+                    "rebinding never rewrites the immutable copied snapshot body");
+                expectedGenerationDuringSave = 0;
+                executor.MutateChatResources(fork, new ChatResourceMutationIntent(ChatResourceMutationKind.Fork, target.Id, source: session), () => fork);
+                expectedGenerationDuringSave = null;
+                var forkScope = executor.ResourceAuthority.Scope(fork, false);
+                var forkHead = store.GetHead(forkScope, ResourceStateProvider.Identity(forkScope, "html-workspace")).Revision;
+                AssertEqual(1L, store.Capture(forkScope).Generation, "all fork heads are published in one commit");
+                AssertEqual(4, store.Capture(forkScope).Commits.Single().HeadChanges.Count, "fork atomically publishes workspace, plan, tasks and membership");
+                AssertEqual(session.DocumentAuthorityId, fork.DocumentAuthorityId, "chat fork keeps the same live document authority");
+                AssertTrue(forkHead.Uri != restored.Uri && forkHead.Revision != restored.Revision, "fork has its own logical resource identity/revision");
+                executor.MutateChatResources(fork, new ChatResourceMutationIntent(ChatResourceMutationKind.Edit, target.Id, text: "Replay"), () => true);
+                AssertEqual(ResourceEffectOutcome.VerifiedNoChange, store.Capture(forkScope).Commits.Last().Effect.Outcome,
+                    "history with unchanged resource membership does not invent revisions");
+                AssertEqual(forkHead.Revision, store.GetHead(forkScope, forkHead.Identity).Revision.Revision, "no-op preserves exact head");
+
+                var retained = store.GetRevision(forkScope, forkHead).Payload;
+                expectedGenerationDuringSave = store.Capture(forkScope).Generation;
+                executor.MutateChatResources(fork, new ChatResourceMutationIntent(ChatResourceMutationKind.Clear), () =>
+                { edits.Clear(fork, new DocumentContext()); return true; });
+                expectedGenerationDuringSave = null;
+                AssertTrue(store.Capture(forkScope).Heads.Values.All(head => head.Knowledge == HeadKnowledge.Unavailable),
+                    "clear atomically removes active heads");
+                AssertEqual(0, chats.Load(fork.Id).Messages.Count, "clear is durable");
+                AssertEqual(sourceGeneration, store.Capture(scope).Generation, "fork and clear cannot change source chat heads");
+                AssertEqual(retained.Sha256, store.GetRevision(forkScope, forkHead).Payload.Sha256, "clear retains immutable revision and CAS");
+                var historical = executor.ResourceGateway.Read(fork, new ResourceReadRequest { Reference = forkHead, Representation = "text", MaxChars = 32000 }).Result;
+                AssertTrue(historical.Text.Contains("<p>one</p>"), "exact logical revision stays readable after clear");
+                AssertEqual(HeadKnowledge.Unavailable, store.GetHead(forkScope, forkHead.Identity).Knowledge, "historical read cannot resurrect current head");
+            });
+        }
+
+        private static void ResourceChatLifecyclePersistenceFailure()
+        {
+            WithTempPaths(paths =>
+            {
+                var adapter = FakeOfficeAdapter.ForHost("Word");
+                var chats = new ChatStore(paths);
+                var store = new ResourceAuthorityStore(paths);
+                var fail = false;
+                var executor = new OfficeToolExecutor(adapter, new VbaJournalStore(paths), new SkillStore(paths), paths: paths,
+                    resourceAuthorityStore: store, persistResourceFacts: saved =>
+                    { chats.Save(saved); if (fail) throw new System.IO.IOException("Injected failure after durable conversation write."); });
+                var session = NewSession(adapter);
+                var edits = new ChatHistoryEditService(_ => { }, (_, reason) => { });
+                executor.MutateLocalResources(session, "common.html_workspace_write_file", null,
+                    () => HtmlWorkspaceToolService.UpsertFile(session, "index.html", "html", "<p>retained</p>", true));
+                var scope = executor.ResourceAuthority.Scope(session, false);
+                var old = store.GetHead(scope, ResourceStateProvider.Identity(scope, "html-workspace")).Revision;
+                fail = true;
+                RuntimeThrows<System.IO.IOException>(() => executor.MutateChatResources(session,
+                    new ChatResourceMutationIntent(ChatResourceMutationKind.Clear), () => { edits.Clear(session, new DocumentContext()); return true; }));
+                AssertEqual(0, chats.Load(session.Id).Artifacts.Count, "injected failure is after actual persistence");
+                RuntimeThrows<ResourceRequestException>(() => executor.ResourceAuthority.CaptureMany(new[] { scope }));
+                var journal = new ResourceMutationJournal(paths);
+                AssertEqual(MutationAttemptState.DispatchMayHaveOccurred, journal.Unresolved().Single().State, "failed publication remains unresolved");
+                ResourceMutationAuthorityObserver.ReconcileInterrupted(executor.ResourceAuthority, journal);
+                AssertEqual(HeadKnowledge.Unknown, store.GetHead(scope, old.Identity).Knowledge, "recovery marks uncertain effect unknown");
+                AssertEqual(0, journal.Unresolved().Count, "recovery links a terminal authority commit without replaying clear");
+                AssertTrue(store.GetRevision(scope, old).Payload != null, "failed clear never deletes historical bytes");
+            });
+        }
+
+        private static void ResourceForkPreparationFailsClosed()
+        {
+            var adapter = FakeOfficeAdapter.ForHost("Word");
+            var source = NewSession(adapter);
+            HtmlWorkspaceToolService.UpsertFile(source, "index.html", "html", "<p>old</p>", true);
+            var checkpoint = ChatResourceUri.ResolveArtifactRevision(source, source.ActiveHtmlArtifactId);
+            source.Messages.Add(new ChatMessage { Role = "user", Content = "Checkpoint", HtmlWorkspaceCheckpoint = checkpoint });
+            HtmlWorkspaceToolService.UpsertFile(source, "index.html", "html", "<p>new</p>", true);
+            source.Artifacts.Single(item => item.Id == ResourceUri.Parse(checkpoint.Uri).Segments[2]).InlineText = null;
+            var fork = NewSession(adapter);
+            fork.ParentSessionId = source.Id;
+            fork.Messages = ChatCloneService.CloneMessages(source.Messages);
+            RuntimeThrows<InvalidOperationException>(() => ChatCloneService.PrepareForkResources(source, fork, (_, id) => false));
+            AssertTrue(!fork.HtmlWorkspace.Files.Any(item => item.Content == "<p>new</p>"),
+                "unavailable old checkpoint never silently falls back to the parent's newer workspace");
+
+            source.Messages.Clear();
+            source.HtmlWorkspace.DataSources.Add(new HtmlWorkspaceDataSource { Name = "bound", Binding = new HtmlWorkspaceDataBinding {
+                Resource = new ResourceRef("rna://document/shared/root", "r1"), View = "text", Policy = "exact",
+                Schema = new ResourceRef(ResourceStateProvider.Identity(new ResourceAuthorityScopeId("conversation", source.Id), "schema-published-demo").Uri, "r1") } });
+            HtmlWorkspaceArtifactService.CaptureCurrent(source, "Bound definition");
+            var boundFork = NewSession(adapter); boundFork.ParentSessionId = source.Id;
+            RuntimeThrows<InvalidOperationException>(() => ChatCloneService.PrepareForkResources(source, boundFork, null));
+            AssertTrue(boundFork.HtmlWorkspace.DataSources.Single().Binding.Schema.Uri.Contains(source.Id),
+                "unsupported definition copy cannot manufacture a child revision or alias another chat's current head");
+        }
+
         private static void ResourceAuthorityAtomicCommitAndReplay()
         {
             WithTempPaths(paths =>

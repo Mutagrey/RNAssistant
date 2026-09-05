@@ -1,3 +1,4 @@
+using System;
 using System.Collections.Generic;
 using System.Linq;
 using Newtonsoft.Json;
@@ -101,7 +102,8 @@ namespace RNAssistant.Office.Services
                 }).ToList();
         }
 
-        public static List<ChatArtifact> CloneArtifactsForMessages(IEnumerable<ChatArtifact> artifacts, IEnumerable<ChatMessage> messages)
+        public static List<ChatArtifact> CloneArtifactsForMessages(IEnumerable<ChatArtifact> artifacts, IEnumerable<ChatMessage> messages,
+            IEnumerable<string> additionalArtifactIds = null)
         {
             var artifactList = (artifacts ?? new ChatArtifact[0]).Where(item => item != null).ToList();
             var messageIds = new HashSet<string>((messages ?? new ChatMessage[0])
@@ -115,7 +117,7 @@ namespace RNAssistant.Office.Services
             return ChatResourceReferenceService.ReachableForMessages(
                     artifactList,
                     messages,
-                    applicableTombstones)
+                    applicableTombstones.Concat(additionalArtifactIds ?? new string[0]))
                 .Select(CloneArtifact)
                 .ToList();
         }
@@ -123,6 +125,47 @@ namespace RNAssistant.Office.Services
         public static HtmlWorkspace CloneWorkspaceForFork(HtmlWorkspace workspace)
         {
             return HtmlWorkspaceCopyService.CloneCurrent(workspace);
+        }
+
+        internal static void PrepareForkResources(ChatSession source, ChatSession fork,
+            Func<ChatSession, string, bool> loadArtifactBody)
+        {
+            if (source == null || fork == null || source.Id == fork.Id || fork.ParentSessionId != source.Id)
+                throw new InvalidOperationException("An explicit source and unpublished child chat are required.");
+            var checkpoint = HtmlWorkspaceArtifactService.CheckpointAtOrBefore(source, fork.Messages, fork.Messages.Count - 1);
+            var additional = new List<string>();
+            if (string.IsNullOrWhiteSpace(checkpoint))
+            {
+                if (source.HtmlWorkspaceRecovery != null && !source.HtmlWorkspaceRecovery.CanMutate)
+                    throw new InvalidOperationException("Сначала восстановите HTML workspace на доступную ревизию, затем повторите создание ветки чата.");
+                if (!string.IsNullOrWhiteSpace(source.ActiveHtmlArtifactId)) additional.Add(source.ActiveHtmlArtifactId);
+                foreach (var binding in (source.HtmlWorkspace?.DataSources ?? new List<HtmlWorkspaceDataSource>()).Select(item => item?.Binding))
+                {
+                    string id;
+                    if (ChatResourceUri.TryGetArtifactId(source, binding?.Resource, out id)) additional.Add(id);
+                }
+            }
+            var reachable = ChatResourceReferenceService.ReachableForMessages(source.Artifacts, fork.Messages, additional);
+            if (loadArtifactBody != null)
+                foreach (var artifact in reachable.Where(item => item.Kind == ChatArtifactKinds.HtmlWorkspace || item.Kind == ChatArtifactKinds.TaskList))
+                    loadArtifactBody(source, artifact.Id);
+            fork.Artifacts = CloneArtifactsForMessages(source.Artifacts, fork.Messages, additional);
+            fork.ContextCheckpoints = CloneContextCheckpoints(source.ContextCheckpoints, fork.Messages);
+            fork.ActiveContextCheckpointId = fork.ContextCheckpoints.OrderByDescending(item => item.CreatedUtc).Select(item => item.Id).FirstOrDefault();
+            if (!string.IsNullOrWhiteSpace(checkpoint))
+            {
+                if (!HtmlWorkspaceArtifactService.Restore(fork, checkpoint))
+                    throw new InvalidOperationException("RESOURCE_SNAPSHOT_UNAVAILABLE: the fork's exact HTML checkpoint is unavailable.");
+            }
+            else
+            {
+                fork.HtmlWorkspace = CloneWorkspaceForFork(source.HtmlWorkspace);
+                fork.ActiveHtmlArtifactId = source.ActiveHtmlArtifactId;
+                HtmlWorkspaceArtifactService.CaptureCurrent(fork, "Forked HTML workspace");
+            }
+            ChatResourceReferenceService.LinkMessageResources(fork, 0);
+            ChatResourceReferenceService.RestoreActiveTaskListFromMessages(fork);
+            ChatResourceReferenceService.RestoreActivePlanDocumentFromMessages(fork);
         }
 
         private static ChatRunRecord CloneRun(ChatRunRecord run)

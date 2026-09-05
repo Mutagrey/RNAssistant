@@ -214,10 +214,17 @@ namespace RNAssistant.Office.Tools
 
         // Explicit UI resource commands share the mutation journal/commit owner.
         // The caller holds its exact chat reservation; this is not a second tool runtime.
+        internal T MutateChatResources<T>(ChatSession session, ChatResourceMutationIntent intent, Func<T> action)
+        {
+            if (intent == null) throw new ArgumentNullException(nameof(intent));
+            return MutateLocalResources(session, intent.Operation, intent.Arguments(), action);
+        }
+
         internal T MutateLocalResources<T>(ChatSession session, string operation,
             IDictionary<string, object> arguments, Func<T> action)
         {
-            if (session == null || action == null || ConversationResourceMutationDomain.StateName(operation) == null)
+            var historyMutation = ConversationResourceMutationDomain.IsHistoryMutation(operation);
+            if (session == null || action == null || ConversationResourceMutationDomain.StateName(operation) == null && !historyMutation)
                 throw new ArgumentException("An explicit local resource mutation is required.");
             BindResourceAuthority(session);
             var id = Guid.NewGuid().ToString("N");
@@ -238,7 +245,9 @@ namespace RNAssistant.Office.Tools
                     dispatched = true;
                     var value = action();
                     var after = session.ActiveHtmlArtifactId + "|" + session.ActivePlanDocumentArtifactId + "|" + session.ActiveTaskListArtifactId;
-                    var changed = before != after || operation.EndsWith("_restore", StringComparison.Ordinal) || operation.EndsWith("_redo", StringComparison.Ordinal);
+                    // History commands also change membership and can remove all active
+                    // pointers. The domain read-back compares each affected logical state.
+                    var changed = historyMutation || before != after || operation.EndsWith("_restore", StringComparison.Ordinal) || operation.EndsWith("_redo", StringComparison.Ordinal);
                     publicationStarted = true;
                     observer.Complete(attempt, new ToolExecutionRecord(context, ToolExecutionOutcome.Ok, DateTime.UtcNow,
                         mayHaveDispatched: true, evidence: new ToolExecutionEvidence(ToolDispatchEvidence.MayHaveDispatched,

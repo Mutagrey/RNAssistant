@@ -23,6 +23,7 @@ namespace RNAssistant.Office.Services
                 return session.ActiveHtmlArtifactId ?? session.HtmlWorkspaceRecovery.ActiveArtifactId ?? string.Empty;
             }
             session.HtmlWorkspace = HtmlWorkspaceToolService.NormalizeWorkspace(session.HtmlWorkspace);
+            RebindForkResources(session, session.HtmlWorkspace);
             session.Artifacts = session.Artifacts ?? new List<ChatArtifact>();
             ValidateRevisionLineage(session);
             var snapshot = HtmlWorkspaceCopyService.CaptureSnapshot(
@@ -81,11 +82,51 @@ namespace RNAssistant.Office.Services
                 return false;
             }
             if (snapshot == null) return false;
-            session.HtmlWorkspace = HtmlWorkspaceToolService.NormalizeWorkspace(
+            var workspace = HtmlWorkspaceToolService.NormalizeWorkspace(
                 HtmlWorkspaceCopyService.CreateWorkspaceFromSnapshot(snapshot));
+            var rebound = RebindForkResources(session, workspace);
+            session.HtmlWorkspace = workspace;
             session.ActiveHtmlArtifactId = artifact.Id;
-            RebuildNavigation(session);
+            if (rebound) CaptureCurrent(session, "Forked workspace resources");
+            else RebuildNavigation(session);
             return true;
+        }
+
+        private static bool RebindForkResources(ChatSession session, HtmlWorkspace workspace)
+        {
+            if (string.IsNullOrEmpty(session.ParentSessionId)) return false;
+            // Rebind only deliberately copied immutable artifacts. Never mutate an
+            // existing snapshot body or grant implicit access to another chat's state.
+            var bindings = workspace.DataSources.Where(item => item?.Binding != null).Select(item => new
+            {
+                Binding = item.Binding,
+                Resource = ForkReference(session, item.Binding.Resource),
+                Schema = ForkReference(session, item.Binding.Schema),
+                Mapping = ForkReference(session, item.Binding.Mapping)
+            }).ToArray();
+            var changed = bindings.Any(item => !ReferenceEquals(item.Resource, item.Binding.Resource) ||
+                !ReferenceEquals(item.Schema, item.Binding.Schema) || !ReferenceEquals(item.Mapping, item.Binding.Mapping));
+            foreach (var item in bindings)
+            { item.Binding.Resource = item.Resource; item.Binding.Schema = item.Schema; item.Binding.Mapping = item.Mapping; }
+            return changed;
+        }
+
+        private static ResourceRef ForkReference(ChatSession session, ResourceRef reference)
+        {
+            if (reference == null) return null;
+            var address = ResourceUri.Parse(reference.Uri);
+            if (address.Provider == "chat" && address.Segments[0] != session.Id)
+            {
+                var copy = ChatResourceUri.RebaseArtifactRevision(reference, session.Id);
+                string artifactId;
+                if (copy == null || !ChatResourceUri.TryGetCurrentArtifactId(session, copy, out artifactId))
+                    throw new InvalidOperationException("RESOURCE_FORK_DEPENDENCY_UNAVAILABLE: a bound artifact was not copied into this chat.");
+                return copy;
+            }
+            if ((address.Provider == "state" || address.Provider == "context") && address.Segments.Count >= 2 &&
+                address.Segments[0] == "conversation" && address.Segments[1] != session.Id)
+                throw new InvalidOperationException("RESOURCE_FORK_DEPENDENCY_UNAVAILABLE: copying bound conversation definitions is not yet supported.");
+            return reference;
         }
 
         public static void EnsureMutable(ChatSession session)

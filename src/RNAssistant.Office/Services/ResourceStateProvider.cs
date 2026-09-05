@@ -34,7 +34,8 @@ namespace RNAssistant.Office.Services
         {
             var scope = _authority.Scope(session, false);
             var snapshot = _authority.CaptureMany(new[] { scope }).Get(scope);
-            var items = snapshot.Heads.Values.Where(head => head.Identity.Uri.StartsWith("rna://state/", StringComparison.Ordinal))
+            var items = snapshot.Heads.Values.Where(head => head.Knowledge != HeadKnowledge.Unavailable &&
+                head.Identity.Uri.StartsWith("rna://state/", StringComparison.Ordinal))
                 .Select(head => Describe(head.Identity.Uri, head)).Where(item => string.IsNullOrWhiteSpace(kind) || item.Kind == kind).ToList();
             var binding = ResourceReadCursor.ListBinding(Id, kind);
             var position = ResourceReadCursor.ParseRevisionBound(cursor, binding);

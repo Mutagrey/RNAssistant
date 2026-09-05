@@ -31,29 +31,10 @@ namespace RNAssistant.Office.Services
             int index,
             string text)
         {
-            if (session == null)
-            {
-                throw new InvalidOperationException("Chat session was not found.");
-            }
-
-            var trimmed = (text ?? string.Empty).Trim();
-            if (trimmed.Length == 0)
-            {
-                throw new InvalidOperationException("Message text is required.");
-            }
-
-            var messages = session.Messages ?? (session.Messages = new List<ChatMessage>());
-            var targetIndex = ResolveTargetIndex(messages, messageId, index);
-            if (targetIndex < 0)
-            {
-                throw new InvalidOperationException("Message was not found.");
-            }
-
+            var targetIndex = ValidateUserMessageEdit(session, messageId, index, text);
+            var trimmed = text.Trim();
+            var messages = session.Messages;
             var target = messages[targetIndex];
-            if (target == null || !string.Equals(target.Role, "user", StringComparison.OrdinalIgnoreCase))
-            {
-                throw new InvalidOperationException("Only user messages can be edited.");
-            }
 
             string targetCheckpointId;
             var workspaceCheckpoint = ChatResourceUri.TryGetArtifactId(session, target.HtmlWorkspaceCheckpoint, out targetCheckpointId)
@@ -87,7 +68,11 @@ namespace RNAssistant.Office.Services
             _removePendingAgentTools(sessionId);
             _cancelPendingActivities(session, PendingActionCancelledReason);
             session.LastRun = null;
+            session.LastContextReceipt = null;
             InvalidateContextCheckpoints(session);
+            if (_loadArtifactBody != null)
+                foreach (var artifact in ChatResourceReferenceService.ReachableForMessages(session.Artifacts, messages)
+                    .Where(item => item.Kind == ChatArtifactKinds.TaskList)) _loadArtifactBody(session, artifact.Id);
             ChatResourceReferenceService.RestoreActiveTaskListFromMessages(session);
             ChatResourceReferenceService.RestoreActivePlanDocumentFromMessages(session);
             ChatResourceReferenceService.PruneUnreachable(session);
@@ -98,6 +83,52 @@ namespace RNAssistant.Office.Services
                 Index = targetIndex,
                 RemovedMessages = removedMessages
             };
+        }
+
+        internal static int ValidateUserMessageEdit(ChatSession session, string messageId, int index, string text)
+        {
+            if (session == null)
+            {
+                throw new InvalidOperationException("Chat session was not found.");
+            }
+
+            var trimmed = (text ?? string.Empty).Trim();
+            if (trimmed.Length == 0)
+            {
+                throw new InvalidOperationException("Message text is required.");
+            }
+
+            var messages = session.Messages ?? new List<ChatMessage>();
+            var targetIndex = ResolveTargetIndex(messages, messageId, index);
+            if (targetIndex < 0)
+            {
+                throw new InvalidOperationException("Message was not found.");
+            }
+
+            var target = messages[targetIndex];
+            if (target == null || !string.Equals(target.Role, "user", StringComparison.OrdinalIgnoreCase))
+            {
+                throw new InvalidOperationException("Only user messages can be edited.");
+            }
+
+            return targetIndex;
+        }
+
+        internal void Clear(ChatSession session, DocumentContext emptyContext)
+        {
+            if (session == null || emptyContext == null) throw new ArgumentNullException();
+            _removePendingAgentTools(session.Id);
+            session.Messages = new List<ChatMessage>();
+            session.Context = emptyContext;
+            session.HtmlWorkspace = new HtmlWorkspace();
+            session.HtmlWorkspaceRecovery = null;
+            session.Artifacts = new List<ChatArtifact>();
+            InvalidateContextCheckpoints(session);
+            session.ActiveHtmlArtifactId = null;
+            session.ActiveTaskListArtifactId = null;
+            session.ActivePlanDocumentArtifactId = null;
+            session.LastRun = null;
+            session.LastContextReceipt = null;
         }
 
         internal static List<ChatMessage> SelectMessagesForDeletion(

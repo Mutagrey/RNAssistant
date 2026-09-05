@@ -241,6 +241,7 @@
     <Compile Include="Services\ToolLibraryTestSessionService.cs" />
     <Compile Include="Services\ModelToolResultProjection.cs" />
     <Compile Include="Services\ChatHistoryEditService.cs" />
+    <Compile Include="Services\ChatResourceMutationIntent.cs" />
     <Compile Include="Services\ConversationRunService.cs" />
     <Compile Include="Services\ConversationKernelAdapter.cs" />
     <Compile Include="Services\ConversationKernelAdapter.Model.cs" />

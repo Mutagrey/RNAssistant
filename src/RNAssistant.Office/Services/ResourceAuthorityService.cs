@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using Newtonsoft.Json;
 using RNAssistant.Core.Models;
 using RNAssistant.Core.Services;
 using RNAssistant.Core.Storage;
@@ -374,26 +375,70 @@ namespace RNAssistant.Office.Services
                 }
                 if (attempt.ScopeId.Kind == "conversation" && record.Evidence?.Effect == ToolEffectEvidence.VerifiedChange)
                 {
-                    var name = ConversationResourceMutationDomain.StateName(attempt.Operation);
-                    if (name != null)
-                    {
-                        var artifactId = name == "html-workspace" ? _session.ActiveHtmlArtifactId :
-                            name == "plan-document" ? _session.ActivePlanDocumentArtifactId : _session.ActiveTaskListArtifactId;
-                        var artifact = _session.Artifacts.SingleOrDefault(item => item.Id == artifactId);
-                        var identity = ResourceStateProvider.Identity(attempt.ScopeId, name);
-                        if (artifact == null) readBack.Add(new ResourceMutationReadBack(identity, false));
-                        else if (artifact.InlineText != null)
-                        {
-                            var payload = PayloadRef.FromBlob(_payloads.StoreText(artifact.InlineText, artifact.MimeType ?? "text/plain"));
-                            readBack.Add(new ResourceMutationReadBack(identity, true, "text", payload.Sha256, payload,
-                                dependencies: new[] { new ResourceDependency(ChatResourceUri.CreateArtifactRevision(_session, artifact), kind: "immutable-snapshot") }));
-                        }
-                    }
+                    readBack.AddRange(CaptureConversationReadBack(attempt));
                     if (_persistResources != null) _persistResources(_session);
                 }
                 return PublishAttempt(_authority, _journal, attempt, record, readBack);
             }
             finally { Release(attemptId); }
+        }
+
+        private IEnumerable<ResourceMutationReadBack> CaptureConversationReadBack(MutationAttempt attempt)
+        {
+            foreach (var impact in attempt.IntendedImpacts.Where(item => ResourceMutationDomains.Provider(item.Identity) == "state"))
+            {
+                var name = ResourceUri.Parse(impact.Identity.Uri).Segments.Last();
+                if (attempt.Operation == "common.chat_clear")
+                {
+                    if (!string.IsNullOrEmpty(_session.ActiveHtmlArtifactId) || !string.IsNullOrEmpty(_session.ActivePlanDocumentArtifactId) ||
+                        !string.IsNullOrEmpty(_session.ActiveTaskListArtifactId) || (_session.Artifacts?.Count ?? 0) != 0)
+                        throw new InvalidOperationException("Chat clear did not remove its active resource membership.");
+                    yield return new ResourceMutationReadBack(impact.Identity, false);
+                    continue;
+                }
+                if (name == "artifacts")
+                {
+                    var references = (_session.Artifacts ?? new List<ChatArtifact>()).Where(item => item != null)
+                        .Select(item => ChatResourceUri.CreateArtifactRevision(_session, item))
+                        .OrderBy(item => item.Uri, StringComparer.Ordinal).ToArray();
+                    var manifest = PayloadRef.FromBlob(_payloads.StoreText(JsonConvert.SerializeObject(references), "application/json"));
+                    yield return new ResourceMutationReadBack(impact.Identity, true, "text", manifest.Sha256, manifest,
+                        dependencies: references.Select(reference => new ResourceDependency(reference, kind: "member")));
+                    continue;
+                }
+                if (name != "html-workspace" && name != "plan-document" && name != "task-list") continue;
+                var artifactId = name == "html-workspace" ? _session.ActiveHtmlArtifactId :
+                    name == "plan-document" ? _session.ActivePlanDocumentArtifactId : _session.ActiveTaskListArtifactId;
+                if (string.IsNullOrWhiteSpace(artifactId))
+                {
+                    yield return new ResourceMutationReadBack(impact.Identity, false);
+                    continue;
+                }
+                var artifact = (_session.Artifacts ?? new List<ChatArtifact>()).SingleOrDefault(item => item != null && item.Id == artifactId);
+                // A dangling pointer or missing CAS body is unknown, not proven removal.
+                if (artifact == null) continue;
+                var body = artifact.InlineText;
+                if (body == null && artifact.ContentByteLength.HasValue && artifact.ContentByteLength <= 8L * 1024 * 1024)
+                    body = _payloads.ReadText(new ChatBlobReference { Sha256 = artifact.ContentSha256,
+                        ByteLength = artifact.ContentByteLength.Value, ContentType = artifact.MimeType });
+                if (body == null) continue;
+                var payload = PayloadRef.FromBlob(_payloads.StoreText(body, artifact.MimeType ?? "text/plain"));
+                yield return new ResourceMutationReadBack(impact.Identity, true, "text", payload.Sha256, payload,
+                    dependencies: new[] { new ResourceDependency(ChatResourceUri.CreateArtifactRevision(_session, artifact), kind: "immutable-snapshot") });
+            }
+        }
+
+        private static bool SameCapturedState(IResourceRevisionStore revisions, ResourceAuthorityScopeId scope,
+            ResourceHeadState before, ResourceMutationReadBack captured)
+        {
+            if (captured == null) return false;
+            if (!captured.Exists) return before == null || before.Knowledge == HeadKnowledge.Unavailable;
+            if (before?.Knowledge != HeadKnowledge.Known) return false;
+            var prior = revisions.GetRevision(scope, before.Revision);
+            // A no-op requires the same immutable source(s), not merely equal bytes.
+            return prior != null && prior.Payload != null && captured.Payload != null &&
+                prior.ContentSha256 == captured.ContentSha256 &&
+                JsonConvert.SerializeObject(prior.Dependencies) == JsonConvert.SerializeObject(captured.Dependencies);
         }
 
         private static ResourceAuthorityCommit PublishAttempt(ResourceAuthorityService authority,
@@ -406,7 +451,7 @@ namespace RNAssistant.Office.Services
             var outcome = Outcome(record);
             if (outcome == ResourceEffectOutcome.VerifiedChanged && (attempt.Operation == "common.vba_restore_backup" ||
                 attempt.Operation == "common.plan_doc_restore" || attempt.Operation == "common.html_workspace_restore" ||
-                attempt.Operation == "common.html_workspace_redo" || attempt.Operation == "resource.restore"))
+                attempt.Operation == "common.html_workspace_redo" || attempt.Operation == "common.chat_edit" || attempt.Operation == "resource.restore"))
                 outcome = ResourceEffectOutcome.Restored;
             var readBack = capturedReadBack ?? (record == null ? null : record.ResourceReadBack) ?? new ResourceMutationReadBack[0];
             var returned = record?.Result?.Resources.Where(reference => reference.IsExact &&
@@ -423,6 +468,8 @@ namespace RNAssistant.Office.Services
             {
                 var before = snapshot.GetHead(impact.Identity);
                 var captured = readBack.FirstOrDefault(item => item.Identity.Equals(impact.Identity));
+                if (changed && ConversationResourceMutationDomain.IsHistoryMutation(attempt.Operation) &&
+                    SameCapturedState((IResourceRevisionStore)authority.Store, attempt.ScopeId, before, captured)) continue;
                 var exact = changed ? returned.FirstOrDefault(item => item.Identity.Equals(impact.Identity)) : null;
                 ResourceHeadState after = before;
                 if (changed && (exact != null || captured != null && captured.Exists))
@@ -458,6 +505,8 @@ namespace RNAssistant.Office.Services
                 impacts.Add(new ResourceImpact(impact.Identity, impact.Relation, impact.Coverage,
                     before?.Revision, after?.Revision, impact.ChangeKind ?? "tool-mutation"));
             }
+            if (changed && changes.Count == 0 && ConversationResourceMutationDomain.IsHistoryMutation(attempt.Operation))
+                outcome = ResourceEffectOutcome.VerifiedNoChange;
             var effect = new ResourceEffect("re_" + Guid.NewGuid().ToString("N"),
                 attempt.Operation, outcome, impacts, Verification(record));
             var commit = ResourceAuthorityCommit.Create(attempt.ScopeId, snapshot.Generation,

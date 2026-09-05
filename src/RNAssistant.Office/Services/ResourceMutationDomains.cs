@@ -100,6 +100,11 @@ namespace RNAssistant.Office.Services
 
     internal sealed class ConversationResourceMutationDomain : IResourceMutationDomain
     {
+        internal static bool IsHistoryMutation(string operation)
+        {
+            return operation == "common.chat_clear" || operation == "common.chat_edit" ||
+                operation == "common.chat_fork" || operation == "common.chat_delete_message";
+        }
         internal static string StateName(string operation)
         {
             return operation.StartsWith("common.html_", StringComparison.Ordinal) ? "html-workspace" :
@@ -110,11 +115,22 @@ namespace RNAssistant.Office.Services
         {
             return operation.StartsWith("common.html_", StringComparison.Ordinal) ||
                 operation.StartsWith("common.plan_", StringComparison.Ordinal) || operation.StartsWith("common.task_", StringComparison.Ordinal) ||
-                operation == "excel.create_chat_chart";
+                operation == "excel.create_chat_chart" || IsHistoryMutation(operation);
         }
         public IEnumerable<ResourceImpact> Impacts(ResourceAuthorityScopeId scope, string operation,
             IDictionary<string, object> arguments, ResourceAuthoritySnapshot snapshot)
         {
+            if (IsHistoryMutation(operation))
+            {
+                foreach (var name in new[] { "html-workspace", "plan-document", "task-list", "artifacts" })
+                    yield return new ResourceImpact(ResourceStateProvider.Identity(scope, name), ResourceImpactRelation.ContainerMembership);
+                // Clear removes active conversation-owned definitions as well, but never
+                // deletes retained exact revisions or changes document/catalog authority.
+                if (operation == "common.chat_clear")
+                    foreach (var head in snapshot.Heads.Values.Where(head => ResourceMutationDomains.Provider(head.Identity) == "state"))
+                        yield return new ResourceImpact(head.Identity, ResourceImpactRelation.Exact);
+                yield break;
+            }
             yield return new ResourceImpact(ResourceStateProvider.Identity(scope, StateName(operation) ?? "artifacts"),
                 ResourceImpactRelation.ContainerMembership);
         }

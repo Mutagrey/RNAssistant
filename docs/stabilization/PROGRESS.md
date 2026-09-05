@@ -41,24 +41,38 @@ the UI and authorized RN.resources subscribers. Authority readers catch up journ
 tails, and Known-head publication now requires durable exact revision metadata.
 The canonical owner map and active removal gates are updated in resource-fabric.md
 and MIGRATION_MAP.md.
+Checkpoint commit: `ec8b179` (user-requested, integrated foundation; not a completed
+cutover). The next user-requested checkpoint switches controller clear/edit/message-delete/
+fork to typed history intents through the same journal/authority observer. History
+and fork preparation belong to ChatHistoryEditService/ChatCloneService; active
+workspace, plan, task and membership heads publish atomically after conversation
+persistence. Clear removes active conversation definitions without deleting retained
+revisions/CAS. Edit preserves unchanged heads and records exact restore lineage.
+Persistence/publication failure blocks fresh captures and recovers to Unknown,
+never automatic replay. Duplicate controller saves in this contour are removed.
+Fork preserves document authority and explicitly rebinds copied artifact references
+in a new workspace snapshot; old snapshot bodies stay immutable. Missing exact
+checkpoints no longer fall back to newer parent content. Copying bound conversation
+schema/mapping/derived definitions remains an explicit pre-publication rejection.
 Still open: remaining definition/domain read and bulk upload/export consumers,
-controller clear/edit/fork logical mutations, typed user-note/observation separation,
+fork copying of conversation-scoped definitions, typed user-note/observation separation,
 VBA restore-origin metadata, finer
 Excel coverage/named resources, complete binary/raw view negotiation, bounded
 cold replay/checkpoint/retention optimization, standalone bound HTML export,
 cross-process push qualification, and final cross-document cleanup.
 This is NOT a completed cutover; no Windows gate is closed by these changes.
 Focused checks so far: VBA 98/98 (before latest manual-package/drift integration),
-resources 10/10 (earlier), resource cutover 13/13 including publication and lease
-cancellation/capacity, kernel replay 10/10, Inspector 3/3, artifact viewer 3/3,
+resources 10/10 (earlier), resource cutover 16/16 including publication, lease
+cancellation/capacity, history/fork/clear and failure barriers; chat editing 5/5
+and production source inclusion 1/1. Kernel replay 10/10, Inspector 3/3, artifact viewer 3/3,
 skill-reference publication/continuation 1/1, bounded bridge notifications 1/1,
 typed artifact-viewer bridge 1/1; compaction 4/4 (earlier) and package journal 1/1
 (earlier). Web checks: artifact viewer 10/10, media gallery 2/2, resource data plane,
 HTML ECharts 7/7, HTML export contract 7/7 and chat sync 4/4. The export contract
 check verifies explicit missing-host failure, NOT functional offline bound export.
-These are focused host-neutral checks, not end-to-end qualification. The integrated
-work is checkpointed by an explicit user-requested commit; no Office/VSTO/Windows
-validation, release or tag. Implementation continues in the same cutover workstream.
+These are focused host-neutral checks, not end-to-end qualification. Foundation and
+the lifecycle slice are checkpointed by user-requested commits. No Office/VSTO/
+Windows validation, release or tag. Implementation continues in the same cutover workstream.
 
 R77 VBA write-integrity correction (2026-09-04, user-reported host-neutral):
 complete model-visible source observation is separated from runtime guard/read-back.

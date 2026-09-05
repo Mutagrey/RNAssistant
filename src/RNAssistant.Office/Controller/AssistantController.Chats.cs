@@ -159,14 +159,20 @@ namespace RNAssistant.Office
                 var removedMessages = ChatHistoryEditService.SelectMessagesForDeletion(
                     session.Messages,
                     targetIndex);
-                session.Messages.RemoveAll(message => removedMessages.Contains(message));
-                RemovePendingAgentToolsForSession(session.Id);
-                CancelPendingActivities(session, "Pending action cancelled because chat history changed.");
-                session.LastRun = null;
-                session.ContextCheckpoints = new List<ContextCheckpoint>();
-                session.ActiveContextCheckpointId = null;
-                ChatResourceReferenceService.PruneUnreachable(session);
-                SaveSessionChanges(session);
+                _toolExecutor.MutateChatResources(session,
+                    new ChatResourceMutationIntent(ChatResourceMutationKind.DeleteMessage, id, targetIndex), () =>
+                    {
+                        session.Messages.RemoveAll(message => removedMessages.Contains(message));
+                        RemovePendingAgentToolsForSession(session.Id);
+                        CancelPendingActivities(session, "Pending action cancelled because chat history changed.");
+                        session.LastRun = null;
+                        session.LastContextReceipt = null;
+                        session.ContextCheckpoints = new List<ContextCheckpoint>();
+                        session.ActiveContextCheckpointId = null;
+                        ChatResourceReferenceService.PruneUnreachable(session);
+                        return true;
+                    });
+                _chatSessions.NotifySaved(session);
                 foreach (var removedMessage in removedMessages) _attachmentStore.DeleteMessage(removedMessage);
             });
         }
@@ -208,6 +214,8 @@ namespace RNAssistant.Office
                     source.DocumentTitle,
                     ChatSessionService.BuildForkTitle(source));
                 fork.ParentSessionId = source.Id;
+                fork.DocumentAuthorityId = source.DocumentAuthorityId;
+                fork.DocumentPath = source.DocumentPath;
                 fork.ParentSessionRevision = source.Revision;
                 fork.ForkedThroughMessageId = targetIndex < 0 ? null : sourceMessages[targetIndex].Id;
                 fork.Model = source.Model;
@@ -218,37 +226,17 @@ namespace RNAssistant.Office
                     ? new List<ChatMessage>()
                     : ChatCloneService.CloneMessages(sourceMessages.Take(targetIndex + 1));
                 ChatHistoryEditService.ExcludeUnmatchedToolCalls(fork.Messages);
-                _chatStore.LoadArtifactBodies(
-                    source,
-                    ChatResourceReferenceService.ReachableForMessages(source.Artifacts, fork.Messages)
-                        .Where(artifact => string.Equals(artifact.Kind, ChatArtifactKinds.HtmlWorkspace, StringComparison.OrdinalIgnoreCase))
-                        .Select(artifact => artifact.Id));
-                fork.Artifacts = ChatCloneService.CloneArtifactsForMessages(source.Artifacts, fork.Messages);
-                fork.ContextCheckpoints = ChatCloneService.CloneContextCheckpoints(source.ContextCheckpoints, fork.Messages);
-                fork.ActiveContextCheckpointId = fork.ContextCheckpoints.OrderByDescending(checkpoint => checkpoint.CreatedUtc).Select(checkpoint => checkpoint.Id).FirstOrDefault();
-                var workspaceCheckpoint = HtmlWorkspaceArtifactService.CheckpointAtOrBefore(fork, fork.Messages, fork.Messages.Count - 1);
-                if (!string.IsNullOrWhiteSpace(workspaceCheckpoint) && HtmlWorkspaceArtifactService.Restore(fork, workspaceCheckpoint))
-                {
-                    fork.ActiveHtmlArtifactId = workspaceCheckpoint;
-                }
-                else if (source.HtmlWorkspaceRecovery != null && !source.HtmlWorkspaceRecovery.CanMutate)
-                {
-                    throw new InvalidOperationException("Сначала восстановите HTML workspace на доступную ревизию, затем повторите создание ветки чата.");
-                }
-                else
-                {
-                    fork.HtmlWorkspace = ChatCloneService.CloneWorkspaceForFork(source.HtmlWorkspace);
-                    HtmlWorkspaceArtifactService.CaptureCurrent(fork, "Forked HTML workspace");
-                }
                 foreach (var message in fork.Messages)
                 {
                     _attachmentStore.CloneMessageAttachments(message);
                 }
-                ChatResourceReferenceService.LinkMessageResources(fork, 0);
-                ChatResourceReferenceService.RestoreActiveTaskListFromMessages(fork);
-                ChatResourceReferenceService.RestoreActivePlanDocumentFromMessages(fork);
+                ChatCloneService.PrepareForkResources(source, fork, _chatStore.LoadArtifactBody);
                 NormalizeContext(fork.Context, fork);
-                SaveSessionChanges(fork);
+                // Cloning above is unpublished preparation. The first durable fork
+                // state and all of its logical heads share the normal commit barrier.
+                _toolExecutor.MutateChatResources(fork,
+                    new ChatResourceMutationIntent(ChatResourceMutationKind.Fork, fork.ForkedThroughMessageId, targetIndex, source: source), () => fork);
+                _chatSessions.NotifySaved(fork);
                 _chatSessions.SetActiveSession(fork);
             }
 
@@ -273,7 +261,10 @@ namespace RNAssistant.Office
                 null,
                 currentSession =>
                 {
-                    var edit = _chatHistoryEditService.RewriteUserMessage(currentSession, sessionId, id, index, text);
+                    ChatHistoryEditService.ValidateUserMessageEdit(currentSession, id, index, text);
+                    var edit = _toolExecutor.MutateChatResources(currentSession,
+                        new ChatResourceMutationIntent(ChatResourceMutationKind.Edit, id, index, text),
+                        () => _chatHistoryEditService.RewriteUserMessage(currentSession, sessionId, id, index, text));
                     return new ChatTurnInput
                     {
                         Text = edit.Message == null ? string.Empty : edit.Message.Content,
@@ -445,20 +436,13 @@ namespace RNAssistant.Office
         {
             return WithReservedChatState(LoadSession(chatId), session =>
             {
-                var sessionId = session.Id;
-                RemovePendingAgentToolsForSession(sessionId);
-                session.Messages.Clear();
-                session.Context = CreateEmptyContext();
-                session.HtmlWorkspace = new HtmlWorkspace();
-                session.Artifacts = new List<ChatArtifact>();
-                session.ContextCheckpoints = new List<ContextCheckpoint>();
-                session.ActiveContextCheckpointId = null;
-                session.ActiveHtmlArtifactId = null;
-                session.ActiveTaskListArtifactId = null;
-                session.ActivePlanDocumentArtifactId = null;
-                session.LastRun = null;
-                NormalizeContext(session.Context, session);
-                SaveSessionChanges(session);
+                _toolExecutor.MutateChatResources(session, new ChatResourceMutationIntent(ChatResourceMutationKind.Clear), () =>
+                {
+                    _chatHistoryEditService.Clear(session, CreateEmptyContext());
+                    NormalizeContext(session.Context, session);
+                    return true;
+                });
+                _chatSessions.NotifySaved(session);
             });
         }
 
