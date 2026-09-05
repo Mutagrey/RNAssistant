@@ -28,6 +28,43 @@ namespace RNAssistant.Office.Services
         internal IResourceAuthorityStore Store { get { return _authority; } }
         internal ChatBlobStore Payloads { get { return _payloads; } }
 
+        internal long[] PublicationOrder(ResourceAuthoritySnapshot snapshot, ResourceRef exact, ChatSession session = null)
+        {
+            if (exact?.IsExact != true) return null;
+            // A committed fork can retain multiple exact copies while publishing
+            // only one head per identity. Their provenance is in the existing chat
+            // event stream, and is usable only behind that fork's authority commit.
+            if (snapshot.ScopeId.Kind == "conversation" && snapshot.ScopeId.Id == session?.Id)
+            {
+                var address = ResourceUri.Parse(exact.Uri);
+                if ((address.Provider == "state" || address.Provider == "context") && address.Segments.Count == 3 &&
+                    address.Segments[0] == "conversation" && address.Segments[1] == session.Id)
+                {
+                    var copy = (session.ResourceCopies ?? new List<ResourceCopyLink>()).FirstOrDefault(link =>
+                        link.Copy.Uri == exact.Uri && link.Copy.Revision == exact.Revision);
+                    var fork = copy == null ? null : snapshot.Commits.FirstOrDefault(commit =>
+                        commit.Effect?.Operation == "common.chat_fork" && commit.Effect.Outcome == ResourceEffectOutcome.VerifiedChanged);
+                    if (fork != null) return new[] { fork.NewGeneration }.Concat(copy.SourcePublicationPath).ToArray();
+                }
+            }
+            var head = snapshot.GetHead(exact.Identity);
+            if (head?.Knowledge == HeadKnowledge.Known && head.Revision.Uri == exact.Uri && head.Revision.Revision == exact.Revision)
+                return new[] { head.AuthorityGeneration };
+            var publication = snapshot.Commits.LastOrDefault(commit => commit.HeadChanges.Any(change =>
+                change.After.Knowledge == HeadKnowledge.Known && change.After.Revision.Uri == exact.Uri &&
+                change.After.Revision.Revision == exact.Revision));
+            return publication == null ? null : new[] { publication.NewGeneration };
+        }
+
+        internal ResourceRevisionMetadata RequirePublished(ResourceAuthoritySnapshot snapshot, ResourceRef exact, ChatSession session = null)
+        {
+            var metadata = exact?.IsExact == true ? _revisions.GetRevision(snapshot.ScopeId, exact) : null;
+            if (metadata == null || PublicationOrder(snapshot, exact, session) == null)
+                throw new ResourceRequestException("The exact resource revision has not crossed its publication barrier or is unavailable.",
+                    "RESOURCE_SNAPSHOT_UNAVAILABLE", false);
+            return metadata;
+        }
+
         internal void ReportExternalDrift(ResourceAuthorityScopeId scope, ResourceIdentity identity)
         {
             var snapshot = _authority.Capture(scope);
@@ -147,7 +184,7 @@ namespace RNAssistant.Office.Services
             if (view?.Payload == null || view.Coverage.Kind != ResourceCoverageKinds.Whole) return null;
             var descriptor = new ResourceDescriptor { Reference = request.Reference.Copy(),
                 Provider = ResourceUri.Parse(request.Reference.Uri).Provider, Mutable = true };
-            var retained = new ResourceSnapshotReadService(this, _payloads).Read(scope, descriptor, request);
+            var retained = new ResourceSnapshotReadService(this, _payloads).Read(session, scope, descriptor, request);
             retained.Result.RawContentIncluded = true;
             return retained;
         }

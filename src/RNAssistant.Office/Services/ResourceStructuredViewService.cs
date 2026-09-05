@@ -37,7 +37,7 @@ namespace RNAssistant.Office.Services
             var binding = ResourceReadCursor.ProjectionBinding(request);
             var position = ResourceReadCursor.ParseExact(request, binding);
             var scope = _authority.ScopeFor(session, request.Reference, live);
-            _authority.CaptureMany(new[] { scope });
+            var frozen = _authority.CaptureMany(new[] { scope }).Get(scope);
             var reference = request.Reference;
             var indexView = "record-index-v1:" + path;
             ResourceRevisionView captured = reference.IsExact ? _revisions.GetView(scope, reference, indexView) : null;
@@ -75,10 +75,11 @@ namespace RNAssistant.Office.Services
             }
             else
             {
+                var metadata = _authority.RequirePublished(frozen, reference, session);
                 descriptor = new ResourceDescriptor { Reference = reference.Copy(), Provider = ResourceUri.Parse(reference.Uri).Provider,
                     MimeType = "application/json", Title = reference.Identity.Uri, Mutable = live };
-                descriptor.Dependencies = _revisions.GetRevision(scope, reference).Dependencies.ToList();
-                generation = _authority.Store.Capture(scope).Generation;
+                descriptor.Dependencies = metadata.Dependencies.ToList();
+                generation = frozen.Generation;
             }
             var index = JsonConvert.DeserializeObject<RecordIndex>(RequiredText(captured.Payload, 1024 * 1024));
             if (index == null || index.Columns == null || index.Parts == null || index.RowCount > MaximumRows)
@@ -184,10 +185,8 @@ namespace RNAssistant.Office.Services
 
         private string RequiredText(PayloadRef payload, long maximumBytes)
         {
-            if (payload == null || payload.ByteLength > maximumBytes) throw Error("RESOURCE_BATCH_TOO_LARGE", "The exact payload exceeds its bounded view.");
-            var text = _payloads.ReadText(payload.ToBlobReference());
-            if (text == null) throw Error("RESOURCE_SNAPSHOT_UNAVAILABLE", "A retained structural payload is unavailable.");
-            return text;
+            if (payload?.ByteLength > maximumBytes) throw Error("RESOURCE_BATCH_TOO_LARGE", "The exact payload exceeds its bounded view.");
+            return ResourceSnapshotReadService.ReadPayload(_payloads, payload);
         }
         private static ResourceRequestException Error(string code, string message) { return new ResourceRequestException(message, code, false); }
         private sealed class RecordIndex

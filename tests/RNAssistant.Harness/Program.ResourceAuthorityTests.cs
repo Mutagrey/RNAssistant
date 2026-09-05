@@ -336,6 +336,24 @@ namespace RNAssistant.Harness
                 var materialized = publish(ResourceDefinitionToolHandler.Derive, new JObject { ["name"] = "saved-sales", ["mapping"] = target(mapping), ["mode"] = "materialized" });
                 AssertEqual(2, gateway.Read(session, new ResourceReadRequest { Reference = materialized, Representation = "table", MaxRows = 10 }).Result.Table.Rows.Count,
                     "materialized output is an immutable resource snapshot");
+                var revisionStore = (IResourceRevisionStore)executor.ResourceAuthority.Store;
+                var publicationGeneration = executor.ResourceAuthority.Store.Capture(scope).Generation;
+                foreach (var reference in new[] { schema, mapping, derived, materialized })
+                {
+                    var metadata = revisionStore.GetRevision(scope, reference);
+                    var prepared = new ResourceRef(reference.Uri, "r_prepared_definition");
+                    revisionStore.RegisterRevision(scope, new ResourceRevisionMetadata(prepared, metadata.ContentSha256, metadata.Payload,
+                        reference, dependencies: metadata.Dependencies));
+                    var index = revisionStore.GetView(scope, reference, "record-index-v1:$");
+                    if (index != null) revisionStore.RegisterView(scope, new ResourceRevisionView(prepared, index.View,
+                        index.ContentSha256, index.Payload, index.Coverage, index.Parts));
+                    foreach (var view in new[] { "text", "table", "records" })
+                        AssertEqual("RESOURCE_SNAPSHOT_UNAVAILABLE", RuntimeThrows<ResourceRequestException>(() => gateway.Read(session,
+                            new ResourceReadRequest { Reference = prepared, Representation = view, MaxRows = 1 })).ErrorCode,
+                            "prepared definition cannot borrow the visibility of an older committed head or a retained index");
+                }
+                AssertEqual(publicationGeneration, executor.ResourceAuthority.Store.Capture(scope).Generation,
+                    "rejected definition reads do not publish or heal heads");
                 foreach (var reference in new[] { derived, materialized })
                 {
                     var page = gateway.Read(session, new ResourceReadRequest { Reference = reference, Representation = "table",
@@ -413,6 +431,10 @@ namespace RNAssistant.Harness
                     "prepared context copies cannot become readable/published through a read");
                 AssertEqual(0L, executor.ResourceAuthority.Store.Capture(childScope).Generation, "rejected read leaves fork preparation unpublished");
                 var childDerived = child.HtmlWorkspace.DataSources.Single(item => item.Name == "virtual").Binding.Resource;
+                foreach (var view in new[] { "text", "table", "records" })
+                    AssertEqual("RESOURCE_SNAPSHOT_UNAVAILABLE", RuntimeThrows<ResourceRequestException>(() => gateway.Read(child,
+                        new ResourceReadRequest { Reference = childDerived, Representation = view, MaxRows = 1 })).ErrorCode,
+                        "copy provenance alone cannot authorize a prepared fork before its commit");
                 AssertTrue(childDerived.Uri.Contains(child.Id) && childDerived.Revision != derived.Revision, "fork has a new exact resource identity/revision");
                 var copiedSnapshot = child.Artifacts.Single(item => item.Id == originalSnapshotId);
                 AssertEqual(originalSnapshotBody, copiedSnapshot.InlineText, "old snapshot body is not rewritten during copy");
@@ -489,6 +511,13 @@ namespace RNAssistant.Harness
                 AssertEqual("resource_cursor_invalid", RuntimeThrows<ResourceRequestException>(() => gateway.Read(session,
                     new ResourceReadRequest { Reference = derived, Representation = "table", Cursor = read.NextCursor,
                         Fields = new List<string> { "Sales" } })).ErrorCode, "virtual continuation guards run before definition CAS hydration");
+                AssertEqual("RESOURCE_SNAPSHOT_UNAVAILABLE", RuntimeThrows<ResourceRequestException>(() => gateway.Read(session,
+                    new ResourceReadRequest { Reference = derived, Representation = "table", Cursor = read.NextCursor })).ErrorCode,
+                    "missing committed virtual definition has a typed unavailable result, not a newer replacement");
+                System.IO.File.WriteAllText(executor.Payloads.PathFor(revisions.GetRevision(scope, derived).Payload.Sha256), "corrupt definition");
+                AssertEqual("RESOURCE_SNAPSHOT_UNAVAILABLE", RuntimeThrows<ResourceRequestException>(() => gateway.Read(session,
+                    new ResourceReadRequest { Reference = derived, Representation = "table" })).ErrorCode,
+                    "corrupt committed virtual definition fails through the same retained payload reader");
             });
         }
 
@@ -684,6 +713,39 @@ namespace RNAssistant.Harness
                 AssertEqual("RESOURCE_SNAPSHOT_UNAVAILABLE", RuntimeThrows<ResourceRequestException>(() => read(r1, first.NextCursor, "$.Rows", new[] { "Amount" })).ErrorCode,
                     "valid continuation with missing exact index fails explicitly");
                 AssertEqual(generation, store.Capture(scope).Generation, "continuations and failures cannot publish heads");
+            });
+        }
+
+        private static void ResourceRetainedPayloadsFailClosed()
+        {
+            WithTempPaths(paths =>
+            {
+                var payloads = new ChatBlobStore(paths);
+                var store = new ResourceAuthorityStore(paths);
+                var authority = new ResourceAuthorityService(store, store, payloads: payloads);
+                var session = new ChatSession();
+                var scope = authority.Scope(session, false);
+                var gateway = new ResourceGatewayService(null, null, null, authority: authority);
+                var exact = new ResourceRef(ResourceStateProvider.Identity(scope, "retained-payload-test").Uri, "r_retained_payload");
+                var payload = PayloadRef.FromBlob(payloads.StoreText("[{\"value\":1},{\"value\":2}]", "application/json"));
+                store.RegisterRevision(scope, new ResourceRevisionMetadata(exact, payload.Sha256, payload));
+                store.Publish(ResourceAuthorityCommit.Create(scope, 0, null,
+                    new[] { new ResourceHeadChange(exact.Identity, null, ResourceHeadState.Known(exact, 1)) }, AuthorityCommitReason.InitialObservation));
+                Func<string, ResourceReadResult> read = view => gateway.Read(session,
+                    new ResourceReadRequest { Reference = exact, Representation = view, MaxRows = 1 }).Result;
+                AssertEqual(1L, Convert.ToInt64(read("table").Table.Rows.Single()["value"]), "committed table index is retained");
+                var index = store.GetView(scope, exact, "record-index-v1:$");
+                System.IO.File.WriteAllText(payloads.PathFor(index.Parts.Single().Sha256), "corrupt record part");
+                AssertEqual("RESOURCE_SNAPSHOT_UNAVAILABLE", RuntimeThrows<ResourceRequestException>(() => read("table")).ErrorCode,
+                    "corrupt indexed part is a typed unavailable snapshot, never re-materialized from source");
+                System.IO.File.WriteAllText(payloads.PathFor(index.Payload.Sha256), "corrupt index");
+                AssertEqual("RESOURCE_SNAPSHOT_UNAVAILABLE", RuntimeThrows<ResourceRequestException>(() => read("records")).ErrorCode,
+                    "corrupt index is a typed unavailable snapshot");
+                System.IO.File.WriteAllText(payloads.PathFor(payload.Sha256), "corrupt source");
+                AssertEqual("RESOURCE_SNAPSHOT_UNAVAILABLE", RuntimeThrows<ResourceRequestException>(() => read("text")).ErrorCode,
+                    "retained source uses the same typed CAS failure behavior");
+                AssertEqual(1L, store.Capture(scope).Generation, "payload failures never change publication authority");
+                AssertEqual(exact.Revision, store.GetHead(scope, exact.Identity).Revision.Revision, "payload failures do not invent a replacement head");
             });
         }
 

@@ -44,7 +44,8 @@ and MIGRATION_MAP.md.
 Checkpoint commits: `ec8b179` (integrated foundation), `332b911` (lifecycle),
 `904e1ae` (exact lineage across restore/context/fork), `b59e26d` (exact HTML
 data-plane export), `75e2aef` (shared context/state reads), `d266895` (exact Office
-continuations) and `bde3348` (committed catalog reads); user-requested checkpoints,
+continuations), `bde3348` (committed catalog reads) and `6a1617e` (exact structured
+projections); user-requested checkpoints,
 not a completed cutover. The lifecycle checkpoint switches controller clear/edit/message-delete/
 fork to typed history intents through the same journal/authority observer. History
 and fork preparation belong to ChatHistoryEditService/ChatCloneService; active
@@ -137,7 +138,7 @@ native semantic resources and Agent full skill read 1/1 each; HTML export 2/2;
 Inspector 3/3; production source inclusion 1/1 — 41/41. No full harness, Office/VSTO
 or Windows validation. The required version-format gate passed for the
 user-requested catalog checkpoint commit.
-Structured-projection checkpoint after `bde3348`: record/table and virtual derived
+Structured-projection checkpoint `6a1617e`: record/table and virtual derived
 continuations validate exact refs before source capture and index/definition CAS
 hydration. URI/view/path/ordered-field bindings preserve JSON case; omitted/empty
 fields mean the same all-fields projection. First artifact reads rebind to the
@@ -150,10 +151,23 @@ Checks: resource cutover 23/23, resources 10/10, native semantic resources 1/1,
 HTML export 2/2 and production source inclusion 1/1 — 37/37. No full harness,
 Office/VSTO or Windows validation. The required version-format gate passed before
 the user-requested checkpoint commit.
-Next host-neutral read contour: remaining definition reads, starting with publication
-visibility and missing-payload handling of retained structural/virtual views through
-their existing authority owners; then remaining domain reads and bulk transport in
-MASTER order.
+Definition-publication checkpoint after `6a1617e`: retained text, structural indexes,
+virtual definitions and catalog roots share exact publication proof in the existing
+authority owner. Prepared revisions cannot borrow an older head or cached index.
+Fork preparation reuses the same proof/order; existing event-backed copy provenance
+is admitted only after its verified fork commit, preserving historical non-head
+copies and nested forks. Independent catalog/fork publication checks are removed.
+The retained payload reader normalizes missing/corrupt CAS errors for definitions,
+indexes, parts and catalog references; domain bounds remain with their owners.
+Historical reads and payload failures never publish or heal a head.
+Checks: resource cutover 24/24, resources 10/10, native semantic resources 1/1,
+HTML export 2/2, skill-reference continuation 1/1, Agent full skill 1/1, Inspector 3/3,
+chat editing 5/5 and production source inclusion 1/1 — 48/48. No full harness,
+Office/VSTO or Windows validation. The required version-format gate passed before
+the user-requested checkpoint commit.
+Next host-neutral contour: remaining domain/authoring read consumers and bulk
+upload/export transport through the existing Gateway/data plane, then finer Excel
+coverage/named resources and binary/raw view negotiation in MASTER order.
 Still open: remaining definition/domain read and bulk upload/export consumers,
 finer Excel coverage/named resources, complete binary/raw view negotiation, bounded
 cold replay/checkpoint/retention optimization,

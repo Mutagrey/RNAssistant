@@ -50,8 +50,9 @@ view guard only inside dispatch, validates the provider continuation and returns
 a logical token. It owns no second cursor/head store. Available exact Office views
 use the common snapshot reader even for the last known head; fresh head reads still
 observe the provider. Missing/corrupt retained CAS never falls back to live bytes.
-An identity with only prepared metadata cannot be activated by reading it; copied
-context becomes readable after the owning atomic fork publication.
+An exact revision with only prepared metadata cannot borrow another revision's head
+or cached index to become readable; copied context becomes readable after the
+owning atomic fork publication.
 `ResourceGatewayService.Binary` captures CAS image/thumbnail/PDF-page views using
 the existing renderer owners. Providers retain interpretation/materialization.
 
@@ -93,6 +94,10 @@ commit publishes all selected definitions and workspace state after persistence.
 `ResourceCopyLink` facts in conversation events preserve exact copy provenance and
 source publication order, including nested forks and multiple retained revisions;
 they never become a current-head store or an implicit cross-chat read alias.
+Fork preparation and retained reads use the same authority-owned publication proof:
+copy provenance is eligible only after the verified fork commit, including historical
+copies that were not selected as heads. Preparation caches only its bounded graph's
+publication order, not an independently rebuilt publication history.
 Only deliberately copied artifacts and references are rebound. Materialized data
 reuses its CAS body; typed definitions get new bodies when their internal refs change.
 Cycles, missing/unpublished dependencies and size/depth bounds fail before publication.
@@ -137,6 +142,13 @@ published schema heads enter `SchemaRegistrySnapshot`. Mappings pin source/schem
 revisions. `ResourceDerivedViewService` preserves transitive dependencies for
 virtual/materialized views; drafts have no authority before publication. Virtual
 tables expose only the root record projection and reject unsupported paths.
+`ResourceAuthorityService.RequirePublished` guards retained text, structural indexes,
+virtual definitions and catalog roots against prepared-revision exposure. Committed
+history remains readable after head changes without publishing or healing authority.
+The shared retained reader also owns typed CAS read failures for those definitions,
+indexes, parts and catalog references. Domain owners keep their size/shape bounds;
+missing/corrupt payloads return `RESOURCE_SNAPSHOT_UNAVAILABLE`, never current-source
+replacement or an invented empty body.
 
 ## Context and storage
 

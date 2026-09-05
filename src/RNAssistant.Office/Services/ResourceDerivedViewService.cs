@@ -28,13 +28,14 @@ namespace RNAssistant.Office.Services
             if (reference == null) return null;
             var metadata = ((IResourceRevisionStore)authority.Store).GetRevision(scope, reference);
             if (metadata?.Payload?.ContentType != VirtualContentType) return null;
+            authority.RequirePublished(frozen, reference, session);
             if (!string.IsNullOrWhiteSpace(request.ViewPath) && request.ViewPath != "$")
                 throw Error("RESOURCE_VIEW_UNSUPPORTED", "A virtual derived table exposes only its root record projection.");
             if (++_depth > 16) { _depth--; throw Error("RESOURCE_DERIVATION_DEPTH", "The exact derivation exceeds its bounded dependency depth."); }
             try
             {
                 if (metadata.Payload.ByteLength > 128000) throw Error("RESOURCE_VIEW_UNAVAILABLE", "The derived definition exceeds its bound.");
-                var definition = JsonConvert.DeserializeObject<ResourceDerivedDefinition>(authority.Payloads.ReadText(metadata.Payload.ToBlobReference()));
+                var definition = JsonConvert.DeserializeObject<ResourceDerivedDefinition>(ResourceSnapshotReadService.ReadPayload(authority.Payloads, metadata.Payload));
                 if (definition?.Contract != "resource-derived-v1" || definition.Mode != DerivedResourceMode.Virtual)
                     throw Error("RESOURCE_VIEW_UNAVAILABLE", "The exact virtual definition is invalid.");
                 var fields = request.Fields == null || request.Fields.Count == 0 ? definition.Fields.Select(item => item.Field).ToList() : request.Fields;

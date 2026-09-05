@@ -41,6 +41,7 @@ namespace RNAssistant.Office.Services
             private readonly ChatBlobStore _payloads;
             private readonly ChatSession _source, _target;
             private readonly ResourceAuthorityScopeId _sourceScope, _targetScope;
+            private readonly ResourceAuthoritySnapshot _sourcePublication;
             private readonly Dictionary<string, long[]> _published = new Dictionary<string, long[]>(StringComparer.Ordinal);
             private readonly Dictionary<string, ResourceCopyLink> _links = new Dictionary<string, ResourceCopyLink>(StringComparer.Ordinal);
             private readonly Dictionary<string, ResourceRevisionMetadata> _copies = new Dictionary<string, ResourceRevisionMetadata>(StringComparer.Ordinal);
@@ -57,24 +58,9 @@ namespace RNAssistant.Office.Services
                 _source = source; _target = target;
                 _sourceScope = authority.Scope(source, false); _targetScope = authority.Scope(target, false);
                 var frozen = authority.CaptureMany(new[] { _sourceScope, _targetScope });
+                _sourcePublication = frozen.Get(_sourceScope);
                 if (frozen.Get(_targetScope).Generation != 0 || (target.ResourceCopies?.Count ?? 0) != 0)
                     throw Error("The target must be an unpublished fork.");
-                foreach (var commit in frozen.Get(_sourceScope).Commits)
-                    foreach (var change in commit.HeadChanges.Where(item => item.After.Knowledge == HeadKnowledge.Known))
-                        _published[Key(change.After.Revision)] = new[] { commit.NewGeneration };
-                var forkCommit = frozen.Get(_sourceScope).Commits.FirstOrDefault(commit => commit.Effect?.Operation == "common.chat_fork" &&
-                    commit.Effect.Outcome == ResourceEffectOutcome.VerifiedChanged);
-                if (forkCommit != null)
-                    foreach (var link in source.ResourceCopies ?? new List<ResourceCopyLink>())
-                    {
-                        var address = ResourceUri.Parse(link.Copy.Uri);
-                        if (address.Segments.Count != 3 || address.Segments[1] != source.Id || _revisions.GetRevision(_sourceScope, link.Copy) == null)
-                            throw Error("Recorded fork provenance is inconsistent with retained revisions.");
-                        // A previous fork may retain several exact revisions of one
-                        // definition while publishing only its selected head. Preserve
-                        // their source publication order inside that fork commit.
-                        _published[Key(link.Copy)] = new[] { forkCommit.NewGeneration }.Concat(link.SourcePublicationPath).ToArray();
-                    }
             }
 
             internal ResourceForkPlan Build(HtmlWorkspace currentWorkspace)
@@ -148,8 +134,12 @@ namespace RNAssistant.Office.Services
                 if (_visiting.Count >= 16 || !_visiting.Add(key)) throw Error("The copy graph is cyclic or exceeds its depth bound.");
                 try
                 {
-                    if (_copies.Count + _visiting.Count > 128 || !_published.ContainsKey(key))
-                        throw Error("The copy graph is too large or contains an unpublished revision.");
+                    if (_copies.Count + _visiting.Count > 128)
+                        throw Error("The copy graph is too large.");
+                    var publicationOrder = _authority.PublicationOrder(_sourcePublication, reference, _source);
+                    if (publicationOrder == null)
+                        throw Error("The copy graph contains an unpublished revision.");
+                    _published[key] = publicationOrder;
                     var metadata = _revisions.GetRevision(_sourceScope, reference);
                     if (metadata?.Payload == null || metadata.Payload.ByteLength > 2000000 ||
                         (_bytes += metadata.Payload.ByteLength) > 16L * 1024 * 1024)

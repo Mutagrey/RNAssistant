@@ -59,7 +59,7 @@ namespace RNAssistant.Office.Services
         {
             var scope = Scope(session, request.Reference.Uri);
             var descriptor = Resolve(session, request.Reference.Uri);
-            return _reads.Read(scope, descriptor, request);
+            return _reads.Read(session, scope, descriptor, request);
         }
         private ResourceAuthorityScopeId Scope(ChatSession session, string uri)
         {

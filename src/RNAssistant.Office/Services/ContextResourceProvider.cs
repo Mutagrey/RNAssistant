@@ -68,7 +68,7 @@ namespace RNAssistant.Office.Services
         public ResourceReadSelection Read(ChatSession session, ResourceReadRequest request)
         {
             var scope = Scope(session, request.Reference.Uri);
-            return _reads.Read(scope, Resolve(session, request.Reference.Uri), request);
+            return _reads.Read(session, scope, Resolve(session, request.Reference.Uri), request);
         }
 
         private ResourceAuthorityScopeId Scope(ChatSession session, string uri)
