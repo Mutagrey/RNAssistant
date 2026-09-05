@@ -270,12 +270,13 @@ checks; real VBIDE/Trust Access/crash behavior remains Windows qualification. Se
 
 ## Skill authoring native runtime (Phase 11K1)
 
-For Library reference reads, use `skill reference editor:` in
-`Program.SkillReferenceResourceTests.cs` plus `skills: UI mutations use typed revision guards`.
+For Library source reads, use `skill editor:` in
+`Program.SkillEditorResourceTests.cs` plus `skills: UI mutations use typed revision guards`.
 They cover the published Gateway/CAS snapshot, complete UTF-8/BOM handling, source
-drift/save guards, exact retained reads and shared capacity/lifetime. Browser read,
+drift/save guards, explicit unread-body preservation, built-in/core metadata-only
+delivery, exact retained reads and shared capacity/lifetime. Browser read,
 cancel, metadata-integrity and draft-conflict cases live in
-`tests/web/skill-reference-resource.test.js`; this does not qualify real WebView2.
+`tests/web/skill-editor-resource.test.js`; this does not qualify real WebView2.
 
 The `skills:` filter covers the complete current-package revision, core/reference
 CRUD and collision/validation behavior. The CRUD case also verifies the four exact

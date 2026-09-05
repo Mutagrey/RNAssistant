@@ -18,7 +18,7 @@ namespace RNAssistant.Office.WebView
             "exportChatTrajectory",
             "getChatEventPayload",
             "getVbaModule",
-            "readSkillReference",
+            "readSkillSource",
             "beginVbaModuleUpload",
             "saveVbaModule",
             "createVbaModule",

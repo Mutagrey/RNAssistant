@@ -87,14 +87,17 @@ heal Unknown authority. Each member read hydrates its root once; public root
 projection remains in the catalog owner. Remaining domain-specific read consumers
 are tracked below.
 
-`SkillReferenceResourceService` uses that published catalog and exact Gateway/CAS
-source for the Library reference editor. `readSkillReference` carries metadata and
+`SkillEditorResourceService` uses that published catalog and exact Gateway/CAS
+source for Library core/reference editing, including read-only built-ins.
+Catalog DTOs contain body metadata only; opening a source pulls its text through
+`readSkillSource`. This one read action carries metadata and
 a shared bounded download lease, not Markdown or a whole package. It reserves
 capacity before hydration and requires the displayed package revision; no authoring
 file fallback or model observation is created. Complete-source/read-only, cache
 conflict and existing save-guard rules belong to
-[Skill Library](skills.md#reference-editor-reads). Core Library bodies and mutation
-body transport still require consumer cutover.
+[Skill Library](skills.md#editor-source-reads). Metadata-only edits explicitly
+preserve the guarded body without fetching it. Skill mutation body transport
+still requires consumer cutover.
 
 ## Conversation loop
 
@@ -307,6 +310,8 @@ attachment-text import reads (now exact Gateway pages through the same owners);
 mutable-disk skill reference activation;
 direct Skill Library reference reads and their inline body/fake mutation-result
 bridge response (now published catalog → Gateway/CAS → shared bounded download);
+inline SkillPackageDto core text in catalog/mutation projections and the separate
+reference-only bridge action (now one pull-based skill source reader);
 separate state/Office retained text readers, externally hash-bound Office/state/catalog
 continuations, and read-side exposure of prepared state/context/catalog identities.
 No compatibility alias, dual-write or feature flag restores these paths.

@@ -25,6 +25,10 @@ namespace RNAssistant.Office.Tools
                     "invalid_skill_mutation", false), false, null);
             }
 
+            if (mutation.PreserveBody && kind != "upsert")
+                return ManualResult(SkillAuthoringOutcome.Error(
+                    "Body preservation is only valid for an upsert.", null,
+                    "invalid_skill_mutation", false), false, null);
             var intended = mutation.Intended;
             var baseId = string.IsNullOrWhiteSpace(mutation.BaseId)
                 ? null : mutation.BaseId;
@@ -61,6 +65,15 @@ namespace RNAssistant.Office.Tools
                     }, expectedRevision, currentId);
             }
 
+            if (mutation.PreserveBody)
+            {
+                if (baseId == null || current == null || intended == null || intended.BodyMarkdown != null)
+                    return ManualResult(SkillAuthoringOutcome.Error(
+                        "Preserving a body requires an exact existing package and no replacement body.", null,
+                        "invalid_skill_mutation", false), false, current);
+                intended = SkillPackageSource.Capture(intended).ToDefinition();
+                intended.BodyMarkdown = current.BodyMarkdown;
+            }
             var validation = SkillStore.ValidateDefinition(intended);
             if (!string.IsNullOrWhiteSpace(validation))
             {

@@ -545,7 +545,7 @@ namespace RNAssistant.Office.Tools
         {
             return MutateCatalog(mutation.Kind == "delete" ? "common.skills_delete" : "common.skills_upsert",
                 new Dictionary<string, object> { ["kind"] = mutation.Kind, ["id"] = mutation.BaseId,
-                    ["expectedRevision"] = mutation.ExpectedRevision, ["intended"] = mutation.Intended },
+                    ["expectedRevision"] = mutation.ExpectedRevision, ["preserveBody"] = mutation.PreserveBody, ["intended"] = mutation.Intended },
                 () => _skillAuthoringService.ExecuteManualCoreMutation(mutation), value => value.DispatchPossible,
                 value => SkillEffect(value.Outcome.Effect));
         }

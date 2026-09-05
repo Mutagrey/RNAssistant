@@ -203,16 +203,15 @@ namespace RNAssistant.Office
             }
         }
 
-        public Task<SkillReferenceReadResponse> ReadSkillReferenceAsync(
-            SkillReferenceReadRequest payload, CancellationToken token)
+        public Task<SkillSourceReadResponse> ReadSkillSourceAsync(
+            SkillSourceReadRequest payload, CancellationToken token)
         {
-            ValidateSkillReferencePayload(payload);
-            if (string.IsNullOrWhiteSpace(payload.ChatId))
+            if (payload == null || string.IsNullOrWhiteSpace(payload.ChatId))
                 throw new InvalidOperationException("RESOURCE_ACCESS_DENIED: an explicit chat is required.");
             var session = LoadAddressedSession(payload.ChatId);
             var source = new ChatSession { Id = session.Id, Host = session.Host, DocumentKey = session.DocumentKey,
                 DocumentAuthorityId = session.DocumentAuthorityId };
-            return Task.Run(() => new SkillReferenceResourceService(_toolExecutor.ResourceGateway, _resourceData, _skillCatalog)
+            return Task.Run(() => new SkillEditorResourceService(_toolExecutor.ResourceGateway, _resourceData, _skillCatalog)
                 .Open(source, payload, token), token);
         }
 
@@ -295,7 +294,7 @@ namespace RNAssistant.Office
                     StringComparison.Ordinal))
                 {
                     if (string.IsNullOrWhiteSpace(baseId) ||
-                        string.IsNullOrWhiteSpace(expected))
+                        string.IsNullOrWhiteSpace(expected) || item.PreserveBody)
                     {
                         throw new InvalidOperationException(
                             "Skill delete requires baseId and expectedRevision.");
@@ -326,6 +325,7 @@ namespace RNAssistant.Office
                     Kind = item.Kind,
                     BaseId = baseId,
                     ExpectedRevision = expected,
+                    PreserveBody = item.PreserveBody,
                     Intended = new SkillDefinition
                     {
                         Id = item.Id,

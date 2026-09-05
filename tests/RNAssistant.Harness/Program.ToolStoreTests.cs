@@ -1353,12 +1353,12 @@ namespace RNAssistant.Harness
                     "typed UI reference update verifies package read-back");
                 using (var data = new ResourceDataPlaneService(executor.ResourceGateway))
                 {
-                    var reader = new SkillReferenceResourceService(executor.ResourceGateway, data,
+                    var reader = new SkillEditorResourceService(executor.ResourceGateway, data,
                         new SkillCatalogService(adapter, executor.CapturePublishedSkills));
                     var session = NewSession(adapter);
                     var request = SkillReferenceRequest(session, original.Id, reference.Package.Revision);
                     var read = reader.Open(session, request, CancellationToken.None);
-                    AssertEqual("# Rules", ReadSkillReferenceDownload(data, read), "typed UI reference read is revision-bound");
+                    AssertEqual("# Rules", ReadSkillSourceDownload(data, read), "typed UI reference read is revision-bound");
                     request.ExpectedPackageRevision = update.Package.Revision;
                     AssertEqual("RESOURCE_REVISION_CHANGED", RuntimeThrows<ResourceRequestException>(() =>
                         reader.Open(session, request, CancellationToken.None)).ErrorCode, "stale UI reference read fails closed");

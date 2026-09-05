@@ -85,7 +85,7 @@ vm.runInContext(fs.readFileSync(path.join(root, "web/js/app-chat-state.js"), "ut
   assert.match(attachments, /committed:\s*"Оригинал"/);
   const index = fs.readFileSync(path.join(root, "web/index.html"), "utf8");
   assert.ok(index.includes("app-core.js?v=chat-sync-20260903-1"), "core has the chat sync cache key");
-  assert.ok(index.includes("app-chat-state.js?v=skill-resource-20260906-1"), "chat state has the resource lifecycle cache key");
+  assert.ok(index.includes("app-chat-state.js?v=skill-core-20260906-1"), "chat state has the resource lifecycle cache key");
   assert.ok(index.includes("app-messages.js?v=ui-lazy-20260903-1"), "messages have the lazy UI cache key");
   assert.ok(index.includes("app-attachments.js?v=vba-upload-20260906-1"),
     "attachment staging has the current pre-dispatch barrier cache key");

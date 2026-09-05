@@ -23,7 +23,7 @@ vm.runInContext(source, context, { filename: "app-skills.js" });
 function item(id, revision, description = "Description") {
   return {
     revision, id, host: "Common", name: id,
-    description, version: "1.0.0", bodyMarkdown: "# " + id,
+    description, version: "1.0.0", body: { sha256: "b".repeat(64), byteLength: 10, characters: 10 },
     enabled: true, builtIn: false, references: []
   };
 }
@@ -42,6 +42,8 @@ function library(skills) {
   ]));
   assert.equal(skills[0].Id, "common.one");
   assert.equal(skills[0]._baseRevision, "a".repeat(64));
+  const inline = item("legacy", "b".repeat(64)); delete inline.body; inline.bodyMarkdown = "# Inline";
+  assert.throws(() => context.skillFromContract(inline), /typed package/);
   assert.throws(() => context.skillLibraryItemsFromContract([item("legacy", "b".repeat(64))]),
     /typed Skill Library/);
   assert.throws(() => context.skillLibraryItemsFromContract({
@@ -62,12 +64,16 @@ function library(skills) {
   created.Revision = "";
   created._baseId = "";
   created._baseRevision = "";
+  context.skillWithBodyDraft(created, "# New");
   context.state.skills.push(created);
   const mutations = context.skillLibraryMutations();
   assert.deepEqual(Array.from(mutations, mutation => mutation.kind),
     ["upsert", "upsert", "delete"]);
   assert.equal(mutations[0].baseId, "common.update");
   assert.equal(mutations[0].expectedRevision, "1".repeat(64));
+  assert.equal(mutations[0].preserveBody, true, "metadata edits do not need to fetch or send the body");
+  assert.equal(mutations[0].bodyMarkdown, undefined);
+  assert.equal(mutations[1].bodyMarkdown, "# New");
   assert.equal(mutations[1].baseId, "");
   assert.equal(mutations[1].expectedRevision, "");
   assert.equal(mutations[2].baseId, "common.delete");
@@ -105,7 +111,7 @@ function library(skills) {
 }
 
 {
-  assert.ok(index.includes("app-skills.js?v=skill-resource-20260906-1"));
+  assert.ok(index.includes("app-skills.js?v=skill-core-20260906-1"));
   assert.equal(/StoragePath|storagePath|response\s*\|\|\s*\[\]/.test(source), false);
   assert.match(source, /expectedPackageRevision/);
   assert.match(source, /skillLibraryMutationRequestType/);

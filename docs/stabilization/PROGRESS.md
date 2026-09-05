@@ -6,7 +6,7 @@ Current task: user-authorized unified Resource Architecture direct cutover, in p
 Execution mode: mandatory host-neutral route 0–11T10, WQ-A1–A5, R61/11O0–11O7, the separately approved D05.1–D05.6 slices and R65–R70 corrections завершены. WQ0 не блокировал implementation: текущий `RuntimeKey` exact bound Excel/Word/PowerPoint/Outlook object or window принят как lifetime assumption. Накопленные Windows gates по §16.1 теперь квалифицируют только итоговый post-cutover catalog/UI; до их evidence Phase 12 remains blocked.
 
 Next step for tools: finish the unified resource cutover in MASTER order: complete remaining authority/compiler integration, replace HTML/bulk transport (Wave 4), then schema/mapping/derived/catalog integration and cleanup (Wave 5). Only then run final post-cutover Windows rebuild/live-provider/WebView2 qualification, including the accumulated R61–R77 retests. Phase 12 remains blocked.
-Latest slice (2026-09-06): Skill Library reference reads now use published Gateway/CAS snapshots and bounded downloads; direct file/inline read path removed. Next: remaining core Library and mutation-body transport, not diagnostic expansion. Windows gates stay open.
+Latest slice (2026-09-06): Skill Library core/reference reads now share one published Gateway/CAS reader and bounded downloads; catalog core bodies are metadata-only. Explicit guarded body preservation supports metadata-only edits without eager reads. Next: skill mutation-body transport and remaining domain reads, not diagnostic expansion. Windows gates stay open.
 Required context: [Resource MASTER](resource-cutover/MASTER.md), its three normative documents in the specified order, [resource owner map](../resource-fabric.md), and the exact owning source contour. Previous WQ evidence remains valid only for unchanged contours.
 Open gates / remaining legacy: the preceding 11T tool-dispatch adapter cleanup is complete; the unified Resource direct-cutover consumer/removal gates below are still OPEN. This is not an assertion that resource/catalog/result legacy is empty. All current Excel, Word, PowerPoint, Outlook, public VBA/macro, custom VBA package and controller-owned tools use direct typed owners. `ThisAddIn` active-window/document lookup remains only VSTO pane lifecycle discovery, never execution target fallback, and is part of Windows UI/session qualification. Permanent narrow journal ports and current model-compatibility diagnostics share the canonical authority and are not legacy. R61 11O0–11O7 are complete host-neutral; final post-cutover live-provider/WQ-PACK and real WebView2 evidence remain. R62 is fixed host-neutral but requires the exact Windows WebView model/tool-error retest. R63/R68/R69/R70/R71/R72/R73/R74/R75/R76 are fixed host-neutral. Exact real Excel bind, edited-cell toolbar refresh, WebView rerender, Artifact Library chart preview, run resource-card count, downloaded ECharts export, target-model v5 final/checkpoint behavior, schema 27 final-quality behavior, real VBE duplicate-source rejection and real chat/artifact/tab/startup responsiveness remain open on Windows. R65/R67/R70/R71/R72/R73/R74 are contained in prompt/schema/skill/tool guidance; explicit saved-prompt review/reset and a real complex Excel/VBA → HTML bind run on the target model remain open. R66 passes local Chromium but still requires the exact Windows WebView2 dashboard preview/export retest. R51 remains open for audio, other committed-resource removal and Windows WebView image-gallery/thumbnail/PDF/lifecycle qualification; 11D2 image, 11D3 PDF and their thumbnail/sequence navigation remain complete host-neutral and are not removed. R64 has matching exact-package x86 PDFium/Skia wired, but exact Windows x86 PDF extraction/preview/scanned-page/model-send execution remains open. Production OfficeHosts/VSTO build, actual COM marshal/cleanup, real DocumentSession lifetime, WQ0, WQ-SESSION, WQ-EXCEL, WQ-WORD, WQ-POWERPOINT and WQ-OUTLOOK are open evidence. Full Phase 6 Windows/VBE, Phase 8 WQ-PACK, Phase 9/R45–R48 WebView/restart/multi-window and R28/R29/R32 live-provider/UI gates remain open. R52 Host Fabric, R53 Local Automation, R54 Skill Library, R56 Tool Library, R57 Issue Center and R58 typed-facade risk remain open. Product 16.1.0-dev, no release/tag.
 
@@ -259,7 +259,7 @@ WebView policy and production inclusion 2/2 — 12/12 host-neutral. Web VBA uplo
 6/6, shared upload 6/6, source read 4/4, attachment send barrier 4/4, chat sync 4/4,
 Library 5/5 and commit projection 4/4 — 33/33. JavaScript syntax, version-format
 and diff checks pass; no full harness or Office/VSTO validation.
-Skill reference editor slice (2026-09-06): Library reference Markdown now reads the
+Skill reference editor checkpoint `1fdd843` (2026-09-06): Library reference Markdown now reads the
 published catalog through the same Gateway/CAS and shared bounded download as
 other consumers. Direct authoring-file reads and inline read/fake mutation-result
 DTOs are removed. Explicit chat/package binding, pre-hydration reservation,
@@ -274,8 +274,23 @@ Web reference reader 6/6, skill contract 4/4, chat sync 4/4, Library 5/5,
 commit projection 4/4 and VBA reader 4/4 — 27/27. No full harness or Office/VSTO
 validation. Real Windows Library read/save/cancel qualification stays open.
 JavaScript syntax, version-format and diff checks pass.
+Skill core/editor slice (2026-09-06): core/reference bodies now share
+SkillEditorResourceService and readSkillSource; the reference-only owner/action
+is removed. SkillPackageDto contains raw text hash/extent metadata, not core text,
+in init/catalog/mutation projections. Opening a source pulls its complete bounded
+published snapshot; built-ins stay read-only. Clean UI text is selection-bounded;
+late/failed reads cannot unlock empty drafts. Metadata-only edits explicitly preserve
+the unread body under the existing package guard/commit barrier. Core replacement
+requires a loaded/user-created draft; Save acknowledgement cannot erase later text
+edits. Clone/context-copy cannot treat an unloaded core as empty.
+Checks: skill editor 4/4, existing UI guard, catalog publication, typed bridge,
+WebView policy and source inclusion 5/5 — 9/9 host-neutral. Web skill reader 10/10,
+skill contract 4/4, prompt review 5/5, chat sync 4/4, Library 5/5, commit projection
+4/4 and VBA reader 4/4 — 36/36. No full harness or Office/VSTO validation;
+Windows Library/WebView2 read/save/cancel gates remain open.
+JavaScript syntax, version-format and diff checks pass.
 Next host-neutral contour: remaining domain/authoring read consumers and other bulk
-upload/export transport (including core Library bodies and skill mutation bodies)
+upload/export transport (including skill mutation bodies and reference mutation echo)
 through the existing Gateway/data plane, then finer Excel
 coverage/named resources and binary/raw view negotiation in MASTER order.
 Still open: remaining definition/domain read and other bulk upload/export consumers,

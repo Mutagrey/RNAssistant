@@ -1,5 +1,6 @@
 using System.Collections.Generic;
 using System.Linq;
+using System.Text;
 using Newtonsoft.Json;
 using RNAssistant.Core.Models;
 using RNAssistant.Core.Tools;
@@ -51,6 +52,9 @@ namespace RNAssistant.Office.Contracts
         [JsonProperty("bodyMarkdown")]
         public string BodyMarkdown { get; set; }
 
+        [JsonProperty("preserveBody")]
+        public bool PreserveBody { get; set; }
+
         [JsonProperty("enabled")]
         public bool Enabled { get; set; }
     }
@@ -82,19 +86,26 @@ namespace RNAssistant.Office.Contracts
         public string Content { get; set; }
     }
 
-    public sealed class SkillReferenceReadRequest : SkillReferencePayload
+    public sealed class SkillSourceReadRequest
     {
+        public const string ContractType = "rnassistant.skillSourceRequest";
+        [JsonProperty("type")] public string Type { get; set; }
+        [JsonProperty("contractVersion")] public int ContractVersion { get; set; }
         [JsonProperty("chatId")] public string ChatId { get; set; }
+        [JsonProperty("skillId")] public string SkillId { get; set; }
+        [JsonProperty("expectedPackageRevision")] public string ExpectedPackageRevision { get; set; }
+        [JsonProperty("path")] public string Path { get; set; }
     }
 
-    public sealed class SkillReferenceReadResponse
+    public sealed class SkillSourceReadResponse
     {
-        public const string ContractType = "rnassistant.skillReferenceRead";
+        public const string ContractType = "rnassistant.skillSourceRead";
         [JsonProperty("type")] public string Type { get; set; }
         [JsonProperty("contractVersion")] public int ContractVersion { get; set; }
         [JsonProperty("chatId")] public string ChatId { get; set; }
         [JsonProperty("skillId")] public string SkillId { get; set; }
         [JsonProperty("packageRevision")] public string PackageRevision { get; set; }
+        [JsonProperty("path")] public string Path { get; set; }
         [JsonProperty("reference")] public SkillReferenceDto Reference { get; set; }
         [JsonProperty("resource")] public ResourceRef Resource { get; set; }
         [JsonProperty("totalCharacters")] public int TotalCharacters { get; set; }
@@ -180,8 +191,8 @@ namespace RNAssistant.Office.Contracts
         [JsonProperty("version")]
         public string Version { get; set; }
 
-        [JsonProperty("bodyMarkdown")]
-        public string BodyMarkdown { get; set; }
+        [JsonProperty("body")]
+        public SkillBodyMetadataDto Body { get; set; }
 
         [JsonProperty("enabled")]
         public bool Enabled { get; set; }
@@ -210,12 +221,26 @@ namespace RNAssistant.Office.Contracts
                 Name = source.Name,
                 Description = source.Description,
                 Version = source.Version,
-                BodyMarkdown = source.BodyMarkdown,
+                Body = SkillBodyMetadataDto.From(source.BodyMarkdown),
                 Enabled = source.Enabled,
                 BuiltIn = builtIn,
                 References = source.References
                     .Select(SkillReferenceDto.From).ToList()
             };
+        }
+    }
+
+    public sealed class SkillBodyMetadataDto
+    {
+        [JsonProperty("sha256")] public string Sha256 { get; set; }
+        [JsonProperty("byteLength")] public int ByteLength { get; set; }
+        [JsonProperty("characters")] public int Characters { get; set; }
+
+        internal static SkillBodyMetadataDto From(string text)
+        {
+            text = text ?? string.Empty;
+            return new SkillBodyMetadataDto { Sha256 = TextPatternEngine.Sha256(text),
+                ByteLength = Encoding.UTF8.GetByteCount(text), Characters = text.Length };
         }
     }
 

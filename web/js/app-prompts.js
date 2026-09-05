@@ -230,6 +230,10 @@
     if (empty) empty.style.display = promptSelected || skillSelected ? "none" : "grid";
     if (promptPanel) promptPanel.classList.toggle("hidden", !promptSelected);
     if (skillPanel) skillPanel.classList.toggle("hidden", !skillSelected);
+    if (!skillSelected) {
+      if (typeof cancelSkillSourceRead === "function") cancelSkillSourceRead();
+      if (typeof trimSkillSourceCache === "function") trimSkillSourceCache(null, "");
+    }
     if (promptSelected) renderPromptEditor();
     if (skillSelected && typeof renderSkillEditor === "function") renderSkillEditor();
     if (toolSelected && typeof renderToolEditor === "function") renderToolEditor();

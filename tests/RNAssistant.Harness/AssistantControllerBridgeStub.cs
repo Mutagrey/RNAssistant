@@ -398,15 +398,15 @@ namespace RNAssistant.Office
                 Library = EmptySkillLibrary()
             };
         }
-        public Task<SkillReferenceReadResponse> ReadSkillReferenceAsync(
-            SkillReferenceReadRequest payload, CancellationToken token)
+        public Task<SkillSourceReadResponse> ReadSkillSourceAsync(
+            SkillSourceReadRequest payload, CancellationToken token)
         {
             token.ThrowIfCancellationRequested();
             LastChatId = payload.ChatId;
             LastSkillReferenceId = payload == null ? null : payload.SkillId;
             LastSkillReferencePath = payload == null ? null : payload.Path;
-            return Task.FromResult(new SkillReferenceReadResponse { Type = SkillReferenceReadResponse.ContractType,
-                ContractVersion = 1, ChatId = payload.ChatId, SkillId = payload.SkillId, PackageRevision = payload.ExpectedPackageRevision,
+            return Task.FromResult(new SkillSourceReadResponse { Type = SkillSourceReadResponse.ContractType,
+                ContractVersion = 1, ChatId = payload.ChatId, SkillId = payload.SkillId, PackageRevision = payload.ExpectedPackageRevision, Path = payload.Path,
                 Reference = new SkillReferenceDto { Path = payload.Path, Revision = "ref", ByteLength = 9 }, TotalCharacters = 9,
                 Resource = new ResourceRef("rna://catalog/skills/common.review/reference/rules.md", "r_published"),
                 Data = new ResourceDownloadOpenResponse { LeaseId = new string('a', 64),
@@ -468,7 +468,7 @@ namespace RNAssistant.Office
                     Name = skillId,
                     Description = "stub",
                     Version = "1.0.0",
-                    BodyMarkdown = "# Stub",
+                    Body = SkillBodyMetadataDto.From("# Stub"),
                     Enabled = true,
                     BuiltIn = false,
                     References = deleted
@@ -868,7 +868,7 @@ namespace RNAssistant.Office
                             Name = "Generated skill",
                             Description = "Generated skill.",
                             Version = "1.0.0",
-                            BodyMarkdown = "# Generated",
+                            Body = SkillBodyMetadataDto.From("# Generated"),
                             Enabled = true,
                             BuiltIn = false,
                             References = new List<SkillReferenceDto>()

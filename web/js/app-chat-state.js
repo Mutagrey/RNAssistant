@@ -161,8 +161,8 @@ function applyLibraryCatalogState(response) {
     if (state.skillLibraryDirty && typeof reconcileSkillLibraryCatalog === "function") {
       reconcileSkillLibraryCatalog(responseSkills);
     } else {
-      state.skills = typeof preserveSkillReferenceState === "function"
-        ? preserveSkillReferenceState(responseSkills)
+      state.skills = typeof preserveSkillSourceState === "function"
+        ? preserveSkillSourceState(responseSkills)
         : responseSkills;
       if (typeof acceptSkillLibraryState === "function") acceptSkillLibraryState();
     }
@@ -194,7 +194,7 @@ function applyChatState(response) {
     captureChatDraft(previousChatId);
     if (typeof cancelVbaModuleRead === "function") cancelVbaModuleRead();
     if (typeof cancelVbaModuleWrite === "function") cancelVbaModuleWrite();
-    if (typeof cancelSkillReferenceRead === "function") cancelSkillReferenceRead();
+    if (typeof cancelSkillSourceRead === "function") cancelSkillSourceRead();
     if (typeof window.closeArtifactViewerResources === "function") window.closeArtifactViewerResources();
     state.artifactViewerPages = {};
     state.artifactViewerThumbnails = { items: {}, order: [], queue: [], pending: 0 };

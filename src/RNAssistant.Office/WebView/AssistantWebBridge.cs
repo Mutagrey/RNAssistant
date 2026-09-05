@@ -299,8 +299,8 @@ namespace RNAssistant.Office.WebView
                         var saveSkills = Payload<SaveSkillsPayload>(payload);
                         responsePayload = _controller.SaveSkills(saveSkills);
                         break;
-                    case "readSkillReference":
-                        responsePayload = await _controller.ReadSkillReferenceAsync(Payload<SkillReferenceReadRequest>(payload), cancellationToken).ConfigureAwait(false);
+                    case "readSkillSource":
+                        responsePayload = await _controller.ReadSkillSourceAsync(Payload<SkillSourceReadRequest>(payload), cancellationToken).ConfigureAwait(false);
                         break;
                     case "saveSkillReference":
                         var saveSkillReference = Payload<SaveSkillReferencePayload>(payload);

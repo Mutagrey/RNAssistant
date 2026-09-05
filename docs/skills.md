@@ -58,13 +58,20 @@ UI. A mutation becomes available through a freshly built catalog on the next run
 boundary; it does not rewrite the immutable catalog of an already accepted model
 step.
 
-### Reference editor reads
+### Editor source reads
 
-`SkillReferenceResourceService` resolves the exact custom reference from the
+`SkillPackageDto` carries metadata, including the core text's raw SHA-256, UTF-8
+byte length and character count, never `bodyMarkdown`. Catalog hydration does not
+mark a draft dirty or fetch all package bodies.
+
+`SkillEditorResourceService` resolves the exact core or reference from the
 host-filtered published catalog, then reads through `CatalogResourceProvider`,
-Gateway and the existing CAS. `readSkillReference` returns only typed
-`rnassistant.skillReferenceRead` v1 metadata, an exact `ResourceRef` and a shared
-download lease. It requires an explicit chat and expected package revision;
+Gateway and the existing CAS. `readSkillSource` accepts
+`rnassistant.skillSourceRequest` v1: explicit chat, expected package revision and
+path (`""` for the core, otherwise a canonical reference path). It returns only
+`rnassistant.skillSourceRead` v1 metadata, an exact `ResourceRef` and a shared
+download lease. Built-ins use the same reader and remain read-only. The previous
+reference-only reader/bridge action is removed, not kept as an alias;
 there is no direct authoring-file reader, inline read body or fake mutation result.
 Reading does not publish a catalog or add model observations.
 
@@ -75,11 +82,23 @@ distinct from the published text's transport hash/length and the logical resourc
 revision. The existing `SkillAuthoringService` still checks live package drift
 before Save/Delete; an old published read cannot authorize overwriting changed files.
 
-Cancel, chat/package/reference changes and bridge/page close invalidate pending
+Cancel, chat/package/source or Library section changes and bridge/page close invalidate pending
 reads and close late leases. Failed reads stay read-only. Catalog refresh discards
-changed clean reference caches, but retains dirty user text and blocks saving its
-conflict instead of silently rebasing it. Core Library body delivery and mutation
-body transport remain separate open consumers in the same resource cutover.
+changed clean sources, but retains dirty user text and blocks saving its conflict
+instead of silently rebasing it. Only the selected skill's core and current
+reference retain clean text; other clean sources are evicted. User drafts are not
+evicted. Clone/context-copy requires a loaded core and cannot copy a missing body
+as empty text.
+
+Metadata-only upserts explicitly send `preserveBody: true` without a replacement
+body. The existing mutation owner checks the complete package revision before
+preserving its live body. Creation, delete, or mixing preservation with replacement
+is rejected; the typed preservation intent is recorded at the same commit barrier.
+Replacing the core requires a loaded/user-created draft. A successful Save clears
+only its unchanged submitted draft and reloads exact published text; later user
+edits remain visible and conflicts block further writes. Core/reference mutation
+body transport (including the reference mutation echo) remains an open consumer
+in the same cutover.
 
 ## Built-in guidance contract
 

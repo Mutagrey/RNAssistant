@@ -137,6 +137,7 @@ namespace RNAssistant.Office.Tools
         internal string Kind { get; set; }
         internal string BaseId { get; set; }
         internal string ExpectedRevision { get; set; }
+        internal bool PreserveBody { get; set; }
         internal SkillDefinition Intended { get; set; }
     }
 
