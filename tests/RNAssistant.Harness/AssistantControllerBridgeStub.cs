@@ -239,7 +239,7 @@ namespace RNAssistant.Office
             return Task.FromResult(ChatState(id, chatId));
         }
         public ChatStateResponse UpdateMessageActivityData(string messageId, string dataJson, string chatId = null) { return ChatState(messageId, chatId); }
-        public SettingsResponse GetSettings() { return new SettingsResponse { Settings = new AppSettings(), HasApiKey = false, HasHistorySecret = false }; }
+        public SettingsResponse GetSettings() { return new SettingsResponse { Settings = SettingsControlsDto.From(new AppSettings()), HasApiKey = false, HasHistorySecret = false }; }
         public RuntimeLogResponse GetRuntimeLog() { return new RuntimeLogResponse { Content = "runtime log", Path = "runtime.log" }; }
         public RuntimeLogResponse ClearRuntimeLog() { return new RuntimeLogResponse { Content = string.Empty, Path = "runtime.log" }; }
         public CasHealthResponse GetCasHealth() { return new CasHealthResponse { Healthy = true, ReachabilityComplete = true, CanGarbageCollect = true }; }
@@ -247,15 +247,26 @@ namespace RNAssistant.Office
         public Task<ModelCatalogResponse> GetModelCatalogAsync(AppSettings settings, string apiKey) { return Task.FromResult(new ModelCatalogResponse { Catalog = new JObject() }); }
 
         public bool LastReviewAgentPrompts { get; private set; }
+        public SaveSettingsPayload LastSettingsRequest { get; private set; }
 
-        public SettingsResponse SaveSettings(AppSettings settings, string apiKey, string historySecret, bool reviewAgentPrompts = false)
+        public SettingsResponse SaveSettings(SaveSettingsPayload request, CancellationToken token)
         {
-            LastSettings = settings;
-            LastApiKey = apiKey;
-            LastHistorySecret = historySecret;
-            LastReviewAgentPrompts = reviewAgentPrompts;
+            token.ThrowIfCancellationRequested();
+            LastSettingsRequest = request;
+            LastSettings = request.Settings.ApplyTo(new AppSettings());
+            LastApiKey = request.ApiKey;
+            LastHistorySecret = request.HistorySecret;
+            LastReviewAgentPrompts = request.ReviewAgentPrompts;
             return GetSettings();
         }
+
+        public Task<PromptSourceReadResponse> ReadPromptSourceAsync(PromptSourceReadRequest request, CancellationToken token)
+        { token.ThrowIfCancellationRequested(); return Task.FromResult(new PromptSourceReadResponse { Type = PromptSourceReadResponse.ContractType,
+            ContractVersion = 1, ChatId = request.ChatId, Resource = request.Resource }); }
+        public ResourceUploadOpenResponse BeginPromptMutationUpload(PromptMutationUploadRequest request, CancellationToken token)
+        { token.ThrowIfCancellationRequested(); return new ResourceUploadOpenResponse(); }
+        public ResourceDataCloseResponse CancelPromptMutationUpload(ResourceUploadLeaseRequest request)
+        { return new ResourceDataCloseResponse { Closed = true }; }
 
         public Task<ModelCompatibilityResponse> TestModelCompatibilityAsync(CancellationToken cancellationToken)
         {

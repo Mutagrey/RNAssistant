@@ -278,7 +278,13 @@ namespace RNAssistant.Harness
                 var first = executor.CaptureCatalogs();
                 var secondSettings = settings.Clone();
                 secondSettings.SystemPrompt = "PUBLISHED_TWO";
-                executor.SaveSettingsPublication(secondSettings, () => settings = secondSettings);
+                var library = executor.GetPromptLibrary();
+                executor.SaveSettingsControls(settings, new RNAssistant.Office.Contracts.SaveSettingsPayload {
+                    Settings = RNAssistant.Office.Contracts.SettingsControlsDto.From(secondSettings), ExpectedPromptPublication = library.Publication },
+                    new RNAssistant.Office.Contracts.PromptMutationBatch { Type = RNAssistant.Office.Contracts.PromptMutationBatch.ContractType, ContractVersion = 1,
+                        Changes = new[] { new RNAssistant.Office.Contracts.PromptFieldChange {
+                            Resource = library.Items.Single(item => item.Key == "systemPrompt").Resource, Value = secondSettings.SystemPrompt } } },
+                    value => settings = value);
                 var second = executor.CaptureCatalogs();
                 AssertEqual(first.Authority.Generation + 1, second.Authority.Generation,
                     "manual settings publication advances one shared catalog commit");

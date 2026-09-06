@@ -1,4 +1,5 @@
 using System;
+using System.Threading;
 using System.Threading.Tasks;
 using RNAssistant.Core.Llm;
 using RNAssistant.Core.Models;
@@ -17,7 +18,8 @@ namespace RNAssistant.Office
             return new SettingsResponse
             {
                 AppVersion = ApplicationVersionService.Current,
-                Settings = _settingsService.Load(),
+                Settings = SettingsControlsDto.From(_settingsService.Load()),
+                Prompts = _toolExecutor.GetPromptLibrary(),
                 HasApiKey = !string.IsNullOrWhiteSpace(_settingsService.LoadApiKey()),
                 HasHistorySecret = !string.IsNullOrWhiteSpace(_settingsService.LoadHistorySecret())
             };
@@ -44,17 +46,63 @@ namespace RNAssistant.Office
             };
         }
 
-        public SettingsResponse SaveSettings(AppSettings settings, string apiKey, string historySecret, bool reviewAgentPrompts = false)
+        public Task<PromptSourceReadResponse> ReadPromptSourceAsync(PromptSourceReadRequest request, CancellationToken token)
         {
-            _toolExecutor.SaveSettingsPublication(settings,
-                () => _settingsService.Save(settings, apiKey, historySecret, reviewAgentPrompts));
+            if (request == null || string.IsNullOrWhiteSpace(request.ChatId))
+                throw new InvalidOperationException("RESOURCE_ACCESS_DENIED: an explicit chat is required.");
+            var session = LoadAddressedSession(request.ChatId);
+            var source = new ChatSession { Id = session.Id, Host = session.Host, DocumentKey = session.DocumentKey,
+                DocumentAuthorityId = session.DocumentAuthorityId };
+            return Task.Run(() => new PromptEditorResourceService(_toolExecutor.ResourceGateway, _resourceData)
+                .Open(source, request, token), token);
+        }
+
+        public ResourceUploadOpenResponse BeginPromptMutationUpload(PromptMutationUploadRequest request, CancellationToken token)
+        {
+            if (request == null || string.IsNullOrWhiteSpace(request.ChatId))
+                throw new InvalidOperationException("RESOURCE_ACCESS_DENIED: an explicit chat is required.");
+            return WithReservedSession(LoadAddressedSession(request.ChatId), session =>
+                new PromptEditorResourceService(_toolExecutor.ResourceGateway, _resourceData).BeginUpload(session, request, token));
+        }
+
+        public ResourceDataCloseResponse CancelPromptMutationUpload(ResourceUploadLeaseRequest request)
+        {
+            if (request == null || string.IsNullOrWhiteSpace(request.ChatId))
+                throw new InvalidOperationException("RESOURCE_ACCESS_DENIED: an explicit chat is required.");
+            _resourceData.CloseUpload(request.ChatId, request.LeaseId, PromptEditorResourceService.Owner);
+            return new ResourceDataCloseResponse { Closed = true };
+        }
+
+        public SettingsResponse SaveSettings(SaveSettingsPayload request, CancellationToken token)
+        {
+            if (request == null || string.IsNullOrWhiteSpace(request.ChatId) || request.Settings == null)
+                throw new InvalidOperationException("RESOURCE_ACCESS_DENIED: addressed settings controls are required.");
+            try
+            {
+                using (_chatRuns.ReserveMaintenance())
+                {
+                    EnsureNoActiveRuns();
+                    WithReservedSession(LoadAddressedSession(request.ChatId), session =>
+                    {
+                        var changes = new PromptEditorResourceService(_toolExecutor.ResourceGateway, _resourceData).ReadMutation(session, request, token);
+                        token.ThrowIfCancellationRequested();
+                        _toolExecutor.SaveSettingsControls(_settingsService.Load(), request, changes,
+                            intended => _settingsService.Save(intended, request.ApiKey, request.HistorySecret, request.ReviewAgentPrompts));
+                        return true;
+                    });
+                }
+            }
+            finally
+            {
+                if (request.UploadLeaseId != null) _resourceData.CloseUpload(request.ChatId, request.UploadLeaseId, PromptEditorResourceService.Owner);
+            }
             var response = GetSettings();
             var settingsChanged = SettingsChanged;
             if (settingsChanged != null)
             {
                 try
                 {
-                    settingsChanged(response.Settings.Clone());
+                    settingsChanged(_settingsService.Load());
                 }
                 catch (Exception ex)
                 {

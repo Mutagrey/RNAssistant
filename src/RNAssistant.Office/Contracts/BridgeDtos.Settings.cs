@@ -18,8 +18,15 @@ namespace RNAssistant.Office.Contracts
         public string ApiKey { get; set; }
     }
 
-    public sealed class SaveSettingsPayload : ModelCatalogPayload
+    public sealed class SaveSettingsPayload
     {
+        [JsonProperty("settings")] public SettingsControlsDto Settings { get; set; }
+        [JsonProperty("apiKey")] public string ApiKey { get; set; }
+        [JsonProperty("chatId")] public string ChatId { get; set; }
+        [JsonProperty("expectedPromptPublication")] public ResourceRef ExpectedPromptPublication { get; set; }
+        [JsonProperty("uploadLeaseId")] public string UploadLeaseId { get; set; }
+        [JsonProperty("sha256")] public string Sha256 { get; set; }
+
         [JsonProperty("historySecret")]
         public string HistorySecret { get; set; }
 
@@ -42,7 +49,9 @@ namespace RNAssistant.Office.Contracts
         public string AppVersion { get; set; }
 
         [JsonProperty("settings")]
-        public AppSettings Settings { get; set; }
+        public SettingsControlsDto Settings { get; set; }
+
+        [JsonProperty("prompts")] public PromptLibraryResponse Prompts { get; set; }
 
         [JsonProperty("hasApiKey")]
         public bool HasApiKey { get; set; }

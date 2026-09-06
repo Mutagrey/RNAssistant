@@ -669,7 +669,9 @@ namespace RNAssistant.Office.Contracts
         public IReadOnlyList<OpenOfficeDocumentDto> Documents { get; set; }
 
         [JsonProperty("settings")]
-        public AppSettings Settings { get; set; }
+        public SettingsControlsDto Settings { get; set; }
+
+        [JsonProperty("prompts")] public PromptLibraryResponse Prompts { get; set; }
 
         [JsonProperty("hasApiKey")]
         public bool HasApiKey { get; set; }

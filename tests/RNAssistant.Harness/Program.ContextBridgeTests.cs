@@ -775,15 +775,25 @@ namespace RNAssistant.Harness
                 ["id"] = "review-prompts", ["type"] = "saveSettings", ["bridgeToken"] = token,
                 ["payload"] = new JObject
                 {
-                    ["settings"] = JObject.FromObject(reviewSettings),
+                    ["settings"] = JObject.FromObject(SettingsControlsDto.From(reviewSettings)),
+                    ["chatId"] = "settings-chat",
+                    ["expectedPromptPublication"] = JObject.FromObject(new ResourceRef("rna://catalog/prompts", "prompt-r1")),
+                    ["uploadLeaseId"] = new string('a', 64), ["sha256"] = new string('b', 64),
                     ["reviewAgentPrompts"] = true
                 }
             };
             var reviewResponse = JObject.Parse(bridge.HandleMessageAsync(reviewPayload.ToString()).GetAwaiter().GetResult());
             AssertTrue(reviewResponse["ok"].Value<bool>() && controller.LastReviewAgentPrompts, "typed bridge forwards explicit review");
+            AssertEqual("settings-chat", controller.LastSettingsRequest.ChatId, "settings mutation retains its explicit chat");
+            AssertEqual("prompt-r1", controller.LastSettingsRequest.ExpectedPromptPublication.Revision, "exact publication is not inferred from UI text");
+            AssertEqual(new string('a', 64), controller.LastSettingsRequest.UploadLeaseId, "bridge forwards the capability, not a prompt body");
             AssertEqual(13, controller.LastSettings.AgentPromptSchemaVersion, "bridge leaves schema approval to the settings service");
-            AssertEqual(reviewSettings.SystemPrompt, controller.LastSettings.SystemPrompt, "bridge preserves custom schema 13 instructions");
-            AssertEqual("reviewed Plan text", controller.LastSettings.PlanSystemPrompt, "Plan instructions reach the save boundary");
+            AssertTrue(reviewResponse["payload"]["settings"]["SystemPrompt"] == null &&
+                reviewResponse["payload"]["settings"]["PlanSystemPrompt"] == null, "settings responses carry no inline prompt bodies");
+            reviewPayload["payload"]["settings"]["SystemPrompt"] = "retired inline body";
+            var refused = JObject.Parse(bridge.HandleMessageAsync(reviewPayload.ToString()).GetAwaiter().GetResult());
+            AssertTrue(!refused["ok"].Value<bool>(), "legacy inline prompt writes are explicitly rejected, not ignored");
+            ((JObject)reviewPayload["payload"]["settings"]).Remove("SystemPrompt");
             ((JObject)reviewPayload["payload"]).Remove("reviewAgentPrompts");
             bridge.HandleMessageAsync(reviewPayload.ToString()).GetAwaiter().GetResult();
             AssertTrue(!controller.LastReviewAgentPrompts, "review is request-local, not remembered by later saves");

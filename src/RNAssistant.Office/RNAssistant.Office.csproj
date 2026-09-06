@@ -67,6 +67,8 @@
     <Compile Include="Contracts\BridgeDtos.Html.cs" />
     <Compile Include="Contracts\BridgeDtos.Qualification.cs" />
     <Compile Include="Contracts\BridgeDtos.Settings.cs" />
+    <Compile Include="Contracts\BridgeDtos.Prompts.cs" />
+    <Compile Include="Contracts\SettingsControlsDto.cs" />
     <Compile Include="Contracts\BridgeDtos.Skills.cs" />
     <Compile Include="Contracts\BridgeDtos.Tools.cs" />
     <Compile Include="Contracts\ToolRunResult.cs" />
@@ -216,6 +218,7 @@
     <Compile Include="Services\VbaResourceProvider.cs" />
     <Compile Include="Services\VbaEditorResourceService.cs" />
     <Compile Include="Services\SkillEditorResourceService.cs" />
+    <Compile Include="Services\PromptEditorResourceService.cs" />
     <Compile Include="Services\ToolEditorResourceService.cs" />
     <Compile Include="Services\VbaResourceProvider.Read.cs" />
     <Compile Include="Services\ChatResourceIngestionService.cs" />

@@ -241,7 +241,8 @@ namespace RNAssistant.Office
                 ActiveChatReasoning = session != null && session.ReasoningEnabled,
                 Chats = _chatSessions.GetChatSummaries(activeId),
                 Documents = ListOpenDocuments(),
-                Settings = settings,
+                Settings = SettingsControlsDto.From(settings),
+                Prompts = _toolExecutor.GetPromptLibrary(),
                 HasApiKey = !string.IsNullOrWhiteSpace(_settingsService.LoadApiKey()),
                 HasHistorySecret = !string.IsNullOrWhiteSpace(_settingsService.LoadHistorySecret()),
                 Tools = ToolLibraryResponse.From(

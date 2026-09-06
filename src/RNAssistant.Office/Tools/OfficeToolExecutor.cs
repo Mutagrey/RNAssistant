@@ -273,6 +273,8 @@ namespace RNAssistant.Office.Tools
 
         internal SkillCatalogSnapshot CapturePublishedSkills() { return _catalogPublication.CaptureSkills(); }
         internal PublishedCatalogSnapshot CaptureCatalogs() { return _catalogPublication.Capture(); }
+        internal PromptLibraryResponse GetPromptLibrary()
+        { return PromptEditorResourceService.Metadata(_catalogPublication.Current("prompts")); }
         internal IReadOnlyList<ToolCatalogEntry> CapturePublishedTools() { return _catalogPublication.CaptureTools(); }
         internal long CaptureCatalogGeneration() { return _catalogPublication.CaptureGeneration(); }
         internal IReadOnlyList<ToolCatalogEntry> CaptureRunnableCatalog()
@@ -580,21 +582,38 @@ namespace RNAssistant.Office.Tools
                 effect == SkillAuthoringEffect.Unknown ? ToolEffectEvidence.Unknown : ToolEffectEvidence.None;
         }
 
-        internal void SaveSettingsPublication(AppSettings intended, Action save)
+        internal void SaveSettingsControls(AppSettings source, SaveSettingsPayload request,
+            PromptMutationBatch changes, Action<AppSettings> save)
+        {
+            var expected = request.ExpectedPromptPublication;
+            if (expected == null || !expected.IsExact || expected.Uri != "rna://catalog/prompts")
+                throw new ResourceRequestException("An exact prompt publication is required.", "RESOURCE_ACCESS_DENIED", false);
+            var intended = PromptEditorResourceService.Prepare(source, request.Settings, expected, _catalogPublication.Read(expected), changes);
+            SaveSettingsPublication(intended, () => save(intended), expected);
+        }
+
+        private void SaveSettingsPublication(AppSettings intended, Action save, ResourceRef expected)
         {
             // The durable intent contains only editable templates, never credentials/settings secrets.
             MutateCatalog("common.prompts_save", new Dictionary<string, object> {
+                ["expectedRevision"] = expected.Revision,
                 ["templates"] = JsonConvert.DeserializeObject<Dictionary<string, string>>(PromptSettingsService.CaptureTemplates(intended)) },
                 () => {
                     var before = _promptSettingsService.CaptureTemplates();
                     save();
                     return before == _promptSettingsService.CaptureTemplates()
                         ? ToolEffectEvidence.VerifiedNoChange : ToolEffectEvidence.VerifiedChange;
-                }, value => true, value => value);
+                }, value => true, value => value, () =>
+                {
+                    var current = _catalogPublication.Current("prompts");
+                    if (current.Uri != expected.Uri || current.Revision != expected.Revision ||
+                        _promptSettingsService.CaptureTemplates() != _catalogPublication.Read(expected))
+                        throw new ResourceRequestException("Prompt settings changed. Refresh before saving.", "RESOURCE_REVISION_CHANGED", false);
+                });
         }
 
         private T MutateCatalog<T>(string operation, object arguments, Func<T> action,
-            Func<T, bool> wasDispatched, Func<T, ToolEffectEvidence> effect)
+            Func<T, bool> wasDispatched, Func<T, ToolEffectEvidence> effect, Action validateBeforeDispatch = null)
         {
             var session = BoundManualSession(null);
             var id = Guid.NewGuid().ToString("N");
@@ -610,6 +629,8 @@ namespace RNAssistant.Office.Tools
             var dispatched = false;
             try
             {
+                try { validateBeforeDispatch?.Invoke(); }
+                catch { observer.AbandonBeforeDispatch(attempt); throw; }
                 observer.MarkDispatchMayHaveOccurred(attempt);
                 dispatched = true;
                 var result = action();

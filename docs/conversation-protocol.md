@@ -262,7 +262,7 @@ the committed current templates through its existing capture path.
 `common.prompts_read`, its include-defaults response branch and native/direct-settings
 reader are removed without alias. Old accepted calls fail explicit model-history
 validation, without automatic conversion or deletion of user history.
-The Prompts UI transport is a separate remaining consumer of this same cutover.
+The Prompts UI uses the same publication through the source transport below.
 
 The exact Agent-only native `common.prompts_save` accepts one enumerated `promptKey`
 plus its complete `value` and requires confirmation; role values are validated as
@@ -271,6 +271,45 @@ confirmation rejects changed pre-state before dispatch, preserves unrelated sett
 marks the storage boundary, then verifies the supplied value by read-back. An already
 matching request returns verified no-change without dispatch. Endpoint compatibility
 probes and JSON repair text remain fixed protocol safeguards, not authored prompts.
+
+### Prompt editor transport
+
+Initialization and settings responses expose `SettingsControlsDto` (no prompt
+bodies) and `rnassistant.promptLibrary` v1 metadata for the eight Markdown fields.
+`systemPromptRole` remains a scalar settings control. Opening a selected prompt
+calls typed `readPromptSource` with explicit chat and exact published field ref;
+`PromptEditorResourceService` uses the same Gateway/CAS snapshot and shared download
+owner `prompt-editor`. Capacity is reserved before capture: 100,000 characters,
+400,000 UTF-8 bytes per field. Missing, corrupt, partial or mismatched snapshots
+cannot enable editing; no direct settings/default reconstruction exists.
+
+The UI retains one selected clean source plus at most eight explicit dirty drafts.
+Chat/selection changes and page teardown cancel reads and close late leases;
+stale revisions and edits made during save remain drafts, not silently rebased text.
+Unloaded fields are omitted from writes, never interpreted as empty strings.
+Reset-current/all remains an explicit empty-value draft; existing settings
+normalization selects defaults only on save. Review still requires explicit user
+confirmation and the request-local flag described above.
+
+Changed fields use a single-use, chat/consumer-scoped upload: typed
+`rnassistant.promptMutation` v1 JSON with one to eight unique exact field refs and
+complete values, bounded to 8 MiB. Shared chunk transport verifies UTF-8, SHA-256,
+extent, scope and cancellation before the existing settings writer is reached.
+`saveSettings` carries body-free controls, the exact prompt publication and optional
+upload lease/hash. Legacy inline prompt fields are rejected. Under the existing
+catalog mutation lease, the writer checks both the expected committed revision and
+live template equality before dispatch; stale preparation is abandoned without
+changing the head. Omitted bodies come from that committed snapshot. The existing
+prepared/dispatch/read-back commit barrier remains the only publication owner;
+possible effect without successful read-back is `unknown`, never automatically
+retried. Uploads create neither authority nor model observations.
+
+Explicit settings/prompt reload requires confirmation before discarding drafts and
+refuses to discard edits made while the reload is in flight. The frozen compiler
+and model-facing confirmed save path are unchanged. Real Windows settings/DPAPI,
+multi-window and WebView2 editor/save/cancellation qualification remains open.
+
+### Tool and skill authoring
 
 The exact Agent-only `common.tools_upsert` and `common.tools_delete` authoring
 operations execute through native ToolRuntime handlers. Existing implementation is

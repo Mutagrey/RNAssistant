@@ -252,7 +252,7 @@ namespace RNAssistant.Office.Tools
             return result;
         }
 
-        private static void SetValue(
+        internal static void SetValue(
             AppSettings settings, string field, string value)
         {
             switch (field)

@@ -250,7 +250,7 @@ function renderSettings() {
   $("maxAgentFormatRetriesInput").value = s.MaxAgentFormatRetries || s.maxAgentFormatRetries || agentSettingsDefaults.maxAgentFormatRetries;
   $("maxAgentToolStepsInput").value = s.MaxAgentToolSteps || s.maxAgentToolSteps || agentSettingsDefaults.maxAgentToolSteps;
   if (typeof renderPromptSettings === "function") {
-    renderPromptSettings(s);
+    renderPromptSettings(state.prompts);
   }
   $("headersInput").value = headersToText(s.CustomHeaders || s.customHeaders || {});
   $("htmlNetworkOriginsInput").value = (s.HtmlNetworkAllowedOrigins || s.htmlNetworkAllowedOrigins || []).join("\n");
@@ -272,9 +272,6 @@ function readSettings() {
   if (typeof syncSelectedPromptFromEditor === "function") {
     syncSelectedPromptFromEditor();
   }
-  var promptSettings = typeof readPromptSettings === "function"
-    ? readPromptSettings()
-    : (state.settings || {});
   var reasoningRequestMode = $("reasoningRequestModeInput").value;
   var reasoningCustomJson = readReasoningCustomJson(reasoningRequestMode);
   return {
@@ -311,15 +308,7 @@ function readSettings() {
     AgentResponseMode: $("agentResponseModeInput").value,
     ToolResultRole: $("toolResultRoleInput").value,
     FallbackToJsonObject: $("fallbackJsonObjectInput").checked,
-    SystemPrompt: compatibilityValue(promptSettings, "SystemPrompt", "systemPrompt", ""),
-    AgentToolsPrompt: compatibilityValue(promptSettings, "AgentToolsPrompt", "agentToolsPrompt", ""),
-    AgentSkillsPrompt: compatibilityValue(promptSettings, "AgentSkillsPrompt", "agentSkillsPrompt", ""),
-    ChatSystemPrompt: compatibilityValue(promptSettings, "ChatSystemPrompt", "chatSystemPrompt", ""),
-    PlanSystemPrompt: compatibilityValue(promptSettings, "PlanSystemPrompt", "planSystemPrompt", ""),
     SystemPromptRole: $("systemPromptRoleInput").value,
-    ContextCompactionPrompt: compatibilityValue(promptSettings, "ContextCompactionPrompt", "contextCompactionPrompt", ""),
-    ChatTitlePrompt: compatibilityValue(promptSettings, "ChatTitlePrompt", "chatTitlePrompt", ""),
-    AttachmentAnalysisPrompt: compatibilityValue(promptSettings, "AttachmentAnalysisPrompt", "attachmentAnalysisPrompt", ""),
     ModelImageSupportOverrides: modelImageSupportOverrides(),
     ModelAudioSupportOverrides: modelAudioSupportOverrides(),
     ModelCapabilities: modelCapabilitiesForSettings(),
@@ -333,14 +322,10 @@ async function persistSettingsFromForm(reviewAgentPrompts) {
   var apiKey = $("apiKeyInput").value;
   var historySecret = $("historySecretInput").value;
   var nextSettings = readSettings();
-  var response = await send("saveSettings", {
-    settings: nextSettings,
-    apiKey: apiKey || null,
-    historySecret: historySecret || null,
-    reviewAgentPrompts: reviewAgentPrompts === true
-  });
+  var response = await saveSettingsWithPromptChanges(nextSettings, apiKey, historySecret, reviewAgentPrompts);
   state.appVersion = response.appVersion || response.AppVersion || state.appVersion;
-  state.settings = response.settings || response.Settings || nextSettings;
+  state.settings = response.settings;
+  state.prompts = response.prompts;
   state.hasApiKey = !!(response.hasApiKey || response.HasApiKey);
   state.hasHistorySecret = !!(response.hasHistorySecret || response.HasHistorySecret);
   $("apiKeyInput").value = "";

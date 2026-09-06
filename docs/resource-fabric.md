@@ -102,6 +102,14 @@ published text and reads cannot activate/reset defaults. The direct model settin
 reader is removed. Bounds, fields and save authority belong to
 [Published prompt inspection](conversation-protocol.md#published-prompt-inspection).
 
+`PromptEditorResourceService` reuses those exact field snapshots for selected UI
+source reads via shared downloads. Initialization/settings DTOs expose only controls
+and prompt refs; dirty field batches use the same single-use upload service before
+the existing guarded settings writer/catalog commit barrier. There is no inline
+settings-body fallback or second publication owner. Bounds, stale-draft preservation,
+explicit reset/review and cancellation belong to
+[Prompt editor transport](conversation-protocol.md#prompt-editor-transport).
+
 `SkillEditorResourceService` uses that published catalog and exact Gateway/CAS
 source for Library core/reference editing, including read-only built-ins.
 Catalog DTOs contain body metadata only; opening a source pulls its text through

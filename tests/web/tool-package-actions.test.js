@@ -192,7 +192,8 @@ function fixture(hooks = {}) {
     for (const file of ["app-chat-state.js", "app-chat-session.js"]) assert.ok(read("js/" + file).includes("cancelToolLibraryWrite()"));
     assert.ok(read("js/app-tools.js").includes('window.addEventListener("pagehide", cancelToolLibraryWrite)'));
     for (const file of ["app-tools.js", "app-tools-actions.js", "app-chat-state.js", "app-chat-session.js"])
-      assert.ok(read("index.html").includes(file + "?v=tool-docs-20260906-1"));
+      assert.ok(read("index.html").includes(file + "?v=" +
+        (/app-chat-(state|session)\./.test(file) ? "prompt-source-20260906-1" : "tool-docs-20260906-1")));
     assert.ok(!read("js/app-tools-actions.js").includes('"saveTools", options.mutationRequest()'));
     console.log("PASS tool package actions: both inline save consumers are removed and lifecycle cancellation is wired");
   }

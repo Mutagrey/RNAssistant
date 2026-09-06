@@ -258,12 +258,17 @@ namespace RNAssistant.Office.WebView
                             modelCatalog.ApiKey);
                         break;
                     case "saveSettings":
-                        var saveSettings = Payload<SaveSettingsPayload>(payload);
-                        responsePayload = _controller.SaveSettings(
-                            saveSettings.Settings ?? new AppSettings(),
-                            saveSettings.ApiKey,
-                            saveSettings.HistorySecret,
-                            saveSettings.ReviewAgentPrompts);
+                        responsePayload = _controller.SaveSettings(payload.ToObject<SaveSettingsPayload>(JsonSerializer.Create(
+                            new JsonSerializerSettings { MissingMemberHandling = MissingMemberHandling.Error })), cancellationToken);
+                        break;
+                    case "readPromptSource":
+                        responsePayload = await _controller.ReadPromptSourceAsync(Payload<PromptSourceReadRequest>(payload), cancellationToken).ConfigureAwait(false);
+                        break;
+                    case "beginPromptMutationUpload":
+                        responsePayload = _controller.BeginPromptMutationUpload(Payload<PromptMutationUploadRequest>(payload), cancellationToken);
+                        break;
+                    case "cancelPromptMutationUpload":
+                        responsePayload = _controller.CancelPromptMutationUpload(Payload<ResourceUploadLeaseRequest>(payload));
                         break;
                     case "testModelCompatibility":
                         responsePayload = await _controller.TestModelCompatibilityAsync(cancellationToken).ConfigureAwait(false);

@@ -67,6 +67,7 @@ version check still apply.
 | ModelProtocol boundary | `Program.AgentSafetyTests.cs`; media integration in `Program.ResourceGatewayTests.cs` | `model protocol:`, `agent: hydrates artifact media`, `causal trace:` |
 | Active wire / compatibility probes | `Program.AgentSafetyTests.cs` | `model compatibility:`, `agent: supports selectable`, `model protocol:` |
 | Prompt schema review / settings | `Program.ChatSettingsTests.cs`, `Program.AgentSafetyTests.cs`, `Program.ContextBridgeTests.cs` | `settings:`, `bridge: typed settings`, `chat: prompt save` |
+| Prompt editor exact source, body-free settings, changed-only uploads and publication guards | `Program.PromptEditorResourceTests.cs`, `Program.ContextBridgeTests.cs`; UI/shared transfers in `tests/web/prompt-review.test.js` | `prompt editor:`, `bridge: typed settings`, `resource cutover: prompt resources`, `resource cutover: frozen prompt publication`, `chat: prompt save preserves global model` |
 | Conversation v5 contract/context | `Program.SimpleAgentTests.cs`, `Program.AgentSafetyTests.cs` | `conversation v5:`, `protocol context:` |
 | History/context preflight | `Program.AgentSafetyTests.cs` | `preflight`, `protocol context:`, `model protocol:` |
 | Resources and attachments | `Program.ResourceFabricTests.cs`, `Program.ResourceGatewayTests.cs`, `Program.AttachmentTests.cs`; UI pre-dispatch ordering in `tests/web/attachment-ingestion-order.test.js` | `resources:`, `attachments:` |
