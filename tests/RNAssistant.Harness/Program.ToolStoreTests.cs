@@ -280,7 +280,7 @@ namespace RNAssistant.Harness
             };
             AssertEqual(14, excel.Count, "complete Excel tool count");
             AssertEqual(8, word.Count, "complete Word tool count");
-            AssertEqual(9, powerpoint.Count, "complete PowerPoint tool count");
+            AssertEqual(8, powerpoint.Count, "complete PowerPoint tool count");
             AssertEqual(5, outlook.Count, "complete Outlook tool count");
             foreach (var catalog in catalogs)
             {

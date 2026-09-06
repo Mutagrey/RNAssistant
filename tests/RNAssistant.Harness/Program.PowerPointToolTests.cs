@@ -5,6 +5,10 @@ using RNAssistant.Core.Agent;
 using RNAssistant.Core.Models;
 using RNAssistant.Core.Storage;
 using RNAssistant.Core.Tools;
+using RNAssistant.Core.Services;
+using RNAssistant.Office.Services;
+using RNAssistant.Office.Domains.PowerPoint;
+using System.Threading;
 using RNAssistant.Office;
 using RNAssistant.Office.Runtime;
 using RNAssistant.Office.Tools;
@@ -24,7 +28,6 @@ namespace RNAssistant.Harness
                     var runtime = PowerPointRuntime(executor, adapter);
                     var ids = new[]
                     {
-                        PowerPointToolIds.ReadSlides,
                         PowerPointToolIds.ListObjects,
                         PowerPointToolIds.SearchText,
                         PowerPointToolIds.AddSlide,
@@ -51,35 +54,26 @@ namespace RNAssistant.Harness
                                 "PowerPoint mutation requires tool verification: " + id);
                     }
 
-                    var readCall = new ToolCall(
-                        "powerpoint-read", PowerPointToolIds.ReadSlides,
-                        "{\"slideIndex\":1,\"content\":\"both\"}");
-                    var read = ExecuteNative(
-                        runtime, readCall, runtime.Describe(readCall));
-                    AssertEqual(ToolExecutionOutcome.Ok, read.Outcome,
-                        "PowerPoint read uses the typed backend");
-                    AssertTrue(((string)JObject.Parse(read.Result.DataJson)["text"])
-                        .IndexOf("Revenue grew", StringComparison.Ordinal) >= 0,
-                        "PowerPoint read keeps the existing result shape");
+                    var read = executor.ExecuteManual(Command(
+                        ResourceToolCatalog.ReadToolId, "target", "PowerPoint slide: 1", "representation", "source"),
+                        tools, new AppSettings(), false, false, session);
+                    AssertTrue(read.Success, "PowerPoint source uses the typed resource backend");
+                    AssertContains(JObject.Parse(read.DataJson).Value<string>("text"), "Revenue grew",
+                        "PowerPoint resource source includes slide text");
+                    AssertTrue(!tools.Any(tool => tool.Id == "powerpoint.read_slides"),
+                        "PowerPoint direct reader is removed");
 
                     var reads = adapter.PowerPointBackendCalls.Count(operation =>
                         operation == FakeOfficeAdapter.PowerPointReadSlidesOperation);
-                    AppendAcceptedHtmlSource(session, "powerpoint_html_run",
-                        "powerpoint_html_source", PowerPointToolIds.ReadSlides,
-                        new JObject
-                        {
-                            ["slideIndex"] = 1,
-                            ["content"] = "both"
-                        }, read.Result);
                     var bound = executor.ExecuteManual(Command(
                         HtmlWorkspaceToolCatalog.BindDataToolId,
-                        "name", "powerpoint_slides"), tools, new AppSettings(), false, false, session);
-                    AssertTrue(bound.Success,
-                        "PowerPoint HTML binding shares the typed read route");
-                    AssertEqual(reads,
+                        "name", "powerpoint_slides", "target", "PowerPoint slide: 1", "view", "source"),
+                        tools, new AppSettings(), false, false, session);
+                    AssertTrue(bound.Success, "PowerPoint HTML binding shares the resource capture");
+                    AssertEqual(reads + 1,
                         adapter.PowerPointBackendCalls.Count(operation =>
                             operation == FakeOfficeAdapter.PowerPointReadSlidesOperation),
-                        "PowerPoint HTML binding does not nest another backend read");
+                        "PowerPoint HTML binding reads through Gateway");
 
                     var writes = adapter.PowerPointBackendCalls.Count(operation =>
                         operation == FakeOfficeAdapter.PowerPointAddSlideOperation);
@@ -96,6 +90,101 @@ namespace RNAssistant.Harness
                         "powerpoint-case", "POWERPOINT.ADD_SLIDE", "{}")) == null,
                         "PowerPoint native ownership has no case alias");
                 });
+        }
+
+        private static void PowerPointResourcesRetainExactSources()
+        {
+            WithTempExecutor(FakeOfficeAdapter.ForHost("PowerPoint"), (executor, adapter) =>
+            {
+                var source = "\uFEFFСлайд\r\n" + new string('p', 70000) + "\r\nКонец 😀";
+                var notes = "Заметки\r\nс пробелами  ";
+                adapter.SetText(new PowerPointSetTextRequest { Target = "body", HasSlideIndex = true, SlideIndex = 1, Text = source }, () => { });
+                adapter.SetText(new PowerPointSetTextRequest { Target = "notes", HasSlideIndex = true, SlideIndex = 1, Text = notes }, () => { });
+                var session = NewSession(adapter);
+                executor.BindResourceAuthority(session);
+                var tools = OfficeToolCatalog.ForHost("PowerPoint").Concat(executor.GetControllerTools()).ToList();
+                var runtime = executor.CreateNativeRuntime(session, tools, new AppSettings(), "agent", false);
+                var legacyReads = adapter.DocumentSnapshotReadCount;
+                var before = adapter.PowerPointSourceMaterializationCount;
+                var first = ExecuteHtmlNative(runtime, ResourceToolCatalog.ReadToolId,
+                    new JObject { ["target"] = "PowerPoint slide: 1", ["representation"] = "source" });
+                AssertEqual(ToolExecutionOutcome.Ok, first.Outcome, "PowerPoint source read succeeds");
+                var text = (string)JObject.Parse(first.Result.DataJson)["text"];
+                var slide = (JObject)JArray.Parse(text).Single();
+                AssertContains((string)slide["text"], source, "source preserves Unicode and line endings");
+                AssertEqual(notes, (string)slide["notes"], "source preserves speaker notes");
+                AssertEqual(before + 1, adapter.PowerPointSourceMaterializationCount, "all internal pages use one capture");
+                AssertEqual(legacyReads, adapter.DocumentSnapshotReadCount, "source bypasses clipped adapter snapshot");
+                var evidence = first.ResourceEvidence.Single();
+                AssertTrue(evidence.Resource.IsExact && evidence.Complete && evidence.Payload != null, "complete exact CAS evidence");
+
+                var document = executor.ResourceGateway.List(session, LiveDocumentResourceProvider.ProviderName,
+                    LiveDocumentResourceProvider.DocumentKind, null, 10).Items.Single();
+                var deck = ExecuteHtmlNative(runtime, ResourceToolCatalog.ReadToolId,
+                    new JObject { ["target"] = ResourceGatewayService.IntentTarget(document), ["representation"] = "text" });
+                AssertEqual(ToolExecutionOutcome.Ok, deck.Outcome, "document text uses typed capture");
+                AssertContains((string)JObject.Parse(deck.Result.DataJson)["text"], source, "deck text is complete");
+                AssertEqual(legacyReads, adapter.DocumentSnapshotReadCount, "document also bypasses adapter snapshot");
+
+                adapter.SetText(new PowerPointSetTextRequest { Target = "notes", HasSlideIndex = true, SlideIndex = 1, Text = "changed" }, () => { });
+                var fresh = ExecuteHtmlNative(runtime, ResourceToolCatalog.ReadToolId,
+                    new JObject { ["target"] = "PowerPoint slide: 1", ["representation"] = "source" });
+                AssertEqual(ToolExecutionOutcome.Ok, fresh.Outcome, "fresh source observes note change");
+                AssertEqual(EvidenceState.Superseded, new EvidenceStateReducer().Reduce(evidence,
+                    executor.ResourceAuthority.CaptureMany(new[] { evidence.ScopeId })).State, "changed notes supersede old source");
+                before = adapter.PowerPointSourceMaterializationCount;
+                var retained = executor.ResourceGateway.Read(session, new ResourceReadRequest
+                    { Reference = evidence.Resource, Representation = "source", MaxChars = 32000 }).Result;
+                var continuation = executor.ResourceGateway.Read(session, new ResourceReadRequest
+                    { Reference = evidence.Resource, Representation = "source", Cursor = retained.NextCursor, MaxChars = 32000 }).Result;
+                AssertEqual(text.Substring(0, 32000), retained.Text, "historical source stays exact");
+                AssertEqual(text.Substring(32000, 32000), continuation.Text, "historical continuation stays exact");
+                AssertEqual(before, adapter.PowerPointSourceMaterializationCount, "retained source never reads Office");
+                string error;
+                AssertTrue(!ModelToolResultProjection.ValidateAcceptedCall(new ToolCall("old", "powerpoint.read_slides", "{}"), out error) &&
+                    DirectToolBindingCatalog.Resolve("powerpoint.read_slides") == null, "old reader has no replay or native alias");
+                var removed = executor.ExecuteManual(Command("powerpoint.read_slides"), tools, new AppSettings(), false, false, session);
+                AssertEqual("unknown_tool", removed.ErrorCode, "old manual reader has no fallback");
+            });
+        }
+
+        private static void PowerPointResourcesRejectIncompleteCaptures()
+        {
+            WithTempExecutor(FakeOfficeAdapter.ForHost("PowerPoint"), (executor, adapter) =>
+            {
+                var session = NewSession(adapter);
+                executor.BindResourceAuthority(session);
+                var tools = OfficeToolCatalog.ForHost("PowerPoint").Concat(executor.GetControllerTools()).ToList();
+                AssertTrue(executor.ResourceGateway.Find(session, "PowerPoint slide: 1", "document").Items
+                    .Any(item => item.Target == "PowerPoint slide: 1"), "explicit slide target is discoverable");
+                foreach (var target in new[] { "PowerPoint slide: 0", "PowerPoint slide: -1", "PowerPoint slide: 01",
+                    "PowerPoint slide: 1:2", "PowerPoint slide: 2147483648", "PowerPoint slide: 999" })
+                {
+                    var before = adapter.PowerPointSourceMaterializationCount;
+                    var invalid = executor.ExecuteManual(Command(ResourceToolCatalog.ReadToolId, "target", target),
+                        tools, new AppSettings(), false, false, session);
+                    AssertTrue(!invalid.Success, "invalid slide is rejected: " + target);
+                    AssertEqual(before, adapter.PowerPointSourceMaterializationCount, "invalid target never materializes source");
+                }
+                adapter.AddSlide(new PowerPointAddSlideRequest { Title = "Second", Body = "end" }, () => { });
+                var service = new PowerPointService(adapter);
+                var count = adapter.PowerPointSourceMaterializationCount;
+                var rejected = false;
+                try { service.CaptureSlides(new PowerPointReadSlidesRequest { MaxSlides = 1, MaxShapesPerSlide = 1000, MaxCharacters = 1000000 }, CancellationToken.None); }
+                catch (PowerPointBackendException error) { rejected = error.ErrorCode == "RESOURCE_SNAPSHOT_TOO_LARGE"; }
+                AssertTrue(rejected, "deck bound rejects instead of taking first slides");
+                AssertEqual(count, adapter.PowerPointSourceMaterializationCount, "deck bound precedes materialization");
+
+                adapter.SetText(new PowerPointSetTextRequest { Target = "body", HasSlideIndex = true, SlideIndex = 1,
+                    Text = new string('x', PowerPointService.MaximumTextCharacters + 1) }, () => { });
+                var large = executor.ExecuteManual(Command(ResourceToolCatalog.ReadToolId, "target", "PowerPoint slide: 1"),
+                    tools, new AppSettings(), false, false, session);
+                AssertEqual("RESOURCE_SNAPSHOT_TOO_LARGE", large.ErrorCode, "oversized slide never returns clipped success");
+                AssertEqual(count, adapter.PowerPointSourceMaterializationCount, "character bound precedes materialization");
+                var small = executor.ExecuteManual(Command(ResourceToolCatalog.ReadToolId, "target", "PowerPoint slide: 2"),
+                    tools, new AppSettings(), false, false, session);
+                AssertTrue(small.Success, "explicit small slide is still readable");
+            });
         }
 
         private static void PowerPointToolsPreserveFamilySemantics()
@@ -225,11 +314,14 @@ namespace RNAssistant.Harness
                     var inner = FakeOfficeAdapter.ForHost("PowerPoint");
                     var host = new BoundTestOfficeAdapter(sessionPort, inner);
                     var ownerSta = false;
+                    var sourceOwnerSta = false;
                     host.BeforeRead = operation =>
                     {
                         if (operation ==
                             FakeOfficeAdapter.PowerPointAddSlideOperation)
                             ownerSta = dispatcher.CheckAccess;
+                        if (operation == FakeOfficeAdapter.PowerPointReadSlidesOperation)
+                            sourceOwnerSta = dispatcher.CheckAccess;
                     };
                     var executor = new OfficeToolExecutor(
                         host, new VbaJournalStore(paths),
@@ -249,10 +341,19 @@ namespace RNAssistant.Harness
                     AssertTrue(result.Success && ownerSta,
                         "PowerPoint mutation stays on bound owner STA");
 
+                    var sourceRead = executor.ExecuteManual(Command(ResourceToolCatalog.ReadToolId,
+                        "target", "PowerPoint slide: 1", "representation", "source"), tools, new AppSettings(), false, false, chat);
+                    AssertTrue(sourceRead.Success && sourceOwnerSta, "resource source uses the bound presentation STA");
+                    var sourceReads = inner.PowerPointSourceMaterializationCount;
+
                     var dispatched = inner.PowerPointBackendCalls.Count(
                         operation => operation ==
                             FakeOfficeAdapter.PowerPointAddSlideOperation);
                     dispatcher.Invoke(() => document.IsAlive = false);
+                    var closedSource = executor.ExecuteManual(Command(ResourceToolCatalog.ReadToolId,
+                        "target", "PowerPoint slide: 1"), tools, new AppSettings(), false, false, chat);
+                    AssertTrue(!closedSource.Success, "closed presentation blocks fresh resource capture");
+                    AssertEqual(sourceReads, inner.PowerPointSourceMaterializationCount, "closed source never reaches backend");
                     var closed = executor.ExecuteManual(Command(
                         PowerPointToolIds.AddSlide, "title", "Stale"),
                         tools, new AppSettings(), false, true, chat);

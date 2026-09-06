@@ -213,7 +213,7 @@ namespace RNAssistant.MockDemo
 
             if (IsHost(host, "PowerPoint"))
             {
-                return "Готово: добавил mock slide и проверил deck через `powerpoint.read_slides`.";
+                return "Готово: добавил mock slide и проверил deck через `common.resources_read`.";
             }
 
             if (IsHost(host, "Outlook"))

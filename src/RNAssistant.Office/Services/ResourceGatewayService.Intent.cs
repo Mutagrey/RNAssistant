@@ -40,6 +40,11 @@ namespace RNAssistant.Office.Services
                 var word = _registry.All().OfType<LiveDocumentResourceProvider>().SingleOrDefault();
                 if (word != null) AddIntentState(states, WithProvider(word, session, () => word.ResolveWordRange(session, query)));
             }
+            if ((scope == "all" || scope == "document") && query.StartsWith("PowerPoint slide: ", StringComparison.Ordinal))
+            {
+                var powerPoint = _registry.All().OfType<LiveDocumentResourceProvider>().SingleOrDefault();
+                if (powerPoint != null) AddIntentState(states, WithProvider(powerPoint, session, () => powerPoint.ResolvePowerPointSlide(session, query)));
+            }
             AssignIntentTargets(states);
 
             Dictionary<string, ResourceSearchMatch> matches = null;
@@ -110,6 +115,14 @@ namespace RNAssistant.Office.Services
                 if (excel == null) throw new ResourceRequestException("Excel resource provider is unavailable.", "RESOURCE_PROVIDER_UNAVAILABLE", false);
                 var descriptor = WithProvider(excel, session, () => excel.ResolveRange(session, target));
                 return new ResourceIntentTarget { Target = IntentTarget(descriptor), Type = "Excel range", Scope = "document",
+                    Descriptor = descriptor, Reference = descriptor.Reference };
+            }
+            if (target.StartsWith("PowerPoint slide: ", StringComparison.Ordinal))
+            {
+                var powerPoint = _registry.All().OfType<LiveDocumentResourceProvider>().SingleOrDefault();
+                if (powerPoint == null) throw new ResourceRequestException("PowerPoint resource provider is unavailable.", "RESOURCE_PROVIDER_UNAVAILABLE", false);
+                var descriptor = WithProvider(powerPoint, session, () => powerPoint.ResolvePowerPointSlide(session, target));
+                return new ResourceIntentTarget { Target = IntentTarget(descriptor), Type = "PowerPoint slide", Scope = "document",
                     Descriptor = descriptor, Reference = descriptor.Reference };
             }
             if (target.StartsWith("Word range: ", StringComparison.Ordinal))
@@ -459,6 +472,7 @@ namespace RNAssistant.Office.Services
             {
                 case "document": return "document";
                 case "Excel range": return "document";
+                case "PowerPoint slide":
                 case "Word range": return "document";
                 case "Office observation": return "document";
                 case "catalog":
@@ -493,6 +507,7 @@ namespace RNAssistant.Office.Services
                 case "skill-reference": return "skill reference";
                 case LiveDocumentResourceProvider.DocumentKind: return "document";
                 case ExcelResourceProvider.RangeKind: return "Excel range";
+                case LiveDocumentResourceProvider.PowerPointSlideKind: return "PowerPoint slide";
                 case LiveDocumentResourceProvider.WordRangeKind: return "Word range";
                 case LiveDocumentResourceProvider.SelectionKind: return "selection";
                 case VbaResourceProvider.ProjectKind: return "VBA project";
@@ -517,7 +532,7 @@ namespace RNAssistant.Office.Services
             string type)
         {
             if (descriptor.Provider == "catalog") return "catalogs";
-            if (string.Equals(type, "document", StringComparison.Ordinal) || type == "Excel range" || type == "Word range" || type == "Office observation") return "document";
+            if (string.Equals(type, "document", StringComparison.Ordinal) || type == "Excel range" || type == "Word range" || type == "PowerPoint slide" || type == "Office observation") return "document";
             if (string.Equals(type, "selection", StringComparison.Ordinal)) return "selection";
             if (string.Equals(type, "VBA backup", StringComparison.Ordinal)) return "backups";
             if (string.Equals(type, "VBA module", StringComparison.Ordinal) ||

@@ -16,12 +16,15 @@ namespace RNAssistant.Office.Services
 
         private readonly IOfficeApplicationAdapter _adapter;
         private readonly LiveOfficeResourceScope _scope;
+        private readonly RNAssistant.Core.Storage.ChatBlobStore _payloads;
+        private bool IsExactSource(string target) { return IsWord || (IsPowerPoint && target != "selection"); }
 
         public LiveDocumentResourceProvider(IOfficeApplicationAdapter adapter, RNAssistant.Core.Storage.ChatBlobStore payloads = null)
         {
             _adapter = adapter ?? throw new ArgumentNullException("adapter");
             _scope = new LiveOfficeResourceScope(adapter);
             _payloads = payloads;
+            if (IsPowerPoint) _powerPoint = (adapter as RNAssistant.Office.Domains.PowerPoint.IPowerPointBackendProvider)?.PowerPointBackend;
             if (IsWord) _word = (adapter as RNAssistant.Office.Domains.Word.IWordBackendProvider)?.WordBackend;
         }
 
@@ -79,19 +82,22 @@ namespace RNAssistant.Office.Services
         private ResourceDescriptor Describe(ChatSession session, string target)
         {
             var selection = string.Equals(target, "selection", StringComparison.Ordinal);
+            var powerPointSlide = IsPowerPoint && IsPowerPointSlide(target);
             var wordRange = IsWord && target.StartsWith("range-", StringComparison.Ordinal);
             var descriptor = new ResourceDescriptor
             {
                 Reference = new ResourceRef(CreateUri(session, target)),
                 Provider = ProviderName,
-                Kind = wordRange ? WordRangeKind : selection ? SelectionKind : DocumentKind,
-                Title = wordRange ? target.Substring(6).Replace('-', ':') : selection ? "Current Office selection" : _adapter.DocumentTitle ?? "Office document",
+                Kind = powerPointSlide ? PowerPointSlideKind : wordRange ? WordRangeKind : selection ? SelectionKind : DocumentKind,
+                Title = powerPointSlide ? target.Substring(6) : wordRange ? target.Substring(6).Replace('-', ':') : selection ? "Current Office selection" : _adapter.DocumentTitle ?? "Office document",
                 MimeType = "text/plain; charset=utf-8",
                 Mutable = true
             };
             descriptor.Representations.Add(ResourceRepresentations.Metadata);
             descriptor.Representations.Add(ResourceRepresentations.Structure);
             descriptor.Representations.Add(ResourceRepresentations.Text);
+            if (IsPowerPoint && !selection) descriptor.Representations.Add(ResourceRepresentations.Source);
+            if (IsPowerPoint) descriptor.Metadata["slideTargetFormat"] = "PowerPoint slide: N (one-based); source includes text and notes";
             descriptor.Metadata["host"] = _adapter.HostName ?? string.Empty;
             descriptor.Metadata["live"] = "true";
             descriptor.Metadata["target"] = target;
@@ -123,7 +129,8 @@ namespace RNAssistant.Office.Services
             }
             if (!string.Equals(address.Segments[1], "root", StringComparison.Ordinal) &&
                 !string.Equals(address.Segments[1], "selection", StringComparison.Ordinal) &&
-                !(IsWord && IsWordRange(address.Segments[1])))
+                !(IsWord && IsWordRange(address.Segments[1])) &&
+                !(IsPowerPoint && IsPowerPointSlide(address.Segments[1])))
             {
                 return false;
             }

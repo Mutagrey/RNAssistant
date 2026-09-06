@@ -28,6 +28,8 @@ namespace RNAssistant.Harness
         internal const string PowerPointMoveOperation =
             "powerpoint.move.direct";
 
+        public int PowerPointSourceMaterializationCount { get; private set; }
+
         public PowerPointSlideReadSnapshot ReadSlides(
             PowerPointReadSlidesRequest request)
         {
@@ -36,11 +38,26 @@ namespace RNAssistant.Harness
             IEnumerable<FakeSlide> slides = _slides;
             if (request.HasSlideIndex)
                 slides = new[] { PowerPointSlide(request.SlideIndex) };
-            else slides = slides.Take(request.MaxSlides);
+            else if (_slides.Count > request.MaxSlides)
+                throw new PowerPointBackendException("Choose one slide.", "RESOURCE_SNAPSHOT_TOO_LARGE", false);
+            long characters = 0;
+            var selected = slides.ToArray();
+            foreach (var slide in selected)
+            {
+                if (2 + slide.Shapes.Count > request.MaxShapesPerSlide)
+                    throw new PowerPointBackendException("Too many shapes.", "RESOURCE_SNAPSHOT_TOO_LARGE", false);
+                characters += (slide.Notes ?? string.Empty).Length;
+                foreach (var value in new[] { slide.Title, slide.Body }.Concat(slide.Shapes.Select(shape => shape.Text)))
+                    if (!string.IsNullOrEmpty(value)) characters += (long)value.Length + Environment.NewLine.Length;
+            }
+            if (characters > request.MaxCharacters)
+                throw new PowerPointBackendException("Choose a smaller source.", "RESOURCE_SNAPSHOT_TOO_LARGE", false);
+            PowerPointSourceMaterializationCount++;
+            var captured = selected.Select(PowerPointContent).ToArray();
             return new PowerPointSlideReadSnapshot
             {
-                Slides = slides.Select((slide, offset) =>
-                    PowerPointContent(slide)).ToArray()
+                TotalSlides = _slides.Count,
+                Slides = captured
             };
         }
 

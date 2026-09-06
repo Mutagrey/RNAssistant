@@ -49,6 +49,11 @@ document/selection/range evidence, single-capture continuation, historical no-I/
 removed-call refusal, pre-materialization bounds and bound-STA/closed-document
 source access. Fake checks do not qualify real Word COM text or selection semantics.
 
+PowerPoint source cutover: `powerpoint resources:` and `powerpoint tools:` cover
+document/slide text and notes, exact CAS evidence, one-capture paging, historical
+no-I/O, explicit bounds, removed-call refusal, shared HTML capture and bound
+STA/closed-presentation routing. Real COM shapes/notes and selection remain unqualified.
+
 | Area | Main files | Useful filters |
 | --- | --- | --- |
 | Conversation and Agent | `Program.SimpleAgentTests.cs`, `Program.AgentSafetyTests.cs`, `Program.ToolDiscoveryTests.cs` | `conversation:`, `agent:` |

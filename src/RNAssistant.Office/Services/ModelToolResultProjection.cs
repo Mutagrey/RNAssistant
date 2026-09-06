@@ -194,6 +194,9 @@ namespace RNAssistant.Office.Services
                 case "excel.read_range":
                     error = "Excel range reads use common.resources_read and exact document evidence.";
                     return false;
+                case "powerpoint.read_slides":
+                    error = "PowerPoint slide reads use common.resources_read and exact document evidence.";
+                    return false;
                 case "word.read_text":
                     error = "Word text reads use common.resources_read and exact document evidence.";
                     return false;

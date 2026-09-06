@@ -28,18 +28,6 @@ namespace RNAssistant.Office.Tools
             arguments = arguments ??
                 new Dictionary<string, object>(StringComparer.OrdinalIgnoreCase);
             if (string.Equals(
-                toolId, PowerPointToolIds.ReadSlides, StringComparison.Ordinal))
-                return _service.ReadSlides(new PowerPointReadSlidesRequest
-                {
-                    HasSlideIndex = arguments.ContainsKey("slideIndex"),
-                    SlideIndex = ToolArgumentReader.Int32(
-                        arguments, "slideIndex", 0),
-                    MaxSlides = ToolArgumentReader.Int32(
-                        arguments, "maxSlides", 20),
-                    Content = ToolArgumentReader.String(
-                        arguments, "content", "text")
-                }, cancellationToken);
-            if (string.Equals(
                 toolId, PowerPointToolIds.ListObjects, StringComparison.Ordinal))
                 return _service.List(new PowerPointListRequest
                 {

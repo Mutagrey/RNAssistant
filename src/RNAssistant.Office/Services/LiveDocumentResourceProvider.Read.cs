@@ -25,7 +25,7 @@ namespace RNAssistant.Office.Services
                 {
                     throw new KeyNotFoundException("Live Office resource was not found: " + resourceUri);
                 }
-                var representation = NormalizeRepresentation(request == null ? null : request.Representation);
+                var representation = NormalizeRepresentation(request == null ? null : request.Representation, target);
                 if (representation == ResourceRepresentations.Metadata)
                 {
                     ResourceReadCursor.RejectCursor(request);
@@ -41,10 +41,12 @@ namespace RNAssistant.Office.Services
                     };
                 }
 
-                var content = representation == ResourceRepresentations.Structure
+                var content = representation == ResourceRepresentations.Source
+                    ? ReadPowerPointSource(target, true)
+                    : representation == ResourceRepresentations.Structure
                     ? ReadStructure(target)
                     : ReadText(target);
-                var sourceTruncated = !IsWord && content.Length >= MaximumMaterializedCharacters;
+                var sourceTruncated = !IsExactSource(target) && content.Length >= MaximumMaterializedCharacters;
                 var cursorBinding = ResourceReadCursor.ReadBinding(resourceUri, representation);
                 var position = ResourceReadCursor.ParseRevisionBound(request, cursorBinding);
                 return SelectText(
@@ -101,7 +103,7 @@ namespace RNAssistant.Office.Services
                 var content = ReadText(target);
                 var contentSha256 = TextPatternEngine.Sha256(content);
                 result.ScannedCharacters = content.Length;
-                result.ScanTruncated = !IsWord && content.Length >= MaximumMaterializedCharacters;
+                result.ScanTruncated = !IsExactSource(target) && content.Length >= MaximumMaterializedCharacters;
                 var index = 0;
                 while (result.Matches.Count < limit &&
                     (index = content.IndexOf(query, index, StringComparison.OrdinalIgnoreCase)) >= 0)
@@ -134,6 +136,7 @@ namespace RNAssistant.Office.Services
         private string ReadText(string target)
         {
             if (IsWord) return ReadWordText(target);
+            if (IsPowerPoint && target != "selection") return ReadPowerPointSource(target, false);
             if (string.Equals(target, "selection", StringComparison.Ordinal))
             {
                 var selection = _adapter.CaptureSelectionContext("selection", MaximumMaterializedCharacters);
@@ -151,6 +154,8 @@ namespace RNAssistant.Office.Services
 
         private string ReadStructure(string target)
         {
+            if (IsPowerPoint && IsPowerPointSlide(target))
+                return JsonConvert.SerializeObject(new { slideIndex = int.Parse(target.Substring(6), System.Globalization.CultureInfo.InvariantCulture) });
             if (IsWord && target.StartsWith("range-", StringComparison.Ordinal))
             {
                 var range = WordRange(target);
@@ -240,7 +245,7 @@ namespace RNAssistant.Office.Services
                     Representation = representation,
                     Text = content.Substring(offset, length),
                     ContentSha256 = contentSha256,
-                    CompleteViewPayload = IsWord && !sourceTruncated && _payloads != null
+                    CompleteViewPayload = IsExactSource(target) && !sourceTruncated && _payloads != null
                         ? PayloadRef.FromBlob(_payloads.StoreText(content, "text/plain; charset=utf-8")) : null,
                     Offset = offset,
                     ReturnedCharacters = length,
@@ -256,10 +261,11 @@ namespace RNAssistant.Office.Services
             };
         }
 
-        private static string NormalizeRepresentation(string value)
+        private string NormalizeRepresentation(string value, string target)
         {
             value = (value ?? string.Empty).Trim().ToLowerInvariant();
             if (value.Length == 0 || value == "auto") return ResourceRepresentations.Text;
+            if (value == ResourceRepresentations.Source && IsPowerPoint && target != "selection") return value;
             if (value == ResourceRepresentations.Metadata ||
                 value == ResourceRepresentations.Structure ||
                 value == ResourceRepresentations.Text) return value;

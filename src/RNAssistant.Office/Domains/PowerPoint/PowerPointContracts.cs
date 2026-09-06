@@ -8,7 +8,8 @@ namespace RNAssistant.Office.Domains.PowerPoint
         public bool HasSlideIndex { get; set; }
         public int SlideIndex { get; set; }
         public int MaxSlides { get; set; }
-        public string Content { get; set; }
+        public int MaxCharacters { get; set; }
+        public int MaxShapesPerSlide { get; set; }
     }
 
     public sealed class PowerPointSlideContentSnapshot
@@ -21,6 +22,7 @@ namespace RNAssistant.Office.Domains.PowerPoint
 
     public sealed class PowerPointSlideReadSnapshot
     {
+        public int TotalSlides { get; set; }
         public IReadOnlyList<PowerPointSlideContentSnapshot> Slides { get; set; }
     }
 

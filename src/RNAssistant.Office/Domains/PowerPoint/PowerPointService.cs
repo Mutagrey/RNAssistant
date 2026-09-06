@@ -23,77 +23,37 @@ namespace RNAssistant.Office.Domains.PowerPoint
             _backend = backend ?? throw new ArgumentNullException(nameof(backend));
         }
 
-        public PowerPointOutcome ReadSlides(
-            PowerPointReadSlidesRequest request,
-            CancellationToken cancellationToken)
+        public const int MaximumTextCharacters = 1000000;
+
+        public PowerPointSlideReadSnapshot CaptureSlides(
+            PowerPointReadSlidesRequest request, CancellationToken cancellationToken)
         {
-            request = request ?? new PowerPointReadSlidesRequest();
-            request.Content = Normalize(request.Content, "text");
-            request.MaxSlides = Math.Max(1, Math.Min(200, request.MaxSlides));
-            if (request.Content != "text" && request.Content != "notes" &&
-                request.Content != "both")
-                return Failure(
-                    "content must be text, notes, or both.",
-                    "powerpoint_content_invalid", false);
-            if (request.HasSlideIndex && request.SlideIndex < 1)
-                return Failure(
-                    "slideIndex must be a positive integer.",
-                    "invalid_arguments", false);
-            try
+            if (request == null || (request.HasSlideIndex && request.SlideIndex < 1) ||
+                request.MaxSlides < 1 || request.MaxSlides > MaxSlides ||
+                request.MaxCharacters < 1 || request.MaxCharacters > MaximumTextCharacters ||
+                request.MaxShapesPerSlide < 1 || request.MaxShapesPerSlide > MaxShapesPerSlide)
+                throw new PowerPointBackendException("Invalid exact PowerPoint capture bounds.", "invalid_arguments", false);
+            cancellationToken.ThrowIfCancellationRequested();
+            var snapshot = _backend.ReadSlides(request);
+            cancellationToken.ThrowIfCancellationRequested();
+            if (snapshot == null || snapshot.Slides == null || snapshot.TotalSlides < 0 ||
+                snapshot.Slides.Count != (request.HasSlideIndex ? 1 : snapshot.TotalSlides) ||
+                snapshot.Slides.Count > request.MaxSlides)
+                throw new PowerPointBackendException("PowerPoint backend returned an incomplete capture.", "powerpoint_read_snapshot_invalid", false);
+            long characters = 0;
+            var ids = new HashSet<int>();
+            for (var i = 0; i < snapshot.Slides.Count; i++)
             {
-                cancellationToken.ThrowIfCancellationRequested();
-                var snapshot = _backend.ReadSlides(request);
-                var slides = snapshot == null || snapshot.Slides == null
-                    ? null : snapshot.Slides;
-                if (slides == null)
-                    return Failure(
-                        "PowerPoint read backend returned no snapshot.",
-                        "powerpoint_read_snapshot_missing", true);
-                if (request.HasSlideIndex && slides.Count != 1)
-                    return Failure(
-                        "PowerPoint read backend did not return the requested slide.",
-                        "powerpoint_slide_snapshot_missing", true);
-                if (request.Content == "notes")
-                    return PowerPointOutcome.Ok(
-                        "Speaker notes read: " + slides.Count,
-                        NotesJson(slides), PowerPointEffect.None);
-                if (request.Content == "both")
-                    return PowerPointOutcome.Ok(
-                        request.HasSlideIndex
-                            ? "Slide read: " + slides[0].Index
-                            : "Slides and notes read: " + slides.Count,
-                        request.HasSlideIndex
-                            ? SlideJson(slides[0], true).ToString(Formatting.None)
-                            : SlidesJson(slides, true),
-                        PowerPointEffect.None);
-                if (request.HasSlideIndex)
-                    return PowerPointOutcome.Ok(
-                        "Slide text read: " + slides[0].Index,
-                        SlideJson(slides[0], false).ToString(Formatting.None),
-                        PowerPointEffect.None);
-                var builder = new StringBuilder();
-                foreach (var slide in slides)
-                {
-                    builder.AppendLine("Slide " + slide.Index + ":");
-                    builder.Append(slide.Text ?? string.Empty);
-                }
-                return PowerPointOutcome.Ok(
-                    "Slides read.",
-                    new JObject { ["text"] = builder.ToString() }
-                        .ToString(Formatting.None),
-                    PowerPointEffect.None);
+                var slide = snapshot.Slides[i];
+                if (slide == null || slide.Text == null || slide.Notes == null ||
+                    slide.Index != (request.HasSlideIndex ? request.SlideIndex : i + 1) ||
+                    slide.Index > snapshot.TotalSlides || slide.SlideId <= 0 || !ids.Add(slide.SlideId))
+                    throw new PowerPointBackendException("PowerPoint backend returned an invalid slide.", "powerpoint_read_snapshot_invalid", false);
+                characters += (long)slide.Text.Length + slide.Notes.Length;
             }
-            catch (OperationCanceledException) { throw; }
-            catch (PowerPointBackendException ex)
-            {
-                return Failure(ex.Message, ex.ErrorCode, ex.Retryable, ex.DetailsJson);
-            }
-            catch (Exception ex)
-            {
-                return Failure(
-                    "PowerPoint slide read failed: " + ex.Message,
-                    "powerpoint_read_failed", true);
-            }
+            if (characters > request.MaxCharacters)
+                throw new PowerPointBackendException("Choose a smaller PowerPoint source.", "RESOURCE_SNAPSHOT_TOO_LARGE", false);
+            return snapshot;
         }
 
         public PowerPointOutcome List(
@@ -712,39 +672,6 @@ namespace RNAssistant.Office.Domains.PowerPoint
                 ["replacements"] = replacements,
                 ["scopeSha256"] = scopeHash ?? string.Empty
             }.ToString(Formatting.None);
-        }
-
-        private static JObject SlideJson(
-            PowerPointSlideContentSnapshot slide, bool notes)
-        {
-            var result = new JObject
-            {
-                ["index"] = slide.Index,
-                ["text"] = slide.Text ?? string.Empty
-            };
-            if (notes) result["notes"] = slide.Notes ?? string.Empty;
-            return result;
-        }
-
-        private static string SlidesJson(
-            IEnumerable<PowerPointSlideContentSnapshot> slides, bool notes)
-        {
-            return new JArray((slides ??
-                new PowerPointSlideContentSnapshot[0]).Select(
-                    slide => SlideJson(slide, notes)))
-                .ToString(Formatting.None);
-        }
-
-        private static string NotesJson(
-            IEnumerable<PowerPointSlideContentSnapshot> slides)
-        {
-            return new JArray((slides ??
-                new PowerPointSlideContentSnapshot[0]).Select(slide =>
-                    new JObject
-                    {
-                        ["index"] = slide.Index,
-                        ["notes"] = slide.Notes ?? string.Empty
-                    })).ToString(Formatting.None);
         }
 
         private static string SlideSummariesJson(

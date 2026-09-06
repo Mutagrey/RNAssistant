@@ -187,6 +187,27 @@ HTML uses this same provider. Word search, inspection and mutations keep their
 specialized owners. Real Word range/selection/STA and final catalog qualification
 remain open on Windows.
 
+## PowerPoint slide reads
+
+`powerpoint.read_slides` is removed. Use `common.resources_read` with a discovered
+document target or `PowerPoint slide: N` (positive one-based index). The `text`
+view contains slide text; `source` is an ordered JSON array of slide id/index,
+text and speaker notes, including for a single slide. `structure` remains metadata,
+not a slide-content alias. Noncanonical and nonexistent slide targets fail explicitly.
+
+The existing document provider calls `PowerPointService.CaptureSlides` and the bound
+`IPowerPointBackend`; document/slide reads no longer call the adapter's clipped
+document snapshot. Complete captures use the shared authority, CAS and evidence;
+internal continuations and retained historical reads never recapture Office.
+The backend enforces 500 slides, 1000 shapes per slide/notes page and a shared
+one-million-character capture budget. Shape text length is checked before COM
+`TextRange.Text`; over-limit decks/slides fail without a prefix-as-complete result.
+Serialized view size is bounded too. HTML binds through the same Gateway.
+Search, object inspection and mutations remain specialized. The existing selection
+observation is separate and unchanged; it does not expose the slide `source` view.
+Real COM shape/notes capture, selection and final catalog/model qualification remain
+open on Windows.
+
 ## Conversation loop
 
 Controller clear/edit/message-delete/fork use typed `ChatResourceMutationIntent`

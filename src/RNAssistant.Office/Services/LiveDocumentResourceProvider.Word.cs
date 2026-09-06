@@ -2,7 +2,6 @@ using System;
 using System.Globalization;
 using System.Threading;
 using RNAssistant.Core.Models;
-using RNAssistant.Core.Storage;
 using RNAssistant.Office.Domains.Word;
 
 namespace RNAssistant.Office.Services
@@ -11,7 +10,6 @@ namespace RNAssistant.Office.Services
     {
         internal const string WordRangeKind = "word-text-range";
         private readonly IWordBackend _word;
-        private readonly ChatBlobStore _payloads;
         private bool IsWord { get { return string.Equals(_adapter.HostName, "Word", StringComparison.OrdinalIgnoreCase); } }
 
         internal ResourceDescriptor ResolveWordRange(ChatSession session, string target)

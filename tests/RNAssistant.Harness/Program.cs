@@ -452,6 +452,8 @@ namespace RNAssistant.Harness
                 Test("word tools: dispatch fault classification", WordToolsClassifyDispatchFaults),
                 Test("word tools: bound document scope", WordToolsUseBoundDocumentScope),
                 Test("powerpoint tools: native ownership and direct backend", PowerPointToolsUseExactNativeOwnership),
+                Test("powerpoint resources: exact sources and retained evidence", PowerPointResourcesRetainExactSources),
+                Test("powerpoint resources: incomplete captures rejected", PowerPointResourcesRejectIncompleteCaptures),
                 Test("powerpoint tools: family semantics", PowerPointToolsPreserveFamilySemantics),
                 Test("powerpoint tools: dispatch fault classification", PowerPointToolsClassifyDispatchFaults),
                 Test("powerpoint tools: bound presentation scope", PowerPointToolsUseBoundPresentationScope),

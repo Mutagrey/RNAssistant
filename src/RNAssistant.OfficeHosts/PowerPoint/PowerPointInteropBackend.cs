@@ -25,18 +25,21 @@ namespace RNAssistant.OfficeHosts
         {
             request = request ?? new PowerPointReadSlidesRequest();
             var presentation = Presentation();
+            if (!request.HasSlideIndex && presentation.Slides.Count > request.MaxSlides)
+                throw Failure("Choose one slide from this presentation.", "RESOURCE_SNAPSHOT_TOO_LARGE", false);
+            var remaining = request.MaxCharacters;
             var slides = new List<PowerPointSlideContentSnapshot>();
             if (request.HasSlideIndex)
             {
-                slides.Add(Content(ResolveSlide(presentation, request.SlideIndex)));
+                slides.Add(Content(ResolveSlide(presentation, request.SlideIndex), request.MaxShapesPerSlide, ref remaining));
             }
             else
             {
-                var count = Math.Min(presentation.Slides.Count, request.MaxSlides);
+                var count = presentation.Slides.Count;
                 for (var index = 1; index <= count; index++)
-                    slides.Add(Content(presentation.Slides[index]));
+                    slides.Add(Content(presentation.Slides[index], request.MaxShapesPerSlide, ref remaining));
             }
-            return new PowerPointSlideReadSnapshot { Slides = slides };
+            return new PowerPointSlideReadSnapshot { Slides = slides, TotalSlides = presentation.Slides.Count };
         }
 
         public PowerPointListSnapshot List(PowerPointListRequest request)
@@ -541,15 +544,37 @@ namespace RNAssistant.OfficeHosts
         }
 
         private static PowerPointSlideContentSnapshot Content(
-            PowerPoint.Slide slide)
+            PowerPoint.Slide slide, int maxShapes, ref int remaining)
         {
             return new PowerPointSlideContentSnapshot
             {
                 SlideId = slide.SlideID,
                 Index = slide.SlideIndex,
-                Text = SlideText(slide),
-                Notes = NotesText(slide)
+                Text = CaptureShapeText(slide.Shapes, maxShapes, ref remaining),
+                Notes = CaptureShapeText(slide.NotesPage.Shapes, maxShapes, ref remaining)
             };
+        }
+
+        private static string CaptureShapeText(PowerPoint.Shapes shapes, int maxShapes, ref int remaining)
+        {
+            if (shapes.Count > maxShapes)
+                throw Failure("PowerPoint source exceeds the shape limit.", "RESOURCE_SNAPSHOT_TOO_LARGE", false);
+            var builder = new StringBuilder();
+            foreach (PowerPoint.Shape shape in shapes)
+            {
+                if (shape.HasTextFrame != MsoTriState.msoTrue ||
+                    shape.TextFrame.HasText != MsoTriState.msoTrue) continue;
+                var range = shape.TextFrame.TextRange;
+                var length = range.Length;
+                if (length < 0 || (long)length + Environment.NewLine.Length > remaining)
+                    throw Failure("PowerPoint source exceeds the character limit.", "RESOURCE_SNAPSHOT_TOO_LARGE", false);
+                var text = range.Text;
+                if (text == null || (long)text.Length + Environment.NewLine.Length > remaining)
+                    throw Failure("PowerPoint source changed during capture.", "powerpoint_read_snapshot_invalid", false);
+                builder.AppendLine(text);
+                remaining -= text.Length + Environment.NewLine.Length;
+            }
+            return builder.ToString();
         }
 
         private static PowerPointShapeSnapshot ShapeSnapshot(

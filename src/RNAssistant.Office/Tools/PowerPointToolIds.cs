@@ -4,7 +4,6 @@ namespace RNAssistant.Office.Tools
 {
     internal static class PowerPointToolIds
     {
-        internal const string ReadSlides = "powerpoint.read_slides";
         internal const string ListObjects = "powerpoint.list_objects";
         internal const string SearchText = "powerpoint.search_text";
         internal const string AddSlide = "powerpoint.add_slide";
@@ -16,8 +15,7 @@ namespace RNAssistant.Office.Tools
 
         internal static bool Owns(string toolId)
         {
-            return string.Equals(toolId, ReadSlides, StringComparison.Ordinal) ||
-                string.Equals(toolId, ListObjects, StringComparison.Ordinal) ||
+            return string.Equals(toolId, ListObjects, StringComparison.Ordinal) ||
                 string.Equals(toolId, SearchText, StringComparison.Ordinal) ||
                 string.Equals(toolId, AddSlide, StringComparison.Ordinal) ||
                 string.Equals(toolId, SetText, StringComparison.Ordinal) ||
@@ -29,8 +27,7 @@ namespace RNAssistant.Office.Tools
 
         internal static bool IsRead(string toolId)
         {
-            return string.Equals(toolId, ReadSlides, StringComparison.Ordinal) ||
-                string.Equals(toolId, ListObjects, StringComparison.Ordinal) ||
+            return string.Equals(toolId, ListObjects, StringComparison.Ordinal) ||
                 string.Equals(toolId, SearchText, StringComparison.Ordinal);
         }
 

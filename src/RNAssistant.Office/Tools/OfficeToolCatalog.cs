@@ -73,7 +73,6 @@ namespace RNAssistant.Office.Tools
         {
             return new[]
             {
-                Define("PowerPoint", "powerpoint.read_slides", "Read-only: Read slide text, speaker notes, or both from one slide or a bounded set.", "{\"type\":\"object\",\"properties\":{\"slideIndex\":{\"type\":\"integer\",\"description\":\"Optional one-based slide index; omit to read multiple slides.\",\"minimum\":1},\"maxSlides\":{\"type\":\"integer\",\"description\":\"Maximum number of slides returned when slideIndex is omitted.\",\"default\":20},\"content\":{\"type\":\"string\",\"enum\":[\"text\",\"notes\",\"both\"],\"description\":\"Slide content to return.\",\"default\":\"text\"}},\"required\":[],\"additionalProperties\":false}", canSourceHtmlData: true, independentLocalRead: true),
                 Define("PowerPoint", "powerpoint.list_objects", "Read-only: List slide summaries or shapes on one slide with one kind selector.", "{\"type\":\"object\",\"properties\":{\"kind\":{\"type\":\"string\",\"enum\":[\"slides\",\"shapes\"],\"description\":\"Objects to list.\"},\"slideIndex\":{\"type\":\"integer\",\"description\":\"Optional one-based slide for shapes; runtime uses the active slide when omitted.\",\"minimum\":1}},\"required\":[\"kind\"],\"additionalProperties\":false}", canSourceHtmlData: true, independentLocalRead: true),
                 Define("PowerPoint", "powerpoint.search_text", "Read-only: Find literal or regex text in slide shapes and notes with stable coordinates/hash.", "{\"type\":\"object\",\"properties\":{\"query\":{\"type\":\"string\",\"description\":\"Non-empty literal or regular-expression search query.\",\"minLength\":1},\"scope\":{\"type\":\"string\",\"description\":\"Search or operation scope supported by the tool.\",\"default\":\"deck\",\"enum\":[\"deck\",\"slide\"]},\"slideIndex\":{\"type\":\"integer\",\"description\":\"One-based target slide when scope is slide; 0 searches the deck.\",\"default\":0},\"includeNotes\":{\"type\":\"boolean\",\"description\":\"Whether speaker notes are included.\",\"default\":true},\"mode\":{\"type\":\"string\",\"description\":\"Text matching mode: literal or regex.\",\"default\":\"literal\",\"enum\":[\"literal\",\"regex\"]},\"matchCase\":{\"type\":\"boolean\",\"description\":\"Whether matching is case-sensitive.\",\"default\":false},\"wholeWord\":{\"type\":\"boolean\",\"description\":\"Whether only whole-word matches are accepted.\",\"default\":false},\"maxResults\":{\"type\":\"integer\",\"description\":\"Maximum number of matches returned.\",\"default\":50},\"contextChars\":{\"type\":\"integer\",\"description\":\"Maximum context characters returned around each match.\",\"default\":80}},\"required\":[\"query\"],\"additionalProperties\":false}", independentLocalRead: true),
                 Define("PowerPoint", "powerpoint.add_slide", "Mutates document: Add a text slide.", "{\"type\":\"object\",\"properties\":{\"title\":{\"type\":\"string\",\"description\":\"Human-readable title.\",\"default\":\"AI slide\"},\"body\":{\"type\":\"string\",\"description\":\"Body text for the item being created or updated.\"}},\"required\":[],\"additionalProperties\":false}", true, true, 1, verification: ToolVerification.Tool),
@@ -174,11 +173,6 @@ namespace RNAssistant.Office.Tools
                     break;
                 case "word.format_text":
                     SetFormatTextVariants(schema);
-                    break;
-                case "powerpoint.read_slides":
-                    SetAnyOf(schema,
-                        ObjectVariant(schema, new[] { "content", "maxSlides" }, new string[0]),
-                        ObjectVariant(schema, new[] { "content", "slideIndex" }, new[] { "slideIndex" }));
                     break;
                 case "powerpoint.list_objects":
                     SetDiscriminatorVariants(schema, "kind",
