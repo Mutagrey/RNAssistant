@@ -91,9 +91,9 @@ namespace RNAssistant.OfficeHosts
         public OutlookFolderSnapshot ReadFolder(OutlookFolderReadRequest request)
         {
             request = request ?? new OutlookFolderReadRequest();
-            var collection = request.MaxSearchBodyChars == 0;
-            if (collection && (request.MaxItems < 1 || request.MaxItems > OutlookService.MaxItems ||
-                request.MaxBodyChars < 0 || request.MaxBodyChars > OutlookService.CollectionPreviewCharacters))
+            var collection = request.Kind == OutlookFolderCaptureKind.Collection;
+            if (!Enum.IsDefined(typeof(OutlookFolderCaptureKind), request.Kind) || request.MaxItems < 1 || request.MaxItems > OutlookService.MaxItems ||
+                request.MaxBodyChars < 0 || request.MaxBodyChars > (collection ? OutlookService.CollectionPreviewCharacters : OutlookService.MaxSearchBodyChars))
                 throw new OutlookBackendException("Invalid collection bounds.", "invalid_arguments", false);
             var folder = _session.Folder;
             var items = folder.Items;
@@ -107,18 +107,16 @@ namespace RNAssistant.OfficeHosts
                 var mail = items[index] as Outlook.MailItem;
                 if (mail == null) continue;
                 var captured = collection ? CollectionSnapshot(mail, request.MaxBodyChars) :
-                    Snapshot(mail, request.MaxBodyChars, request.MaxSearchBodyChars);
-                if (collection)
-                {
-                    characters += captured.Subject.Length + captured.Sender.Length + captured.Body.Length;
-                    if (characters > OutlookService.CollectionMaximumCharacters)
-                        throw new OutlookBackendException("The mail collection exceeds the snapshot budget.", "RESOURCE_SNAPSHOT_TOO_LARGE", false);
-                }
+                    SearchSnapshot(mail, request.Kind == OutlookFolderCaptureKind.SearchBodies, request.MaxBodyChars);
+                characters += captured.Subject.Length + captured.Sender.Length + (captured.Body ?? string.Empty).Length +
+                    (captured.SenderEmail ?? string.Empty).Length + (captured.To ?? string.Empty).Length +
+                    (captured.Cc ?? string.Empty).Length + (captured.Bcc ?? string.Empty).Length;
+                if (characters > OutlookService.CollectionMaximumCharacters)
+                    throw new OutlookBackendException("Reduce the folder capture size.", "RESOURCE_SNAPSHOT_TOO_LARGE", false);
                 messages.Add(captured);
             }
             return new OutlookFolderSnapshot
             {
-                FolderPath = collection ? null : SafeString(delegate { return folder.FolderPath; }),
                 Messages = messages,
                 TotalItems = total,
                 Truncated = total > limit
@@ -217,7 +215,7 @@ namespace RNAssistant.OfficeHosts
                 throw new OutlookBackendException(
                     "Select an email first in the bound Outlook window.",
                     "outlook_mail_target_missing", true);
-            var before = Snapshot(mail, 1, 0);
+            var before = Snapshot(mail, 1);
             if (!string.Equals(
                 request.ExpectedTargetToken, before.StateToken,
                 StringComparison.Ordinal))
@@ -237,14 +235,14 @@ namespace RNAssistant.OfficeHosts
                     Verified = true,
                     Changed = false,
                     Before = before,
-                    After = Snapshot(mail, 1, 0)
+                    After = Snapshot(mail, 1)
                 };
             markDispatchPossible();
             if (string.Equals(request.Kind, "categories", StringComparison.Ordinal))
                 mail.Categories = request.Categories ?? string.Empty;
             else mail.UnRead = false;
             mail.Save();
-            var after = Snapshot(mail, 1, 0);
+            var after = Snapshot(mail, 1);
             var verified = string.Equals(
                     OutlookDocumentSession.MailIdentity(mail),
                     string.IsNullOrWhiteSpace(after.EntryId)
@@ -285,8 +283,7 @@ namespace RNAssistant.OfficeHosts
                 Received = mail.ReceivedTime,
                 Categories = mail.Categories ?? string.Empty,
                 Unread = mail.UnRead,
-                Body = body,
-                SearchBody = null
+                Body = body
             };
             if (includeBody)
                 snapshot.StateToken = TextPatternEngine.Sha256(string.Join("\n", new[]
@@ -311,8 +308,30 @@ namespace RNAssistant.OfficeHosts
                 Received = mail.ReceivedTime, Body = body.Substring(0, length), BodyTruncated = length < body.Length };
         }
 
+        private static OutlookMailSnapshot SearchSnapshot(Outlook.MailItem mail, bool includeBody, int maxBodyChars)
+        {
+            var snapshot = new OutlookMailSnapshot { EntryId = mail.EntryID,
+                Subject = mail.Subject ?? string.Empty, Sender = mail.SenderName ?? string.Empty,
+                SenderEmail = mail.SenderEmailAddress ?? string.Empty, To = mail.To ?? string.Empty,
+                Cc = mail.CC ?? string.Empty, Bcc = mail.BCC ?? string.Empty, Received = mail.ReceivedTime };
+            foreach (var header in new[] { snapshot.Subject, snapshot.Sender, snapshot.SenderEmail, snapshot.To, snapshot.Cc, snapshot.Bcc })
+                if (header.Length > 4096)
+                    throw new OutlookBackendException("Search headers exceed the capture bound.", "RESOURCE_SNAPSHOT_TOO_LARGE", false);
+            if (includeBody)
+            {
+                // OOM returns Body as one string. This is a bounded retained prefix,
+                // not a pre-materialization memory bound and never a mutation token.
+                var body = mail.Body ?? string.Empty;
+                var length = Math.Min(body.Length, maxBodyChars);
+                if (length > 0 && length < body.Length && char.IsHighSurrogate(body[length - 1])) length--;
+                snapshot.Body = body.Substring(0, length);
+                snapshot.BodyTruncated = length < body.Length;
+            }
+            return snapshot;
+        }
+
         private static OutlookMailSnapshot Snapshot(
-            Outlook.MailItem mail, int maxBodyChars, int maxSearchBodyChars)
+            Outlook.MailItem mail, int maxBodyChars)
         {
             if (mail == null) return null;
             var body = SafeString(delegate { return mail.Body; });
@@ -330,7 +349,6 @@ namespace RNAssistant.OfficeHosts
                 Categories = SafeString(delegate { return mail.Categories; }),
                 Unread = SafeBool(delegate { return mail.UnRead; }),
                 Body = Trim(body, maxBodyChars),
-                SearchBody = Trim(body, maxSearchBodyChars),
                 StateToken = StateToken(mail)
             };
         }

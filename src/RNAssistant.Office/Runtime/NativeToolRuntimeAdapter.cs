@@ -170,7 +170,7 @@ namespace RNAssistant.Office.Runtime
                             "Outlook handler dependencies are unavailable.");
                     handler = new OutlookToolHandler(
                         registration.Descriptor.Id, outlookTools,
-                        hostRuntime, session);
+                        hostRuntime, session, gateway);
                 }
                 else if (VbaToolCatalog.Owns(registration.Descriptor.Id))
                 {

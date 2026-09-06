@@ -291,8 +291,8 @@ fail before the snapshot reaches a caller or a mutation dispatch.
 
 Outlook OOM exposes `MailItem.Body` as one string: the character ceiling is enforced
 after that property read, **not** before COM materialization. Bounded body acquisition
-and real large-mail execution remain open. Folder search and mutation read-back
-remain specialized existing contours. Real Inspector/folder/store
+and real large-mail execution remain open. Mutation read-back remains a specialized
+existing contour; folder search uses the exact projection described below. Real Inspector/folder/store
 membership, unsaved-mail identity, WebView2 and final catalog/model qualification
 remain open; this reader switch does not close those gates.
 
@@ -320,6 +320,35 @@ become empty successful captures. OOM still materializes the full body before
 trimming, so this does not close the pre-COM allocation gate. Inspector runtimes
 cannot read their parent folder. Fresh reads publish observed collection drift;
 exact historical text/records and opened continuations never fall forward.
+
+### Outlook search
+
+`outlook.search_mail` retains literal/regex, case/whole-word, field-local coordinates
+and subject/sender/recipients/body matching. `OutlookSearchResourceService` obtains
+one Gateway/CAS snapshot and invokes pure `OutlookService.SearchMail`. Search output
+contains semantic mail targets and bounded matching previews, not EntryIDs, folder
+paths or repeated body copies. The obsolete `maxBodyChars` argument and direct tool
+adapter search branch are removed without fallback; complete mail bodies use
+`common.resources_read`. Duplicate semantic mail targets remain explicitly ambiguous.
+
+The document provider exposes `Outlook search scope: latest:N` (headers only) and
+`latest:N+body`, where N is 1–500 newest folder items; the default 100-item scopes are
+discoverable without body reads. The exact text JSON includes the capture limit,
+body-capture flag, folder extent/truncation and mail header/body-prefix rows. Bodies
+are capped at 100,000 characters per mail with explicit `bodyTruncated`; the
+aggregate retained header/body bound is 750,000 characters and serialized JSON is
+limited to one million. Oversize aggregate captures fail and request a lower N.
+Header-only search never reads Body; body search reads it once without a mutation
+token, preserves surrogate boundaries and never substitutes empty text after errors.
+
+`sourceTruncated` and the returned overall `truncated` flag include incomplete body
+prefixes as well as folder truncation; `matchCount` counts only captured fields.
+Complete evidence means the complete bounded projection, not the entire mailbox or
+full mail bodies. Positive, zero-match and empty-folder searches retain exact CAS
+evidence and publish observed drift; historical reads do no Office I/O and missing
+payloads never fall forward. Inspector runtimes cannot search their parent folder.
+The old search-body duplicate field and unused folder-path snapshot field are removed.
+Real Windows/COM, OOM pre-materialization and WebView/model qualification remain open.
 
 ## Conversation loop
 

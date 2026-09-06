@@ -471,6 +471,8 @@ namespace RNAssistant.Harness
                 Test("outlook capture: complete body and metadata isolation", OutlookCapturesPreserveCompleteBodies),
                 Test("outlook capture: invalid guards and cancellation", OutlookCapturesRejectInvalidGuards),
                 Test("outlook tools: family semantics", OutlookToolsPreserveFamilySemantics),
+                Test("outlook search: exact snapshots and zero-match drift", OutlookSearchRetainsExactSnapshots),
+                Test("outlook search: bounds and header isolation", OutlookSearchPreservesBoundsAndHeaderIsolation),
                 Test("outlook tools: dispatch fault classification", OutlookToolsClassifyDispatchFaults),
                 Test("outlook tools: bound window scope", OutlookToolsUseBoundWindowScope),
                 Test("resources: gateway reads searches resolves and pages", ResourceGatewayReadsSearchesAndPages),

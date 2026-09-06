@@ -75,6 +75,10 @@ qualify real COM membership/unsaved-mail or OOM pre-materialization bounds.
 Collection cases cover body-free discovery, explicit folder/preview coverage,
 exact CAS-derived records, membership drift with retained continuation, shared HTML
 binding, empty/oversized snapshots, Inspector refusal and removed-tool rejection.
+`outlook search:` covers exact field snapshots, zero-match drift, historical no-I/O,
+missing-CAS refusal, header-only body isolation, explicit body-prefix truncation,
+invalid capture/input rejection and removal of inline body/EntryID output and its
+old argument. Existing Outlook tool cases also check bound-STA/closed-window search.
 
 | Area | Main files | Useful filters |
 | --- | --- | --- |

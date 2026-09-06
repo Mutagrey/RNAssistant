@@ -117,6 +117,14 @@ namespace RNAssistant.Office.Services
                 return new ResourceIntentTarget { Target = IntentTarget(descriptor), Type = "Word search scope", Scope = "document",
                     Descriptor = descriptor, Reference = descriptor.Reference };
             }
+            if (target.StartsWith("Outlook search scope: ", StringComparison.Ordinal))
+            {
+                var provider = _registry.All().OfType<LiveDocumentResourceProvider>().SingleOrDefault();
+                if (provider == null) throw new ResourceRequestException("Outlook resource provider is unavailable.", "RESOURCE_PROVIDER_UNAVAILABLE", false);
+                var descriptor = WithProvider(provider, session, () => provider.ResolveOutlookSearch(session, target.Substring(22)));
+                return new ResourceIntentTarget { Target = IntentTarget(descriptor), Type = "Outlook search scope", Scope = "document",
+                    Descriptor = descriptor, Reference = descriptor.Reference };
+            }
             if (target.StartsWith("PowerPoint search scope: ", StringComparison.Ordinal))
             {
                 var provider = _registry.All().OfType<LiveDocumentResourceProvider>().SingleOrDefault();
@@ -304,6 +312,8 @@ namespace RNAssistant.Office.Services
                         yield return new ResourceIntentPlan(provider, LiveDocumentResourceProvider.WordSearchKind, "document");
                     if ((provider as LiveDocumentResourceProvider)?.IsPowerPoint == true)
                         yield return new ResourceIntentPlan(provider, LiveDocumentResourceProvider.PowerPointSearchKind, "document");
+                    if ((provider as LiveDocumentResourceProvider)?.IsOutlook == true)
+                        yield return new ResourceIntentPlan(provider, LiveDocumentResourceProvider.OutlookSearchKind, "document");
                     if ((provider as LiveDocumentResourceProvider)?.IsOutlook == true)
                         yield return new ResourceIntentPlan(provider, LiveDocumentResourceProvider.OutlookMailKind, "document");
                     yield return new ResourceIntentPlan(provider, LiveDocumentResourceProvider.SelectionKind, "selection");
@@ -496,6 +506,7 @@ namespace RNAssistant.Office.Services
                 case "Excel range": return "document";
                 case "Outlook mail":
                 case "Outlook collection":
+                case "Outlook search scope":
                 case "PowerPoint slide":
                 case "Word range": return "document";
                 case "Word search scope": return "document";
@@ -535,6 +546,7 @@ namespace RNAssistant.Office.Services
                 case ExcelResourceProvider.RangeKind: return "Excel range";
                 case LiveDocumentResourceProvider.OutlookMailKind: return "Outlook mail";
                 case LiveDocumentResourceProvider.OutlookCollectionKind: return "Outlook collection";
+                case LiveDocumentResourceProvider.OutlookSearchKind: return "Outlook search scope";
                 case LiveDocumentResourceProvider.PowerPointSlideKind: return "PowerPoint slide";
                 case LiveDocumentResourceProvider.WordRangeKind: return "Word range";
                 case LiveDocumentResourceProvider.WordSearchKind: return "Word search scope";
@@ -562,6 +574,7 @@ namespace RNAssistant.Office.Services
             string type)
         {
             if (descriptor.Provider == "catalog") return "catalogs";
+            if (type == "Outlook search scope") return "document";
             if (string.Equals(type, "document", StringComparison.Ordinal) || type == "Excel range" || type == "Word range" || type == "Word search scope" || type == "PowerPoint search scope" || type == "PowerPoint slide" || type == "Outlook mail" || type == "Outlook collection" || type == "Office observation") return "document";
             if (string.Equals(type, "selection", StringComparison.Ordinal)) return "selection";
             if (string.Equals(type, "VBA backup", StringComparison.Ordinal)) return "backups";

@@ -35,7 +35,6 @@ namespace RNAssistant.Office.Domains.Outlook
         public string Fields { get; set; }
         public int MaxItems { get; set; }
         public int MaxResults { get; set; }
-        public int MaxBodyChars { get; set; }
         public int ContextChars { get; set; }
     }
 
@@ -58,11 +57,20 @@ namespace RNAssistant.Office.Domains.Outlook
         public string ExpectedTargetToken { get; set; }
     }
 
+    public enum OutlookFolderCaptureKind { Collection, SearchHeaders, SearchBodies }
+
+    public sealed class OutlookSearchSnapshot
+    {
+        public int MaximumItems { get; set; }
+        public bool BodyCaptured { get; set; }
+        public OutlookFolderSnapshot Folder { get; set; }
+    }
+
     public sealed class OutlookFolderReadRequest
     {
         public int MaxItems { get; set; }
         public int MaxBodyChars { get; set; }
-        public int MaxSearchBodyChars { get; set; }
+        public OutlookFolderCaptureKind Kind { get; set; }
     }
 
     public sealed class OutlookAttachmentSnapshot
@@ -87,7 +95,6 @@ namespace RNAssistant.Office.Domains.Outlook
         public string Categories { get; set; }
         public bool Unread { get; set; }
         public string Body { get; set; }
-        public string SearchBody { get; set; }
         public bool BodyTruncated { get; set; }
         public string StateToken { get; set; }
     }
@@ -101,7 +108,6 @@ namespace RNAssistant.Office.Domains.Outlook
 
     public sealed class OutlookFolderSnapshot
     {
-        public string FolderPath { get; set; }
         public IReadOnlyList<OutlookMailSnapshot> Messages { get; set; }
         public int TotalItems { get; set; }
         public bool Truncated { get; set; }

@@ -6,6 +6,7 @@ using RNAssistant.Core.Models;
 using RNAssistant.Core.Tools;
 using RNAssistant.Office.Domains.Outlook;
 using RNAssistant.Office.Runtime;
+using RNAssistant.Office.Services;
 using RuntimeResult = RNAssistant.Core.Tools.Contracts.ToolResult;
 
 namespace RNAssistant.Office.Tools
@@ -16,12 +17,13 @@ namespace RNAssistant.Office.Tools
         private readonly OutlookToolAdapter _adapter;
         private readonly HostRuntime _runtime;
         private readonly ChatSession _session;
+        private readonly OutlookSearchResourceService _search;
 
         internal OutlookToolHandler(
             string toolId,
             OutlookToolAdapter adapter,
             HostRuntime runtime,
-            ChatSession session)
+            ChatSession session, ResourceGatewayService gateway)
         {
             if (!OutlookToolIds.Owns(toolId))
                 throw new ArgumentException(
@@ -30,11 +32,13 @@ namespace RNAssistant.Office.Tools
             _adapter = adapter ?? throw new ArgumentNullException(nameof(adapter));
             _runtime = runtime ?? throw new ArgumentNullException(nameof(runtime));
             _session = session;
+            _search = new OutlookSearchResourceService(gateway);
         }
 
         internal static ToolBinding BindingFor(string toolId)
         {
             if (!OutlookToolIds.Owns(toolId)) return null;
+            if (toolId == OutlookToolIds.SearchMail) return new ToolBinding("outlook.search.mail.resource.v1");
             return new ToolBinding(
                 "outlook." +
                 toolId.Substring("outlook.".Length).Replace('_', '.') +
@@ -51,6 +55,11 @@ namespace RNAssistant.Office.Tools
                     "outlook_session_required", false);
             try
             {
+                if (_toolId == OutlookToolIds.SearchMail)
+                    return Task.FromResult(_runtime.ReadDocument(Target(_session), cancellationToken, delegate {
+                        context.MarkDispatchPossible();
+                        return _search.Search(_session, context.Arguments, cancellationToken);
+                    }));
                 var outcome = OutlookToolIds.IsRead(_toolId)
                     ? _runtime.ReadDocument(
                         Target(_session), cancellationToken, delegate

@@ -44,6 +44,7 @@ namespace RNAssistant.Harness
 
         public int OutlookBodyMaterializationCount { get; private set; }
         public int OutlookCollectionCaptureCount { get; private set; }
+        public int OutlookSearchBodyCaptureCount { get; private set; }
         public Func<OutlookFolderSnapshot, OutlookFolderSnapshot> OutlookFolderSnapshotTransform { get; set; }
         public Func<OutlookMailReadSnapshot, OutlookMailReadSnapshot> OutlookReadSnapshotTransform { get; set; }
         public string OutlookSelectedBody
@@ -88,9 +89,8 @@ namespace RNAssistant.Harness
                     }
                 }
                 : new OutlookAttachmentSnapshot[0];
-            var captured = OutlookSnapshot(mail, includeBody ? request.MaxChars : 0, 0);
+            var captured = OutlookSnapshot(mail, includeBody ? request.MaxChars : 0);
             captured.Body = includeBody ? mail.Body ?? string.Empty : null;
-            captured.SearchBody = null;
             if (!includeBody) captured.StateToken = null;
             var snapshot = new OutlookMailReadSnapshot
             {
@@ -107,14 +107,28 @@ namespace RNAssistant.Harness
             request = request ?? new OutlookFolderReadRequest();
             if (OutlookIsMailTarget)
                 throw new OutlookBackendException("The bound Inspector is not a folder.", "outlook_folder_target_missing", true);
-            var collection = request.MaxSearchBodyChars == 0;
+            var collection = request.Kind == OutlookFolderCaptureKind.Collection;
             if (collection) OutlookCollectionCaptureCount++;
             var all = _outlookMail.Where(mail => !OutlookExcludeSecondMail || mail.EntryId != "mail-2").ToArray();
             var source = all
                 .OrderByDescending(item => item.Received)
                 .Take(Math.Max(1, request.MaxItems))
                 .Select(item => {
-                    if (!collection) return OutlookSnapshot(item, request.MaxBodyChars, request.MaxSearchBodyChars);
+                    if (!collection)
+                    {
+                        var captured = new OutlookMailSnapshot { EntryId = item.EntryId, Subject = item.Subject ?? string.Empty, Sender = item.Sender ?? string.Empty,
+                            SenderEmail = item.SenderEmail ?? string.Empty, To = item.To ?? string.Empty,
+                            Cc = item.Cc ?? string.Empty, Bcc = item.Bcc ?? string.Empty, Received = item.Received };
+                        if (request.Kind == OutlookFolderCaptureKind.SearchBodies)
+                        {
+                            OutlookSearchBodyCaptureCount++;
+                            var text = item.Body ?? string.Empty;
+                            var count = Math.Min(text.Length, request.MaxBodyChars);
+                            if (count > 0 && count < text.Length && char.IsHighSurrogate(text[count - 1])) count--;
+                            captured.Body = text.Substring(0, count); captured.BodyTruncated = count < text.Length;
+                        }
+                        return captured;
+                    }
                     var body = item.Body ?? string.Empty;
                     var length = Math.Min(body.Length, request.MaxBodyChars);
                     if (length > 0 && length < body.Length && char.IsHighSurrogate(body[length - 1])) length--;
@@ -124,7 +138,6 @@ namespace RNAssistant.Harness
                 .ToArray();
             var snapshot = new OutlookFolderSnapshot
             {
-                FolderPath = "\\Mock Store\\Inbox",
                 Messages = source,
                 TotalItems = all.Length,
                 Truncated = all.Length > source.Length
@@ -191,7 +204,7 @@ namespace RNAssistant.Harness
             BeginOutlookBackendCall(OutlookUpdateMailOperation);
             request = request ?? new OutlookUpdateMailRequest();
             var mail = OutlookSelected();
-            var before = OutlookSnapshot(mail, 1, 0);
+            var before = OutlookSnapshot(mail, 1);
             if (!string.Equals(
                 request.ExpectedTargetToken, before.StateToken,
                 StringComparison.Ordinal))
@@ -211,7 +224,7 @@ namespace RNAssistant.Harness
                     Verified = true,
                     Changed = false,
                     Before = before,
-                    After = OutlookSnapshot(mail, 1, 0)
+                    After = OutlookSnapshot(mail, 1)
                 };
             markDispatchPossible();
             if (string.Equals(request.Kind, "categories", StringComparison.Ordinal))
@@ -223,7 +236,7 @@ namespace RNAssistant.Harness
                 Verified = true,
                 Changed = true,
                 Before = before,
-                After = OutlookSnapshot(mail, 1, 0)
+                After = OutlookSnapshot(mail, 1)
             };
         }
 
@@ -251,7 +264,7 @@ namespace RNAssistant.Harness
         }
 
         private static OutlookMailSnapshot OutlookSnapshot(
-            FakeOutlookMail mail, int maxBodyChars, int maxSearchBodyChars)
+            FakeOutlookMail mail, int maxBodyChars)
         {
             return new OutlookMailSnapshot
             {
@@ -266,8 +279,6 @@ namespace RNAssistant.Harness
                 Categories = mail.Categories,
                 Unread = mail.Unread,
                 Body = OutlookTrim(mail.Body, Math.Max(0, maxBodyChars)),
-                SearchBody = OutlookTrim(
-                    mail.Body, Math.Max(0, maxSearchBodyChars)),
                 StateToken = OutlookToken(mail)
             };
         }

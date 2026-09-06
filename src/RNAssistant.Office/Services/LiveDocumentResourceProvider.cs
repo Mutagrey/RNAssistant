@@ -44,6 +44,8 @@ namespace RNAssistant.Office.Services
                     items.AddRange(new[] { "main", "selection", "all" }.Select(scope => Describe(session, "stories-" + scope)));
                 if (IsOutlook && (string.IsNullOrWhiteSpace(kind) || kind == OutlookCollectionKind))
                     items.Add(DescribeOutlookCollection(session));
+                if (IsOutlook && kind == OutlookSearchKind)
+                    items.AddRange(new[] { "search-latest-100", "search-latest-100+body" }.Select(key => DescribeOutlookSearch(session, key)));
                 if (string.IsNullOrWhiteSpace(kind) ||
                     string.Equals(kind, DocumentKind, StringComparison.OrdinalIgnoreCase))
                 {
@@ -90,6 +92,7 @@ namespace RNAssistant.Office.Services
         private ResourceDescriptor Describe(ChatSession session, string target)
         {
             if (IsOutlook && target == OutlookCollectionKey) return DescribeOutlookCollection(session);
+            if (IsOutlook && IsOutlookSearch(target)) return DescribeOutlookSearch(session, target);
             if (IsPowerPoint && IsPowerPointSearch(target))
             {
                 var search = new ResourceDescriptor { Reference = new ResourceRef(CreateUri(session, target)),
@@ -170,6 +173,7 @@ namespace RNAssistant.Office.Services
                 !(IsPowerPoint && IsPowerPointSlide(address.Segments[1])) &&
                 !(IsPowerPoint && IsPowerPointSearch(address.Segments[1])) &&
                 !(IsOutlook && address.Segments[1] == OutlookCollectionKey) &&
+                !(IsOutlook && IsOutlookSearch(address.Segments[1])) &&
                 !(IsOutlook && TryOutlookMailKey(address.Segments[1], out outlookEntryId)))
             {
                 return false;

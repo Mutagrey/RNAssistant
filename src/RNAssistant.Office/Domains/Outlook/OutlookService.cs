@@ -70,7 +70,41 @@ namespace RNAssistant.Office.Domains.Outlook
             return snapshot;
         }
 
-        public OutlookOutcome SearchMail(
+        public OutlookSearchSnapshot CaptureSearch(int maxItems, bool includeBody, CancellationToken cancellationToken)
+        {
+            if (maxItems < 1 || maxItems > MaxItems)
+                throw new OutlookBackendException("Invalid search item limit.", "invalid_arguments", false);
+            cancellationToken.ThrowIfCancellationRequested();
+            var folder = _backend.ReadFolder(new OutlookFolderReadRequest { MaxItems = maxItems,
+                MaxBodyChars = includeBody ? MaxSearchBodyChars : 0,
+                Kind = includeBody ? OutlookFolderCaptureKind.SearchBodies : OutlookFolderCaptureKind.SearchHeaders });
+            cancellationToken.ThrowIfCancellationRequested();
+            if (folder == null || folder.Messages == null || folder.Messages.Count > maxItems ||
+                folder.TotalItems < folder.Messages.Count || (folder.TotalItems > maxItems && !folder.Truncated))
+                throw new OutlookBackendException("Invalid search collection extent.", "outlook_search_snapshot_invalid", false);
+            long characters = 0;
+            var ids = new HashSet<string>(StringComparer.Ordinal);
+            foreach (var mail in folder.Messages)
+            {
+                cancellationToken.ThrowIfCancellationRequested();
+                if (mail == null || string.IsNullOrWhiteSpace(mail.EntryId) || mail.EntryId.Length > 4096 || !ids.Add(mail.EntryId) ||
+                    mail.StateToken != null || (includeBody ? mail.Body == null || mail.Body.Length > MaxSearchBodyChars : mail.Body != null || mail.BodyTruncated))
+                    throw new OutlookBackendException("Invalid search mail capture.", "outlook_search_snapshot_invalid", false);
+                foreach (var header in new[] { mail.Subject, mail.Sender, mail.SenderEmail, mail.To, mail.Cc, mail.Bcc })
+                {
+                    if (header == null || header.Length > 4096)
+                        throw new OutlookBackendException("Invalid search header.", "outlook_search_snapshot_invalid", false);
+                    characters += header.Length;
+                }
+                characters += (mail.Body ?? string.Empty).Length;
+                if (characters > CollectionMaximumCharacters)
+                    throw new OutlookBackendException("Reduce maxItems for this search.", "RESOURCE_SNAPSHOT_TOO_LARGE", false);
+            }
+            return new OutlookSearchSnapshot { MaximumItems = maxItems, BodyCaptured = includeBody, Folder = folder };
+        }
+
+        internal static OutlookOutcome SearchMail(
+            OutlookSearchSnapshot snapshot,
             OutlookSearchMailRequest request,
             CancellationToken cancellationToken)
         {
@@ -79,8 +113,6 @@ namespace RNAssistant.Office.Domains.Outlook
                 return Failure("query is required.", "invalid_arguments", false);
             request.MaxItems = Math.Max(1, Math.Min(MaxItems, request.MaxItems));
             request.MaxResults = Math.Max(1, Math.Min(500, request.MaxResults));
-            request.MaxBodyChars = Math.Max(
-                0, Math.Min(MaxBodyChars, request.MaxBodyChars));
             request.ContextChars = Math.Max(
                 0, Math.Min(1000, request.ContextChars));
             HashSet<string> fields;
@@ -89,12 +121,9 @@ namespace RNAssistant.Office.Domains.Outlook
             try
             {
                 cancellationToken.ThrowIfCancellationRequested();
-                var folder = _backend.ReadFolder(new OutlookFolderReadRequest
-                {
-                    MaxItems = request.MaxItems,
-                    MaxBodyChars = request.MaxBodyChars,
-                    MaxSearchBodyChars = MaxSearchBodyChars
-                });
+                if (snapshot == null || snapshot.MaximumItems != request.MaxItems || snapshot.BodyCaptured != fields.Contains("body"))
+                    return Failure("Search capture does not match the requested scope.", "RESOURCE_SNAPSHOT_UNAVAILABLE", false);
+                var folder = snapshot.Folder;
                 if (folder == null || folder.Messages == null)
                     return Failure(
                         "Outlook folder backend returned no snapshot.",
@@ -123,14 +152,14 @@ namespace RNAssistant.Office.Domains.Outlook
                             if (matches.Count >= request.MaxResults) break;
                             matches.Add(new JObject
                             {
-                                ["entryId"] = mail.EntryId ?? string.Empty,
+                                ["target"] = "Outlook mail: " + mail.Subject + " — " + mail.Sender + " — " +
+                                    mail.Received.ToString("s", System.Globalization.CultureInfo.InvariantCulture),
                                 ["subject"] = mail.Subject ?? string.Empty,
                                 ["received"] = new JValue(mail.Received),
                                 ["field"] = field.Key,
                                 ["start"] = match.Index,
                                 ["end"] = match.Index + match.Length,
-                                ["preview"] = match.Preview ?? string.Empty,
-                                ["body"] = mail.Body ?? string.Empty
+                                ["preview"] = match.Preview ?? string.Empty
                             });
                         }
                     }
@@ -139,10 +168,12 @@ namespace RNAssistant.Office.Domains.Outlook
                     "Mail search matches: " + total,
                     new JObject
                     {
-                        ["folder"] = folder.FolderPath ?? string.Empty,
+                        ["maximumFolderItems"] = snapshot.MaximumItems,
+                        ["maximumBodyCharacters"] = snapshot.BodyCaptured ? MaxSearchBodyChars : 0,
+                        ["sourceTruncated"] = folder.Truncated || folder.Messages.Any(mail => mail.BodyTruncated),
                         ["matchCount"] = total,
                         ["returnedCount"] = matches.Count,
-                        ["truncated"] = total > matches.Count || folder.Truncated,
+                        ["truncated"] = total > matches.Count || folder.Truncated || folder.Messages.Any(mail => mail.BodyTruncated),
                         ["matches"] = matches
                     }.ToString(Formatting.None),
                     OutlookEffect.None);
@@ -170,7 +201,7 @@ namespace RNAssistant.Office.Domains.Outlook
         {
             cancellationToken.ThrowIfCancellationRequested();
             var snapshot = _backend.ReadFolder(new OutlookFolderReadRequest {
-                MaxItems = MaxItems, MaxBodyChars = CollectionPreviewCharacters, MaxSearchBodyChars = 0 });
+                MaxItems = MaxItems, MaxBodyChars = CollectionPreviewCharacters, Kind = OutlookFolderCaptureKind.Collection });
             cancellationToken.ThrowIfCancellationRequested();
             if (snapshot == null || snapshot.Messages == null || snapshot.Messages.Count > MaxItems ||
                 snapshot.TotalItems < snapshot.Messages.Count ||
@@ -185,7 +216,7 @@ namespace RNAssistant.Office.Domains.Outlook
                     !ids.Add(mail.EntryId) || mail.Subject == null || mail.Sender == null ||
                     mail.Body == null || mail.Body.Length > CollectionPreviewCharacters ||
                     mail.Subject.Length > 4096 || mail.Sender.Length > 4096 ||
-                    !string.IsNullOrEmpty(mail.SearchBody) || !string.IsNullOrEmpty(mail.StateToken))
+                    !string.IsNullOrEmpty(mail.StateToken))
                     throw new OutlookBackendException("Incomplete or oversized mail collection row.", "outlook_collection_invalid", false);
                 characters += mail.Subject.Length + mail.Sender.Length + mail.Body.Length;
                 if (characters > CollectionMaximumCharacters)
@@ -424,7 +455,7 @@ namespace RNAssistant.Office.Domains.Outlook
             return null;
         }
 
-        private static OutlookOutcome Fields(
+        internal static OutlookOutcome Fields(
             string text, out HashSet<string> fields)
         {
             fields = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
@@ -459,7 +490,7 @@ namespace RNAssistant.Office.Domains.Outlook
                 "To: " + (mail.To ?? string.Empty) + "; CC: " +
                 (mail.Cc ?? string.Empty) + "; BCC: " +
                 (mail.Bcc ?? string.Empty));
-            yield return Pair("body", mail.SearchBody ?? mail.Body);
+            yield return Pair("body", mail.Body);
         }
 
         private static KeyValuePair<string, string> Pair(

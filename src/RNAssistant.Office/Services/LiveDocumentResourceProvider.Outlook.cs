@@ -14,6 +14,7 @@ namespace RNAssistant.Office.Services
     {
         internal const string OutlookMailKind = "outlook-mail";
         internal const string OutlookCollectionKind = "outlook-collection";
+        internal const string OutlookSearchKind = "outlook-search-scope";
         private const string OutlookCollectionKey = "folder-collection";
         private readonly IOutlookBackend _outlook;
         internal bool IsOutlook { get { return string.Equals(_adapter.HostName, "Outlook", StringComparison.OrdinalIgnoreCase); } }
@@ -23,6 +24,56 @@ namespace RNAssistant.Office.Services
             if (_outlook == null)
                 throw new ResourceRequestException("The bound Outlook reader is unavailable.", "RESOURCE_PROVIDER_UNAVAILABLE", false);
             return new OutlookService(_outlook);
+        }
+
+        private static bool IsOutlookSearch(string key)
+        {
+            if (key == null || !key.StartsWith("search-latest-", StringComparison.Ordinal)) return false;
+            var number = key.Substring(14);
+            if (number.EndsWith("+body", StringComparison.Ordinal)) number = number.Substring(0, number.Length - 5);
+            int count;
+            return int.TryParse(number, NumberStyles.None, CultureInfo.InvariantCulture, out count) && count > 0 &&
+                count <= OutlookService.MaxItems && number == count.ToString(CultureInfo.InvariantCulture);
+        }
+
+        internal ResourceDescriptor ResolveOutlookSearch(ChatSession session, string scope)
+        {
+            if (!IsOutlook || _outlook == null)
+                throw new ResourceRequestException("The bound Outlook reader is unavailable.", "RESOURCE_PROVIDER_UNAVAILABLE", false);
+            var key = "search-" + scope.Replace(':', '-');
+            if (!IsOutlookSearch(key) || scope != key.Substring(7).Replace("latest-", "latest:"))
+                throw new ResourceRequestException("Use latest:N or latest:N+body, with N from 1 to 500.", "RESOURCE_TARGET_INVALID", false);
+            return _scope.Read(session, () => DescribeOutlookSearch(session, key));
+        }
+
+        private ResourceDescriptor DescribeOutlookSearch(ChatSession session, string key)
+        {
+            var descriptor = new ResourceDescriptor { Reference = new ResourceRef(CreateUri(session, key)), Provider = ProviderName,
+                Kind = OutlookSearchKind, Title = key.Substring(7).Replace("latest-", "latest:"), Mutable = true,
+                MimeType = "application/json", Tracking = "externally-observed" };
+            descriptor.Representations.AddRange(new[] { "metadata", "text" });
+            descriptor.Metadata["coverage"] = "Newest N folder items; +body captures at most 100000 characters per mail. Read text for truncation.";
+            return descriptor;
+        }
+
+        private string ReadOutlookSearch(string key)
+        {
+            var includeBody = key.EndsWith("+body", StringComparison.Ordinal);
+            var number = key.Substring(14);
+            if (includeBody) number = number.Substring(0, number.Length - 5);
+            OutlookSearchSnapshot snapshot;
+            try { snapshot = OutlookReader().CaptureSearch(int.Parse(number, CultureInfo.InvariantCulture), includeBody, CancellationToken.None); }
+            catch (OutlookBackendException error) { throw new ResourceRequestException(error.Message, error.ErrorCode, error.Retryable); }
+            var json = new JObject { ["maximumItems"] = snapshot.MaximumItems, ["bodyCaptured"] = includeBody,
+                ["maximumBodyCharacters"] = includeBody ? OutlookService.MaxSearchBodyChars : 0,
+                ["folder"] = new JObject { ["totalItems"] = snapshot.Folder.TotalItems, ["truncated"] = snapshot.Folder.Truncated,
+                    ["messages"] = new JArray(snapshot.Folder.Messages.Select(mail => new JObject {
+                        ["subject"] = mail.Subject, ["sender"] = mail.Sender, ["senderEmail"] = mail.SenderEmail,
+                        ["to"] = mail.To, ["cc"] = mail.Cc, ["bcc"] = mail.Bcc, ["received"] = mail.Received,
+                        ["body"] = mail.Body, ["bodyTruncated"] = mail.BodyTruncated })) } }.ToString(Formatting.None);
+            if (json.Length > MaximumMaterializedCharacters)
+                throw new ResourceRequestException("Reduce maxItems for this search.", "RESOURCE_SNAPSHOT_TOO_LARGE", false);
+            return json;
         }
 
         private static string OutlookMailKey(string entryId)
@@ -99,6 +150,7 @@ namespace RNAssistant.Office.Services
         private string ReadOutlookSource(string target, string representation)
         {
             if (target == OutlookCollectionKey) return ReadOutlookCollection();
+            if (IsOutlookSearch(target)) return ReadOutlookSearch(target);
             var snapshot = CaptureOutlookMail(target, representation != ResourceRepresentations.Structure);
             var mail = snapshot.Mail;
             var content = representation == ResourceRepresentations.Text ? mail.Body : new JObject

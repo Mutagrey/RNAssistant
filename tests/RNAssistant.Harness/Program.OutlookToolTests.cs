@@ -17,6 +17,85 @@ namespace RNAssistant.Harness
 {
     internal static partial class Program
     {
+        private static void OutlookSearchRetainsExactSnapshots()
+        {
+            WithTempExecutor(FakeOfficeAdapter.ForHost("Outlook"), (executor, adapter) =>
+            {
+                adapter.OutlookSelectedBody = new string('x', 35000) + " needle NEEDLE " + new string('y', 35000);
+                var session = NewSession(adapter);
+                executor.BindResourceAuthority(session);
+                var gateway = executor.ResourceGateway;
+                AssertEqual(2, gateway.Find(session, "", "document").Items.Count(item => item.Type == "Outlook search scope"), "search scopes are discoverable");
+                AssertEqual(0, adapter.OutlookSearchBodyCaptureCount, "discovery is body-free");
+                var runtime = executor.CreateNativeRuntime(session, OfficeToolCatalog.ForHost("Outlook").Concat(executor.GetControllerTools()).ToList(),
+                    new AppSettings(), "agent", false);
+                var args = new JObject { ["query"] = "n(e{2})dle", ["mode"] = "regex", ["wholeWord"] = true,
+                    ["fields"] = "body", ["maxResults"] = 1 };
+                var found = ExecuteHtmlNative(runtime, OutlookToolIds.SearchMail, args);
+                AssertEqual(ToolExecutionOutcome.Ok, found.Outcome, "exact Outlook search: " + found.Result.DataJson);
+                var data = JObject.Parse(found.Result.DataJson);
+                AssertTrue((int)data["matchCount"] == 2 && (bool)data["truncated"] && !(bool)data["sourceTruncated"], "result limit is separate from source truncation");
+                var match = data["matches"][0];
+                AssertEqual(35001, (int)match["start"], "body coordinates are field-local");
+                AssertTrue(match["body"] == null && match["entryId"] == null && data["folder"] == null, "search output has no bodies or runtime locators");
+                AssertTrue(((string)match["target"]).StartsWith("Outlook mail: "), "match exposes a semantic mail target");
+                var evidence = found.ResourceEvidence.Single();
+                AssertTrue(evidence.Complete && evidence.Payload != null && evidence.Resource.IsExact, "whole bounded projection is retained as exact evidence");
+                AssertEqual(1, adapter.OutlookBackendCalls.Count(op => op == FakeOfficeAdapter.OutlookReadFolderOperation), "one folder capture per search");
+                var first = gateway.Read(session, new ResourceReadRequest { Reference = evidence.Resource, Representation = "text", MaxChars = 32000 }).Result;
+                AssertTrue(!first.Text.Contains("entryId") && !first.Text.Contains("stateToken"), "private mail identity and guard are not source fields");
+                adapter.OutlookSelectedBody = "no matches";
+                var negative = ExecuteHtmlNative(runtime, OutlookToolIds.SearchMail, args);
+                AssertEqual(0, (int)JObject.Parse(negative.Result.DataJson)["matchCount"], "zero-match search completes");
+                AssertTrue(negative.ResourceEvidence.Single().Complete, "zero-match source still retained");
+                AssertEqual(EvidenceState.Superseded, new EvidenceStateReducer().Reduce(evidence,
+                    executor.ResourceAuthority.CaptureMany(new[] { evidence.ScopeId })).State, "zero-match search publishes drift");
+                var reads = adapter.OutlookSearchBodyCaptureCount;
+                var next = gateway.Read(session, new ResourceReadRequest { Reference = evidence.Resource, Representation = "text", Cursor = first.NextCursor, MaxChars = 32000 }).Result;
+                AssertTrue(next.Text.Contains("needle NEEDLE"), "historical pages preserve searched body prefix");
+                AssertEqual(reads, adapter.OutlookSearchBodyCaptureCount, "historical pages do not read Outlook");
+                System.IO.File.Delete(executor.Payloads.PathFor(evidence.Payload.Sha256));
+                var denied = false;
+                try { gateway.Read(session, new ResourceReadRequest { Reference = evidence.Resource, Representation = "text" }); }
+                catch (ResourceRequestException error) { denied = error.ErrorCode == "RESOURCE_SNAPSHOT_UNAVAILABLE"; }
+                AssertTrue(denied, "missing exact search source never falls back to current mail");
+            });
+        }
+
+        private static void OutlookSearchPreservesBoundsAndHeaderIsolation()
+        {
+            WithTempExecutor(FakeOfficeAdapter.ForHost("Outlook"), (executor, adapter) =>
+            {
+                var runtime = OutlookRuntime(executor, adapter);
+                var invalid = ExecuteHtmlNative(runtime, OutlookToolIds.SearchMail, new JObject { ["query"] = "(", ["mode"] = "regex" });
+                AssertEqual(ToolExecutionOutcome.Error, invalid.Outcome, "invalid regex rejected");
+                var removed = ExecuteHtmlNative(runtime, OutlookToolIds.SearchMail, new JObject { ["query"] = "x", ["maxBodyChars"] = 10 });
+                AssertEqual(ToolExecutionOutcome.Error, removed.Outcome, "old body-output argument has no compatibility fallback");
+                AssertEqual(0, adapter.OutlookBackendCalls.Count(op => op == FakeOfficeAdapter.OutlookReadFolderOperation), "invalid input never reads folder");
+                var headers = new JObject { ["query"] = "quarterly", ["fields"] = "subject,sender,recipients" };
+                var headerResult = ExecuteHtmlNative(runtime, OutlookToolIds.SearchMail, headers);
+                AssertEqual(ToolExecutionOutcome.Ok, headerResult.Outcome, "header matching works");
+                AssertEqual(0, adapter.OutlookSearchBodyCaptureCount, "header-only search never reads body");
+                adapter.OutlookSelectedBody = new string('x', OutlookService.MaxSearchBodyChars - 1) + "😀 needle";
+                var bodies = new JObject { ["query"] = "needle", ["fields"] = "body" };
+                var limited = ExecuteHtmlNative(runtime, OutlookToolIds.SearchMail, bodies);
+                var data = JObject.Parse(limited.Result.DataJson);
+                AssertTrue((bool)data["sourceTruncated"] && (int)data["matchCount"] == 0, "body prefix cannot claim a full negative search");
+                adapter.OutlookFolderSnapshotTransform = snapshot => { snapshot.Messages[0].To = null; return snapshot; };
+                AssertEqual(ToolExecutionOutcome.Error, ExecuteHtmlNative(runtime, OutlookToolIds.SearchMail, headers).Outcome, "incomplete header rejected");
+                adapter.OutlookFolderSnapshotTransform = snapshot => { snapshot.Messages[0].Body = "unexpected body"; return snapshot; };
+                AssertEqual(ToolExecutionOutcome.Error, ExecuteHtmlNative(runtime, OutlookToolIds.SearchMail, headers).Outcome, "header source cannot smuggle body");
+                adapter.OutlookFolderSnapshotTransform = snapshot => { snapshot.Messages[0].Body = new string('x', OutlookService.MaxSearchBodyChars + 1); return snapshot; };
+                AssertEqual(ToolExecutionOutcome.Error, ExecuteHtmlNative(runtime, OutlookToolIds.SearchMail, bodies).Outcome, "oversized provider prefix rejected");
+                adapter.OutlookFolderSnapshotTransform = snapshot => { snapshot.Messages = new OutlookMailSnapshot[0]; snapshot.TotalItems = 0; snapshot.Truncated = false; return snapshot; };
+                var empty = ExecuteHtmlNative(runtime, OutlookToolIds.SearchMail, bodies);
+                AssertTrue(empty.Outcome == ToolExecutionOutcome.Ok && empty.ResourceEvidence.Single().Complete, "empty folder is exact observed data");
+                adapter.OutlookFolderSnapshotTransform = null;
+                adapter.OutlookIsMailTarget = true;
+                AssertEqual(ToolExecutionOutcome.Error, ExecuteHtmlNative(runtime, OutlookToolIds.SearchMail, bodies).Outcome, "Inspector cannot fall back to a folder search");
+            });
+        }
+
         private static void OutlookToolsUseExactNativeOwnership()
         {
             WithTempExecutor(FakeOfficeAdapter.ForHost("Outlook"),
@@ -380,6 +459,7 @@ namespace RNAssistant.Harness
                         "{\"query\":\"quarterly\",\"fields\":\"subject,body\"}");
                     var search = ExecuteNative(
                         runtime, searchCall, runtime.Describe(searchCall));
+                    AssertEqual(ToolExecutionOutcome.Ok, search.Outcome, "Outlook search succeeds: " + search.Result.DataJson);
                     AssertTrue((int)JObject.Parse(
                         search.Result.DataJson)["matchCount"] >= 2,
                         "Outlook search preserves field matching");
@@ -480,8 +560,10 @@ namespace RNAssistant.Harness
                     var host = new BoundTestOfficeAdapter(sessionPort, inner);
                     var ownerSta = false;
                     var readOwnerSta = false;
+                    var searchOwnerSta = false;
                     host.BeforeRead = operation =>
                     {
+                        if (operation == FakeOfficeAdapter.OutlookReadFolderOperation) searchOwnerSta = dispatcher.CheckAccess;
                         if (operation ==
                             FakeOfficeAdapter.OutlookCreateDraftOperation)
                             ownerSta = dispatcher.CheckAccess;
@@ -511,6 +593,9 @@ namespace RNAssistant.Harness
                         tools, new AppSettings(), false, false, chat);
                     AssertTrue(source.Success && readOwnerSta, "exact mail capture stays on bound owner STA");
                     var sourceReads = inner.OutlookBodyMaterializationCount;
+                    var search = executor.ExecuteManual(Command(OutlookToolIds.SearchMail, "query", "quarterly"), tools, new AppSettings(), false, false, chat);
+                    AssertTrue(search.Success && searchOwnerSta, "search uses bound window STA");
+                    var searchReads = inner.OutlookSearchBodyCaptureCount;
 
                     var dispatched = inner.OutlookBackendCalls.Count(
                         operation => operation ==
@@ -520,6 +605,9 @@ namespace RNAssistant.Harness
                         tools, new AppSettings(), false, false, chat);
                     AssertTrue(!closedSource.Success, "closed window cannot capture mail");
                     AssertEqual(sourceReads, inner.OutlookBodyMaterializationCount, "closed capture never reaches the body getter");
+                    var closedSearch = executor.ExecuteManual(Command(OutlookToolIds.SearchMail, "query", "quarterly"), tools, new AppSettings(), false, false, chat);
+                    AssertTrue(!closedSearch.Success, "closed window rejects search");
+                    AssertEqual(searchReads, inner.OutlookSearchBodyCaptureCount, "closed search never reads bodies");
                     var closed = executor.ExecuteManual(Command(
                         OutlookToolIds.CreateDraft,
                         "kind", "new", "body", "Stale"),

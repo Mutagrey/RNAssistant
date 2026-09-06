@@ -274,6 +274,8 @@ namespace RNAssistant.Office.Services
         {
             value = (value ?? string.Empty).Trim().ToLowerInvariant();
             if (value.Length == 0 || value == "auto") return ResourceRepresentations.Text;
+            if (IsOutlook && IsOutlookSearch(target) && value != ResourceRepresentations.Text && value != ResourceRepresentations.Metadata)
+                throw new ResourceRequestException("Outlook search scopes expose exact text JSON.", "RESOURCE_VIEW_UNAVAILABLE", false);
             if (IsPowerPoint && IsPowerPointSearch(target) && value != ResourceRepresentations.Text && value != ResourceRepresentations.Metadata)
                 throw new ResourceRequestException("PowerPoint search scopes expose exact text JSON.", "RESOURCE_VIEW_UNAVAILABLE", false);
             if (IsWord && IsWordSearch(target) && value != ResourceRepresentations.Text && value != ResourceRepresentations.Metadata)
