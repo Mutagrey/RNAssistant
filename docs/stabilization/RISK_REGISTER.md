@@ -47,6 +47,14 @@ checks parent StoreID/EntryID before capture. Discovery reads bound headers only
 Real COM membership/unsaved-mail and large-mail execution remain unqualified;
 no scope/large-mail Windows gate is closed.
 
+Resource cutover / allocation deferral (2026-09-07, explicit user decision): Outlook
+whole-string allocation above and Inspector request serialization before preview
+truncation are deferred beyond host-neutral cleanup. Owners/triggers are recorded
+in [BACKLOG](BACKLOG.md#user-deferred-source-allocation--2026-09-07). Inspector's
+bounded transfer does not bound construction of the source JSON. Neither this
+decision nor the completed consumer switch qualifies bounded source allocation,
+real WebView2 responsiveness, Windows/Office or a release candidate.
+
 | ID | Priority | Риск | Владелец | Защита / фаза | Статус |
 |---|---|---|---|---|---|
 | R01 | P0 | Model completed скрывает write error/unknown или отсутствие write | AgentKernel / Application / UI | Phase 1C warning + Phase 3B2 shared kernel summary, actual event replay; production delivery R21 | contained host-neutral 1C; Windows qualification open |

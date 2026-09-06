@@ -86,15 +86,26 @@ delegate-ом. Это доказывает механическую исполн
 число calls, argument/format repairs, tool errors, continuation restarts и итоговую
 успешность задачи.
 
-11O0 добавил, а 11O1–11O5 обновили machine-checked
-[property inventory](R61_TOOL_PROPERTY_INVENTORY.tsv): 69 уникальных built-in ids
-и 72 effective host-варианта фиксируют exact descriptor revision, host, mode,
-direct binding и все рекурсивные schema property paths. Четыре host-specific
-варианта принадлежат `common.html_data_bind`. Поле, похожее на
+11O0 добавил, а единый Resource direct cutover обновил machine-checked
+[property inventory](R61_TOOL_PROPERTY_INVENTORY.tsv): 66 уникальных built-in ids
+и 66 effective host-вариантов фиксируют exact descriptor revision, host, mode,
+direct binding и все рекурсивные schema property paths. `common.html_data_bind`
+теперь имеет один resource-backed контракт для четырёх hosts. Поле, похожее на
 runtime plumbing, не может появиться без явного решения; допустимые public
 capability/tool/skill/mail identities отмечены отдельно от полей, которые R61
 internalizes/removes. Descriptor revision одновременно фиксирует description,
 defaults и validation, не создавая второй schema source.
+
+Final review (2026-09-07): HTML uses semantic target/view/path/head-or-exact policy,
+not host-specific copied JSON transforms; schema/mapping/derived publication uses
+semantic definitions and source targets. `resources_read.offset` is an explicit
+table/records row selector, not a provider continuation cursor; exact revisions
+and cursor tokens stay runtime-owned. The four host search tools retain domain
+matching/coordinate intent over exact resources. VBA write/patch/macro revisions
+pin their current safety descriptions with unchanged semantic argument shapes.
+Removed direct source-reader rows are absent, not aliases. The focused inventory
+check passes after this property/description/binding review; it is not Windows or
+real-model qualification.
 
 Произвольные argument schemas установленных custom packages нельзя честно
 зафиксировать в source baseline: они package-owned и меняются только новой exact

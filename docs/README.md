@@ -19,7 +19,8 @@ owners или dependencies. Не читай оба документа автом
 Для текущего единого Resource direct cutover сначала прочитай
 [Resource MASTER](stabilization/resource-cutover/MASTER.md), затем его три
 нормативных документа в заданном порядке. [Resource Fabric](resource-fabric.md)
-содержит карту текущих владельцев и незакрытых consumers, а не отдельную реализацию.
+содержит карту владельцев, завершённую host-neutral замену consumers и открытые
+qualification gates, а не отдельную реализацию.
 
 ## Канонические документы
 

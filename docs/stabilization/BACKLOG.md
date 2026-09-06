@@ -26,31 +26,22 @@
 Не проводить общий предварительный split/rename, массовый namespace move, новый
 service locator, второй store/read model или универсальный Office abstraction.
 
-## Existing defects outside the active slice
+## User-deferred source allocation — 2026-09-07
 
-- HTML source-tool fixture still exercises retired `RNAssistantData.missingData`
-  while expecting the current `script.data_source_missing` finding. The focused
-  `tools: html source read search and patch` check passes its read/search/patch
-  assertions but fails this later diagnostic assertion (2026-09-06 source-download
-  slice); the diagnostic owner is unchanged by this slice. Owner: HTML diagnostics
-  qualification. Review the fixture against `RN.resources` in a separate slice;
-  do not reintroduce the removed data API or report the entire check as passing.
-- Web Plan fixture has stale unrelated VBA delivery evidence:
-  `tests/web/plan-document.test.js:102` still requires
-  `app-vba.js?v=resource-intent-20260902-1`, while the preceding committed UI already
-  delivers `vba-upload-20260906-1`. Observed during the HTML mutation-upload slice
-  on 2026-09-06; its four preceding Plan assertions pass, but this assertion stops
-  the remainder of the file. Owner: VBA/UI qualification. Review the handoff
-  fixture against its current canonical consumer in a separate slice; do not
-  report the full Plan file as green or change product behavior to satisfy it.
-- R61 property inventory baseline trails preceding Resource cutover changes:
-  `tools: R61 built-in contract inventory` still expects old HTML binding shapes,
-  resource find/read descriptors, no schema/mapping/derived tools, and earlier
-  VBA descriptor revisions. These mismatches were observed on 2026-09-06 while
-  removing the tool definition reader; only that retired row was removed in its
-  slice. Owner: Tool catalog/qualification. Review each changed property against
-  its canonical owner and update the baseline before final post-cutover Windows
-  qualification; do not regenerate unchecked hashes or report this gate as green.
+The user explicitly approved closing host-neutral Resource cutover before these
+two corrections. Bounded transport is implemented; bounded source allocation is
+not qualified. They do not authorize another diagnostics/performance workstream.
+
+- Outlook backend/resource owner: `MailItem.Body` allocates the whole COM string
+  before rejecting its size. Revisit with a concrete large-mail Windows failure
+  or before claiming bounded-source qualification; keep real Outlook gates open.
+- Inspector owner: request JSON serialization precedes preview truncation.
+  Revisit for a reproducible large-request memory/responsiveness problem or before
+  claiming bounded-source qualification. The bounded download/preview remains;
+  do not add a second compiler/store or change context semantics to optimize it.
+
+## Existing defects outside the completed cutover
+
 - Tool package README leading `U+FEFF`: `StorageFileSystem` writes a UTF-8 sidecar
   without a separate BOM, while `ToolStore.TryReadUtf8` strips its first BOM-shaped
   character. A literal leading `U+FEFF` therefore yields a different read-back and

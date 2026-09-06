@@ -1,6 +1,8 @@
 # Resource Fabric
 
-Status: unified direct cutover **in progress**, host-neutral. Execution order and
+Status: unified direct cutover **complete host-neutral** (2026-09-07), with explicit
+user-deferred Outlook/Inspector source-allocation limits and open Windows gates.
+This is not bounded-source qualification or beta/RC/release readiness. Execution order and
 acceptance gates belong to [Resource MASTER](stabilization/resource-cutover/MASTER.md).
 Read its normative documents in order: [URF](stabilization/resource-cutover/UNIVERSAL_RESOURCE_FABRIC.md),
 [Authority](stabilization/resource-cutover/RESOURCE_AUTHORITY.md), then
@@ -305,7 +307,7 @@ carry complete exact CAS evidence; later observed scope drift or document mutati
 invalidates previous evidence through the shared reducer. Search results no longer
 expose scope/content hashes as public coordinates. Missing retained payloads never
 fall forward. Actual Word story enumeration, COM and WebView qualification remain
-open; other host-specific search consumers remain separate cutover work. Generic
+open; other host-specific searches are covered by their own sections. Generic
 `resources_find` scan publication uses the shared provider/Gateway path above.
 
 ## PowerPoint slide reads
@@ -734,7 +736,8 @@ qualify actual Windows WebView2 capture or downloaded-file browser behavior.
 
 The three normative contracts supersede conflicting pre-cutover area explanations.
 [PROGRESS](stabilization/PROGRESS.md) records current work/Windows gates and
-[MIGRATION_MAP](stabilization/MIGRATION_MAP.md) records remaining consumer removal.
+[MIGRATION_MAP](stabilization/MIGRATION_MAP.md) records completed consumer removal
+and the remaining qualification, separately from optional improvements.
 Existing Office adapters, mutation journal, event store and CAS remain canonical
 owners, not parallel legacy/new paths.
 
@@ -787,8 +790,10 @@ Do not treat those labels as authorization for further provider expansion.
 
 ## MASTER acceptance reconciliation — 2026-09-07
 
-This is a source/existing-check review of MASTER §8, not a new test run, Windows
-qualification or assertion that every repository path was exhaustively proved.
+This reconciles MASTER §8 with the implementation and focused host-neutral checks.
+It is not Windows qualification or an assertion that every repository path was
+exhaustively proved. Final closure is host-neutral only (2026-09-07); the user
+explicitly deferred the two source-allocation limits below.
 Test method names below are in `tests/RNAssistant.Harness`; implementation owners
 are in `src/RNAssistant.Office/Services` unless another layer is stated.
 
@@ -800,14 +805,14 @@ are in `src/RNAssistant.Office/Services` unless another layer is stated.
 | Guarded write cannot publish over unexpected head | HostRuntime/domain guard, mutation lease, authority compare-and-publish; extended `VbaConfirmedMutationRejectsStaleSnapshot` | Checked host-neutral: another chat observes a replacement revision while confirmation waits; stale confirmation performs no mutation/publication or backup. Guard mismatch may separately publish conservative ExternalDriftObserved/Unknown; the competing historical snapshot remains intact |
 | Changed/no-op/unknown effects; cross-chat invalidation | ResourceMutationAuthorityObserver/OfficeResourceMutationDomain + Core EvidenceStateReducer; `ResourceTwoChatMutationsReachCompiler` | Checked through two executors sharing document authority, native Excel read/write, persisted paired read facts and actual ConversationModelSession.CreateRequest. No-op retains current evidence; changed-without-captured-after-state and lost-read-back remove uncertain content. Compiler/historical reads perform no Office I/O or replay |
 | One coherent frozen authority tuple | UseInput carries the captured catalog generation through CreateAsync/RebindAuthority; CompileCurrent checks it against the same frozen CaptureMany tuple | Fixed host-neutral: intervening publication fails before compilation/request dispatch; the extended `ResourcePromptPublicationIsFrozen` checks rejection, fresh rebind and retained request/repair |
-| Every normal model request uses one compiler | ConversationKernelAdapter.Model → ConversationModelSession.CreateRequest → ModelContextCompiler; repair also uses compiler; `ResourceCompilerFiltersBeforeBudget` | Preserve this route when closing the catalog race; no second builder |
+| Every normal model request uses one compiler | ConversationKernelAdapter.Model → ConversationModelSession.CreateRequest → ModelContextCompiler; repair also uses compiler; `ResourceCompilerFiltersBeforeBudget` | Preserved in final cleanup; no second builder |
 | Large payloads remain reference-first/bounded | Existing CAS/download/upload owners; `ResourceRuntimePayloadStorage`, `ResourceCompletedCallDoesNotHydrateArguments`, binary/raw admission cases | Known source-allocation limits below are not closed by transport bounds |
 | HTML/viewers use Gateway, not copied current JSON | ResourceDataPlaneService and resource-backed bindings; `ResourceBoundedTableLeaseUsesOneSnapshot`, `tests/web/resource-data-plane.test.js` | Real WebView2 qualification; HtmlWorkspaceDataSource now contains binding metadata, not the removed Json body |
 | Slow consumer cannot create unbounded buffering | Pull-based reads, busy/lease/byte limits; `ResourceBinaryChunkBudget`, sequential stream/download/upload browser cases | Real WebView2 responsiveness qualification |
 | Schema/mapping change invalidates derived currentness | ResourceStateProvider/ResourceDerivedViewService + reducer dependencies; `ResourceSchemaMappingDerivedPublication` | No new semantic layer required by this review |
 | Wave 5 retention roots and unavailable historical payloads | Core CasMaintenanceService scans chats, VBA journal, authority revisions/views/parts and mutation journal; `ResourceUnpublishedRevisionRetention`, retained missing/corrupt-CAS cases | Conservative retention already protects roots; do not invent a new GC/checkpoint subsystem |
 
-Finite remaining order:
+Finite closure status:
 
 1. **Catalog capture correctness — complete host-neutral.** The generation from
    `UseInput` accompanies the active tools/skills/prompts into the model session.
@@ -834,17 +839,28 @@ Finite remaining order:
    and retained replacement bytes. Two focused checks cover all four scenarios;
    no production change was required. Finer sectional validity is not mandatory:
    Evidence/Compiler §5 and Authority §47 permit conservative head semantics.
-3. **Resolve existing source-allocation qualification.** Outlook `MailItem.Body`
+3. **Source allocation — explicitly deferred by the user, not qualified.** Outlook `MailItem.Body`
    allocates before its ceiling is checked (tracked in RISK_REGISTER); Inspector
    request serialization also precedes preview truncation. Distinguish source
-   allocation from bounded transport, and record an explicit owner decision or
-   correction before claiming bounded-source qualification. Do not turn this into
-   a new diagnostics/performance project.
-4. Align the final removal records with these results, then run the already-required
-   Windows/Office/WebView2 qualification. Only concrete reachable bypasses found
-   during this closure justify further consumer changes. No more named resource
-   kinds, universal raw expansion, finer Excel coverage or checkpoint optimization
-   are scheduled by this reconciliation.
+   allocation from bounded transport. Owners and concrete revisit triggers are in
+   [BACKLOG](stabilization/BACKLOG.md#user-deferred-source-allocation--2026-09-07);
+   risks remain open. This is permission to finish host-neutral cleanup, not evidence
+   of bounded-source safety or a new diagnostics/performance project.
+4. **Final cleanup — complete host-neutral.** The removed public readers have no
+   execution/catalog path; their remaining identifiers reject incompatible accepted
+   history explicitly. The copied HTML data API/store is absent. Final corrections
+   separate normalized VBA guards from immutable raw bytes and remove incidental
+   document discovery from global publication projection. Reviewed R61 inventory
+   (66 ids/66 variants), current HTML diagnostics and delivered Plan/VBA resource
+   assets replace stale fixtures; completed backlog items are removed. Fourteen
+   focused harness cases and eight Plan browser-script cases pass, not a full-suite
+   or Office validation. Conservative retention roots are already implemented;
+   checkpoints/finer coverage are optional improvements, not unfinished migration.
+5. **Remaining required qualification — Windows/Office/WebView2.** Accumulated
+   live-provider, COM/lifetime, model and UI gates remain open before Phase 12 or
+   beta/RC/release claims. No new provider kinds, universal raw expansion or generic
+   cleanup workstream is scheduled. The unrelated ToolStore leading-U+FEFF defect
+   remains explicitly recorded in BACKLOG, not silently fixed or declared closed.
 
 ## Delivery order
 

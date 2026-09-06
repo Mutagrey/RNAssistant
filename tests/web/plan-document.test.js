@@ -65,10 +65,10 @@ vm.runInContext(source, context, { filename: "app-html-workspace-artifacts.js" }
   const editor = fs.readFileSync(path.join(root, "web/js/app-html-workspace-editor.js"), "utf8");
   const questions = fs.readFileSync(path.join(root, "web/js/app-agent-activity.js"), "utf8");
   const taskList = fs.readFileSync(path.join(root, "web/js/app-task-list.js"), "utf8");
-  assert.ok(index.includes("app-artifacts.js?v=chart-resource-card-20260903-1"), "artifact cards use the chart resource cache key");
-  assert.ok(index.includes("app-artifact-viewer-actions.js?v=artifact-gallery-20260902-1"),
+  assert.ok(index.includes("app-artifacts.js?v=binary-chunks-20260906-1"), "artifact cards use the chunked resource cache key");
+  assert.ok(index.includes("app-artifact-viewer-actions.js?v=binary-chunks-20260906-1"),
     "artifact actions have the current artifact cache key");
-  assert.ok(index.includes("app-html-workspace-artifacts.js?v=html-source-resource-20260905-1"),
+  assert.ok(index.includes("app-html-workspace-artifacts.js?v=binary-chunks-20260906-1"),
     "artifact detail has the current artifact cache key");
   assert.ok(index.includes("app-html-workspace-editor.js?v=html-read-20260906-1"));
   ["app-task-list.js", "app-agent-activity.js"].forEach(asset => {
@@ -99,8 +99,8 @@ vm.runInContext(source, context, { filename: "app-html-workspace-artifacts.js" }
 {
   const index = fs.readFileSync(path.join(root, "web/index.html"), "utf8");
   const vba = fs.readFileSync(path.join(root, "web/js/app-vba.js"), "utf8");
-  assert.ok(index.includes("app-vba.js?v=resource-intent-20260902-1"),
-    "VBA chat handoff has the resource-intent cache key");
+  assert.ok(index.includes("app-vba.js?v=vba-upload-20260906-1"),
+    "VBA chat handoff uses the delivered source-upload script");
   assert.match(vba, /common\.resources_find со scope=vba/);
   assert.doesNotMatch(vba, /common\.resources_(?:list|resolve|search)|provider=vba|kind=vba-component/);
   console.log("PASS plan document: VBA review handoff uses semantic resource intent");

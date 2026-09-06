@@ -130,10 +130,10 @@ leases. Existing revision-guarded mutation uploads remain the only write path.
 
 The separate generated built-in human-documentation view uses the same Gateway/
 download owner as described [below](#human-documentation-without-model-context-cost).
-Remaining model/domain definition-read consumers are still open cutover work.
-The pre-existing VBA
-canonical-hash/raw-line-ending collision remains an explicit
-[authority gap](stabilization/BACKLOG.md#existing-defects-outside-the-active-slice).
+Model/domain definition reads are switched through the same resource owner.
+VBA line-ending-only drift now creates a new exact source revision while preserving
+normalized mutation guards and historical bytes; see
+[Resource Fabric](resource-fabric.md).
 Real Office/WebView2 qualification remains open.
 
 ### Library mutation uploads
@@ -167,7 +167,7 @@ Direct package install/remove authorization and execution remain unchanged.
 The inline save request and separate pre-install save transport are removed;
 catalog and outgoing library projections now use the source metadata above.
 The pre-existing README leading-`U+FEFF` sidecar/read-back issue is tracked in
-[backlog](stabilization/BACKLOG.md#existing-defects-outside-the-active-slice).
+[backlog](stabilization/BACKLOG.md#existing-defects-outside-the-completed-cutover).
 
 ## Mandatory all-tool contract audit (R61)
 

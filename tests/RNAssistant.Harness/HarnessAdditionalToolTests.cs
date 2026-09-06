@@ -464,7 +464,7 @@ namespace RNAssistant.Harness
                 };
                 HtmlWorkspaceToolService.UpsertFile(inspectSession, "index.html", "html", "<main id=\"total\"></main><div id='total'></div><script src=\"echarts.min.js\"></script>", true);
                 HtmlWorkspaceToolService.UpsertFile(inspectSession, "styles.css", "css", "@import url('theme.css');", false);
-                HtmlWorkspaceToolService.UpsertFile(inspectSession, "app.js", "script", "import thing from 'pkg';\ndocument.getElementById('missing');\nRNAssistantData.missingData;", false);
+                HtmlWorkspaceToolService.UpsertFile(inspectSession, "app.js", "script", "import thing from 'pkg';\ndocument.getElementById('missing');\nRN.resources.open('missingData');", false);
                 HtmlWorkspaceToolService.UpsertDataSource(inspectSession, "sales", "{\"rows\":[1]}");
                 var inspectResult = HtmlWorkspaceToolService.InspectForPreview(
                     inspectSession, CancellationToken.None);
@@ -480,7 +480,7 @@ namespace RNAssistant.Harness
                 AssertTrue(inspection["issues"].Any(item =>
                         (string)item["code"] == "script.data_source_missing" &&
                         (string)item["severity"] == "error" &&
-                        ((string)item["message"] ?? string.Empty).IndexOf("sales", StringComparison.OrdinalIgnoreCase) >= 0),
+                        ((string)item["message"] ?? string.Empty).IndexOf("missingData", StringComparison.OrdinalIgnoreCase) >= 0),
                     "HTML inspection fails loudly when code uses a missing data-source name");
                 AssertTrue(inspection["issues"].Any(item =>
                         (string)item["code"] == "html.script_src_unsupported" &&

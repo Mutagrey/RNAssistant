@@ -369,8 +369,9 @@ exact source, no callable admission, publication-dependent evidence, retained hi
 and no authoring-file fallback/Office discovery. It also rejects the retired reader
 and its stored call. Existing `tools: agent CRUD preserves omitted fields` reads back
 through the same generic resource tool; `tools: authoring intents are semantic`
-checks the replacement guidance. The broader R61 inventory has an explicitly open
-[baseline gap](../../docs/stabilization/BACKLOG.md#existing-defects-outside-the-active-slice).
+checks the replacement guidance. `tools: R61 built-in contract inventory` checks
+the final reviewed [baseline](../../docs/stabilization/R61_TOOL_PROPERTY_INVENTORY.tsv)
+(66 ids/66 host variants); its pass does not qualify real Windows/model behavior.
 
 For Tool Library source reads and mutation uploads, use `tool editor:` in
 `Program.ToolEditorResourceTests.cs` and
