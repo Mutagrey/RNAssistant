@@ -65,6 +65,7 @@ const vbaHost = add("vbaMetaBox", "div", body);
 
 const copied = [];
 const context = vm.createContext({
+  AbortController,
   document: { body, createElement: tag => new Element(tag), execCommand: () => true },
   navigator: { clipboard: { writeText(text) { copied.push(String(text)); return Promise.resolve(); } } },
   state: { context: {} },
@@ -169,11 +170,13 @@ function settle() { return new Promise(resolve => setImmediate(resolve)); }
   console.log("PASS read-only JSON surfaces: VBA metadata uses shared viewer and clears on deselection");
 
   const actionOrder = [];
-  const actionState = { tools: [{ Id: "demo" }], selectedToolIndex: 0, selectedToolComponentIndex: 0 };
+  const actionState = { tools: [{ Id: "demo" }], selectedToolIndex: 0, selectedToolComponentIndex: 0, activeChatId: "chat" };
   const actions = context.RNAssistantToolActions.create({
     state: actionState,
     syncSelected() {},
     setBusy() {},
+    updateWriteState() {},
+    reconcile: tools => tools,
     send() { return Promise.resolve({ result: { contractVersion: 1, status: "ok", effect: "verified_change" },
       tools: { type: "rnassistant.toolLibrary", contractVersion: 1, items: [{ Id: "demo" }] } }); },
     parseLibrary(value) { assert.equal(value.type, "rnassistant.toolLibrary"); return value.items; },

@@ -157,7 +157,7 @@ function library(tools) {
 
 {
   assert.ok(index.includes(
-    "app-tools.js?v=library-ux-20260903-1"));
+    "app-tools.js?v=tool-upload-20260906-1"));
   assert.equal(/StoragePath|storagePath/.test(source), false);
   assert.match(source, /expectedRevision/);
   assert.match(source, /toolLibraryMutationRequestType/);

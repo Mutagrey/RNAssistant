@@ -43,43 +43,137 @@
   function create(options) {
     options = options || {};
     var state = options.state;
+    var write = null;
+    var maximumMutationBytes = 16 * 1024 * 1024;
+
+    function closeUpload(operation) {
+      if (!operation || operation.closed || !operation.lease || !/^[a-f0-9]{64}$/.test(operation.lease.leaseId)) return Promise.resolve();
+      operation.closed = true;
+      return options.send("cancelToolMutationUpload", { chatId: operation.chatId, leaseId: operation.lease.leaseId }).catch(function () {});
+    }
+
+    function cancelWrite() {
+      if (!write) return;
+      write.abort.abort();
+      if (write.requestId) options.cancelRequest(write.requestId).catch(function () {});
+      closeUpload(write);
+    }
+
+    function beginWrite() {
+      if (write) throw new Error("Дождитесь завершения записи Tool Library.");
+      var operation = { chatId: state.activeChatId, library: state.tools, abort: new AbortController(), possibleEffect: false };
+      operation.current = function () { return write === operation && !operation.abort.signal.aborted && !state.bridgeUnavailable &&
+        !!operation.chatId && state.activeChatId === operation.chatId && state.tools === operation.library; };
+      operation.active = function () { if (!operation.current()) throw new Error("Запись остановлена: контекст Tool Library изменился."); };
+      write = operation; state.toolLibraryWriting = true; options.updateWriteState();
+      return operation;
+    }
+
+    async function endWrite(operation) {
+      if (!operation) return;
+      await closeUpload(operation);
+      if (write === operation) { write = null; state.toolLibraryWriting = false; options.updateWriteState(); }
+    }
+
+    function writeError(error, operation) {
+      var message = error.detail || error.message;
+      return operation && operation.possibleEffect
+        ? message + " Обновите Library перед повтором: результат записи не подтверждён в редакторе." : message;
+    }
+
+    async function saveUploaded(operation) {
+      operation.active();
+      if (!options.validateSelected()) throw new Error("Исправьте JSON перед сохранением.");
+      options.syncSelected(); options.validateAll();
+      var body = options.mutationRequest(), submitted = options.captureSave();
+      if (!Array.isArray(body.mutations) || body.mutations.length > 256) throw new Error("RESOURCE_BATCH_TOO_LARGE");
+      function validateUnicode(value) {
+        if (typeof value === "string") {
+          if (value.length > maximumMutationBytes) throw new Error("RESOURCE_BATCH_TOO_LARGE");
+          if (new TextDecoder("utf-8", { fatal: true, ignoreBOM: true }).decode(new TextEncoder().encode(value)) !== value)
+            throw new Error("RESOURCE_UPLOAD_INVALID: некорректный Unicode в определении инструмента.");
+        } else if (value && typeof value === "object") Object.keys(value).forEach(function (key) { validateUnicode(value[key]); });
+      }
+      var length = 256;
+      body.mutations.forEach(function (mutation) {
+        validateUnicode(mutation); length += JSON.stringify(mutation).length + 1;
+        if (length > maximumMutationBytes) throw new Error("RESOURCE_BATCH_TOO_LARGE");
+      });
+      var bytes = new TextEncoder().encode(JSON.stringify(body));
+      if (bytes.length > maximumMutationBytes) throw new Error("RESOURCE_BATCH_TOO_LARGE");
+      var hash = Array.from(new Uint8Array(await crypto.subtle.digest("SHA-256", bytes)))
+        .map(function (part) { return part.toString(16).padStart(2, "0"); }).join("");
+      operation.active();
+      try {
+        var opening = options.send("beginToolMutationUpload", { chatId: operation.chatId, byteLength: bytes.length });
+        operation.requestId = opening.requestId;
+        operation.lease = await opening; operation.requestId = null;
+        operation.active();
+        await window.RNAssistantResourceUpload.write(operation.lease, new Blob([bytes]), {
+          maxBytes: maximumMutationBytes, signal: operation.abort.signal, isCurrent: operation.current
+        });
+        operation.active(); operation.possibleEffect = body.mutations.length > 0;
+        var saving = options.send("saveTools", { chatId: operation.chatId, uploadLeaseId: operation.lease.leaseId, sha256: hash });
+        operation.requestId = saving.requestId;
+        var response = await saving; operation.requestId = null;
+        operation.active();
+        var saved = options.parseMutation(response);
+        if (saved.results.length > body.mutations.length || !saved.failure && saved.results.length !== body.mutations.length ||
+            saved.results.some(function (result, index) {
+              var mutation = body.mutations[index];
+              return result.id !== (mutation.kind === "delete" ? mutation.baseId : mutation.id) &&
+                  !(result.status !== "ok" && result.id === mutation.baseId) ||
+                result.status !== "ok" && index !== saved.results.length - 1;
+            })) throw new Error("Результат записи Tool Library не совпадает с отправленным набором.");
+        operation.possibleEffect = saved.results.some(function (result) { return result.status === "unknown" || result.effect === "unknown"; });
+        var selectedId = (state.tools[state.selectedToolIndex] || {}).Id;
+        options.acknowledgeSave(submitted, saved);
+        state.tools = options.reconcile(saved.tools); operation.library = state.tools;
+        state.selectedToolIndex = findToolIndex(state.tools, selectedId);
+        options.renderTools();
+        if (saved.failure) {
+          var failure = new Error(saved.failure.message || "Инструменты не сохранены.");
+          failure.code = saved.failure.code || "tool_library_mutation_failed";
+          throw failure;
+        }
+        return saved;
+      } finally { await closeUpload(operation); }
+    }
 
     async function changeVbaInstallation(action) {
-      options.syncSelected();
-      var tool = state.tools[state.selectedToolIndex];
-      if (!tool) return;
+      if (write) { options.log("Дождитесь завершения записи Tool Library.", "error"); return; }
       var actionButtonId = action === "installVbaTool" ? "installVbaToolButton" : "uninstallVbaToolButton";
       var outputKind = "text";
       var outputValue = "";
-      options.setBusy(actionButtonId, true);
+      var operation;
       try {
+        operation = beginWrite(); operation.active();
+        options.syncSelected();
+        var tool = state.tools[state.selectedToolIndex];
+        if (!tool) return;
+        options.setBusy(actionButtonId, true);
         if (action === "installVbaTool") {
-          var selectedId = tool.Id;
-          var saved = options.parseMutation(await options.send(
-            "saveTools", options.mutationRequest()));
-          state.tools = saved.failure && options.reconcile
-            ? options.reconcile(saved.tools) : saved.tools;
-          if (saved.failure) {
-            var saveFailure = new Error(saved.failure.message ||
-              "Инструмент не сохранён.");
-            saveFailure.code = saved.failure.code ||
-              "tool_library_mutation_failed";
-            throw saveFailure;
-          }
-          if (options.acceptSaved) options.acceptSaved();
-          state.selectedToolIndex = findToolIndex(state.tools, selectedId);
-          tool = state.tools[state.selectedToolIndex];
-          if (!tool) throw new Error("VBA package was not found after saving.");
+          var targetId = tool.Id;
+          var saved = await saveUploaded(operation);
+          tool = state.tools[findToolIndex(state.tools, targetId)];
+          if (!tool || tool !== saved.tools[findToolIndex(saved.tools, targetId)])
+            throw new Error("Определение изменилось во время сохранения. Сохраните черновик перед установкой.");
         }
-        var response = await options.send(action, { id: tool.Id, dryRun: false });
+        operation.active(); operation.possibleEffect = true;
+        var installing = options.send(action, { id: tool.Id, dryRun: false });
+        operation.requestId = installing.requestId;
+        var response = await installing; operation.requestId = null;
+        operation.active();
         var result = response && response.result;
         if (!result || result.contractVersion !== 1 ||
             !["ok", "error", "unknown"].includes(result.status) ||
             !["none", "verified_no_change", "verified_change", "unknown"].includes(result.effect)) {
           throw new Error("VBA package action returned an incompatible result contract.");
         }
-        state.tools = options.parseLibrary(response.tools);
-        state.selectedToolIndex = findToolIndex(state.tools, tool.Id);
+        operation.possibleEffect = result.status === "unknown" || result.effect === "unknown";
+        var selectedId = (state.tools[state.selectedToolIndex] || {}).Id;
+        state.tools = options.reconcile(options.parseLibrary(response.tools)); operation.library = state.tools;
+        state.selectedToolIndex = findToolIndex(state.tools, selectedId);
         state.selectedToolComponentIndex = 0;
         options.renderTools();
         outputKind = "json";
@@ -90,17 +184,20 @@
         }
         options.log(result.message || "VBA package state updated.");
       } catch (error) {
-        outputValue = error.detail || error.message;
-        options.log(error.message, "error");
+        outputValue = writeError(error, operation);
+        options.log(outputValue, "error");
       } finally {
+        await endWrite(operation);
         options.setBusy(actionButtonId, false);
         options.renderEditor();
+        options.updateWriteState();
         if (outputKind === "json") options.setJsonOutput(outputValue);
         else options.setTextOutput(outputValue);
       }
     }
 
     async function runSelected(dryRun, semanticNext) {
+      if (write) { options.log("Дождитесь завершения записи Tool Library.", "error"); return; }
       if (!options.validateSelected()) {
         options.log("Исправьте JSON инструмента перед запуском.", "warning");
         return;
@@ -134,37 +231,24 @@
     }
 
     async function saveTools() {
-      options.setBusy("saveToolsButton", true);
+      if (write) { options.log("Дождитесь завершения записи Tool Library.", "error"); return; }
+      var operation;
       try {
-        if (!options.validateSelected()) throw new Error("Исправьте JSON перед сохранением.");
-        options.syncSelected();
-        options.validateAll();
-        var selected = state.tools[state.selectedToolIndex];
-        var selectedId = selected ? selected.Id : "";
-        var response = options.parseMutation(await options.send(
-          "saveTools", options.mutationRequest()));
-        state.tools = response.failure && options.reconcile
-          ? options.reconcile(response.tools) : response.tools;
-        state.selectedToolIndex = selectedId ? findToolIndex(state.tools, selectedId) : -1;
-        if (response.failure) {
-          var failure = new Error(response.failure.message ||
-            "Инструменты не сохранены.");
-          failure.detail = response.failure.message;
-          failure.code = response.failure.code ||
-            "tool_library_mutation_failed";
-          throw failure;
-        }
-        if (options.acceptSaved) options.acceptSaved();
-        options.renderTools();
+        operation = beginWrite();
+        options.setBusy("saveToolsButton", true);
+        await saveUploaded(operation);
         options.log("Инструменты сохранены.");
       } catch (error) {
-        options.log(error.message, "error");
+        options.log(writeError(error, operation), "error");
       } finally {
+        await endWrite(operation);
         options.setBusy("saveToolsButton", false);
+        options.updateWriteState();
       }
     }
 
     return {
+      cancelWrite: cancelWrite,
       installVba: function () { return changeVbaInstallation("installVbaTool"); },
       next: function () { return runSelected(false, true); },
       run: function () { return runSelected(false); },

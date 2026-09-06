@@ -126,6 +126,8 @@ var toolDocumentation = window.RNAssistantToolDocumentation.create({
 var toolActions = window.RNAssistantToolActions.create({
   state: state,
   send: send,
+  cancelRequest: function (id) { return cancelBridgeRequest(id); },
+  updateWriteState: updateToolWriteControls,
   setBusy: setControlBusy,
   setJsonOutput: renderToolRunJson,
   setTextOutput: renderToolRunText,
@@ -133,6 +135,8 @@ var toolActions = window.RNAssistantToolActions.create({
   validateSelected: validateSelectedToolEditors,
   validateAll: validateAllToolDefinitions,
   mutationRequest: toolLibraryMutationRequest,
+  captureSave: function () { return toolLibraryRecords(state.tools); },
+  acknowledgeSave: acknowledgeToolSaves,
   parseMutation: toolLibraryMutationFromContract,
   parseLibrary: toolLibraryItemsFromContract,
   reconcile: reconcileToolLibraryCatalog,
@@ -141,7 +145,6 @@ var toolActions = window.RNAssistantToolActions.create({
   readRunArguments: toolStructuredEditor.readRunArguments,
   renderTools: renderTools,
   renderEditor: renderToolEditor,
-  acceptSaved: acceptToolLibraryState,
   setContinuation: setToolRunContinuation,
   log: log,
   logToolResult: logToolResult
@@ -252,7 +255,7 @@ function toolLibraryComparable(tool) {
       Limitations: tool.Limitations || "",
       PackageVersion: tool.PackageVersion || "1.0.0",
       EntryPoint: tool.EntryPoint || "",
-      ArgumentOrder: tool.ArgumentOrder || [],
+      ArgumentOrder: (tool.ArgumentOrder || []).slice(),
       Components: components.map(function (component) {
         return {
           Name: component.Name || "",
@@ -310,6 +313,31 @@ function setToolLibraryBaseline(tools) {
   state.toolLibraryBaseline = toolLibrarySnapshot(tools);
 }
 
+function acknowledgeToolSaves(submitted, saved) {
+  submitted.forEach(function (record) {
+    var outcome = saved.results.find(function (result) { return result.status === "ok" && result.id === record.entity.Id; });
+    var published = outcome && saved.tools.find(function (tool) { return tool.Id === outcome.id && tool.Revision === outcome.revision; });
+    var index = state.tools.indexOf(record.entity);
+    if (published && index >= 0 && !toolRecordChanged(toolLibraryRecords([record.entity])[0], record)) state.tools[index] = published;
+  });
+}
+
+function cancelToolLibraryWrite() { toolActions.cancelWrite(); }
+
+function updateToolWriteControls() {
+  var tool = state.tools[state.selectedToolIndex], unavailable = !!state.bridgeUnavailable || !!state.toolLibraryWriting;
+  var readOnly = !tool || !!tool.BuiltIn || String(tool.Scope || "").toLowerCase() === "document";
+  var isVba = tool && String(tool.Executor).toLowerCase() === "vba";
+  if ($("deleteToolButton")) $("deleteToolButton").disabled = unavailable || readOnly;
+  if ($("cloneToolButton")) $("cloneToolButton").disabled = unavailable || !tool || !!tool.BuiltIn;
+  if ($("addToolButton")) $("addToolButton").disabled = unavailable;
+  ["installVbaToolButton", "uninstallVbaToolButton"].forEach(function (id) {
+    if ($(id)) $(id).disabled = unavailable || readOnly || !isVba || id === "uninstallVbaToolButton" && tool.InstallationStatus === "not_installed";
+  });
+  ["dryRunToolButton", "runToolButton"].forEach(function (id) { if ($(id)) $(id).disabled = unavailable || !tool; });
+  updateToolSaveButton();
+}
+
 function reconcileToolLibraryCatalog(serverTools) {
   var currentRecords = toolLibraryRecords(state.tools);
   var currentIndex = toolRecordIndex(currentRecords);
@@ -343,7 +371,7 @@ function updateToolSaveButton() {
   var button = $("saveToolsButton");
   if (!button) return;
   button.hidden = !state.toolLibraryDirty;
-  button.disabled = !!state.bridgeUnavailable || !state.toolLibraryDirty;
+  button.disabled = !!state.bridgeUnavailable || !!state.toolLibraryWriting || !state.toolLibraryDirty;
 }
 
 function updateToolLibraryDirty() {
@@ -592,6 +620,7 @@ function renderToolEditor() {
   $("vbaPackageActions").hidden = !isVba || builtIn || documentLocal;
   $("installVbaToolButton").disabled = !isVba || builtIn || documentLocal || !!state.bridgeUnavailable;
   $("uninstallVbaToolButton").disabled = $("installVbaToolButton").disabled || String(skill && skill.InstallationStatus || "") === "not_installed";
+  updateToolWriteControls();
 }
 
 function syncSelectedToolFromEditor() {
@@ -732,6 +761,7 @@ function addVbaComponent(type) {
 }
 
 function bindToolActions() {
+  window.addEventListener("pagehide", cancelToolLibraryWrite);
   Array.prototype.slice.call(document.querySelectorAll(".tool-page-button")).forEach(function (button) { button.addEventListener("click", function () { syncSelectedToolFromEditor(); state.toolEditorPage = button.getAttribute("data-tool-page") || "main"; applyToolEditorPage(); }); });
   toolStructuredEditor.bind();
 

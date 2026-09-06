@@ -28,7 +28,7 @@ const context = vm.createContext({
   state: { host: "Excel", tools: [], selectedToolIndex: -1 }, $: get,
   document: { createElement: () => new Element(), querySelectorAll: () => [] },
   createResourceEmptyState: () => new Element(),
-  send() {}, setControlBusy() {}, log() {}, logToolResult() {},
+  send() {}, setControlBusy() {}, log() {}, logToolResult() {}, addEventListener() {},
   renderInstructions() { context.renderToolEditor(); },
   syncCodeEditors(ids) {
     if (pendingCode !== null && ids.includes("toolCodeInput")) {

@@ -196,6 +196,7 @@ function applyChatState(response) {
     if (typeof cancelVbaModuleWrite === "function") cancelVbaModuleWrite();
     if (typeof cancelSkillSourceRead === "function") cancelSkillSourceRead();
     if (typeof cancelSkillSourceWrite === "function") cancelSkillSourceWrite();
+    if (typeof cancelToolLibraryWrite === "function") cancelToolLibraryWrite();
     if (typeof window.closeArtifactViewerResources === "function") window.closeArtifactViewerResources();
     state.artifactViewerPages = {};
     state.artifactViewerThumbnails = { items: {}, order: [], queue: [], pending: 0 };

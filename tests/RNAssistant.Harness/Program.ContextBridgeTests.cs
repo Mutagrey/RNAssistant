@@ -839,7 +839,7 @@ namespace RNAssistant.Harness
             var bridge = new AssistantWebBridge(controller, null);
             var token = BridgeToken(bridge);
             var toolsResponseJson = bridge.HandleMessageAsync(
-                "{\"id\":\"b6\",\"type\":\"saveTools\",\"bridgeToken\":\"" + token + "\",\"payload\":{\"type\":\"rnassistant.toolLibraryMutationRequest\",\"contractVersion\":1,\"mutations\":[{\"kind\":\"upsert\",\"baseId\":\"\",\"expectedRevision\":\"\",\"id\":\"excel.custom\",\"host\":\"Excel\",\"name\":\"Custom\",\"description\":\"Custom.\",\"argumentSchemaJson\":\"{}\",\"executor\":\"vba\",\"enabled\":true,\"components\":[]}]}}")
+                "{\"id\":\"b6\",\"type\":\"saveTools\",\"bridgeToken\":\"" + token + "\",\"payload\":{\"chatId\":\"tool-chat\",\"uploadLeaseId\":\"tool-lease\",\"sha256\":\"tool-hash\"}}")
                 .GetAwaiter()
                 .GetResult();
             var documentationResponseJson = bridge.HandleMessageAsync(
@@ -875,7 +875,7 @@ namespace RNAssistant.Harness
             AssertEqual("r_published", (string)referenceRead["resource"]["revision"], "exact published resource reaches the editor");
             AssertTrue(JObject.Parse(saveReferenceJson)["ok"].Value<bool>(), "skill reference save bridge response ok");
             AssertTrue(JObject.Parse(deleteReferenceJson)["ok"].Value<bool>(), "skill reference delete bridge response ok");
-            AssertEqual("excel.custom", JArray.Parse(controller.LastToolsJson)[0]["id"].Value<string>(), "tool id");
+            AssertEqual("tool-lease", (string)JObject.Parse(controller.LastToolsJson)["uploadLeaseId"], "tool control carries upload identity, not source");
             AssertEqual("core-lease", (string)JObject.Parse(controller.LastSkillsJson)["uploadLeaseId"], "core control carries only upload identity");
             AssertEqual("rnassistant.skillLibraryMutationResult",
                 JObject.Parse(skillsResponseJson)["payload"]["type"].Value<string>(),

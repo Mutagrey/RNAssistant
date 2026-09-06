@@ -328,21 +328,25 @@ namespace RNAssistant.Office
                 Markdown = "# " + request.ToolId
             };
         }
-        public ToolLibraryMutationResponse SaveTools(SaveToolsPayload payload)
+        public ResourceUploadOpenResponse BeginToolMutationUpload(ToolMutationUploadRequest request, CancellationToken token)
         {
-            if (payload == null || payload.Type != SaveToolsPayload.ContractType ||
-                payload.ContractVersion != ToolLibraryResponse.CurrentContractVersion)
-                throw new InvalidOperationException(
-                    "Unsupported Tool Library mutation contract.");
-            LastToolsJson = JsonConvert.SerializeObject(
-                payload.Mutations ?? new List<ToolCoreMutationPayload>());
-            return new ToolLibraryMutationResponse
+            token.ThrowIfCancellationRequested(); LastChatId = request.ChatId;
+            return new ResourceUploadOpenResponse { LeaseId = new string('a', 64), ByteLength = request.ByteLength,
+                Url = "https://rnassistant.local-resource/v1/upload/" + new string('a', 64), MaxChunkBytes = 262144 };
+        }
+        public ResourceDataCloseResponse CancelToolMutationUpload(ResourceUploadLeaseRequest request)
+        { LastChatId = request.ChatId; return new ResourceDataCloseResponse { Closed = true }; }
+        public Task<ToolLibraryMutationResponse> SaveToolsAsync(ToolMutationWriteRequest payload, CancellationToken token)
+        {
+            token.ThrowIfCancellationRequested();
+            LastToolsJson = JsonConvert.SerializeObject(payload);
+            return Task.FromResult(new ToolLibraryMutationResponse
             {
                 Type = ToolLibraryMutationResponse.ContractType,
                 ContractVersion = ToolLibraryResponse.CurrentContractVersion,
                 Results = new List<ToolMutationResultDto>(),
                 Library = EmptyToolLibrary()
-            };
+            });
         }
 
         public VbaToolPackageResponse InstallVbaTool(string id, bool dryRun)

@@ -60,114 +60,53 @@ namespace RNAssistant.Office
             };
         }
 
-        public ToolLibraryMutationResponse SaveTools(
-            SaveToolsPayload payload)
+        public ResourceUploadOpenResponse BeginToolMutationUpload(ToolMutationUploadRequest request, CancellationToken token)
         {
-            using (_chatRuns.ReserveMaintenance())
-            {
-                EnsureNoActiveRuns();
-                var mutations = ValidateToolLibraryPayload(payload);
-                var results = new List<ToolMutationResultDto>();
-                foreach (var mutation in mutations)
-                {
-                    var result = _toolExecutor
-                        .ExecuteToolLibraryMutation(mutation);
-                    results.Add(ToolMutationResultDto.From(result));
-                    if (result.Outcome.Status !=
-                        ToolAuthoringOutcomeStatus.Ok) break;
-                }
-                _toolCatalog.InvalidateDocumentVbaTools();
-                return new ToolLibraryMutationResponse
-                {
-                    Type = ToolLibraryMutationResponse.ContractType,
-                    ContractVersion =
-                        ToolLibraryResponse.CurrentContractVersion,
-                    Results = results,
-                    Library = GetTools()
-                };
-            }
+            if (request == null || string.IsNullOrWhiteSpace(request.ChatId))
+                throw new InvalidOperationException("RESOURCE_ACCESS_DENIED: an explicit chat is required.");
+            return WithReservedSession(LoadAddressedSession(request.ChatId), session =>
+                new ToolEditorResourceService(_resourceData).BeginUpload(session, request, token));
         }
 
-        private static IReadOnlyList<ToolLibraryCoreMutation>
-            ValidateToolLibraryPayload(SaveToolsPayload payload)
+        public ResourceDataCloseResponse CancelToolMutationUpload(ResourceUploadLeaseRequest request)
         {
-            if (payload == null || !string.Equals(payload.Type,
-                    SaveToolsPayload.ContractType,
-                    StringComparison.Ordinal) ||
-                payload.ContractVersion !=
-                    ToolLibraryResponse.CurrentContractVersion)
+            if (request == null || string.IsNullOrWhiteSpace(request.ChatId))
+                throw new InvalidOperationException("RESOURCE_ACCESS_DENIED: an explicit chat is required.");
+            _resourceData.CloseUpload(request.ChatId, request.LeaseId, ToolEditorResourceService.Owner);
+            return new ResourceDataCloseResponse { Closed = true };
+        }
+
+        public async Task<ToolLibraryMutationResponse> SaveToolsAsync(ToolMutationWriteRequest payload, CancellationToken token)
+        {
+            if (payload == null || string.IsNullOrWhiteSpace(payload.ChatId))
+                throw new InvalidOperationException("RESOURCE_ACCESS_DENIED: an explicit chat is required.");
+            try
             {
-                throw new InvalidOperationException(
-                    "Unsupported Tool Library mutation contract.");
-            }
-            var source = payload.Mutations ??
-                new List<ToolCoreMutationPayload>();
-            if (source.Count > 256)
-                throw new InvalidOperationException(
-                    "Tool Library mutation limit exceeded: 256.");
-            var baseIds = new HashSet<string>(
-                StringComparer.OrdinalIgnoreCase);
-            var targetIds = new HashSet<string>(
-                StringComparer.OrdinalIgnoreCase);
-            var result = new List<ToolLibraryCoreMutation>();
-            foreach (var item in source)
-            {
-                if (item == null ||
-                    !string.Equals(item.Kind, "upsert",
-                        StringComparison.Ordinal) &&
-                    !string.Equals(item.Kind, "delete",
-                        StringComparison.Ordinal))
+                using (_chatRuns.ReserveMaintenance())
                 {
-                    throw new InvalidOperationException(
-                        "Tool Library mutation kind is invalid.");
-                }
-                var baseId = item.BaseId ?? string.Empty;
-                var expected = item.ExpectedRevision ?? string.Empty;
-                if (!string.IsNullOrWhiteSpace(baseId) &&
-                    !baseIds.Add(baseId))
-                {
-                    throw new InvalidOperationException(
-                        "Duplicate Tool Library base id: " + baseId);
-                }
-                if (string.Equals(item.Kind, "delete",
-                    StringComparison.Ordinal))
-                {
-                    if (string.IsNullOrWhiteSpace(baseId) ||
-                        string.IsNullOrWhiteSpace(expected))
+                    EnsureNoActiveRuns();
+                    var session = LoadAddressedSession(payload.ChatId);
+                    return await Task.Run(() =>
                     {
-                        throw new InvalidOperationException(
-                            "Tool delete requires baseId and expectedRevision.");
-                    }
-                    result.Add(new ToolLibraryCoreMutation
-                    {
-                        Kind = item.Kind,
-                        BaseId = baseId,
-                        ExpectedRevision = expected
-                    });
-                    continue;
+                        var mutations = new ToolEditorResourceService(_resourceData).PrepareMutations(session, payload, token);
+                        var results = new List<ToolMutationResultDto>();
+                        try
+                        {
+                            foreach (var mutation in mutations)
+                            {
+                                token.ThrowIfCancellationRequested();
+                                var result = _toolExecutor.ExecuteToolLibraryMutation(mutation);
+                                results.Add(ToolMutationResultDto.From(result));
+                                if (result.Outcome.Status != ToolAuthoringOutcomeStatus.Ok) break;
+                            }
+                        }
+                        finally { _toolCatalog.InvalidateDocumentVbaTools(); }
+                        return new ToolLibraryMutationResponse { Type = ToolLibraryMutationResponse.ContractType,
+                            ContractVersion = ToolLibraryResponse.CurrentContractVersion, Results = results, Library = GetTools() };
+                    }, token).ConfigureAwait(false);
                 }
-                if (string.IsNullOrWhiteSpace(item.Id) ||
-                    !targetIds.Add(item.Id))
-                {
-                    throw new InvalidOperationException(
-                        "Tool upsert id is missing or duplicated: " +
-                        (item.Id ?? string.Empty));
-                }
-                if (string.IsNullOrWhiteSpace(baseId) !=
-                    string.IsNullOrWhiteSpace(expected))
-                {
-                    throw new InvalidOperationException(
-                        "Existing tool upsert requires both baseId and expectedRevision; a new tool requires neither.");
-                }
-                result.Add(new ToolLibraryCoreMutation
-                {
-                    Kind = item.Kind,
-                    BaseId = baseId,
-                    ExpectedRevision = expected,
-                    Intended = item.ToCatalogEntry()
-                });
             }
-            return result;
+            finally { _resourceData.CloseUpload(payload.ChatId, payload.UploadLeaseId, ToolEditorResourceService.Owner); }
         }
 
         public SkillLibraryResponse GetSkills()

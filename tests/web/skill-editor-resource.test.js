@@ -170,8 +170,9 @@ function deferred() {
     for (const file of ["app-chat-state.js", "app-chat-session.js"])
       assert.ok(read("js/" + file).includes("cancelSkillSourceWrite()"));
     assert.ok(read("js/app-skills.js").includes('window.addEventListener("pagehide", cancelSkillSourceWrite)'));
-    for (const file of ["app-skills.js", "app-chat-state.js", "app-chat-session.js"])
-      assert.ok(read("index.html").includes(file + "?v=skill-upload-20260906-1"));
+    for (const file of ["app-chat-state.js", "app-chat-session.js"])
+      assert.ok(read("index.html").includes(file + "?v=tool-upload-20260906-1"));
+    assert.ok(read("index.html").includes("app-skills.js?v=skill-upload-20260906-1"));
     assert.ok(read("index.html").includes("app-prompts.js?v=skill-core-20260906-1"));
     console.log("PASS skill reference: lifecycle and changed assets are delivered together");
   }

@@ -282,8 +282,13 @@ namespace RNAssistant.Office.WebView
                             Payload<ToolLibraryDocumentationRequest>(payload));
                         break;
                     case "saveTools":
-                        var saveTools = Payload<SaveToolsPayload>(payload);
-                        responsePayload = _controller.SaveTools(saveTools);
+                        responsePayload = await _controller.SaveToolsAsync(Payload<ToolMutationWriteRequest>(payload), cancellationToken).ConfigureAwait(false);
+                        break;
+                    case "beginToolMutationUpload":
+                        responsePayload = _controller.BeginToolMutationUpload(Payload<ToolMutationUploadRequest>(payload), cancellationToken);
+                        break;
+                    case "cancelToolMutationUpload":
+                        responsePayload = _controller.CancelToolMutationUpload(Payload<ResourceUploadLeaseRequest>(payload));
                         break;
                     case "installVbaTool":
                         var installVbaTool = Payload<VbaToolPackagePayload>(payload);

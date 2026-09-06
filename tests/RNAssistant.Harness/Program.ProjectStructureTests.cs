@@ -700,9 +700,13 @@ namespace RNAssistant.Harness
                     "ExecuteTool") == null,
                 "Office adapter boundary must not expose generic catalog or command dispatch");
             AssertTrue(
-                typeof(RNAssistant.Office.Contracts.SaveToolsPayload)
+                typeof(RNAssistant.Office.Contracts.ToolMutationWriteRequest)
                     .GetProperty("Tools") == null &&
-                typeof(RNAssistant.Office.Contracts.SaveToolsPayload)
+                typeof(RNAssistant.Office.Contracts.ToolMutationWriteRequest)
+                    .GetProperty("Mutations") == null &&
+                typeof(RNAssistant.Office.Contracts.ToolMutationWriteRequest)
+                    .GetProperty("UploadLeaseId").PropertyType == typeof(string) &&
+                typeof(RNAssistant.Office.Contracts.ToolLibraryMutationBatch)
                     .GetProperty("Mutations").PropertyType ==
                     typeof(List<RNAssistant.Office.Contracts.ToolCoreMutationPayload>) &&
                 typeof(RNAssistant.Office.Contracts.InitResponse)

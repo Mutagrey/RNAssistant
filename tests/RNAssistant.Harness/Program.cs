@@ -661,6 +661,8 @@ namespace RNAssistant.Harness
                 Test("skill editor: explicit guarded body preservation", SkillEditorPreservesUnreadBody),
                 Test("skill editor: uploaded batch and reference use existing mutation owner", SkillEditorUploadsUseMutationOwner),
                 Test("skill editor: upload integrity isolation and bounds", SkillEditorUploadBounds),
+                Test("tool editor: uploaded batch uses existing mutation owner", ToolEditorUploadUsesMutationOwner),
+                Test("tool editor: upload integrity isolation and bounds", ToolEditorUploadBounds),
                 Test("resource cutover: exact catalog publication continuations", ResourceCatalogContinuationsPinPublication),
                 Test("resource cutover: unavailable catalog snapshots fail closed", ResourceCatalogSnapshotsFailClosed),
                 Test("resource cutover: frozen prompt publication", ResourcePromptPublicationIsFrozen),

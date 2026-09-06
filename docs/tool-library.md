@@ -72,6 +72,41 @@ Controller-owned catalog reconciliation, `StoragePath` identity, generic executi
 and unversioned response fallback are absent. This does not make the flat store
 immutable history.
 
+### Library mutation uploads
+
+Both Library Save and the save-before-VBA-install step use one bounded upload
+consumer, `ToolEditorResourceService`, over the existing resource data plane.
+`beginToolMutationUpload` reserves a chat-bound `tool-editor` capability; the
+`saveTools` control contains only `chatId`, `uploadLeaseId` and the complete
+upload's SHA-256. Code, README, schema and native typed component values travel in
+one UTF-8 `ToolLibraryMutationBatch` body, not an inline bridge request. The batch
+is limited to 16 MiB and 256 mutations and shares existing upload capacity/expiry.
+Complete bytes, hash, typed shape and batch identities/guards are checked before
+dispatch; the capability is consumed even on validation failure. Upload alone is
+transient input, not a package, catalog publication or model observation.
+
+The same `ToolAuthoringService` still owns per-package source bounds, validation,
+revision recheck, read-back and the existing catalog commit barrier. Mutations
+remain sequential and stop at the first non-OK member; a verified committed prefix
+is retained, not rolled back or replayed as an atomic multi-package transaction.
+Document VBA catalog refresh still uses its existing document access owner.
+
+The UI has one pending save/install/remove operation and retains that slot until
+cancelled work exits. Chat/library replacement, bridge/page close and late
+responses cannot apply stale state or continue into installation. An unconfirmed
+save never retries or triggers install. Successful members acknowledge only their
+unchanged submitted drafts; failed members and later text edits remain visible.
+If the selected definition changes while saving, installation requires another
+explicit save. Installation-status refresh also preserves unsaved authoring text.
+Direct package install/remove authorization and execution remain unchanged.
+
+The inline save request and separate pre-install save transport are removed.
+Tool catalog/read bodies, built-in documentation and outgoing mutation/package
+library projections still require pull-based hydration through the shared Gateway;
+they are the next consumer cutover, not a parallel upload implementation. The
+pre-existing README leading-`U+FEFF` sidecar/read-back issue is tracked in
+[backlog](stabilization/BACKLOG.md#existing-defects-outside-the-active-slice).
+
 ## Mandatory all-tool contract audit (R61)
 
 The post-cutover catalog is complete host-neutral but is not yet Windows-qualified

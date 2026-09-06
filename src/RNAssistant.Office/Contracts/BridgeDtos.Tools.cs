@@ -30,7 +30,8 @@ namespace RNAssistant.Office.Contracts
         [JsonProperty("markdown")] public string Markdown { get; set; }
     }
 
-    public sealed class SaveToolsPayload
+    // Typed bulk upload body, not a bridge control payload.
+    public sealed class ToolLibraryMutationBatch
     {
         public const string ContractType =
             "rnassistant.toolLibraryMutationRequest";
@@ -43,6 +44,19 @@ namespace RNAssistant.Office.Contracts
 
         [JsonProperty("mutations")]
         public List<ToolCoreMutationPayload> Mutations { get; set; }
+    }
+
+    public sealed class ToolMutationUploadRequest
+    {
+        [JsonProperty("chatId")] public string ChatId { get; set; }
+        [JsonProperty("byteLength")] public long ByteLength { get; set; }
+    }
+
+    public sealed class ToolMutationWriteRequest
+    {
+        [JsonProperty("chatId")] public string ChatId { get; set; }
+        [JsonProperty("uploadLeaseId")] public string UploadLeaseId { get; set; }
+        [JsonProperty("sha256")] public string Sha256 { get; set; }
     }
 
     public sealed class ToolCoreMutationPayload

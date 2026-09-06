@@ -104,6 +104,14 @@ No upload publishes a resource or creates model evidence. Limits, cancellation,
 partial outcomes and draft rules belong to
 [Skill mutation uploads](skills.md#editor-mutation-uploads).
 
+`ToolEditorResourceService` is the Tool Library consumer of the same single-use
+upload route: ordinary Save and save-before-VBA-install send chat/lease/hash-only
+controls and one bounded typed batch. Existing Tool authoring, catalog commit and
+document access owners retain their responsibilities. No upload grants execution
+or publication authority. Bounds, verified-prefix/draft rules and the remaining
+outgoing body consumers are owned by
+[Tool Library](tool-library.md#library-mutation-uploads).
+
 ## Conversation loop
 
 Controller clear/edit/message-delete/fork use typed `ChatResourceMutationIntent`
@@ -319,6 +327,8 @@ inline SkillPackageDto core text in catalog/mutation projections and the separat
 reference-only bridge action (now one pull-based skill source reader);
 inline Skill Library core/reference mutation bodies and reference source echo
 (now one bounded upload consumer, retaining the existing guarded mutation owner);
+inline Tool Library mutation requests in Save and save-before-install
+(now one bounded upload consumer through the same guarded authoring/commit owner);
 separate state/Office retained text readers, externally hash-bound Office/state/catalog
 continuations, and read-side exposure of prepared state/context/catalog identities.
 No compatibility alias, dual-write or feature flag restores these paths.

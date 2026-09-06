@@ -20,6 +20,8 @@ namespace RNAssistant.Office.WebView
             "getVbaModule",
             "readSkillSource",
             "beginSkillMutationUpload",
+            "beginToolMutationUpload",
+            "saveTools",
             "saveSkills",
             "saveSkillReference",
             "beginVbaModuleUpload",

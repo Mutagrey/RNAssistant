@@ -26,6 +26,16 @@
 Не проводить общий предварительный split/rename, массовый namespace move, новый
 service locator, второй store/read model или универсальный Office abstraction.
 
+## Existing defects outside the active slice
+
+- Tool package README leading `U+FEFF`: `StorageFileSystem` writes a UTF-8 sidecar
+  without a separate BOM, while `ToolStore.TryReadUtf8` strips its first BOM-shaped
+  character. A literal leading `U+FEFF` therefore yields a different read-back and
+  `unknown`, not a false successful mutation. Observed during the 2026-09-06 Tool
+  upload check; transport preserves the submitted text. Owner: ToolStore/package
+  authoring. Resolve exact sidecar text semantics in an explicitly scoped storage
+  slice; verify ordinary/BOM-prefixed Unicode and preserve existing user files.
+
 ## Deferred product decisions
 
 Эти пункты требуют отдельного решения после stable core; они не являются Phase 12
