@@ -720,6 +720,7 @@ namespace RNAssistant.Harness
                 Test("resources: reference pins revision", ResourceReferencePinsRevision),
                 Test("resources: registry rejects duplicate providers", ResourceRegistryRejectsDuplicateProviders),
                 Test("resources: gateway discovers providers", ResourceGatewayDiscoversProvidersBeforeListing),
+                Test("resources: discovery preserves incomplete source coverage", ResourceIntentDiscoveryPreservesCoverage),
                 Test("resources: hard cutover artifact tools", ResourceToolsHardCutoverArtifactTools),
                 Test("chart: default config", ChartArtifactBuildsDefaultConfig),
                 Test("chart: requested type truncates", ChartArtifactHonorsRequestedTypeAndTruncates),

@@ -38,7 +38,9 @@ namespace RNAssistant.Office.Tools
                     ? "No resources matched the semantic scope."
                     : result.Partial
                         ? "Resource find completed with unavailable scopes."
-                        : "Resource find completed.",
+                        : !result.Complete
+                            ? "Resource find is incomplete; absence is not established."
+                            : "Resource find completed.",
                 Serialize(result),
                 ExactReferences(result.ResourceRefs)), ToolEffectEvidence.None, resourceEvidence: result.Items.SelectMany(item => item.Evidence ??
                     new RNAssistant.Core.Models.ResourceEvidence[0]));

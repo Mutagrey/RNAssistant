@@ -39,6 +39,11 @@ version check still apply.
 
 ## Test map
 
+`resources: discovery preserves` covers ordinary vs terminal pagination, filtered
+and empty incomplete captures, multi-provider accumulation, truncated search and
+refusal to infer a unique semantic target from incomplete enumeration. Use with
+`resources: gateway` for changes to intent discovery/completeness behavior.
+
 `resource search:` covers generic live document/VBA zero-match drift publication,
 exact retained pages without Office reads, missing-CAS refusal, bounded snippet vs
 whole-capture coverage, truncated VBA prefixes and body-free backup metadata.

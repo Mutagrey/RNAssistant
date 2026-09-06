@@ -90,7 +90,7 @@ namespace RNAssistant.Office.Services
                 Items = shown,
                 Total = selected.Count,
                 Complete = !resultTruncated && unavailable.Count == 0,
-                Empty = selected.Count == 0 && unavailable.Count == 0,
+                Empty = selected.Count == 0 && !resultTruncated && unavailable.Count == 0,
                 Partial = unavailable.Count > 0,
                 RefineQuery = resultTruncated,
                 UnavailableScopes = unavailable
@@ -190,6 +190,10 @@ namespace RNAssistant.Office.Services
             var scope = IntentTargetScope(target);
             var states = EnumerateIntentResources(
                 session, IntentPlansForScope(scope), unavailable, failures, ref truncated);
+            if (truncated)
+                throw new ResourceRequestException(
+                    "The resource scope is incomplete; a unique semantic target cannot be established from the captured collection.",
+                    "resource_scope_incomplete", false);
             AssignIntentTargets(states);
             var matches = states.Where(state => string.Equals(
                     state.Target, target, StringComparison.Ordinal))
@@ -253,6 +257,9 @@ namespace RNAssistant.Office.Services
                     do
                     {
                         var page = List(session, plan.Provider.Id, plan.Kind, cursor, IntentPageSize);
+                        // A normal page is completed by its continuation. Terminal
+                        // truncation is missing source coverage, not a finished catalog.
+                        if (page.Truncated && string.IsNullOrWhiteSpace(page.NextCursor)) truncated = true;
                         foreach (var descriptor in page.Items ??
                             new List<ResourceDescriptor>())
                         {

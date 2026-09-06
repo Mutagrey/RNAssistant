@@ -178,6 +178,52 @@ namespace RNAssistant.Harness
             });
         }
 
+        private static void ResourceIntentDiscoveryPreservesCoverage()
+        {
+            var incomplete = true;
+            var paged = false;
+            var empty = false;
+            var provider = new TestResourceProvider("alpha");
+            provider.ListPage = cursor =>
+            {
+                var second = cursor == "next";
+                var next = paged && !second ? "next" : null;
+                return new ResourceListPage {
+                    Items = empty ? new System.Collections.Generic.List<ResourceDescriptor>() :
+                        new System.Collections.Generic.List<ResourceDescriptor> { new ResourceDescriptor {
+                            Reference = new ResourceRef(ResourceUri.Create("alpha", second ? "second" : "first"), "1"),
+                            Provider = "alpha", Kind = "test", Title = second ? "Second" : "Test" } },
+                    Total = empty ? 0 : 2, NextCursor = next, Truncated = next != null || incomplete };
+            };
+            var gateway = new ResourceGatewayService(new[] { provider });
+            var session = new ChatSession();
+            var clipped = gateway.Find(session, "Test", "conversation");
+            AssertEqual(1, clipped.Items.Count, "captured matches remain discoverable");
+            AssertTrue(!clipped.Complete && clipped.RefineQuery && !clipped.Empty,
+                "terminal truncation survives metadata filtering even with one result");
+            AssertTrue(!clipped.Partial && clipped.UnavailableScopes.Count == 0, "bounded coverage is not provider unavailability");
+            var target = clipped.Items.Single().Target;
+            var refusal = RuntimeThrows<ResourceRequestException>(() => gateway.ResolveIntentTarget(session, target));
+            AssertEqual("resource_scope_incomplete", refusal.ErrorCode, "partial enumeration cannot prove a unique semantic target");
+            AssertTrue(!refusal.Retryable, "no automatic retry of an incomplete catalog");
+            AssertTrue(!gateway.Find(session, "missing", "conversation").Empty, "zero observed matches are not proof of absence");
+            empty = true;
+            AssertTrue(!gateway.Find(session, null, "conversation").Empty, "an empty truncated capture is not an empty scope");
+            empty = false; paged = true; incomplete = false;
+            var calls = provider.ListCalls;
+            var complete = gateway.Find(session, "Test", "conversation");
+            AssertEqual(2, provider.ListCalls - calls, "ordinary pagination is fully consumed");
+            AssertTrue(complete.Complete && !complete.RefineQuery, "intermediate page truncation is resolved by its continuation");
+            AssertEqual("rna://alpha/first", gateway.ResolveIntentTarget(session, target).Reference.Uri, "complete enumeration still resolves normally");
+            AssertTrue(gateway.Find(session, "missing", "conversation").Empty, "complete negative discovery remains genuinely empty");
+            incomplete = true;
+            AssertTrue(!gateway.Find(session, "Test", "conversation").Complete, "terminal truncation also survives multi-page discovery");
+            var mixed = new ResourceGatewayService(new IResourceProvider[] { provider, new TestResourceProvider("zeta") });
+            AssertTrue(!mixed.Find(session, null, "conversation").Complete, "a later complete provider cannot erase earlier truncation");
+            incomplete = false; provider.SearchTruncated = true;
+            AssertTrue(!gateway.Find(session, "missing", "conversation").Empty, "an incomplete content scan cannot prove absence either");
+        }
+
         private sealed class TestResourceProvider : IResourceProvider
         {
             private readonly bool _failList;
@@ -190,12 +236,15 @@ namespace RNAssistant.Harness
 
             public string Id { get; private set; }
             public int ListCalls { get; private set; }
+            internal Func<string, ResourceListPage> ListPage { get; set; }
+            internal bool SearchTruncated { get; set; }
 
             public ResourceListPage List(ChatSession session, string kind, string cursor, int limit)
             {
                 ListCalls++;
                 if (_failList)
                     throw new InvalidOperationException("provider unavailable");
+                if (ListPage != null) return ListPage(cursor);
                 return new ResourceListPage
                 {
                     Items = new System.Collections.Generic.List<ResourceDescriptor>
@@ -220,6 +269,7 @@ namespace RNAssistant.Harness
 
             public ResourceSearchResult Search(ChatSession session, string query, string kind, int limit, int maxCharsPerMatch)
             {
+                if (ListPage != null) return new ResourceSearchResult { Query = query, ScanTruncated = SearchTruncated };
                 throw new NotSupportedException();
             }
 

@@ -78,6 +78,15 @@ reads; bounded VBA prefixes retain only character-range coverage. Backup searche
 can retain an already-materialized whole body while honestly reporting a truncated
 search prefix. Metadata-only discovery neither reads nor publishes source bodies;
 it may advertise an existing authority head, never a provider hash as a revision.
+Discovery consumes ordinary list continuations before claiming completeness.
+`Truncated=true` on a terminal provider page remains incomplete source coverage,
+even when a query leaves only one or zero matches. A later complete provider cannot
+erase that flag. `complete=false` and `refineQuery=true` report bounded coverage;
+`partial`/`unavailableScopes` retain their separate provider-availability meaning.
+`empty=true` requires complete enumeration/search, not just zero observed matches.
+The generic semantic-target resolver refuses incomplete enumeration with
+`resource_scope_incomplete` rather than assuming the observed name is unique.
+Explicit domain-owned target resolution and already pinned exact reads are unchanged.
 A mutable semantic
 target captures its current head on the first read, then pins all internal pages
 to that exact revision; it cannot get stuck on discovery's previous observation.
