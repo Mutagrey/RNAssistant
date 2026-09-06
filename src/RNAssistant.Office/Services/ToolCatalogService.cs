@@ -35,6 +35,9 @@ namespace RNAssistant.Office.Services
         public List<ToolCatalogEntry> GetVisibleTools()
         { return GetVisibleTools(_toolExecutor.CapturePublishedTools(), true); }
 
+        internal IReadOnlyList<ToolCatalogEntry> GetPublishedVisibleTools(IReadOnlyList<ToolCatalogEntry> published)
+        { return GetVisibleTools(published, false); }
+
         internal IReadOnlyList<ToolCatalogEntry> GetPublishedGlobalTools(IReadOnlyList<ToolCatalogEntry> published)
         { return GetVisibleTools(published, false).Where(tool => tool.Scope == "global").ToList(); }
 

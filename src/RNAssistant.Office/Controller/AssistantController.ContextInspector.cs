@@ -33,7 +33,7 @@ namespace RNAssistant.Office
             var publishedSkills = _toolExecutor.CaptureSkills(publication);
             if (ChatModes.Normalize(session.Mode) != ChatModes.Chat)
             {
-                tools = _toolCatalog.GetVisibleTools(publication.Tools).Where(item => item.Enabled).ToList();
+                tools = _toolCatalog.GetPublishedVisibleTools(publication.Tools).Where(item => item.Enabled).ToList();
                 skills = publishedSkills.Skills;
             }
 
