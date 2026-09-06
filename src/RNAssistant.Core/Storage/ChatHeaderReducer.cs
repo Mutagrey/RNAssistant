@@ -230,6 +230,7 @@ namespace RNAssistant.Core.Storage
             if (value != null)
             {
                 CaptureCasPair(value, "Sha256", "ByteLength");
+                CaptureCasPair(value, "sha256", "byteLength");
                 CaptureCasPair(value, "ContentSha256", "ContentByteLength");
                 CaptureCasPair(value, "ExtractedTextSha256", "ExtractedTextByteLength");
             }
@@ -246,6 +247,8 @@ namespace RNAssistant.Core.Storage
 
             var byteLength = -1L;
             var lengthToken = value[lengthProperty];
+            if (lengthToken == null || lengthToken.Type == JTokenType.Null ||
+                lengthToken.Type == JTokenType.Undefined) return;
             if (lengthToken != null && lengthToken.Type == JTokenType.Integer)
             {
                 try { byteLength = lengthToken.ToObject<long>(); }

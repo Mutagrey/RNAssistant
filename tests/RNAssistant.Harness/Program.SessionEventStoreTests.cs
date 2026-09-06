@@ -1328,6 +1328,36 @@ namespace RNAssistant.Harness
                 AssertEqual(ChatStorageWarningLevels.None, header.StorageWarningLevel,
                     "small healthy history has no warning");
 
+                writer.AppendTrace(session, SessionEventTypes.AssistantChunk,
+                    new { ContentSha256 = artifact.ContentSha256 },
+                    null, null, "storage-run", "storage-turn", "hash-only-step");
+                header = reader.ListHeaders(session.Host, session.DocumentKey, session.DocumentTitle).Single();
+                AssertEqual(1, header.CasBlobCount,
+                    "hash-only content evidence is not counted as a CAS reference");
+                AssertEqual(0, header.CasReferenceIssueCount,
+                    "hash-only content evidence is not reported as a broken CAS link");
+
+                var lowerCaseReference = new ChatBlobStore(paths).StoreText(
+                    "{\"lowercase\":true}", "application/json");
+                var lowerCaseBlobPath = Path.Combine(paths.ChatBlobDirectory,
+                    lowerCaseReference.Sha256.Substring(0, 2),
+                    lowerCaseReference.Sha256 + ".blob");
+                writer.AppendTrace(session, SessionEventTypes.AssistantChunk,
+                    new JObject
+                    {
+                        ["payload"] = new JObject
+                        {
+                            ["sha256"] = lowerCaseReference.Sha256,
+                            ["byteLength"] = lowerCaseReference.ByteLength
+                        }
+                    },
+                    null, null, "storage-run", "storage-turn", "lowercase-ref-step");
+                header = reader.ListHeaders(session.Host, session.DocumentKey, session.DocumentTitle).Single();
+                AssertEqual(2, header.CasBlobCount,
+                    "lowercase payload refs are counted as CAS references");
+                AssertEqual(0, header.CasReferenceIssueCount,
+                    "lowercase payload refs with length are valid");
+
                 AssertEqual(ChatStorageWarningLevels.Warning,
                     ChatStorageUsagePolicy.GetWarningLevel(
                         ChatStorageUsagePolicy.WarningJsonlByteLength, 0, 0, 0, 0),
@@ -1342,7 +1372,8 @@ namespace RNAssistant.Harness
                 header = reader.ListHeaders(session.Host, session.DocumentKey, session.DocumentTitle).Single();
                 AssertEqual(1, header.CasMissingBlobCount,
                     "warm header cache refreshes missing referenced CAS state");
-                AssertEqual(0L, header.CasStoredByteLength, "missing CAS contributes no stored bytes");
+                AssertEqual(new FileInfo(lowerCaseBlobPath).Length, header.CasStoredByteLength,
+                    "missing CAS contributes no stored bytes beyond remaining valid blobs");
                 AssertEqual(ChatStorageWarningLevels.Critical, header.StorageWarningLevel,
                     "missing CAS raises a critical warning");
 
@@ -1351,7 +1382,7 @@ namespace RNAssistant.Harness
                 header = reader.ListHeaders(session.Host, session.DocumentKey, session.DocumentTitle).Single();
                 AssertEqual(0, header.CasMissingBlobCount,
                     "warm header cache notices a restored referenced CAS blob");
-                AssertEqual((long)storedBlob.Length, header.CasStoredByteLength,
+                AssertEqual((long)storedBlob.Length + new FileInfo(lowerCaseBlobPath).Length, header.CasStoredByteLength,
                     "restored CAS contributes its current stored bytes");
                 AssertEqual(ChatStorageWarningLevels.None, header.StorageWarningLevel,
                     "restored CAS clears the storage warning without a JSONL append");
