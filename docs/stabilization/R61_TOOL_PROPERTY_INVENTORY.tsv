@@ -18,7 +18,6 @@ common.office_run_macro	Excel,PowerPoint,Word	agent	vba.public.office.run.macro.
 common.plan_doc_delete	Excel,Outlook,PowerPoint,Word	plan	conversation.plan.document.delete.intent.v2	ef754f8f3ffdaba9aaf78a8d5e83cf272f0cdeabb2b35d4b34a42d3c21802209		-
 common.plan_doc_restore	Excel,Outlook,PowerPoint,Word	plan	conversation.plan.document.restore.intent.v2	130065387f93614a5b8edc51ab62cb112ba7583ba4597e87557b9db3fd61a7aa	version	-
 common.plan_doc_save	Excel,Outlook,PowerPoint,Word	plan	conversation.plan.document.save.intent.v2	b21aec6988876c0799d15900073fc01e67694ee848465bca46b65b905f23f599	markdown,status,title	-
-common.prompts_read	Excel,Outlook,PowerPoint,Word	agent	prompts.read.v1	fa9ca7d4d4875ccae8822aaabd30bee058c5b146226eb387870a22ee2ade80f0	includeDefaults	-
 common.prompts_save	Excel,Outlook,PowerPoint,Word	agent	prompts.save.intent.v1	f5cb11a324db7787f21fa723b78e5eff109a7339a761a0faa9d3848f336bcded	promptKey,value	-
 common.questions_ask	Excel,Outlook,PowerPoint,Word	plan	conversation.questions.ask.intent.v2	2eedab12f315d9c46ada256424ca6b4617ca7638b3f2dd55b6b48e85c2d63dcb	questions,questions[].allowFreeText,questions[].header,questions[].options,questions[].options[].description,questions[].options[].label,questions[].options[].recommended,questions[].prompt,questions[].selection	-
 common.resources_find	Excel,Outlook,PowerPoint,Word	agent,chat,plan	resources.find.v1	34bef05744c53f78a6b3f7a7032fd241ead0f5725842e2c597babaa6aaab94af	query,scope	-

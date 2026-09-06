@@ -23,6 +23,7 @@ namespace RNAssistant.Office.Tools
             "chatTitlePrompt",
             "attachmentAnalysisPrompt"
         };
+        internal static readonly IReadOnlyList<string> TemplateKeys = Array.AsReadOnly(EditableFields);
 
         private readonly Func<AppSettings> _loadSettings;
         private readonly Action<AppSettings> _saveSettings;
@@ -35,7 +36,7 @@ namespace RNAssistant.Office.Tools
             _saveSettings = saveSettings;
         }
 
-        internal bool CanRead { get { return _loadSettings != null; } }
+        internal bool CanUse { get { return _loadSettings != null; } }
 
         internal string CaptureTemplates()
         { return JsonConvert.SerializeObject(ToPayload(_loadSettings == null ? new AppSettings() : _loadSettings())); }
@@ -55,33 +56,6 @@ namespace RNAssistant.Office.Tools
                 SetValue(result, key, value);
             }
             return result;
-        }
-
-        internal PromptToolOutcome Read(
-            IDictionary<string, object> arguments)
-        {
-            if (_loadSettings == null)
-            {
-                return PromptToolOutcome.Error(
-                    "Prompt settings store is not available.", null,
-                    "prompt_settings_unavailable", false);
-            }
-            var current = _loadSettings();
-            if (ToolArgumentReader.Boolean(
-                arguments, "includeDefaults", false))
-            {
-                return PromptToolOutcome.Ok(
-                    "RNAssistant prompt templates and defaults read.",
-                    JsonConvert.SerializeObject(new
-                    {
-                        current = ToPayload(current),
-                        defaults = ToPayload(new AppSettings())
-                    }), PromptToolEffect.None);
-            }
-            return PromptToolOutcome.Ok(
-                "RNAssistant prompt templates read.",
-                JsonConvert.SerializeObject(ToPayload(current)),
-                PromptToolEffect.None);
         }
 
         internal PromptSavePreparation PrepareSave(

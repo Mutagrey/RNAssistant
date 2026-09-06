@@ -237,11 +237,45 @@ A confirmation pause persists its pending id, cumulative iteration/tool-step cou
 
 `ModelProtocolClient` permits `MaxAgentFormatRetries` total protocol responses per logical step (default 10, normalized 1–20), **including the first response**. Limit 1 means no format repair; limit 20 accepts a valid twentieth response and stops after twenty invalid responses. Every repair starts from the same accepted conversation plus one current `FORMAT_REPAIR` instruction; rejected output and prior repair instructions are never copied forward or stored in accepted history. Internal repair attempts are not shown as user-facing activity, while the rejected payload and exact parser error remain available in trajectory diagnostics. Native provider refusal is a separate accepted metadata outcome, including when accompanied by JSON content; it cannot dispatch calls. A model-authored refusal sentence is ordinary `message` text and does not set runtime status. Exhausting the limit ends the run with a visible diagnostic excluded from model replay. There is no separate repair state machine or legacy response-envelope normalization.
 
-The Prompts UI and exact Agent-only native `common.prompts_read/save` handlers expose the three Agent sections plus `ChatSystemPrompt`, `PlanSystemPrompt`, `ContextCompactionPrompt`, `ChatTitlePrompt`, and `AttachmentAnalysisPrompt`. Model-facing save accepts exactly one enumerated `promptKey` plus its complete `value` and requires confirmation; role values are validated as `developer`, `system`, or `user`. Preparation binds that one accepted field to its current hash; confirmation rejects a changed pre-state before dispatch, preserves every unrelated setting, marks the storage boundary before save, then verifies the supplied value by read-back. An already matching request returns verified no-change without dispatch. Endpoint compatibility probes and JSON repair text are fixed protocol safeguards rather than agent-authored prompts.
+### Published prompt inspection
 
-The three exact Agent-only `common.tools_definition_read`, `common.tools_upsert`
-and `common.tools_delete` authoring operations execute through native ToolRuntime
-handlers. Read requires one exact semantic tool id. Upsert accepts only that id,
+Model prompt inspection uses `common.resources_find` with `scope=catalogs`, followed
+by `common.resources_read` on the returned `prompt: <key>` or `prompt default: <key>`
+target. The nine keys are the three Agent sections (`systemPrompt`, `agentToolsPrompt`,
+`agentSkillsPrompt`), `chatSystemPrompt`, `planSystemPrompt`, `systemPromptRole`,
+`contextCompactionPrompt`, `chatTitlePrompt` and `attachmentAnalysisPrompt`.
+Discovery lists keys/metadata without loading prompt bodies; a read returns one
+complete published value, bounded to 100,000 characters. Empty text is preserved;
+missing/null/oversized or corrupt snapshots fail explicitly. Role is plain text;
+the other fields are Markdown.
+
+`CatalogPublicationService` owns current `rna://catalog/prompts` and the source-owned
+`rna://catalog/prompt-defaults` publication captured from builtin settings at startup.
+The existing Catalog provider exposes exact field children under these roots.
+Reads never reload mutable settings or regenerate missing defaults; they use the
+existing CAS, exact continuation rules and catalog-root dependency evidence.
+Saving current prompts supersedes their earlier evidence without replacing defaults
+or deleting historical snapshots. Reading defaults is comparison data, not reset,
+activation or execution authority. The frozen model compiler still applies only
+the committed current templates through its existing capture path.
+
+`common.prompts_read`, its include-defaults response branch and native/direct-settings
+reader are removed without alias. Old accepted calls fail explicit model-history
+validation, without automatic conversion or deletion of user history.
+The Prompts UI transport is a separate remaining consumer of this same cutover.
+
+The exact Agent-only native `common.prompts_save` accepts one enumerated `promptKey`
+plus its complete `value` and requires confirmation; role values are validated as
+`developer`, `system`, or `user`. Preparation binds that field to its current hash;
+confirmation rejects changed pre-state before dispatch, preserves unrelated settings,
+marks the storage boundary, then verifies the supplied value by read-back. An already
+matching request returns verified no-change without dispatch. Endpoint compatibility
+probes and JSON repair text remain fixed protocol safeguards, not authored prompts.
+
+The exact Agent-only `common.tools_upsert` and `common.tools_delete` authoring
+operations execute through native ToolRuntime handlers. Existing implementation is
+inspected through [published tool-source resources](tool-library.md#model-source-reads),
+not a separate file reader. Upsert accepts only the semantic tool id,
 existence policy, complete ordered VBA components and human documentation; the VBA
 manifest owns callable metadata/schema while runtime assigns conservative authority
 and validates the complete effective definition before any write. Separate

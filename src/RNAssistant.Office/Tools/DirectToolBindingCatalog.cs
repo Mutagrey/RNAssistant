@@ -47,8 +47,6 @@ namespace RNAssistant.Office.Tools
                 return HtmlWorkspaceToolHandler.BindingFor(toolId);
             if (CapabilityToolCatalog.Owns(toolId))
                 return CapabilityToolHandler.BindingFor(toolId);
-            if (string.Equals(toolId, PromptToolCatalog.ReadToolId,
-                StringComparison.Ordinal)) return PromptReadToolHandler.Binding;
             if (string.Equals(toolId, PromptToolCatalog.SaveToolId,
                 StringComparison.Ordinal)) return PromptSaveToolHandler.Binding;
             if (ToolAuthoringCatalog.Owns(toolId))

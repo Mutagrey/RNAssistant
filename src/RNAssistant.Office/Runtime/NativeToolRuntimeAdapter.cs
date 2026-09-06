@@ -225,11 +225,7 @@ namespace RNAssistant.Office.Runtime
                     if (promptTools == null)
                         throw new InvalidOperationException(
                             "Prompt handler dependencies are unavailable.");
-                    handler = string.Equals(registration.Descriptor.Id,
-                            PromptToolCatalog.ReadToolId,
-                            StringComparison.Ordinal)
-                        ? (IToolHandler)new PromptReadToolHandler(promptTools)
-                        : new PromptSaveToolHandler(promptTools);
+                    handler = new PromptSaveToolHandler(promptTools);
                 }
                 else if (ToolAuthoringCatalog.Owns(
                     registration.Descriptor.Id))

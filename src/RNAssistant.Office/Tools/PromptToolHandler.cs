@@ -8,28 +8,6 @@ using RuntimeResult = RNAssistant.Core.Tools.Contracts.ToolResult;
 
 namespace RNAssistant.Office.Tools
 {
-    internal sealed class PromptReadToolHandler : IToolHandler
-    {
-        internal static readonly ToolBinding Binding =
-            new ToolBinding("prompts.read.v1");
-
-        private readonly PromptSettingsService _service;
-
-        internal PromptReadToolHandler(PromptSettingsService service)
-        {
-            _service = service ?? throw new ArgumentNullException(nameof(service));
-        }
-
-        public Task<ToolHandlerResult> ExecuteAsync(
-            ToolHandlerContext context,
-            CancellationToken cancellationToken)
-        {
-            cancellationToken.ThrowIfCancellationRequested();
-            return Task.FromResult(PromptToolProjection.Project(
-                _service.Read(context.Arguments)));
-        }
-    }
-
     internal sealed class PromptSaveToolHandler : IPreparableToolHandler
     {
         internal static readonly ToolBinding Binding =

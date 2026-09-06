@@ -188,6 +188,9 @@ namespace RNAssistant.Office.Services
                 case "common.tools_definition_read":
                     error = "Tool source reads use common.resources_find/read and exact catalog evidence.";
                     return false;
+                case "common.prompts_read":
+                    error = "Prompt reads use common.resources_find/read and exact catalog evidence.";
+                    return false;
                 case "common.vba_inspect":
                 case "common.vba_list_modules":
                 case "common.vba_read_module":
@@ -245,7 +248,6 @@ namespace RNAssistant.Office.Services
                 case HtmlWorkspaceToolCatalog.FreezeDataToolId:
                     schema = HtmlWorkspaceToolCatalog.FreezeSchema();
                     break;
-                case PromptToolCatalog.ReadToolId:
                 case PromptToolCatalog.SaveToolId:
                     schema = PromptToolCatalog.SchemaFor(call.Name);
                     break;

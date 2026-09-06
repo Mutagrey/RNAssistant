@@ -397,7 +397,7 @@ namespace RNAssistant.Harness
                 AssertTrue(prompt.IndexOf("common.tools_validate",
                         StringComparison.Ordinal) < 0,
                     "model prompt omits internal tool validation");
-                AssertContains(prompt, "common.prompts_read", "prompt includes prompt reader");
+                AssertTrue(!prompt.Contains("common.prompts_read") && prompt.Contains("common.resources_read"), "prompt inspection uses the generic resource reader");
 
                 var promptTools = ConversationPromptComposer.BuildTools(tools);
                 var bindParameters = (JObject)promptTools.OfType<JObject>()
@@ -473,6 +473,9 @@ namespace RNAssistant.Harness
                     "tool skill does not teach retired validation");
                 AssertTrue(!toolAuthoring.Contains("common.tools_definition_read") && toolAuthoring.Contains("common.resources_find") &&
                     toolAuthoring.Contains("common.resources_read"), "tool skill uses resource discovery/read for existing implementation");
+                var promptAuthoring = builtInSkills.Single(skill => skill.Id == "common.prompt_authoring").BodyMarkdown;
+                AssertTrue(!promptAuthoring.Contains("common.prompts_read") && promptAuthoring.Contains("common.resources_find") &&
+                    promptAuthoring.Contains("common.resources_read") && promptAuthoring.Contains("prompt default"), "prompt guidance compares exact current/default resources");
 
                 string error;
                 AssertTrue(ModelToolResultProjection.ValidateAcceptedCall(

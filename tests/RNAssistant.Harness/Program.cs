@@ -671,6 +671,8 @@ namespace RNAssistant.Harness
                 Test("resource cutover: exact catalog publication continuations", ResourceCatalogContinuationsPinPublication),
                 Test("resource cutover: unavailable catalog snapshots fail closed", ResourceCatalogSnapshotsFailClosed),
                 Test("resource cutover: frozen prompt publication", ResourcePromptPublicationIsFrozen),
+                Test("resource cutover: prompt resources replace direct settings reads", PromptResourcesReadPublishedTemplates),
+                Test("resource cutover: prompt resources fail closed", PromptResourcesFailClosed),
                 Test("resource cutover: runtime payload storage and exact hydration", ResourceRuntimePayloadStorage),
                 Test("resource cutover: unpublished revision retention roots", ResourceUnpublishedRevisionRetention),
                 Test("resource cutover: canonical binary data plane", ResourceBinaryLeaseUsesCanonicalViews),

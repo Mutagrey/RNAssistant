@@ -95,7 +95,9 @@ implementation never admits a callable tool or grants mutation authority.
 entry are removed, without alias or fallback. Stored calls to that old contract
 are explicitly rejected by model-history validation; user history is not deleted.
 Upsert/delete preparation and confirmed read-back still belong to the existing
-authoring owner. Other domain reads, including prompt inspection, remain open.
+authoring owner. Prompt inspection also uses
+[published field resources](conversation-protocol.md#published-prompt-inspection);
+other domain reads and the Prompts UI transport remain open.
 
 ### Library source reads
 

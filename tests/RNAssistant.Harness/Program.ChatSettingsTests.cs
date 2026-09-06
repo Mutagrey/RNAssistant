@@ -37,6 +37,103 @@ namespace RNAssistant.Harness
             AssertEqual("global-model", effective.Model, "blank chat model fallback");
         }
 
+        private static void PromptResourcesReadPublishedTemplates()
+        {
+            WithTempPaths(paths =>
+            {
+                var adapter = FakeOfficeAdapter.ForHost("Excel");
+                var original = "\ufeff# Published prompt\r\n" + new string('ж', 40000) + "😀";
+                var settings = new AppSettings { SystemPrompt = original, PlanSystemPrompt = string.Empty };
+                var loads = 0;
+                var executor = new OfficeToolExecutor(adapter, new VbaJournalStore(paths), new SkillStore(paths), new ToolStore(paths),
+                    () => { loads++; return settings; }, value => settings = value, paths);
+                executor.CaptureCatalogs();
+                var session = NewSession(adapter);
+                var tools = executor.GetControllerTools().ToList();
+                var native = executor.CreateNativeRuntime(session, tools, new AppSettings(), ChatModes.Agent, false);
+                Func<string, ToolExecutionRecord> read = target => ExecutePromptNative(native, ResourceToolCatalog.ReadToolId, new JObject { ["target"] = target });
+                loads = 0;
+                var retired = new ToolCall("retired", "common.prompts_read", "{\"includeDefaults\":true}");
+                AssertTrue(tools.All(item => item.Id != retired.Name) && native.Describe(retired) == null &&
+                    DirectToolBindingCatalog.Resolve(retired.Name) == null, "old prompt reader has no catalog entry, binding or alias");
+                string error;
+                AssertTrue(!ModelToolResultProjection.ValidateAcceptedCall(retired, out error), "old direct-settings reads cannot replay as current model evidence");
+                var found = ExecutePromptNative(native, ResourceToolCatalog.FindToolId, new JObject { ["scope"] = "catalogs", ["query"] = "systemPrompt" });
+                AssertEqual(ToolExecutionOutcome.Ok, found.Outcome, "published prompt discovery succeeds");
+                var targets = ((JArray)JObject.Parse(found.Result.DataJson)["items"]).Select(item => (string)item["target"]).ToList();
+                AssertTrue(targets.Contains("prompt: systemPrompt") && targets.Contains("prompt default: systemPrompt"), "current and default have distinct semantic targets");
+                AssertTrue(!found.Result.DataJson.Contains("Published prompt") && !found.Result.DataJson.Contains("rna://"), "discovery exposes neither bodies nor runtime plumbing");
+                var fields = executor.ResourceGateway.List(session, "catalog", "prompt", null, 50).Items;
+                AssertEqual(string.Join(",", PromptSettingsService.TemplateKeys.OrderBy(key => key)),
+                    string.Join(",", fields.Select(item => item.Title).OrderBy(key => key)), "only the editable prompt keys are discoverable");
+                AssertTrue(fields.All(item => item.Payload == null), "listing prompt fields never hydrates their bodies");
+                var first = read("prompt: systemPrompt");
+                AssertEqual(ToolExecutionOutcome.Ok, first.Outcome, "current prompt reads through the generic resource handler");
+                AssertEqual(original, (string)JObject.Parse(first.Result.DataJson)["text"], "complete Unicode/BOM/CRLF text survives exact internal paging");
+                var defaults = read("prompt default: systemPrompt");
+                AssertEqual(new AppSettings().SystemPrompt, (string)JObject.Parse(defaults.Result.DataJson)["text"], "defaults come from the committed builtin publication");
+                AssertEqual(string.Empty, (string)JObject.Parse(read("prompt: planSystemPrompt").Result.DataJson)["text"], "an empty published prompt stays empty");
+                AssertEqual(settings.SystemPromptRole, (string)JObject.Parse(read("prompt: systemPromptRole").Result.DataJson)["text"], "role remains a separate exact value");
+                AssertEqual(0, loads, "discovery and source reads do not reload mutable settings");
+                AssertEqual(original, settings.SystemPrompt, "reading defaults does not reset or activate them");
+                var evidence = first.ResourceEvidence.Single();
+                var defaultEvidence = defaults.ResourceEvidence.Single();
+                var scope = CatalogPublicationService.ScopeId;
+                AssertTrue(evidence.Complete && evidence.Payload != null && evidence.Dependencies.Single().Resource.Uri == "rna://catalog/prompts",
+                    "prompt evidence retains exact source and its publication dependency");
+                var reducer = new EvidenceStateReducer();
+                AssertEqual(EvidenceState.Current, reducer.Reduce(evidence, executor.ResourceAuthority.CaptureMany(new[] { scope })).State, "original prompt evidence is current");
+                var saved = executor.ExecuteManual(Command(PromptToolCatalog.SaveToolId, "promptKey", "systemPrompt", "value", "# Replacement"),
+                    tools, new AppSettings(), false, true, session);
+                AssertTrue(saved.Success, "existing guarded save publishes the replacement: " + saved.Message);
+                AssertEqual(EvidenceState.Superseded, reducer.Reduce(evidence, executor.ResourceAuthority.CaptureMany(new[] { scope })).State, "saving invalidates prior prompt evidence through the shared reducer");
+                AssertEqual(EvidenceState.Current, reducer.Reduce(defaultEvidence, executor.ResourceAuthority.CaptureMany(new[] { scope })).State, "editing current prompts does not replace builtin defaults");
+                AssertEqual(original.Substring(0, 64), executor.ResourceGateway.Read(session, new ResourceReadRequest {
+                    Reference = evidence.Resource, Representation = "text", MaxChars = 64 }).Result.Text, "historical prompt remains exact after save");
+                settings.SystemPrompt = "UNPUBLISHED"; loads = 0;
+                AssertEqual("# Replacement", (string)JObject.Parse(read("prompt: systemPrompt").Result.DataJson)["text"], "mutable settings cannot bypass publication");
+                AssertEqual(0, loads, "later reads still use only the committed snapshot");
+                AssertEqual(0, adapter.VbaBackendCalls.Count, "prompt inspection never discovers live Office/VBA");
+            });
+        }
+
+        private static void PromptResourcesFailClosed()
+        {
+            foreach (var scenario in new[] { "prompts", "prompt-defaults", "oversized", "missing-value" })
+                WithTempPaths(paths =>
+                {
+                    var adapter = FakeOfficeAdapter.ForHost("Word");
+                    var settings = new AppSettings();
+                    if (scenario == "oversized") settings.SystemPrompt = new string('x', PromptSettingsService.MaximumPromptCharacters + 1);
+                    if (scenario == "missing-value") settings.SystemPrompt = null;
+                    var loads = 0;
+                    var executor = new OfficeToolExecutor(adapter, new VbaJournalStore(paths), new SkillStore(paths), new ToolStore(paths),
+                        () => { loads++; return settings; }, value => settings = value, paths);
+                    executor.CaptureCatalogs();
+                    var session = NewSession(adapter);
+                    var native = executor.CreateNativeRuntime(session, executor.GetControllerTools().ToList(), new AppSettings(), ChatModes.Agent, false);
+                    var scope = CatalogPublicationService.ScopeId;
+                    var kind = scenario == "prompt-defaults" ? CatalogPublicationService.PromptDefaultsKind : "prompts";
+                    var root = executor.ResourceAuthority.Store.GetHead(scope, new ResourceIdentity(ResourceUri.Create("catalog", kind))).Revision;
+                    if (scenario == "prompts" || scenario == "prompt-defaults")
+                    {
+                        var payload = ((IResourceRevisionStore)executor.ResourceAuthority.Store).GetRevision(scope, root).Payload;
+                        File.WriteAllText(executor.Payloads.PathFor(payload.Sha256), "corrupt");
+                    }
+                    var generation = executor.ResourceAuthority.CaptureMany(new[] { scope }).Get(scope).Generation;
+                    loads = 0;
+                    var read = ExecutePromptNative(native, ResourceToolCatalog.ReadToolId,
+                        new JObject { ["target"] = kind == "prompts" ? "prompt: systemPrompt" : "prompt default: systemPrompt" });
+                    AssertEqual(ToolExecutionOutcome.Error, read.Outcome, "unavailable prompt fails closed: " + scenario);
+                    AssertEqual("RESOURCE_SNAPSHOT_UNAVAILABLE", (string)JObject.Parse(read.Result.DataJson)["code"], "typed prompt snapshot failure: " + scenario);
+                    AssertEqual(0, read.ResourceEvidence.Count, "no fabricated evidence on prompt failure");
+                    AssertEqual(0, loads, "failure never falls back to current settings or regenerates defaults");
+                    AssertEqual(generation, executor.ResourceAuthority.CaptureMany(new[] { scope }).Get(scope).Generation, "read failure cannot heal or republish authority");
+                    var unknown = ExecutePromptNative(native, ResourceToolCatalog.ReadToolId, new JObject { ["target"] = "prompt: apiKey" });
+                    AssertEqual(ToolExecutionOutcome.Error, unknown.Outcome, "non-template settings cannot become prompt resources");
+                });
+        }
+
         private static void PromptSavePreservesGlobalModel()
         {
             WithTempPaths(delegate(AppDataPaths paths)
@@ -55,20 +152,10 @@ namespace RNAssistant.Harness
                 var definitions = executor.GetControllerTools()
                     .Where(tool => PromptToolCatalog.Owns(tool.Id))
                     .ToList();
-                AssertEqual(2, definitions.Count,
+                AssertEqual(1, definitions.Count,
                     "complete prompt family is registered");
-                var readDefinition = definitions.Single(tool =>
-                    tool.Id == PromptToolCatalog.ReadToolId);
                 var saveDefinition = definitions.Single(tool =>
                     tool.Id == PromptToolCatalog.SaveToolId);
-                AssertEqual(ToolEffect.Read,
-                    readDefinition.Policy.Effect,
-                    "prompt read effect");
-                AssertEqual(ToolVerification.None,
-                    readDefinition.Policy.Verification,
-                    "prompt read verification");
-                AssertTrue(readDefinition.Policy.IndependentLocalRead,
-                    "prompt read is an independent local read");
                 AssertEqual(ToolEffect.Write,
                     saveDefinition.Policy.Effect,
                     "prompt save effect");
@@ -90,22 +177,13 @@ namespace RNAssistant.Harness
                     "agent", false,
                     (execution, preparation) => "prompt_pending");
                 AssertTrue(native.Describe(new ToolCall(
-                        "prompt_read_policy", PromptToolCatalog.ReadToolId,
+                        "prompt_save_policy", PromptToolCatalog.SaveToolId,
                         "{}")) != null,
-                    "exact prompt read has a native binding");
+                    "exact prompt save has a native binding");
                 AssertTrue(native.Describe(new ToolCall(
-                        "prompt_alias", PromptToolCatalog.ReadToolId
+                        "prompt_alias", PromptToolCatalog.SaveToolId
                             .ToUpperInvariant(), "{}")) == null,
-                    "prompt read has no case alias");
-                var read = ExecutePromptNative(
-                    native, PromptToolCatalog.ReadToolId, new JObject());
-                AssertEqual(ToolExecutionOutcome.Ok, read.Outcome,
-                    "native prompt read succeeds");
-                AssertEqual(ToolDispatchEvidence.NotDispatched,
-                    read.Evidence.Dispatch,
-                    "prompt read never dispatches an effect");
-                AssertEqual(ToolEffectEvidence.None, read.Evidence.Effect,
-                    "prompt read reports no effect");
+                    "prompt save has no case alias");
 
                 var empty = executor.ExecuteManual(
                     new ToolInvocation { ToolId = "common.prompts_save" },

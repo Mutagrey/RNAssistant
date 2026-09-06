@@ -449,6 +449,8 @@ namespace RNAssistant.Office.Services
                 case "Office observation": return "document";
                 case "catalog":
                 case "tool source":
+                case "prompt":
+                case "prompt default":
                 case "skill":
                 case "skill reference": return "catalogs";
                 case "selection": return "selection";
@@ -471,6 +473,8 @@ namespace RNAssistant.Office.Services
                 case ContextResourceProvider.ObservationKind: return "Office observation";
                 case "catalog": return "catalog";
                 case "tool-source": return "tool source";
+                case "prompt": return "prompt";
+                case "prompt-default": return "prompt default";
                 case "skill": return "skill";
                 case "skill-reference": return "skill reference";
                 case LiveDocumentResourceProvider.DocumentKind: return "document";

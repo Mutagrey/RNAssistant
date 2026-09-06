@@ -19,10 +19,11 @@ namespace RNAssistant.Office.Services
         internal CatalogResourceProvider(CatalogPublicationService catalogs, ResourceAuthorityService authority)
         { _catalogs = catalogs; _payloads = authority.Payloads; }
 
-        private IEnumerable<string> Kinds { get { return new[] { "tools", "skills", "prompts", _catalogs.BuiltInKind }
+        private IEnumerable<string> Kinds { get { return new[] { "tools", "skills", "prompts", CatalogPublicationService.PromptDefaultsKind, _catalogs.BuiltInKind }
             .Concat(_catalogs.HasBuiltInTools ? new[] { _catalogs.BuiltInToolsKind } : new string[0]); } }
         private bool SkillKind(string kind) { return kind == "skills" || kind == _catalogs.BuiltInKind; }
         private bool ToolKind(string kind) { return kind == "tools" || _catalogs.HasBuiltInTools && kind == _catalogs.BuiltInToolsKind; }
+        private static bool PromptKind(string kind) { return kind == "prompts" || kind == CatalogPublicationService.PromptDefaultsKind; }
 
         public ResourceListPage List(ChatSession session, string kind, string cursor, int limit)
         {
@@ -31,6 +32,8 @@ namespace RNAssistant.Office.Services
             {
                 var root = _catalogs.Current(name);
                 items.Add(DescribeRoot(root));
+                if (PromptKind(name))
+                    foreach (var key in PromptSettingsService.TemplateKeys) items.Add(DescribePrompt(root, key));
                 if (ToolKind(name) && (string.IsNullOrEmpty(kind) || kind == "tool-source"))
                     foreach (var tool in Tools(root).Where(tool =>
                         string.Equals(tool.Host, session.Host, StringComparison.OrdinalIgnoreCase) ||
@@ -89,6 +92,12 @@ namespace RNAssistant.Office.Services
             string text;
             if (address.Segments.Count == 1)
             { descriptor = DescribeRoot(exact); text = _catalogs.ReadPublic(exact); }
+            else if (PromptKind(address.Segments[0]))
+            {
+                var root = new ResourceRef(ResourceUri.Create("catalog", address.Segments[0]), exact.Revision);
+                descriptor = DescribePrompt(root, address.Segments[1]);
+                text = ReadPrompt(root, address.Segments[1]);
+            }
             else if (ToolKind(address.Segments[0]))
             {
                 var root = new ResourceRef(ResourceUri.Create("catalog", address.Segments[0]), exact.Revision);
@@ -143,6 +152,7 @@ namespace RNAssistant.Office.Services
                 parsed.Segments.Count != 1 &&
                 !(ToolKind(parsed.Segments[0]) && parsed.Segments.Count == 3 && (parsed.Segments[2] == "source" ||
                     parsed.Segments[0] == _catalogs.BuiltInToolsKind && parsed.Segments[2] == "documentation") ||
+                  PromptKind(parsed.Segments[0]) && parsed.Segments.Count == 2 && PromptSettingsService.TemplateKeys.Contains(parsed.Segments[1]) ||
                   SkillKind(parsed.Segments[0]) && (parsed.Segments.Count == 3 && parsed.Segments[2] == "body" ||
                   parsed.Segments.Count == 4 && parsed.Segments[2] == "reference")))
                 throw Error("Unknown catalog resource.", "RESOURCE_NOT_FOUND");
@@ -154,9 +164,31 @@ namespace RNAssistant.Office.Services
             var address = Address(exact.Uri);
             if (address.Segments.Count == 1) return DescribeRoot(exact);
             var root = new ResourceRef(ResourceUri.Create("catalog", address.Segments[0]), exact.Revision);
+            if (PromptKind(address.Segments[0])) return DescribePrompt(root, address.Segments[1]);
             if (ToolKind(address.Segments[0])) return DescribeTool(root, FindTool(root, address.Segments[1]), address.Segments[2] == "documentation");
             var skill = FindSkill(root, address.Segments[1]);
             return DescribeSkill(root, skill, address.Segments.Count == 4 ? FindReference(skill, address.Segments[3]) : null);
+        }
+
+        private string ReadPrompt(ResourceRef root, string key)
+        {
+            Dictionary<string, string> values;
+            try { values = JsonConvert.DeserializeObject<Dictionary<string, string>>(_catalogs.Read(root)); }
+            catch (JsonException) { throw Error("The exact prompt publication is incompatible.", "RESOURCE_SNAPSHOT_UNAVAILABLE"); }
+            string text;
+            if (values == null || !values.TryGetValue(key, out text) || text == null || text.Length > PromptSettingsService.MaximumPromptCharacters)
+                throw Error("The exact prompt is unavailable or exceeds its bound.", "RESOURCE_SNAPSHOT_UNAVAILABLE");
+            return text;
+        }
+        private static ResourceDescriptor DescribePrompt(ResourceRef root, string key)
+        {
+            var kind = ResourceUri.Parse(root.Uri).Segments[0];
+            var descriptor = new ResourceDescriptor { Reference = new ResourceRef(ResourceUri.Create("catalog", kind, key), root.Revision),
+                Provider = "catalog", Title = key, Kind = kind == "prompts" ? "prompt" : "prompt-default",
+                MimeType = key == "systemPromptRole" ? "text/plain" : "text/markdown", Mutable = false, Tracking = "strongly-tracked" };
+            descriptor.Representations.Add("text"); descriptor.Capabilities.Add("read");
+            descriptor.Dependencies.Add(new ResourceDependency(root, "text", ResourceCoverage.Whole(), "catalog-publication"));
+            return descriptor;
         }
 
         private SkillDefinition[] Skills(ResourceRef root)

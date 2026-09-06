@@ -268,6 +268,18 @@ checks; real VBIDE/Trust Access/crash behavior remains Windows qualification. Se
 [Phase 6I evidence](../../docs/stabilization/PHASE_6I_VBA_PACKAGE_LIFECYCLE.md) and
 [Phase 11J2 evidence](../../docs/stabilization/PHASE_11J2_VBA_PACKAGE_NATIVE_RUNTIME.md).
 
+## Published prompt reads
+
+Use `resource cutover: prompt resources` for metadata-only field discovery, exact
+current/default source, Unicode/empty text, root-dependent evidence, historical
+reads and explicit failures for corrupt/missing/oversized values. It verifies that
+reads neither reload settings nor activate defaults, and rejects the retired reader.
+`resource cutover: frozen prompt publication` and `chat: prompt save preserves global model`
+retain capture, confirmation, stale guards, no-change and read-back coverage.
+`tools: authoring intents are semantic` / `tools: prompt metadata is model-friendly`
+check the switched guidance/catalog. The existing R61 baseline gap stays open;
+only the retired prompt-reader row is removed, without a blanket baseline refresh.
+
 ## Tool Library source reads and mutation uploads
 
 Model source inspection uses `resource cutover: tool source replaces definition read`

@@ -5,6 +5,7 @@ using Newtonsoft.Json;
 using RNAssistant.Core.Models;
 using RNAssistant.Core.Services;
 using RNAssistant.Core.Storage;
+using RNAssistant.Office.Tools;
 
 namespace RNAssistant.Office.Services
 {
@@ -12,11 +13,13 @@ namespace RNAssistant.Office.Services
     internal sealed class CatalogPublicationService
     {
         internal static readonly ResourceAuthorityScopeId ScopeId = new ResourceAuthorityScopeId("catalog", "local");
+        internal const string PromptDefaultsKind = "prompt-defaults";
         private readonly ResourceAuthorityService _authority;
         private readonly ResourceMutationJournal _journal;
         private readonly ToolStore _tools;
         private readonly SkillStore _skills;
         private readonly Func<string> _prompts;
+        private readonly string _promptDefaults = PromptSettingsService.CaptureTemplates(new AppSettings());
         private readonly object _sync = new object();
         private string _skillRevision;
         private SkillCatalogSnapshot _skillSnapshot;
@@ -35,6 +38,7 @@ namespace RNAssistant.Office.Services
             _builtIns = new SkillCatalogSnapshot(BuiltInSkillProvider.GetSkills(adapter));
             // Registration is a publication boundary, never a provider/COM read during compile.
             PublishBuiltIns(BuiltInKind);
+            PublishBuiltIns(PromptDefaultsKind);
         }
 
         internal void RegisterBuiltInTools(IEnumerable<RNAssistant.Core.Tools.ToolCatalogEntry> tools)
@@ -77,6 +81,7 @@ namespace RNAssistant.Office.Services
                         }
                     json = JsonConvert.SerializeObject(skills); break;
                 case "prompts": json = _prompts(); break;
+                case PromptDefaultsKind: json = _promptDefaults; break;
                 default:
                     if (address.Segments[0] == BuiltInKind) json = JsonConvert.SerializeObject(_builtIns.Skills);
                     else if (HasBuiltInTools && address.Segments[0] == BuiltInToolsKind)
@@ -90,7 +95,7 @@ namespace RNAssistant.Office.Services
 
         internal ResourceRef Current(string kind)
         {
-            if (kind != "skills" && kind != "tools" && kind != "prompts" && kind != BuiltInKind &&
+            if (kind != "skills" && kind != "tools" && kind != "prompts" && kind != PromptDefaultsKind && kind != BuiltInKind &&
                 !(HasBuiltInTools && kind == BuiltInToolsKind)) throw new InvalidOperationException("Unsupported catalog kind.");
             var identity = new ResourceIdentity(ResourceUri.Create("catalog", kind));
             var head = _authority.CaptureMany(new[] { ScopeId }).Get(ScopeId).GetHead(identity);
