@@ -411,6 +411,18 @@ setup contains no text. Both raw diagnostics and Run Journal use one cancellable
 UI consumer, with no new publication/store. Bounds, UTF-8 handling and remaining
 qualification gates are owned by [Trajectory query](trajectory-query.md#payload-preview-delivery).
 
+Context Inspector's opt-in request JSON uses `PromptContextInspectorDownloadService`
+and the same download slots/reader. The bridge carries snapshot metadata and a
+`rawData` lease, never `rawRequestJson`. Reservation precedes inspection; the existing
+512,000-character preview is surrogate-safe and transported as strict UTF-8 inert
+text within 2 MiB. The browser verifies the payload before rendering, retains one
+bounded raw-text cache and closes the lease on success/failure, panel close or chat
+change, including late setup responses. Closing cancels delivery, not an already
+running synchronous compiler capture. This is a disposable diagnostic projection,
+not a new resource publication/store; compiler and context-budget semantics are
+unchanged. Pre-truncation raw serialization allocation and real WebView2 lifecycle
+qualification remain open.
+
 Text/Markdown/PDF text pages, images, thumbnails and PDF renders travel through
 that data plane. Typed bridge DTOs carry metadata/leases, not page text or base64.
 Text leases close after each bounded page; media leases close on replacement,

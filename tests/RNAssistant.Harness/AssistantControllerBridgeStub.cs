@@ -555,7 +555,8 @@ namespace RNAssistant.Office
                 Percent = 10,
                 Estimated = true,
                 Sections = new PromptContextSectionDto[0],
-                RawRequestJson = includeRaw ? "{}" : null
+                RawRequestJson = includeRaw ? "must not cross bridge" : null,
+                RawData = includeRaw ? new ResourceDownloadOpenResponse { LeaseId = "inspector-download" } : null
             };
         }
         public VbaProjectResponse GetVbaProject() { return new VbaProjectResponse { Result = ToolRunResult.Ok("ok") }; }

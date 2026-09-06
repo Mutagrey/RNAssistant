@@ -37,7 +37,7 @@ namespace RNAssistant.Office
                 skills = publishedSkills.Skills;
             }
 
-            return new PromptContextInspectorService(_adapter, _paths, _toolExecutor.ResourceAuthority, _toolExecutor.Payloads).Inspect(
+            Func<PromptContextInspectorResponse> capture = () => new PromptContextInspectorService(_adapter, _paths, _toolExecutor.ResourceAuthority, _toolExecutor.Payloads).Inspect(
                 session,
                 LoadContext(session),
                 settings,
@@ -46,6 +46,8 @@ namespace RNAssistant.Office
                 attachments,
                 text,
                 includeRaw, publishedSkills);
+            return includeRaw ? new PromptContextInspectorDownloadService(_resourceData)
+                .Open(session, capture, System.Threading.CancellationToken.None) : capture();
         }
     }
 }

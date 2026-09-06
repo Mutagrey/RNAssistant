@@ -16,6 +16,8 @@ adapters не означает завершение resource-consumer cleanup. �
 
 | Replaced/pending contour | Canonical owner | Consumers / removal gate | State |
 |---|---|---|---|
+| Inspector inline request JSON bridge body | PromptContextInspectorDownloadService → shared resource data plane/reader | Opt-in Inspector raw viewer | Removed host-neutral; reserved 2 MiB UTF-8 preview, metadata-only setup, verified chunks and single cancellable UI cache. No new publication/store; Windows/WebView2 and pre-truncation serialization allocation remain open |
+| Runtime log inline tail (up to 1,000,000 characters) | Existing runtime log owner → shared data plane | Diagnostics log viewer | Open; next concrete control-body consumer to switch, without adding diagnostic features |
 | Removed Outlook direct reader/output wrapper and generic document/selection source fallback | Existing document provider → `OutlookService.CaptureMail` + header discovery → bound backend/Gateway/CAS | Model/manual resources and HTML mail bindings; public id/binding/output wrapper removed | Consumer switch complete host-neutral 2026-09-06. Inspector/folder-scoped mail targets, retained source evidence and body-free metadata; OOM pre-materialization and real Windows gates remain open |
 | Per-session VBA observed hashes and refresh callbacks | Shared ResourceAuthority + immutable conversation evidence | VBA guard/read-back, next model request | Removed; no parallel hash authority |
 | VBA restore without exact origin metadata | VBA journal preimage reference → prepared restore → shared authority commit | Restore confirmation/read-back | Exact live origin or exact independent backup pinned before confirmation; no history search by equal hash |

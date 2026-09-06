@@ -962,7 +962,8 @@ namespace RNAssistant.Harness
             var response = JObject.Parse(responseJson);
             AssertTrue(response["ok"].Value<bool>(), "prompt context inspector response ok");
             AssertEqual("chat-context", response["payload"]["chatId"].Value<string>(), "inspector chat id");
-            AssertEqual("{}", response["payload"]["rawRequestJson"].Value<string>(), "raw flag reaches typed payload");
+            AssertEqual("inspector-download", response["payload"]["rawData"]["leaseId"].Value<string>(), "raw flag returns download metadata");
+            AssertTrue(response["payload"]["rawRequestJson"] == null, "raw body never crosses the bridge");
         }
 
         private static void BridgeUsesTypedVbaPayload()

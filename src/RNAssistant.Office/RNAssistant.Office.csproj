@@ -278,6 +278,7 @@
     <Compile Include="Services\ContextCompactionService.cs" />
     <Compile Include="Services\PromptBudgetComposer.cs" />
     <Compile Include="Services\PromptContextInspectorService.cs" />
+    <Compile Include="Services\PromptContextInspectorDownloadService.cs" />
     <Compile Include="Services\AttachmentImageService.cs" />
     <Compile Include="Services\AttachmentAnalysisService.cs" />
     <Compile Include="Services\AttachmentModelRoutingService.cs" />

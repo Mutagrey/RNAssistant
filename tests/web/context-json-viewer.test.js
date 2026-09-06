@@ -127,7 +127,8 @@ function settle() { return new Promise(resolve => setImmediate(resolve)); }
   console.log("PASS context JSON viewer: state projection is explicit, safe and lazy");
 
   const raw = '{"request":9007199254740993123456789,"tail":';
-  const snapshot = { rawRequestJson: raw, rawTruncated: true };
+  const snapshot = { rawTruncated: true };
+  context.promptContextInspectorRawText = raw;
   context.promptContextInspectorSnapshot = snapshot;
   context.renderPromptContextRaw(snapshot);
   assert.ok(rawHost.firstElementChild.classList.contains("rn-json-viewer"));
@@ -142,6 +143,7 @@ function settle() { return new Promise(resolve => setImmediate(resolve)); }
   assert.equal(rawButton.textContent, "Показать сокращённый JSON");
   context.togglePromptContextRaw();
   assert.ok(rawHost.firstElementChild.classList.contains("rn-json-viewer"));
+  context.promptContextInspectorRawText = "";
   context.renderPromptContextRaw({});
   assert.equal(rawHost.childNodes.length, 0);
   assert.ok(rawDetails.classList.contains("hidden"));

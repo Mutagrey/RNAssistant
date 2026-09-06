@@ -158,6 +158,81 @@ namespace RNAssistant.Harness
             });
         }
 
+        private static void PromptContextInspectorExactDownload()
+        {
+            var session = new ChatSession { Id = "inspector-chat" };
+            using (var data = new ResourceDataPlaneService(new ResourceGatewayService()))
+            {
+                var service = new PromptContextInspectorDownloadService(data);
+                foreach (var raw in new[] { "", "\uFEFF{\"text\":\"" + new string('語', 180000) + "😀\"}" })
+                {
+                    var captures = 0;
+                    var result = service.Open(session, () =>
+                    {
+                        captures++;
+                        return new PromptContextInspectorResponse { ChatId = session.Id, RawRequestJson = raw, RawTruncated = true };
+                    }, CancellationToken.None);
+                    AssertEqual(1, captures, "exactly one capture");
+                    AssertTrue(result.RawRequestJson == null && result.RawTruncated, "only metadata survives capture");
+                    var json = Newtonsoft.Json.Linq.JObject.FromObject(result);
+                    AssertTrue(json["rawRequestJson"] == null && json["rawData"] != null, "metadata-only bridge shape");
+                    using (var bytes = new System.IO.MemoryStream())
+                    {
+                        for (var offset = 0; offset < result.RawData.Payload.ByteLength;)
+                        {
+                            var count = (int)Math.Min(result.RawData.MaxChunkBytes, result.RawData.Payload.ByteLength - offset);
+                            string mime;
+                            var chunk = data.ReadDownload(result.RawData.LeaseId, offset, count, CancellationToken.None, out mime);
+                            AssertEqual("text/plain; charset=utf-8", mime, "inert preview MIME");
+                            bytes.Write(chunk, 0, chunk.Length);
+                            offset += chunk.Length;
+                        }
+                        AssertEqual(raw, new System.Text.UTF8Encoding(false, true).GetString(bytes.ToArray()), "exact UTF-8 source, including BOM");
+                    }
+                    data.Close(session.Id, PromptContextInspectorDownloadService.Owner, result.RawData.LeaseId);
+                }
+            }
+        }
+
+        private static void PromptContextInspectorDownloadGuards()
+        {
+            var session = new ChatSession { Id = "inspector-guards" };
+            using (var data = new ResourceDataPlaneService(new ResourceGatewayService()))
+            {
+                var service = new PromptContextInspectorDownloadService(data);
+                var captures = 0;
+                Func<PromptContextInspectorResponse> capture = () =>
+                {
+                    captures++;
+                    return new PromptContextInspectorResponse { ChatId = session.Id, RawRequestJson = "{}" };
+                };
+                var first = service.Open(session, capture, CancellationToken.None);
+                var second = service.Open(session, capture, CancellationToken.None);
+                RuntimeThrows<ResourceRequestException>(() => service.Open(session, capture, CancellationToken.None));
+                AssertEqual(2, captures, "reservation refuses before expensive inspection");
+                data.Close(session.Id, PromptContextInspectorDownloadService.Owner, first.RawData.LeaseId);
+                data.Close(session.Id, PromptContextInspectorDownloadService.Owner, second.RawData.LeaseId);
+                RuntimeThrows<OperationCanceledException>(() => service.Open(session, capture, new CancellationToken(true)));
+                AssertEqual(2, captures, "cancelled request does not capture");
+                foreach (var invalid in new[] {
+                    new PromptContextInspectorResponse { ChatId = "other", RawRequestJson = "{}" },
+                    new PromptContextInspectorResponse { ChatId = session.Id },
+                    new PromptContextInspectorResponse { ChatId = session.Id, RawRequestJson = new string('x', PromptContextInspectorDownloadService.MaximumBytes + 1) }
+                })
+                {
+                    RuntimeThrows<InvalidOperationException>(() => service.Open(session, () => invalid, CancellationToken.None));
+                    AssertTrue(invalid.RawRequestJson == null, "failed capture clears transient body");
+                }
+                var cancelled = new PromptContextInspectorResponse { ChatId = session.Id, RawRequestJson = "{}" };
+                using (var cancel = new CancellationTokenSource())
+                    RuntimeThrows<OperationCanceledException>(() => service.Open(session, () => { cancel.Cancel(); return cancelled; }, cancel.Token));
+                AssertTrue(cancelled.RawRequestJson == null, "cancel after capture clears body");
+                first = service.Open(session, capture, CancellationToken.None);
+                second = service.Open(session, capture, CancellationToken.None);
+                AssertTrue(first.RawData != null && second.RawData != null, "failed captures release both download slots");
+            }
+        }
+
         private static void PromptContextInspectorIsolatesConcurrentSettings()
         {
             WithTempPaths(paths =>

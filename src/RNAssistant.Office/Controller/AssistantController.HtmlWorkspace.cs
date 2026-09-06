@@ -56,6 +56,7 @@ namespace RNAssistant.Office
                 return session != null && (workspaceId == "viewer" || workspaceId == ResourceDataPlaneService.UploadOwner ||
                     workspaceId == TrajectoryExportDownloadService.Owner ||
                     workspaceId == TrajectoryPayloadService.Owner ||
+                    workspaceId == PromptContextInspectorDownloadService.Owner ||
                     workspaceId == VbaEditorResourceService.Owner ||
                     workspaceId == SkillEditorResourceService.Owner ||
                     workspaceId == ToolEditorResourceService.Owner ||

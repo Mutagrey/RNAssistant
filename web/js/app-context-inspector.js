@@ -1,5 +1,28 @@
 var promptContextInspectorRequest = null;
 var promptContextInspectorSnapshot = null;
+var promptContextInspectorRawText = "";
+
+function closePromptContextDownload(operation) {
+  if (!operation || !operation.lease) return;
+  var lease = operation.lease;
+  operation.lease = null;
+  try {
+    Promise.resolve(send("closeResourceData", { chatId: operation.chatId,
+      workspaceId: "context-inspector", leaseId: lease.leaseId })).catch(function () {});
+  } catch (_) { /* Expiry also releases a lease if the bridge has gone away. */ }
+}
+
+function cancelPromptContextInspection() {
+  var operation = promptContextInspectorRequest;
+  promptContextInspectorRequest = null;
+  if (operation) {
+    operation.cancelled = true;
+    operation.abort.abort();
+    closePromptContextDownload(operation);
+  }
+  promptContextInspectorRawText = "";
+  promptContextInspectorSnapshot = null;
+}
 
 function promptContextInspectorValue(item, camel, pascal, fallback) {
   item = item || {};
@@ -23,6 +46,7 @@ function setPromptContextInspectorOpen(open) {
   if (open) {
     loadPromptContextInspector(false);
   } else {
+    cancelPromptContextInspection();
     clearPromptContextRawViewer();
   }
 }
@@ -55,28 +79,49 @@ async function loadPromptContextInspector(includeRaw) {
   refresh.disabled = true;
   rawButton.disabled = true;
 
-  var request = send("inspectPromptContext", {
-    chatId: chatId,
-    text: $("chatInput") ? $("chatInput").value : "",
-    resourceDraftIds: promptContextResourceDraftIds(),
-    includeRaw: !!includeRaw
-  });
-  promptContextInspectorRequest = request;
+  promptContextInspectorRawText = "";
+  clearPromptContextRawViewer();
+  var operation = { chatId: chatId, abort: new AbortController(), cancelled: false, lease: null };
+  function current() {
+    return promptContextInspectorRequest === operation && !operation.cancelled &&
+      promptContextInspectorOpen() && state.activeChatId === chatId;
+  }
+  promptContextInspectorRequest = operation;
   try {
-    var response = await request;
-    if (!promptContextInspectorOpen() || state.activeChatId !== chatId) return;
+    var response = await send("inspectPromptContext", {
+      chatId: chatId, text: $("chatInput") ? $("chatInput").value : "",
+      resourceDraftIds: promptContextResourceDraftIds(), includeRaw: !!includeRaw
+    });
+    operation.lease = response && response.rawData;
+    if (!current()) return;
+    if (includeRaw) {
+      if (!operation.lease || !operation.lease.payload || !window.RNAssistantResourceDownload ||
+          operation.lease.payload.contentType !== "text/plain; charset=utf-8")
+        throw new Error("RESOURCE_DOWNLOAD_INVALID");
+      var bytes = await window.RNAssistantResourceDownload.read(operation.lease, {
+        maxBytes: 2 * 1024 * 1024, fetch: window.fetch.bind(window), signal: operation.abort.signal, isCurrent: current
+      });
+      if (!current()) return;
+      promptContextInspectorRawText = new TextDecoder("utf-8", { fatal: true, ignoreBOM: true }).decode(bytes);
+    } else if (operation.lease) {
+      throw new Error("RESOURCE_DOWNLOAD_INVALID");
+    }
     promptContextInspectorSnapshot = response || {};
     renderPromptContextInspector(promptContextInspectorSnapshot);
   } catch (requestError) {
-    if (!promptContextInspectorOpen() || state.activeChatId !== chatId) return;
+    if (!current()) return;
+    promptContextInspectorRawText = "";
     error.textContent = requestError.detail || requestError.message || "Не удалось собрать контекст.";
     error.classList.remove("hidden");
   } finally {
-    if (promptContextInspectorRequest === request) promptContextInspectorRequest = null;
-    if (promptContextInspectorOpen()) {
-      loading.classList.add("hidden");
-      refresh.disabled = false;
-      rawButton.disabled = false;
+    closePromptContextDownload(operation);
+    if (promptContextInspectorRequest === operation) {
+      promptContextInspectorRequest = null;
+      if (promptContextInspectorOpen()) {
+        loading.classList.add("hidden");
+        refresh.disabled = false;
+        rawButton.disabled = false;
+      }
     }
   }
 }
@@ -245,7 +290,7 @@ function renderPromptContextItem(item, included) {
 }
 
 function renderPromptContextRaw(snapshot) {
-  var raw = promptContextInspectorValue(snapshot, "rawRequestJson", "RawRequestJson", "");
+  var raw = promptContextInspectorRawText;
   var details = $("promptContextInspectorRaw");
   var button = $("loadPromptContextRawButton");
   clearPromptContextRawViewer();
@@ -270,7 +315,7 @@ function clearPromptContextRawViewer() {
 
 function mountPromptContextRawViewer(snapshot) {
   snapshot = snapshot || promptContextInspectorSnapshot || {};
-  var raw = promptContextInspectorValue(snapshot, "rawRequestJson", "RawRequestJson", "");
+  var raw = promptContextInspectorRawText;
   var target = $("promptContextInspectorRawText");
   var details = $("promptContextInspectorRaw");
   if (!raw || !target || !details || !details.open || target.firstElementChild) return;
@@ -287,7 +332,7 @@ function mountPromptContextRawViewer(snapshot) {
 
 function updatePromptContextRawButton(snapshot) {
   snapshot = snapshot || promptContextInspectorSnapshot || {};
-  var raw = promptContextInspectorValue(snapshot, "rawRequestJson", "RawRequestJson", "");
+  var raw = promptContextInspectorRawText;
   var truncated = !!promptContextInspectorValue(snapshot, "rawTruncated", "RawTruncated", false);
   var details = $("promptContextInspectorRaw");
   var button = $("loadPromptContextRawButton");
@@ -310,8 +355,7 @@ function formatPromptContextTime(value) {
 }
 
 function togglePromptContextRaw() {
-  var raw = promptContextInspectorSnapshot && promptContextInspectorValue(
-    promptContextInspectorSnapshot, "rawRequestJson", "RawRequestJson", "");
+  var raw = promptContextInspectorSnapshot && promptContextInspectorRawText;
   if (!raw) {
     loadPromptContextInspector(true);
     return;
@@ -332,6 +376,10 @@ function renderPromptContextInspectorAvailability() {
 }
 
 function syncPromptContextInspectorState() {
+  if (promptContextInspectorRequest && promptContextInspectorRequest.chatId !== state.activeChatId) {
+    closePromptContextInspector();
+    return;
+  }
   if (!promptContextInspectorOpen() || !promptContextInspectorSnapshot) return;
   var snapshotChatId = promptContextInspectorValue(promptContextInspectorSnapshot, "chatId", "ChatId", "");
   if (snapshotChatId && snapshotChatId !== state.activeChatId) {

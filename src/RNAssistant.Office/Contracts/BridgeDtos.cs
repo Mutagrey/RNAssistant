@@ -228,8 +228,12 @@ namespace RNAssistant.Office.Contracts
         [JsonProperty("sections")]
         public IReadOnlyList<PromptContextSectionDto> Sections { get; set; }
 
-        [JsonProperty("rawRequestJson")]
-        public string RawRequestJson { get; set; }
+        // Transient compiler capture, consumed and cleared before bridge delivery.
+        [JsonIgnore]
+        internal string RawRequestJson { get; set; }
+
+        [JsonProperty("rawData")]
+        public ResourceDownloadOpenResponse RawData { get; set; }
 
         [JsonProperty("rawTruncated")]
         public bool RawTruncated { get; set; }

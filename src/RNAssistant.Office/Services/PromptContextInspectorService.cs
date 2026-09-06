@@ -229,8 +229,10 @@ namespace RNAssistant.Office.Services
             {
                 var raw = BuildRawRequest(mode, settings.Model, messages, options);
                 response.RawTruncated = raw.Length > MaxRawChars;
+                var length = Math.Min(raw.Length, MaxRawChars);
+                if (response.RawTruncated && length > 0 && char.IsHighSurrogate(raw[length - 1])) length--;
                 response.RawRequestJson = response.RawTruncated
-                    ? raw.Substring(0, MaxRawChars) + "\n\n[structure truncated]"
+                    ? raw.Substring(0, length) + "\n\n[structure truncated]"
                     : raw;
             }
 
