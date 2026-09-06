@@ -852,7 +852,7 @@ namespace RNAssistant.Harness
                 .GetAwaiter()
                 .GetResult();
             var documentationResponseJson = bridge.HandleMessageAsync(
-                "{\"id\":\"b6-docs\",\"type\":\"getToolDocumentation\",\"bridgeToken\":\"" + token + "\",\"payload\":{\"type\":\"rnassistant.toolLibraryDocumentationRequest\",\"contractVersion\":1,\"toolId\":\"excel.inspect\",\"expectedRevision\":\"exact-revision\"}}")
+                "{\"id\":\"b6-docs\",\"type\":\"getToolDocumentation\",\"bridgeToken\":\"" + token + "\",\"payload\":{\"type\":\"rnassistant.toolLibraryDocumentationRequest\",\"contractVersion\":1,\"chatId\":\"tool-chat\",\"toolId\":\"excel.inspect\",\"expectedRevision\":\"exact-revision\"}}")
                 .GetAwaiter()
                 .GetResult();
             var skillsResponseJson = bridge.HandleMessageAsync(
@@ -874,6 +874,10 @@ namespace RNAssistant.Harness
 
             AssertTrue(JObject.Parse(toolsResponseJson)["ok"].Value<bool>(), "tools bridge response ok");
             AssertTrue(JObject.Parse(documentationResponseJson)["ok"].Value<bool>(), "tool documentation bridge response ok");
+            var documentation = JObject.Parse(documentationResponseJson)["payload"];
+            AssertEqual("tool-chat", (string)documentation["chatId"], "documentation read retains explicit chat");
+            AssertTrue(documentation["markdown"] == null && documentation["data"] != null, "documentation controls carry no inline body");
+            AssertEqual("exact-docs", (string)documentation["resource"]["revision"], "documentation carries a pinned resource");
             AssertTrue(JObject.Parse(skillsResponseJson)["ok"].Value<bool>(), "skills bridge response ok");
             AssertTrue(JObject.Parse(readReferenceJson)["ok"].Value<bool>(), "skill reference read bridge response ok");
             var referenceRead = JObject.Parse(readReferenceJson)["payload"];

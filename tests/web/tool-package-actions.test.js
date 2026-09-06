@@ -28,7 +28,7 @@ function fixture(hooks = {}) {
   let server = item(), sequence = 0;
   const context = vm.createContext({ window: null, state, AbortController, TextEncoder, TextDecoder, Blob, Uint8Array, setTimeout, clearTimeout, crypto: crypto.webcrypto,
     $: id => elements[id] || (elements[id] = {}), send() {}, log() {}, logToolResult() {}, setControlBusy() {},
-    RNAssistantToolStructuredEditor: { create: () => ({}) }, RNAssistantToolDocumentation: { create: () => ({}) },
+    RNAssistantToolStructuredEditor: { create: () => ({}) }, RNAssistantToolDocumentation: { create: () => ({ cancel() {} }) },
     RNAssistantToolActions: { create: () => ({}) } });
   context.window = context;
   vm.runInContext(read("js/app-tools.js"), context);
@@ -192,7 +192,7 @@ function fixture(hooks = {}) {
     for (const file of ["app-chat-state.js", "app-chat-session.js"]) assert.ok(read("js/" + file).includes("cancelToolLibraryWrite()"));
     assert.ok(read("js/app-tools.js").includes('window.addEventListener("pagehide", cancelToolLibraryWrite)'));
     for (const file of ["app-tools.js", "app-tools-actions.js", "app-chat-state.js", "app-chat-session.js"])
-      assert.ok(read("index.html").includes(file + "?v=tool-source-20260906-1"));
+      assert.ok(read("index.html").includes(file + "?v=tool-docs-20260906-1"));
     assert.ok(!read("js/app-tools-actions.js").includes('"saveTools", options.mutationRequest()'));
     console.log("PASS tool package actions: both inline save consumers are removed and lifecycle cancellation is wired");
   }

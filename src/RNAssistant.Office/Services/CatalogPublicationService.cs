@@ -22,7 +22,7 @@ namespace RNAssistant.Office.Services
         private SkillCatalogSnapshot _skillSnapshot;
         private readonly SkillCatalogSnapshot _builtIns;
         internal string BuiltInKind { get; private set; }
-        private RNAssistant.Core.Tools.ToolCatalogEntry[] _builtInTools;
+        private BuiltInToolPublication[] _builtInTools;
         internal string BuiltInToolsKind { get; private set; }
         internal bool HasBuiltInTools { get { return _builtInTools != null; } }
 
@@ -40,7 +40,17 @@ namespace RNAssistant.Office.Services
         internal void RegisterBuiltInTools(IEnumerable<RNAssistant.Core.Tools.ToolCatalogEntry> tools)
         {
             if (_builtInTools != null) throw new InvalidOperationException("Built-in tools are already registered.");
-            _builtInTools = tools.Select(tool => tool.Clone()).ToArray();
+            _builtInTools = tools.Select(tool =>
+            {
+                var definition = tool.Clone();
+                // Generate while the source-owned runtime policy exists. Deserialized
+                // definitions are projections and must never reconstruct that authority.
+                var markdown = ToolLibraryDocumentationService.Build(definition);
+                if (System.Text.Encoding.UTF8.GetByteCount(markdown) > ToolLibraryDocumentationService.MaximumBytes)
+                    throw Unavailable("Built-in tool documentation exceeds its publication bound.");
+                return new BuiltInToolPublication { Type = BuiltInToolPublication.ContractType, Definition = definition,
+                    Documentation = PayloadRef.FromBlob(_authority.Payloads.StoreText(markdown, "text/markdown")) };
+            }).ToArray();
             PublishBuiltIns(BuiltInToolsKind);
         }
 
@@ -69,7 +79,8 @@ namespace RNAssistant.Office.Services
                 case "prompts": json = _prompts(); break;
                 default:
                     if (address.Segments[0] == BuiltInKind) json = JsonConvert.SerializeObject(_builtIns.Skills);
-                    else if (HasBuiltInTools && address.Segments[0] == BuiltInToolsKind) json = JsonConvert.SerializeObject(_builtInTools);
+                    else if (HasBuiltInTools && address.Segments[0] == BuiltInToolsKind)
+                    { json = JsonConvert.SerializeObject(_builtInTools); parts.AddRange(_builtInTools.Select(item => item.Documentation)); }
                     else throw new InvalidOperationException("Unsupported catalog publication.");
                     break;
             }
@@ -175,6 +186,23 @@ namespace RNAssistant.Office.Services
         internal string ReadReference(SkillReferenceMetadata reference)
         { return ReadPayload(reference?.Payload, SkillStore.MaximumSkillReferenceBytes); }
 
+        internal BuiltInToolPublication[] ReadBuiltInTools(ResourceRef root)
+        { return ParseBuiltInTools(Read(root)); }
+
+        private static BuiltInToolPublication[] ParseBuiltInTools(string json)
+        {
+            BuiltInToolPublication[] entries;
+            try { entries = JsonConvert.DeserializeObject<BuiltInToolPublication[]>(json); }
+            catch (JsonException) { throw Unavailable("The exact built-in tool publication is incompatible."); }
+            if (entries == null || entries.Any(item => item == null || item.Type != BuiltInToolPublication.ContractType ||
+                item.Definition?.BuiltIn != true || string.IsNullOrWhiteSpace(item.Definition.Id) || item.Documentation?.ContentType != "text/markdown"))
+                throw Unavailable("The exact built-in tool publication is incompatible or incomplete.");
+            return entries;
+        }
+
+        internal string ReadDocumentation(PayloadRef payload)
+        { return ReadPayload(payload, ToolLibraryDocumentationService.MaximumBytes); }
+
         private string ReadPayload(PayloadRef payload, long maximumBytes)
         {
             if (payload == null || payload.ByteLength > maximumBytes)
@@ -194,6 +222,12 @@ namespace RNAssistant.Office.Services
                 var entries = JsonConvert.DeserializeObject<SkillDefinition[]>(text);
                 foreach (var entry in entries) { entry.StoragePath = null; entry.BodyMarkdown = null; }
                 return JsonConvert.SerializeObject(entries, new JsonSerializerSettings { NullValueHandling = NullValueHandling.Ignore });
+            }
+            if (kind == BuiltInToolsKind)
+            {
+                // Public catalog metadata never injects the generated human docs.
+                var entries = ParseBuiltInTools(text);
+                return JsonConvert.SerializeObject(entries.Select(item => item.Definition));
             }
             if (kind == "tools")
             {
@@ -218,10 +252,20 @@ namespace RNAssistant.Office.Services
                 if (before?.Knowledge == HeadKnowledge.Known && revisions.GetRevision(ScopeId, before.Revision)?.Payload?.Sha256 == captured.Payload.Sha256) return;
                 var exact = new ResourceRef(identity.Uri, "r_" + Guid.NewGuid().ToString("N"));
                 revisions.RegisterRevision(ScopeId, new ResourceRevisionMetadata(exact, captured.ContentSha256, captured.Payload, before?.Revision));
+                revisions.RegisterView(ScopeId, new ResourceRevisionView(exact, captured.View, captured.ContentSha256,
+                    captured.Payload, captured.Coverage, captured.Parts));
                 _authority.Store.Publish(ResourceAuthorityCommit.Create(ScopeId, state.Generation, null,
                     new[] { new ResourceHeadChange(identity, before, ResourceHeadState.Known(exact, state.Generation + 1)) }, AuthorityCommitReason.MetadataTransition));
             }
         }
+    }
+
+    internal sealed class BuiltInToolPublication
+    {
+        internal const string ContractType = "rnassistant.builtInToolPublication.v1";
+        [JsonProperty("type")] public string Type { get; set; }
+        [JsonProperty("definition")] public RNAssistant.Core.Tools.ToolCatalogEntry Definition { get; set; }
+        [JsonProperty("documentation")] public PayloadRef Documentation { get; set; }
     }
 
     // Request-local frozen publication, never another durable catalog or activation store.

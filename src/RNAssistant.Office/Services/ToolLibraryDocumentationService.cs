@@ -8,11 +8,12 @@ using RNAssistant.Core.Tools;
 
 namespace RNAssistant.Office.Services
 {
-    // Human-facing documentation is projected on demand for the Library only.
+    // Human-facing documentation is generated from source-owned registrations.
     // It is deliberately not stored on ToolCatalogEntry and therefore cannot
     // enter model descriptors, callable-pack revisions or token accounting.
     internal static class ToolLibraryDocumentationService
     {
+        internal const int MaximumBytes = 2 * 1024 * 1024;
         internal static string Build(ToolCatalogEntry tool)
         {
             if (tool == null || !tool.BuiltIn ||

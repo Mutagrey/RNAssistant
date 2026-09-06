@@ -33,42 +33,15 @@ namespace RNAssistant.Office
                 .Open(source, payload, token), token);
         }
 
-        public ToolLibraryDocumentationResponse GetToolDocumentation(
-            ToolLibraryDocumentationRequest request)
+        public Task<ToolLibraryDocumentationResponse> GetToolDocumentationAsync(ToolLibraryDocumentationRequest payload, CancellationToken token)
         {
-            if (request == null || !string.Equals(request.Type,
-                    ToolLibraryDocumentationRequest.ContractType,
-                    StringComparison.Ordinal) ||
-                request.ContractVersion !=
-                    ToolLibraryResponse.CurrentContractVersion ||
-                string.IsNullOrWhiteSpace(request.ToolId) ||
-                string.IsNullOrWhiteSpace(request.ExpectedRevision))
-            {
-                throw new InvalidOperationException(
-                    "Unsupported or incomplete Tool Library documentation contract.");
-            }
-            var matches = _toolCatalog.GetVisibleTools()
-                .Where(item => item != null && item.BuiltIn &&
-                    string.Equals(item.Id, request.ToolId,
-                        StringComparison.Ordinal)).ToArray();
-            if (matches.Length != 1 || !matches[0].BuiltIn)
-                throw new InvalidOperationException(
-                    "Built-in tool documentation was not found for the exact id.");
-            var tool = matches[0];
-            var revision = ToolAuthoringService.LibraryRevision(tool);
-            if (!string.Equals(revision, request.ExpectedRevision,
-                    StringComparison.Ordinal))
-                throw new InvalidOperationException(
-                    "Tool documentation revision is stale. Refresh Tool Library.");
-            return new ToolLibraryDocumentationResponse
-            {
-                Type = ToolLibraryDocumentationResponse.ContractType,
-                ContractVersion =
-                    ToolLibraryResponse.CurrentContractVersion,
-                ToolId = tool.Id,
-                Revision = revision,
-                Markdown = ToolLibraryDocumentationService.Build(tool)
-            };
+            if (payload == null || string.IsNullOrWhiteSpace(payload.ChatId))
+                throw new InvalidOperationException("RESOURCE_ACCESS_DENIED: an explicit chat is required.");
+            var session = LoadAddressedSession(payload.ChatId);
+            var source = new ChatSession { Id = session.Id, Host = session.Host, DocumentKey = session.DocumentKey,
+                DocumentAuthorityId = session.DocumentAuthorityId };
+            return Task.Run(() => new ToolEditorResourceService(_toolExecutor.ResourceGateway, _resourceData, _toolCatalog)
+                .OpenDocumentation(source, payload, token), token);
         }
 
         public ResourceUploadOpenResponse BeginToolMutationUpload(ToolMutationUploadRequest request, CancellationToken token)

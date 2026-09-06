@@ -18,6 +18,92 @@ namespace RNAssistant.Harness
 {
     internal static partial class Program
     {
+        private static ToolLibraryDocumentationRequest ToolDocumentationRequest(ChatSession session, ToolCatalogEntry tool)
+        { return new ToolLibraryDocumentationRequest { Type = ToolLibraryDocumentationRequest.ContractType, ContractVersion = 1,
+            ChatId = session.Id, ToolId = tool.Id, ExpectedRevision = ToolAuthoringService.LibraryRevision(tool) }; }
+
+        private static void ToolEditorReadsPublishedDocumentation()
+        {
+            WithTempPaths(paths =>
+            {
+                var adapter = FakeOfficeAdapter.ForHost("Excel"); var skills = new SkillStore(paths); var tools = new ToolStore(paths);
+                var executor = new OfficeToolExecutor(adapter, new VbaJournalStore(paths), skills, tools);
+                var session = NewSession(adapter); var tool = executor.GetControllerTools().Single(item => item.Id == "common.resources_read");
+                var catalog = new ToolCatalogService(adapter, executor);
+                using (var data = new ResourceDataPlaneService(executor.ResourceGateway))
+                {
+                    var editor = new ToolEditorResourceService(executor.ResourceGateway, data, catalog);
+                    var request = ToolDocumentationRequest(session, tool);
+                    var response = editor.OpenDocumentation(session, request, CancellationToken.None);
+                    var metadata = JObject.FromObject(response);
+                    AssertTrue(metadata["markdown"] == null && metadata["code"] == null && metadata["data"] != null, "only metadata and a shared download lease cross the bridge");
+                    AssertEqual("rna://catalog/builtin-tools-excel/common.resources_read/documentation", response.Resource.Uri, "exact builtin documentation child");
+                    AssertEqual(0, adapter.VbaBackendCalls.Count, "documentation never discovers or reads Office/VBA");
+                    AssertEqual(0, session.Messages.Count, "reading human documentation grants no model evidence");
+                    var expected = ToolLibraryDocumentationService.Build(tool);
+                    var root = new ResourceRef("rna://catalog/builtin-tools-excel", response.Resource.Revision);
+                    var revisions = (IResourceRevisionStore)executor.ResourceAuthority.Store;
+                    var view = revisions.GetView(CatalogPublicationService.ScopeId, root, "catalog-state");
+                    AssertTrue(view.Parts.Any(part => part.Sha256 == response.Data.Payload.Sha256), "the published root retains documentation CAS parts");
+                    RuntimeThrows<ResourceRequestException>(() => data.Close("foreign", ToolEditorResourceService.Owner, response.Data.LeaseId));
+                    var changed = tool.Clone(); changed.Description += " A later build.";
+                    var publisher = new CatalogPublicationService(executor.ResourceAuthority, new ResourceMutationJournal(paths), tools, skills, () => "{}", adapter);
+                    publisher.RegisterBuiltInTools(new[] { changed });
+                    AssertTrue(!publisher.ReadPublic(publisher.Current(publisher.BuiltInToolsKind)).Contains("## Аргументы"), "public catalog never expands generated human docs");
+                    AssertEqual("RESOURCE_REVISION_CHANGED", RuntimeThrows<ResourceRequestException>(() =>
+                        editor.OpenDocumentation(session, request, CancellationToken.None)).ErrorCode, "a different registration publication cannot impersonate current runtime docs");
+                    using (var output = new MemoryStream())
+                    {
+                        for (var offset = 0; offset < response.Data.Payload.ByteLength;)
+                        {
+                            string mime;
+                            var bytes = data.ReadDownload(response.Data.LeaseId, offset,
+                                (int)Math.Min(512, response.Data.Payload.ByteLength - offset), CancellationToken.None, out mime);
+                            AssertEqual("text/markdown; charset=utf-8", mime, "inert documentation transport");
+                            output.Write(bytes, 0, bytes.Length); offset += bytes.Length;
+                        }
+                        AssertEqual(expected, new UTF8Encoding(false, true).GetString(output.ToArray()), "open exact download survives later publication");
+                    }
+                    data.Close(session.Id, ToolEditorResourceService.Owner, response.Data.LeaseId);
+                    var retained = executor.ResourceGateway.Read(session, new ResourceReadRequest { Reference = response.Resource, Representation = "text", MaxChars = 64 }).Result;
+                    AssertEqual(expected.Substring(0, 64), retained.Text, "historical document shares the normal retained Gateway path");
+                }
+            });
+        }
+
+        private static void ToolEditorDocumentationFailsClosed()
+        {
+            WithTempPaths(paths =>
+            {
+                var adapter = FakeOfficeAdapter.ForHost("Excel");
+                var executor = new OfficeToolExecutor(adapter, new VbaJournalStore(paths), new SkillStore(paths), new ToolStore(paths));
+                var session = NewSession(adapter); var tool = executor.GetControllerTools().First();
+                using (var data = new ResourceDataPlaneService(executor.ResourceGateway))
+                {
+                    var editor = new ToolEditorResourceService(executor.ResourceGateway, data, new ToolCatalogService(adapter, executor));
+                    var request = ToolDocumentationRequest(session, tool);
+                    for (var index = 0; index < 2; index++) data.OpenDownload(session, "other", 1,
+                        _ => new ResourceDownloadContent { Bytes = new byte[] { 1 }, ContentType = "text/plain" });
+                    RuntimeThrows<ResourceRequestException>(() => editor.OpenDocumentation(session, request, CancellationToken.None));
+                    RuntimeThrows<OperationCanceledException>(() => editor.OpenDocumentation(session, request, new CancellationToken(true)));
+                    data.CloseTransfers();
+                    request.ChatId = "foreign";
+                    RuntimeThrows<ResourceRequestException>(() => editor.OpenDocumentation(session, request, CancellationToken.None));
+                    request.ChatId = session.Id; request.ExpectedRevision = "stale";
+                    AssertEqual("RESOURCE_REVISION_CHANGED", RuntimeThrows<ResourceRequestException>(() => editor.OpenDocumentation(session, request, CancellationToken.None)).ErrorCode, "displayed tool revision is required");
+                    request = ToolDocumentationRequest(session, tool); request.ToolId = "excel.custom";
+                    AssertEqual("RESOURCE_NOT_FOUND", RuntimeThrows<ResourceRequestException>(() => editor.OpenDocumentation(session, request, CancellationToken.None)).ErrorCode, "documentation route cannot borrow custom source");
+                    request = ToolDocumentationRequest(session, tool);
+                    var response = editor.OpenDocumentation(session, request, CancellationToken.None);
+                    data.Close(session.Id, ToolEditorResourceService.Owner, response.Data.LeaseId);
+                    File.WriteAllText(executor.Payloads.PathFor(response.Data.Payload.Sha256), "corrupt");
+                    AssertEqual("RESOURCE_SNAPSHOT_UNAVAILABLE", RuntimeThrows<ResourceRequestException>(() => editor.OpenDocumentation(session, request, CancellationToken.None)).ErrorCode,
+                        "missing/corrupt published documentation never falls back to the live generator");
+                    AssertEqual(0, adapter.VbaBackendCalls.Count, "no Office access even on failures");
+                }
+            });
+        }
+
         private static ToolSourceReadRequest ToolSourceRequest(ChatSession session, ToolCatalogEntry tool)
         { return new ToolSourceReadRequest { Type = ToolSourceReadRequest.ContractType, ContractVersion = 1, ChatId = session.Id,
             ToolId = tool.Id, ExpectedRevision = ToolAuthoringService.LibraryRevision(tool) }; }

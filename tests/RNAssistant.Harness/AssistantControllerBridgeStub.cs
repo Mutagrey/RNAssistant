@@ -305,28 +305,17 @@ namespace RNAssistant.Office
 
         public InitResponse ClearRuntimeData() { return Initialize(); }
         public ToolLibraryResponse GetTools() { return EmptyToolLibrary(); }
-        public ToolLibraryDocumentationResponse GetToolDocumentation(
-            ToolLibraryDocumentationRequest request)
+        public Task<ToolLibraryDocumentationResponse> GetToolDocumentationAsync(ToolLibraryDocumentationRequest request, CancellationToken token)
         {
-            if (request == null ||
-                request.Type != ToolLibraryDocumentationRequest.ContractType ||
-                request.ContractVersion !=
-                    ToolLibraryResponse.CurrentContractVersion ||
-                string.IsNullOrWhiteSpace(request.ToolId) ||
-                string.IsNullOrWhiteSpace(request.ExpectedRevision))
-                throw new InvalidOperationException(
-                    "Unsupported Tool Library documentation contract.");
-            LastToolDocumentationId = request.ToolId;
-            LastToolDocumentationRevision = request.ExpectedRevision;
-            return new ToolLibraryDocumentationResponse
-            {
-                Type = ToolLibraryDocumentationResponse.ContractType,
-                ContractVersion =
-                    ToolLibraryResponse.CurrentContractVersion,
-                ToolId = request.ToolId,
-                Revision = request.ExpectedRevision,
-                Markdown = "# " + request.ToolId
-            };
+            token.ThrowIfCancellationRequested();
+            if (request == null || request.Type != ToolLibraryDocumentationRequest.ContractType || request.ContractVersion != 1 ||
+                string.IsNullOrWhiteSpace(request.ChatId)) throw new InvalidOperationException("Unsupported Tool Library documentation contract.");
+            LastToolDocumentationId = request.ToolId; LastToolDocumentationRevision = request.ExpectedRevision;
+            return Task.FromResult(new ToolLibraryDocumentationResponse { Type = ToolLibraryDocumentationResponse.ContractType, ContractVersion = 1,
+                ChatId = request.ChatId, ToolId = request.ToolId, Revision = request.ExpectedRevision,
+                Resource = new ResourceRef("rna://catalog/builtin-tools-excel/" + request.ToolId + "/documentation", "exact-docs"),
+                Data = new ResourceDownloadOpenResponse { LeaseId = new string('a', 64), Url = "https://rnassistant.local-resource/v1/download/" + new string('a', 64),
+                    MaxChunkBytes = 262144, Payload = new PayloadRef(new string('b', 64), 2, "text/markdown; charset=utf-8") } });
         }
         public Task<ToolSourceReadResponse> ReadToolSourceAsync(ToolSourceReadRequest request, CancellationToken token)
         {

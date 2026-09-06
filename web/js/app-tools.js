@@ -224,6 +224,7 @@ var toolStructuredEditor = window.RNAssistantToolStructuredEditor.create({
 var toolDocumentation = window.RNAssistantToolDocumentation.create({
   state: state,
   send: send,
+  cancelRequest: function (id) { return cancelBridgeRequest(id); },
   log: log
 });
 var toolActions = window.RNAssistantToolActions.create({
@@ -400,6 +401,7 @@ function acknowledgeToolSaves(submitted, saved) {
 }
 
 function cancelToolLibraryWrite() { toolActions.cancelWrite(); }
+function cancelToolDocumentationRead() { toolDocumentation.cancel(); }
 
 function updateToolWriteControls() {
   var tool = state.tools[state.selectedToolIndex], unavailable = !!state.bridgeUnavailable || !!state.toolLibraryWriting;
@@ -421,6 +423,7 @@ function updateToolWriteControls() {
 
 function reconcileToolLibraryCatalog(serverTools) {
   cancelToolSourceRead();
+  cancelToolDocumentationRead();
   (serverTools || []).forEach(function (serverTool) {
     var current = state.tools.find(function (tool) { return (tool._baseId || tool.Id) === serverTool.Id; });
     if (!current || !current._sourceLoaded) return;
@@ -820,6 +823,7 @@ function addVbaComponent(type) {
 }
 
 function bindToolActions() {
+  window.addEventListener("pagehide", cancelToolDocumentationRead);
   window.addEventListener("pagehide", cancelToolSourceRead);
   window.addEventListener("pagehide", cancelToolLibraryWrite);
   Array.prototype.slice.call(document.querySelectorAll(".tool-page-button")).forEach(function (button) { button.addEventListener("click", function () { syncSelectedToolFromEditor(); state.toolEditorPage = button.getAttribute("data-tool-page") || "main"; applyToolEditorPage(); }); });

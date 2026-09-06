@@ -101,9 +101,10 @@ source with a dirty draft blocks saving rather than silently rebasing it. Chat,
 selection, Library section and bridge/page closure cancel reads and close late
 leases. Existing revision-guarded mutation uploads remain the only write path.
 
-The separate generated built-in human-documentation view (`getToolDocumentation`)
-and remaining model/domain definition-read consumers are still open cutover work;
-they are not an inline fallback for editor source. The pre-existing VBA
+The separate generated built-in human-documentation view uses the same Gateway/
+download owner as described [below](#human-documentation-without-model-context-cost).
+Remaining model/domain definition-read consumers are still open cutover work.
+The pre-existing VBA
 canonical-hash/raw-line-ending collision remains an explicit
 [authority gap](stabilization/BACKLOG.md#existing-defects-outside-the-active-slice).
 Real Office/WebView2 qualification remains open.
@@ -243,15 +244,37 @@ argument schema. It covers purpose, target selection, semantic arguments, defaul
 types/enums/bounds, confirmation/effect semantics, result and common error examples,
 limitations and a safe Library test recipe.
 
-Built-in `Readme` remains empty in the compact Library projection. Contract tests
+Built-in README is absent from the compact Library projection and remains empty
+in the source-editor body. Contract tests
 prove that generated documentation is absent from
 `ConversationPromptComposer.BuildDescription`, model tool descriptors,
 `RUNTIME_CONTEXT`, capability search/read, Tool Result and request-token accounting;
 it cannot change executable ToolPack registration or model capability-catalog
-revision. Full Markdown is generated and loaded only for the selected exact
-built-in id/revision through the separate
-`rnassistant.toolLibraryDocumentation*` v1 UI detail DTO. Custom package
-README/provenance remains package-owned.
+revision. Full Markdown is generated from source-owned registrations/policies at
+the existing builtin catalog publication boundary. Typed publication entries retain
+the definition and a documentation CAS `PayloadRef`; the root's committed view
+retains these parts. Neither compact/public catalog projections nor execution
+registrations acquire generated Markdown or reconstructed runtime policy.
+
+Only opening the selected builtin's Docs tab requests `getToolDocumentation` with
+explicit chat, id and expected Library revision. The controller delegates to
+`ToolEditorResourceService`; it reserves shared download capacity before reading
+`rna://catalog/builtin-tools-<host>/<id>/documentation` through the Gateway.
+The child has an exact root-publication dependency, not its own synthetic head.
+The service verifies the published definition/body against this runtime's original
+registration/policy; re-generation is comparison only, never a missing-CAS fallback.
+This path does not discover live VBA or call Office. Historical reads use retained
+snapshots and do not activate a catalog or grant model observations.
+
+The typed `rnassistant.toolLibraryDocumentation*` v1 response carries chat/id/revision,
+an exact `ResourceRef` and the shared download lease, not inline `markdown`.
+Complete UTF-8/SHA-256 verification and the 2 MiB limit precede rendering. One
+selected-tool/chat/revision cache replaces the state-wide body/request dictionaries;
+selection/catalog/chat/Library-section and bridge/page closure cancel requests,
+discard stale cached bodies and close late leases. Cancelled openings keep their
+bounded pending slots until settled. Errors remain explicit, without automatic
+retry or an inline reader. Custom README/provenance remains package-owned.
+Windows WebView2/Office qualification remains open.
 
 Model-facing descriptions stay short and operational. `UseWhen`, `DoNotUseWhen`
 and limitations are audited for selection value rather than copied from the human

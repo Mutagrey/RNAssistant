@@ -6,6 +6,7 @@ using RNAssistant.Core.Models;
 using RNAssistant.Core.Services;
 using RNAssistant.Core.Tools;
 using RNAssistant.Office.Contracts;
+using RNAssistant.Office.Tools;
 
 namespace RNAssistant.Office.Services
 {
@@ -86,9 +87,18 @@ namespace RNAssistant.Office.Services
             else if (ToolKind(address.Segments[0]))
             {
                 var root = new ResourceRef(ResourceUri.Create("catalog", address.Segments[0]), exact.Revision);
-                var tool = FindTool(root, address.Segments[1]);
-                descriptor = DescribeTool(root, tool);
-                text = JsonConvert.SerializeObject(ToolSourceBodyDto.From(tool));
+                if (address.Segments[2] == "documentation")
+                {
+                    var publication = FindBuiltIn(root, address.Segments[1]);
+                    descriptor = DescribeTool(root, publication.Definition, true);
+                    text = _catalogs.ReadDocumentation(publication.Documentation);
+                }
+                else
+                {
+                    var tool = FindTool(root, address.Segments[1]);
+                    descriptor = DescribeTool(root, tool);
+                    text = JsonConvert.SerializeObject(ToolSourceBodyDto.From(tool));
+                }
             }
             else
             {
@@ -126,7 +136,8 @@ namespace RNAssistant.Office.Services
             var parsed = ResourceUri.Parse(uri);
             if (parsed.Provider != Id || parsed.Segments.Count < 1 || !Kinds.Contains(parsed.Segments[0]) ||
                 parsed.Segments.Count != 1 &&
-                !(ToolKind(parsed.Segments[0]) && parsed.Segments.Count == 3 && parsed.Segments[2] == "source" ||
+                !(ToolKind(parsed.Segments[0]) && parsed.Segments.Count == 3 && (parsed.Segments[2] == "source" ||
+                    parsed.Segments[0] == _catalogs.BuiltInToolsKind && parsed.Segments[2] == "documentation") ||
                   SkillKind(parsed.Segments[0]) && (parsed.Segments.Count == 3 && parsed.Segments[2] == "body" ||
                   parsed.Segments.Count == 4 && parsed.Segments[2] == "reference")))
                 throw Error("Unknown catalog resource.", "RESOURCE_NOT_FOUND");
@@ -138,7 +149,7 @@ namespace RNAssistant.Office.Services
             var address = Address(exact.Uri);
             if (address.Segments.Count == 1) return DescribeRoot(exact);
             var root = new ResourceRef(ResourceUri.Create("catalog", address.Segments[0]), exact.Revision);
-            if (ToolKind(address.Segments[0])) return DescribeTool(root, FindTool(root, address.Segments[1]));
+            if (ToolKind(address.Segments[0])) return DescribeTool(root, FindTool(root, address.Segments[1]), address.Segments[2] == "documentation");
             var skill = FindSkill(root, address.Segments[1]);
             return DescribeSkill(root, skill, address.Segments.Count == 4 ? FindReference(skill, address.Segments[3]) : null);
         }
@@ -147,15 +158,24 @@ namespace RNAssistant.Office.Services
         { return JsonConvert.DeserializeObject<SkillDefinition[]>(_catalogs.Read(root)); }
         private ToolCatalogEntry FindTool(ResourceRef root, string id)
         {
+            if (ResourceUri.Parse(root.Uri).Segments[0] == _catalogs.BuiltInToolsKind) return FindBuiltIn(root, id).Definition;
             var values = JsonConvert.DeserializeObject<ToolCatalogEntry[]>(_catalogs.Read(root)).Where(item => item.Id == id).Take(2).ToArray();
             if (values.Length != 1) throw Error("The exact tool source is unavailable or ambiguous.", "RESOURCE_SNAPSHOT_UNAVAILABLE");
             return values[0];
         }
-        private static ResourceDescriptor DescribeTool(ResourceRef root, ToolCatalogEntry tool)
+        private BuiltInToolPublication FindBuiltIn(ResourceRef root, string id)
+        {
+            var values = _catalogs.ReadBuiltInTools(root).Where(item => item.Definition.Id == id).Take(2).ToArray();
+            if (values.Length != 1) throw Error("The exact built-in tool is unavailable or ambiguous.", "RESOURCE_SNAPSHOT_UNAVAILABLE");
+            return values[0];
+        }
+        private static ResourceDescriptor DescribeTool(ResourceRef root, ToolCatalogEntry tool, bool documentation = false)
         {
             var descriptor = new ResourceDescriptor { Reference = new ResourceRef(ResourceUri.Create("catalog",
-                    ResourceUri.Parse(root.Uri).Segments[0], tool.Id, "source"), root.Revision),
-                Provider = "catalog", Title = tool.Id, Kind = "tool-source", MimeType = "application/json", Mutable = false, Tracking = "strongly-tracked" };
+                    ResourceUri.Parse(root.Uri).Segments[0], tool.Id, documentation ? "documentation" : "source"), root.Revision),
+                Provider = "catalog", Title = tool.Id, Kind = documentation ? "tool-documentation" : "tool-source",
+                MimeType = documentation ? "text/markdown" : "application/json", Mutable = false, Tracking = "strongly-tracked" };
+            if (documentation) descriptor.Metadata["libraryRevision"] = ToolAuthoringService.LibraryRevision(tool);
             descriptor.Representations.Add("text"); descriptor.Capabilities.Add("read");
             descriptor.Dependencies.Add(new ResourceDependency(root, "text", ResourceCoverage.Whole(), "catalog-publication"));
             return descriptor;

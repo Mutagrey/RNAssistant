@@ -278,6 +278,11 @@ They cover the shared capacity, chat/consumer isolation, single-use and complete
 typed UTF-8/hash validation, then the existing guarded authoring/publication owner.
 Source checks cover committed custom/builtin snapshots, historical exact children,
 document-local live drift, metadata-only delivery and capacity before live capture.
+Builtin documentation checks verify committed CAS parts/exact children, no Office
+discovery, historical downloads, runtime-registration mismatch and no generator
+fallback after CAS corruption. `tests/web/tool-documentation-resource.test.js`
+covers lazy complete Markdown delivery, one selected cache, integrity/bounds,
+pending slots and late chat/selection/page/cancel responses.
 `tests/web/tool-editor-resource.test.js` covers exact source contracts, hydration
 neutrality, read-only failures, clean-cache bounds, dirty conflicts and late leases.
 `tests/web/tool-package-actions.test.js` covers Save/pre-install transport, empty

@@ -17,6 +17,7 @@ namespace RNAssistant.Office.Contracts
 
         [JsonProperty("type")] public string Type { get; set; }
         [JsonProperty("contractVersion")] public int ContractVersion { get; set; }
+        [JsonProperty("chatId")] public string ChatId { get; set; }
         [JsonProperty("toolId")] public string ToolId { get; set; }
         [JsonProperty("expectedRevision")] public string ExpectedRevision { get; set; }
     }
@@ -28,9 +29,11 @@ namespace RNAssistant.Office.Contracts
 
         [JsonProperty("type")] public string Type { get; set; }
         [JsonProperty("contractVersion")] public int ContractVersion { get; set; }
+        [JsonProperty("chatId")] public string ChatId { get; set; }
         [JsonProperty("toolId")] public string ToolId { get; set; }
         [JsonProperty("revision")] public string Revision { get; set; }
-        [JsonProperty("markdown")] public string Markdown { get; set; }
+        [JsonProperty("resource")] public ResourceRef Resource { get; set; }
+        [JsonProperty("data")] public ResourceDownloadOpenResponse Data { get; set; }
     }
 
     // Typed bulk upload body, not a bridge control payload.

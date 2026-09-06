@@ -182,11 +182,12 @@ console.log("PASS Tool Library form: typed controls, omit/null, bounds and seman
     Id: "excel.inspect", Revision: "r".repeat(64), BuiltIn: true
   };
   const docState = {
-    toolEditorPage: "main", tools: [docTool], selectedToolIndex: 0
+    toolEditorPage: "main", tools: [docTool], selectedToolIndex: 0, selectedInstructionKind: "tool", activeChatId: "chat", host: "Excel"
   };
   const docCalls = [];
   const docContext = vm.createContext({
-    window: null,
+    window: null, AbortController, TextDecoder,
+    fetch() {}, RNAssistantResourceDownload: { read: async () => new TextEncoder().encode("# exact docs") },
     $: id => docElements.get(id) || null
   });
   docContext.window = docContext;
@@ -196,12 +197,15 @@ console.log("PASS Tool Library form: typed controls, omit/null, bounds and seman
   const documentation = docContext.RNAssistantToolDocumentation.create({
     state: docState,
     log() {},
+    cancelRequest: async () => {},
     async send(action, payload) {
       docCalls.push({ action, payload });
+      if (action === "resourceDataClose") return { closed: true };
       return {
         type: "rnassistant.toolLibraryDocumentation", contractVersion: 1,
-        toolId: docTool.Id, revision: docTool.Revision,
-        markdown: "# exact docs"
+        chatId: "chat", toolId: docTool.Id, revision: docTool.Revision,
+        resource: { uri: "rna://catalog/builtin-tools-excel/excel.inspect/documentation", revision: "exact" },
+        data: { leaseId: "a".repeat(64), payload: { contentType: "text/markdown; charset=utf-8" } }
       };
     }
   });
@@ -210,7 +214,7 @@ console.log("PASS Tool Library form: typed controls, omit/null, bounds and seman
   assert.equal(docCalls.length, 0, "documentation is not fetched before its tab opens");
   docState.toolEditorPage = "docs";
   await documentation.ensure();
-  assert.equal(docCalls.length, 1);
+  assert.equal(docCalls.length, 2);
   assert.equal(docCalls[0].action, "getToolDocumentation");
   assert.equal(docCalls[0].payload.toolId, docTool.Id);
   assert.equal(docCalls[0].payload.expectedRevision, docTool.Revision);

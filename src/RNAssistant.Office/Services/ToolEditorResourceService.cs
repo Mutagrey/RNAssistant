@@ -25,6 +25,42 @@ namespace RNAssistant.Office.Services
         { _gateway = gateway ?? throw new ArgumentNullException(nameof(gateway)); _data = data ?? throw new ArgumentNullException(nameof(data));
           _tools = tools ?? throw new ArgumentNullException(nameof(tools)); }
 
+        internal ToolLibraryDocumentationResponse OpenDocumentation(ChatSession session, ToolLibraryDocumentationRequest request, CancellationToken token)
+        {
+            if (session == null || string.IsNullOrWhiteSpace(session.Id) || request == null || request.ChatId != session.Id ||
+                request.Type != ToolLibraryDocumentationRequest.ContractType || request.ContractVersion != ToolLibraryResponse.CurrentContractVersion ||
+                string.IsNullOrWhiteSpace(request.ToolId) || string.IsNullOrWhiteSpace(request.ExpectedRevision))
+                throw Error("RESOURCE_ACCESS_DENIED", "An exact addressed built-in documentation request is required.");
+            ToolLibraryDocumentationResponse response = null;
+            var lease = _data.OpenDownload(session, Owner, ToolLibraryDocumentationService.MaximumBytes, cancellation =>
+            {
+                cancellation.ThrowIfCancellationRequested();
+                // Built-in registration lookup is host-neutral; documentation never discovers live VBA.
+                var matches = _tools.GetBuiltInTools().Where(item => item.BuiltIn && item.Id == request.ToolId).Take(2).ToArray();
+                if (matches.Length != 1) throw Error("RESOURCE_NOT_FOUND", "The exact built-in tool is unavailable or ambiguous.");
+                var tool = matches[0];
+                if (ToolAuthoringService.LibraryRevision(tool) != request.ExpectedRevision)
+                    throw Error("RESOURCE_REVISION_CHANGED", "The tool changed. Refresh the Tool Library.");
+                var uri = ResourceUri.Create("catalog", "builtin-tools-" + _tools.HostName.ToLowerInvariant(), tool.Id, "documentation");
+                var read = _gateway.Read(session, new ResourceReadRequest { Reference = new ResourceRef(uri),
+                    Representation = ResourceRepresentations.Text, MaxChars = 32000 }).Result;
+                var bytes = ReadComplete(read, uri, "tool-documentation", ResourceRepresentations.Text, ToolLibraryDocumentationService.MaximumBytes);
+                string revision;
+                // Verify this publication against the current source-owned definition/policy.
+                // Generation here is only comparison: missing CAS never falls back to a rebuilt body.
+                if (!read.Resource.Metadata.TryGetValue("libraryRevision", out revision) || revision != request.ExpectedRevision ||
+                    new UTF8Encoding(false, true).GetString(bytes) != ToolLibraryDocumentationService.Build(tool))
+                    throw Error("RESOURCE_REVISION_CHANGED", "Published documentation does not match this runtime registration.");
+                cancellation.ThrowIfCancellationRequested();
+                response = new ToolLibraryDocumentationResponse { Type = ToolLibraryDocumentationResponse.ContractType,
+                    ContractVersion = ToolLibraryResponse.CurrentContractVersion, ChatId = session.Id, ToolId = tool.Id,
+                    Revision = request.ExpectedRevision, Resource = read.Resource.Reference.Copy() };
+                return new ResourceDownloadContent { Bytes = bytes, ContentType = "text/markdown; charset=utf-8" };
+            }, token);
+            try { token.ThrowIfCancellationRequested(); response.Data = lease; return response; }
+            catch { _data.Close(session.Id, Owner, lease.LeaseId); throw; }
+        }
+
         internal ToolSourceReadResponse Open(ChatSession session, ToolSourceReadRequest request, CancellationToken token)
         {
             if (session == null || string.IsNullOrWhiteSpace(session.Id) || request == null || request.ChatId != session.Id ||
@@ -91,12 +127,12 @@ namespace RNAssistant.Office.Services
             catch { _data.Close(session.Id, Owner, lease.LeaseId); throw; }
         }
 
-        private byte[] ReadComplete(ResourceReadResult read, string uri, string kind, string representation)
+        private byte[] ReadComplete(ResourceReadResult read, string uri, string kind, string representation, int maximumBytes = MaximumMutationBytes)
         {
             var payload = read?.CompleteViewPayload;
             if (read?.Resource?.Reference?.IsExact != true || read.Resource.Reference.Uri != uri || read.Resource.Kind != kind ||
-                read.Representation != representation || payload == null || payload.ByteLength > MaximumMutationBytes ||
-                read.TotalCharacters < 0 || read.TotalCharacters > MaximumMutationBytes)
+                read.Representation != representation || payload == null || payload.ByteLength > maximumBytes ||
+                read.TotalCharacters < 0 || read.TotalCharacters > maximumBytes)
                 throw Error("RESOURCE_SNAPSHOT_UNAVAILABLE", "A complete bounded tool source snapshot is required.");
             var bytes = _gateway.Authority.Payloads.ReadBytes(payload.ToBlobReference());
             if (bytes == null || new UTF8Encoding(false, true).GetString(bytes).Length != read.TotalCharacters)

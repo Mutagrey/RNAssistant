@@ -664,6 +664,8 @@ namespace RNAssistant.Harness
                 Test("tool editor: uploaded batch uses existing mutation owner", ToolEditorUploadUsesMutationOwner),
                 Test("tool editor: exact published source download", ToolEditorReadsPublishedSource),
                 Test("tool editor: exact document source and capacity", ToolEditorReadsExactDocumentSource),
+                Test("tool editor: exact builtin documentation publication", ToolEditorReadsPublishedDocumentation),
+                Test("tool editor: builtin documentation fails closed", ToolEditorDocumentationFailsClosed),
                 Test("tool editor: upload integrity isolation and bounds", ToolEditorUploadBounds),
                 Test("resource cutover: exact catalog publication continuations", ResourceCatalogContinuationsPinPublication),
                 Test("resource cutover: unavailable catalog snapshots fail closed", ResourceCatalogSnapshotsFailClosed),

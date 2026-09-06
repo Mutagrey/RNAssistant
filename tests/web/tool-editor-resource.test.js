@@ -23,7 +23,7 @@ function fixture(readme = "# Справка\r\n" + "ж".repeat(140000) + "😀",
   const context = vm.createContext({ AbortController, TextEncoder, TextDecoder, Uint8Array, setTimeout, clearTimeout, crypto: crypto.webcrypto,
     state, $: id => elements[id] || (elements[id] = { value: "", checked: false }), setControlBusy() {}, logToolResult() {},
     log: error => errors.push(error), cancelBridgeRequest: async id => cancelled.push(id),
-    RNAssistantToolStructuredEditor: { create: () => ({}) }, RNAssistantToolDocumentation: { create: () => ({}) }, RNAssistantToolActions: { create: () => ({}) },
+    RNAssistantToolStructuredEditor: { create: () => ({}) }, RNAssistantToolDocumentation: { create: () => ({ cancel() {} }) }, RNAssistantToolActions: { create: () => ({}) },
     send(action, payload) {
       calls.push(action);
       if (action === "resourceDataClose") { closes.push(payload); return Promise.resolve(); }
@@ -121,7 +121,7 @@ function fixture(readme = "# Справка\r\n" + "ж".repeat(140000) + "😀",
     assert.ok(read("js/app-tools.js").includes('window.addEventListener("pagehide", cancelToolSourceRead)'));
     assert.ok(!read("js/app-tools.js").includes("function readTools()"));
     for (const file of ["app-tools.js", "app-tools-actions.js", "app-prompts.js", "app-chat-state.js", "app-chat-session.js"])
-      assert.ok(read("index.html").includes(file + "?v=tool-source-20260906-1"));
+      assert.ok(read("index.html").includes(file + "?v=tool-docs-20260906-1"));
     console.log("PASS tool source: shared download/lifecycle cutover shipped without old whole-catalog serializer");
   }
   console.log("OK 6/6");

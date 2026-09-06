@@ -110,6 +110,12 @@ tool children depend on existing catalog publications; document-local tools prov
 their exact live VBA component refs, with no second document catalog authority.
 All outgoing Library DTOs omit source bodies. Hydration, draft conflicts and
 selected-source cache rules belong to [Tool source reads](tool-library.md#library-source-reads).
+Generated builtin human documentation now shares this owner: publication captures
+source-owned policy-derived Markdown into CAS parts, and exact `/documentation`
+children are read without Office access. UI controls carry only metadata and a
+bounded download; generated bodies never enter callable registrations or compact
+catalog projections. Bounds, comparison-only verification, cache and cancellation
+rules belong to [Tool documentation](tool-library.md#human-documentation-without-model-context-cost).
 The same owner consumes the single-use upload route:
 ordinary Save and save-before-VBA-install send chat/lease/hash-only
 controls and one bounded typed batch. Existing Tool authoring, catalog commit and
@@ -336,8 +342,10 @@ inline Tool Library mutation requests in Save and save-before-install
 (now one bounded upload consumer through the same guarded authoring/commit owner);
 inline Tool Library schema/code/README/component catalog and response bodies,
 plus the UI whole-catalog body serializer/component reconstruction fallback
-(now exact selected source through Gateway/CAS and shared download; generated
-built-in human documentation remains a separate open consumer);
+(now exact selected source through Gateway/CAS and shared download);
+inline generated builtin documentation controls and state-wide documentation/body
+request caches (now committed documentation CAS parts, exact catalog children and
+the same bounded download owner, with one selected cache and no generator fallback);
 separate state/Office retained text readers, externally hash-bound Office/state/catalog
 continuations, and read-side exposure of prepared state/context/catalog identities.
 No compatibility alias, dual-write or feature flag restores these paths.

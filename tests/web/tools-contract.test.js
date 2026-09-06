@@ -137,31 +137,29 @@ function library(tools) {
 }
 
 {
-  const tool = { Id: "excel.inspect", Revision: "d".repeat(64) };
-  const markdown = context.RNAssistantToolDocumentation.fromContract({
+  const operation = { toolId: "excel.inspect", revision: "d".repeat(64), chatId: "chat", host: "excel" };
+  const response = {
     type: "rnassistant.toolLibraryDocumentation",
     contractVersion: 1,
-    toolId: tool.Id,
-    revision: tool.Revision,
-    markdown: "# excel.inspect"
-  }, tool);
-  assert.equal(markdown, "# excel.inspect");
+    toolId: operation.toolId,
+    revision: operation.revision, chatId: "chat",
+    resource: { uri: "rna://catalog/builtin-tools-excel/excel.inspect/documentation", revision: "exact" },
+    data: { payload: { contentType: "text/markdown; charset=utf-8" } }
+  };
+  assert.equal(context.RNAssistantToolDocumentation.fromContract(response, operation), response);
   assert.throws(() => context.RNAssistantToolDocumentation.fromContract({
-    type: "rnassistant.toolLibraryDocumentation",
-    contractVersion: 1,
-    toolId: tool.Id,
-    revision: "stale",
-    markdown: "# stale"
-  }, tool), /typed contract/);
+    ...response, revision: "stale"
+  }, operation), /typed contract/);
+  assert.throws(() => context.RNAssistantToolDocumentation.fromContract({ ...response, markdown: "inline" }, operation), /typed contract/);
   assert.match(documentationSource, /getToolDocumentation/);
-  assert.match(documentationSource, /expectedRevision:\s*tool\.Revision/);
+  assert.match(documentationSource, /expectedRevision:\s*operation\.revision/);
   assert.ok(index.includes("id=\"toolDocumentationMarkdown\""));
   console.log("PASS tool contract: built-in documentation uses exact UI-only id/revision boundary");
 }
 
 {
   assert.ok(index.includes(
-    "app-tools.js?v=tool-source-20260906-1"));
+    "app-tools.js?v=tool-docs-20260906-1"));
   assert.equal(/StoragePath|storagePath/.test(source), false);
   assert.match(source, /expectedRevision/);
   assert.match(source, /toolLibraryMutationRequestType/);

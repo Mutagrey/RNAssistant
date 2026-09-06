@@ -236,6 +236,7 @@
     }
     if (!toolSelected) {
       if (typeof cancelToolSourceRead === "function") cancelToolSourceRead();
+      if (typeof cancelToolDocumentationRead === "function") cancelToolDocumentationRead();
       if (typeof trimToolSourceCache === "function") trimToolSourceCache(null);
     }
     if (promptSelected) renderPromptEditor();
