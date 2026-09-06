@@ -111,7 +111,7 @@ vm.runInContext(source, context, { filename: "app-artifacts.js" });
   assert.ok(index.includes("app-core.js?v=chat-sync-20260903-1"), "core has the chat sync cache key");
   assert.ok(index.includes("app-chat-state.js?v=context-usage-display-20260907-1"), "chat state has the context usage cache key");
   assert.ok(index.includes("app-chat-session.js?v=context-usage-display-20260907-1"), "chat session has the context usage cache key");
-  assert.ok(index.includes("app-artifacts.js?v=binary-chunks-20260906-1"), "artifact cards have the current resource cache key");
+  assert.ok(index.includes("app-artifacts.js?v=resource-index-20260907-1"), "artifact cards have the resource index cache key");
   assert.ok(index.includes("app-html-workspace-model.js?v=html-read-20260906-1"), "artifact selection model has the gallery cache key");
   assert.ok(index.includes("app-html-workspace.js?v=html-read-20260906-1"), "artifact actions have the current resource cache key");
   assert.ok(index.includes("app-html-workspace-actions.js?v=html-read-20260906-1"), "artifact tool calls have the current resource cache key");
@@ -119,6 +119,9 @@ vm.runInContext(source, context, { filename: "app-artifacts.js" });
   assert.ok(index.includes("app-html-workspace-artifacts.js?v=binary-chunks-20260906-1"), "artifact detail has the current resource cache key");
   assert.ok(index.includes("app-chart-artifacts.js?v=ui-lazy-20260903-1"), "chart artifact renderer has the lazy UI cache key");
   assert.ok(index.includes("app-html-workspace-editor.js?v=html-read-20260906-1"), "artifact action bridge has the lazy UI cache key");
+  assert.match(source, /function artifactProjection\(\)/, "artifact UI builds a transient projection index");
+  assert.doesNotMatch(source, /artifactLibraryHeads\(\)\.filter/, "head lookup does not scan all heads per card");
+  assert.doesNotMatch(source, /filtered\.filter/, "resource navigation groups filtered rows in one pass");
   console.log("PASS artifact library: client lineage inference and Plan JSON label are removed");
 }
 

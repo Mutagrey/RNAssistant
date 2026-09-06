@@ -2,6 +2,7 @@
   "use strict";
 
   var resourceNavigationChatId = "";
+  var artifactProjectionIndex = null;
 
   function value(source, pascal, camel, fallback) {
     source = source || {};
@@ -19,9 +20,7 @@
   function artifactRemoved(artifact) {
     var uri = String(value(artifact, "ResourceUri", "resourceUri", "") || "").toLowerCase();
     if (!uri) return false;
-    var projection = state.artifactLibrary || {};
-    var removed = value(projection, "RemovedResourceUris", "removedResourceUris", []) || [];
-    return removed.some(function (item) { return String(item || "").toLowerCase() === uri; });
+    return !!artifactProjection().removedResourceUris[uri];
   }
 
   function artifactLibraryHeads() {
@@ -33,17 +32,79 @@
     return value(head, "History", "history", []) || [];
   }
 
+  function artifactProjectionKey() {
+    var projection = state.artifactLibrary || {};
+    var heads = artifactLibraryHeads();
+    var artifacts = state.artifacts || [];
+    var removed = value(projection, "RemovedResourceUris", "removedResourceUris", []) || [];
+    return [
+      state.activeChatId || "",
+      value(projection, "SessionRevision", "sessionRevision", 0) || 0,
+      heads.length,
+      artifacts.length,
+      removed.length
+    ].join("|");
+  }
+
+  function artifactProjection() {
+    var key = artifactProjectionKey();
+    var heads = artifactLibraryHeads();
+    var artifacts = state.artifacts || [];
+    var projection = state.artifactLibrary || {};
+    var removed = value(projection, "RemovedResourceUris", "removedResourceUris", []) || [];
+    if (artifactProjectionIndex && artifactProjectionIndex.key === key &&
+        artifactProjectionIndex.headsRef === heads &&
+        artifactProjectionIndex.artifactsRef === artifacts &&
+        artifactProjectionIndex.removedRef === removed) return artifactProjectionIndex;
+    var artifactByIdMap = {};
+    artifacts.forEach(function (artifact) {
+      var id = String(artifactId(artifact) || "").toLowerCase();
+      if (id) artifactByIdMap[id] = artifact;
+    });
+    var headByArtifactId = {};
+    var headByHistoryArtifactId = {};
+    var revisionResourceUri = {};
+    var headArtifacts = [];
+    heads.forEach(function (head) {
+      var headId = String(value(head, "ArtifactId", "artifactId", "") || "").toLowerCase();
+      if (headId) headByArtifactId[headId] = head;
+      libraryHistory(head).forEach(function (revision) {
+        var id = String(value(revision, "ArtifactId", "artifactId", "") || "").toLowerCase();
+        if (!id) return;
+        if (!headByHistoryArtifactId[id]) headByHistoryArtifactId[id] = head;
+        revisionResourceUri[id + "|" + Number(value(revision, "Revision", "revision", 1) || 1)] =
+          value(revision, "ResourceUri", "resourceUri", "") || "";
+      });
+      var artifact = headId ? artifactByIdMap[headId] : null;
+      if (artifact) headArtifacts.push(libraryHeadArtifactFromMap(head, artifact));
+    });
+    var removedResourceUris = {};
+    removed.forEach(function (uri) {
+      uri = String(uri || "").toLowerCase();
+      if (uri) removedResourceUris[uri] = true;
+    });
+    artifactProjectionIndex = {
+      key: key,
+      headsRef: heads,
+      artifactsRef: artifacts,
+      removedRef: removed,
+      artifactById: artifactByIdMap,
+      headByArtifactId: headByArtifactId,
+      headByHistoryArtifactId: headByHistoryArtifactId,
+      headArtifacts: headArtifacts,
+      revisionResourceUri: revisionResourceUri,
+      removedResourceUris: removedResourceUris
+    };
+    return artifactProjectionIndex;
+  }
+
   function libraryHeadForArtifact(artifact) {
     var embedded = value(artifact, "LibraryHead", "libraryHead", null);
     if (embedded) return embedded;
     var id = String(artifactId(artifact) || "").toLowerCase();
     if (!id) return null;
-    return artifactLibraryHeads().filter(function (head) {
-      if (String(value(head, "ArtifactId", "artifactId", "")).toLowerCase() === id) return true;
-      return libraryHistory(head).some(function (revision) {
-        return String(value(revision, "ArtifactId", "artifactId", "")).toLowerCase() === id;
-      });
-    })[0] || null;
+    var index = artifactProjection();
+    return index.headByArtifactId[id] || index.headByHistoryArtifactId[id] || null;
   }
 
   function artifactResourceClass(artifact) {
@@ -69,6 +130,10 @@
   function libraryHeadArtifact(head) {
     var artifact = artifactById(value(head, "ArtifactId", "artifactId", ""));
     if (!artifact) return null;
+    return libraryHeadArtifactFromMap(head, artifact);
+  }
+
+  function libraryHeadArtifactFromMap(head, artifact) {
     var result = {};
     Object.keys(artifact).forEach(function (key) { result[key] = artifact[key]; });
     result.displayKind = value(head, "DisplayKind", "displayKind", artifactKind(artifact));
@@ -78,9 +143,7 @@
 
   function artifactById(id) {
     var normalized = String(id || "").toLowerCase();
-    return (state.artifacts || []).filter(function (artifact) {
-      return String(artifactId(artifact) || "").toLowerCase() === normalized;
-    })[0] || null;
+    return normalized ? artifactProjection().artifactById[normalized] || null : null;
   }
 
   function messageResourceRefs(message) {
@@ -96,12 +159,7 @@
     if (direct) return direct;
     var id = String(artifactId(artifact) || "").toLowerCase();
     var revision = artifactRevision(artifact);
-    var head = libraryHeadForArtifact(artifact);
-    var exact = libraryHistory(head).filter(function (item) {
-      return String(value(item, "ArtifactId", "artifactId", "") || "").toLowerCase() === id &&
-        Number(value(item, "Revision", "revision", 1) || 1) === revision;
-    })[0] || null;
-    return value(exact, "ResourceUri", "resourceUri", "") || "";
+    return artifactProjection().revisionResourceUri[id + "|" + revision] || "";
   }
 
   function isImageArtifact(artifact) {
@@ -394,7 +452,7 @@
 
   function artifactResourceHeads(sourceArtifacts) {
     if (!Array.isArray(sourceArtifacts)) {
-      return artifactLibraryHeads().map(libraryHeadArtifact).filter(Boolean);
+      return artifactProjection().headArtifacts.slice();
     }
     var seen = {};
     return sourceArtifacts.filter(function (artifact) {
@@ -720,9 +778,9 @@
     button.setAttribute("aria-expanded", open ? "true" : "false");
     if (open) {
       if (typeof window.setAgentPlanDockOpen === "function") window.setAgentPlanDockOpen(false);
-      renderChatResourceNavigation();
+      var itemCount = renderChatResourceNavigation();
       var search = $("chatResourcesSearchInput");
-      if (search && chatDockResourceHeads().length > 6) search.focus();
+      if (search && itemCount > 6) search.focus();
     }
   }
 
@@ -732,7 +790,7 @@
     var count = $("chatResourceCount");
     var list = $("chatResourcesList");
     var search = $("chatResourcesSearchInput");
-    if (!button || !count || !list) return;
+    if (!button || !count || !list) return 0;
     var items = chatDockResourceHeads();
     var hasResources = !!state.activeChatId && !!items.length;
     if (dock) dock.classList.toggle("hidden", !hasResources);
@@ -761,11 +819,17 @@
       empty.className = "chat-resource-empty";
       empty.textContent = query ? "Ничего не найдено." : "Ресурсов пока нет.";
       list.appendChild(empty);
-      return;
+      return items.length;
     }
 
+    var groups = { authored: [], files: [], generated: [], system: [] };
+    filtered.forEach(function (artifact) {
+      var category = kindCategory(artifact);
+      if (!groups[category]) groups[category] = [];
+      groups[category].push(artifact);
+    });
     ["authored", "files", "generated", "system"].forEach(function (category) {
-      var groupItems = filtered.filter(function (artifact) { return kindCategory(artifact) === category; });
+      var groupItems = groups[category] || [];
       if (!groupItems.length) return;
       var section = document.createElement("section");
       section.className = "chat-resource-group";
@@ -801,6 +865,7 @@
       });
       list.appendChild(section);
     });
+    return items.length;
   }
 
   function bindChatResourceNavigation() {
