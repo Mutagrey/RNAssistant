@@ -552,12 +552,18 @@ function reconcileMessageUnits(box, units) {
       node = unit.render();
     }
     nextCache[unit.key] = { signature: unit.signature, node: node };
-    box.appendChild(node);
   });
   Object.keys(renderedMessageUnits).forEach(function (key) {
     if (!nextCache[key] && renderedMessageUnits[key].node && typeof clearMarkdownEnhancements === "function") {
       clearMarkdownEnhancements(renderedMessageUnits[key].node);
     }
+  });
+
+  // Reattach the current cached nodes as one ordered set. Appending only the
+  // changed node leaves previous live-stream snapshots in the container.
+  box.textContent = "";
+  units.forEach(function (unit) {
+    box.appendChild(nextCache[unit.key].node);
   });
   renderedMessageUnits = nextCache;
 }
