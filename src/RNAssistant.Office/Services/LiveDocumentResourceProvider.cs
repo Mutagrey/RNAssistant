@@ -38,6 +38,8 @@ namespace RNAssistant.Office.Services
                 limit = Math.Max(1, Math.Min(MaximumItems, limit <= 0 ? 20 : limit));
                 if (IsOutlook && kind == OutlookMailKind) return ListOutlookMail(session, cursor, limit);
                 var items = new List<ResourceDescriptor>();
+                if (IsOutlook && (string.IsNullOrWhiteSpace(kind) || kind == OutlookCollectionKind))
+                    items.Add(DescribeOutlookCollection(session));
                 if (string.IsNullOrWhiteSpace(kind) ||
                     string.Equals(kind, DocumentKind, StringComparison.OrdinalIgnoreCase))
                 {
@@ -83,6 +85,7 @@ namespace RNAssistant.Office.Services
 
         private ResourceDescriptor Describe(ChatSession session, string target)
         {
+            if (IsOutlook && target == OutlookCollectionKey) return DescribeOutlookCollection(session);
             string outlookEntryId;
             if (IsOutlook && TryOutlookMailKey(target, out outlookEntryId))
             {
@@ -142,6 +145,7 @@ namespace RNAssistant.Office.Services
                 !string.Equals(address.Segments[1], "selection", StringComparison.Ordinal) &&
                 !(IsWord && IsWordRange(address.Segments[1])) &&
                 !(IsPowerPoint && IsPowerPointSlide(address.Segments[1])) &&
+                !(IsOutlook && address.Segments[1] == OutlookCollectionKey) &&
                 !(IsOutlook && TryOutlookMailKey(address.Segments[1], out outlookEntryId)))
             {
                 return false;

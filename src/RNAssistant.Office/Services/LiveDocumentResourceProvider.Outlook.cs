@@ -13,6 +13,8 @@ namespace RNAssistant.Office.Services
     internal sealed partial class LiveDocumentResourceProvider
     {
         internal const string OutlookMailKind = "outlook-mail";
+        internal const string OutlookCollectionKind = "outlook-collection";
+        private const string OutlookCollectionKey = "folder-collection";
         private readonly IOutlookBackend _outlook;
         internal bool IsOutlook { get { return string.Equals(_adapter.HostName, "Outlook", StringComparison.OrdinalIgnoreCase); } }
 
@@ -96,6 +98,7 @@ namespace RNAssistant.Office.Services
 
         private string ReadOutlookSource(string target, string representation)
         {
+            if (target == OutlookCollectionKey) return ReadOutlookCollection();
             var snapshot = CaptureOutlookMail(target, representation != ResourceRepresentations.Structure);
             var mail = snapshot.Mail;
             var content = representation == ResourceRepresentations.Text ? mail.Body : new JObject
@@ -111,6 +114,42 @@ namespace RNAssistant.Office.Services
             }.ToString(Formatting.None);
             if (content.Length > MaximumMaterializedCharacters)
                 throw new ResourceRequestException("The complete mail view exceeds the capture limit.", "RESOURCE_SNAPSHOT_TOO_LARGE", false);
+            return content;
+        }
+
+        private ResourceDescriptor DescribeOutlookCollection(ChatSession session)
+        {
+            var descriptor = new ResourceDescriptor {
+                Reference = new ResourceRef(CreateUri(session, OutlookCollectionKey)), Provider = ProviderName,
+                Kind = OutlookCollectionKind, Title = "Recent mail in bound folder", Mutable = true,
+                MimeType = "application/json", Tracking = "externally-observed" };
+            descriptor.Representations.AddRange(new[] { "metadata", "text", "records", "table" });
+            descriptor.Metadata["host"] = "Outlook";
+            descriptor.Metadata["recordsPath"] = "$.messages";
+            descriptor.Metadata["coverage"] = "Newest 500 folder items; mail rows only. Read text for collection truncation and total folder count.";
+            descriptor.Metadata["bodyPreview"] = "At most 1000 characters; bodyTruncated is explicit. Read individual mail resources for complete bodies.";
+            descriptor.Metadata["grouping"] = "month is yyyy-MM; grouping belongs to the consumer.";
+            return descriptor;
+        }
+
+        private string ReadOutlookCollection()
+        {
+            OutlookFolderSnapshot snapshot;
+            try { snapshot = OutlookReader().CaptureCollection(CancellationToken.None); }
+            catch (OutlookBackendException error)
+            { throw new ResourceRequestException(error.Message, error.ErrorCode, error.Retryable); }
+            var content = new JObject {
+                ["totalFolderItems"] = snapshot.TotalItems,
+                ["collectionTruncated"] = snapshot.Truncated,
+                ["maximumFolderItems"] = OutlookService.MaxItems,
+                ["maximumBodyPreviewCharacters"] = OutlookService.CollectionPreviewCharacters,
+                ["messages"] = new JArray(snapshot.Messages.Select(mail => new JObject {
+                    ["subject"] = mail.Subject, ["sender"] = mail.Sender, ["received"] = mail.Received,
+                    ["month"] = mail.Received.ToString("yyyy-MM", CultureInfo.InvariantCulture),
+                    ["bodyPreview"] = mail.Body, ["bodyTruncated"] = mail.BodyTruncated }))
+            }.ToString(Formatting.None);
+            if (content.Length > MaximumMaterializedCharacters)
+                throw new ResourceRequestException("The mail collection exceeds the serialized snapshot limit.", "RESOURCE_SNAPSHOT_TOO_LARGE", false);
             return content;
         }
     }

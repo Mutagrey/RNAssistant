@@ -267,6 +267,7 @@ namespace RNAssistant.Harness
 
             var outlook = new List<ToolCatalogEntry>(OfficeToolCatalog.ForHost("Outlook"));
             AssertTrue(!HasTool(outlook, "outlook.get_context"), "generic Outlook context uses document resources");
+            AssertTrue(!HasTool(outlook, "outlook.collect_mail"), "Outlook collection uses document resources");
             AssertTrue(HasTool(outlook, "outlook.search_mail"), "outlook search visible");
             AssertTrue(HasTool(outlook, "outlook.create_draft"), "outlook draft facade visible");
             AssertTrue(FindTool(outlook, "outlook.update_mail").AgentCanRun, "outlook mail updates remain runnable");
@@ -281,7 +282,7 @@ namespace RNAssistant.Harness
             AssertEqual(14, excel.Count, "complete Excel tool count");
             AssertEqual(8, word.Count, "complete Word tool count");
             AssertEqual(8, powerpoint.Count, "complete PowerPoint tool count");
-            AssertEqual(4, outlook.Count, "complete Outlook tool count");
+            AssertEqual(3, outlook.Count, "complete Outlook tool count");
             foreach (var catalog in catalogs)
             {
                 AssertEqual(catalog.Value.Count, catalog.Value.Select(tool => tool.Id).Distinct(StringComparer.OrdinalIgnoreCase).Count(), catalog.Key + " ids are unique");

@@ -75,22 +75,6 @@ namespace RNAssistant.Office.Tools
                     Categories = ToolArgumentReader.String(
                         arguments, "categories", string.Empty)
                 }, markDispatchPossible, cancellationToken);
-            if (string.Equals(
-                toolId, OutlookToolIds.CollectMail, StringComparison.Ordinal))
-            {
-                var grouped = string.Equals(
-                    ToolArgumentReader.String(arguments, "groupBy", "none"),
-                    "month", StringComparison.OrdinalIgnoreCase);
-                return _service.CollectMail(new OutlookCollectMailRequest
-                {
-                    GroupBy = grouped ? "month" : ToolArgumentReader.String(
-                        arguments, "groupBy", "none"),
-                    MaxItems = ToolArgumentReader.Int32(
-                        arguments, "maxItems", grouped ? 500 : 100),
-                    MaxBodyChars = ToolArgumentReader.Int32(
-                        arguments, "maxBodyChars", grouped ? 500 : 1000)
-                }, cancellationToken);
-            }
             return OutlookOutcome.Error(
                 "Unsupported Outlook tool: " + toolId,
                 new JObject

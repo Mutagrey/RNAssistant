@@ -195,6 +195,7 @@ namespace RNAssistant.Office.Services
                     error = "Excel range reads use common.resources_read and exact document evidence.";
                     return false;
                 case "outlook.read_mail":
+                case "outlook.collect_mail":
                     error = "Mail reads use common.resources_find/read and exact document evidence.";
                     return false;
                 case "powerpoint.read_slides":

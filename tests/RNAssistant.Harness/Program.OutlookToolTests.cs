@@ -30,8 +30,7 @@ namespace RNAssistant.Harness
                     {
                         OutlookToolIds.SearchMail,
                         OutlookToolIds.CreateDraft,
-                        OutlookToolIds.UpdateMail,
-                        OutlookToolIds.CollectMail
+                        OutlookToolIds.UpdateMail
                     };
                     foreach (var id in ids)
                     {
@@ -134,6 +133,109 @@ namespace RNAssistant.Harness
                     "old reader has no catalog, binding or replay alias");
                 var removed = executor.ExecuteManual(Command("outlook.read_mail"), tools, new AppSettings(), false, false, session);
                 AssertEqual("unknown_tool", removed.ErrorCode, "old manual reader has no fallback");
+            });
+        }
+
+        private static void OutlookResourcesRetainCollection()
+        {
+            WithTempExecutor(FakeOfficeAdapter.ForHost("Outlook"), (executor, adapter) =>
+            {
+                adapter.OutlookSelectedBody = new string('a', 999) + "😀";
+                var session = NewSession(adapter);
+                executor.BindResourceAuthority(session);
+                var tools = OfficeToolCatalog.ForHost("Outlook").Concat(executor.GetControllerTools()).ToList();
+                var runtime = executor.CreateNativeRuntime(session, tools, new AppSettings(), "agent", false);
+                var candidate = executor.ResourceGateway.Find(session, "", "document").Items.Single(item => item.Type == "Outlook collection");
+                AssertEqual(0, adapter.OutlookCollectionCaptureCount, "discovery is body-free");
+                var sourceRead = ExecuteHtmlNative(runtime, ResourceToolCatalog.ReadToolId,
+                    new JObject { ["target"] = candidate.Target, ["representation"] = "text" });
+                AssertEqual(ToolExecutionOutcome.Ok, sourceRead.Outcome, "collection source uses common reader");
+                var source = JObject.Parse((string)JObject.Parse(sourceRead.Result.DataJson)["text"]);
+                var messages = (JArray)source["messages"];
+                AssertEqual(2, messages.Count, "bounded collection retains both fixture mails");
+                AssertEqual(2, messages.Select(item => (string)item["month"]).Distinct().Count(), "month is a semantic grouping field");
+                var preview = messages.Single(item => ((string)item["subject"]).StartsWith("Renewal"));
+                AssertEqual(999, ((string)preview["bodyPreview"]).Length, "preview does not split surrogate pairs");
+                AssertTrue((bool)preview["bodyTruncated"] && !(bool)source["collectionTruncated"], "body and folder coverage remain separate");
+                AssertTrue(source.ToString().IndexOf("entryId", StringComparison.OrdinalIgnoreCase) < 0 && source["folder"] == null,
+                    "no folder locator or mail runtime identity in source body");
+                var evidence = sourceRead.ResourceEvidence.Single();
+                AssertTrue(evidence.Complete && evidence.Payload != null, "complete exact collection is retained in CAS");
+                var count = adapter.OutlookCollectionCaptureCount;
+                var first = executor.ResourceGateway.Read(session, new ResourceReadRequest {
+                    Reference = evidence.Resource, Representation = "records", ViewPath = "$.messages", MaxRows = 1 }).Result;
+                AssertEqual(count, adapter.OutlookCollectionCaptureCount, "records derive from the same retained source snapshot");
+                AssertTrue(!first.Complete && first.Table.Rows.Count == 1, "records have bounded exact coverage");
+                adapter.OutlookExcludeSecondMail = true;
+                var fresh = ExecuteHtmlNative(runtime, ResourceToolCatalog.ReadToolId,
+                    new JObject { ["target"] = candidate.Target, ["representation"] = "text" });
+                AssertEqual(ToolExecutionOutcome.Ok, fresh.Outcome, "fresh head captures changed membership");
+                AssertEqual(EvidenceState.Superseded, new EvidenceStateReducer().Reduce(evidence,
+                    executor.ResourceAuthority.CaptureMany(new[] { evidence.ScopeId })).State, "membership drift supersedes collection evidence");
+                count = adapter.OutlookCollectionCaptureCount;
+                var next = executor.ResourceGateway.Read(session, new ResourceReadRequest {
+                    Reference = first.Resource.Reference, Representation = "records", ViewPath = "$.messages",
+                    Cursor = first.NextCursor, MaxRows = 1 }).Result;
+                AssertTrue(next.Complete && next.Table.Rows.Count == 1, "old collection continuation retains removed member");
+                AssertEqual(count, adapter.OutlookCollectionCaptureCount, "old records never fall forward to live folder");
+                var bound = executor.ExecuteManual(Command(HtmlWorkspaceToolCatalog.BindDataToolId,
+                    "name", "mail_collection", "target", candidate.Target, "view", "records", "path", "$.messages"),
+                    tools, new AppSettings(), false, false, session);
+                AssertTrue(bound.Success, "HTML binds the same resource records");
+                string error;
+                AssertTrue(!tools.Any(tool => tool.Id == "outlook.collect_mail") && DirectToolBindingCatalog.Resolve("outlook.collect_mail") == null &&
+                    !ModelToolResultProjection.ValidateAcceptedCall(new ToolCall("old-collection", "outlook.collect_mail", "{}"), out error),
+                    "removed collection has no catalog, binding or replay alias");
+                AssertEqual("unknown_tool", executor.ExecuteManual(Command("outlook.collect_mail"), tools,
+                    new AppSettings(), false, false, session).ErrorCode, "removed manual tool has no fallback");
+            });
+        }
+
+        private static void OutlookCollectionBounds()
+        {
+            WithTempExecutor(FakeOfficeAdapter.ForHost("Outlook"), (executor, adapter) =>
+            {
+                var session = NewSession(adapter);
+                executor.BindResourceAuthority(session);
+                var reference = executor.ResourceGateway.List(session, "document", LiveDocumentResourceProvider.OutlookCollectionKind, null, 10).Items.Single().Reference;
+                adapter.OutlookFolderSnapshotTransform = snapshot => {
+                    snapshot.TotalItems = OutlookService.MaxItems + 1; snapshot.Truncated = true; return snapshot; };
+                var captured = executor.ResourceGateway.Read(session, new ResourceReadRequest { Reference = reference, Representation = "text" }).Result;
+                AssertTrue((bool)JObject.Parse(captured.Text)["collectionTruncated"], "bounded source never claims complete folder coverage");
+                adapter.OutlookFolderSnapshotTransform = snapshot => { snapshot.Messages[0].Body = new string('x', 1001); return snapshot; };
+                var denied = false;
+                try { executor.ResourceGateway.Read(session, new ResourceReadRequest { Reference = reference, Representation = "text" }); }
+                catch (ResourceRequestException error) { denied = error.ErrorCode == "outlook_collection_invalid"; }
+                AssertTrue(denied, "oversized preview fails before publication");
+                adapter.OutlookFolderSnapshotTransform = snapshot => {
+                    snapshot.Messages = Enumerable.Range(0, 100).Select(index => new OutlookMailSnapshot {
+                        EntryId = "budget-" + index, Subject = new string('s', 4096), Sender = new string('r', 4096),
+                        Body = new string('b', 1000) }).ToArray();
+                    snapshot.TotalItems = 100; return snapshot; };
+                denied = false;
+                try { executor.ResourceGateway.Read(session, new ResourceReadRequest { Reference = reference, Representation = "text" }); }
+                catch (ResourceRequestException error) { denied = error.ErrorCode == "RESOURCE_SNAPSHOT_TOO_LARGE"; }
+                AssertTrue(denied, "aggregate collection budget refuses individually valid oversized rows");
+                adapter.OutlookFolderSnapshotTransform = snapshot => {
+                    snapshot.Messages[0].Body = ""; snapshot.Messages[1].Body = ""; return snapshot; };
+                var emptyBodies = new OutlookService(adapter).CaptureCollection(CancellationToken.None);
+                AssertEqual("", emptyBodies.Messages[0].Body, "empty preview is legal");
+                adapter.OutlookFolderSnapshotTransform = snapshot => { snapshot.Messages = new OutlookMailSnapshot[0]; snapshot.TotalItems = 0; return snapshot; };
+                var empty = executor.ResourceGateway.Read(session, new ResourceReadRequest { Reference = reference, Representation = "records", ViewPath = "$.messages" }).Result;
+                AssertTrue(empty.Complete && empty.Table.Rows.Count == 0, "empty folder is a complete empty records snapshot");
+                adapter.OutlookFolderSnapshotTransform = null;
+                adapter.OutlookIsMailTarget = true;
+                denied = false;
+                try { executor.ResourceGateway.Read(session, new ResourceReadRequest { Reference = reference, Representation = "text" }); }
+                catch (ResourceRequestException error) { denied = error.ErrorCode == "outlook_folder_target_missing"; }
+                AssertTrue(denied, "Inspector resource cannot read parent folder");
+                using (var cancellation = new CancellationTokenSource())
+                {
+                    cancellation.Cancel(); var count = adapter.OutlookCollectionCaptureCount;
+                    try { new OutlookService(adapter).CaptureCollection(cancellation.Token); throw new InvalidOperationException("Cancellation required"); }
+                    catch (OperationCanceledException) { }
+                    AssertEqual(count, adapter.OutlookCollectionCaptureCount, "cancelled collection never enters backend");
+                }
             });
         }
 
@@ -281,16 +383,6 @@ namespace RNAssistant.Harness
                     AssertTrue((int)JObject.Parse(
                         search.Result.DataJson)["matchCount"] >= 2,
                         "Outlook search preserves field matching");
-
-                    var collectCall = new ToolCall(
-                        "outlook-collect", OutlookToolIds.CollectMail,
-                        "{\"groupBy\":\"month\"}");
-                    var collected = ExecuteNative(
-                        runtime, collectCall, runtime.Describe(collectCall));
-                    AssertEqual(2,
-                        ((JObject)JObject.Parse(
-                            collected.Result.DataJson)["months"]).Count,
-                        "Outlook collection preserves monthly grouping");
 
                     var exact = new OutlookService(adapter).CaptureMail(new OutlookReadMailRequest {
                         EntryId = "mail-2", Content = "message", MaxChars = OutlookService.MaxBodyChars }, CancellationToken.None);

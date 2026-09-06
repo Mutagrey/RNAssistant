@@ -248,7 +248,7 @@ namespace RNAssistant.Office.Services
                     Text = content.Substring(offset, length),
                     ContentSha256 = contentSha256,
                     CompleteViewPayload = IsExactSource(target) && !sourceTruncated && _payloads != null
-                        ? PayloadRef.FromBlob(_payloads.StoreText(content, "text/plain; charset=utf-8")) : null,
+                        ? PayloadRef.FromBlob(_payloads.StoreText(content, descriptor.MimeType)) : null,
                     Offset = offset,
                     ReturnedCharacters = length,
                     TotalCharacters = content.Length,
@@ -267,6 +267,8 @@ namespace RNAssistant.Office.Services
         {
             value = (value ?? string.Empty).Trim().ToLowerInvariant();
             if (value.Length == 0 || value == "auto") return ResourceRepresentations.Text;
+            if (IsOutlook && target == OutlookCollectionKey && (value == ResourceRepresentations.Structure || value == ResourceRepresentations.Source))
+                throw new ResourceRequestException("Read collection text metadata or records at $.messages.", "RESOURCE_VIEW_UNSUPPORTED", false);
             if (value == ResourceRepresentations.Source && (IsOutlook || (IsPowerPoint && target != "selection"))) return value;
             if (value == ResourceRepresentations.Metadata ||
                 value == ResourceRepresentations.Structure ||

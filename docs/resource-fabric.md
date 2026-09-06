@@ -238,10 +238,35 @@ fail before the snapshot reaches a caller or a mutation dispatch.
 
 Outlook OOM exposes `MailItem.Body` as one string: the character ceiling is enforced
 after that property read, **not** before COM materialization. Bounded body acquisition
-and real large-mail execution remain open. Folder search/collection previews and
-mutation read-back remain specialized existing contours. Real Inspector/folder/store
+and real large-mail execution remain open. Folder search and mutation read-back
+remain specialized existing contours. Real Inspector/folder/store
 membership, unsaved-mail identity, WebView2 and final catalog/model qualification
 remain open; this reader switch does not close those gates.
+
+Folder collection uses the same document provider, shared authority and CAS;
+`outlook.collect_mail`, its handler/request/output and monthly JSON wrapper are
+removed, including accepted-call replay. `common.resources_find` exposes an
+`Outlook collection` target. `text` is the complete JSON projection; `records/table`
+at `$.messages` and HTML bindings derive from that exact retained text snapshot.
+No separate collection store, bulk result tool or compatibility alias remains.
+
+This is a bounded projection of at most 500 newest **folder items** (mail rows only),
+not a complete mailbox or full-body capture. The JSON envelope reports
+`totalFolderItems` and `collectionTruncated`. Rows expose subject, sender, received,
+`month` (`yyyy-MM`), `bodyPreview` (at most 1000 characters) and `bodyTruncated`.
+Read the envelope before interpreting record totals; `complete` on a records page
+means completion of this captured projection, not the whole folder. Monthly grouping
+belongs to the consumer; full bodies use individual mail resources. Folder paths and
+EntryIDs are not projected into the body. Empty folders/previews remain valid.
+
+The typed `OutlookService.CaptureCollection` validates row identity/extent and a
+750,000-character aggregate budget; serialized JSON has the provider's one-million
+character ceiling. The collection backend captures each preview once, with explicit
+truncation and no mutation-token/second body read. Header/getter failures cannot
+become empty successful captures. OOM still materializes the full body before
+trimming, so this does not close the pre-COM allocation gate. Inspector runtimes
+cannot read their parent folder. Fresh reads publish observed collection drift;
+exact historical text/records and opened continuations never fall forward.
 
 ## Conversation loop
 

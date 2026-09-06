@@ -59,6 +59,9 @@ cover exact source/evidence/CAS paging, header-only discovery and attachment vie
 scope refusal/ambiguity, removed-reader rejection, HTML and bound-STA/closed-window
 reads, malformed captures and preparation refusal before mutation. These do not
 qualify real COM membership/unsaved-mail or OOM pre-materialization bounds.
+Collection cases cover body-free discovery, explicit folder/preview coverage,
+exact CAS-derived records, membership drift with retained continuation, shared HTML
+binding, empty/oversized snapshots, Inspector refusal and removed-tool rejection.
 
 | Area | Main files | Useful filters |
 | --- | --- | --- |

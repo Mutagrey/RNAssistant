@@ -43,6 +43,8 @@ namespace RNAssistant.Harness
         }
 
         public int OutlookBodyMaterializationCount { get; private set; }
+        public int OutlookCollectionCaptureCount { get; private set; }
+        public Func<OutlookFolderSnapshot, OutlookFolderSnapshot> OutlookFolderSnapshotTransform { get; set; }
         public Func<OutlookMailReadSnapshot, OutlookMailReadSnapshot> OutlookReadSnapshotTransform { get; set; }
         public string OutlookSelectedBody
         {
@@ -103,19 +105,31 @@ namespace RNAssistant.Harness
         {
             BeginOutlookBackendCall(OutlookReadFolderOperation);
             request = request ?? new OutlookFolderReadRequest();
-            var source = _outlookMail
+            if (OutlookIsMailTarget)
+                throw new OutlookBackendException("The bound Inspector is not a folder.", "outlook_folder_target_missing", true);
+            var collection = request.MaxSearchBodyChars == 0;
+            if (collection) OutlookCollectionCaptureCount++;
+            var all = _outlookMail.Where(mail => !OutlookExcludeSecondMail || mail.EntryId != "mail-2").ToArray();
+            var source = all
                 .OrderByDescending(item => item.Received)
                 .Take(Math.Max(1, request.MaxItems))
-                .Select(item => OutlookSnapshot(
-                    item, request.MaxBodyChars, request.MaxSearchBodyChars))
+                .Select(item => {
+                    if (!collection) return OutlookSnapshot(item, request.MaxBodyChars, request.MaxSearchBodyChars);
+                    var body = item.Body ?? string.Empty;
+                    var length = Math.Min(body.Length, request.MaxBodyChars);
+                    if (length > 0 && length < body.Length && char.IsHighSurrogate(body[length - 1])) length--;
+                    return new OutlookMailSnapshot { EntryId = item.EntryId, Subject = item.Subject, Sender = item.Sender,
+                        Received = item.Received, Body = body.Substring(0, length), BodyTruncated = length < body.Length };
+                })
                 .ToArray();
-            return new OutlookFolderSnapshot
+            var snapshot = new OutlookFolderSnapshot
             {
                 FolderPath = "\\Mock Store\\Inbox",
                 Messages = source,
-                TotalItems = _outlookMail.Count,
-                Truncated = _outlookMail.Count > source.Length
+                TotalItems = all.Length,
+                Truncated = all.Length > source.Length
             };
+            return OutlookFolderSnapshotTransform == null ? snapshot : OutlookFolderSnapshotTransform(snapshot);
         }
 
         public OutlookDraftBackendResult CreateDraft(

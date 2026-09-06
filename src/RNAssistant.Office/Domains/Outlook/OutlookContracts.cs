@@ -58,13 +58,6 @@ namespace RNAssistant.Office.Domains.Outlook
         public string ExpectedTargetToken { get; set; }
     }
 
-    public sealed class OutlookCollectMailRequest
-    {
-        public string GroupBy { get; set; }
-        public int MaxItems { get; set; }
-        public int MaxBodyChars { get; set; }
-    }
-
     public sealed class OutlookFolderReadRequest
     {
         public int MaxItems { get; set; }
@@ -95,6 +88,7 @@ namespace RNAssistant.Office.Domains.Outlook
         public bool Unread { get; set; }
         public string Body { get; set; }
         public string SearchBody { get; set; }
+        public bool BodyTruncated { get; set; }
         public string StateToken { get; set; }
     }
 

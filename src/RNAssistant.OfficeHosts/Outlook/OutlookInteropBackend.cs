@@ -91,23 +91,34 @@ namespace RNAssistant.OfficeHosts
         public OutlookFolderSnapshot ReadFolder(OutlookFolderReadRequest request)
         {
             request = request ?? new OutlookFolderReadRequest();
+            var collection = request.MaxSearchBodyChars == 0;
+            if (collection && (request.MaxItems < 1 || request.MaxItems > OutlookService.MaxItems ||
+                request.MaxBodyChars < 0 || request.MaxBodyChars > OutlookService.CollectionPreviewCharacters))
+                throw new OutlookBackendException("Invalid collection bounds.", "invalid_arguments", false);
             var folder = _session.Folder;
             var items = folder.Items;
             items.Sort("[ReceivedTime]", true);
             var total = items.Count;
             var limit = Math.Min(total, Math.Max(1, request.MaxItems));
             var messages = new List<OutlookMailSnapshot>();
+            long characters = 0;
             for (var index = 1; index <= limit; index++)
             {
                 var mail = items[index] as Outlook.MailItem;
                 if (mail == null) continue;
-                messages.Add(Snapshot(
-                    mail, request.MaxBodyChars,
-                    request.MaxSearchBodyChars));
+                var captured = collection ? CollectionSnapshot(mail, request.MaxBodyChars) :
+                    Snapshot(mail, request.MaxBodyChars, request.MaxSearchBodyChars);
+                if (collection)
+                {
+                    characters += captured.Subject.Length + captured.Sender.Length + captured.Body.Length;
+                    if (characters > OutlookService.CollectionMaximumCharacters)
+                        throw new OutlookBackendException("The mail collection exceeds the snapshot budget.", "RESOURCE_SNAPSHOT_TOO_LARGE", false);
+                }
+                messages.Add(captured);
             }
             return new OutlookFolderSnapshot
             {
-                FolderPath = SafeString(delegate { return folder.FolderPath; }),
+                FolderPath = collection ? null : SafeString(delegate { return folder.FolderPath; }),
                 Messages = messages,
                 TotalItems = total,
                 Truncated = total > limit
@@ -284,6 +295,20 @@ namespace RNAssistant.OfficeHosts
                     snapshot.Categories, snapshot.Unread ? "1" : "0", snapshot.Subject, body
                 }));
             return snapshot;
+        }
+
+        private static OutlookMailSnapshot CollectionSnapshot(Outlook.MailItem mail, int maxBodyChars)
+        {
+            // OOM materializes Body before slicing; no state-token/second body read.
+            var subject = mail.Subject ?? string.Empty;
+            var sender = mail.SenderName ?? string.Empty;
+            if (subject.Length > 4096 || sender.Length > 4096)
+                throw new OutlookBackendException("Mail collection headers exceed the bound.", "RESOURCE_SNAPSHOT_TOO_LARGE", false);
+            var body = mail.Body ?? string.Empty;
+            var length = Math.Min(body.Length, maxBodyChars);
+            if (length > 0 && length < body.Length && char.IsHighSurrogate(body[length - 1])) length--;
+            return new OutlookMailSnapshot { EntryId = mail.EntryID, Subject = subject, Sender = sender,
+                Received = mail.ReceivedTime, Body = body.Substring(0, length), BodyTruncated = length < body.Length };
         }
 
         private static OutlookMailSnapshot Snapshot(

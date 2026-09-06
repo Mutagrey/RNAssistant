@@ -462,6 +462,8 @@ namespace RNAssistant.Harness
                 Test("outlook tools: native ownership and direct backend", OutlookToolsUseExactNativeOwnership),
                 Test("outlook resources: exact mail evidence and retained pages", OutlookResourcesRetainExactMail),
                 Test("outlook resources: bound mail scope and ambiguity", OutlookResourcesRespectMailScope),
+                Test("outlook resources: exact folder collection and HTML records", OutlookResourcesRetainCollection),
+                Test("outlook resources: collection bounds and scope refusal", OutlookCollectionBounds),
                 Test("outlook capture: complete body and metadata isolation", OutlookCapturesPreserveCompleteBodies),
                 Test("outlook capture: invalid guards and cancellation", OutlookCapturesRejectInvalidGuards),
                 Test("outlook tools: family semantics", OutlookToolsPreserveFamilySemantics),

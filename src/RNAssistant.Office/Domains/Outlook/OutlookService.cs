@@ -14,6 +14,8 @@ namespace RNAssistant.Office.Domains.Outlook
         public const int MaxAttachments = 1000;
         public const int MaxBodyChars = 1000000;
         public const int MaxSearchBodyChars = 100000;
+        public const int CollectionPreviewCharacters = 1000;
+        public const int CollectionMaximumCharacters = 750000;
 
         private readonly IOutlookBackend _backend;
 
@@ -163,71 +165,33 @@ namespace RNAssistant.Office.Domains.Outlook
             }
         }
 
-        public OutlookOutcome CollectMail(
-            OutlookCollectMailRequest request,
-            CancellationToken cancellationToken)
+        // A complete snapshot of a bounded folder projection, not complete mail bodies.
+        public OutlookFolderSnapshot CaptureCollection(CancellationToken cancellationToken)
         {
-            request = request ?? new OutlookCollectMailRequest();
-            request.GroupBy = Normalize(request.GroupBy, "none");
-            if (request.GroupBy != "none" && request.GroupBy != "month")
-                return Failure(
-                    "groupBy must be none or month.",
-                    "invalid_arguments", false);
-            request.MaxItems = Math.Max(1, Math.Min(MaxItems, request.MaxItems));
-            request.MaxBodyChars = Math.Max(
-                0, Math.Min(MaxBodyChars, request.MaxBodyChars));
-            try
+            cancellationToken.ThrowIfCancellationRequested();
+            var snapshot = _backend.ReadFolder(new OutlookFolderReadRequest {
+                MaxItems = MaxItems, MaxBodyChars = CollectionPreviewCharacters, MaxSearchBodyChars = 0 });
+            cancellationToken.ThrowIfCancellationRequested();
+            if (snapshot == null || snapshot.Messages == null || snapshot.Messages.Count > MaxItems ||
+                snapshot.TotalItems < snapshot.Messages.Count ||
+                (snapshot.TotalItems > MaxItems && !snapshot.Truncated))
+                throw new OutlookBackendException("Invalid mail collection extent.", "outlook_collection_invalid", false);
+            long characters = 0;
+            var ids = new HashSet<string>(StringComparer.Ordinal);
+            foreach (var mail in snapshot.Messages)
             {
                 cancellationToken.ThrowIfCancellationRequested();
-                var folder = _backend.ReadFolder(new OutlookFolderReadRequest
-                {
-                    MaxItems = request.MaxItems,
-                    MaxBodyChars = request.MaxBodyChars,
-                    MaxSearchBodyChars = 0
-                });
-                if (folder == null || folder.Messages == null)
-                    return Failure(
-                        "Outlook folder backend returned no snapshot.",
-                        "outlook_folder_snapshot_missing", true);
-                JToken data;
-                if (request.GroupBy == "month")
-                {
-                    var months = new JObject();
-                    foreach (var group in folder.Messages.GroupBy(
-                        mail => mail.Received.ToString("yyyy-MM")))
-                        months[group.Key] = new JArray(
-                            group.Select(CollectJson).ToArray());
-                    data = new JObject
-                    {
-                        ["folder"] = folder.FolderPath ?? string.Empty,
-                        ["months"] = months
-                    };
-                }
-                else
-                {
-                    data = new JObject
-                    {
-                        ["folder"] = folder.FolderPath ?? string.Empty,
-                        ["messages"] = new JArray(
-                            folder.Messages.Select(CollectJson).ToArray())
-                    };
-                }
-                return OutlookOutcome.Ok(
-                    "Mail data collected.", data.ToString(Formatting.None),
-                    OutlookEffect.None);
+                if (mail == null || string.IsNullOrWhiteSpace(mail.EntryId) || mail.EntryId.Length > 4096 ||
+                    !ids.Add(mail.EntryId) || mail.Subject == null || mail.Sender == null ||
+                    mail.Body == null || mail.Body.Length > CollectionPreviewCharacters ||
+                    mail.Subject.Length > 4096 || mail.Sender.Length > 4096 ||
+                    !string.IsNullOrEmpty(mail.SearchBody) || !string.IsNullOrEmpty(mail.StateToken))
+                    throw new OutlookBackendException("Incomplete or oversized mail collection row.", "outlook_collection_invalid", false);
+                characters += mail.Subject.Length + mail.Sender.Length + mail.Body.Length;
+                if (characters > CollectionMaximumCharacters)
+                    throw new OutlookBackendException("The mail collection exceeds the snapshot budget.", "RESOURCE_SNAPSHOT_TOO_LARGE", false);
             }
-            catch (OperationCanceledException) { throw; }
-            catch (OutlookBackendException ex)
-            {
-                return Failure(
-                    ex.Message, ex.ErrorCode, ex.Retryable, ex.DetailsJson);
-            }
-            catch (Exception ex)
-            {
-                return Failure(
-                    "Outlook mail collection failed: " + ex.Message,
-                    "outlook_collect_failed", true);
-            }
+            return snapshot;
         }
 
         public OutlookOutcome CreateDraft(
@@ -502,17 +466,6 @@ namespace RNAssistant.Office.Domains.Outlook
             string key, string value)
         {
             return new KeyValuePair<string, string>(key, value ?? string.Empty);
-        }
-
-        private static JObject CollectJson(OutlookMailSnapshot mail)
-        {
-            return new JObject
-            {
-                ["subject"] = mail.Subject ?? string.Empty,
-                ["sender"] = mail.Sender ?? string.Empty,
-                ["received"] = new JValue(mail.Received),
-                ["body"] = mail.Body ?? string.Empty
-            };
         }
 
         private static string DraftData(OutlookDraftBackendResult result)
