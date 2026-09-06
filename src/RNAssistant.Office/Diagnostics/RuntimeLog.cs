@@ -42,65 +42,6 @@ namespace RNAssistant.Office.Diagnostics
             Write("ERROR", message, exception);
         }
 
-        public static string FilePath
-        {
-            get { return _logFile ?? string.Empty; }
-        }
-
-        public static string ReadTail(int maxChars)
-        {
-            var file = _logFile;
-            if (string.IsNullOrWhiteSpace(file) || !File.Exists(file))
-            {
-                return string.Empty;
-            }
-
-            maxChars = Math.Max(1024, Math.Min(4 * 1024 * 1024, maxChars));
-            try
-            {
-                lock (Sync)
-                {
-                    using (var stream = new FileStream(file, FileMode.Open, FileAccess.Read, FileShare.ReadWrite))
-                    {
-                        var maxBytes = (long)maxChars * 4;
-                        if (stream.Length > maxBytes)
-                        {
-                            stream.Seek(-maxBytes, SeekOrigin.End);
-                        }
-                        using (var reader = new StreamReader(stream, Encoding.UTF8, true))
-                        {
-                            var value = reader.ReadToEnd();
-                            return value.Length <= maxChars ? value : value.Substring(value.Length - maxChars);
-                        }
-                    }
-                }
-            }
-            catch
-            {
-                return string.Empty;
-            }
-        }
-
-        public static void Clear()
-        {
-            var file = _logFile;
-            if (string.IsNullOrWhiteSpace(file))
-            {
-                return;
-            }
-
-            try
-            {
-                lock (Sync)
-                {
-                    File.WriteAllText(file, string.Empty, Encoding.UTF8);
-                }
-            }
-            catch
-            {
-            }
-        }
-
         private static void Write(string level, string message, Exception exception)
         {
             var file = _logFile;

@@ -239,12 +239,6 @@ namespace RNAssistant.Office.WebView
                     case "getSettings":
                         responsePayload = _controller.GetSettings();
                         break;
-                    case "getRuntimeLog":
-                        responsePayload = _controller.GetRuntimeLog();
-                        break;
-                    case "clearRuntimeLog":
-                        responsePayload = _controller.ClearRuntimeLog();
-                        break;
                     case "getCasHealth":
                         responsePayload = _controller.GetCasHealth();
                         break;

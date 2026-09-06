@@ -423,6 +423,13 @@ not a new resource publication/store; compiler and context-budget semantics are
 unchanged. Pre-truncation raw serialization allocation and real WebView2 lifecycle
 qualification remain open.
 
+The unused `getRuntimeLog`/`clearRuntimeLog` bridge commands, inline response DTO
+and exclusive tail/clear helpers are removed, not replaced by a new download.
+The existing UI log is WebView-session-local (`app-core.js`/`app-logs.js`), with no
+runtime-file reader. Runtime file logging remains unchanged; existing log files
+are neither cleared nor migrated by the cutover. Retired commands fail as unknown
+bridge messages.
+
 Text/Markdown/PDF text pages, images, thumbnails and PDF renders travel through
 that data plane. Typed bridge DTOs carry metadata/leases, not page text or base64.
 Text leases close after each bounded page; media leases close on replacement,

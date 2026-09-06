@@ -798,11 +798,20 @@ namespace RNAssistant.Harness
             bridge.HandleMessageAsync(reviewPayload.ToString()).GetAwaiter().GetResult();
             AssertTrue(!controller.LastReviewAgentPrompts, "review is request-local, not remembered by later saves");
             AssertEqual(13, controller.LastSettings.AgentPromptSchemaVersion, "ordinary bridge save does not approve schema 13 prompts");
+        }
 
-            var runtimeLog = JObject.Parse(bridge.HandleMessageAsync(
-                "{\"id\":\"log1\",\"type\":\"getRuntimeLog\",\"bridgeToken\":\"" + token + "\",\"payload\":{}}")
-                .GetAwaiter().GetResult());
-            AssertEqual("runtime log", runtimeLog.SelectToken("payload.content").Value<string>(), "runtime log bridge response");
+        private static void BridgeRejectsRetiredRuntimeLogCommands()
+        {
+            var bridge = new AssistantWebBridge(new AssistantController(), null);
+            var token = BridgeToken(bridge);
+            foreach (var command in new[] { "getRuntimeLog", "clearRuntimeLog" })
+            {
+                var response = JObject.Parse(bridge.HandleMessageAsync(
+                    "{\"id\":\"retired-log\",\"type\":\"" + command + "\",\"bridgeToken\":\"" + token + "\",\"payload\":{}}")
+                    .GetAwaiter().GetResult());
+                AssertTrue(!response["ok"].Value<bool>(), "retired runtime log command is not dispatched: " + command);
+                AssertTrue(response.SelectToken("payload.content") == null, "no inline log body or fallback");
+            }
         }
 
         private static void BridgeRunsModelCompatibilityTest()

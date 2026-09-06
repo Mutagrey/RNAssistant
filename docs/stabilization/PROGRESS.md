@@ -6,7 +6,7 @@ Current task: user-authorized unified Resource Architecture direct cutover, in p
 Execution mode: mandatory host-neutral route 0–11T10, WQ-A1–A5, R61/11O0–11O7, the separately approved D05.1–D05.6 slices and R65–R70 corrections завершены. WQ0 не блокировал implementation: текущий `RuntimeKey` exact bound Excel/Word/PowerPoint/Outlook object or window принят как lifetime assumption. Накопленные Windows gates по §16.1 теперь квалифицируют только итоговый post-cutover catalog/UI; до их evidence Phase 12 remains blocked.
 
 Next step for tools: finish the unified resource cutover in MASTER order: complete remaining authority/compiler integration, replace HTML/bulk transport (Wave 4), then schema/mapping/derived/catalog integration and cleanup (Wave 5). Only then run final post-cutover Windows rebuild/live-provider/WebView2 qualification, including the accumulated R61–R77 retests. Phase 12 remains blocked.
-Latest slice (2026-09-06): Inspector raw JSON uses the shared bounded download, with metadata-only bridge setup and no inline fallback. Exact UTF-8 and UI cancellation/late-response cleanup pass host-neutral. Next concrete bulk contour: runtime log tail; remaining binary/raw, search/collection, cleanup and Windows qualification gates stay open.
+Latest slice (2026-09-06): unused runtime log bridge read/clear commands, inline DTO and exclusive helpers are removed. Repository inspection found no UI consumers: the UI log is WebView-session-local, while runtime file logging remains intact. No replacement download or diagnostic feature was added; retired commands fail closed. Focused bridge checks pass host-neutral. Next: remaining general binary/raw resource-view negotiation and search/collection consumers; cleanup and Windows qualification gates stay open.
 
 Previous slice (2026-09-06): Chat header CAS usage scan no longer treats hash-only `ContentSha256` evidence as a broken CAS reference; only hash+byte-length pairs are counted as CAS refs. The same header scan now also counts lowercase `sha256`/`byteLength` payload refs used by newer resource contracts. This fixes false critical chat-list badges such as "Некорректные или конфликтующие CAS-ссылки" for ordinary resource evidence while preserving missing-blob warnings for real CAS refs. Focused storage header test passes host-neutral. Prior WebView resource-download consumers now bind browser `fetch` before passing it into shared download paths; real Windows WebView2 retest and live complex Excel/VBA → HTML bind remain open. Previous Outlook mail reader consumer switch remains host-neutral complete; OOM pre-materialization and real Windows/COM/catalog gates remain open. Next: remaining bulk upload/export, search/collection consumers and final cleanup.
 Required context: [Resource MASTER](resource-cutover/MASTER.md), its three normative documents in the specified order, [resource owner map](../resource-fabric.md), and the exact owning source contour. Previous WQ evidence remains valid only for unchanged contours.
@@ -18,9 +18,10 @@ chunks, one raw-text cache and cancellation/late-response lease cleanup replace
 the inline path. Compiler/context-budget semantics are unchanged. Five Inspector
 cases, typed bridge and architecture/project-includes checks plus focused browser
 reader/viewer/lifecycle tests pass host-neutral. Real WebView2 qualification and
-pre-truncation serialization allocation remain open. Next concrete bulk contour:
-runtime log inline tail; then remaining binary/raw, search/collection and cleanup
-gates. No Phase 12 or Windows gate is closed by this checkpoint.
+pre-truncation serialization allocation remain open. The subsequently inspected
+runtime-log tail had no UI consumers and is now deleted with its unused bridge
+commands. Binary/raw, search/collection and cleanup gates remain open. No Phase 12
+or Windows gate is closed by these checkpoints.
 
 Outlook resource checkpoint (2026-09-06): eight Outlook cases plus six
 catalog/Gateway/continuation/architecture/project-include checks pass (14 focused

@@ -715,6 +715,7 @@ namespace RNAssistant.Harness
                 Test("bridge: typed chat mode", BridgeUsesTypedChatModePayload),
                 Test("bridge: typed chat reasoning", BridgeUsesTypedChatReasoningPayload),
                 Test("bridge: typed settings", BridgeUsesTypedSettingsPayload),
+                Test("bridge: rejects retired runtime log commands", BridgeRejectsRetiredRuntimeLogCommands),
                 Test("bridge: model diagnostics", BridgeReportsModelConnectionDiagnostics),
                 Test("bridge: typed trajectory query", BridgeUsesTypedTrajectoryQuery),
                 Test("bridge: CAS maintenance", BridgeReportsCasMaintenance),

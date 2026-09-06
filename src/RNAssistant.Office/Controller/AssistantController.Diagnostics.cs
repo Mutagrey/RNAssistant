@@ -19,21 +19,6 @@ namespace RNAssistant.Office
                 cancellationToken);
         }
 
-        public RuntimeLogResponse GetRuntimeLog()
-        {
-            return new RuntimeLogResponse
-            {
-                Content = RuntimeLog.ReadTail(1000000),
-                Path = RuntimeLog.FilePath
-            };
-        }
-
-        public RuntimeLogResponse ClearRuntimeLog()
-        {
-            RuntimeLog.Clear();
-            return GetRuntimeLog();
-        }
-
         public CasHealthResponse GetCasHealth()
         {
             return CasHealthResponse.From(_casMaintenanceService.Audit());
