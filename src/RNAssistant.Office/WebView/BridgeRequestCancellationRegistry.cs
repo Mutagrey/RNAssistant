@@ -19,6 +19,7 @@ namespace RNAssistant.Office.WebView
             "getChatEventPayload",
             "getVbaModule",
             "readSkillSource",
+            "readToolSource",
             "beginSkillMutationUpload",
             "beginToolMutationUpload",
             "saveTools",

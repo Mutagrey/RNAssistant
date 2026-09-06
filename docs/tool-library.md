@@ -72,6 +72,42 @@ Controller-owned catalog reconciliation, `StoragePath` identity, generic executi
 and unversioned response fallback are absent. This does not make the flat store
 immutable history.
 
+### Library source reads
+
+Init, chat updates, catalog refresh and mutation/install/remove responses carry
+only source SHA-256/byte extent in `ToolLibraryItemDto.source`, never schema, code,
+README or component bodies. The selected editor calls typed `readToolSource` with
+explicit chat, tool id and expected Library revision. `ToolEditorResourceService`
+reserves a shared download slot before catalog hydration/live reads; its response
+contains exact source refs and a bounded download capability. One inert UTF-8
+`ToolSourceBodyDto` (schema, code, README, components) is delivered through the
+existing data plane, at most 16 MiB, with complete-byte integrity verification.
+
+Custom source comes from the committed `rna://catalog/tools` publication; built-in
+source registrations are published once through the same catalog owner under
+`builtin-tools-<host>`. Both expose exact `/source` children with root-publication
+dependencies, not separate child heads or another activation store. Document-local
+source instead proves each cached manifest/component against an exact live VBA
+Gateway snapshot under the existing document access owner. Missing, partial or
+changed components fail closed and invalidate document discovery for refresh.
+Its JSON download is a disposable editor projection of those refs, not a new
+document catalog authority. Reads create no model observations or execution rights.
+
+No input becomes editable until the complete source is verified. Failed reads
+cannot become empty drafts; unchanged unloaded items are not serialized as writes.
+Clean source cache is selection-bounded; hydration does not mark the package dirty.
+Local source edits survive refresh and late save responses. A changed published
+source with a dirty draft blocks saving rather than silently rebasing it. Chat,
+selection, Library section and bridge/page closure cancel reads and close late
+leases. Existing revision-guarded mutation uploads remain the only write path.
+
+The separate generated built-in human-documentation view (`getToolDocumentation`)
+and remaining model/domain definition-read consumers are still open cutover work;
+they are not an inline fallback for editor source. The pre-existing VBA
+canonical-hash/raw-line-ending collision remains an explicit
+[authority gap](stabilization/BACKLOG.md#existing-defects-outside-the-active-slice).
+Real Office/WebView2 qualification remains open.
+
 ### Library mutation uploads
 
 Both Library Save and the save-before-VBA-install step use one bounded upload
@@ -100,11 +136,9 @@ If the selected definition changes while saving, installation requires another
 explicit save. Installation-status refresh also preserves unsaved authoring text.
 Direct package install/remove authorization and execution remain unchanged.
 
-The inline save request and separate pre-install save transport are removed.
-Tool catalog/read bodies, built-in documentation and outgoing mutation/package
-library projections still require pull-based hydration through the shared Gateway;
-they are the next consumer cutover, not a parallel upload implementation. The
-pre-existing README leading-`U+FEFF` sidecar/read-back issue is tracked in
+The inline save request and separate pre-install save transport are removed;
+catalog and outgoing library projections now use the source metadata above.
+The pre-existing README leading-`U+FEFF` sidecar/read-back issue is tracked in
 [backlog](stabilization/BACKLOG.md#existing-defects-outside-the-active-slice).
 
 ## Mandatory all-tool contract audit (R61)

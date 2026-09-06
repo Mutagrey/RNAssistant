@@ -243,6 +243,7 @@
       } finally {
         await endWrite(operation);
         options.setBusy("saveToolsButton", false);
+        options.renderEditor();
         options.updateWriteState();
       }
     }

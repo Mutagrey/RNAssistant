@@ -21,6 +21,7 @@ namespace RNAssistant.Office.Services
         private DateTime _documentVbaCacheUtc;
         private long _documentVbaCacheGeneration;
         private List<ToolCatalogEntry> _documentVbaCache = new List<ToolCatalogEntry>();
+        internal string HostName { get { return _adapter.HostName; } }
 
         public ToolCatalogService(IOfficeApplicationAdapter adapter, OfficeToolExecutor toolExecutor)
         {

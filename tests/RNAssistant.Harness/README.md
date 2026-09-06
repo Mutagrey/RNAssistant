@@ -268,14 +268,18 @@ checks; real VBIDE/Trust Access/crash behavior remains Windows qualification. Se
 [Phase 6I evidence](../../docs/stabilization/PHASE_6I_VBA_PACKAGE_LIFECYCLE.md) and
 [Phase 11J2 evidence](../../docs/stabilization/PHASE_11J2_VBA_PACKAGE_NATIVE_RUNTIME.md).
 
-## Tool Library mutation uploads
+## Tool Library source reads and mutation uploads
 
-For Tool Library mutation uploads, use `tool editor:` in
+For Tool Library source reads and mutation uploads, use `tool editor:` in
 `Program.ToolEditorResourceTests.cs` and
 `tools: typed library mutations are revision guarded`, plus
 `bridge: typed tools and skills` / `webview: restricts` for control wiring.
 They cover the shared capacity, chat/consumer isolation, single-use and complete
 typed UTF-8/hash validation, then the existing guarded authoring/publication owner.
+Source checks cover committed custom/builtin snapshots, historical exact children,
+document-local live drift, metadata-only delivery and capacity before live capture.
+`tests/web/tool-editor-resource.test.js` covers exact source contracts, hydration
+neutrality, read-only failures, clean-cache bounds, dirty conflicts and late leases.
 `tests/web/tool-package-actions.test.js` covers Save/pre-install transport, empty
 and Unicode bodies, verified prefixes, later drafts and cancellation before/after
 dispatch. The catalog's document read remains covered by

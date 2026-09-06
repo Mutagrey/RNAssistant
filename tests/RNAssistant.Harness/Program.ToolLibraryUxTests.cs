@@ -70,9 +70,10 @@ namespace RNAssistant.Harness
                                 tool.Id + " model description unchanged");
                             var projection = ToolLibraryResponse.From(
                                 new[] { tool });
-                            AssertEqual(string.Empty,
-                                projection.Tools[0].Readme,
-                                tool.Id + " UI docs absent from compact list");
+                            var metadata = JObject.FromObject(projection.Tools[0]);
+                            AssertTrue(metadata["readme"] == null && metadata["code"] == null && metadata["components"] == null &&
+                                metadata["argumentSchemaJson"] == null && metadata["source"] != null,
+                                tool.Id + " source bodies absent from compact list");
                             documented.Add(tool.Id);
                         }
                     });

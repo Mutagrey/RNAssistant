@@ -328,6 +328,15 @@ namespace RNAssistant.Office
                 Markdown = "# " + request.ToolId
             };
         }
+        public Task<ToolSourceReadResponse> ReadToolSourceAsync(ToolSourceReadRequest request, CancellationToken token)
+        {
+            token.ThrowIfCancellationRequested(); LastChatId = request.ChatId;
+            return Task.FromResult(new ToolSourceReadResponse { Type = ToolSourceReadResponse.ContractType, ContractVersion = 1,
+                ChatId = request.ChatId, ToolId = request.ToolId, Revision = request.ExpectedRevision,
+                Sources = new List<ResourceRef> { new ResourceRef("rna://catalog/tools/" + request.ToolId + "/source", "exact") },
+                Data = new ResourceDownloadOpenResponse { LeaseId = new string('a', 64), Url = "https://rnassistant.local-resource/v1/download/" + new string('a', 64),
+                    MaxChunkBytes = 262144, Payload = new PayloadRef(new string('b', 64), 2, "application/json; charset=utf-8") } });
+        }
         public ResourceUploadOpenResponse BeginToolMutationUpload(ToolMutationUploadRequest request, CancellationToken token)
         {
             token.ThrowIfCancellationRequested(); LastChatId = request.ChatId;
@@ -850,12 +859,11 @@ namespace RNAssistant.Office
                             Host = "Common",
                             Name = "common.generated_tool",
                             Description = string.Empty,
-                            ArgumentSchemaJson = "{}",
+                            Source = new ToolSourceMetadataDto { Sha256 = new string('b', 64), ByteLength = 64 },
                             Executor = "builtin",
                             Enabled = true,
                             BuiltIn = true,
                             AgentCanRun = true,
-                            Components = new List<ToolPackageComponentDto>(),
                             ArgumentOrder = new List<string>()
                         }
                     }

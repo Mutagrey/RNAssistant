@@ -170,6 +170,7 @@ namespace RNAssistant.Office.Tools
             {
                 throw new InvalidOperationException("Duplicate built-in tool id: " + duplicate.Id);
             }
+            _catalogPublication.RegisterBuiltInTools(_adapterTools.Concat(_controllerTools));
         }
 
         public IEnumerable<ToolCatalogEntry> GetControllerTools()

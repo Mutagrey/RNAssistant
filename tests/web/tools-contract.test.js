@@ -48,15 +48,15 @@ function component() {
 function item(id, revision, description = "Description") {
   return {
     revision, id, host: "Excel", name: id, description,
-    argumentSchemaJson: "{\"type\":\"object\"}", executor: "vba",
+    source: { sha256: "a".repeat(64), byteLength: 100 }, executor: "vba",
     requiresConfirmation: true, mutatesDocument: true,
     mutatesLocalState: false, canSourceHtmlData: false,
-    agentCanRun: false, code: "Option Explicit\n", readme: "",
+    agentCanRun: false,
     enabled: true, builtIn: false, riskLevel: 1,
     useWhen: "", doNotUseWhen: "", capabilityStatus: "available",
     limitations: "", packageVersion: "1.0.0",
     entryPoint: "RNA_Echo.Run", argumentOrder: [],
-    components: [component()], scope: "global",
+    scope: "global",
     installationStatus: "not_installed"
   };
 }
@@ -90,6 +90,8 @@ function library(tools) {
     item("excel.delete", "4".repeat(64))
   ]));
   context.setToolLibraryBaseline(context.state.tools);
+  const body = { argumentSchemaJson: '{"type":"object"}', code: "Option Explicit\n", readme: "", components: [component()] };
+  context.applyToolSource(context.state.tools[0], body);
   context.state.tools[0].Description = "After";
   context.state.tools.splice(1, 1);
   const created = context.toolFromContract(
@@ -97,6 +99,8 @@ function library(tools) {
   created.Revision = "";
   created._baseId = "";
   created._baseRevision = "";
+  context.applyToolSource(created, body);
+  delete created.Source; delete created._sourceBaseline;
   context.state.tools.push(created);
   const mutations = context.toolLibraryMutations();
   assert.deepEqual(Array.from(mutations, mutation => mutation.kind),
@@ -157,7 +161,7 @@ function library(tools) {
 
 {
   assert.ok(index.includes(
-    "app-tools.js?v=tool-upload-20260906-1"));
+    "app-tools.js?v=tool-source-20260906-1"));
   assert.equal(/StoragePath|storagePath/.test(source), false);
   assert.match(source, /expectedRevision/);
   assert.match(source, /toolLibraryMutationRequestType/);

@@ -6,7 +6,7 @@ Current task: user-authorized unified Resource Architecture direct cutover, in p
 Execution mode: mandatory host-neutral route 0–11T10, WQ-A1–A5, R61/11O0–11O7, the separately approved D05.1–D05.6 slices and R65–R70 corrections завершены. WQ0 не блокировал implementation: текущий `RuntimeKey` exact bound Excel/Word/PowerPoint/Outlook object or window принят как lifetime assumption. Накопленные Windows gates по §16.1 теперь квалифицируют только итоговый post-cutover catalog/UI; до их evidence Phase 12 remains blocked.
 
 Next step for tools: finish the unified resource cutover in MASTER order: complete remaining authority/compiler integration, replace HTML/bulk transport (Wave 4), then schema/mapping/derived/catalog integration and cleanup (Wave 5). Only then run final post-cutover Windows rebuild/live-provider/WebView2 qualification, including the accumulated R61–R77 retests. Phase 12 remains blocked.
-Latest slice (2026-09-06): Tool Library Save and save-before-VBA-install now share one bounded single-use upload with chat/lease/hash-only controls. Existing guarded authoring/commit semantics are retained; both inline save consumers are removed. Late drafts survive and failed/unconfirmed save cannot proceed to install. Next: Tool Library catalog/read bodies and outgoing library projections, not diagnostic expansion. Windows gates stay open.
+Latest slice (2026-09-06): Tool Library catalog and outgoing library projections now carry source hash/extent only. Selected custom/builtin/document-local schema/code/README/components load through the existing catalog/VBA Gateway and shared bounded download; no second authority or inline fallback. Clean source cache is selection-bounded and conflicting drafts survive with writes blocked. Next: generated built-in human docs and remaining definition/domain reads; the observed canonical/raw VBA snapshot collision is recorded for a focused authority correction. Windows gates stay open.
 Required context: [Resource MASTER](resource-cutover/MASTER.md), its three normative documents in the specified order, [resource owner map](../resource-fabric.md), and the exact owning source contour. Previous WQ evidence remains valid only for unchanged contours.
 Open gates / remaining legacy: the preceding 11T tool-dispatch adapter cleanup is complete; the unified Resource direct-cutover consumer/removal gates below are still OPEN. This is not an assertion that resource/catalog/result legacy is empty. All current Excel, Word, PowerPoint, Outlook, public VBA/macro, custom VBA package and controller-owned tools use direct typed owners. `ThisAddIn` active-window/document lookup remains only VSTO pane lifecycle discovery, never execution target fallback, and is part of Windows UI/session qualification. Permanent narrow journal ports and current model-compatibility diagnostics share the canonical authority and are not legacy. R61 11O0–11O7 are complete host-neutral; final post-cutover live-provider/WQ-PACK and real WebView2 evidence remain. R62 is fixed host-neutral but requires the exact Windows WebView model/tool-error retest. R63/R68/R69/R70/R71/R72/R73/R74/R75/R76 are fixed host-neutral. Exact real Excel bind, edited-cell toolbar refresh, WebView rerender, Artifact Library chart preview, run resource-card count, downloaded ECharts export, target-model v5 final/checkpoint behavior, schema 27 final-quality behavior, real VBE duplicate-source rejection and real chat/artifact/tab/startup responsiveness remain open on Windows. R65/R67/R70/R71/R72/R73/R74 are contained in prompt/schema/skill/tool guidance; explicit saved-prompt review/reset and a real complex Excel/VBA → HTML bind run on the target model remain open. R66 passes local Chromium but still requires the exact Windows WebView2 dashboard preview/export retest. R51 remains open for audio, other committed-resource removal and Windows WebView image-gallery/thumbnail/PDF/lifecycle qualification; 11D2 image, 11D3 PDF and their thumbnail/sequence navigation remain complete host-neutral and are not removed. R64 has matching exact-package x86 PDFium/Skia wired, but exact Windows x86 PDF extraction/preview/scanned-page/model-send execution remains open. Production OfficeHosts/VSTO build, actual COM marshal/cleanup, real DocumentSession lifetime, WQ0, WQ-SESSION, WQ-EXCEL, WQ-WORD, WQ-POWERPOINT and WQ-OUTLOOK are open evidence. Full Phase 6 Windows/VBE, Phase 8 WQ-PACK, Phase 9/R45–R48 WebView/restart/multi-window and R28/R29/R32 live-provider/UI gates remain open. R52 Host Fabric, R53 Local Automation, R54 Skill Library, R56 Tool Library, R57 Issue Center and R58 typed-facade risk remain open. Product 16.1.0-dev, no release/tag.
 
@@ -322,8 +322,28 @@ Library UX 4/4, context JSON 7/7, skill editor 13/13, shared upload 6/6, chat sy
 JavaScript syntax, version-format and diff checks pass. No full harness or
 Office/VSTO validation. A pre-existing literal leading-U+FEFF README sidecar issue
 was recorded in BACKLOG; storage behavior is unchanged, read-back remains unknown.
-Next host-neutral contour: Tool Library catalog/read bodies and outgoing mutation/
-package projections (including built-in documentation), remaining domain reads
+Tool source read slice (2026-09-06): catalog and outgoing Init/chat/mutation/package
+DTOs now carry hash/extent-only source metadata. ToolEditorResourceService reserves
+shared capacity, checks displayed Library revision and reads exact custom/builtin
+catalog children or document-local VBA component refs. Builtin registration uses
+the existing catalog publication owner; document-local JSON is disposable transfer,
+not another authority. Complete typed UTF-8 source downloads are bounded to 16 MiB;
+no model observations, disk fallback or implicit mutation is created. The UI's
+whole-catalog body serializer and component reconstruction fallback are removed.
+Unloaded/failed source stays read-only, hydration is dirty-neutral, clean cache is
+selection-bounded, and conflicting/late drafts survive without silent rebasing.
+Checks: tool editor 4/4 plus typed Library guards/bridge, builtin docs, document
+access, catalog merge/continuations/missing snapshots and dependency direction
+8/8 — 12/12 host-neutral. The catalog merge fixture now passes its ToolStore to
+the existing publication owner instead of assuming an implicit disk catalog.
+Web source reader 6/6, package actions 5/5, tool contract 5/5, editor 1/1, Library
+UX 4/4, context JSON 7/7, skill reader 13/13, chat sync 4/4, Artifact Library 5/5,
+commit projection 4/4 and VBA reader 4/4 — 58/58 in 11 focused files.
+JavaScript syntax, version-format and diff checks pass. No full harness or Office/
+VSTO validation. A pre-existing LF/CRLF canonical-hash versus raw immutable VBA
+view collision was reproduced and recorded in BACKLOG; it fails closed and is
+not repaired by this transport slice. Real Office/WebView2 gates remain open.
+Next host-neutral contour: generated built-in human documentation, remaining domain reads
 and other bulk upload/export through the existing Gateway/data plane, then finer Excel
 coverage/named resources and binary/raw view negotiation in MASTER order.
 Still open: remaining definition/domain read and other bulk upload/export consumers,

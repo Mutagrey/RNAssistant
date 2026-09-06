@@ -4,6 +4,8 @@ using System.Linq;
 using Newtonsoft.Json;
 using RNAssistant.Core.Models;
 using RNAssistant.Core.Services;
+using RNAssistant.Core.Tools;
+using RNAssistant.Office.Contracts;
 
 namespace RNAssistant.Office.Services
 {
@@ -16,8 +18,10 @@ namespace RNAssistant.Office.Services
         internal CatalogResourceProvider(CatalogPublicationService catalogs, ResourceAuthorityService authority)
         { _catalogs = catalogs; _payloads = authority.Payloads; }
 
-        private string[] Kinds { get { return new[] { "tools", "skills", "prompts", _catalogs.BuiltInKind }; } }
+        private IEnumerable<string> Kinds { get { return new[] { "tools", "skills", "prompts", _catalogs.BuiltInKind }
+            .Concat(_catalogs.HasBuiltInTools ? new[] { _catalogs.BuiltInToolsKind } : new string[0]); } }
         private bool SkillKind(string kind) { return kind == "skills" || kind == _catalogs.BuiltInKind; }
+        private bool ToolKind(string kind) { return kind == "tools" || _catalogs.HasBuiltInTools && kind == _catalogs.BuiltInToolsKind; }
 
         public ResourceListPage List(ChatSession session, string kind, string cursor, int limit)
         {
@@ -79,6 +83,13 @@ namespace RNAssistant.Office.Services
             string text;
             if (address.Segments.Count == 1)
             { descriptor = DescribeRoot(exact); text = _catalogs.ReadPublic(exact); }
+            else if (ToolKind(address.Segments[0]))
+            {
+                var root = new ResourceRef(ResourceUri.Create("catalog", address.Segments[0]), exact.Revision);
+                var tool = FindTool(root, address.Segments[1]);
+                descriptor = DescribeTool(root, tool);
+                text = JsonConvert.SerializeObject(ToolSourceBodyDto.From(tool));
+            }
             else
             {
                 var root = new ResourceRef(ResourceUri.Create("catalog", address.Segments[0]), exact.Revision);
@@ -114,8 +125,9 @@ namespace RNAssistant.Office.Services
         {
             var parsed = ResourceUri.Parse(uri);
             if (parsed.Provider != Id || parsed.Segments.Count < 1 || !Kinds.Contains(parsed.Segments[0]) ||
-                parsed.Segments.Count != 1 && (!SkillKind(parsed.Segments[0]) ||
-                !(parsed.Segments.Count == 3 && parsed.Segments[2] == "body" ||
+                parsed.Segments.Count != 1 &&
+                !(ToolKind(parsed.Segments[0]) && parsed.Segments.Count == 3 && parsed.Segments[2] == "source" ||
+                  SkillKind(parsed.Segments[0]) && (parsed.Segments.Count == 3 && parsed.Segments[2] == "body" ||
                   parsed.Segments.Count == 4 && parsed.Segments[2] == "reference")))
                 throw Error("Unknown catalog resource.", "RESOURCE_NOT_FOUND");
             return parsed;
@@ -126,12 +138,28 @@ namespace RNAssistant.Office.Services
             var address = Address(exact.Uri);
             if (address.Segments.Count == 1) return DescribeRoot(exact);
             var root = new ResourceRef(ResourceUri.Create("catalog", address.Segments[0]), exact.Revision);
+            if (ToolKind(address.Segments[0])) return DescribeTool(root, FindTool(root, address.Segments[1]));
             var skill = FindSkill(root, address.Segments[1]);
             return DescribeSkill(root, skill, address.Segments.Count == 4 ? FindReference(skill, address.Segments[3]) : null);
         }
 
         private SkillDefinition[] Skills(ResourceRef root)
         { return JsonConvert.DeserializeObject<SkillDefinition[]>(_catalogs.Read(root)); }
+        private ToolCatalogEntry FindTool(ResourceRef root, string id)
+        {
+            var values = JsonConvert.DeserializeObject<ToolCatalogEntry[]>(_catalogs.Read(root)).Where(item => item.Id == id).Take(2).ToArray();
+            if (values.Length != 1) throw Error("The exact tool source is unavailable or ambiguous.", "RESOURCE_SNAPSHOT_UNAVAILABLE");
+            return values[0];
+        }
+        private static ResourceDescriptor DescribeTool(ResourceRef root, ToolCatalogEntry tool)
+        {
+            var descriptor = new ResourceDescriptor { Reference = new ResourceRef(ResourceUri.Create("catalog",
+                    ResourceUri.Parse(root.Uri).Segments[0], tool.Id, "source"), root.Revision),
+                Provider = "catalog", Title = tool.Id, Kind = "tool-source", MimeType = "application/json", Mutable = false, Tracking = "strongly-tracked" };
+            descriptor.Representations.Add("text"); descriptor.Capabilities.Add("read");
+            descriptor.Dependencies.Add(new ResourceDependency(root, "text", ResourceCoverage.Whole(), "catalog-publication"));
+            return descriptor;
+        }
         private SkillDefinition FindSkill(ResourceRef root, string id)
         {
             var values = Skills(root).Where(item => item.Id == id).Take(2).ToArray();

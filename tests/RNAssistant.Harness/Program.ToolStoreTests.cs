@@ -87,7 +87,7 @@ namespace RNAssistant.Harness
                     CustomTool("Excel", "excel.custom"),
                     CustomTool("Word", "word.hidden")
                 });
-                var executor = new OfficeToolExecutor(adapter, new VbaJournalStore(paths), new SkillStore(paths));
+                var executor = new OfficeToolExecutor(adapter, new VbaJournalStore(paths), new SkillStore(paths), toolStore);
                 var catalog = new ToolCatalogService(adapter, executor).GetVisibleTools();
 
                 AssertTrue(HasTool(catalog, "excel.add_sheet"), "built-in tool visible");

@@ -234,6 +234,10 @@
       if (typeof cancelSkillSourceRead === "function") cancelSkillSourceRead();
       if (typeof trimSkillSourceCache === "function") trimSkillSourceCache(null, "");
     }
+    if (!toolSelected) {
+      if (typeof cancelToolSourceRead === "function") cancelToolSourceRead();
+      if (typeof trimToolSourceCache === "function") trimToolSourceCache(null);
+    }
     if (promptSelected) renderPromptEditor();
     if (skillSelected && typeof renderSkillEditor === "function") renderSkillEditor();
     if (toolSelected && typeof renderToolEditor === "function") renderToolEditor();

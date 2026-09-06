@@ -58,6 +58,7 @@ namespace RNAssistant.Office
                     workspaceId == TrajectoryPayloadService.Owner ||
                     workspaceId == VbaEditorResourceService.Owner ||
                     workspaceId == SkillEditorResourceService.Owner ||
+                    workspaceId == ToolEditorResourceService.Owner ||
                     string.Equals(session.ActiveHtmlArtifactId, workspaceId, StringComparison.Ordinal));
             }
             catch (InvalidOperationException) { return false; }

@@ -25,14 +25,14 @@ function toolFromContract(tool) {
     typeof tool.id !== "string" || !tool.id ||
     typeof tool.host !== "string" || typeof tool.name !== "string" ||
     typeof tool.description !== "string" ||
-    typeof tool.argumentSchemaJson !== "string" ||
+    !tool.source || !/^[a-f0-9]{64}$/.test(tool.source.sha256) || !Number.isInteger(tool.source.byteLength) || tool.source.byteLength < 0 ||
+    ["argumentSchemaJson", "code", "readme", "components"].some(function (key) { return Object.prototype.hasOwnProperty.call(tool, key); }) ||
     typeof tool.executor !== "string" ||
     typeof tool.requiresConfirmation !== "boolean" ||
     typeof tool.mutatesDocument !== "boolean" ||
     typeof tool.mutatesLocalState !== "boolean" ||
     typeof tool.canSourceHtmlData !== "boolean" ||
     typeof tool.agentCanRun !== "boolean" ||
-    typeof tool.code !== "string" || typeof tool.readme !== "string" ||
     typeof tool.enabled !== "boolean" || typeof tool.builtIn !== "boolean" ||
     typeof tool.riskLevel !== "number" || typeof tool.useWhen !== "string" ||
     typeof tool.doNotUseWhen !== "string" ||
@@ -40,7 +40,7 @@ function toolFromContract(tool) {
     typeof tool.limitations !== "string" ||
     typeof tool.packageVersion !== "string" ||
     typeof tool.entryPoint !== "string" ||
-    !Array.isArray(tool.argumentOrder) || !Array.isArray(tool.components) ||
+    !Array.isArray(tool.argumentOrder) ||
     typeof tool.scope !== "string" ||
     typeof tool.installationStatus !== "string") {
     throw new Error("Некорректный typed package инструмента.");
@@ -50,15 +50,13 @@ function toolFromContract(tool) {
     Host: tool.host,
     Name: tool.name,
     Description: tool.description,
-    ArgumentSchemaJson: tool.argumentSchemaJson,
+    Source: { sha256: tool.source.sha256, byteLength: tool.source.byteLength },
     Executor: tool.executor,
     RequiresConfirmation: tool.requiresConfirmation,
     MutatesDocument: tool.mutatesDocument,
     MutatesLocalState: tool.mutatesLocalState,
     CanSourceHtmlData: tool.canSourceHtmlData,
     AgentCanRun: tool.agentCanRun,
-    Code: tool.code,
-    Readme: tool.readme,
     Enabled: tool.enabled,
     BuiltIn: tool.builtIn,
     RiskLevel: tool.riskLevel,
@@ -69,13 +67,118 @@ function toolFromContract(tool) {
     PackageVersion: tool.packageVersion,
     EntryPoint: tool.entryPoint,
     ArgumentOrder: tool.argumentOrder.slice(),
-    Components: tool.components.map(toolComponentFromContract),
     Scope: tool.scope,
     InstallationStatus: tool.installationStatus,
     Revision: tool.revision,
     _baseId: tool.builtIn ? "" : tool.id,
     _baseRevision: tool.builtIn ? "" : tool.revision
   };
+}
+
+function toolSourceBody(tool) {
+  return { argumentSchemaJson: tool.ArgumentSchemaJson || "", code: tool.Code || "", readme: tool.Readme || "",
+    components: (tool.Components || []).map(function (component) { return { name: component.Name || "", type: component.Type || "StdModule",
+      fileName: component.FileName || "", code: component.Code || "", codeSha256: component.CodeSha256 || "" }; }) };
+}
+
+function toolSourceDirty(tool) {
+  return !!(tool && tool._sourceLoaded && JSON.stringify(toolSourceBody(tool)) !== tool._sourceBaseline);
+}
+
+function applyToolSource(tool, body) {
+  if (!body || typeof body.argumentSchemaJson !== "string" || typeof body.code !== "string" ||
+      typeof body.readme !== "string" || !Array.isArray(body.components) ||
+      Object.keys(body).some(function (key) { return ["argumentSchemaJson", "code", "readme", "components"].indexOf(key) < 0; }))
+    throw new Error("Некорректный typed исходник инструмента.");
+  var components = body.components.map(toolComponentFromContract);
+  tool.ArgumentSchemaJson = body.argumentSchemaJson; tool.Code = body.code; tool.Readme = body.readme; tool.Components = components;
+  tool._sourceLoaded = true; tool._sourceBaseline = JSON.stringify(toolSourceBody(tool));
+}
+
+function trimToolSourceCache(selected) {
+  (state.tools || []).forEach(function (tool) {
+    if (tool !== selected && !toolSourceDirty(tool)) {
+      delete tool.ArgumentSchemaJson; delete tool.Code; delete tool.Readme; delete tool.Components;
+      delete tool._sourceLoaded; delete tool._sourceBaseline; delete tool._sourceError;
+    }
+  });
+}
+
+var toolSourceRead = null, toolSourceReadPending = 0;
+
+function closeToolSourceRead(operation) {
+  if (!operation || operation.closed || !operation.data || !/^[a-f0-9]{64}$/.test(operation.data.leaseId)) return Promise.resolve();
+  operation.closed = true;
+  return send("resourceDataClose", { chatId: operation.chatId, workspaceId: "tool-editor", leaseId: operation.data.leaseId }).catch(function () {});
+}
+
+function cancelToolSourceRead() {
+  var operation = toolSourceRead;
+  if (!operation) return;
+  operation.abort.abort();
+  if (operation.requestId) cancelBridgeRequest(operation.requestId).catch(function () {});
+  closeToolSourceRead(operation); toolSourceRead = null;
+}
+
+function toolSourceReadFromContract(response, operation) {
+  if (!response || response.type !== "rnassistant.toolSourceRead" || response.contractVersion !== toolLibraryContractVersion ||
+      response.chatId !== operation.chatId || response.toolId !== operation.id || response.revision !== operation.revision ||
+      !response.data || !response.data.payload || response.data.payload.contentType !== "application/json; charset=utf-8" ||
+      response.data.payload.sha256 !== operation.hash || response.data.payload.byteLength !== operation.length ||
+      !Array.isArray(response.sources) || !response.sources.length || response.sources.length > 256)
+    throw new Error("Некорректный снимок исходника инструмента.");
+  var seen = {};
+  response.sources.forEach(function (resource) {
+    var parts = resource && typeof resource.uri === "string" ? resource.uri.split("/") : [];
+    if (typeof (resource && resource.revision) !== "string" || !resource.revision || seen[resource.uri] ||
+        parts[0] !== "rna:" || parts[1] !== "" || parts.length !== 6 ||
+        (operation.documentLocal ? parts[2] !== "vba" || !parts[3] || parts[4] !== "component" || !/^[a-f0-9]{64}$/.test(parts[5]) :
+          parts[2] !== "catalog" || parts[3] !== (operation.builtIn ? "builtin-tools-" + operation.host : "tools") ||
+          decodeURIComponent(parts[4]) !== operation.id || parts[5] !== "source"))
+      throw new Error("Источник инструмента не привязан к точной ревизии.");
+    seen[resource.uri] = true;
+  });
+  if (!operation.documentLocal && response.sources.length !== 1) throw new Error("Неоднозначный источник инструмента.");
+  return response;
+}
+
+async function loadSelectedToolSource(tool) {
+  if (!tool || tool._sourceLoaded || tool._sourceError || toolSourceRead && toolSourceRead.tool === tool ||
+      !tool.Source || !state.activeChatId || state.bridgeUnavailable || state.toolLibraryWriting || state.selectedInstructionKind !== "tool") return;
+  cancelToolSourceRead();
+  if (toolSourceReadPending >= 2) { log("Предыдущее чтение ещё закрывается. Выберите инструмент повторно после завершения.", "error"); return; }
+  var operation = { tool: tool, id: tool._baseId || tool.Id, revision: tool.Revision, chatId: state.activeChatId,
+    hash: tool.Source.sha256, length: tool.Source.byteLength, builtIn: !!tool.BuiltIn, host: String(state.host || "common").toLowerCase(),
+    documentLocal: tool.Scope === "document", abort: new AbortController() };
+  toolSourceRead = operation; toolSourceReadPending++;
+  function current() { return toolSourceRead === operation && !operation.abort.signal.aborted && !state.bridgeUnavailable &&
+    state.activeChatId === operation.chatId && state.selectedInstructionKind === "tool" && state.tools[state.selectedToolIndex] === tool &&
+    tool.Revision === operation.revision && (tool._baseId || tool.Id) === operation.id && !toolSourceDirty(tool) &&
+    tool.Source.sha256 === operation.hash && tool.Source.byteLength === operation.length; }
+  function active() { if (!current()) throw new Error("RESOURCE_READ_CANCELLED"); }
+  try {
+    if (operation.length > 16 * 1024 * 1024) throw new Error("RESOURCE_BATCH_TOO_LARGE");
+    active();
+    var opening = send("readToolSource", { type: "rnassistant.toolSourceRequest", contractVersion: toolLibraryContractVersion,
+      chatId: operation.chatId, toolId: operation.id, expectedRevision: operation.revision });
+    operation.requestId = opening.requestId;
+    var response = await opening; operation.requestId = null; operation.data = response && response.data;
+    active();
+    var typed = toolSourceReadFromContract(response, operation);
+    var bytes = await window.RNAssistantResourceDownload.read(typed.data, { maxBytes: 16 * 1024 * 1024,
+      fetch: window.fetch.bind(window), signal: operation.abort.signal, isCurrent: current });
+    var body = JSON.parse(new TextDecoder("utf-8", { fatal: true, ignoreBOM: true }).decode(bytes));
+    if (operation.documentLocal && (!body || !Array.isArray(body.components) || typed.sources.length !== body.components.length ||
+        typed.sources.some(function (source) { return source.uri.split("/")[3] !== typed.sources[0].uri.split("/")[3]; })))
+      throw new Error("Состав VBA-снимка не совпадает с исходником инструмента.");
+    await closeToolSourceRead(operation); active();
+    applyToolSource(tool, body);
+  } catch (error) {
+    if (current()) { tool._sourceError = error.detail || error.message; log(tool._sourceError, "error"); }
+  } finally {
+    await closeToolSourceRead(operation); toolSourceReadPending--;
+    if (toolSourceRead === operation) { toolSourceRead = null; renderToolEditor(); }
+  }
 }
 
 function toolLibraryItemsFromContract(contract) {
@@ -140,7 +243,6 @@ var toolActions = window.RNAssistantToolActions.create({
   parseMutation: toolLibraryMutationFromContract,
   parseLibrary: toolLibraryItemsFromContract,
   reconcile: reconcileToolLibraryCatalog,
-  readTools: readTools,
   readNextArguments: toolStructuredEditor.readNextArguments,
   readRunArguments: toolStructuredEditor.readRunArguments,
   renderTools: renderTools,
@@ -199,27 +301,14 @@ function emptyToolSchema() {
 }
 
 function toolComponents(tool) {
-  if (!tool) {
+  if (!tool || !tool._sourceLoaded) {
     return [];
   }
-  var components = tool.Components || tool.components;
-  if (!Array.isArray(components)) {
-    components = [];
-  }
-  if (!components.length && (tool.Code || tool.code)) {
-    components.push({
-      Name: tool.EntryModuleName || tool.entryModuleName || inferredVbaComponentName(tool),
-      Type: "StdModule",
-      FileName: inferredVbaComponentName(tool) + ".bas",
-      Code: tool.Code || tool.code || ""
-    });
-  }
-  tool.Components = components;
-  return components;
+  return tool.Components || [];
 }
 
 function inferredVbaComponentName(tool) {
-  var raw = String((tool && (tool.Id || tool.id)) || "Tool").replace(/[^A-Za-z0-9_]/g, "_");
+  var raw = String(tool && tool.Id || "Tool").replace(/[^A-Za-z0-9_]/g, "_");
   if (!/^[A-Za-z]/.test(raw)) {
     raw = "Tool_" + raw;
   }
@@ -233,17 +322,14 @@ function writableToolLibraryItems(tools) {
 }
 
 function toolLibraryComparable(tool) {
-  var components = Array.isArray(tool.Components || tool.components) ? (tool.Components || tool.components) : [];
   return {
       Id: tool.Id || "",
       Host: tool.Host || "Common",
       Name: tool.Name || tool.Id || "",
       Description: tool.Description || "",
-      ArgumentSchemaJson: tool.ArgumentSchemaJson || emptyToolSchema(),
+      SourceState: toolSourceDirty(tool) ? JSON.stringify(toolSourceBody(tool)) : tool.Source && tool.Source.sha256 || "",
       Executor: tool.Executor || "vba",
       RequiresConfirmation: !!tool.RequiresConfirmation,
-      Code: tool.Code || "",
-      Readme: tool.Readme || "",
       Enabled: tool.Enabled !== false,
       MutatesDocument: !!tool.MutatesDocument,
       MutatesLocalState: !!tool.MutatesLocalState,
@@ -255,16 +341,7 @@ function toolLibraryComparable(tool) {
       Limitations: tool.Limitations || "",
       PackageVersion: tool.PackageVersion || "1.0.0",
       EntryPoint: tool.EntryPoint || "",
-      ArgumentOrder: (tool.ArgumentOrder || []).slice(),
-      Components: components.map(function (component) {
-        return {
-          Name: component.Name || "",
-          Type: component.Type || "StdModule",
-          FileName: component.FileName || "",
-          Code: component.Code || "",
-          CodeSha256: component.CodeSha256 || ""
-        };
-      })
+      ArgumentOrder: (tool.ArgumentOrder || []).slice()
   };
 }
 
@@ -309,7 +386,7 @@ function toolRecordChanged(current, baseline) {
 }
 
 function setToolLibraryBaseline(tools) {
-  state.toolLibraryBaselineItems = toolLibraryRecords(tools);
+  state.toolLibraryBaselineItems = toolLibraryRecords(tools).map(function (record) { delete record.entity; return record; });
   state.toolLibraryBaseline = toolLibrarySnapshot(tools);
 }
 
@@ -329,16 +406,28 @@ function updateToolWriteControls() {
   var readOnly = !tool || !!tool.BuiltIn || String(tool.Scope || "").toLowerCase() === "document";
   var isVba = tool && String(tool.Executor).toLowerCase() === "vba";
   if ($("deleteToolButton")) $("deleteToolButton").disabled = unavailable || readOnly;
-  if ($("cloneToolButton")) $("cloneToolButton").disabled = unavailable || !tool || !!tool.BuiltIn;
+  var sourceUnavailable = !tool || !tool._sourceLoaded;
+  if ($("cloneToolButton")) $("cloneToolButton").disabled = unavailable || sourceUnavailable || !!tool.BuiltIn;
   if ($("addToolButton")) $("addToolButton").disabled = unavailable;
   ["installVbaToolButton", "uninstallVbaToolButton"].forEach(function (id) {
-    if ($(id)) $(id).disabled = unavailable || readOnly || !isVba || id === "uninstallVbaToolButton" && tool.InstallationStatus === "not_installed";
+    if ($(id)) $(id).disabled = unavailable || sourceUnavailable || readOnly || !isVba || !!tool._sourceConflict ||
+      id === "uninstallVbaToolButton" && tool.InstallationStatus === "not_installed";
   });
-  ["dryRunToolButton", "runToolButton"].forEach(function (id) { if ($(id)) $(id).disabled = unavailable || !tool; });
+  ["dryRunToolButton", "runToolButton", "copyToolContextButton", "askToolBuilderButton"].forEach(function (id) {
+    if ($(id)) $(id).disabled = unavailable || sourceUnavailable;
+  });
   updateToolSaveButton();
 }
 
 function reconcileToolLibraryCatalog(serverTools) {
+  cancelToolSourceRead();
+  (serverTools || []).forEach(function (serverTool) {
+    var current = state.tools.find(function (tool) { return (tool._baseId || tool.Id) === serverTool.Id; });
+    if (!current || !current._sourceLoaded) return;
+    if (current.Source && serverTool.Source && current.Source.sha256 === serverTool.Source.sha256) {
+      if (!toolSourceDirty(current)) applyToolSource(serverTool, toolSourceBody(current));
+    } else if (toolSourceDirty(current)) current._sourceConflict = true;
+  });
   var currentRecords = toolLibraryRecords(state.tools);
   var currentIndex = toolRecordIndex(currentRecords);
   var baselineIndex = toolRecordIndex(state.toolLibraryBaselineItems || []);
@@ -354,7 +443,14 @@ function reconcileToolLibraryCatalog(serverTools) {
     var baseline = matchingToolRecord(baselineIndex, serverRecord);
     if (!current && baseline) return;
     if (current) used.push(current.entity);
-    merged.push(current && toolRecordChanged(current, baseline) ? current.entity : serverTool);
+    var retained = current && toolRecordChanged(current, baseline);
+    if (retained && !toolSourceDirty(current.entity) && current.entity.Source.sha256 !== serverTool.Source.sha256) {
+      // Metadata-only local edits may follow a new body only after an explicit fresh read.
+      delete current.entity.ArgumentSchemaJson; delete current.entity.Code; delete current.entity.Readme; delete current.entity.Components;
+      delete current.entity._sourceLoaded; delete current.entity._sourceBaseline;
+      current.entity.Source = serverTool.Source; current.entity.Revision = serverTool.Revision;
+    }
+    merged.push(retained ? current.entity : serverTool);
   });
   currentRecords.forEach(function (current) {
     if (used.indexOf(current.entity) >= 0) return;
@@ -371,7 +467,8 @@ function updateToolSaveButton() {
   var button = $("saveToolsButton");
   if (!button) return;
   button.hidden = !state.toolLibraryDirty;
-  button.disabled = !!state.bridgeUnavailable || !!state.toolLibraryWriting || !state.toolLibraryDirty;
+  button.disabled = !!state.bridgeUnavailable || !!state.toolLibraryWriting || !state.toolLibraryDirty ||
+    state.tools.some(function (tool) { return !!tool._sourceConflict; });
 }
 
 function updateToolLibraryDirty() {
@@ -401,7 +498,10 @@ function toolLibraryMutations() {
     var previous = matchingToolRecord(baselineIndex, record);
     if (previous && !toolRecordChanged(record, previous)) return;
     var tool = record.entity;
+    if (!tool._sourceLoaded || tool._sourceConflict)
+      throw new Error("Исходник " + tool.Id + " не загружен либо изменился на диске. Обновите Library и сверьте черновик.");
     var comparable = toolLibraryComparable(tool);
+    var source = toolSourceBody(tool);
     mutations.push({
       kind: "upsert",
       baseId: previous ? previous.baseId : "",
@@ -410,14 +510,14 @@ function toolLibraryMutations() {
       host: comparable.Host,
       name: comparable.Name,
       description: comparable.Description,
-      argumentSchemaJson: comparable.ArgumentSchemaJson,
+      argumentSchemaJson: source.argumentSchemaJson,
       executor: comparable.Executor,
       requiresConfirmation: comparable.RequiresConfirmation,
       mutatesDocument: comparable.MutatesDocument,
       mutatesLocalState: comparable.MutatesLocalState,
       agentCanRun: comparable.AgentCanRun,
-      code: comparable.Code,
-      readme: comparable.Readme,
+      code: source.code,
+      readme: source.readme,
       enabled: comparable.Enabled,
       riskLevel: comparable.RiskLevel,
       useWhen: comparable.UseWhen,
@@ -427,15 +527,7 @@ function toolLibraryMutations() {
       packageVersion: comparable.PackageVersion,
       entryPoint: comparable.EntryPoint,
       argumentOrder: comparable.ArgumentOrder,
-      components: comparable.Components.map(function (component) {
-        return {
-          name: component.Name,
-          type: component.Type,
-          fileName: component.FileName,
-          code: component.Code,
-          codeSha256: component.CodeSha256
-        };
-      })
+      components: source.components
     });
   });
   baseline.forEach(function (record) {
@@ -472,7 +564,7 @@ function vbaComponentFileName(name, type) {
 }
 
 function syncSelectedToolComponentFromEditor(tool) {
-  if (!tool || String(tool.Executor || "").toLowerCase() !== "vba") {
+  if (!tool || !tool._sourceLoaded || tool.BuiltIn || tool.Scope === "document" || String(tool.Executor || "").toLowerCase() !== "vba") {
     return;
   }
   var component = selectedToolComponent(tool);
@@ -514,10 +606,14 @@ function applyToolEditorPage() {
 
 function renderToolEditor() {
   var skill = state.tools[state.selectedToolIndex] || null;
+  if (toolSourceRead && (toolSourceRead.tool !== skill || toolSourceRead.chatId !== state.activeChatId ||
+      toolSourceRead.revision !== skill.Revision)) cancelToolSourceRead();
+  trimToolSourceCache(skill);
   var disabled = !skill;
   var builtIn = !!(skill && skill.BuiltIn);
   var documentLocal = !!(skill && String(skill.Scope || skill.scope || "").toLowerCase() === "document");
-  var readOnly = builtIn || documentLocal;
+  var sourceUnavailable = !skill || !skill._sourceLoaded;
+  var readOnly = builtIn || documentLocal || sourceUnavailable || !!state.bridgeUnavailable;
   setToolRunContinuation(null);
   state.toolBuilderReadOnly = disabled || readOnly;
   var isVba = !!(skill && String(skill.Executor || "").toLowerCase() === "vba");
@@ -533,7 +629,8 @@ function renderToolEditor() {
       : "Выберите инструмент слева или создайте новый.";
   }
   if ($("toolEditorTitle")) $("toolEditorTitle").textContent = skill ? (skill.Id || skill.Name || "Инструмент") : "Инструмент";
-  if ($("toolEditorMeta")) $("toolEditorMeta").textContent = skill ? ((builtIn ? "Встроенный" : "Пользовательский") + " · " + (skill.Host || "Common") + " · " + (skill.Executor || "vba")) : "";
+  if ($("toolEditorMeta")) $("toolEditorMeta").textContent = skill ? ((builtIn ? "Встроенный" : "Пользовательский") + " · " + (skill.Host || "Common") + " · " + (skill.Executor || "vba") +
+    (skill._sourceConflict ? " · Исходник изменился: черновик сохранён, запись заблокирована" : skill._sourceError ? " · Ошибка чтения: обновите Library" : sourceUnavailable ? " · Загрузка исходника…" : "")) : "";
   $("toolEnabledInput").checked = skill ? skill.Enabled !== false : false;
   $("toolIdInput").value = skill ? (skill.Id || "") : "";
   $("toolHostInput").value = skill ? (skill.Host || "Common") : "Common";
@@ -596,11 +693,11 @@ function renderToolEditor() {
   ].forEach(function (id) {
     $(id).disabled = disabled || readOnly;
   });
-  $("toolRunArgsInput").disabled = disabled;
-  $("applyToolRunJsonButton").disabled = disabled;
+  $("toolRunArgsInput").disabled = sourceUnavailable;
+  $("applyToolRunJsonButton").disabled = sourceUnavailable;
   if (typeof setCodeEditorReadOnly === "function") {
     setCodeEditorReadOnly("toolSchemaInput", disabled || readOnly);
-    setCodeEditorReadOnly("toolRunArgsInput", disabled);
+    setCodeEditorReadOnly("toolRunArgsInput", sourceUnavailable);
     setCodeEditorReadOnly("toolCodeInput", disabled || readOnly || !isVba);
     setCodeEditorReadOnly("toolReadmeInput", disabled || readOnly);
   }
@@ -621,6 +718,7 @@ function renderToolEditor() {
   $("installVbaToolButton").disabled = !isVba || builtIn || documentLocal || !!state.bridgeUnavailable;
   $("uninstallVbaToolButton").disabled = $("installVbaToolButton").disabled || String(skill && skill.InstallationStatus || "") === "not_installed";
   updateToolWriteControls();
+  loadSelectedToolSource(skill);
 }
 
 function syncSelectedToolFromEditor() {
@@ -628,7 +726,7 @@ function syncSelectedToolFromEditor() {
     syncCodeEditors(["toolSchemaInput", "toolRunArgsInput", "toolCodeInput", "toolReadmeInput"]);
   }
   var skill = state.tools[state.selectedToolIndex];
-  if (!skill || skill.BuiltIn) {
+  if (!skill || !skill._sourceLoaded || skill.BuiltIn || skill.Scope === "document") {
     return;
   }
 
@@ -652,7 +750,7 @@ function syncSelectedToolFromEditor() {
 
 function validateSelectedToolEditors() {
   var tool = state.tools[state.selectedToolIndex];
-  if (!tool) return true;
+  if (!tool || !tool._sourceLoaded) return true;
   if (!toolStructuredEditor.syncSchemaDraft()) { state.toolEditorPage = "schema"; applyToolEditorPage(); return false; }
   return true;
 }
@@ -660,57 +758,18 @@ function validateSelectedToolEditors() {
 function validateAllToolDefinitions() {
   for (var index = 0; index < state.tools.length; index += 1) {
     var tool = state.tools[index] || {};
+    if (!tool._sourceLoaded) continue;
     try { JSON.parse(tool.ArgumentSchemaJson || emptyToolSchema()); }
     catch (error) { throw new Error("Некорректная schema у " + (tool.Id || "инструмента") + ": " + error.message); }
 
   }
 }
 
-function readTools() {
-  syncSelectedToolFromEditor();
-  return state.tools.map(function (skill) {
-    return {
-      Id: skill.Id || "",
-      Host: skill.Host || "Common",
-      Name: skill.Name || skill.Id || "",
-      Description: skill.Description || "",
-      ArgumentSchemaJson: skill.ArgumentSchemaJson || emptyToolSchema(),
-      Executor: skill.Executor || (skill.BuiltIn ? "builtin" : "vba"),
-      RequiresConfirmation: !!skill.RequiresConfirmation,
-      Code: skill.Code || "",
-      Readme: skill.Readme || "",
-      Enabled: skill.Enabled !== false,
-      BuiltIn: !!skill.BuiltIn,
-      MutatesDocument: !!skill.MutatesDocument,
-      MutatesLocalState: !!skill.MutatesLocalState,
-      AgentCanRun: !!skill.AgentCanRun,
-      RiskLevel: Number(skill.RiskLevel || 0),
-      UseWhen: skill.UseWhen || "",
-      DoNotUseWhen: skill.DoNotUseWhen || "",
-      CapabilityStatus: skill.CapabilityStatus || "available",
-      Limitations: skill.Limitations || "",
-      PackageVersion: skill.PackageVersion || "1.0.0",
-      EntryPoint: skill.EntryPoint || "",
-      ArgumentOrder: skill.ArgumentOrder || [],
-      Components: toolComponents(skill).map(function (component) {
-        return {
-          Name: component.Name || "",
-          Type: component.Type || "StdModule",
-          FileName: component.FileName || "",
-          Code: component.Code || "",
-          CodeSha256: component.CodeSha256 || ""
-        };
-      }),
-      Scope: skill.Scope || "global",
-      InstallationStatus: skill.InstallationStatus || ""
-    };
-  });
-}
 
 function selectedToolContext() {
   syncSelectedToolFromEditor();
   var skill = state.tools[state.selectedToolIndex];
-  if (!skill) {
+  if (!skill || !skill._sourceLoaded) {
     return "";
   }
 
@@ -742,7 +801,7 @@ function selectedToolContext() {
 function addVbaComponent(type) {
   syncSelectedToolFromEditor();
   var tool = state.tools[state.selectedToolIndex];
-  if (!tool || String(tool.Executor || "").toLowerCase() !== "vba") {
+  if (!tool || !tool._sourceLoaded || tool.BuiltIn || tool.Scope === "document" || String(tool.Executor || "").toLowerCase() !== "vba") {
     return;
   }
   var components = toolComponents(tool);
@@ -761,6 +820,7 @@ function addVbaComponent(type) {
 }
 
 function bindToolActions() {
+  window.addEventListener("pagehide", cancelToolSourceRead);
   window.addEventListener("pagehide", cancelToolLibraryWrite);
   Array.prototype.slice.call(document.querySelectorAll(".tool-page-button")).forEach(function (button) { button.addEventListener("click", function () { syncSelectedToolFromEditor(); state.toolEditorPage = button.getAttribute("data-tool-page") || "main"; applyToolEditorPage(); }); });
   toolStructuredEditor.bind();
@@ -822,7 +882,8 @@ function bindToolActions() {
       PackageVersion: "1.0.0",
       Components: [{ Name: "RNA_NewTool", Type: "StdModule", FileName: "RNA_NewTool.bas", Code: "Option Explicit\n" }],
       _baseId: "",
-      _baseRevision: ""
+      _baseRevision: "",
+      _sourceLoaded: true
     });
     state.selectedToolIndex = state.tools.length - 1;
     state.selectedInstructionKind = "tool";
@@ -833,7 +894,7 @@ function bindToolActions() {
   $("cloneToolButton").addEventListener("click", function () {
     syncSelectedToolFromEditor();
     var source = state.tools[state.selectedToolIndex];
-    if (!source || source.BuiltIn) {
+    if (!source || !source._sourceLoaded || source.BuiltIn) {
       return;
     }
 
@@ -865,7 +926,8 @@ function bindToolActions() {
       Scope: "global",
       InstallationStatus: "not_installed",
       _baseId: "",
-      _baseRevision: ""
+      _baseRevision: "",
+      _sourceLoaded: true
     });
     state.selectedToolIndex = state.tools.length - 1;
     state.selectedInstructionKind = "tool";

@@ -22,15 +22,26 @@ namespace RNAssistant.Office.Services
         private SkillCatalogSnapshot _skillSnapshot;
         private readonly SkillCatalogSnapshot _builtIns;
         internal string BuiltInKind { get; private set; }
+        private RNAssistant.Core.Tools.ToolCatalogEntry[] _builtInTools;
+        internal string BuiltInToolsKind { get; private set; }
+        internal bool HasBuiltInTools { get { return _builtInTools != null; } }
 
         internal CatalogPublicationService(ResourceAuthorityService authority, ResourceMutationJournal journal,
             ToolStore tools, SkillStore skills, Func<string> prompts, IOfficeApplicationAdapter adapter = null)
         {
             _authority = authority; _journal = journal; _tools = tools; _skills = skills; _prompts = prompts;
             BuiltInKind = "builtin-skills-" + (adapter?.HostName ?? "common").ToLowerInvariant();
+            BuiltInToolsKind = "builtin-tools-" + (adapter?.HostName ?? "common").ToLowerInvariant();
             _builtIns = new SkillCatalogSnapshot(BuiltInSkillProvider.GetSkills(adapter));
             // Registration is a publication boundary, never a provider/COM read during compile.
-            PublishBuiltIns();
+            PublishBuiltIns(BuiltInKind);
+        }
+
+        internal void RegisterBuiltInTools(IEnumerable<RNAssistant.Core.Tools.ToolCatalogEntry> tools)
+        {
+            if (_builtInTools != null) throw new InvalidOperationException("Built-in tools are already registered.");
+            _builtInTools = tools.Select(tool => tool.Clone()).ToArray();
+            PublishBuiltIns(BuiltInToolsKind);
         }
 
         internal ResourceMutationReadBack CaptureReadBack(ResourceIdentity identity)
@@ -57,8 +68,10 @@ namespace RNAssistant.Office.Services
                     json = JsonConvert.SerializeObject(skills); break;
                 case "prompts": json = _prompts(); break;
                 default:
-                    if (address.Segments[0] != BuiltInKind) throw new InvalidOperationException("Unsupported catalog publication.");
-                    json = JsonConvert.SerializeObject(_builtIns.Skills); break;
+                    if (address.Segments[0] == BuiltInKind) json = JsonConvert.SerializeObject(_builtIns.Skills);
+                    else if (HasBuiltInTools && address.Segments[0] == BuiltInToolsKind) json = JsonConvert.SerializeObject(_builtInTools);
+                    else throw new InvalidOperationException("Unsupported catalog publication.");
+                    break;
             }
             var payload = PayloadRef.FromBlob(_authority.Payloads.StoreText(json, "application/json"));
             return new ResourceMutationReadBack(identity, true, "catalog-state", payload.Sha256, payload, parts: parts);
@@ -66,7 +79,8 @@ namespace RNAssistant.Office.Services
 
         internal ResourceRef Current(string kind)
         {
-            if (kind != "skills" && kind != "tools" && kind != "prompts" && kind != BuiltInKind) throw new InvalidOperationException("Unsupported catalog kind.");
+            if (kind != "skills" && kind != "tools" && kind != "prompts" && kind != BuiltInKind &&
+                !(HasBuiltInTools && kind == BuiltInToolsKind)) throw new InvalidOperationException("Unsupported catalog kind.");
             var identity = new ResourceIdentity(ResourceUri.Create("catalog", kind));
             var head = _authority.CaptureMany(new[] { ScopeId }).Get(ScopeId).GetHead(identity);
             if (head == null)
@@ -190,12 +204,12 @@ namespace RNAssistant.Office.Services
             return text;
         }
 
-        private void PublishBuiltIns()
+        private void PublishBuiltIns(string kind)
         {
             using (_journal.AcquireScope(ScopeId))
             {
                 var state = _authority.CaptureMany(new[] { ScopeId }).Get(ScopeId);
-                var identity = new ResourceIdentity(ResourceUri.Create("catalog", BuiltInKind));
+                var identity = new ResourceIdentity(ResourceUri.Create("catalog", kind));
                 var before = state.GetHead(identity);
                 if (before?.Knowledge == HeadKnowledge.Unknown)
                     throw new ResourceRequestException("Built-in catalog publication is unresolved.", "RESOURCE_HEAD_UNKNOWN", false);

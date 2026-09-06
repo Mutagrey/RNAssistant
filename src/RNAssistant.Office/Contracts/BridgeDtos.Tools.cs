@@ -1,7 +1,10 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Security.Cryptography;
+using System.Text;
 using Newtonsoft.Json;
+using RNAssistant.Core.Models;
 using RNAssistant.Core.Tools;
 using RNAssistant.Office.Tools;
 
@@ -155,15 +158,13 @@ namespace RNAssistant.Office.Contracts
         [JsonProperty("host")] public string Host { get; set; }
         [JsonProperty("name")] public string Name { get; set; }
         [JsonProperty("description")] public string Description { get; set; }
-        [JsonProperty("argumentSchemaJson")] public string ArgumentSchemaJson { get; set; }
+        [JsonProperty("source")] public ToolSourceMetadataDto Source { get; set; }
         [JsonProperty("executor")] public string Executor { get; set; }
         [JsonProperty("requiresConfirmation")] public bool RequiresConfirmation { get; set; }
         [JsonProperty("mutatesDocument")] public bool MutatesDocument { get; set; }
         [JsonProperty("mutatesLocalState")] public bool MutatesLocalState { get; set; }
         [JsonProperty("canSourceHtmlData")] public bool CanSourceHtmlData { get; set; }
         [JsonProperty("agentCanRun")] public bool AgentCanRun { get; set; }
-        [JsonProperty("code")] public string Code { get; set; }
-        [JsonProperty("readme")] public string Readme { get; set; }
         [JsonProperty("enabled")] public bool Enabled { get; set; }
         [JsonProperty("builtIn")] public bool BuiltIn { get; set; }
         [JsonProperty("riskLevel")] public int RiskLevel { get; set; }
@@ -174,7 +175,6 @@ namespace RNAssistant.Office.Contracts
         [JsonProperty("packageVersion")] public string PackageVersion { get; set; }
         [JsonProperty("entryPoint")] public string EntryPoint { get; set; }
         [JsonProperty("argumentOrder")] public List<string> ArgumentOrder { get; set; }
-        [JsonProperty("components")] public List<ToolPackageComponentDto> Components { get; set; }
         [JsonProperty("scope")] public string Scope { get; set; }
         [JsonProperty("installationStatus")] public string InstallationStatus { get; set; }
 
@@ -188,15 +188,13 @@ namespace RNAssistant.Office.Contracts
                 Host = tool.Host ?? string.Empty,
                 Name = tool.Name ?? string.Empty,
                 Description = tool.Description ?? string.Empty,
-                ArgumentSchemaJson = tool.ArgumentSchemaJson ?? string.Empty,
+                Source = ToolSourceMetadataDto.From(tool),
                 Executor = tool.Executor ?? string.Empty,
                 RequiresConfirmation = tool.RequiresConfirmation,
                 MutatesDocument = tool.MutatesDocument,
                 MutatesLocalState = tool.MutatesLocalState,
                 CanSourceHtmlData = tool.CanSourceHtmlData,
                 AgentCanRun = tool.AgentCanRun,
-                Code = tool.Code ?? string.Empty,
-                Readme = tool.BuiltIn ? string.Empty : tool.Readme ?? string.Empty,
                 Enabled = tool.Enabled,
                 BuiltIn = tool.BuiltIn,
                 RiskLevel = tool.RiskLevel,
@@ -208,14 +206,63 @@ namespace RNAssistant.Office.Contracts
                 EntryPoint = tool.EntryPoint ?? string.Empty,
                 ArgumentOrder = new List<string>(tool.ArgumentOrder ??
                     new List<string>()),
-                Components = (tool.Components ??
-                    new List<ToolPackageComponentDefinition>())
-                    .Where(component => component != null)
-                    .Select(ToolPackageComponentDto.From).ToList(),
                 Scope = tool.Scope ?? string.Empty,
                 InstallationStatus = tool.InstallationStatus ?? string.Empty
             };
         }
+    }
+
+    // Download body only. Catalog and mutation response controls carry its hash/extent.
+    public sealed class ToolSourceBodyDto
+    {
+        [JsonProperty("argumentSchemaJson")] public string ArgumentSchemaJson { get; set; }
+        [JsonProperty("code")] public string Code { get; set; }
+        [JsonProperty("readme")] public string Readme { get; set; }
+        [JsonProperty("components")] public List<ToolPackageComponentDto> Components { get; set; }
+
+        internal static ToolSourceBodyDto From(ToolCatalogEntry tool)
+        {
+            return new ToolSourceBodyDto { ArgumentSchemaJson = tool.ArgumentSchemaJson ?? string.Empty,
+                Code = tool.Code ?? string.Empty, Readme = tool.BuiltIn ? string.Empty : tool.Readme ?? string.Empty,
+                Components = (tool.Components ?? new List<ToolPackageComponentDefinition>()).Where(item => item != null)
+                    .Select(ToolPackageComponentDto.From).ToList() };
+        }
+        internal static byte[] Bytes(ToolCatalogEntry tool)
+        { return new UTF8Encoding(false, true).GetBytes(JsonConvert.SerializeObject(From(tool))); }
+    }
+
+    public sealed class ToolSourceMetadataDto
+    {
+        [JsonProperty("sha256")] public string Sha256 { get; set; }
+        [JsonProperty("byteLength")] public long ByteLength { get; set; }
+        internal static ToolSourceMetadataDto From(ToolCatalogEntry tool)
+        {
+            var bytes = ToolSourceBodyDto.Bytes(tool);
+            using (var sha = SHA256.Create())
+                return new ToolSourceMetadataDto { Sha256 = BitConverter.ToString(sha.ComputeHash(bytes)).Replace("-", "").ToLowerInvariant(), ByteLength = bytes.Length };
+        }
+    }
+
+    public sealed class ToolSourceReadRequest
+    {
+        public const string ContractType = "rnassistant.toolSourceRequest";
+        [JsonProperty("type")] public string Type { get; set; }
+        [JsonProperty("contractVersion")] public int ContractVersion { get; set; }
+        [JsonProperty("chatId")] public string ChatId { get; set; }
+        [JsonProperty("toolId")] public string ToolId { get; set; }
+        [JsonProperty("expectedRevision")] public string ExpectedRevision { get; set; }
+    }
+
+    public sealed class ToolSourceReadResponse
+    {
+        public const string ContractType = "rnassistant.toolSourceRead";
+        [JsonProperty("type")] public string Type { get; set; }
+        [JsonProperty("contractVersion")] public int ContractVersion { get; set; }
+        [JsonProperty("chatId")] public string ChatId { get; set; }
+        [JsonProperty("toolId")] public string ToolId { get; set; }
+        [JsonProperty("revision")] public string Revision { get; set; }
+        [JsonProperty("sources")] public List<ResourceRef> Sources { get; set; }
+        [JsonProperty("data")] public ResourceDownloadOpenResponse Data { get; set; }
     }
 
     public sealed class ToolPackageComponentDto

@@ -15,6 +15,13 @@ function item() {
       code: "Option Explicit\r\n", codeSha256: "a".repeat(64) }], scope: "global", installationStatus: "not_installed" };
 }
 
+function body(tool) { return { argumentSchemaJson: tool.argumentSchemaJson, code: tool.code, readme: tool.readme, components: tool.components }; }
+function metadata(tool) {
+  const bytes = Buffer.from(JSON.stringify(body(tool))), result = { ...tool, source: { sha256: sha(bytes), byteLength: bytes.length } };
+  for (const key of ["argumentSchemaJson", "code", "readme", "components"]) delete result[key];
+  return result;
+}
+
 function fixture(hooks = {}) {
   const calls = [], logs = [], outputs = [], cancelled = [], closed = [], pending = {}, elements = {};
   const state = { tools: [], selectedToolIndex: 0, selectedToolComponentIndex: 0, activeChatId: "chat" };
@@ -28,7 +35,8 @@ function fixture(hooks = {}) {
   vm.runInContext(read("js/app-tools-actions.js"), context);
   vm.runInContext(read("js/app-resource-upload.js"), context);
   context.syncSelectedToolFromEditor = () => {};
-  state.tools = [context.toolFromContract(server)]; context.acceptToolLibraryState();
+  state.tools = [context.toolFromContract(metadata(server))]; context.acceptToolLibraryState();
+  context.applyToolSource(state.tools[0], body(server));
   state.tools[0].Readme = "# Saved\r\n" + "Ж".repeat(140000) + "😀"; context.updateToolLibraryDirty();
   context.fetch = async (url, options) => {
     const address = new URL(url), id = address.pathname.split("/").pop(), upload = pending[id];
@@ -39,7 +47,7 @@ function fixture(hooks = {}) {
     if (hooks.chunk) await hooks.chunk(options);
     return new Response(JSON.stringify({ leaseId: id, nextOffset: offset + count }));
   };
-  function library() { return { type: "rnassistant.toolLibrary", contractVersion: 1, tools: [server] }; }
+  function library() { return { type: "rnassistant.toolLibrary", contractVersion: 1, tools: [metadata(server)] }; }
   function send(action, payload) {
     calls.push({ action, payload }); let response;
     if (action === "beginToolMutationUpload") {
@@ -99,12 +107,14 @@ function fixture(hooks = {}) {
         assert.deepEqual(f.calls.map(call => call.action), ["beginToolMutationUpload", "saveTools", "cancelToolMutationUpload"]
           .concat(action === "installVba" ? ["installVbaTool"] : []));
         assert.equal(f.closed.length, 1); assert.equal(f.state.toolLibraryDirty, false);
-        assert.match(f.state.tools[0].Readme, /😀$/);
+        assert.equal(f.state.tools[0]._sourceLoaded, undefined, "save response carries only source metadata");
+        const uploaded = JSON.parse(Object.values(f.pending)[0].bytes.toString("utf8"));
+        assert.match(uploaded.mutations[0].readme, /😀$/);
       }
       if (action !== "save") assert.equal(f.outputs.at(-1).effect, "verified_change", "typed result wins over legacy shape");
     }
     const empty = fixture(); empty.state.tools[0].Readme = ""; await empty.actions.save();
-    assert.equal(empty.state.tools[0].Readme, ""); assert.equal(empty.state.toolLibraryDirty, false);
+    assert.equal(JSON.parse(Object.values(empty.pending)[0].bytes).mutations[0].readme, ""); assert.equal(empty.state.toolLibraryDirty, false);
     console.log("PASS tool package actions: Save and pre-install share bounded hashed uploads; typed install/remove and empty source remain intact");
   }
   {
@@ -117,15 +127,16 @@ function fixture(hooks = {}) {
       if (action === "installVba") assert.match(f.logs.at(-1).message, /Определение изменилось/);
     }
     let f;
-    f = fixture({ install: response => { f.state.tools[0].Readme = "# During install"; return response; } });
-    await f.actions.installVba();
-    assert.equal(f.state.tools[0].Readme, "# During install"); assert.equal(f.state.toolLibraryDirty, true);
+    f = fixture({ install: response => { f.state.tools[0].Readme = "# During uninstall"; return response; } });
+    await f.actions.uninstallVba();
+    assert.equal(f.state.tools[0].Readme, "# During uninstall"); assert.equal(f.state.toolLibraryDirty, true);
     const partial = fixture({ save: (batch, response) => {
       response.results[1].status = "error"; response.results[1].effect = "none"; response.results[1].message = "second package failed";
-      response.library.tools = [{ ...item(), ...batch.mutations[0], revision: "saved" }, { ...item(), id: "excel.other" }];
+      response.library.tools = [metadata({ ...item(), ...batch.mutations[0], revision: "saved" }), metadata({ ...item(), id: "excel.other" })];
       return response;
     } });
-    partial.state.tools.push(partial.context.toolFromContract({ ...item(), id: "excel.other" }));
+    partial.state.tools.push(partial.context.toolFromContract(metadata({ ...item(), id: "excel.other" })));
+    partial.context.applyToolSource(partial.state.tools[1], body(item()));
     partial.context.setToolLibraryBaseline(partial.state.tools);
     partial.state.tools[0].Readme += "\nSubmitted"; partial.state.tools[1].Readme = "# Pending second";
     await partial.actions.installVba();
@@ -162,7 +173,7 @@ function fixture(hooks = {}) {
       const f = fixture({ save: (_, response) => {
         if (mode === "malformed") return {};
         response.results[0].status = mode; response.results[0].effect = mode === "unknown" ? "unknown" : "none";
-        response.results[0].message = "not saved"; response.library.tools = [item()]; return response;
+        response.results[0].message = "not saved"; response.library.tools = [metadata(item())]; return response;
       } });
       if (mode === "unicode") f.state.tools[0].Readme = "\ud800";
       if (mode === "size") f.state.tools[0].Readme = "x".repeat(16 * 1024 * 1024 + 1);
@@ -181,7 +192,7 @@ function fixture(hooks = {}) {
     for (const file of ["app-chat-state.js", "app-chat-session.js"]) assert.ok(read("js/" + file).includes("cancelToolLibraryWrite()"));
     assert.ok(read("js/app-tools.js").includes('window.addEventListener("pagehide", cancelToolLibraryWrite)'));
     for (const file of ["app-tools.js", "app-tools-actions.js", "app-chat-state.js", "app-chat-session.js"])
-      assert.ok(read("index.html").includes(file + "?v=tool-upload-20260906-1"));
+      assert.ok(read("index.html").includes(file + "?v=tool-source-20260906-1"));
     assert.ok(!read("js/app-tools-actions.js").includes('"saveTools", options.mutationRequest()'));
     console.log("PASS tool package actions: both inline save consumers are removed and lifecycle cancellation is wired");
   }

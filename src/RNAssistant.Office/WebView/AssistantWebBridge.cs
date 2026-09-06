@@ -284,6 +284,9 @@ namespace RNAssistant.Office.WebView
                     case "saveTools":
                         responsePayload = await _controller.SaveToolsAsync(Payload<ToolMutationWriteRequest>(payload), cancellationToken).ConfigureAwait(false);
                         break;
+                    case "readToolSource":
+                        responsePayload = await _controller.ReadToolSourceAsync(Payload<ToolSourceReadRequest>(payload), cancellationToken).ConfigureAwait(false);
+                        break;
                     case "beginToolMutationUpload":
                         responsePayload = _controller.BeginToolMutationUpload(Payload<ToolMutationUploadRequest>(payload), cancellationToken);
                         break;

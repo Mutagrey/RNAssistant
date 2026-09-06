@@ -838,6 +838,15 @@ namespace RNAssistant.Harness
             var controller = new AssistantController();
             var bridge = new AssistantWebBridge(controller, null);
             var token = BridgeToken(bridge);
+            var toolSourceResponse = JObject.Parse(bridge.HandleMessageAsync(JsonConvert.SerializeObject(new {
+                id = "tool-source", type = "readToolSource", bridgeToken = token,
+                payload = new ToolSourceReadRequest { Type = ToolSourceReadRequest.ContractType, ContractVersion = 1,
+                    ChatId = "tool-chat", ToolId = "excel.inspect", ExpectedRevision = "exact-revision" }
+            })).GetAwaiter().GetResult());
+            AssertTrue((bool)toolSourceResponse["ok"], "typed Tool Library source route");
+            AssertEqual("tool-chat", (string)toolSourceResponse["payload"]["chatId"], "source read retains explicit chat");
+            AssertEqual("exact", (string)toolSourceResponse["payload"]["sources"][0]["revision"], "exact source proof reaches UI");
+            AssertTrue(toolSourceResponse["payload"]["code"] == null && toolSourceResponse["payload"]["data"] != null, "only metadata and bounded download capability");
             var toolsResponseJson = bridge.HandleMessageAsync(
                 "{\"id\":\"b6\",\"type\":\"saveTools\",\"bridgeToken\":\"" + token + "\",\"payload\":{\"chatId\":\"tool-chat\",\"uploadLeaseId\":\"tool-lease\",\"sha256\":\"tool-hash\"}}")
                 .GetAwaiter()

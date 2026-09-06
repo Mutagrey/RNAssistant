@@ -73,8 +73,8 @@ semantic targets and exact internal references/continuations. A mutable semantic
 target captures its current head on the first read, then pins all internal pages
 to that exact revision; it cannot get stuck on discovery's previous observation.
 The `catalogs` scope discovers definitions without execution admission.
-`CatalogResourceProvider` serves committed metadata, exact skill bodies and reference
-Markdown, including historical publications. Its text continuations bind publication
+`CatalogResourceProvider` serves committed metadata, exact skill bodies/reference
+Markdown and tool-source JSON children, including historical publications. Its text continuations bind publication
 revision plus URI/view through the shared exact cursor rules, not payload hashes;
 equal-byte publications/restores remain distinct. Capability reference `action=next`
 reconstructs the same logical cursor from durable evidence. Catalog children have
@@ -104,12 +104,17 @@ No upload publishes a resource or creates model evidence. Limits, cancellation,
 partial outcomes and draft rules belong to
 [Skill mutation uploads](skills.md#editor-mutation-uploads).
 
-`ToolEditorResourceService` is the Tool Library consumer of the same single-use
-upload route: ordinary Save and save-before-VBA-install send chat/lease/hash-only
+`ToolEditorResourceService` reads metadata-addressed Library source through the
+same Gateway/CAS and shared bounded download. Custom and source-owned built-in
+tool children depend on existing catalog publications; document-local tools prove
+their exact live VBA component refs, with no second document catalog authority.
+All outgoing Library DTOs omit source bodies. Hydration, draft conflicts and
+selected-source cache rules belong to [Tool source reads](tool-library.md#library-source-reads).
+The same owner consumes the single-use upload route:
+ordinary Save and save-before-VBA-install send chat/lease/hash-only
 controls and one bounded typed batch. Existing Tool authoring, catalog commit and
 document access owners retain their responsibilities. No upload grants execution
-or publication authority. Bounds, verified-prefix/draft rules and the remaining
-outgoing body consumers are owned by
+or publication authority. Bounds and verified-prefix/draft rules are owned by
 [Tool Library](tool-library.md#library-mutation-uploads).
 
 ## Conversation loop
@@ -329,6 +334,10 @@ inline Skill Library core/reference mutation bodies and reference source echo
 (now one bounded upload consumer, retaining the existing guarded mutation owner);
 inline Tool Library mutation requests in Save and save-before-install
 (now one bounded upload consumer through the same guarded authoring/commit owner);
+inline Tool Library schema/code/README/component catalog and response bodies,
+plus the UI whole-catalog body serializer/component reconstruction fallback
+(now exact selected source through Gateway/CAS and shared download; generated
+built-in human documentation remains a separate open consumer);
 separate state/Office retained text readers, externally hash-bound Office/state/catalog
 continuations, and read-side exposure of prepared state/context/catalog identities.
 No compatibility alias, dual-write or feature flag restores these paths.

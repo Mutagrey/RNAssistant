@@ -22,6 +22,17 @@ namespace RNAssistant.Office
                 _toolCatalog.GetVisibleTools());
         }
 
+        public Task<ToolSourceReadResponse> ReadToolSourceAsync(ToolSourceReadRequest payload, CancellationToken token)
+        {
+            if (payload == null || string.IsNullOrWhiteSpace(payload.ChatId))
+                throw new InvalidOperationException("RESOURCE_ACCESS_DENIED: an explicit chat is required.");
+            var session = LoadAddressedSession(payload.ChatId);
+            var source = new ChatSession { Id = session.Id, Host = session.Host, DocumentKey = session.DocumentKey,
+                DocumentAuthorityId = session.DocumentAuthorityId };
+            return Task.Run(() => new ToolEditorResourceService(_toolExecutor.ResourceGateway, _resourceData, _toolCatalog)
+                .Open(source, payload, token), token);
+        }
+
         public ToolLibraryDocumentationResponse GetToolDocumentation(
             ToolLibraryDocumentationRequest request)
         {
@@ -65,7 +76,7 @@ namespace RNAssistant.Office
             if (request == null || string.IsNullOrWhiteSpace(request.ChatId))
                 throw new InvalidOperationException("RESOURCE_ACCESS_DENIED: an explicit chat is required.");
             return WithReservedSession(LoadAddressedSession(request.ChatId), session =>
-                new ToolEditorResourceService(_resourceData).BeginUpload(session, request, token));
+                new ToolEditorResourceService(_toolExecutor.ResourceGateway, _resourceData, _toolCatalog).BeginUpload(session, request, token));
         }
 
         public ResourceDataCloseResponse CancelToolMutationUpload(ResourceUploadLeaseRequest request)
@@ -88,7 +99,7 @@ namespace RNAssistant.Office
                     var session = LoadAddressedSession(payload.ChatId);
                     return await Task.Run(() =>
                     {
-                        var mutations = new ToolEditorResourceService(_resourceData).PrepareMutations(session, payload, token);
+                        var mutations = new ToolEditorResourceService(_toolExecutor.ResourceGateway, _resourceData, _toolCatalog).PrepareMutations(session, payload, token);
                         var results = new List<ToolMutationResultDto>();
                         try
                         {
