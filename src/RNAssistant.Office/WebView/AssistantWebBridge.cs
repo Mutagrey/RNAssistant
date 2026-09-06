@@ -84,7 +84,10 @@ namespace RNAssistant.Office.WebView
                         responsePayload = _controller.GetChatState(Payload<ChatPayload>(payload).ChatId);
                         break;
                     case "getChatTrajectory":
-                        responsePayload = _controller.GetChatTrajectory(Payload<ChatTrajectoryRequest>(payload));
+                        var trajectoryRequest = Payload<ChatTrajectoryRequest>(payload);
+                        responsePayload = await RunBridgeReadAsync(
+                            () => _controller.GetChatTrajectory(trajectoryRequest),
+                            cancellationToken).ConfigureAwait(false);
                         break;
                     case "exportChatTrajectory":
                         responsePayload = await _controller.ExportChatTrajectoryAsync(Payload<ChatTrajectoryExportRequest>(payload), cancellationToken).ConfigureAwait(false);
@@ -95,13 +98,17 @@ namespace RNAssistant.Office.WebView
                         break;
                     case "getQualificationCatalog":
                         var qualificationCatalog = Payload<QualificationCatalogPayload>(payload);
-                        responsePayload = _controller.GetQualificationCatalog(
-                            qualificationCatalog.ChatId, qualificationCatalog.Suite);
+                        responsePayload = await RunBridgeReadAsync(
+                            () => _controller.GetQualificationCatalog(
+                                qualificationCatalog.ChatId, qualificationCatalog.Suite),
+                            cancellationToken).ConfigureAwait(false);
                         break;
                     case "getQualificationRun":
                         var qualificationRun = Payload<QualificationRunPayload>(payload);
-                        responsePayload = _controller.GetQualificationRun(
-                            qualificationRun.ChatId, qualificationRun.RunId);
+                        responsePayload = await RunBridgeReadAsync(
+                            () => _controller.GetQualificationRun(
+                                qualificationRun.ChatId, qualificationRun.RunId),
+                            cancellationToken).ConfigureAwait(false);
                         break;
                     case "startQualification":
                         var qualificationStart = Payload<QualificationStartPayload>(payload);
@@ -606,6 +613,13 @@ namespace RNAssistant.Office.WebView
         private static string Serialize(BridgeResponse response)
         {
             return JsonConvert.SerializeObject(response);
+        }
+
+        private static Task<T> RunBridgeReadAsync<T>(Func<T> read, CancellationToken cancellationToken)
+        {
+            if (read == null) throw new ArgumentNullException(nameof(read));
+            cancellationToken.ThrowIfCancellationRequested();
+            return Task.Run(read, cancellationToken);
         }
 
         private void ReportProgress(string id, string phase, string message)
