@@ -707,6 +707,7 @@ namespace RNAssistant.Harness
                 Test("resource cutover: unpublished revision retention roots", ResourceUnpublishedRevisionRetention),
                 Test("resource cutover: canonical binary data plane", ResourceBinaryLeaseUsesCanonicalViews),
                 Test("resource cutover: binary capabilities and retained bounds", ResourceBinaryCapabilitiesAndRetainedBounds),
+                Test("resource cutover: binary metadata unavailable without recapture", ResourceBinaryMetadataUnavailable),
                 Test("resource cutover: raw original bytes", ResourceRawOriginalBytes),
                 Test("resource cutover: raw admission guards", ResourceRawAdmissionGuards),
                 Test("resource cutover: raw stored originals", ResourceRawStoredOriginals),

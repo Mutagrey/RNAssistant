@@ -129,6 +129,62 @@ namespace RNAssistant.Harness
             });
         }
 
+        private static void ResourceBinaryMetadataUnavailable()
+        {
+            WithTempPaths(paths =>
+            {
+                var payloads = new ChatBlobStore(paths);
+                var store = new ResourceAuthorityStore(paths);
+                var authority = new ResourceAuthorityService(store, store, new ResourceMutationJournal(paths), payloads);
+                var original = payloads.StoreBytes(new byte[] { 1, 2, 3 }, "image/png");
+                var session = new ChatSession();
+                var reads = 0;
+                var gateway = new ResourceGatewayService(null, null, null, authority: authority,
+                    readAttachmentBytes: item => { reads++; throw new InvalidOperationException("retained views must not recapture"); });
+                var scope = authority.Scope(session, false);
+                foreach (var view in new[] { "raw", "thumbnail" })
+                foreach (var defect in new[] { "missing", "null-record", "invalid-json", "invalid-payload", "trailing-json",
+                    "invalid-utf8", "no-payload", "no-part", "wrong-part", "wrong-hash", "wrong-mime" })
+                {
+                    var attachment = new ChatAttachment { Id = view + defect, Kind = "image", ContentType = original.ContentType,
+                        ContentSha256 = original.Sha256, ContentByteLength = original.ByteLength };
+                    var message = new ChatMessage { Role = "user", Attachments = new List<ChatAttachment> { attachment } };
+                    var artifact = new ChatArtifact { Kind = ChatArtifactKinds.Image, MimeType = original.ContentType,
+                        SourceMessageId = message.Id, ContentSha256 = original.Sha256, ContentByteLength = original.ByteLength,
+                        MetadataJson = new JObject { ["attachmentId"] = attachment.Id }.ToString() };
+                    session.Messages.Add(message); session.Artifacts.Add(artifact);
+                    var exact = ChatResourceUri.CreateArtifactRevision(session, artifact);
+                    var body = new PayloadRef(original.Sha256, original.ByteLength,
+                        view == "raw" ? "application/octet-stream" : "image/jpeg");
+                    var record = new ResourceBinaryView { Payload = body, Width = 1, Height = 1 };
+                    var json = Newtonsoft.Json.JsonConvert.SerializeObject(record);
+                    if (defect == "invalid-json") json = "{";
+                    if (defect == "invalid-payload") json = "{\"payload\":{\"sha256\":\"invalid\",\"byteLength\":-1}}";
+                    if (defect == "trailing-json") json += " {}";
+                    if (defect == "no-payload") json = "{}";
+                    var metadata = PayloadRef.FromBlob(defect == "invalid-utf8"
+                        ? payloads.StoreBytes(new byte[] { 0xff }, "application/json")
+                        : payloads.StoreText(json, defect == "wrong-mime" ? "text/plain" : "application/json"));
+                    if (defect == "missing") System.IO.File.Delete(payloads.PathFor(metadata.Sha256));
+                    var parts = defect == "no-part" ? new PayloadRef[0] : new[] { defect == "wrong-part"
+                        ? new PayloadRef(body.Sha256, body.ByteLength + 1, body.ContentType) : body };
+                    store.RegisterRevision(scope, new ResourceRevisionMetadata(exact, original.Sha256));
+                    store.RegisterView(scope, new ResourceRevisionView(exact, "binary:" + view,
+                        defect == "wrong-hash" ? new string('a', 64) : body.Sha256,
+                        defect == "null-record" ? null : metadata, ResourceCoverage.Whole(), parts));
+                    var before = authority.CaptureMany(new[] { scope }).Get(scope).Generation;
+                    using (var data = new ResourceDataPlaneService(gateway))
+                    {
+                        var error = RuntimeThrows<ResourceRequestException>(() => data.Open(session, "workspace", exact, view));
+                        AssertEqual("RESOURCE_SNAPSHOT_UNAVAILABLE", error.ErrorCode, view + "/" + defect + " has a canonical exact-snapshot failure");
+                        AssertTrue(!error.Retryable, "broken retained metadata cannot suggest recapture");
+                    }
+                    AssertEqual(0, reads, view + "/" + defect + " does not read original bytes or render");
+                    AssertEqual(before, authority.CaptureMany(new[] { scope }).Get(scope).Generation, "failed read does not publish or heal authority");
+                }
+            });
+        }
+
         private static void ResourceRawOriginalBytes()
         {
             WithTempPaths(paths =>

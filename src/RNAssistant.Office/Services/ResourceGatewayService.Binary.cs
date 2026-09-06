@@ -39,13 +39,9 @@ namespace RNAssistant.Office.Services
             var revisions = (IResourceRevisionStore)_authority.Store;
             var retained = revisions.GetView(scope, exact, view);
             ResourceBinaryView binary;
-            if (retained?.Payload != null)
+            if (retained != null)
             {
-                // View metadata is itself a bounded CAS record; image bytes remain a retained part.
-                if (retained.Payload.ByteLength > 4096)
-                    throw new ResourceRequestException("The exact binary metadata is unavailable.", "RESOURCE_SNAPSHOT_UNAVAILABLE", false);
-                binary = Newtonsoft.Json.JsonConvert.DeserializeObject<ResourceBinaryView>(
-                    _authority.Payloads.ReadText(retained.Payload.ToBlobReference()));
+                binary = ReadRetainedBinaryMetadata(retained);
             }
             else
             {
@@ -107,6 +103,35 @@ namespace RNAssistant.Office.Services
             }, ResourceRefs = new[] { exact.Copy() } };
             // Publication sees only durable bytes and metadata, not a renderer's provisional result.
             return _authority.PublishRead(session, result, request, false);
+        }
+
+        private ResourceBinaryView ReadRetainedBinaryMetadata(ResourceRevisionView retained)
+        {
+            // An existing view is never a reason to recapture its original, even
+            // when its metadata has expired or is incomplete. Parts are GC roots.
+            if (retained.Payload == null || retained.Payload.ByteLength > 4096 ||
+                retained.Payload.ContentType != "application/json")
+                throw new ResourceRequestException("The exact binary metadata is unavailable.", "RESOURCE_SNAPSHOT_UNAVAILABLE", false);
+            ResourceBinaryView binary;
+            try
+            {
+                binary = Newtonsoft.Json.JsonConvert.DeserializeObject<ResourceBinaryView>(
+                    ResourceSnapshotReadService.ReadPayload(_authority.Payloads, retained.Payload),
+                    new Newtonsoft.Json.JsonSerializerSettings { MaxDepth = 16, CheckAdditionalContent = true });
+            }
+            catch (Exception error) when (error is Newtonsoft.Json.JsonException || error is ArgumentException)
+            {
+                throw new ResourceRequestException("The exact binary metadata is corrupt.", "RESOURCE_SNAPSHOT_UNAVAILABLE", false);
+            }
+            var payload = binary?.Payload;
+            var part = retained.Parts.Count == 1 ? retained.Parts[0] : null;
+            if (payload == null || part == null ||
+                !string.Equals(retained.ContentSha256, payload.Sha256, StringComparison.OrdinalIgnoreCase) ||
+                part.Sha256 != payload.Sha256 || part.ByteLength != payload.ByteLength ||
+                part.ContentType != payload.ContentType || part.Encryption != payload.Encryption ||
+                part.ProtectionKeyId != payload.ProtectionKeyId)
+                throw new ResourceRequestException("The exact binary payload has no matching retained part.", "RESOURCE_SNAPSHOT_UNAVAILABLE", false);
+            return binary;
         }
     }
 }

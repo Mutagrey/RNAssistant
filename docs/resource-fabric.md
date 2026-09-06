@@ -611,8 +611,20 @@ the former viewer raw-reader is removed. Gateway resolves the exact descriptor,
 preserving member identity, verifies length/hash before registering a view and uses
 the existing binary retention/chunk route. Workspace edits do not replace historical
 file reads, and missing retained CAS is not rebuilt from the parent snapshot.
-No new reader tool or store is introduced. Other provider view-negotiation gaps and
-real Windows/WebView2 qualification remain open.
+No new reader tool or store is introduced. The implemented original-byte domains
+(attachments including PDF/image/text, stored file/JSON artifacts and workspace
+files) now negotiate raw through this path. `UpsertDataSource` already publishes a
+JSON file artifact; its binding is not another raw source. This does not require
+inventing `raw` for every live Office, catalog or state projection. Real
+Windows/WebView2 qualification remains open.
+
+Retained binary metadata is read through the shared snapshot reader, with a 4 KiB
+JSON bound, strict UTF-8 and bounded typed parsing. Missing/null/corrupt records,
+invalid payloads and extra JSON return `RESOURCE_SNAPSHOT_UNAVAILABLE`, never
+recapture or renderer fallback. The embedded payload must match the view hash and
+its exact retained part (hash, length, MIME and protection), so readable metadata
+cannot bypass the authority's CAS retention roots. Failed reads publish no head
+or generation and do not repair the retained record.
 
 Binary opens reserve capture capacity before provider work in the existing 50 MiB
 upload/download transfer budget. A lease verifies and retains its bounded CAS body
@@ -708,7 +720,7 @@ member provider/CAS/download. Preview assembly refuses missing source bodies.
 No compatibility alias, dual-write or feature flag restores these paths.
 
 Still open within this same cutover: remaining definition/domain read consumers, finer
-Excel coverage/named resources, complete binary/raw view negotiation,
+Excel coverage/named resources,
 remaining bulk upload/export surfaces, bounded history/retention
 optimization and final documentation cleanup. These are not permanent adapters.
 
