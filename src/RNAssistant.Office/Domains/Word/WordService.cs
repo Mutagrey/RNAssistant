@@ -20,49 +20,25 @@ namespace RNAssistant.Office.Domains.Word
             _backend = backend ?? throw new ArgumentNullException(nameof(backend));
         }
 
-        public WordOutcome ReadText(
-            WordTextReadRequest request, CancellationToken cancellationToken)
+        public const int MaximumTextCharacters = 1000000;
+
+        internal WordTextSnapshot CaptureText(WordTextReadRequest request, CancellationToken cancellationToken)
         {
-            request = request ?? new WordTextReadRequest();
-            var source = Normalize(request.Source, "document");
-            if (source != "document" && source != "selection" && source != "range")
-                return Failure(
-                    "source must be document, selection, or range.",
-                    "word_text_source_invalid", false);
-            request.Source = source;
-            request.MaxChars = Math.Max(0, request.MaxChars);
-            try
-            {
-                cancellationToken.ThrowIfCancellationRequested();
-                var snapshot = _backend.ReadText(request);
-                if (snapshot == null)
-                    return Failure(
-                        "Word text backend returned no snapshot.",
-                        "word_text_snapshot_missing", true);
-                var data = source == "range"
-                    ? new JObject
-                    {
-                        ["start"] = snapshot.Start,
-                        ["end"] = snapshot.End,
-                        ["text"] = snapshot.Text ?? string.Empty
-                    }
-                    : new JObject { ["text"] = snapshot.Text ?? string.Empty };
-                return WordOutcome.Ok(
-                    source == "selection" ? "Selection read." :
-                    source == "range" ? "Range read." : "Document read.",
-                    data.ToString(Formatting.None), WordEffect.None);
-            }
-            catch (OperationCanceledException) { throw; }
-            catch (WordBackendException ex)
-            {
-                return Failure(ex.Message, ex.ErrorCode, ex.Retryable, ex.DetailsJson);
-            }
-            catch (Exception ex)
-            {
-                return Failure(
-                    "Word text read failed: " + ex.Message,
-                    "word_text_read_failed", true);
-            }
+            if (request == null || (request.Source != "document" && request.Source != "selection" && request.Source != "range") ||
+                request.MaxChars < 1 || request.MaxChars > MaximumTextCharacters ||
+                request.Source == "range" && (!request.HasEnd || request.Start < 0 || request.End < request.Start))
+                throw new WordBackendException("An explicit bounded Word text request is required.", "RESOURCE_TARGET_INVALID", false);
+            if (request.Source == "range" && (long)request.End - request.Start > request.MaxChars)
+                throw new WordBackendException("Choose a narrower Word character range.", "RESOURCE_SNAPSHOT_TOO_LARGE", false);
+            cancellationToken.ThrowIfCancellationRequested();
+            var snapshot = _backend.ReadText(request);
+            cancellationToken.ThrowIfCancellationRequested();
+            if (snapshot == null || snapshot.Text == null || snapshot.Source != request.Source ||
+                snapshot.Start < 0 || snapshot.End < snapshot.Start || snapshot.Text.Length > request.MaxChars ||
+                (long)snapshot.End - snapshot.Start > request.MaxChars ||
+                request.Source == "range" && (snapshot.Start != request.Start || snapshot.End != request.End))
+                throw new WordBackendException("Word text backend returned an incomplete or mismatched snapshot.", "word_text_snapshot_invalid", false);
+            return snapshot;
         }
 
         public WordOutcome Find(

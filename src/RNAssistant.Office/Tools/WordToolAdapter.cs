@@ -27,17 +27,6 @@ namespace RNAssistant.Office.Tools
         {
             arguments = arguments ??
                 new Dictionary<string, object>(StringComparer.OrdinalIgnoreCase);
-            if (string.Equals(toolId, WordToolIds.ReadText, StringComparison.Ordinal))
-                return _service.ReadText(new WordTextReadRequest
-                {
-                    Source = ToolArgumentReader.String(
-                        arguments, "source", "document"),
-                    Start = ToolArgumentReader.Int32(arguments, "start", 0),
-                    HasEnd = arguments.ContainsKey("end"),
-                    End = ToolArgumentReader.Int32(arguments, "end", 0),
-                    MaxChars = ToolArgumentReader.Int32(
-                        arguments, "maxChars", 12000)
-                }, cancellationToken);
             if (string.Equals(toolId, WordToolIds.FindText, StringComparison.Ordinal))
                 return _service.Find(ReplaceRequest(arguments, "query"),
                     ToolArgumentReader.Int32(arguments, "maxResults", 50),

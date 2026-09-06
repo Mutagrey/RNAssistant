@@ -247,7 +247,7 @@ namespace RNAssistant.Harness
 
             var word = new List<ToolCatalogEntry>(OfficeToolCatalog.ForHost("Word"));
             AssertTrue(!HasTool(word, "word.get_context"), "generic Word context uses document resources");
-            AssertTrue(HasTool(word, "word.read_text"), "word text reader facade visible");
+            AssertTrue(!HasTool(word, "word.read_text"), "direct Word text reader is removed");
             AssertTrue(HasTool(word, "word.inspect"), "word inspection facade visible");
             AssertTrue(HasTool(word, "word.find_text"), "word find text visible");
             AssertTrue(FindTool(word, "word.replace_text").ArgumentSchemaJson.IndexOf("expectedMatches", StringComparison.Ordinal) < 0,
@@ -279,7 +279,7 @@ namespace RNAssistant.Harness
                 { "Outlook", outlook }
             };
             AssertEqual(14, excel.Count, "complete Excel tool count");
-            AssertEqual(9, word.Count, "complete Word tool count");
+            AssertEqual(8, word.Count, "complete Word tool count");
             AssertEqual(9, powerpoint.Count, "complete PowerPoint tool count");
             AssertEqual(5, outlook.Count, "complete Outlook tool count");
             foreach (var catalog in catalogs)

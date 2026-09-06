@@ -31,22 +31,21 @@ namespace RNAssistant.OfficeHosts
             else if (source == "range")
             {
                 var content = document.Content;
-                var start = Math.Max(content.Start,
-                    Math.Min(content.End, request.Start));
-                var requestedEnd = request.HasEnd
-                    ? request.End
-                    : Math.Min(content.End, start + 12000);
-                var end = Math.Max(start,
-                    Math.Min(content.End, requestedEnd));
-                range = document.Range(start, end);
+                if (!request.HasEnd || request.Start < content.Start || request.End < request.Start || request.End > content.End)
+                    throw new WordBackendException("The exact character range is outside the document.", "RESOURCE_TARGET_INVALID", false);
+                range = document.Range(request.Start, request.End);
             }
             else range = document.Range();
+            // Reject before Range.Text: trimming afterwards materializes the whole
+            // document and can disguise an incomplete exact snapshot.
+            if (request.MaxChars < 1 || (long)range.End - range.Start > request.MaxChars)
+                throw new WordBackendException("Choose a narrower Word character range.", "RESOURCE_SNAPSHOT_TOO_LARGE", false);
             return new WordTextSnapshot
             {
                 Source = source,
                 Start = range.Start,
                 End = range.End,
-                Text = Trim(range.Text, request.MaxChars)
+                Text = range.Text ?? string.Empty
             };
         }
 

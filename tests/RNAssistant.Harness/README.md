@@ -44,6 +44,11 @@ Excel range values/formulas/profile direct cutover: `Program.ExcelReadTests.cs`
 drift supersession, bounds before materialization, removed-call rejection and shared
 HTML/bound-STA routing. The legacy public `excel.read_range` fixture path is removed.
 
+Word source cutover: `word resources:` and `word tools:` cover complete exact
+document/selection/range evidence, single-capture continuation, historical no-I/O,
+removed-call refusal, pre-materialization bounds and bound-STA/closed-document
+source access. Fake checks do not qualify real Word COM text or selection semantics.
+
 | Area | Main files | Useful filters |
 | --- | --- | --- |
 | Conversation and Agent | `Program.SimpleAgentTests.cs`, `Program.AgentSafetyTests.cs`, `Program.ToolDiscoveryTests.cs` | `conversation:`, `agent:` |

@@ -446,6 +446,8 @@ namespace RNAssistant.Harness
                 Test("excel chart: dispatch fault classification", ExcelChartClassifiesDispatchFaults),
                 Test("excel chart: bound document scope", ExcelChartUsesBoundDocumentScope),
                 Test("word tools: native ownership and direct backend", WordToolsUseExactNativeOwnership),
+                Test("word resources: exact source evidence and retained pages", WordResourceReadsRetainExactEvidence),
+                Test("word resources: bounds precede source capture", WordResourceBoundsRejectBeforeMaterialization),
                 Test("word tools: family semantics", WordToolsPreserveFamilySemantics),
                 Test("word tools: dispatch fault classification", WordToolsClassifyDispatchFaults),
                 Test("word tools: bound document scope", WordToolsUseBoundDocumentScope),

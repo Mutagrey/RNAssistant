@@ -4,7 +4,6 @@ namespace RNAssistant.Office.Tools
 {
     internal static class WordToolIds
     {
-        internal const string ReadText = "word.read_text";
         internal const string FindText = "word.find_text";
         internal const string Inspect = "word.inspect";
         internal const string WriteText = "word.write_text";
@@ -16,8 +15,7 @@ namespace RNAssistant.Office.Tools
 
         internal static bool Owns(string toolId)
         {
-            return string.Equals(toolId, ReadText, StringComparison.Ordinal) ||
-                string.Equals(toolId, FindText, StringComparison.Ordinal) ||
+            return string.Equals(toolId, FindText, StringComparison.Ordinal) ||
                 string.Equals(toolId, Inspect, StringComparison.Ordinal) ||
                 string.Equals(toolId, WriteText, StringComparison.Ordinal) ||
                 string.Equals(toolId, ReplaceText, StringComparison.Ordinal) ||
@@ -29,8 +27,7 @@ namespace RNAssistant.Office.Tools
 
         internal static bool IsRead(string toolId)
         {
-            return string.Equals(toolId, ReadText, StringComparison.Ordinal) ||
-                string.Equals(toolId, FindText, StringComparison.Ordinal) ||
+            return string.Equals(toolId, FindText, StringComparison.Ordinal) ||
                 string.Equals(toolId, Inspect, StringComparison.Ordinal);
         }
 

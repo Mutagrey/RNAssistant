@@ -17,10 +17,12 @@ namespace RNAssistant.Office.Services
         private readonly IOfficeApplicationAdapter _adapter;
         private readonly LiveOfficeResourceScope _scope;
 
-        public LiveDocumentResourceProvider(IOfficeApplicationAdapter adapter)
+        public LiveDocumentResourceProvider(IOfficeApplicationAdapter adapter, RNAssistant.Core.Storage.ChatBlobStore payloads = null)
         {
             _adapter = adapter ?? throw new ArgumentNullException("adapter");
             _scope = new LiveOfficeResourceScope(adapter);
+            _payloads = payloads;
+            if (IsWord) _word = (adapter as RNAssistant.Office.Domains.Word.IWordBackendProvider)?.WordBackend;
         }
 
         public string Id { get { return ProviderName; } }
@@ -77,12 +79,13 @@ namespace RNAssistant.Office.Services
         private ResourceDescriptor Describe(ChatSession session, string target)
         {
             var selection = string.Equals(target, "selection", StringComparison.Ordinal);
+            var wordRange = IsWord && target.StartsWith("range-", StringComparison.Ordinal);
             var descriptor = new ResourceDescriptor
             {
                 Reference = new ResourceRef(CreateUri(session, target)),
                 Provider = ProviderName,
-                Kind = selection ? SelectionKind : DocumentKind,
-                Title = selection ? "Current Office selection" : _adapter.DocumentTitle ?? "Office document",
+                Kind = wordRange ? WordRangeKind : selection ? SelectionKind : DocumentKind,
+                Title = wordRange ? target.Substring(6).Replace('-', ':') : selection ? "Current Office selection" : _adapter.DocumentTitle ?? "Office document",
                 MimeType = "text/plain; charset=utf-8",
                 Mutable = true
             };
@@ -92,6 +95,7 @@ namespace RNAssistant.Office.Services
             descriptor.Metadata["host"] = _adapter.HostName ?? string.Empty;
             descriptor.Metadata["live"] = "true";
             descriptor.Metadata["target"] = target;
+            if (IsWord) descriptor.Metadata["rangeTargetFormat"] = "Word range: start:end (zero-based, end exclusive; main story)";
             if (!selection)
             {
                 descriptor.Metadata["childKinds"] = SelectionKind;
@@ -118,7 +122,8 @@ namespace RNAssistant.Office.Services
                 return false;
             }
             if (!string.Equals(address.Segments[1], "root", StringComparison.Ordinal) &&
-                !string.Equals(address.Segments[1], "selection", StringComparison.Ordinal))
+                !string.Equals(address.Segments[1], "selection", StringComparison.Ordinal) &&
+                !(IsWord && IsWordRange(address.Segments[1])))
             {
                 return false;
             }

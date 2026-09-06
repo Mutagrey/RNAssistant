@@ -17,6 +17,7 @@ namespace RNAssistant.Harness
         internal const string WordTableOperation = "word.table.direct";
         internal const string WordPageBreakOperation = "word.page_break.direct";
         internal const string WordCommentOperation = "word.comment.direct";
+        internal int WordTextMaterializationCount { get; private set; }
 
         public WordTextSnapshot ReadText(WordTextReadRequest request)
         {
@@ -24,16 +25,17 @@ namespace RNAssistant.Harness
             request = request ?? new WordTextReadRequest();
             var source = request.Source ?? "document";
             var start = source == "range"
-                ? Math.Max(0, Math.Min(_wordText.Length, request.Start))
+                ? request.Start
                 : 0;
             var end = source == "range"
-                ? Math.Max(start, Math.Min(_wordText.Length,
-                    request.HasEnd ? request.End : start + 12000))
+                ? request.End
                 : _wordText.Length;
+            if (start < 0 || end < start || end > _wordText.Length || source == "range" && !request.HasEnd)
+                throw new WordBackendException("The exact character range is outside the document.", "RESOURCE_TARGET_INVALID", false);
+            if (request.MaxChars < 1 || (long)end - start > request.MaxChars)
+                throw new WordBackendException("Choose a narrower Word character range.", "RESOURCE_SNAPSHOT_TOO_LARGE", false);
+            WordTextMaterializationCount++;
             var text = _wordText.Substring(start, end - start);
-            if (request.MaxChars == 0) text = string.Empty;
-            else if (request.MaxChars > 0 && text.Length > request.MaxChars)
-                text = text.Substring(0, request.MaxChars) + "\n...[truncated]";
             return new WordTextSnapshot
             {
                 Source = source,

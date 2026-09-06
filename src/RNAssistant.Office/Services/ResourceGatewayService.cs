@@ -70,7 +70,7 @@ namespace RNAssistant.Office.Services
             if (catalogs != null) providers.Add(new CatalogResourceProvider(catalogs, authority));
             if (adapter != null)
             {
-                providers.Add(new LiveDocumentResourceProvider(adapter));
+                providers.Add(new LiveDocumentResourceProvider(adapter, authority?.Payloads));
                 var excel = adapter as RNAssistant.Office.Domains.Excel.IExcelBackendProvider;
                 if (excel?.ExcelReadBackend != null) providers.Add(new ExcelResourceProvider(adapter, excel.ExcelReadBackend, authority?.Payloads));
                 if (vbaSource != null && VbaResourceProvider.SupportsHost(adapter.HostName))

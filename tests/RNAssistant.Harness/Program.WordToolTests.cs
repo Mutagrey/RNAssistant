@@ -4,6 +4,10 @@ using Newtonsoft.Json.Linq;
 using RNAssistant.Core.Agent;
 using RNAssistant.Core.Models;
 using RNAssistant.Core.Storage;
+using RNAssistant.Core.Services;
+using RNAssistant.Office.Services;
+using RNAssistant.Office.Domains.Word;
+using System.Threading;
 using RNAssistant.Core.Tools;
 using RNAssistant.Office;
 using RNAssistant.Office.Runtime;
@@ -23,11 +27,10 @@ namespace RNAssistant.Harness
                         .Concat(executor.GetControllerTools()).ToList();
                     var runtime = executor.CreateNativeRuntime(
                         session,
-                        tools.Where(tool => WordToolIds.Owns(tool.Id)),
+                        tools.Where(tool => WordToolIds.Owns(tool.Id) || tool.Id == ResourceToolCatalog.ReadToolId),
                         new AppSettings(), "agent", false);
                     var ids = new[]
                     {
-                        WordToolIds.ReadText,
                         WordToolIds.FindText,
                         WordToolIds.Inspect,
                         WordToolIds.WriteText,
@@ -56,8 +59,8 @@ namespace RNAssistant.Harness
                     }
 
                     var readCall = new ToolCall(
-                        "word-read", WordToolIds.ReadText,
-                        "{\"source\":\"document\",\"maxChars\":24}");
+                        "word-read", ResourceToolCatalog.ReadToolId,
+                        "{\"target\":\"Word range: 0:24\",\"representation\":\"text\"}");
                     var read = ExecuteNative(
                         runtime, readCall, runtime.Describe(readCall));
                     AssertEqual(ToolExecutionOutcome.Ok, read.Outcome,
@@ -68,22 +71,15 @@ namespace RNAssistant.Harness
 
                     var htmlReads = adapter.WordBackendCalls.Count(operation =>
                         operation == FakeOfficeAdapter.WordReadTextOperation);
-                    AppendAcceptedHtmlSource(session, "word_html_run",
-                        "word_html_source", WordToolIds.ReadText,
-                        new JObject
-                        {
-                            ["source"] = "document",
-                            ["maxChars"] = 24
-                        }, read.Result);
                     var bound = executor.ExecuteManual(Command(
                         HtmlWorkspaceToolCatalog.BindDataToolId,
-                        "name", "word_text"), tools, new AppSettings(), false, false, session);
+                        "name", "word_text", "target", "Word range: 0:24", "view", "text"), tools, new AppSettings(), false, false, session);
                     AssertTrue(bound.Success,
                         "Word HTML binding shares the typed read route");
-                    AssertEqual(htmlReads,
+                    AssertEqual(htmlReads + 1,
                         adapter.WordBackendCalls.Count(operation =>
                             operation == FakeOfficeAdapter.WordReadTextOperation),
-                        "Word HTML binding does not nest another backend read");
+                        "Word HTML binding captures via Gateway, not copied accepted result JSON");
 
                     var writes = adapter.WordBackendCalls.Count(operation =>
                         operation == FakeOfficeAdapter.WordWriteOperation);
@@ -100,6 +96,89 @@ namespace RNAssistant.Harness
                         "word-case", "WORD.WRITE_TEXT", "{}")) == null,
                         "Word native ownership has no case alias");
                 });
+        }
+
+        private static void WordResourceReadsRetainExactEvidence()
+        {
+            WithTempExecutor(FakeOfficeAdapter.ForHost("Word"), (executor, adapter) =>
+            {
+                var source = "\uFEFFЗаголовок\r\n" + new string('w', 70000) + "\r\nКонец 😀";
+                adapter.Write(new WordWriteRequest { Mode = "replaceselection", Text = source }, () => { });
+                var session = NewSession(adapter);
+                executor.BindResourceAuthority(session);
+                var tools = OfficeToolCatalog.ForHost("Word").Concat(executor.GetControllerTools()).ToList();
+                var runtime = executor.CreateNativeRuntime(session, tools, new AppSettings(), "agent", false);
+                var document = executor.ResourceGateway.List(session, LiveDocumentResourceProvider.ProviderName,
+                    LiveDocumentResourceProvider.DocumentKind, null, 10).Items.Single();
+                var target = ResourceGatewayService.IntentTarget(document);
+                var legacyReads = adapter.DocumentSnapshotReadCount;
+                var materializations = adapter.WordTextMaterializationCount;
+                var first = ExecuteHtmlNative(runtime, ResourceToolCatalog.ReadToolId,
+                    new JObject { ["target"] = target, ["representation"] = "text" });
+                AssertEqual(ToolExecutionOutcome.Ok, first.Outcome, "document uses generic native reader");
+                AssertEqual(source, (string)JObject.Parse(first.Result.DataJson)["text"], "whole source preserves BOM/CRLF/Unicode");
+                AssertEqual(materializations + 1, adapter.WordTextMaterializationCount, "internal pages share one bounded capture");
+                AssertEqual(legacyReads, adapter.DocumentSnapshotReadCount, "Word source never calls generic adapter snapshot fallback");
+                var evidence = first.ResourceEvidence.Single();
+                AssertTrue(evidence.Resource.IsExact && evidence.Payload != null && evidence.Complete, "source has complete exact CAS evidence");
+                var selection = executor.ResourceGateway.List(session, LiveDocumentResourceProvider.ProviderName,
+                    LiveDocumentResourceProvider.SelectionKind, null, 10).Items.Single();
+                var selected = ExecuteHtmlNative(runtime, ResourceToolCatalog.ReadToolId,
+                    new JObject { ["target"] = ResourceGatewayService.IntentTarget(selection) });
+                AssertEqual(source, (string)JObject.Parse(selected.Result.DataJson)["text"], "selection uses same typed source capture");
+                var range = ExecuteHtmlNative(runtime, ResourceToolCatalog.ReadToolId,
+                    new JObject { ["target"] = "Word range: 0:10" });
+                AssertEqual(source.Substring(0, 10), (string)JObject.Parse(range.Result.DataJson)["text"], "range coordinates are exact");
+                adapter.Write(new WordWriteRequest { Mode = "replaceselection", Text = "changed" }, () => { });
+                var fresh = ExecuteHtmlNative(runtime, ResourceToolCatalog.ReadToolId, new JObject { ["target"] = target });
+                AssertEqual(ToolExecutionOutcome.Ok, fresh.Outcome, "fresh read observes external change");
+                AssertEqual(EvidenceState.Superseded, new EvidenceStateReducer().Reduce(evidence,
+                    executor.ResourceAuthority.CaptureMany(new[] { evidence.ScopeId })).State, "old source loses current status");
+                var count = adapter.WordTextMaterializationCount;
+                var old = executor.ResourceGateway.Read(session, new ResourceReadRequest {
+                    Reference = evidence.Resource, Representation = "text", MaxChars = 32000 }).Result;
+                AssertEqual(source.Substring(0, 32000), old.Text, "historical source remains exact after drift");
+                var continuation = executor.ResourceGateway.Read(session, new ResourceReadRequest {
+                    Reference = evidence.Resource, Representation = "text", Cursor = old.NextCursor, MaxChars = 32000 }).Result;
+                AssertEqual(source.Substring(32000, 32000), continuation.Text, "historical continuation stays pinned");
+                AssertEqual(count, adapter.WordTextMaterializationCount, "historical pages perform no Word reads");
+                AssertTrue(!tools.Any(tool => tool.Id == "word.read_text") && DirectToolBindingCatalog.Resolve("word.read_text") == null,
+                    "legacy catalog and native binding are gone");
+                string error;
+                AssertTrue(!ModelToolResultProjection.ValidateAcceptedCall(new ToolCall("old", "word.read_text", "{}"), out error),
+                    "old calls cannot be translated or replayed");
+                var removed = executor.ExecuteManual(Command("word.read_text"), tools, new AppSettings(), false, false, session);
+                AssertEqual("unknown_tool", removed.ErrorCode, "manual legacy reader has no fallback");
+            });
+        }
+
+        private static void WordResourceBoundsRejectBeforeMaterialization()
+        {
+            WithTempExecutor(FakeOfficeAdapter.ForHost("Word"), (executor, adapter) =>
+            {
+                var session = NewSession(adapter);
+                executor.BindResourceAuthority(session);
+                var tools = OfficeToolCatalog.ForHost("Word").Concat(executor.GetControllerTools()).ToList();
+                var discovered = executor.ResourceGateway.Find(session, "Word range: 0:10", "document");
+                AssertTrue(discovered.Items.Any(item => item.Target == "Word range: 0:10"), "explicit character range can be discovered");
+                foreach (var target in new[] { "Word range: 0:1000001", "Word range: 10:1", "Word range: 00:1", "Word range: 0-1", "Word range: 0:99999" })
+                {
+                    var count = adapter.WordTextMaterializationCount;
+                    var invalid = executor.ExecuteManual(Command(ResourceToolCatalog.ReadToolId, "target", target), tools, new AppSettings(), false, false, session);
+                    AssertTrue(!invalid.Success, "invalid or oversized range fails: " + target);
+                    AssertEqual(count, adapter.WordTextMaterializationCount, "rejected range never materializes text");
+                }
+                var empty = executor.ExecuteManual(Command(ResourceToolCatalog.ReadToolId, "target", "Word range: 0:0"), tools, new AppSettings(), false, false, session);
+                AssertTrue(empty.Success && (string)JObject.Parse(empty.DataJson)["text"] == "", "explicit empty range is complete");
+                adapter.Write(new WordWriteRequest { Mode = "replaceselection", Text = new string('x', WordService.MaximumTextCharacters + 1) }, () => { });
+                var document = executor.ResourceGateway.List(session, LiveDocumentResourceProvider.ProviderName,
+                    LiveDocumentResourceProvider.DocumentKind, null, 10).Items.Single();
+                var before = adapter.WordTextMaterializationCount;
+                var oversized = executor.ExecuteManual(Command(ResourceToolCatalog.ReadToolId, "target", ResourceGatewayService.IntentTarget(document)),
+                    tools, new AppSettings(), false, false, session);
+                AssertEqual("RESOURCE_SNAPSHOT_TOO_LARGE", oversized.ErrorCode, "oversized document requires explicit narrower range");
+                AssertEqual(before, adapter.WordTextMaterializationCount, "document limit precedes source materialization");
+            });
         }
 
         private static void WordToolsPreserveFamilySemantics()
@@ -243,10 +322,13 @@ namespace RNAssistant.Harness
                     var inner = FakeOfficeAdapter.ForHost("Word");
                     var host = new BoundTestOfficeAdapter(sessionPort, inner);
                     var ownerSta = false;
+                    var sourceOwnerSta = false;
                     host.BeforeRead = operation =>
                     {
                         if (operation == FakeOfficeAdapter.WordWriteOperation)
                             ownerSta = dispatcher.CheckAccess;
+                        if (operation == FakeOfficeAdapter.WordReadTextOperation)
+                            sourceOwnerSta = dispatcher.CheckAccess;
                     };
                     var executor = new OfficeToolExecutor(
                         host, new VbaJournalStore(paths),
@@ -266,6 +348,10 @@ namespace RNAssistant.Harness
                         tools, new AppSettings(), false, true, chat);
                     AssertTrue(result.Success && ownerSta,
                         "Word mutation stays on the bound document owner STA");
+                    var sourceRead = executor.ExecuteManual(Command(ResourceToolCatalog.ReadToolId,
+                        "target", "Word range: 0:8"), tools, new AppSettings(), false, false, chat);
+                    AssertTrue(sourceRead.Success && sourceOwnerSta, "resource source uses the same bound owner STA");
+                    var sourceReads = inner.WordTextMaterializationCount;
 
                     var dispatched = inner.WordBackendCalls.Count(operation =>
                         operation == FakeOfficeAdapter.WordWriteOperation);
@@ -280,6 +366,10 @@ namespace RNAssistant.Harness
                         inner.WordBackendCalls.Count(operation =>
                             operation == FakeOfficeAdapter.WordWriteOperation),
                         "closed Word document never reaches direct backend");
+                    var closedRead = executor.ExecuteManual(Command(ResourceToolCatalog.ReadToolId,
+                        "target", "Word range: 0:8"), tools, new AppSettings(), false, false, chat);
+                    AssertEqual("active_document_changed", closedRead.ErrorCode, "closed bound resource target cannot read Office");
+                    AssertEqual(sourceReads, inner.WordTextMaterializationCount, "closed source never materializes");
                 }
             });
         }

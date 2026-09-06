@@ -168,6 +168,25 @@ Old accepted `excel.read_range` calls fail explicit protocol validation; no alia
 replay translation or public domain-output wrapper remains. Real Windows Excel/STA
 and final catalog/model qualification are still open.
 
+## Word text reads
+
+`word.read_text` is removed. Document and selection targets discovered through
+`common.resources_find`, and explicit `Word range: start:end` targets, use
+`common.resources_read` (`text`). Range positions are main-story, zero-based,
+start-inclusive/end-exclusive; reversed, out-of-document and noncanonical targets
+are rejected, never clamped or given an implicit end.
+
+The existing `LiveDocumentResourceProvider` routes all Word source reads through
+`WordService.CaptureText` and the bound `IWordBackend`; it does not call the generic
+adapter's document/selection text fallback. Complete captures use existing CAS and
+authority, so internal pages and historical exact reads do not recapture live Word.
+The one-million-character capture ceiling is checked before COM `Range.Text`;
+oversized document/selection reads fail explicitly and require a narrower target,
+not clipped text presented as complete. Empty exact ranges remain readable.
+HTML uses this same provider. Word search, inspection and mutations keep their
+specialized owners. Real Word range/selection/STA and final catalog qualification
+remain open on Windows.
+
 ## Conversation loop
 
 Controller clear/edit/message-delete/fork use typed `ChatResourceMutationIntent`

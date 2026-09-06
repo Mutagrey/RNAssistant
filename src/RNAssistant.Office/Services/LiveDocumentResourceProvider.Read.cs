@@ -44,7 +44,7 @@ namespace RNAssistant.Office.Services
                 var content = representation == ResourceRepresentations.Structure
                     ? ReadStructure(target)
                     : ReadText(target);
-                var sourceTruncated = content.Length >= MaximumMaterializedCharacters;
+                var sourceTruncated = !IsWord && content.Length >= MaximumMaterializedCharacters;
                 var cursorBinding = ResourceReadCursor.ReadBinding(resourceUri, representation);
                 var position = ResourceReadCursor.ParseRevisionBound(request, cursorBinding);
                 return SelectText(
@@ -101,7 +101,7 @@ namespace RNAssistant.Office.Services
                 var content = ReadText(target);
                 var contentSha256 = TextPatternEngine.Sha256(content);
                 result.ScannedCharacters = content.Length;
-                result.ScanTruncated = content.Length >= MaximumMaterializedCharacters;
+                result.ScanTruncated = !IsWord && content.Length >= MaximumMaterializedCharacters;
                 var index = 0;
                 while (result.Matches.Count < limit &&
                     (index = content.IndexOf(query, index, StringComparison.OrdinalIgnoreCase)) >= 0)
@@ -133,6 +133,7 @@ namespace RNAssistant.Office.Services
 
         private string ReadText(string target)
         {
+            if (IsWord) return ReadWordText(target);
             if (string.Equals(target, "selection", StringComparison.Ordinal))
             {
                 var selection = _adapter.CaptureSelectionContext("selection", MaximumMaterializedCharacters);
@@ -150,6 +151,11 @@ namespace RNAssistant.Office.Services
 
         private string ReadStructure(string target)
         {
+            if (IsWord && target.StartsWith("range-", StringComparison.Ordinal))
+            {
+                var range = WordRange(target);
+                return JsonConvert.SerializeObject(new { source = "range", start = range.Start, end = range.End });
+            }
             if (string.Equals(target, "selection", StringComparison.Ordinal))
             {
                 var selection = _adapter.CaptureSelectionContext("reference", MaximumMaterializedCharacters);
@@ -234,6 +240,8 @@ namespace RNAssistant.Office.Services
                     Representation = representation,
                     Text = content.Substring(offset, length),
                     ContentSha256 = contentSha256,
+                    CompleteViewPayload = IsWord && !sourceTruncated && _payloads != null
+                        ? PayloadRef.FromBlob(_payloads.StoreText(content, "text/plain; charset=utf-8")) : null,
                     Offset = offset,
                     ReturnedCharacters = length,
                     TotalCharacters = content.Length,
