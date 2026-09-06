@@ -30,8 +30,11 @@ function switchTab(name) {
     renderInstructions();
   } else if (name === "settings") {
     renderSettings();
+  } else if (name === "artifacts" && typeof renderHtmlWorkspace === "function") {
+    renderHtmlWorkspace();
   } else if (name === "vba" && typeof renderVbaProject === "function") {
     renderVbaProject();
+    if (typeof updateVbaMacroRunState === "function") updateVbaMacroRunState();
   }
 }
 

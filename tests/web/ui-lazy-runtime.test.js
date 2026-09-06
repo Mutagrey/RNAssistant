@@ -19,10 +19,18 @@ assert.match(index, /app-echarts-sandbox-runtime\.js\?v=ui-lazy-20260903-1/);
   assert.ok(index.includes(asset + "?v=" + version), asset + " uses the current UI cache key");
 });
 assert.ok(index.includes("app-html-workspace.js?v=html-read-20260906-1"), "HTML workspace uses the resource source cache key");
+assert.ok(index.includes("app-chat-session.js?v=startup-secondary-lazy-20260907-1"), "chat session uses the secondary lazy cache key");
+assert.ok(index.includes("app.js?v=startup-secondary-lazy-20260907-1"), "app boot uses the secondary lazy cache key");
 assert.doesNotMatch(app, /initializeCodeEditors\(\);/,
   "hidden CodeMirror editors must not be created during DOMContentLoaded");
 assert.doesNotMatch(session, /loadModelCatalog\(false\)/,
   "opening the add-in must not start an unsolicited model-catalog request");
+assert.match(session, /function renderVisibleSecondarySurfaces\(\)/,
+  "init routes hidden secondary panels through the lazy render helper");
+assert.doesNotMatch(session, /renderSettings\(\);\s*renderTools\(\);\s*renderSkills\(\);/,
+  "init must not eagerly rebuild hidden library surfaces");
+assert.match(app, /name === "artifacts"[\s\S]*renderHtmlWorkspace\(\)/,
+  "artifacts panel renders on first tab activation");
 console.log("PASS lazy UI: startup omits chart parsing, hidden editors and model discovery");
 
 const editorIds = [

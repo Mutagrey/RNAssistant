@@ -138,7 +138,7 @@ function createSyncContext() {
   ["app-core.js", "app-chat-run.js", "app-chat-edit.js"].forEach(asset => {
     assert.ok(index.includes(asset + "?v=chat-sync-20260903-1"), asset + " cache key was bumped");
   });
-  assert.ok(index.includes("app-chat-session.js?v=context-usage-display-20260907-1"), "chat session context usage cache key was bumped");
+  assert.ok(index.includes("app-chat-session.js?v=startup-secondary-lazy-20260907-1"), "chat session startup lazy cache key was bumped");
   console.log("OK 4/4");
 }()).catch(error => {
   console.error(error.stack || error);

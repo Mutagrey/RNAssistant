@@ -257,6 +257,19 @@ async function forkChatAtMessage(message, index) {
   }
 }
 
+function renderVisibleSecondarySurfaces() {
+  if (typeof isPanelActive === "function" && isPanelActive("instructions") && typeof renderInstructions === "function") {
+    renderInstructions();
+  }
+  if (typeof isPanelActive === "function" && isPanelActive("artifacts") && typeof renderHtmlWorkspace === "function") {
+    renderHtmlWorkspace();
+  }
+  if (typeof isPanelActive === "function" && isPanelActive("vba")) {
+    if (typeof renderVbaProject === "function") renderVbaProject();
+    if (typeof updateVbaMacroRunState === "function") updateVbaMacroRunState();
+  }
+}
+
 function applyInitState(init) {
   state.chatStateApplyVersion = (state.chatStateApplyVersion || 0) + 1;
   init = init || {};
@@ -325,21 +338,13 @@ function applyInitState(init) {
   $("toolsPath").textContent = state.toolsPath ? "Хранилище: " + state.toolsPath : "";
   if ($("skillsPath")) $("skillsPath").textContent = state.skillsPath ? "Хранилище: " + state.skillsPath : "";
   renderSettings();
-  renderTools();
-  renderSkills();
-  renderContext(true);
   renderChatSessions();
   renderMessages();
   if (!state.messages.length && typeof refreshActiveQualificationState === "function") {
     refreshActiveQualificationState();
   }
   renderContextMeter();
-  if (typeof renderHtmlWorkspace === "function") {
-    renderHtmlWorkspace();
-  }
-  if (typeof updateVbaMacroRunState === "function") {
-    updateVbaMacroRunState();
-  }
+  renderVisibleSecondarySurfaces();
   log("Initialized " + init.host);
   if (init.quickAction) {
     runQuickAction(init.quickAction);
@@ -405,23 +410,12 @@ function applyBridgeUnavailableState(error) {
   $("toolsPath").textContent = "";
   if ($("skillsPath")) $("skillsPath").textContent = "";
   renderSettings();
-  renderTools();
-  renderSkills();
-  renderContext(true);
   renderChatSessions();
   renderMessages();
   renderContextMeter();
-  if (typeof renderHtmlWorkspace === "function") {
-    renderHtmlWorkspace();
-  }
+  renderVisibleSecondarySurfaces();
   renderModelControls();
   renderSendControls();
-  if (typeof renderVbaProject === "function") {
-    renderVbaProject();
-  }
-  if (typeof updateVbaMacroRunState === "function") {
-    updateVbaMacroRunState();
-  }
   log((error && (error.detail || error.message)) || "WebView bridge is not available.", "error");
 }
 

@@ -110,7 +110,7 @@ vm.runInContext(source, context, { filename: "app-artifacts.js" });
   const index = fs.readFileSync(path.join(root, "web/index.html"), "utf8");
   assert.ok(index.includes("app-core.js?v=chat-sync-20260903-1"), "core has the chat sync cache key");
   assert.ok(index.includes("app-chat-state.js?v=context-usage-display-20260907-1"), "chat state has the context usage cache key");
-  assert.ok(index.includes("app-chat-session.js?v=context-usage-display-20260907-1"), "chat session has the context usage cache key");
+  assert.ok(index.includes("app-chat-session.js?v=startup-secondary-lazy-20260907-1"), "chat session has the startup lazy cache key");
   assert.ok(index.includes("app-artifacts.js?v=resource-index-20260907-1"), "artifact cards have the resource index cache key");
   assert.ok(index.includes("app-html-workspace-model.js?v=html-read-20260906-1"), "artifact selection model has the gallery cache key");
   assert.ok(index.includes("app-html-workspace.js?v=html-read-20260906-1"), "artifact actions have the current resource cache key");
