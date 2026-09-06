@@ -445,7 +445,19 @@ none. These are whole-response bounds, not a claim of byte/record streaming or
 native renderer availability. Gateway rejects unsupported views and row/field
 selectors before source hydration. Captured and retained views obey the same
 per-view byte limit and MIME contract; retained data cannot bypass negotiation.
-General original-byte `raw` views and their bounded transport remain open.
+The same owner also exposes `raw` for exact attachment-backed image/file/attachment
+artifacts, including empty originals. It reads and verifies original byte length
+and SHA-256, never extracted text or rendered output. The retained `binary:raw`
+view uses the existing CAS and must still match the exact source evidence; missing
+CAS never falls back to the original reader. Control setup contains metadata only.
+Delivery uses the existing whole-binary lease, bounded to 20 MiB per response,
+without row/field/page selectors or byte-stream capability. The source MIME stays
+in the descriptor; the raw payload/HTTP MIME is inert `application/octet-stream`
+under the shared no-sniff/CSP route. HTML bindings accept `view: raw`, and the same
+`RN.resources` binary consumer and standalone export return original bytes (export
+retains its stricter 8 MiB part limit). No new reader tool or store is introduced.
+General chunked binary transport and raw views for other provider domains remain
+open, as does real Windows/WebView2 qualification.
 
 Authority notifications coalesce to bounded scope/generation metadata.
 `RN.resources.subscribe` receives authorized binding names only; it does not create

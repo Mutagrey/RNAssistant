@@ -60,14 +60,15 @@ vm.runInContext(fs.readFileSync(path.join(root, "web/js/app-html-workspace-actio
   const resourceExport = { generations: { "conversation:export": 3 }, bindings: [
     binding("bound", "table", 1), binding("text", "text", 2),
     binding("image", "image", 3, { payload: { byteLength: 4, contentType: "image/png" } }),
-    binding("empty", "table", 4)
+    binding("empty", "table", 4),
+    binding("original", "raw", 5, { payload: { byteLength: 4, contentType: "application/octet-stream" } })
   ] };
   const reads = [];
   const captureOptions = {
     isCurrent: () => true,
     fetch: async url => {
       reads.push(url);
-      if (url.includes("/" + "3".repeat(64))) return new Response(new Uint8Array([0, 1, 254, 255]));
+      if (url.includes("/" + "3".repeat(64)) || url.includes("/" + "5".repeat(64))) return new Response(new Uint8Array([0, 1, 254, 255]));
       const batch = url.includes("/" + "2".repeat(64)) ? textBatch :
         url.includes("/" + "4".repeat(64)) ? table(0, [], true) :
           url.includes("offset=0") ? table(0, [12, 34], false) : table(2, [56], true);
@@ -75,7 +76,7 @@ vm.runInContext(fs.readFileSync(path.join(root, "web/js/app-html-workspace-actio
     }
   };
   const snapshot = await context.RNAssistantHtmlResourceExport.capture(resourceExport, captureOptions);
-  assert.equal(reads.length, 5);
+  assert.equal(reads.length, 6);
   assert.ok(reads[1].includes("offset=2"), "export follows bounded sequential offsets");
   assert.equal(snapshot.resources[0].descriptor.reference.revision, "r1");
   assert.equal(snapshot.resources[0].url, undefined, "transient host capability is not exported");
@@ -115,6 +116,11 @@ vm.runInContext(fs.readFileSync(path.join(root, "web/js/app-html-workspace-actio
   const binary = await imageHandle.read();
   assert.deepEqual(Array.from(new Uint8Array(binary.bytes)), [0, 1, 254, 255]);
   await imageHandle.close();
+  const rawHandle = await offline.RN.resources.open("original");
+  const raw = await rawHandle.read({ view: "raw" });
+  assert.equal(raw.mimeType, "application/octet-stream");
+  assert.deepEqual(Array.from(new Uint8Array(raw.bytes)), [0, 1, 254, 255], "raw exported source is never decoded as text");
+  await rawHandle.close();
   const emptyHandle = await offline.RN.resources.open("empty");
   const empty = await emptyHandle.read();
   assert.equal(empty.done, true); assert.equal(empty.rows.length, 0); await emptyHandle.close();
@@ -199,7 +205,7 @@ vm.runInContext(fs.readFileSync(path.join(root, "web/js/app-html-workspace-actio
   assert.equal(downloads[0].revisionArtifactId, "html-r4");
   assert.equal(downloads[0].workspace.dataSources[0].binding.resource.revision, "r1");
   assert.equal(downloads[0].workspace.dataSources[0].json, undefined);
-  assert.equal(calls.filter(item => item.method === "resourceDataClose").length, 4);
+  assert.equal(calls.filter(item => item.method === "resourceDataClose").length, 5);
   console.log("PASS HTML export: download uses the guarded server checkpoint payload");
 
   state.htmlWorkspaceDirty = true;
@@ -221,7 +227,7 @@ vm.runInContext(fs.readFileSync(path.join(root, "web/js/app-html-workspace-actio
   const closeCount = calls.filter(item => item.method === "resourceDataClose").length;
   assert.equal(await actions.exportWorkspace(), false);
   assert.equal(logs.filter(item => !item.level).length, successLogs, "async hydration failure is never reported as success");
-  assert.equal(calls.filter(item => item.method === "resourceDataClose").length, closeCount + 4);
+  assert.equal(calls.filter(item => item.method === "resourceDataClose").length, closeCount + 5);
   assert.equal(state.htmlWorkspaceExportPending, false);
   console.log("PASS HTML export: asynchronous download failure closes every prepared capability");
 
@@ -235,7 +241,7 @@ vm.runInContext(fs.readFileSync(path.join(root, "web/js/app-html-workspace-actio
     }
   });
   assert.equal(await lateActions.exportWorkspace(), false);
-  assert.equal(lateCloses.length, 4);
+  assert.equal(lateCloses.length, 5);
   assert.ok(lateCloses.every(item => item.chatId === "chat-export" && item.workspaceId === "html-r4"));
   console.log("PASS HTML export: a late response after chat change releases the original owner's leases");
 

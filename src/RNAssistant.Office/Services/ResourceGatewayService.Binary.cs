@@ -10,7 +10,7 @@ namespace RNAssistant.Office.Services
     internal sealed partial class ResourceGatewayService
     {
         internal static bool IsBinaryView(string view)
-        { return view == ResourceRepresentations.Image || view == ResourceRepresentations.Thumbnail ||
+        { return view == ResourceRepresentations.Raw || view == ResourceRepresentations.Image || view == ResourceRepresentations.Thumbnail ||
             view == ResourceRepresentations.RenderPage || view == ResourceRepresentations.PageThumbnail; }
 
         private ResourceReadSelection ReadBinaryView(ChatSession session, ResourceReadRequest request)
@@ -25,6 +25,7 @@ namespace RNAssistant.Office.Services
             if (request.Reference.IsExact && exact.Revision != request.Reference.Revision)
                 throw new ResourceRequestException("The binary view revision is unavailable.", "RESOURCE_SNAPSHOT_UNAVAILABLE", false);
             var page = 0;
+            var raw = request.Representation == ResourceRepresentations.Raw;
             var paged = request.Representation == ResourceRepresentations.RenderPage || request.Representation == ResourceRepresentations.PageThumbnail;
             if (paged && (!int.TryParse(request.ViewPath, NumberStyles.None, CultureInfo.InvariantCulture, out page) || page < 0) ||
                 !paged && !string.IsNullOrEmpty(request.ViewPath))
@@ -52,7 +53,12 @@ namespace RNAssistant.Office.Services
                 byte[] bytes;
                 string mimeType;
                 binary = new ResourceBinaryView();
-                if (paged)
+                if (raw)
+                {
+                    bytes = _mediaViews.ReadRawSource(session, exact.Uri);
+                    mimeType = "application/octet-stream";
+                }
+                else if (paged)
                 {
                     var image = request.Representation == ResourceRepresentations.PageThumbnail
                         ? _mediaViews.ReadPdfThumbnail(session, exact.Uri, page) : _mediaViews.ReadPdfPage(session, exact.Uri, page);
@@ -79,10 +85,12 @@ namespace RNAssistant.Office.Services
                 revisions.RegisterView(scope, new ResourceRevisionView(exact, view, binary.Payload.Sha256,
                     metadata, ResourceCoverage.Whole(), new[] { binary.Payload }));
             }
-            var expectedMime = request.Representation == ResourceRepresentations.Image
+            var expectedMime = raw ? "application/octet-stream" : request.Representation == ResourceRepresentations.Image
                 ? ArtifactViewerService.NormalizeMimeType(descriptor.MimeType) : "image/jpeg";
-            if (binary?.Payload == null || binary.Payload.ByteLength <= 0 || binary.Payload.ByteLength > capability.MaxBatchBytes.Value ||
-                binary.Payload.ContentType != expectedMime)
+            if (binary?.Payload == null || binary.Payload.ByteLength < 0 || !raw && binary.Payload.ByteLength == 0 ||
+                binary.Payload.ByteLength > capability.MaxBatchBytes.Value || binary.Payload.ContentType != expectedMime ||
+                raw && (binary.Payload.ByteLength != descriptor.ByteLength ||
+                    !string.Equals(binary.Payload.Sha256, descriptor.ContentSha256, StringComparison.OrdinalIgnoreCase)))
                 throw new ResourceRequestException("The exact binary payload is unavailable.", "RESOURCE_SNAPSHOT_UNAVAILABLE", false);
             var coverage = paged ? new ResourceCoverage(ResourceCoverageKinds.PageRange, start: page, end: page + 1) : ResourceCoverage.Whole();
             var result = new ResourceReadSelection { Result = new ResourceReadResult {

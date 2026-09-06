@@ -28,7 +28,7 @@ namespace RNAssistant.Office.Tools
                     ["name"] = new JObject { ["type"] = "string", ["description"] = "Stable binding name opened through RN.resources.", ["minLength"] = 1, ["maxLength"] = 128 },
                     ["target"] = new JObject { ["type"] = "string", ["minLength"] = 1, ["maxLength"] = 1024,
                         ["description"] = "Exact semantic target returned by common.resources_find." },
-                    ["view"] = new JObject { ["type"] = "string", ["description"] = "Bounded resource view. Page views use a zero-based page index in path.", ["enum"] = new JArray("text", "source", "table", "records", "image", "thumbnail", "render-page", "page-thumbnail"), ["default"] = "text" },
+                    ["view"] = new JObject { ["type"] = "string", ["description"] = "Bounded resource view. raw returns exact original attachment bytes as inert binary (up to 20 MiB); text is extracted content. Page views use a zero-based page index in path.", ["enum"] = new JArray("text", "source", "table", "records", "raw", "image", "thumbnail", "render-page", "page-thumbnail"), ["default"] = "text" },
                     ["path"] = new JObject { ["type"] = "string", ["description"] = "Explicit record-array path for a structural JSON view (for example $.records).", ["maxLength"] = 256 },
                     ["policy"] = new JObject { ["type"] = "string", ["description"] = "Resolve current head on open, or retain the exact observed revision.", ["enum"] = new JArray("head", "exact"), ["default"] = "exact" }
                 },

@@ -41,7 +41,7 @@ namespace RNAssistant.Harness
                     AssertEqual((int)ArtifactViewerService.MaximumImageBytes, imageCapability.MaxBatchBytes.Value, "declared image bound");
                     AssertTrue(!imageCapability.SupportsOffset && !imageCapability.SupportsFields && !imageCapability.SupportsStream,
                         "whole binary delivery does not advertise record streaming");
-                    AssertEqual(2, gateway.List(session, "chat", null, null, 10).Items.Single().ViewCapabilities.Count,
+                    AssertEqual(3, gateway.List(session, "chat", null, null, 10).Items.Single().ViewCapabilities.Count,
                         "list and resolve share metadata-only capabilities");
                     AssertEqual("RESOURCE_VIEW_UNAVAILABLE", RuntimeThrows<ResourceRequestException>(() =>
                         data.Open(session, "viewer", exact, "render-page", "0")).ErrorCode, "image cannot negotiate a PDF view");
@@ -126,6 +126,107 @@ namespace RNAssistant.Harness
                         "retained metadata cannot bypass the negotiated MIME or per-view bound");
                 }
                 AssertEqual(0, reads, "discovery and rejected retained views do not render or hydrate source bytes");
+            });
+        }
+
+        private static void ResourceRawOriginalBytes()
+        {
+            WithTempPaths(paths =>
+            {
+                var payloads = new ChatBlobStore(paths);
+                var store = new ResourceAuthorityStore(paths);
+                var authority = new ResourceAuthorityService(store, store, new ResourceMutationJournal(paths), payloads);
+                foreach (var bytes in new[] { new byte[0], System.Text.Encoding.UTF8.GetBytes("\uFEFF<script>not a page</script>\r\n語😀" + new string('語', 40000)) })
+                {
+                    var hash = ArtifactViewerService.Sha256(bytes);
+                    payloads.StoreBytes(bytes, "text/html");
+                    var originalStored = System.IO.File.ReadAllBytes(payloads.PathFor(hash));
+                    var attachment = new ChatAttachment { Id = "raw", Kind = "text", FileName = "original.html", ContentType = "text/html",
+                        ContentSha256 = hash, ContentByteLength = bytes.Length, ExtractedText = "not the original bytes" };
+                    var message = new ChatMessage { Role = "user", Attachments = new List<ChatAttachment> { attachment } };
+                    var artifact = new ChatArtifact { Kind = ChatArtifactKinds.Attachment, MimeType = "text/html",
+                        SourceMessageId = message.Id, ContentSha256 = hash, ContentByteLength = bytes.Length,
+                        MetadataJson = "{\"attachmentId\":\"raw\"}" };
+                    var session = new ChatSession(); session.Messages.Add(message); session.Artifacts.Add(artifact);
+                    var reads = 0;
+                    var gateway = new ResourceGatewayService(null, null, null, authority: authority,
+                        readAttachmentBytes: item => { reads++; return bytes; });
+                    var exact = ChatResourceUri.CreateArtifactRevision(session, artifact);
+                    var capability = gateway.Resolve(session, exact.Uri).Resource.ViewCapabilities.Single(item => item.View == "raw");
+                    AssertEqual((int)ArtifactViewerService.MaximumRawBytes, capability.MaxBatchBytes.Value, "raw source bound");
+                    AssertTrue(!capability.SupportsStream && !capability.SupportsOffset, "raw is an exact bounded whole response, not byte paging");
+                    AssertEqual(0, reads, "raw discovery does not load source");
+                    using (var data = new ResourceDataPlaneService(gateway, (chat, owner) => chat == session.Id && owner == "workspace"))
+                    {
+                        var opened = data.Open(session, "workspace", exact, "raw");
+                        AssertEqual(hash, opened.Binary.Payload.Sha256, "raw payload matches original byte evidence");
+                        AssertTrue(originalStored.SequenceEqual(System.IO.File.ReadAllBytes(payloads.PathFor(hash))),
+                            "raw reuses the original CAS blob/codec without rewriting it for the transport MIME");
+                        AssertEqual("text/html", opened.Descriptor.MimeType, "original MIME remains descriptive metadata");
+                        AssertTrue(JObject.FromObject(opened)["text"] == null, "bridge returns only binary metadata");
+                        var router = new ResourceDataRouter(data);
+                        var response = router.Handle("GET", opened.Url, System.Threading.CancellationToken.None);
+                        AssertEqual(200, response.StatusCode, "existing route serves raw bytes");
+                        AssertEqual("application/octet-stream", response.ContentType, "active source MIME is never served as a document");
+                        AssertContains(response.Headers, "X-Content-Type-Options: nosniff", "raw route does not permit MIME sniffing");
+                        using (var body = new System.IO.MemoryStream())
+                        { using (response.Body) response.Body.CopyTo(body); AssertTrue(bytes.SequenceEqual(body.ToArray()), "exact original bytes including BOM/empty source, no text conversion"); }
+                        data.Close(session.Id, "workspace", opened.LeaseId);
+                        AssertEqual(409, router.Handle("GET", opened.Url, System.Threading.CancellationToken.None).StatusCode, "closed raw lease refuses");
+                        var retained = data.Open(session, "workspace", exact, "raw");
+                        AssertEqual(1, reads, "reopen reuses the retained CAS raw view");
+                        var scan = new CasReachabilityScan(); store.ScanCasReferences(scan);
+                        AssertTrue(scan.References.Any(item => item.Reference.Sha256 == hash), "raw bytes are retained by the existing authority store");
+                        System.IO.File.Delete(payloads.PathFor(retained.Binary.Payload.Sha256));
+                        var missing = router.Handle("GET", retained.Url, System.Threading.CancellationToken.None);
+                        AssertEqual(409, missing.StatusCode,
+                            "missing exact payload fails without rereading the original");
+                        using (var reader = new System.IO.StreamReader(missing.Body))
+                            AssertContains(reader.ReadToEnd(), "RESOURCE_SNAPSHOT_UNAVAILABLE", "missing bytes are an explicit snapshot failure");
+                        AssertEqual(1, reads, "missing CAS has no original-file fallback");
+                    }
+                }
+                AssertTrue(JObject.Parse(HtmlWorkspaceToolService.BindSchema())["properties"]["view"]["enum"].Values<string>().Contains("raw"),
+                    "existing HTML binding tool admits raw without a separate reader tool");
+            });
+        }
+
+        private static void ResourceRawAdmissionGuards()
+        {
+            WithTempPaths(paths =>
+            {
+                var payloads = new ChatBlobStore(paths);
+                var store = new ResourceAuthorityStore(paths);
+                var authority = new ResourceAuthorityService(store, store, new ResourceMutationJournal(paths), payloads);
+                var hash = ArtifactViewerService.Sha256(new byte[] { 1, 2, 3 });
+                var attachment = new ChatAttachment { Id = "raw", Kind = "file", ContentType = "application/octet-stream",
+                    ContentSha256 = hash, ContentByteLength = ArtifactViewerService.MaximumRawBytes + 1 };
+                var message = new ChatMessage { Role = "user", Attachments = new List<ChatAttachment> { attachment } };
+                var artifact = new ChatArtifact { Kind = ChatArtifactKinds.Attachment, MimeType = attachment.ContentType,
+                    SourceMessageId = message.Id, ContentSha256 = hash, ContentByteLength = attachment.ContentByteLength,
+                    MetadataJson = "{\"attachmentId\":\"raw\"}" };
+                var session = new ChatSession(); session.Messages.Add(message); session.Artifacts.Add(artifact);
+                var reads = 0;
+                var gateway = new ResourceGatewayService(null, null, null, authority: authority,
+                    readAttachmentBytes: item => { reads++; return new byte[] { 3, 2, 1 }; });
+                var exact = ChatResourceUri.CreateArtifactRevision(session, artifact);
+                Func<ResourceReadSelection> read = () => gateway.Read(session, new ResourceReadRequest { Reference = exact, Representation = "raw" });
+                AssertEqual("RESOURCE_VIEW_UNAVAILABLE", RuntimeThrows<ResourceRequestException>(() => read()).ErrorCode, "oversized raw refuses before allocation");
+                attachment.ContentByteLength = 3; artifact.ContentByteLength = 3;
+                RuntimeThrows<InvalidOperationException>(() => gateway.Read(new ChatSession(), new ResourceReadRequest { Reference = exact, Representation = "raw" }));
+                RuntimeThrows<ResourceRequestException>(() => gateway.Read(session, new ResourceReadRequest { Reference = exact, Representation = "raw", ViewPath = "0" }));
+                AssertEqual(0, reads, "scope and raw selector refusals do not hydrate source");
+                RuntimeThrows<InvalidOperationException>(() => read());
+                AssertEqual(1, reads, "source bytes must match exact attachment evidence");
+                var scope = authority.Scope(session, false);
+                AssertTrue(store.GetView(scope, exact, "binary:raw") == null, "failed integrity cannot publish a raw view");
+                var wrong = PayloadRef.FromBlob(payloads.StoreBytes(new byte[] { 3, 2, 1 }, "application/octet-stream"));
+                var metadata = PayloadRef.FromBlob(payloads.StoreText(Newtonsoft.Json.JsonConvert.SerializeObject(new ResourceBinaryView { Payload = wrong }), "application/json"));
+                store.RegisterRevision(scope, new ResourceRevisionMetadata(exact, hash));
+                store.RegisterView(scope, new ResourceRevisionView(exact, "binary:raw", wrong.Sha256, metadata, ResourceCoverage.Whole(), new[] { wrong }));
+                AssertEqual("RESOURCE_SNAPSHOT_UNAVAILABLE", RuntimeThrows<ResourceRequestException>(() => read()).ErrorCode,
+                    "retained raw metadata must identify original source bytes, not another valid CAS body");
+                AssertEqual(1, reads, "invalid retained metadata never falls back to source capture");
             });
         }
 

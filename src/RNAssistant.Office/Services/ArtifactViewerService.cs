@@ -31,6 +31,7 @@ namespace RNAssistant.Office.Services
         public const int PageCharacters = 32000;
         public const int MaximumDocumentCharacters = 512000;
         public const long MaximumImageBytes = 20L * 1024L * 1024L;
+        public const long MaximumRawBytes = 20L * 1024L * 1024L;
         public const int MaximumImageThumbnailDimension = 320;
         public const long MaximumImageThumbnailBytes = 512L * 1024L;
 
@@ -96,6 +97,16 @@ namespace RNAssistant.Office.Services
         public ArtifactPdfPageDto ReadPdfThumbnail(ChatSession session, string resourceUri, int pageIndex)
         {
             return _pdfViewer.ReadThumbnail(session, resourceUri, pageIndex);
+        }
+
+        internal byte[] ReadRawSource(ChatSession session, string resourceUri)
+        {
+            var artifact = ResolveExactArtifact(session, resourceUri);
+            var attachment = ChatArtifactResourceProvider.FindExactAttachment(session, artifact);
+            if (_readAttachmentBytes == null || !IsRawSource(artifact, attachment))
+                throw new ResourceRequestException("The exact original attachment is unavailable or exceeds the raw view bound.",
+                    "RESOURCE_VIEW_UNAVAILABLE", false);
+            return ReadExactAttachmentBytes(attachment, MaximumRawBytes, "raw");
         }
 
         public ArtifactImageViewerDto ReadImage(ChatSession session, string resourceUri)
@@ -453,27 +464,38 @@ namespace RNAssistant.Office.Services
         internal static IReadOnlyList<ResourceViewCapability> BinaryViewCapabilities(
             ChatArtifact artifact, ChatAttachment attachment)
         {
-            if (artifact == null || attachment == null || !IsSha256(attachment.ContentSha256) ||
-                !attachment.ContentByteLength.HasValue || attachment.ContentByteLength.Value <= 0 ||
-                attachment.ContentByteLength.Value > MaximumImageBytes)
+            if (!IsRawSource(artifact, attachment))
                 return new ResourceViewCapability[0];
             var mime = NormalizeMimeType(attachment.ContentType);
-            if (!string.Equals(NormalizeMimeType(artifact.MimeType), mime, StringComparison.Ordinal))
-                return new ResourceViewCapability[0];
+            var views = new List<ResourceViewCapability> {
+                new ResourceViewCapability(ResourceRepresentations.Raw, maxBatchBytes: (int)MaximumRawBytes)
+            };
+            if (attachment.ContentByteLength.Value == 0 || attachment.ContentByteLength.Value > MaximumImageBytes) return views;
             if (string.Equals(artifact.Kind, ChatArtifactKinds.Image, StringComparison.OrdinalIgnoreCase) &&
                 string.Equals(attachment.Kind, "image", StringComparison.OrdinalIgnoreCase) && IsImageMimeType(mime))
-                return new[] {
+                views.AddRange(new[] {
                     new ResourceViewCapability(ResourceRepresentations.Image, maxBatchBytes: (int)MaximumImageBytes),
                     new ResourceViewCapability(ResourceRepresentations.Thumbnail, maxBatchBytes: (int)MaximumImageThumbnailBytes)
-                };
+                });
             if (string.Equals(artifact.Kind, ChatArtifactKinds.Attachment, StringComparison.OrdinalIgnoreCase) &&
                 string.Equals(attachment.Kind, "pdf", StringComparison.OrdinalIgnoreCase) && mime == "application/pdf" &&
                 attachment.PageCount > 0 && attachment.PageCount <= ArtifactPdfViewerService.MaximumPages)
-                return new[] {
+                views.AddRange(new[] {
                     new ResourceViewCapability(ResourceRepresentations.RenderPage, maxBatchBytes: (int)ArtifactPdfViewerService.MaximumPageImageBytes),
                     new ResourceViewCapability(ResourceRepresentations.PageThumbnail, maxBatchBytes: (int)ArtifactPdfViewerService.MaximumThumbnailImageBytes)
-                };
-            return new ResourceViewCapability[0];
+                });
+            return views;
+        }
+
+        private static bool IsRawSource(ChatArtifact artifact, ChatAttachment attachment)
+        {
+            return artifact != null && attachment != null &&
+                (string.Equals(artifact.Kind, ChatArtifactKinds.Attachment, StringComparison.OrdinalIgnoreCase) ||
+                 string.Equals(artifact.Kind, ChatArtifactKinds.Image, StringComparison.OrdinalIgnoreCase) ||
+                 string.Equals(artifact.Kind, ChatArtifactKinds.File, StringComparison.OrdinalIgnoreCase)) &&
+                IsSha256(attachment.ContentSha256) && attachment.ContentByteLength.HasValue &&
+                attachment.ContentByteLength.Value >= 0 && attachment.ContentByteLength.Value <= MaximumRawBytes &&
+                string.Equals(NormalizeMimeType(artifact.MimeType), NormalizeMimeType(attachment.ContentType), StringComparison.Ordinal);
         }
 
         private static bool IsImageMimeType(string mimeType)

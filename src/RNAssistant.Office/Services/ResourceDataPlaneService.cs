@@ -120,7 +120,7 @@ namespace RNAssistant.Office.Services
                 if (first?.Result?.Binary != null)
                 {
                     if (offset != 0 || fields != null && fields.Count != 0)
-                        throw Error("RESOURCE_VIEW_INVALID", "Binary image/page views do not accept record selectors.");
+                        throw Error("RESOURCE_VIEW_INVALID", "Binary views do not accept record selectors.");
                     var payload = first.Result.Binary.Payload;
                     var binaryBytes = _gateway.Authority.Payloads.ReadBytes(payload.ToBlobReference());
                     if (binaryBytes == null || binaryBytes.LongLength != payload.ByteLength)

@@ -10,6 +10,7 @@ namespace RNAssistant.Core.Models
         public const string Structure = "structure";
         public const string Media = "media";
         public const string Source = "source";
+        public const string Raw = "raw";
         public const string Image = "image";
         public const string Thumbnail = "thumbnail";
         public const string RenderPage = "render-page";
