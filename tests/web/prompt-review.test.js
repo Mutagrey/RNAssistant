@@ -128,7 +128,8 @@ function fixture(loadPrompts = true) {
     console.log("PASS cancelled upload closes late lease without save dispatch");
   }
   {
-    ["app-prompts.js", "app-settings.js", "app-chat-state.js", "app-chat-session.js"].forEach(file => assert.ok(read("index.html").includes(file + "?v=prompt-source-20260906-1")));
+    ["app-prompts.js", "app-settings.js", "app-chat-state.js", "app-chat-session.js"].forEach(file => assert.ok(read("index.html").includes(file + "?v=" +
+      (/app-chat-/.test(file) ? "html-write-20260906-1" : "prompt-source-20260906-1"))));
     assert.ok(!read("js/app-settings.js").includes("readPromptSettings")); console.log("PASS direct-cutover delivery keys and retired form reader removal");
   }
   console.log("OK passed=10 failed=0 total=10");

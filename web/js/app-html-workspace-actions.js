@@ -39,7 +39,89 @@
     var planMutationPending = false;
     var planHandoffPending = false;
     var htmlImportPending = false;
+    var workspaceWrite = null;
     state.htmlWorkspaceExportPending = false;
+
+    async function closeWorkspaceUpload(operation) {
+      if (!operation.closed && operation.lease && /^[a-f0-9]{64}$/.test(operation.lease.leaseId)) {
+        operation.closed = true;
+        await options.send("cancelHtmlWorkspaceMutationUpload", {
+          chatId: operation.chatId, leaseId: operation.lease.leaseId
+        }).catch(function () {});
+      }
+    }
+
+    function cancelWrite() {
+      var operation = workspaceWrite;
+      if (!operation) return;
+      operation.abort.abort();
+      if (operation.requestId && options.cancelRequest) options.cancelRequest(operation.requestId).catch(function () {});
+      closeWorkspaceUpload(operation);
+    }
+
+    function draftState() {
+      options.syncEditor();
+      var selected = options.getSelection() || {};
+      return { type: selected.type, item: selected.item, content: selected.content, json: selected.json,
+        planText: selected.type === "plan" ? value(selected.item, "InlineText", "inlineText", "") : null,
+        dirty: !!state.htmlWorkspaceDirty };
+    }
+
+    async function writeWorkspace(action, controls, content, creating) {
+      if (workspaceWrite || !state.activeChatId || state.bridgeUnavailable)
+        throw new Error("Сохранение уже выполняется или чат недоступен.");
+      if (creating && state.htmlWorkspaceDirty) throw new Error("Сначала сохраните изменения текущего артефакта.");
+      if (typeof state.activeHtmlArtifactId !== "string") throw new Error("Сначала загрузите HTML workspace.");
+      if (typeof content !== "string" || content.length > 300000) throw new Error("Лимит исходного текста — 300000 символов.");
+      var bytes = new TextEncoder().encode(content);
+      if (new TextDecoder("utf-8", { fatal: true, ignoreBOM: true }).decode(bytes) !== content)
+        throw new Error("Некорректный Unicode в исходном тексте.");
+      var operation = { chatId: state.activeChatId, revision: state.activeHtmlArtifactId,
+        workspace: state.htmlWorkspace, draft: draftState(), abort: new AbortController(), dispatched: false };
+      function current() { return workspaceWrite === operation && !operation.abort.signal.aborted && !state.bridgeUnavailable &&
+        state.activeChatId === operation.chatId && state.activeHtmlArtifactId === operation.revision && state.htmlWorkspace === operation.workspace; }
+      function unchanged() {
+        var draft = draftState();
+        return Object.keys(operation.draft).every(function (key) { return draft[key] === operation.draft[key]; });
+      }
+      function active() { if (!current()) throw new Error("Контекст сохранения изменился."); }
+      workspaceWrite = operation;
+      try {
+        var hash = Array.from(new Uint8Array(await crypto.subtle.digest("SHA-256", bytes)))
+          .map(function (part) { return part.toString(16).padStart(2, "0"); }).join("");
+        active();
+        var opening = options.send("beginHtmlWorkspaceMutationUpload", { chatId: operation.chatId, byteLength: bytes.length });
+        operation.requestId = opening.requestId;
+        operation.lease = await opening; operation.requestId = null; active();
+        await window.RNAssistantResourceUpload.write(operation.lease, new Blob([bytes]),
+          { maxBytes: 1200000, signal: operation.abort.signal, isCurrent: current });
+        active();
+        if (!unchanged()) throw new Error("Черновик изменён во время загрузки. Запись не начата; сохраните актуальные правки.");
+        var saving = options.send(action, Object.assign({}, controls, { chatId: operation.chatId,
+          expectedActiveHtmlArtifactId: operation.revision, uploadLeaseId: operation.lease.leaseId, sha256: hash }));
+        operation.dispatched = true; operation.requestId = saving.requestId;
+        var response = await saving; operation.requestId = null; active();
+        await closeWorkspaceUpload(operation); active();
+        if (!response || value(response, "ActiveChatId", "activeChatId", null) !== operation.chatId ||
+            typeof value(response, "ActiveHtmlArtifactId", "activeHtmlArtifactId", null) !== "string" ||
+            !value(response, "ActiveHtmlArtifactId", "activeHtmlArtifactId", ""))
+          throw new Error("Не получено подтверждение точного workspace.");
+        if (!unchanged()) {
+          var notice = "Отправленная версия сохранена. Новые правки оставлены в редакторе; скопируйте их и обновите workspace перед следующим сохранением.";
+          options.log(notice); window.alert(notice); return false;
+        }
+        if (!options.applyWorkspaceResponse(response, operation.chatId))
+          throw new Error("Ответ сохранения устарел; workspace не заменён.");
+        return true;
+      } catch (error) {
+        if (operation.dispatched) throw new Error((error.message || "Сохранение прервано.") +
+          " Запись могла завершиться. Скопируйте правки и обновите workspace перед повтором.");
+        throw error;
+      } finally {
+        await closeWorkspaceUpload(operation);
+        if (workspaceWrite === operation) workspaceWrite = null;
+      }
+    }
 
     async function refreshPlan(planId, chatId) {
       if (state.activeChatId !== chatId) return false;
@@ -74,19 +156,13 @@
         }
         if (selected.type === "data") {
           if (selected.binding && !window.confirm("Сохранение JSON отключит привязку к Office и автообновление. Продолжить?")) return;
-          if (!options.applyWorkspaceResponse(await options.send("saveHtmlWorkspaceData", {
-            chatId: chatId,
-            name: selected.name,
-            json: selected.json
-          }), chatId)) return;
+          if (!await writeWorkspace("saveHtmlWorkspaceData", { name: selected.name }, selected.json, false)) return;
         } else {
-          if (!options.applyWorkspaceResponse(await options.send("saveHtmlWorkspaceFile", {
-            chatId: chatId,
+          if (!await writeWorkspace("saveHtmlWorkspaceFile", {
             path: selected.path,
             kind: selected.kind,
-            content: selected.content,
             setActive: selected.kind === "html"
-          }), chatId)) return;
+          }, selected.content, false)) return;
         }
         options.log("Артефакт сохранён.");
       } catch (error) {
@@ -381,13 +457,11 @@
     async function createFile(kind, path) {
       var chatId = state.activeChatId;
       try {
-        options.applyWorkspaceResponse(await options.send("saveHtmlWorkspaceFile", {
-          chatId: chatId,
+        if (!await writeWorkspace("saveHtmlWorkspaceFile", {
           path: path,
           kind: kind,
-          content: defaultFileContent(kind),
           setActive: kind === "html"
-        }), chatId);
+        }, defaultFileContent(kind), true)) return;
         if (state.activeChatId !== chatId) return;
         state.htmlWorkspaceSelection = { type: "file", id: path.toLowerCase() };
         options.hideCreate();
@@ -401,11 +475,7 @@
     async function createData(name) {
       var chatId = state.activeChatId;
       try {
-        options.applyWorkspaceResponse(await options.send("saveHtmlWorkspaceData", {
-          chatId: chatId,
-          name: name,
-          json: "{\n  \"items\": []\n}\n"
-        }), chatId);
+        if (!await writeWorkspace("saveHtmlWorkspaceData", { name: name }, "{\n  \"items\": []\n}\n", true)) return;
         if (state.activeChatId !== chatId) return;
         state.htmlWorkspaceSelection = { type: "data", id: name.toLowerCase() };
         options.hideCreate();
@@ -460,6 +530,7 @@
     }
 
     return {
+      cancelWrite: cancelWrite,
       createData: createData,
       createFile: createFile,
       createPlan: createPlan,

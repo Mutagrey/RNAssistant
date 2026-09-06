@@ -282,6 +282,15 @@ source hash, never source code; save also requires its normalized editor read gu
 There is no attachment/publication side effect from uploading alone. Bounds and
 cancel/late-response semantics are in [VBA journal](vba-mutation-journal.md#editor-source-uploads).
 
+HTML workspace file and JSON Save/create now consume the same upload route under
+the distinct `html-editor` owner. Only typed target/chat/expected-workspace/lease/hash
+controls cross the bridge; complete source enters the existing CAS-backed mutation
+intent and existing HTML writer/commit barrier. Before dispatch, the editor guard,
+Known logical publication and exact immutable source must agree under the mutation
+lease. Draft/lease cancellation and bounds are in
+[Artifact Library](artifact-library.md#html-editor-uploads). The outgoing workspace
+source/preview read transport remains an open consumer, not a second implementation.
+
 Trajectory ZIP export uses the same owner-scoped data plane at
 `/v1/download/<opaque-lease>`, with metadata-only bridge setup, sequential 256 KiB
 GET chunks and full-payload SHA-256 verification before download. At most two
@@ -375,9 +384,12 @@ the same bounded download owner, with one selected cache and no generator fallba
 (now exact published prompt/default field resources through the same generic reader);
 separate state/Office retained text readers, externally hash-bound Office/state/catalog
 continuations, and read-side exposure of prepared state/context/catalog identities.
+HTML workspace file/data Save/create inline bridge bodies are also removed; the
+four UI callers share one upload writer and the existing guarded domain owner.
 No compatibility alias, dual-write or feature flag restores these paths.
 
-Still open within this same cutover: remaining definition/domain read consumers, finer
+Still open within this same cutover: outgoing HTML workspace source/preview hydration,
+remaining definition/domain read consumers, finer
 Excel coverage/named resources, complete binary/raw view negotiation,
 remaining bulk upload/export surfaces, bounded history/retention
 optimization and final documentation cleanup. These are not permanent adapters.

@@ -57,7 +57,26 @@ namespace RNAssistant.Office.Contracts
         public string Body { get; set; }
     }
 
-    public sealed class HtmlWorkspaceFilePayload : ChatPayload
+    public sealed class HtmlWorkspaceMutationUploadRequest : ChatPayload
+    {
+        [JsonProperty("byteLength", Required = Required.Always)]
+        public long ByteLength { get; set; }
+    }
+
+    public abstract class HtmlWorkspaceMutationPayload : ChatPayload
+    {
+        // Empty is an explicit guard for a workspace that has not been created yet.
+        [JsonProperty("expectedActiveHtmlArtifactId", Required = Required.Always)]
+        public string ExpectedActiveHtmlArtifactId { get; set; }
+
+        [JsonProperty("uploadLeaseId", Required = Required.Always)]
+        public string UploadLeaseId { get; set; }
+
+        [JsonProperty("sha256", Required = Required.Always)]
+        public string Sha256 { get; set; }
+    }
+
+    public sealed class HtmlWorkspaceFilePayload : HtmlWorkspaceMutationPayload
     {
         [JsonProperty("path")]
         public string Path { get; set; }
@@ -65,20 +84,14 @@ namespace RNAssistant.Office.Contracts
         [JsonProperty("kind")]
         public string Kind { get; set; }
 
-        [JsonProperty("content")]
-        public string Content { get; set; }
-
         [JsonProperty("setActive")]
         public bool? SetActive { get; set; }
     }
 
-    public sealed class HtmlWorkspaceDataPayload : ChatPayload
+    public sealed class HtmlWorkspaceDataPayload : HtmlWorkspaceMutationPayload
     {
         [JsonProperty("name")]
         public string Name { get; set; }
-
-        [JsonProperty("json")]
-        public string Json { get; set; }
     }
 
     public sealed class HtmlWorkspaceDeleteFilePayload : ChatPayload

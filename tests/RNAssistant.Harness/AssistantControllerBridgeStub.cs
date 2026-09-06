@@ -625,8 +625,10 @@ namespace RNAssistant.Office
         public ResourceDataOpenResponse OpenResourceData(ResourceDataOpenRequest request, CancellationToken cancellationToken = default(CancellationToken)) { return new ResourceDataOpenResponse(); }
         public ResourceDataCloseResponse CloseResourceData(ResourceDataCloseRequest request) { return new ResourceDataCloseResponse { Closed = true }; }
         public HtmlWorkspaceResponse GetHtmlWorkspace(string chatId = null) { return new HtmlWorkspaceResponse { ActiveChatId = chatId ?? string.Empty, Workspace = HtmlWorkspaceDto.From(null) }; }
-        public HtmlWorkspaceResponse SaveHtmlWorkspaceFile(string chatId, string path, string kind, string content, bool setActive) { return new HtmlWorkspaceResponse { ActiveChatId = chatId ?? string.Empty, Workspace = HtmlWorkspaceDto.From(new HtmlWorkspace { ActiveFileId = path ?? string.Empty }) }; }
-        public HtmlWorkspaceResponse SaveHtmlWorkspaceData(string chatId, string name, string json) { return new HtmlWorkspaceResponse { ActiveChatId = chatId ?? string.Empty, Workspace = HtmlWorkspaceDto.From(null) }; }
+        public ResourceUploadOpenResponse BeginHtmlWorkspaceMutationUpload(HtmlWorkspaceMutationUploadRequest request, CancellationToken token) { token.ThrowIfCancellationRequested(); LastChatId = request.ChatId; return new ResourceUploadOpenResponse(); }
+        public ResourceDataCloseResponse CancelHtmlWorkspaceMutationUpload(ResourceUploadLeaseRequest request) { LastChatId = request.ChatId; return new ResourceDataCloseResponse { Closed = true }; }
+        public HtmlWorkspaceResponse SaveHtmlWorkspaceFile(HtmlWorkspaceFilePayload request, CancellationToken token) { token.ThrowIfCancellationRequested(); LastChatId = request.ChatId; return new HtmlWorkspaceResponse { ActiveChatId = request.ChatId, Workspace = HtmlWorkspaceDto.From(new HtmlWorkspace { ActiveFileId = request.Path ?? string.Empty }) }; }
+        public HtmlWorkspaceResponse SaveHtmlWorkspaceData(HtmlWorkspaceDataPayload request, CancellationToken token) { token.ThrowIfCancellationRequested(); LastChatId = request.ChatId; return new HtmlWorkspaceResponse { ActiveChatId = request.ChatId, Workspace = HtmlWorkspaceDto.From(null) }; }
         public ArtifactViewerPageDto ReadArtifactViewerPage(string chatId, string resourceUri, string cursor,
             System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken))
         {

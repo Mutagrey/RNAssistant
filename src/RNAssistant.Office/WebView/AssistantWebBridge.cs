@@ -400,20 +400,20 @@ namespace RNAssistant.Office.WebView
                         responsePayload = _controller.GetHtmlWorkspace(Payload<ChatPayload>(payload).ChatId);
                         break;
                     case "saveHtmlWorkspaceFile":
-                        var htmlFile = Payload<HtmlWorkspaceFilePayload>(payload);
                         responsePayload = _controller.SaveHtmlWorkspaceFile(
-                            htmlFile.ChatId,
-                            htmlFile.Path,
-                            htmlFile.Kind,
-                            htmlFile.Content,
-                            htmlFile.SetActive != false);
+                            payload.ToObject<HtmlWorkspaceFilePayload>(JsonSerializer.Create(
+                                new JsonSerializerSettings { MissingMemberHandling = MissingMemberHandling.Error })), cancellationToken);
                         break;
                     case "saveHtmlWorkspaceData":
-                        var htmlData = Payload<HtmlWorkspaceDataPayload>(payload);
                         responsePayload = _controller.SaveHtmlWorkspaceData(
-                            htmlData.ChatId,
-                            htmlData.Name,
-                            htmlData.Json);
+                            payload.ToObject<HtmlWorkspaceDataPayload>(JsonSerializer.Create(
+                                new JsonSerializerSettings { MissingMemberHandling = MissingMemberHandling.Error })), cancellationToken);
+                        break;
+                    case "beginHtmlWorkspaceMutationUpload":
+                        responsePayload = _controller.BeginHtmlWorkspaceMutationUpload(Payload<HtmlWorkspaceMutationUploadRequest>(payload), cancellationToken);
+                        break;
+                    case "cancelHtmlWorkspaceMutationUpload":
+                        responsePayload = _controller.CancelHtmlWorkspaceMutationUpload(Payload<ResourceUploadLeaseRequest>(payload));
                         break;
                     case "readArtifactViewerPage":
                         var artifactViewerPage = Payload<ArtifactViewerPagePayload>(payload);

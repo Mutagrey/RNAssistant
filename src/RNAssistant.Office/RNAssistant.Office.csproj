@@ -219,6 +219,7 @@
     <Compile Include="Services\VbaEditorResourceService.cs" />
     <Compile Include="Services\SkillEditorResourceService.cs" />
     <Compile Include="Services\PromptEditorResourceService.cs" />
+    <Compile Include="Services\HtmlWorkspaceEditorResourceService.cs" />
     <Compile Include="Services\ToolEditorResourceService.cs" />
     <Compile Include="Services\VbaResourceProvider.Read.cs" />
     <Compile Include="Services\ChatResourceIngestionService.cs" />

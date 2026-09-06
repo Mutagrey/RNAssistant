@@ -28,6 +28,14 @@ service locator, второй store/read model или универсальный
 
 ## Existing defects outside the active slice
 
+- Web Plan fixture has stale unrelated VBA delivery evidence:
+  `tests/web/plan-document.test.js:102` still requires
+  `app-vba.js?v=resource-intent-20260902-1`, while the preceding committed UI already
+  delivers `vba-upload-20260906-1`. Observed during the HTML mutation-upload slice
+  on 2026-09-06; its four preceding Plan assertions pass, but this assertion stops
+  the remainder of the file. Owner: VBA/UI qualification. Review the handoff
+  fixture against its current canonical consumer in a separate slice; do not
+  report the full Plan file as green or change product behavior to satisfy it.
 - R61 property inventory baseline trails preceding Resource cutover changes:
   `tools: R61 built-in contract inventory` still expects old HTML binding shapes,
   resource find/read descriptors, no schema/mapping/derived tools, and earlier

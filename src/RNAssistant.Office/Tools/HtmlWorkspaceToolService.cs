@@ -13,7 +13,7 @@ namespace RNAssistant.Office.Tools
 {
     internal sealed partial class HtmlWorkspaceToolService
     {
-        private const int MaxHtmlChars = 300000;
+        internal const int MaxHtmlChars = 300000;
         private const int MaxDataChars = 300000;
         private const int MaxWorkspaceItems = 100;
         private const int MaxWorkspaceCharacters = 1500000;
@@ -89,11 +89,7 @@ namespace RNAssistant.Office.Tools
                         arguments, "path", string.Empty);
                     var content = ToolArgumentReader.String(
                         arguments, "content", string.Empty);
-                    ValidateFile(path, string.Empty, content);
-                    var normalizedPath = NormalizePath(path);
-                    ValidateWorkspaceCapacity(
-                        NormalizedWorkspaceCopy(session.HtmlWorkspace),
-                        FileId(normalizedPath), content, null, null);
+                    ValidateFileWrite(session, path, string.Empty, content);
                     mark();
                     var file = UpsertFile(session, path, string.Empty,
                         content, true);
@@ -113,11 +109,7 @@ namespace RNAssistant.Office.Tools
                         arguments, "name", string.Empty);
                     var json = ToolArgumentReader.String(
                         arguments, "json", string.Empty);
-                    ValidateDataSource(name, json);
-                    var normalizedName = NormalizeDataName(name);
-                    ValidateWorkspaceCapacity(
-                        NormalizedWorkspaceCopy(session.HtmlWorkspace),
-                        null, null, DataSourceId(normalizedName), json);
+                    ValidateDataWrite(session, name, json);
                     mark();
                     var data = UpsertDataSource(session, name, json);
                     return WithAutomaticPreflight(session,
@@ -287,12 +279,10 @@ namespace RNAssistant.Office.Tools
                 throw new InvalidOperationException("Chat session is required.");
             }
 
-            HtmlWorkspaceArtifactService.EnsureMutable(session);
-            ValidateFile(path, kind, content);
+            ValidateFileWrite(session, path, kind, content);
             session.HtmlWorkspace = NormalizeWorkspace(session.HtmlWorkspace);
             var normalizedPath = NormalizePath(path);
             var id = FileId(normalizedPath);
-            ValidateWorkspaceCapacity(session.HtmlWorkspace, id, content, null, null);
             var now = DateTime.UtcNow;
             var file = session.HtmlWorkspace.Files.FirstOrDefault(f =>
                 f != null && string.Equals(f.Id, id, StringComparison.OrdinalIgnoreCase));
@@ -336,12 +326,10 @@ namespace RNAssistant.Office.Tools
                 throw new InvalidOperationException("Chat session is required.");
             }
 
-            HtmlWorkspaceArtifactService.EnsureMutable(session);
-            ValidateDataSource(name, json);
+            ValidateDataWrite(session, name, json);
             session.HtmlWorkspace = NormalizeWorkspace(session.HtmlWorkspace);
             var normalizedName = NormalizeDataName(name);
             var id = DataSourceId(normalizedName);
-            ValidateWorkspaceCapacity(session.HtmlWorkspace, null, null, id, json);
             var now = DateTime.UtcNow;
             var data = session.HtmlWorkspace.DataSources.FirstOrDefault(d =>
                 d != null && string.Equals(d.Id, id, StringComparison.OrdinalIgnoreCase));
@@ -557,6 +545,20 @@ namespace RNAssistant.Office.Tools
                 .OrderByDescending(h => h.CreatedUtc)
                 .ToList();
             return HtmlWorkspaceHistoryPolicy.Trim(ordered);
+        }
+
+        internal static void ValidateFileWrite(ChatSession session, string path, string kind, string content)
+        {
+            HtmlWorkspaceArtifactService.EnsureMutable(session);
+            ValidateFile(path, kind, content);
+            ValidateWorkspaceCapacity(NormalizedWorkspaceCopy(session.HtmlWorkspace), FileId(NormalizePath(path)), content, null, null);
+        }
+
+        internal static void ValidateDataWrite(ChatSession session, string name, string json)
+        {
+            HtmlWorkspaceArtifactService.EnsureMutable(session);
+            ValidateDataSource(name, json);
+            ValidateWorkspaceCapacity(NormalizedWorkspaceCopy(session.HtmlWorkspace), null, null, DataSourceId(NormalizeDataName(name)), json);
         }
 
         private static void ValidateFile(string path, string kind, string content)

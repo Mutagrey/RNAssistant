@@ -271,7 +271,7 @@ vm.runInContext(fs.readFileSync(path.join(root, "web/js/app-html-workspace-actio
   ["app-html-resource-export.js", "app-html-workspace-preview.js"]
     .forEach(asset => assert.ok(index.includes(asset + "?v=resource-export-20260905-1"), asset));
   ["app-html-workspace-actions.js", "app-html-workspace.js"]
-    .forEach(asset => assert.ok(index.includes(asset + "?v=html-source-resource-20260905-1"), asset));
+    .forEach(asset => assert.ok(index.includes(asset + "?v=html-write-20260906-1"), asset));
   assert.ok(index.indexOf("app-html-resource-export.js?v=") < index.indexOf("app-html-workspace-preview.js?v="));
   assert.ok(index.includes("app-html-workspace-editor.js?v=ui-lazy-20260903-1"));
   assert.ok(index.includes(

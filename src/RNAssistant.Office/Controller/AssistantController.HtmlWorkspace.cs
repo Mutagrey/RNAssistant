@@ -60,6 +60,7 @@ namespace RNAssistant.Office
                     workspaceId == SkillEditorResourceService.Owner ||
                     workspaceId == ToolEditorResourceService.Owner ||
                     workspaceId == PromptEditorResourceService.Owner ||
+                    workspaceId == HtmlWorkspaceEditorResourceService.Owner ||
                     string.Equals(session.ActiveHtmlArtifactId, workspaceId, StringComparison.Ordinal));
             }
             catch (InvalidOperationException) { return false; }
@@ -85,26 +86,48 @@ namespace RNAssistant.Office
             return HtmlWorkspaceState(session);
         }
 
-        public HtmlWorkspaceResponse SaveHtmlWorkspaceFile(string chatId, string path, string kind, string content, bool setActive)
+        public ResourceUploadOpenResponse BeginHtmlWorkspaceMutationUpload(HtmlWorkspaceMutationUploadRequest request, CancellationToken token)
         {
-            return WithReservedSession(LoadSession(chatId), session =>
-            {
-                _toolExecutor.MutateLocalResources(session, "common.html_workspace_write_file", new Dictionary<string, object> { ["path"] = path, ["kind"] = kind, ["content"] = content, ["setActive"] = setActive },
-                    () => HtmlWorkspaceToolService.UpsertFile(session, path, kind, content, setActive));
-                SaveSessionChanges(session);
-                return HtmlWorkspaceState(session);
-            });
+            if (request == null || string.IsNullOrWhiteSpace(request.ChatId))
+                throw new InvalidOperationException("RESOURCE_ACCESS_DENIED: an explicit chat is required.");
+            return WithReservedSession(LoadAddressedSession(request.ChatId), session =>
+                new HtmlWorkspaceEditorResourceService(_toolExecutor, _resourceData).BeginUpload(session, request, token));
         }
 
-        public HtmlWorkspaceResponse SaveHtmlWorkspaceData(string chatId, string name, string json)
+        public ResourceDataCloseResponse CancelHtmlWorkspaceMutationUpload(ResourceUploadLeaseRequest request)
         {
-            return WithReservedSession(LoadSession(chatId), session =>
+            if (request == null || string.IsNullOrWhiteSpace(request.ChatId))
+                throw new InvalidOperationException("RESOURCE_ACCESS_DENIED: an explicit chat is required.");
+            _resourceData.CloseUpload(request.ChatId, request.LeaseId, HtmlWorkspaceEditorResourceService.Owner);
+            return new ResourceDataCloseResponse { Closed = true };
+        }
+
+        public HtmlWorkspaceResponse SaveHtmlWorkspaceFile(HtmlWorkspaceFilePayload request, CancellationToken token)
+        {
+            return SaveUploadedHtmlWorkspace(request, session =>
+                new HtmlWorkspaceEditorResourceService(_toolExecutor, _resourceData).SaveFile(session, request, token));
+        }
+
+        public HtmlWorkspaceResponse SaveHtmlWorkspaceData(HtmlWorkspaceDataPayload request, CancellationToken token)
+        {
+            return SaveUploadedHtmlWorkspace(request, session =>
+                new HtmlWorkspaceEditorResourceService(_toolExecutor, _resourceData).SaveData(session, request, token));
+        }
+
+        private HtmlWorkspaceResponse SaveUploadedHtmlWorkspace(HtmlWorkspaceMutationPayload request, Action<ChatSession> save)
+        {
+            if (request == null || string.IsNullOrWhiteSpace(request.ChatId))
+                throw new InvalidOperationException("RESOURCE_ACCESS_DENIED: an explicit chat is required.");
+            try
             {
-                _toolExecutor.MutateLocalResources(session, "common.html_data_write", new Dictionary<string, object> { ["name"] = name, ["json"] = json },
-                    () => HtmlWorkspaceToolService.UpsertDataSource(session, name, json));
-                SaveSessionChanges(session);
-                return HtmlWorkspaceState(session);
-            });
+                return WithReservedSession(LoadAddressedSession(request.ChatId), session =>
+                {
+                    save(session);
+                    SaveSessionChanges(session);
+                    return HtmlWorkspaceState(session);
+                });
+            }
+            finally { _resourceData.CloseUpload(request.ChatId, request.UploadLeaseId, HtmlWorkspaceEditorResourceService.Owner); }
         }
 
         public HtmlWorkspaceResponse ImportUploadedHtmlToWorkspace(

@@ -200,6 +200,7 @@ function applyChatState(response) {
     if (typeof cancelToolSourceRead === "function") cancelToolSourceRead();
     if (typeof cancelToolDocumentationRead === "function") cancelToolDocumentationRead();
     if (typeof releasePromptEditorContext === "function") releasePromptEditorContext();
+    if (typeof window.cancelHtmlWorkspaceWrite === "function") window.cancelHtmlWorkspaceWrite();
     if (typeof window.closeArtifactViewerResources === "function") window.closeArtifactViewerResources();
     state.artifactViewerPages = {};
     state.artifactViewerThumbnails = { items: {}, order: [], queue: [], pending: 0 };

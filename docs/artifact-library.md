@@ -325,6 +325,32 @@ cosmetic drop-in or silently run beside PDFtoImage. Official references:
 [viewer options](https://github.com/mozilla/pdf.js/wiki/Viewer-options) and
 [binary-data opening](https://github.com/mozilla/pdf.js/wiki/Frequently-Asked-Questions).
 
+## HTML editor uploads
+
+HTML/CSS/JS Save/create and JSON Save/create use the same shared bounded upload
+route. Bridge controls carry an explicit chat, target path/kind or data name,
+the displayed `expectedActiveHtmlArtifactId`, upload lease and complete SHA-256;
+inline `content`/`json` controls are rejected. An empty expected id is valid only
+for an absent workspace. `HtmlWorkspaceEditorResourceService` consumes a single-use
+`html-editor` capability, verifies complete strict UTF-8, and delegates to the
+existing `HtmlWorkspaceToolService` through `OfficeToolExecutor.MutateLocalResources`.
+The durable prepared intent uses the existing CAS and records the expected logical
+revision plus editor guard. Under the conversation mutation lease, the current
+Known publication must still match its exact immutable workspace snapshot; stale,
+Unknown, invalid-path/JSON and capacity failures cannot dispatch. The existing
+read-back/persistence/authority barrier remains the only publication owner.
+
+Reservation is at most 1,200,000 UTF-8 bytes; existing per-source 300,000-character
+and aggregate workspace limits remain. Empty files are complete replacements;
+empty/invalid JSON is refused. The browser has one in-flight writer, sequential
+acknowledged chunks, chat/page cancellation and late-lease cleanup. Changed drafts
+prevent dispatch; edits made after dispatch are not replaced or silently rebased
+by Save's acknowledgement. Lost/late responses require explicit refresh/review,
+never automatic retry. Creation cannot discard an existing dirty draft. Upload
+alone creates neither an artifact nor model evidence. Outgoing workspace/editor
+source and preview hydration are still an open read-transport consumer in the
+same Resource cutover; this upload slice does not introduce a parallel read path.
+
 ## Edit and delete semantics
 
 Only domain-owned mutable resources expose Save/Delete:
@@ -334,8 +360,10 @@ Only domain-owned mutable resources expose Save/Delete:
   copies its exact historical revision into a new guarded head. Delete appends a
   tombstone for the logical Plan only after an explicit warning; it does not erase
   prior revisions or message references.
-- HTML Save/delete/bind/refresh operates on exact workspace members and produces a
-  complete new workspace revision. A failed refresh keeps the last-good JSON.
+- HTML Save/delete/bind operates on exact workspace members and publishes a
+  complete new workspace revision. Save uses the guarded upload contract above.
+  Refresh reconciles resource authority without manufacturing a workspace revision;
+  a failed refresh is explicit, not an independent last-good JSON authority.
 - Immutable uploads/snapshots have no in-place editor. `Create editable copy` or
   `Import` creates a related resource and leaves the original unchanged.
 

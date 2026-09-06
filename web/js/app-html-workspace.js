@@ -178,6 +178,7 @@
     state: state,
     send: send,
     log: log,
+    cancelRequest: function (requestId) { return cancelBridgeRequest(requestId); },
     getSelection: workspaceActionSelection,
     getActionState: workspaceActionState,
     syncEditor: syncHtmlEditorToState,
@@ -625,6 +626,8 @@
   window.renderHtmlWorkspace = renderHtmlWorkspace;
   window.bindHtmlWorkspaceActions = bindHtmlWorkspaceActions;
   window.saveHtmlWorkspaceSelection = workspaceActions.saveSelection;
+  window.cancelHtmlWorkspaceWrite = workspaceActions.cancelWrite;
+  if (typeof window.addEventListener === "function") window.addEventListener("pagehide", workspaceActions.cancelWrite);
   window.closeArtifactViewerResources = workspaceActions.closeArtifactViewers;
   window.markHtmlWorkspaceDirty = markHtmlWorkspaceDirty;
   window.confirmDiscardHtmlWorkspaceChanges = confirmDiscardArtifactChanges;

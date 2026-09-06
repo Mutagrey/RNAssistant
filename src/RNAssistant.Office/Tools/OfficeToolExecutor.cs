@@ -224,7 +224,8 @@ namespace RNAssistant.Office.Tools
         }
 
         internal T MutateLocalResources<T>(ChatSession session, string operation,
-            IDictionary<string, object> arguments, Func<T> action, IReadOnlyList<ResourceMutationReadBack> preparedReadBack = null)
+            IDictionary<string, object> arguments, Func<T> action, IReadOnlyList<ResourceMutationReadBack> preparedReadBack = null,
+            Action validateBeforeDispatch = null)
         {
             var historyMutation = ConversationResourceMutationDomain.IsHistoryMutation(operation);
             if (session == null || action == null || ConversationResourceMutationDomain.StateName(operation) == null && !historyMutation)
@@ -244,6 +245,8 @@ namespace RNAssistant.Office.Tools
             {
                 using (DocumentAccessGate.BeginOperation())
                 {
+                    try { validateBeforeDispatch?.Invoke(); }
+                    catch { observer.AbandonBeforeDispatch(attempt); throw; }
                     observer.MarkDispatchMayHaveOccurred(attempt);
                     dispatched = true;
                     var value = action();
