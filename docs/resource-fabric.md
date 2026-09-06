@@ -87,6 +87,13 @@ heal Unknown authority. Each member read hydrates its root once; public root
 projection remains in the catalog owner. Remaining domain-specific read consumers
 are tracked below.
 
+Model source inspection now discovers host-visible `tool source` targets through
+`common.resources_find` and reads those same catalog children through
+`common.resources_read`. It records publication-dependent resource evidence, not
+callable admission. The direct authoring-file reader is removed; exact snapshots
+and generic bounds are shared with the Library. See
+[Model source reads](tool-library.md#model-source-reads).
+
 `SkillEditorResourceService` uses that published catalog and exact Gateway/CAS
 source for Library core/reference editing, including read-only built-ins.
 Catalog DTOs contain body metadata only; opening a source pulls its text through
@@ -346,6 +353,8 @@ plus the UI whole-catalog body serializer/component reconstruction fallback
 inline generated builtin documentation controls and state-wide documentation/body
 request caches (now committed documentation CAS parts, exact catalog children and
 the same bounded download owner, with one selected cache and no generator fallback);
+`common.tools_definition_read` and its direct authoring-file reader/native binding
+(now metadata discovery and exact tool-source reads with catalog-dependent evidence);
 separate state/Office retained text readers, externally hash-bound Office/state/catalog
 continuations, and read-side exposure of prepared state/context/catalog identities.
 No compatibility alias, dual-write or feature flag restores these paths.

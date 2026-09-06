@@ -23,7 +23,8 @@ separate owners, stores, version rules and model transports:
 
 - artifacts use revision-pinned `ResourceRef` values and `common.resources_*`;
 - tools use the selected endpoint's exact capability catalog and
-  `common.capabilities_*` for model discovery/schema reads;
+  `common.capabilities_*` for model discovery/schema admission; source inspection
+  uses `common.resources_find/read` without admission;
 - skills use the same capability reader for instruction bodies, but never become
   executable tools;
 - authoring remains separate from discovery and cannot grant authority to an
@@ -41,11 +42,11 @@ subject to source-owned policy and confirmation.
 
 Existing custom VBA packages are stored under `%AppData%/RNAssistant/tools` and the
 current Library editor can validate, save, clone, test and delete them. The current
-flat package store is not immutable revision history. Model authoring uses the three
-separate `common.tools_definition_read`, `common.tools_upsert` and
-`common.tools_delete` operations. Since 11J1 these Agent-only operations use native
-typed handlers; R61/11O4 makes definition read exact-id only, removes separate model
-validation and limits upsert to semantic package source/documentation. The manifest
+flat package store is not immutable revision history. Model authoring uses separate
+`common.tools_upsert` and `common.tools_delete` operations; source inspection uses
+the published resources described below. These Agent-only writes use native typed
+handlers; R61/11O4 removes separate model validation and limits upsert to semantic
+package source/documentation. The manifest
 owns callable metadata; runtime validates the complete effective definition and
 assigns conservative authority before write. Confirmed upsert/delete bind
 accepted arguments to the current effective definition, reject stale state, mark the
@@ -71,6 +72,30 @@ delete mutation DTOs through the same `ToolAuthoringService` as model authoring.
 Controller-owned catalog reconciliation, `StoragePath` identity, generic execution
 and unversioned response fallback are absent. This does not make the flat store
 immutable history.
+
+### Model source reads
+
+`common.resources_find` with `scope=catalogs` and a tool id discovers a semantic
+`tool source: <id>` target for the current host's custom and source-owned builtin
+tools, including Common definitions. Discovery carries metadata only. Passing the
+returned target to `common.resources_read` reads the existing exact catalog
+`/source` child, also used by the Library editor. Its JSON text contains
+`argumentSchemaJson`, `code`, `readme` and `components`; generic whole-read bounds
+and exact internal continuation rules apply. Generated human docs are not listed
+or injected into these source bodies. Document-local VBA remains in its existing
+VBA resource provider, not a second catalog authority.
+
+The read records CAS-backed resource evidence with an exact catalog-root dependency.
+A later publication supersedes that evidence through the common reducer; the
+historical snapshot stays readable. Unpublished authoring-file drift cannot replace
+the committed body, and missing/corrupt snapshots fail closed. Reading a schema or
+implementation never admits a callable tool or grants mutation authority.
+
+`common.tools_definition_read`, its direct file reader/native binding and catalog
+entry are removed, without alias or fallback. Stored calls to that old contract
+are explicitly rejected by model-history validation; user history is not deleted.
+Upsert/delete preparation and confirmed read-back still belong to the existing
+authoring owner. Other domain reads, including prompt inspection, remain open.
 
 ### Library source reads
 

@@ -51,10 +51,8 @@ namespace RNAssistant.Office.Tools
                 StringComparison.Ordinal)) return PromptReadToolHandler.Binding;
             if (string.Equals(toolId, PromptToolCatalog.SaveToolId,
                 StringComparison.Ordinal)) return PromptSaveToolHandler.Binding;
-            if (ToolAuthoringCatalog.IsMutation(toolId))
-                return ToolAuthoringMutationToolHandler.BindingFor(toolId);
             if (ToolAuthoringCatalog.Owns(toolId))
-                return ToolAuthoringReadToolHandler.BindingFor(toolId);
+                return ToolAuthoringMutationToolHandler.BindingFor(toolId);
             if (SkillAuthoringCatalog.Owns(toolId))
                 return SkillAuthoringToolHandler.BindingFor(toolId);
             return null;

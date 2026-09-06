@@ -448,6 +448,7 @@ namespace RNAssistant.Office.Services
                 case "Excel range": return "document";
                 case "Office observation": return "document";
                 case "catalog":
+                case "tool source":
                 case "skill":
                 case "skill reference": return "catalogs";
                 case "selection": return "selection";
@@ -469,6 +470,7 @@ namespace RNAssistant.Office.Services
                 case ContextResourceProvider.DataKind: return "context data";
                 case ContextResourceProvider.ObservationKind: return "Office observation";
                 case "catalog": return "catalog";
+                case "tool-source": return "tool source";
                 case "skill": return "skill";
                 case "skill-reference": return "skill reference";
                 case LiveDocumentResourceProvider.DocumentKind: return "document";

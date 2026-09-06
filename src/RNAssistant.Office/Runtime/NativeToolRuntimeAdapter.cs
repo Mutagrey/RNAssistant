@@ -237,12 +237,8 @@ namespace RNAssistant.Office.Runtime
                     if (toolAuthoring == null)
                         throw new InvalidOperationException(
                             "Tool authoring handler dependencies are unavailable.");
-                    handler = ToolAuthoringCatalog.IsMutation(
-                            registration.Descriptor.Id)
-                        ? (IToolHandler)new ToolAuthoringMutationToolHandler(
-                            registration.Descriptor.Id, toolAuthoring)
-                        : new ToolAuthoringReadToolHandler(
-                            registration.Descriptor.Id, toolAuthoring);
+                    handler = new ToolAuthoringMutationToolHandler(
+                        registration.Descriptor.Id, toolAuthoring);
                 }
                 else if (SkillAuthoringCatalog.Owns(
                     registration.Descriptor.Id))

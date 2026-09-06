@@ -185,6 +185,9 @@ namespace RNAssistant.Office.Services
                 case "common.tools_validate":
                     error = "Tool validation is internal to upsert and Library in 11O4.";
                     return false;
+                case "common.tools_definition_read":
+                    error = "Tool source reads use common.resources_find/read and exact catalog evidence.";
+                    return false;
                 case "common.vba_inspect":
                 case "common.vba_list_modules":
                 case "common.vba_read_module":
@@ -246,7 +249,6 @@ namespace RNAssistant.Office.Services
                 case PromptToolCatalog.SaveToolId:
                     schema = PromptToolCatalog.SchemaFor(call.Name);
                     break;
-                case ToolAuthoringCatalog.DefinitionReadToolId:
                 case ToolAuthoringCatalog.UpsertToolId:
                 case ToolAuthoringCatalog.DeleteToolId:
                     schema = ToolAuthoringCatalog.SchemaFor(call.Name);

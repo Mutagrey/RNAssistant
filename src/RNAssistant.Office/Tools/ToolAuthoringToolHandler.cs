@@ -8,45 +8,6 @@ using RuntimeResult = RNAssistant.Core.Tools.Contracts.ToolResult;
 
 namespace RNAssistant.Office.Tools
 {
-    internal sealed class ToolAuthoringReadToolHandler : IToolHandler
-    {
-        private readonly string _toolId;
-        private readonly ToolAuthoringService _service;
-
-        internal ToolAuthoringReadToolHandler(
-            string toolId, ToolAuthoringService service)
-        {
-            if (!string.Equals(toolId,
-                    ToolAuthoringCatalog.DefinitionReadToolId,
-                    StringComparison.Ordinal))
-                throw new ArgumentException(
-                    "A read-only tool authoring id is required.",
-                    nameof(toolId));
-            _toolId = toolId;
-            _service = service ?? throw new ArgumentNullException(
-                nameof(service));
-        }
-
-        internal static ToolBinding BindingFor(string toolId)
-        {
-            if (string.Equals(toolId,
-                ToolAuthoringCatalog.DefinitionReadToolId,
-                StringComparison.Ordinal))
-                return new ToolBinding("tools.definition-read.exact.v1");
-            return null;
-        }
-
-        public Task<ToolHandlerResult> ExecuteAsync(
-            ToolHandlerContext context,
-            CancellationToken cancellationToken)
-        {
-            cancellationToken.ThrowIfCancellationRequested();
-            var outcome = _service.Read(context.Arguments);
-            return Task.FromResult(
-                ToolAuthoringToolProjection.Project(outcome));
-        }
-    }
-
     internal sealed class ToolAuthoringMutationToolHandler :
         IPreparableToolHandler
     {
@@ -56,7 +17,7 @@ namespace RNAssistant.Office.Tools
         internal ToolAuthoringMutationToolHandler(
             string toolId, ToolAuthoringService service)
         {
-            if (!ToolAuthoringCatalog.IsMutation(toolId))
+            if (!ToolAuthoringCatalog.Owns(toolId))
                 throw new ArgumentException(
                     "A tool authoring mutation id is required.",
                     nameof(toolId));

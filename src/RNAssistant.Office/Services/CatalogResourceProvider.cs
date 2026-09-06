@@ -31,6 +31,11 @@ namespace RNAssistant.Office.Services
             {
                 var root = _catalogs.Current(name);
                 items.Add(DescribeRoot(root));
+                if (ToolKind(name) && (string.IsNullOrEmpty(kind) || kind == "tool-source"))
+                    foreach (var tool in Tools(root).Where(tool =>
+                        string.Equals(tool.Host, session.Host, StringComparison.OrdinalIgnoreCase) ||
+                        string.Equals(tool.Host, "Common", StringComparison.OrdinalIgnoreCase)))
+                        items.Add(DescribeTool(root, tool));
                 if (!SkillKind(name)) continue;
                 foreach (var skill in Skills(root))
                 {
@@ -156,10 +161,15 @@ namespace RNAssistant.Office.Services
 
         private SkillDefinition[] Skills(ResourceRef root)
         { return JsonConvert.DeserializeObject<SkillDefinition[]>(_catalogs.Read(root)); }
+        private IEnumerable<ToolCatalogEntry> Tools(ResourceRef root)
+        {
+            return ResourceUri.Parse(root.Uri).Segments[0] == _catalogs.BuiltInToolsKind
+                ? _catalogs.ReadBuiltInTools(root).Select(item => item.Definition)
+                : JsonConvert.DeserializeObject<ToolCatalogEntry[]>(_catalogs.Read(root));
+        }
         private ToolCatalogEntry FindTool(ResourceRef root, string id)
         {
-            if (ResourceUri.Parse(root.Uri).Segments[0] == _catalogs.BuiltInToolsKind) return FindBuiltIn(root, id).Definition;
-            var values = JsonConvert.DeserializeObject<ToolCatalogEntry[]>(_catalogs.Read(root)).Where(item => item.Id == id).Take(2).ToArray();
+            var values = Tools(root).Where(item => item.Id == id).Take(2).ToArray();
             if (values.Length != 1) throw Error("The exact tool source is unavailable or ambiguous.", "RESOURCE_SNAPSHOT_UNAVAILABLE");
             return values[0];
         }
@@ -175,6 +185,7 @@ namespace RNAssistant.Office.Services
                     ResourceUri.Parse(root.Uri).Segments[0], tool.Id, documentation ? "documentation" : "source"), root.Revision),
                 Provider = "catalog", Title = tool.Id, Kind = documentation ? "tool-documentation" : "tool-source",
                 MimeType = documentation ? "text/markdown" : "application/json", Mutable = false, Tracking = "strongly-tracked" };
+            descriptor.Metadata["host"] = tool.Host;
             if (documentation) descriptor.Metadata["libraryRevision"] = ToolAuthoringService.LibraryRevision(tool);
             descriptor.Representations.Add("text"); descriptor.Capabilities.Add("read");
             descriptor.Dependencies.Add(new ResourceDependency(root, "text", ResourceCoverage.Whole(), "catalog-publication"));

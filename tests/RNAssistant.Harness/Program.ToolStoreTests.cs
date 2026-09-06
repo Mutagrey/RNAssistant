@@ -471,6 +471,8 @@ namespace RNAssistant.Harness
                 AssertTrue(toolAuthoring.IndexOf("common.tools_validate",
                         StringComparison.Ordinal) < 0,
                     "tool skill does not teach retired validation");
+                AssertTrue(!toolAuthoring.Contains("common.tools_definition_read") && toolAuthoring.Contains("common.resources_find") &&
+                    toolAuthoring.Contains("common.resources_read"), "tool skill uses resource discovery/read for existing implementation");
 
                 string error;
                 AssertTrue(ModelToolResultProjection.ValidateAcceptedCall(
@@ -738,7 +740,7 @@ namespace RNAssistant.Harness
                 var definitions = executor.GetControllerTools()
                     .Where(tool => ToolAuthoringCatalog.Owns(tool.Id))
                     .ToList();
-                AssertEqual(3, definitions.Count,
+                AssertEqual(2, definitions.Count,
                     "complete tool authoring family registered");
                 foreach (var definition in definitions)
                 {
@@ -746,15 +748,8 @@ namespace RNAssistant.Harness
                         definition.Policy.AllowedModes),
                         "tool authoring is Agent-only");
                 }
-                var readDefinition = definitions.Single(tool =>
-                    tool.Id == ToolAuthoringCatalog.DefinitionReadToolId);
                 var upsertDefinition = definitions.Single(tool =>
                     tool.Id == ToolAuthoringCatalog.UpsertToolId);
-                AssertEqual(ToolEffect.Read,
-                    readDefinition.Policy.Effect,
-                    "tool definition read effect");
-                AssertTrue(readDefinition.Policy.IndependentLocalRead,
-                    "tool definition read is independently batchable");
                 AssertEqual(ToolEffect.Write,
                     upsertDefinition.Policy.Effect,
                     "tool upsert effect");
@@ -763,19 +758,20 @@ namespace RNAssistant.Harness
                     "tool upsert requires handler verification");
                 AssertTrue(upsertDefinition.Policy.RequiresConfirmation,
                     "tool upsert requires confirmation");
+                var session = NewSession(adapter);
                 var native = executor.CreateNativeRuntime(
-                    NewSession(adapter), definitions,
+                    session, definitions,
                     new AppSettings { AutoConfirmToolActions = false },
                     "agent", false,
                     (execution, preparation) => "tool_authoring_pending");
                 AssertTrue(native.Describe(new ToolCall(
-                        "tool_authoring_read",
-                        ToolAuthoringCatalog.DefinitionReadToolId,
+                        "tool_authoring_upsert",
+                        ToolAuthoringCatalog.UpsertToolId,
                         "{\"id\":\"excel.generated_report\"}")) != null,
                     "exact tool authoring id has a native binding");
                 AssertTrue(native.Describe(new ToolCall(
                         "tool_authoring_alias",
-                        ToolAuthoringCatalog.DefinitionReadToolId
+                        ToolAuthoringCatalog.UpsertToolId
                             .ToUpperInvariant(), "{}")) == null,
                     "tool authoring has no case alias");
                 AssertEqual("tools.upsert.intent.v1",
@@ -851,12 +847,14 @@ namespace RNAssistant.Harness
                 var updated = executor.ExecuteManual(update, new List<ToolCatalogEntry>(OfficeToolCatalog.ForHost(adapter.HostName)), new AppSettings { AutoConfirmToolActions = true }, false, false);
                 AssertTrue(updated.Success, "partial tool update should succeed");
 
-                var read = executor.ExecuteManual(new ToolInvocation { ToolId = ToolAuthoringCatalog.DefinitionReadToolId, Arguments = { ["id"] = "excel.generated_report" } }, new List<ToolCatalogEntry>(OfficeToolCatalog.ForHost(adapter.HostName)), new AppSettings(), false, false);
-                AssertTrue(read.Success, "tool read should succeed");
-                AssertContains(read.DataJson, "Public Function Run", "saved VBA source");
-                AssertContains(read.DataJson, "\"parameters\":{", "schema returned as native object");
-                AssertContains(read.DataJson, "Updated report", "updated field returned");
-                AssertContains(read.DataJson, "Test custom tool.", "omitted manifest description preserved");
+                var read = executor.ExecuteManual(Command(ResourceToolCatalog.ReadToolId, "target", "tool source: excel.generated_report"),
+                    executor.GetControllerTools().ToList(), new AppSettings(), false, false, session);
+                AssertTrue(read.Success, "published tool source read should succeed: " + read.Message);
+                var source = JObject.Parse((string)JObject.Parse(read.DataJson)["text"]);
+                AssertContains((string)source["code"], "Public Function Run", "saved VBA source");
+                AssertTrue(JObject.Parse((string)source["argumentSchemaJson"])["properties"] != null, "exact stored argument schema");
+                AssertContains((string)source["readme"], "Updated report", "updated field returned");
+                AssertContains((string)source["code"], "Test custom tool.", "omitted manifest description preserved");
 
                 var unchangedPending = ExecuteToolAuthoringNative(
                     native, ToolAuthoringCatalog.UpsertToolId,

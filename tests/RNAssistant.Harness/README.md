@@ -46,7 +46,7 @@ version check still apply.
 | Native ToolRuntime / typed contracts and effect evidence | `Program.ToolRuntimeTests.cs`; native read in `Program.ResourceGatewayTests.cs` | `tool runtime:` |
 | Immutable ToolPack authority / finite core / atomic callable admission | `Program.ToolDiscoveryTests.cs`; confirmation and policy regressions in `Program.SimpleAgentTests.cs` and `Program.AgentSafetyTests.cs` | `tool pack:`, `agent: confirmation`, `protocol context: batch safety uses local authority` |
 | Typed Excel reads/writes/range/table/chart families / native, HTML, bounds and effect evidence | `Program.ExcelReadTests.cs`, `Program.ExcelWriteTests.cs`, `Program.ExcelRangeMutationTests.cs`, `Program.ExcelTableTests.cs`, `Program.ExcelChartTests.cs`; paired Agent regression in `Program.AgentSafetyTests.cs`; host access in `Program.ParserDesktopTests.cs` | `excel read:`, `excel write:`, `excel range mutation:`, `excel table:`, `excel chart:`, `protocol context: loop tracks only accepted calls`, `tools: html workspace updates session`, `host runtime:` |
-| Host document gate / neutral bound session / direct context and catalog reads | `Program.ParserDesktopTests.cs`; live-read/guard integration in `Program.VbaPromptTests.cs` and `Program.ResourceGatewayTests.cs` | `host runtime:`, `vba: queued guard`, `waits for active mutation`, `vba: confirmed mutation`, `tool runtime: native resource list manual and model paths` |
+| Host document gate / neutral bound session / direct context and catalog reads | `Program.ParserDesktopTests.cs`; live-read/guard integration in `Program.VbaPromptTests.cs` and `Program.ResourceGatewayTests.cs` | `host runtime:`, `vba: queued guard`, `waits for active mutation`, `vba: confirmed mutation`, `tool runtime: native resource tools manual and model paths` |
 | Excel identity owner/helper protocol (no Office execution) | `Program.ParserDesktopTests.cs`; source-linked `OfficeHosts.Qualification` | `excel identity probe:` |
 | Qualification pack/catalog/runner/event/build authority | `Program.QualificationTests.cs`; strict manifest/coverage, fake action/verifier ports, pause/replay/fault barriers, real chat CAS and signed exact-build admission | `qualification:` |
 | Artifact Library classes, exact heads/history, HTML branch selection, media gallery projection and chat resource cards | `Program.ArtifactLibraryTests.cs`; UI contracts in `tests/web/artifact-library-projection.test.js`, `tests/web/artifact-media-gallery.test.js` and `tests/web/chat-resource-card.test.js` | `artifact library:` |
@@ -269,6 +269,15 @@ checks; real VBIDE/Trust Access/crash behavior remains Windows qualification. Se
 [Phase 11J2 evidence](../../docs/stabilization/PHASE_11J2_VBA_PACKAGE_NATIVE_RUNTIME.md).
 
 ## Tool Library source reads and mutation uploads
+
+Model source inspection uses `resource cutover: tool source replaces definition read`
+in `Program.ResourceGatewayTests.cs`: metadata-only host-visible discovery, complete
+exact source, no callable admission, publication-dependent evidence, retained history
+and no authoring-file fallback/Office discovery. It also rejects the retired reader
+and its stored call. Existing `tools: agent CRUD preserves omitted fields` reads back
+through the same generic resource tool; `tools: authoring intents are semantic`
+checks the replacement guidance. The broader R61 inventory has an explicitly open
+[baseline gap](../../docs/stabilization/BACKLOG.md#existing-defects-outside-the-active-slice).
 
 For Tool Library source reads and mutation uploads, use `tool editor:` in
 `Program.ToolEditorResourceTests.cs` and

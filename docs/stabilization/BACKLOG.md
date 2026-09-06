@@ -28,6 +28,14 @@ service locator, второй store/read model или универсальный
 
 ## Existing defects outside the active slice
 
+- R61 property inventory baseline trails preceding Resource cutover changes:
+  `tools: R61 built-in contract inventory` still expects old HTML binding shapes,
+  resource find/read descriptors, no schema/mapping/derived tools, and earlier
+  VBA descriptor revisions. These mismatches were observed on 2026-09-06 while
+  removing the tool definition reader; only that retired row was removed in its
+  slice. Owner: Tool catalog/qualification. Review each changed property against
+  its canonical owner and update the baseline before final post-cutover Windows
+  qualification; do not regenerate unchecked hashes or report this gate as green.
 - VBA canonical hash versus raw source snapshot: after reading an LF module,
   changing only line endings to CRLF can reuse the same canonical revision while
   attempting to register different immutable view bytes. The Gateway then fails

@@ -655,6 +655,7 @@ namespace RNAssistant.Harness
                 Test("resource cutover: schema mapping derived publication", ResourceSchemaMappingDerivedPublication),
                 Test("resource cutover: large completed call stays reference only", ResourceCompletedCallDoesNotHydrateArguments),
                 Test("resource cutover: immutable skill catalog publication", ResourceSkillCatalogPublication),
+                Test("resource cutover: tool source replaces definition read", ResourceToolSourceReplacesDefinitionRead),
                 Test("skill editor: published reference and guarded save", SkillReferenceEditorReadsPublishedSource),
                 Test("skill editor: bounded capture and lifetime", SkillReferenceEditorBoundsAndLifetime),
                 Test("skill editor: lazy published core and builtin source", SkillEditorReadsPublishedCore),

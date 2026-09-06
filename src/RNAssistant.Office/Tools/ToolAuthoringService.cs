@@ -27,35 +27,6 @@ namespace RNAssistant.Office.Tools
 
         internal bool CanUse { get { return _toolStore != null; } }
 
-        internal ToolAuthoringOutcome Read(
-            IDictionary<string, object> arguments)
-        {
-            if (_toolStore == null)
-            {
-                return ToolAuthoringOutcome.Error(
-                    "Tool authoring store is not available.", null,
-                    "tool_store_unavailable", false);
-            }
-            var id = ToolArgumentReader.String(
-                arguments, "id", string.Empty);
-            if (string.IsNullOrWhiteSpace(id))
-                return ToolAuthoringOutcome.Error(
-                    "An exact custom tool id is required.", null,
-                    "tool_id_required", true);
-            var tool = VisibleTools().FirstOrDefault(candidate =>
-                string.Equals(candidate.Id, id,
-                    StringComparison.OrdinalIgnoreCase));
-            if (tool == null)
-            {
-                return ToolAuthoringOutcome.Error(
-                    "Custom tool not found: " + id, null,
-                    "tool_not_found", false);
-            }
-            return ToolAuthoringOutcome.Ok(
-                "Custom tool read: " + tool.Id,
-                ToolPayload(tool).ToString(Formatting.None));
-        }
-
         internal ToolAuthoringOutcome ValidateDefinition(
             ToolCatalogEntry tool)
         {
@@ -282,15 +253,6 @@ namespace RNAssistant.Office.Tools
             int value;
             return int.TryParse(Convert.ToString(arguments[name]), out value)
                 ? value : fallback;
-        }
-
-        private IEnumerable<ToolCatalogEntry> VisibleTools()
-        {
-            return _toolStore.Load().Where(t =>
-                t != null &&
-                !t.BuiltIn &&
-                (string.Equals(t.Host, _adapter.HostName, StringComparison.OrdinalIgnoreCase) ||
-                 string.Equals(t.Host, "Common", StringComparison.OrdinalIgnoreCase)));
         }
 
         private static bool ReadBool(

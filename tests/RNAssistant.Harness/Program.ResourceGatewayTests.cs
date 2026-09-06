@@ -23,6 +23,77 @@ namespace RNAssistant.Harness
 {
     internal static partial class Program
     {
+        private static void ResourceToolSourceReplacesDefinitionRead()
+        {
+            WithTempPaths(paths =>
+            {
+                var adapter = FakeOfficeAdapter.ForHost("Excel");
+                var store = new ToolStore(paths);
+                store.SaveOne(CustomTool("Word", "word.foreign_source"));
+                var tool = CustomTool("Excel", "excel.resource_source");
+                tool.Readme = "# Published source\r\n" + new string('ж', 40000);
+                store.SaveOne(tool);
+                var executor = new OfficeToolExecutor(adapter, new VbaJournalStore(paths), new SkillStore(paths), store);
+                var session = NewSession(adapter);
+                var tools = executor.GetControllerTools().ToList();
+                var runtime = executor.CreateNativeRuntime(session, tools, new AppSettings(), ChatModes.Agent, false);
+                Func<string, JObject, ToolExecutionRecord> execute = (id, arguments) =>
+                {
+                    var call = new ToolCall(Guid.NewGuid().ToString("N"), id, arguments.ToString(Formatting.None));
+                    return runtime.ExecuteAsync(new ToolExecutionContext(call, runtime.Describe(call), "run", "turn", "step",
+                        DateTime.UtcNow, false, 1), CancellationToken.None).GetAwaiter().GetResult();
+                };
+                var retired = new ToolCall("retired", "common.tools_definition_read", "{\"id\":\"excel.resource_source\"}");
+                AssertTrue(tools.All(item => item.Id != retired.Name) && runtime.Describe(retired) == null &&
+                    DirectToolBindingCatalog.Resolve(retired.Name) == null, "retired definition reader has no catalog, handler or alias");
+                string error;
+                AssertTrue(!ModelToolResultProjection.ValidateAcceptedCall(retired, out error), "old untracked definition reads cannot replay as current model context");
+
+                var found = execute(ResourceToolCatalog.FindToolId, new JObject { ["scope"] = "catalogs", ["query"] = tool.Id });
+                AssertEqual(ToolExecutionOutcome.Ok, found.Outcome, "tool source discovery succeeds");
+                var target = (string)JObject.Parse(found.Result.DataJson).SelectToken("items[0].target");
+                AssertEqual("tool source: " + tool.Id, target, "source uses the existing semantic resource target");
+                AssertTrue(!found.Result.DataJson.Contains("Published source") && !found.Result.DataJson.Contains("rna://") &&
+                    !found.Result.DataJson.Contains("argumentSchemaJson"), "discovery is metadata-only, without bodies or runtime plumbing");
+                AssertEqual(0, executor.ResourceGateway.Find(session, "word.foreign_source", "catalogs").Items.Count, "source discovery preserves host visibility");
+                AssertTrue(executor.ResourceGateway.Find(session, ResourceToolCatalog.ReadToolId, "catalogs").Items.Any(item =>
+                    item.Target == "tool source: " + ResourceToolCatalog.ReadToolId), "source-owned builtin definitions use the same discovery path");
+
+                var first = execute(ResourceToolCatalog.ReadToolId, new JObject { ["target"] = target });
+                AssertEqual(ToolExecutionOutcome.Ok, first.Outcome, "source reads through the generic resource tool");
+                var original = (string)JObject.Parse(first.Result.DataJson)["text"];
+                AssertEqual(tool.Readme, (string)JObject.Parse(original)["readme"], "all internal pages retain the complete exact source");
+                var evidence = first.ResourceEvidence.Single();
+                AssertTrue(evidence.Complete && evidence.Payload != null && evidence.Resource.IsExact &&
+                    evidence.Dependencies.Single().Resource.Uri == "rna://catalog/tools", "model source has exact payload and publication-dependent evidence");
+                var scope = CatalogPublicationService.ScopeId;
+                var reducer = new EvidenceStateReducer();
+                AssertEqual(EvidenceState.Current, reducer.Reduce(evidence, executor.ResourceAuthority.CaptureMany(new[] { scope })).State,
+                    "source observation is current before publication changes");
+                AssertTrue(runtime.Describe(new ToolCall("unadmitted", tool.Id, "{}")) == null, "reading schema/source cannot admit a callable tool");
+
+                var stored = store.Load().Single(item => item.Id == tool.Id);
+                var changed = stored.Clone(); changed.Readme = "# Published replacement";
+                var update = executor.ExecuteToolLibraryMutation(new ToolLibraryCoreMutation { Kind = "upsert", BaseId = tool.Id,
+                    ExpectedRevision = ToolAuthoringService.LibraryRevision(stored), Intended = changed });
+                AssertEqual(ToolAuthoringOutcomeStatus.Ok, update.Outcome.Status, "existing guarded owner publishes the replacement: " + update.Outcome.Message);
+                AssertEqual(EvidenceState.Superseded, reducer.Reduce(evidence, executor.ResourceAuthority.CaptureMany(new[] { scope })).State,
+                    "a Library publication supersedes prior model source evidence through shared authority");
+                AssertEqual(original.Substring(0, 64), executor.ResourceGateway.Read(session, new ResourceReadRequest {
+                    Reference = evidence.Resource, Representation = "text", MaxChars = 64 }).Result.Text, "historical source remains exact after replacement");
+                var current = execute(ResourceToolCatalog.ReadToolId, new JObject { ["target"] = target });
+                AssertEqual(changed.Readme, (string)JObject.Parse((string)JObject.Parse(current.Result.DataJson)["text"])["readme"],
+                    "a later semantic read resolves the new publication");
+                AssertTrue(current.ResourceEvidence.Single().Resource.Revision != evidence.Resource.Revision, "new publication has a distinct logical revision");
+                System.IO.File.WriteAllText(System.IO.Path.Combine(stored.StoragePath, "README.md"), "Unpublished file edit");
+                var generation = executor.ResourceAuthority.CaptureMany(new[] { scope }).Get(scope).Generation;
+                var stable = execute(ResourceToolCatalog.ReadToolId, new JObject { ["target"] = target });
+                AssertEqual(current.Result.DataJson, stable.Result.DataJson, "file drift cannot bypass catalog publication");
+                AssertEqual(generation, executor.ResourceAuthority.CaptureMany(new[] { scope }).Get(scope).Generation, "stable reads do not republish authoring files");
+                AssertEqual(0, adapter.VbaBackendCalls.Count, "catalog source lookup never discovers live document VBA");
+            });
+        }
+
         private static void NativeResourceToolsUseRuntimeForManualAndModelCalls()
         {
             WithTempExecutor(FakeOfficeAdapter.ForHost("Excel"), (executor, adapter) =>
