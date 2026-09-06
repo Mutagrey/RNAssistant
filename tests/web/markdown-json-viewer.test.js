@@ -148,6 +148,8 @@ function settle() { return new Promise(resolve => setImmediate(resolve)); }
   assert.match(markdownSource, /DOMPurify\.sanitize\(marked\.parse/);
   assert.match(messagesSource, /sourceText:\s*state\.liveStreamContent,\s*streaming:\s*true/);
   assert.match(messagesSource, /clearMarkdownEnhancements\(box\)/);
+  assert.match(messagesSource, /reconcileMessageUnits\(box,\s*buildMessageUnits\(\)\)/);
+  assert.equal(/box\.innerHTML\s*=\s*["']["']/.test(messagesSource), false);
   assert.equal(/innerHTML\s*=\s*fence\.text/.test(markdownSource), false);
   console.log("PASS Markdown JSON viewer: post-sanitize opt-in and stream lifecycle are wired");
   console.log("OK 8/8");

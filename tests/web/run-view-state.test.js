@@ -129,10 +129,10 @@ function state(runId, lifecycle = "completed", health = "clean", pending = null)
   });
   assert.ok(index.includes("app-agent.js?v=runtime-diagnostics-20260831-1"),
     "agent outcome uses the diagnostics cache key");
-  assert.ok(index.includes("app-chat-session.js?v=ui-lazy-20260903-1"), "chat session uses the lazy UI cache key");
+  assert.ok(index.includes("app-chat-session.js?v=html-read-20260906-1"), "chat session uses the current cache key");
   assert.ok(index.includes("app-core.js?v=chat-sync-20260903-1"), "core uses the chat sync cache key");
-  assert.ok(index.includes("app-chat-state.js?v=ui-lazy-20260903-1"), "chat state uses the lazy UI cache key");
-  assert.ok(index.includes("app-messages.js?v=ui-lazy-20260903-1"), "messages uses the lazy UI cache key");
+  assert.ok(index.includes("app-chat-state.js?v=html-read-20260906-1"), "chat state uses the current cache key");
+  assert.ok(index.includes("app-messages.js?v=transcript-incremental-20260907-1"), "messages uses the transcript incremental cache key");
   ["app-chat.css", "app-agent.css"].forEach(asset => {
     assert.ok(index.includes(asset + "?v=run-view-state-20260830-1"), asset + " uses the atomic cutover cache key");
   });
