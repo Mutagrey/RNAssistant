@@ -22,7 +22,8 @@ namespace RNAssistant.Office.Services
         private readonly Dictionary<string, Download> _downloads = new Dictionary<string, Download>(StringComparer.Ordinal);
         private int LeaseCount { get { return _access.Count + _openings.Count + _uploads.Count + _downloads.Count; } }
         private int OpeningCount { get { return _openings.Count + _downloads.Values.Count(item => item.Capturing); } }
-        private long TransferBytes { get { return _uploads.Values.Sum(item => (long)item.Bytes.Length) + _downloads.Values.Sum(item => item.ReservedBytes); } }
+        private long TransferBytes { get { return _uploads.Values.Sum(item => (long)item.Bytes.Length) + _downloads.Values.Sum(item => item.ReservedBytes) +
+            _openings.Sum(item => item.ReservedBytes) + _access.Values.Sum(item => item.ReservedBytes); } }
 
         internal ResourceDownloadOpenResponse OpenDownload(ChatSession session, string workspaceId, long maximumBytes,
             Func<CancellationToken, ResourceDownloadContent> capture, CancellationToken token = default(CancellationToken))

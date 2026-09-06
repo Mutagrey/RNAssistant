@@ -18,6 +18,7 @@ namespace RNAssistant.Office.Services
         internal const string Origin = "https://rnassistant.local-resource";
         internal const int MaximumBatchBytes = 8 * 1024 * 1024;
         internal const int MaximumBatchItems = 32000;
+        internal const int MaximumBinaryChunkBytes = 256 * 1024;
         private readonly ResourceGatewayService _gateway;
         private readonly Func<string, string, bool> _ownerIsActive;
         private readonly Func<DateTime> _utcNow;
@@ -44,12 +45,15 @@ namespace RNAssistant.Office.Services
                 _ownerIsActive != null && !_ownerIsActive(session.Id, workspaceId))
                 throw Error("RESOURCE_ACCESS_DENIED", "An explicit workspace owner and bound resource are required.");
             cancellationToken.ThrowIfCancellationRequested();
-            var opening = new Opening { Owner = session.Id + ":" + workspaceId };
+            var opening = new Opening { Owner = session.Id + ":" + workspaceId,
+                ReservedBytes = ResourceGatewayService.IsBinaryView(view) ? ArtifactViewerService.MaximumRawBytes : 0 };
             lock (_sync)
             {
                 EnsureActive(); Expire();
                 if (LeaseCount >= 64) throw Error("RESOURCE_LEASE_LIMIT", "Close unused resource handles before opening more.");
                 if (OpeningCount >= 4) throw Error("RESOURCE_BACKPRESSURE", "Only four resource opens may be in flight.");
+                if (TransferBytes + opening.ReservedBytes > RNAssistant.Core.Storage.AttachmentStore.MaxMessageBytes)
+                    throw Error("RESOURCE_BACKPRESSURE", "The shared binary/transfer budget is occupied.");
                 _openings.Add(opening);
             }
             try
@@ -79,12 +83,14 @@ namespace RNAssistant.Office.Services
                     if (opening.Cancelled)
                         throw Error("RESOURCE_LEASE_EXPIRED", "The resource owner closed during capture.");
                     _access.Add(id, new Access { Lease = lease, Session = session, WorkspaceId = workspaceId, First = first,
-                        ViewPath = viewPath, Offset = first.Result.Offset, Cursor = initialCursor });
+                        ViewPath = viewPath, Offset = first.Result.Offset, Cursor = initialCursor,
+                        ReservedBytes = first.Result.Binary?.Payload.ByteLength ?? 0 });
+                    opening.ReservedBytes = 0;
                 }
                 return new ResourceDataOpenResponse { LeaseId = id, Url = Origin + "/v1/" + id,
                     Descriptor = first.Result.Resource, View = first.Result.Representation, ViewPath = viewPath ?? "$", ExpiresUtc = lease.ExpiresUtc,
-                    MaxBatchBytes = first.Result.Binary == null ? MaximumBatchBytes : checked((int)first.Result.Binary.Payload.ByteLength),
-                    MaxBatchItems = MaximumBatchItems, Binary = first.Result.Binary };
+                    MaxBatchBytes = first.Result.Binary == null ? MaximumBatchBytes : MaximumBinaryChunkBytes,
+                    MaxBatchItems = first.Result.Binary == null ? MaximumBatchItems : MaximumBinaryChunkBytes, Binary = first.Result.Binary };
             }
             finally { lock (_sync) _openings.Remove(opening); }
         }
@@ -101,34 +107,52 @@ namespace RNAssistant.Office.Services
         {
             contentType = "application/json; charset=utf-8";
             Access access;
+            bool binaryRead;
+            ResourceReadSelection first;
             lock (_sync)
             {
                 EnsureActive(); Expire();
                 if (!_access.TryGetValue(leaseId ?? string.Empty, out access))
                     throw Error("RESOURCE_LEASE_EXPIRED", "The resource lease is unknown, closed or expired.");
+                if (!access.Serial.Wait(0)) throw Error("RESOURCE_BACKPRESSURE", "Only one batch may be in flight per resource handle.");
+                access.Busy = true;
+                first = access.First;
+                binaryRead = first?.Result?.Binary != null;
             }
-            if (limit < 1 || limit > MaximumBatchItems || offset < 0)
-                throw Error("RESOURCE_BATCH_TOO_LARGE", "The requested batch exceeds the negotiated bounds.");
-            if (!access.Serial.Wait(0)) throw Error("RESOURCE_BACKPRESSURE", "Only one batch may be in flight per resource handle.");
             try
             {
+                if (limit < 1 || limit > (binaryRead ? MaximumBinaryChunkBytes : MaximumBatchItems) || offset < 0)
+                    throw Error("RESOURCE_BATCH_TOO_LARGE", "The requested batch exceeds the negotiated bounds.");
                 cancellationToken.ThrowIfCancellationRequested();
                 if (access.Cancelled || access.Lease.ExpiresUtc <= _utcNow() ||
                     _ownerIsActive != null && !_ownerIsActive(access.Session.Id, access.WorkspaceId))
                     throw Error("RESOURCE_LEASE_EXPIRED", "The resource lease is closed or expired.");
-                var first = access.First;
                 if (first?.Result?.Binary != null)
                 {
-                    if (offset != 0 || fields != null && fields.Count != 0)
+                    if (fields != null && fields.Count != 0)
                         throw Error("RESOURCE_VIEW_INVALID", "Binary views do not accept record selectors.");
+                    if (access.Done || offset != access.Offset)
+                        throw Error("RESOURCE_CURSOR_INVALID", "Binary chunks must continue this exact lease in sequence.");
                     var payload = first.Result.Binary.Payload;
-                    var binaryBytes = _gateway.Authority.Payloads.ReadBytes(payload.ToBlobReference());
+                    var binaryBytes = access.BinaryBytes ?? _gateway.Authority.Payloads.ReadBytes(payload.ToBlobReference());
                     if (binaryBytes == null || binaryBytes.LongLength != payload.ByteLength)
                         throw Error("RESOURCE_SNAPSHOT_UNAVAILABLE", "The pinned binary payload is unavailable.");
                     cancellationToken.ThrowIfCancellationRequested();
                     if (access.Cancelled) throw Error("RESOURCE_LEASE_EXPIRED", "The resource handle was closed during the read.");
                     contentType = payload.ContentType;
-                    return binaryBytes;
+                    var count = (int)Math.Min(limit, payload.ByteLength - offset);
+                    var chunk = new byte[count];
+                    Buffer.BlockCopy(binaryBytes, offset, chunk, 0, count);
+                    lock (_sync)
+                    {
+                        cancellationToken.ThrowIfCancellationRequested();
+                        if (access.Cancelled || access.Lease.ExpiresUtc <= _utcNow())
+                            throw Error("RESOURCE_LEASE_EXPIRED", "The binary lease closed during capture.");
+                        access.Offset += count; access.Done = access.Offset == payload.ByteLength;
+                        access.BinaryBytes = access.Done ? null : binaryBytes;
+                        if (access.Done) access.ReservedBytes = 0;
+                    }
+                    return chunk;
                 }
                 if (access.Done || offset != access.Offset)
                     throw Error("RESOURCE_CURSOR_INVALID", "Read offsets must continue this exact lease in sequence.");
@@ -159,7 +183,12 @@ namespace RNAssistant.Office.Services
                 access.Offset = checked((int)batch.NextOffset); access.Cursor = result.NextCursor; access.Done = result.Complete;
                 return bytes;
             }
-            finally { access.Serial.Release(); }
+            catch { if (binaryRead) { lock (_sync) CancelAccess(access); } throw; }
+            finally
+            {
+                lock (_sync) { access.Busy = false; if (access.Cancelled) _access.Remove(access.Lease.LeaseId); }
+                access.Serial.Release();
+            }
         }
 
         internal void Close(string sessionId, string workspaceId, string leaseId)
@@ -177,7 +206,7 @@ namespace RNAssistant.Office.Services
                 if (!_access.TryGetValue(leaseId ?? string.Empty, out access)) return;
                 if (access.Lease.Owner != sessionId + ":" + workspaceId)
                     throw Error("RESOURCE_ACCESS_DENIED", "The resource handle belongs to another workspace.");
-                access.Cancelled = true; access.First = null; _access.Remove(leaseId);
+                CancelAccess(access);
             }
         }
 
@@ -199,8 +228,7 @@ namespace RNAssistant.Office.Services
                 _disposed = true;
                 _expiryTimer.Dispose();
                 foreach (var opening in _openings) opening.Cancelled = true;
-                foreach (var access in _access.Values) { access.Cancelled = true; access.First = null; }
-                _access.Clear();
+                foreach (var access in _access.Values.ToArray()) CancelAccess(access);
                 foreach (var upload in _uploads.Values.ToArray()) CancelUpload(upload);
                 foreach (var download in _downloads.Values.ToArray()) CancelDownload(download);
             }
@@ -208,7 +236,7 @@ namespace RNAssistant.Office.Services
         private void Expire()
         {
             foreach (var access in _access.Values.Where(item => item.Lease.ExpiresUtc <= _utcNow()).ToArray())
-            { access.Cancelled = true; access.First = null; _access.Remove(access.Lease.LeaseId); }
+                CancelAccess(access);
             foreach (var upload in _uploads.Values.Where(item => item.ExpiresUtc <= _utcNow()).ToArray()) CancelUpload(upload);
             foreach (var download in _downloads.Values.Where(item => item.ExpiresUtc <= _utcNow()).ToArray()) CancelDownload(download);
         }
@@ -221,7 +249,12 @@ namespace RNAssistant.Office.Services
         private void EnsureActive() { if (_disposed) throw new ObjectDisposedException(nameof(ResourceDataPlaneService)); }
         private static int Count(ResourceReadResult result) { return result.Table == null ? result.ReturnedCharacters : result.Table.Rows.Count; }
         private static ResourceRequestException Error(string code, string message) { return new ResourceRequestException(message, code, false); }
-        private sealed class Opening { internal string Owner; internal bool Cancelled; }
+        private void CancelAccess(Access access)
+        {
+            access.Cancelled = true; access.First = null; access.BinaryBytes = null;
+            if (!access.Busy) _access.Remove(access.Lease.LeaseId);
+        }
+        private sealed class Opening { internal string Owner; internal bool Cancelled; internal long ReservedBytes; }
         private sealed class Access
         {
             internal string ViewPath;
@@ -232,6 +265,9 @@ namespace RNAssistant.Office.Services
             internal string Cursor;
             internal int Offset;
             internal bool Done;
+            internal bool Busy;
+            internal long ReservedBytes;
+            internal byte[] BinaryBytes;
             internal volatile bool Cancelled;
             internal readonly SemaphoreSlim Serial = new SemaphoreSlim(1, 1);
         }

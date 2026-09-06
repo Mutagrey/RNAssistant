@@ -88,5 +88,30 @@ function fixture() {
     assert.equal(f.calls.length, 1);
     console.log("PASS download: context changes stop delivery without fallback");
   }
-  console.log("OK 6/6");
+  {
+    const f = fixture(), originalFetch = f.options.fetch;
+    f.data.url = f.data.url.replace("/download/", "/");
+    f.data.binary = { payload: f.data.payload }; delete f.data.payload;
+    f.data.maxBatchBytes = f.data.maxBatchItems = 3;
+    f.options.fetch = (url, config) => {
+      assert.ok(url.includes("&limit=")); assert.ok(!url.includes("&count="));
+      return originalFetch(url.replace("&limit=", "&count="), config);
+    };
+    const result = await f.context.RNAssistantResourceDownload.readBinary(f.data, f.options);
+    assert.deepEqual(Array.from(result), Array.from(bytes));
+    assert.deepEqual(f.calls.map(call => call.offset), [0, 3, 6]);
+    f.data.binary.payload.sha256 = "b".repeat(64);
+    await assert.rejects(f.context.RNAssistantResourceDownload.readBinary(f.data, f.options), /RESOURCE_INTEGRITY_MISMATCH/);
+    f.data.binary.payload.byteLength = 0;
+    f.data.binary.payload.sha256 = crypto.createHash("sha256").update("").digest("hex");
+    let emptyReads = 0;
+    f.options.fetch = async url => { emptyReads++; assert.match(url, /offset=0&limit=1$/);
+      return new Response(new Uint8Array(), { headers: { "Content-Type": "application/zip" } }); };
+    assert.equal((await f.context.RNAssistantResourceDownload.readBinary(f.data, f.options)).length, 0);
+    assert.equal(emptyReads, 1, "empty resources still verify their pinned CAS through the route");
+    f.data.maxBatchBytes = f.data.maxBatchItems = 20 * 1024 * 1024;
+    await assert.rejects(f.context.RNAssistantResourceDownload.readBinary(f.data, f.options), /RESOURCE_DOWNLOAD_INVALID/);
+    console.log("PASS binary download: sequential resource chunks, full hash and no whole-body fallback");
+  }
+  console.log("OK 7/7");
 }()).catch(error => { console.error(error.stack || error); process.exitCode = 1; });

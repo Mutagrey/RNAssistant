@@ -55,7 +55,7 @@ vm.runInContext(fs.readFileSync(path.join(root, "web/js/app-html-workspace-actio
   function binding(name, view, index, binary) {
     const id = String(index).repeat(64);
     return { name, lease: { leaseId: id, url: "https://rnassistant.local-resource/v1/" + id,
-      descriptor: { reference: ref }, view, path: "$", maxBatchItems: 32000, maxBatchBytes: binary ? 4 : 4096, binary } };
+      descriptor: { reference: ref }, view, path: "$", maxBatchItems: binary ? 2 : 32000, maxBatchBytes: binary ? 2 : 4096, binary } };
   }
   const resourceExport = { generations: { "conversation:export": 3 }, bindings: [
     binding("bound", "table", 1), binding("text", "text", 2),
@@ -68,7 +68,10 @@ vm.runInContext(fs.readFileSync(path.join(root, "web/js/app-html-workspace-actio
     isCurrent: () => true,
     fetch: async url => {
       reads.push(url);
-      if (url.includes("/" + "3".repeat(64)) || url.includes("/" + "5".repeat(64))) return new Response(new Uint8Array([0, 1, 254, 255]));
+      if (url.includes("/" + "3".repeat(64)) || url.includes("/" + "5".repeat(64))) {
+        const query = new URL(url).searchParams, offset = Number(query.get("offset")), limit = Number(query.get("limit"));
+        return new Response(new Uint8Array([0, 1, 254, 255]).slice(offset, offset + limit));
+      }
       const batch = url.includes("/" + "2".repeat(64)) ? textBatch :
         url.includes("/" + "4".repeat(64)) ? table(0, [], true) :
           url.includes("offset=0") ? table(0, [12, 34], false) : table(2, [56], true);
@@ -76,7 +79,9 @@ vm.runInContext(fs.readFileSync(path.join(root, "web/js/app-html-workspace-actio
     }
   };
   const snapshot = await context.RNAssistantHtmlResourceExport.capture(resourceExport, captureOptions);
-  assert.equal(reads.length, 6);
+  assert.throws(() => context.RNAssistantHtmlResourceExport.script({ ...snapshot, version: 1 }, () => {},
+    resourceExport.bindings.map(item => item.name), value => value), /RESOURCE_EXPORT_INVALID/);
+  assert.equal(reads.length, 8);
   assert.ok(reads[1].includes("offset=2"), "export follows bounded sequential offsets");
   assert.equal(snapshot.resources[0].descriptor.reference.revision, "r1");
   assert.equal(snapshot.resources[0].url, undefined, "transient host capability is not exported");
@@ -114,12 +119,17 @@ vm.runInContext(fs.readFileSync(path.join(root, "web/js/app-html-workspace-actio
   assert.equal(restored, textValue);
   const imageHandle = await offline.RN.resources.open("image");
   const binary = await imageHandle.read();
-  assert.deepEqual(Array.from(new Uint8Array(binary.bytes)), [0, 1, 254, 255]);
+  assert.deepEqual(Array.from(new Uint8Array(binary.bytes)), [0, 1]);
+  assert.equal(binary.done, false);
+  assert.deepEqual(Array.from(new Uint8Array((await imageHandle.read()).bytes)), [254, 255]);
   await imageHandle.close();
   const rawHandle = await offline.RN.resources.open("original");
   const raw = await rawHandle.read({ view: "raw" });
   assert.equal(raw.mimeType, "application/octet-stream");
-  assert.deepEqual(Array.from(new Uint8Array(raw.bytes)), [0, 1, 254, 255], "raw exported source is never decoded as text");
+  assert.deepEqual(Array.from(new Uint8Array(raw.bytes)), [0, 1], "raw exported source is never decoded as text");
+  const rawTail = await rawHandle.read({ limit: 1 });
+  assert.deepEqual(Array.from(new Uint8Array(rawTail.bytes)), [254]);
+  assert.deepEqual(Array.from(new Uint8Array((await rawHandle.read()).bytes)), [255]);
   await rawHandle.close();
   const emptyHandle = await offline.RN.resources.open("empty");
   const empty = await emptyHandle.read();
@@ -275,13 +285,13 @@ vm.runInContext(fs.readFileSync(path.join(root, "web/js/app-html-workspace-actio
 
   const index = fs.readFileSync(path.join(root, "web/index.html"), "utf8");
   ["app-html-resource-export.js", "app-html-workspace-preview.js"]
-    .forEach(asset => assert.ok(index.includes(asset + "?v=" + (asset === "app-html-resource-export.js" ? "resource-export-20260905-1" : "html-read-20260906-1")), asset));
+    .forEach(asset => assert.ok(index.includes(asset + "?v=binary-chunks-20260906-1"), asset));
   ["app-html-workspace-actions.js", "app-html-workspace.js"]
     .forEach(asset => assert.ok(index.includes(asset + "?v=html-read-20260906-1"), asset));
   assert.ok(index.indexOf("app-html-resource-export.js?v=") < index.indexOf("app-html-workspace-preview.js?v="));
   assert.ok(index.includes("app-html-workspace-editor.js?v=html-read-20260906-1"));
   assert.ok(index.includes(
-    "app-html-workspace-artifacts.js?v=html-source-resource-20260905-1"));
+    "app-html-workspace-artifacts.js?v=binary-chunks-20260906-1"));
   assert.ok(index.includes("app-html-workspace.css?v=html-export-20260831-1"));
   console.log("PASS HTML export: changed UI graph uses one cache key");
 

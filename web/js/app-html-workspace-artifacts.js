@@ -117,7 +117,7 @@
     if (thumbnail && thumbnail.status === "ready") {
       var image = document.createElement("img");
       image.alt = title || "";
-      image.src = thumbnail.data.url;
+      image.src = thumbnail.data.objectUrl;
       root.appendChild(image);
       return "ready";
     }

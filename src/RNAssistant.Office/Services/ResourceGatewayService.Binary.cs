@@ -32,7 +32,7 @@ namespace RNAssistant.Office.Services
                 throw new ResourceRequestException("An exact zero-based page selector is required for page views only.", "RESOURCE_VIEW_INVALID", false);
             var descriptor = Resolve(session, exact.Uri).Resource;
             var capability = descriptor.ViewCapabilities.SingleOrDefault(item => item.View == request.Representation);
-            if (capability?.MaxBatchBytes == null)
+            if (capability?.MaxPayloadBytes == null)
                 throw new ResourceRequestException("The resource does not offer this binary view.", "RESOURCE_VIEW_UNAVAILABLE", false);
             descriptor.Metadata["sourceContentSha256"] = descriptor.ContentSha256;
             var view = "binary:" + request.Representation + (paged ? ":" + page.ToString(CultureInfo.InvariantCulture) : string.Empty);
@@ -88,7 +88,7 @@ namespace RNAssistant.Office.Services
             var expectedMime = raw ? "application/octet-stream" : request.Representation == ResourceRepresentations.Image
                 ? ArtifactViewerService.NormalizeMimeType(descriptor.MimeType) : "image/jpeg";
             if (binary?.Payload == null || binary.Payload.ByteLength < 0 || !raw && binary.Payload.ByteLength == 0 ||
-                binary.Payload.ByteLength > capability.MaxBatchBytes.Value || binary.Payload.ContentType != expectedMime ||
+                binary.Payload.ByteLength > capability.MaxPayloadBytes.Value || binary.Payload.ContentType != expectedMime ||
                 raw && (binary.Payload.ByteLength != descriptor.ByteLength ||
                     !string.Equals(binary.Payload.Sha256, descriptor.ContentSha256, StringComparison.OrdinalIgnoreCase)))
                 throw new ResourceRequestException("The exact binary payload is unavailable.", "RESOURCE_SNAPSHOT_UNAVAILABLE", false);

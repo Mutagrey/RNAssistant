@@ -441,8 +441,9 @@ existing `representations` and typed `viewCapabilities`: image (20 MiB), image
 thumbnail (512 KiB), PDF page (10 MiB) and PDF thumbnail (1 MiB). The existing media
 owner supplies these metadata-only capabilities only for matching exact attachment
 evidence and admitted kind/MIME/extent; an unconfigured binary reader advertises
-none. These are whole-response bounds, not a claim of byte/record streaming or
-native renderer availability. Gateway rejects unsupported views and row/field
+none. These are `maxPayloadBytes` object bounds, not renderer availability.
+Binary views advertise sequential byte offsets/streaming and separate 256 KiB
+`maxBatchBytes`/`maxItemsPerBatch` limits. Gateway rejects unsupported views and row/field
 selectors before source hydration. Captured and retained views obey the same
 per-view byte limit and MIME contract; retained data cannot bypass negotiation.
 The same owner also exposes `raw` for exact attachment-backed image/file/attachment
@@ -450,14 +451,30 @@ artifacts, including empty originals. It reads and verifies original byte length
 and SHA-256, never extracted text or rendered output. The retained `binary:raw`
 view uses the existing CAS and must still match the exact source evidence; missing
 CAS never falls back to the original reader. Control setup contains metadata only.
-Delivery uses the existing whole-binary lease, bounded to 20 MiB per response,
-without row/field/page selectors or byte-stream capability. The source MIME stays
+Delivery uses the same binary lease with sequential byte offsets and chunks up to
+256 KiB; raw has no row/field/page selectors. The source MIME stays
 in the descriptor; the raw payload/HTTP MIME is inert `application/octet-stream`
 under the shared no-sniff/CSP route. HTML bindings accept `view: raw`, and the same
-`RN.resources` binary consumer and standalone export return original bytes (export
-retains its stricter 8 MiB part limit). No new reader tool or store is introduced.
-General chunked binary transport and raw views for other provider domains remain
-open, as does real Windows/WebView2 qualification.
+`RN.resources` binary consumer and standalone export return original byte chunks.
+No new reader tool or store is introduced. Raw views for other provider domains
+remain open, as does real Windows/WebView2 qualification.
+
+Binary opens reserve capture capacity before provider work in the existing 50 MiB
+upload/download transfer budget. A lease verifies and retains its bounded CAS body
+once on the first chunk, then serves sequential slices without per-chunk CAS
+rehydration. Completion frees the buffer/reservation; close, expiry and failure
+invalidate the lease, keeping busy-operation capacity until that operation exits.
+Empty resources still verify their CAS on a zero-byte read. No second durable
+store or producer queue is introduced; full bounded CAS verification remains, not
+constant-memory decoding from disk.
+Artifact image/PDF/thumbnail consumers use the shared verified chunk accumulator
+before creating cache-owned blob URLs; cache eviction/chat close cancels pending
+delivery and revokes URLs. No image element points directly at the capability URL.
+`RN.resources.read/stream` yields byte chunks with `offset`, `nextOffset`, `done`;
+fields and out-of-sequence offsets are rejected. Standalone export manifest v2
+stores bounded binary parts with byte offsets and lazy verified offline slicing;
+v1 manifests are explicitly refused by the current assembler, with no fallback or
+rewriting of previously exported HTML files.
 
 Authority notifications coalesce to bounded scope/generation metadata.
 `RN.resources.subscribe` receives authorized binding names only; it does not create

@@ -55,7 +55,8 @@ const revokedUrls = [];
 function binaryLease(uri = "rna://chat/chat-text/artifact/image/revision/1", length = 3, hash = "d".repeat(64)) {
   return { leaseId: "a".repeat(64), url: "https://rnassistant.local-resource/v1/" + "a".repeat(64),
     descriptor: { reference: { uri, revision: "1" } }, expiresUtc: new Date(Date.now() + 600000).toISOString(),
-    binary: { payload: { byteLength: length, sha256: hash } } };
+    objectUrl: "blob:fixture", maxBatchBytes: 262144, maxBatchItems: 262144,
+    binary: { payload: { byteLength: length, sha256: hash, contentType: "image/png" } } };
 }
 const vendorViewerInstances = [];
 const body = new Element("body");
@@ -382,8 +383,10 @@ function settle() { return new Promise(resolve => setImmediate(resolve)); }
   assert.equal(openedCollectionArtifact, "image-1");
   console.log("PASS artifact collection: selecting a Library group opens a thumbnail grid");
 
-  const actionContext = vm.createContext({ Promise });
+  const actionContext = vm.createContext({ Promise, AbortController, Blob, URL: context.URL });
   actionContext.window = actionContext;
+  // Ownership tests mock the verified transport; its byte/chunk/hash contract has separate coverage.
+  actionContext.RNAssistantResourceDownload = { readBinary: async data => new Uint8Array(data.binary.payload.byteLength) };
   actionContext.alert = () => {};
   for (const file of ["app-artifact-viewer-actions.js", "app-html-workspace-actions.js"]) {
     vm.runInContext(fs.readFileSync(path.join(root, "web/js", file), "utf8"), actionContext, { filename: file });
@@ -631,19 +634,23 @@ function settle() { return new Promise(resolve => setImmediate(resolve)); }
   assert.equal(calls.filter(call => call.method !== "resourceDataClose").at(-1).method, "readArtifactPdfPage");
   assert.equal(calls.at(-1).method, "resourceDataClose", "previous page lease is closed after navigation");
   console.log("PASS artifact viewer owner: exact pinned pages assemble contiguously before full copy/download");
+  const ownedUrl = actions.artifactViewerState(actionPdfUri).pdfPage.data.objectUrl;
+  assert.match(ownedUrl, /^blob:/);
+  actions.closeArtifactViewers();
+  assert.ok(revokedUrls.includes(ownedUrl), "cache owner revokes verified binary blob URLs on close");
 
   const index = fs.readFileSync(path.join(root, "web/index.html"), "utf8");
   assert.ok(index.includes("app-text-viewer.js?v=artifact-text-20260831-1"));
   assert.ok(index.includes("app-text-viewer.css?v=artifact-text-20260831-1"));
   assert.ok(index.includes("app-sequence-viewer.js?v=artifact-gallery-20260902-1"));
   assert.ok(index.includes("app-sequence-viewer.css?v=artifact-gallery-20260902-1"));
-  assert.ok(index.includes("app-resource-viewer.js?v=artifact-gallery-20260902-1"));
+  assert.ok(index.includes("app-resource-viewer.js?v=binary-chunks-20260906-1"));
   assert.ok(index.includes("app-resource-viewer.css?v=artifact-gallery-20260902-1"));
   assert.ok(index.includes("js/vendor/viewer.min.js"));
   assert.ok(index.includes("css/vendor/viewer.min.css"));
   assert.ok(index.indexOf("js/vendor/viewer.min.js") < index.indexOf("app-resource-viewer.js"));
   assert.ok(index.indexOf("app-sequence-viewer.js") < index.indexOf("app-resource-viewer.js"));
-  assert.ok(index.includes("app-artifact-viewer-actions.js?v=artifact-gallery-20260902-1"));
+  assert.ok(index.includes("app-artifact-viewer-actions.js?v=binary-chunks-20260906-1"));
   assert.ok(index.indexOf("app-viewer-registry.js") < index.indexOf("app-text-viewer.js"));
   assert.ok(index.indexOf("app-artifact-viewer-actions.js") < index.indexOf("app-html-workspace-actions.js"));
   const viewerSource = fs.readFileSync(path.join(root, "web/js/app-text-viewer.js"), "utf8");

@@ -20,7 +20,10 @@ const page = vm.createContext({ MessageChannel, setTimeout, clearTimeout, URL, H
   addEventListener: (name, callback) => listeners.set(name, callback),
   fetch: async (url, options) => {
     fetches.push({ url, options });
-    if (rawMode) return new Response(new Uint8Array([0, 1, 254, 255]), { headers: { "Content-Type": "application/octet-stream" } });
+    if (rawMode) {
+      const query = new URL(url).searchParams, offset = Number(query.get("offset")), limit = Number(query.get("limit"));
+      return new Response(new Uint8Array([0, 1, 254, 255]).slice(offset, offset + limit), { headers: { "Content-Type": "application/octet-stream" } });
+    }
     const offset = Number(new URL(url).searchParams.get("offset"));
     return { ok: true, json: async () => ({ resource: { revision: "r1" }, rows: [{ sales: offset + 10 }],
       offset, nextOffset: offset + 1, done: offset === 1 }) };
@@ -29,7 +32,7 @@ const page = vm.createContext({ MessageChannel, setTimeout, clearTimeout, URL, H
     calls.push(message);
     const value = message.operation === "open" ? rawMode ? {
       leaseId: "raw-lease", url: "https://rnassistant.local-resource/v1/raw-lease",
-      descriptor: { reference: { revision: "raw-r1" } }, view: "raw", maxBatchItems: 32000, maxBatchBytes: 4,
+      descriptor: { reference: { revision: "raw-r1" } }, view: "raw", maxBatchItems: 2, maxBatchBytes: 2,
       binary: { payload: { byteLength: 4, contentType: "application/octet-stream" } }
     } : { leaseId: "lease", url: "https://rnassistant.local-resource/v1/lease",
       descriptor: { reference: { revision: "r1" } }, view: "table", path: "$", maxBatchItems: 2 } : { closed: true };
@@ -59,8 +62,11 @@ for (const script of scripts) vm.runInContext(script, page);
   const original = await raw.read({ view: "raw" });
   assert.equal(original.resource.revision, "raw-r1");
   assert.equal(original.mimeType, "application/octet-stream");
-  assert.deepEqual(Array.from(new Uint8Array(original.bytes)), [0, 1, 254, 255]);
-  assert.equal(original.done, true);
+  assert.deepEqual(Array.from(new Uint8Array(original.bytes)), [0, 1]);
+  assert.equal(original.done, false);
+  const tail = await raw.read();
+  assert.deepEqual(Array.from(new Uint8Array(tail.bytes)), [254, 255]);
+  assert.equal(tail.offset, 2); assert.equal(tail.nextOffset, 4); assert.equal(tail.done, true);
   await raw.close();
   await assert.rejects(raw.read(), /RESOURCE_LEASE_CLOSED/);
   console.log("PASS resource data plane: raw originals use the same binary reader and lease lifecycle");

@@ -113,6 +113,9 @@
           var requestedOffset = options.offset === undefined ? offset : options.offset;
           if (!Number.isInteger(limit) || limit < 1 || limit > lease.maxBatchItems || requestedOffset !== offset)
             throw new Error("RESOURCE_BATCH_BOUNDS");
+          if (lease.binary && (options.fields && options.fields.length || !Number.isInteger(lease.binary.payload.byteLength) ||
+              lease.binary.payload.byteLength < 0 || lease.binary.payload.byteLength > 20 * 1024 * 1024 ||
+              lease.maxBatchBytes > 256 * 1024 || limit > lease.maxBatchBytes)) throw new Error("RESOURCE_BATCH_BOUNDS");
           busy = true;
           try {
             if (options.signal && options.signal.aborted) throw new Error("RESOURCE_READ_CANCELLED");
@@ -120,15 +123,31 @@
               (options.fields ? "&fields=" + encodeURIComponent(JSON.stringify(options.fields)) : ""),
               { method: "GET", credentials: "omit", cache: "no-store", signal: options.signal });
             if (response.ok && lease.binary) {
-              var bytes = await response.arrayBuffer();
+              var expected = Math.min(limit, lease.binary.payload.byteLength - offset), bytes;
+              if (transport) bytes = await response.arrayBuffer();
+              else {
+                if (response.headers.get("Content-Type") !== lease.binary.payload.contentType) throw new Error("RESOURCE_VIEW_INVALID");
+                var reader = response.body.getReader(), collected = new Uint8Array(expected), received = 0;
+                try {
+                  while (true) {
+                    var chunk = await reader.read();
+                    if (closed || options.signal && options.signal.aborted) throw new Error("RESOURCE_READ_CANCELLED");
+                    if (chunk.done) break;
+                    if (received + chunk.value.byteLength > expected) throw new Error("RESOURCE_BATCH_TOO_LARGE");
+                    collected.set(chunk.value, received); received += chunk.value.byteLength;
+                  }
+                  if (received !== expected) throw new Error("RESOURCE_SNAPSHOT_UNAVAILABLE");
+                } finally { await reader.cancel().catch(function () {}); reader.releaseLock(); }
+                bytes = collected.buffer;
+              }
               if (closed) throw new Error("RESOURCE_LEASE_CLOSED");
               if (options.signal && options.signal.aborted) throw new Error("RESOURCE_READ_CANCELLED");
-              if (bytes.byteLength !== lease.binary.payload.byteLength || bytes.byteLength > lease.maxBatchBytes)
+              if (bytes.byteLength > expected || expected > 0 && bytes.byteLength === 0)
                 throw new Error("RESOURCE_BATCH_TOO_LARGE");
-              done = true;
-              return { resource: lease.descriptor.reference, view: lease.view, bytes: bytes,
+              var start = offset; offset += bytes.byteLength; done = offset === lease.binary.payload.byteLength;
+              return { resource: lease.descriptor.reference, view: lease.view, bytes: bytes, offset: start, nextOffset: offset,
                 mimeType: lease.binary.payload.contentType, width: lease.binary.width, height: lease.binary.height,
-                pageIndex: lease.binary.pageIndex, done: true };
+                pageIndex: lease.binary.pageIndex, done: done };
             }
             var batch = await response.json();
             if (closed) throw new Error("RESOURCE_LEASE_CLOSED");

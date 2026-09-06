@@ -38,9 +38,9 @@ namespace RNAssistant.Harness
                     AssertTrue(described.Representations.Contains("image") && described.Representations.Contains("thumbnail"),
                         "existing image views are discoverable before capture");
                     var imageCapability = described.ViewCapabilities.Single(item => item.View == "image");
-                    AssertEqual((int)ArtifactViewerService.MaximumImageBytes, imageCapability.MaxBatchBytes.Value, "declared image bound");
-                    AssertTrue(!imageCapability.SupportsOffset && !imageCapability.SupportsFields && !imageCapability.SupportsStream,
-                        "whole binary delivery does not advertise record streaming");
+                    AssertEqual(ArtifactViewerService.MaximumImageBytes, imageCapability.MaxPayloadBytes.Value, "declared image bound");
+                    AssertTrue(imageCapability.SupportsOffset && !imageCapability.SupportsFields && imageCapability.SupportsStream,
+                        "binary chunks advertise byte offsets, never record fields");
                     AssertEqual(3, gateway.List(session, "chat", null, null, 10).Items.Single().ViewCapabilities.Count,
                         "list and resolve share metadata-only capabilities");
                     AssertEqual("RESOURCE_VIEW_UNAVAILABLE", RuntimeThrows<ResourceRequestException>(() =>
@@ -101,10 +101,10 @@ namespace RNAssistant.Harness
                     readAttachmentBytes: item => { reads++; throw new InvalidOperationException("unexpected hydration"); });
                 var exact = ChatResourceUri.CreateArtifactRevision(session, artifact);
                 var descriptor = gateway.Resolve(session, exact.Uri).Resource;
-                AssertEqual((int)ArtifactPdfViewerService.MaximumPageImageBytes,
-                    descriptor.ViewCapabilities.Single(item => item.View == "render-page").MaxBatchBytes.Value, "PDF page bound");
-                AssertEqual((int)ArtifactPdfViewerService.MaximumThumbnailImageBytes,
-                    descriptor.ViewCapabilities.Single(item => item.View == "page-thumbnail").MaxBatchBytes.Value, "PDF thumbnail bound");
+                AssertEqual(ArtifactPdfViewerService.MaximumPageImageBytes,
+                    descriptor.ViewCapabilities.Single(item => item.View == "render-page").MaxPayloadBytes.Value, "PDF page bound");
+                AssertEqual(ArtifactPdfViewerService.MaximumThumbnailImageBytes,
+                    descriptor.ViewCapabilities.Single(item => item.View == "page-thumbnail").MaxPayloadBytes.Value, "PDF thumbnail bound");
                 AssertTrue(!descriptor.Representations.Contains("image"), "PDF original is not an image view");
                 AssertEqual(0, new ResourceGatewayService(null, null, null, authority: authority)
                     .Resolve(session, exact.Uri).Resource.ViewCapabilities.Count, "unconfigured binary owner advertises no binary views");
@@ -153,8 +153,8 @@ namespace RNAssistant.Harness
                         readAttachmentBytes: item => { reads++; return bytes; });
                     var exact = ChatResourceUri.CreateArtifactRevision(session, artifact);
                     var capability = gateway.Resolve(session, exact.Uri).Resource.ViewCapabilities.Single(item => item.View == "raw");
-                    AssertEqual((int)ArtifactViewerService.MaximumRawBytes, capability.MaxBatchBytes.Value, "raw source bound");
-                    AssertTrue(!capability.SupportsStream && !capability.SupportsOffset, "raw is an exact bounded whole response, not byte paging");
+                    AssertEqual(ArtifactViewerService.MaximumRawBytes, capability.MaxPayloadBytes.Value, "raw source bound");
+                    AssertTrue(capability.SupportsStream && capability.SupportsOffset, "raw uses sequential byte chunks");
                     AssertEqual(0, reads, "raw discovery does not load source");
                     using (var data = new ResourceDataPlaneService(gateway, (chat, owner) => chat == session.Id && owner == "workspace"))
                     {
@@ -165,7 +165,7 @@ namespace RNAssistant.Harness
                         AssertEqual("text/html", opened.Descriptor.MimeType, "original MIME remains descriptive metadata");
                         AssertTrue(JObject.FromObject(opened)["text"] == null, "bridge returns only binary metadata");
                         var router = new ResourceDataRouter(data);
-                        var response = router.Handle("GET", opened.Url, System.Threading.CancellationToken.None);
+                        var response = router.Handle("GET", opened.Url + "?offset=0&limit=" + opened.MaxBatchItems, System.Threading.CancellationToken.None);
                         AssertEqual(200, response.StatusCode, "existing route serves raw bytes");
                         AssertEqual("application/octet-stream", response.ContentType, "active source MIME is never served as a document");
                         AssertContains(response.Headers, "X-Content-Type-Options: nosniff", "raw route does not permit MIME sniffing");
@@ -227,6 +227,83 @@ namespace RNAssistant.Harness
                 AssertEqual("RESOURCE_SNAPSHOT_UNAVAILABLE", RuntimeThrows<ResourceRequestException>(() => read()).ErrorCode,
                     "retained raw metadata must identify original source bytes, not another valid CAS body");
                 AssertEqual(1, reads, "invalid retained metadata never falls back to source capture");
+            });
+        }
+
+        private static void ResourceBinaryChunkBudget()
+        {
+            WithTempPaths(paths =>
+            {
+                var payloads = new ChatBlobStore(paths);
+                var store = new ResourceAuthorityStore(paths);
+                var authority = new ResourceAuthorityService(store, store, new ResourceMutationJournal(paths), payloads);
+                var bytes = new byte[(int)ArtifactViewerService.MaximumRawBytes]; bytes[bytes.Length - 1] = 123;
+                Action capturePause = null;
+                var hash = ArtifactViewerService.Sha256(bytes);
+                var attachment = new ChatAttachment { Id = "chunks", Kind = "file", ContentType = "application/octet-stream",
+                    ContentSha256 = hash, ContentByteLength = bytes.Length };
+                var message = new ChatMessage { Role = "user", Attachments = new List<ChatAttachment> { attachment } };
+                var artifact = new ChatArtifact { Kind = ChatArtifactKinds.Attachment, MimeType = attachment.ContentType,
+                    SourceMessageId = message.Id, ContentSha256 = hash, ContentByteLength = bytes.Length,
+                    MetadataJson = "{\"attachmentId\":\"chunks\"}" };
+                var session = new ChatSession(); session.Messages.Add(message); session.Artifacts.Add(artifact);
+                var reads = 0;
+                var gateway = new ResourceGatewayService(null, null, null, authority: authority,
+                    readAttachmentBytes: item => { reads++; capturePause?.Invoke(); return bytes; });
+                using (var data = new ResourceDataPlaneService(gateway))
+                {
+                    var exact = ChatResourceUri.CreateArtifactRevision(session, artifact);
+                    var first = data.Open(session, "viewer", exact, "raw");
+                    var second = data.Open(session, "viewer", exact, "raw");
+                    var validated = false;
+                    AssertEqual("RESOURCE_BACKPRESSURE", RuntimeThrows<ResourceRequestException>(() => data.Open(session,
+                        "viewer", exact, "raw", validate: result => validated = true)).ErrorCode, "binary captures share transfer budget");
+                    AssertTrue(!validated && reads == 1, "budget refuses before another capture/validation");
+                    AssertEqual(ResourceDataPlaneService.MaximumBinaryChunkBytes, first.MaxBatchBytes, "wire batch is not whole payload size");
+                    var part = data.Read(first.LeaseId, 0, first.MaxBatchItems, System.Threading.CancellationToken.None);
+                    AssertEqual(first.MaxBatchItems, part.Length, "first response is bounded");
+                    System.IO.File.Delete(payloads.PathFor(hash));
+                    var offset = part.Length;
+                    while (offset < bytes.Length)
+                    {
+                        part = data.Read(first.LeaseId, offset, first.MaxBatchItems, System.Threading.CancellationToken.None);
+                        AssertTrue(part.Length <= first.MaxBatchBytes, "every response is bounded");
+                        offset += part.Length;
+                    }
+                    AssertEqual((byte)123, part[part.Length - 1], "verified capture continues without rereading CAS between chunks");
+                    // Completion releases the buffer budget while the metadata lease may remain cached.
+                    var third = data.Open(session, "viewer", exact, "raw");
+                    RuntimeThrows<ResourceRequestException>(() => data.Read(first.LeaseId, offset, 1, System.Threading.CancellationToken.None));
+                    RuntimeThrows<ResourceRequestException>(() => data.Read(second.LeaseId, 1, 1, System.Threading.CancellationToken.None));
+                    AssertEqual("RESOURCE_SNAPSHOT_UNAVAILABLE", RuntimeThrows<ResourceRequestException>(() =>
+                        data.Read(third.LeaseId, 0, 1, System.Threading.CancellationToken.None)).ErrorCode, "new read still verifies CAS");
+                    RuntimeThrows<ResourceRequestException>(() => data.Read(third.LeaseId, 0, 1, System.Threading.CancellationToken.None));
+                    var fourth = data.Open(session, "viewer", exact, "raw");
+                    data.Close(session.Id, "viewer", fourth.LeaseId);
+                    AssertEqual(1, reads, "no chunk or error path recaptures the original");
+                    using (var entered = new System.Threading.ManualResetEventSlim())
+                    using (var finish = new System.Threading.ManualResetEventSlim())
+                    {
+                        capturePause = () => { entered.Set(); AssertTrue(finish.Wait(TimeSpan.FromSeconds(10)), "capture released"); };
+                        artifact.Revision++;
+                        var next = ChatResourceUri.CreateArtifactRevision(session, artifact);
+                        var pending = System.Threading.Tasks.Task.Run(() => RuntimeThrows<ResourceRequestException>(() => data.Open(session, "viewer", next, "raw")));
+                        try
+                        {
+                            AssertTrue(entered.Wait(TimeSpan.FromSeconds(10)), "capture entered");
+                            data.CloseWorkspace(session.Id, "viewer");
+                            var produced = false;
+                            RuntimeThrows<ResourceRequestException>(() => data.OpenDownload(session, "export", 40L * 1024 * 1024,
+                                token => { produced = true; return new ResourceDownloadContent { Bytes = new byte[1], ContentType = "application/octet-stream" }; }));
+                            AssertTrue(!produced, "closing a busy capture does not free its reservation prematurely");
+                        }
+                        finally { finish.Set(); }
+                        pending.GetAwaiter().GetResult();
+                        var download = data.OpenDownload(session, "export", 40L * 1024 * 1024,
+                            token => new ResourceDownloadContent { Bytes = new byte[1], ContentType = "application/octet-stream" });
+                        data.Close(session.Id, "export", download.LeaseId);
+                    }
+                }
             });
         }
 

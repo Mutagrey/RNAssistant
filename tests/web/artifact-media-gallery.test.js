@@ -93,11 +93,11 @@ const firstUri = context.state.artifacts[0].resourceUri;
 const ready = {
   status: "ready", resourceUri: firstUri, viewerKind: "image", contentSha256: "a".repeat(64),
   width: 160, height: 120, imageMimeType: "image/jpeg", imageContentSha256: "b".repeat(64),
-  imageByteLength: 4, data: { url: "https://rnassistant.local-resource/v1/" + "a".repeat(64) }
+  imageByteLength: 4, data: { objectUrl: "blob:verified-thumbnail" }
 };
 context.state.artifactViewerThumbnails.items[firstUri] = ready;
 context.updateArtifactThumbnailViews(firstUri, ready);
-assert.equal(parent.querySelector("img").src, ready.data.url);
+assert.equal(parent.querySelector("img").src, ready.data.objectUrl);
 
 parent.querySelectorAll(".chat-media-item")[2].click();
 assert.equal(switched, "artifacts");

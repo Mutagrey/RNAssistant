@@ -9,9 +9,14 @@
   function create(options) {
     options = options || {};
     var state = options.state;
+    var binaryPending = new Set();
 
     function closeData(data, chatId) {
       if (!data || !data.leaseId) return;
+      if (data.abort) data.abort.abort();
+      if (data.objectUrl) { URL.revokeObjectURL(data.objectUrl); data.objectUrl = null; }
+      if (data.closed) return;
+      data.closed = true;
       options.send("resourceDataClose", { chatId: chatId || data.chatId || state.activeChatId,
         workspaceId: "viewer", leaseId: data.leaseId }).catch(function () {});
     }
@@ -24,6 +29,7 @@
     }
 
     function closeAll() {
+      binaryPending.forEach(function (data) { closeData(data); });
       Object.keys(cache()).forEach(function (uri) { releaseViewer(cache()[uri]); });
       state.artifactViewerPages = {};
       var thumbnails = thumbnailCache();
@@ -32,7 +38,23 @@
       state.artifactViewerThumbnails = null;
     }
 
-    function liveData(data) { return !data || Date.parse(data.expiresUtc) > Date.now(); }
+    function liveData(data) { return !data || !data.closed && Date.parse(data.expiresUtc) > Date.now(); }
+
+    async function hydrateBinary(viewer, current) {
+      var data = viewer.data;
+      data.abort = new AbortController();
+      binaryPending.add(data);
+      try {
+        var bytes = await window.RNAssistantResourceDownload.readBinary(data, {
+          maxBytes: 20 * 1024 * 1024, fetch: options.fetch || window.fetch.bind(window), signal: data.abort.signal,
+          isCurrent: function () { return !data.closed && state.activeChatId === data.chatId && current(); }
+        });
+        if (data.closed || state.activeChatId !== data.chatId || !current()) throw new Error("RESOURCE_READ_CANCELLED");
+        data.objectUrl = URL.createObjectURL(new Blob([bytes], { type: data.binary.payload.contentType }));
+        return viewer;
+      } catch (error) { closeData(data); throw error; }
+      finally { binaryPending.delete(data); data.abort = null; }
+    }
 
     function cache() {
       state.artifactViewerPages = state.artifactViewerPages || {};
@@ -260,13 +282,15 @@
           options.send("readArtifactImageThumbnail", {
             chatId: entry.chatId,
             resourceUri: entry.resourceUri
-          }).then(function (response) {
+          }).then(async function (response) {
             if (state.activeChatId !== entry.chatId || state.artifactViewerThumbnails !== store ||
                 store.items[entry.resourceUri] !== entry) {
               closeData(value(response, "Data", "data", null), entry.chatId); return false;
             }
             var thumbnail;
-            try { thumbnail = normalizeImageThumbnail(response, entry.resourceUri); }
+            try { thumbnail = await hydrateBinary(normalizeImageThumbnail(response, entry.resourceUri), function () {
+              return state.artifactViewerThumbnails === store && store.items[entry.resourceUri] === entry;
+            }); }
             catch (error) { closeData(value(response, "Data", "data", null), entry.chatId); throw error; }
             store.items[entry.resourceUri] = thumbnail;
             touchThumbnail(store, entry.resourceUri);
@@ -507,7 +531,8 @@
           resourceUri: uri
         });
         if (state.activeChatId !== chatId || cache()[uri] !== pending) return false;
-        cacheViewer(uri, normalizeImage(response, uri));
+        var image = await hydrateBinary(normalizeImage(response, uri), function () { return cache()[uri] === pending; });
+        cacheViewer(uri, image);
         retained = true;
         if (options.render) options.render();
         return true;
@@ -552,6 +577,7 @@
         if (state.activeChatId !== chatId || cache()[uri] !== pending) return false;
         var info = normalizePdfInfo(responses[0], uri);
         var pdfPage = normalizePdfPage(responses[1], uri, 0);
+        await hydrateBinary(pdfPage, function () { return cache()[uri] === pending; });
         var textPage = responses[2];
         if (info.contentSha256.toLowerCase() !== pdfPage.contentSha256.toLowerCase() ||
             info.pageCount !== pdfPage.pageCount || textPage.viewerKind !== "pdf" ||
@@ -615,6 +641,7 @@
         });
         if (state.activeChatId !== chatId || artifactViewerState(uri) !== viewer) return false;
         var page = normalizePdfPage(response, uri, pageIndex);
+        await hydrateBinary(page, function () { return artifactViewerState(uri) === viewer; });
         if (viewer.contentSha256.toLowerCase() !== page.contentSha256.toLowerCase() ||
             viewer.pageCount !== page.pageCount) {
           throw new Error("Artifact PDF page changed exact revision evidence.");
@@ -678,6 +705,7 @@
         });
         if (state.activeChatId !== chatId || artifactViewerState(uri) !== viewer) return false;
         var thumbnail = normalizePdfThumbnail(response, uri, pageIndex);
+        await hydrateBinary(thumbnail, function () { return artifactViewerState(uri) === viewer; });
         if (viewer.contentSha256.toLowerCase() !== thumbnail.contentSha256.toLowerCase() ||
             viewer.pageCount !== thumbnail.pageCount) {
           throw new Error("Artifact PDF thumbnail changed exact revision evidence.");

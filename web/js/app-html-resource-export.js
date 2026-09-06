@@ -29,9 +29,12 @@
       var lease = binding.lease;
       if (!lease || !lease.descriptor || !lease.descriptor.reference || !lease.descriptor.reference.revision ||
           !/^https:\/\/rnassistant\.local-resource\/v1\/[a-f0-9]{64}$/.test(lease.url) ||
-          !Number.isInteger(lease.maxBatchItems) || lease.maxBatchItems < 1 || lease.maxBatchItems > 32000 ||
+          !Number.isInteger(lease.maxBatchItems) || lease.maxBatchItems < 1 || lease.maxBatchItems > (lease.binary ? 256 * 1024 : 32000) ||
           !Number.isInteger(lease.maxBatchBytes) || lease.maxBatchBytes < 0 || lease.maxBatchBytes > MAX_BATCH_BYTES)
         throw new Error("RESOURCE_EXPORT_INVALID");
+      if (lease.binary && (!lease.binary.payload || !Number.isInteger(lease.binary.payload.byteLength) ||
+          lease.binary.payload.byteLength < 0 || lease.binary.payload.byteLength > 20 * 1024 * 1024 ||
+          lease.maxBatchBytes > 256 * 1024 || lease.maxBatchItems !== lease.maxBatchBytes)) throw new Error("RESOURCE_EXPORT_INVALID");
       var resource = { name: binding.name, descriptor: lease.descriptor, view: lease.view, path: lease.path,
         binary: lease.binary, maxBatchBytes: lease.maxBatchBytes, maxBatchItems: lease.maxBatchItems, parts: [] };
       var offset = 0, done = false;
@@ -69,11 +72,11 @@
         active(); total += bytes.byteLength;
         var id = "rn-export-part-" + parts.length, text, next;
         if (lease.binary) {
-          if (bytes.byteLength !== lease.binary.payload.byteLength) throw new Error("RESOURCE_SNAPSHOT_UNAVAILABLE");
+          if (bytes.byteLength !== Math.min(lease.maxBatchItems, lease.binary.payload.byteLength - offset)) throw new Error("RESOURCE_SNAPSHOT_UNAVAILABLE");
           var strings = [];
           for (var start = 0; start < bytes.length; start += 8192)
             strings.push(String.fromCharCode.apply(null, bytes.subarray(start, start + 8192)));
-          text = btoa(strings.join("")); next = 1; done = true;
+          text = btoa(strings.join("")); next = offset + bytes.byteLength; done = next === lease.binary.payload.byteLength;
         } else {
           text = new TextDecoder("utf-8", { fatal: true }).decode(bytes);
           var batch = JSON.parse(text), count = Array.isArray(batch.rows) ? batch.rows.length : typeof batch.text === "string" ? batch.text.length : -1;
@@ -93,13 +96,13 @@
       resources.push(resource);
     }
     active();
-    return { version: 1, generations: resourceExport.generations, resources: resources, parts: parts };
+    return { version: 2, generations: resourceExport.generations, resources: resources, parts: parts };
   }
 
   // Read-only transport for an exported exact snapshot. The RN.resources handle,
   // stream/backpressure and selectors are the same as the hosted runtime.
   function installSnapshotTransport(manifest, hash) {
-    if (manifest.version !== 1) throw new Error("RESOURCE_EXPORT_VERSION_UNSUPPORTED");
+    if (manifest.version !== 2) throw new Error("RESOURCE_EXPORT_VERSION_UNSUPPORTED");
     var active = new Map(), sequence = 0;
     function copy(value) { return JSON.parse(JSON.stringify(value)); }
     function entry(lease) {
@@ -141,7 +144,10 @@
           var binary = atob(content), bytes = new Uint8Array(binary.length);
           if (bytes.length !== part.byteLength || bytes.length > resource.maxBatchBytes) throw new Error("RESOURCE_SNAPSHOT_UNAVAILABLE");
           for (var index = 0; index < binary.length; index++) bytes[index] = binary.charCodeAt(index);
-          return { ok: true, arrayBuffer: async function () { return bytes.buffer; } };
+          if (part.nextOffset !== part.offset + bytes.length || part.nextOffset > resource.binary.payload.byteLength)
+            throw new Error("RESOURCE_SNAPSHOT_UNAVAILABLE");
+          var start = offset - part.offset;
+          return { ok: true, arrayBuffer: async function () { return bytes.slice(start, start + limit).buffer; } };
         }
         var batch = JSON.parse(content);
         if (!batch.resource || batch.resource.uri !== resource.descriptor.reference.uri ||
@@ -173,7 +179,7 @@
   }
 
   function script(snapshot, installApi, names, escapeJson) {
-    if (!snapshot || snapshot.version !== 1 || snapshot.resources.length !== names.length ||
+    if (!snapshot || snapshot.version !== 2 || snapshot.resources.length !== names.length ||
         snapshot.resources.some(function (item) { return names.indexOf(item.name) < 0; }))
       throw new Error("RESOURCE_EXPORT_INVALID");
     var manifest = { version: snapshot.version, generations: snapshot.generations,

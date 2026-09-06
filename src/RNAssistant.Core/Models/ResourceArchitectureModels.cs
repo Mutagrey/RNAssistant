@@ -191,23 +191,28 @@ namespace RNAssistant.Core.Models
         public int? MaxItemsPerBatch { get; private set; }
         [JsonProperty("maxBatchBytes", NullValueHandling = NullValueHandling.Ignore)]
         public int? MaxBatchBytes { get; private set; }
+        [JsonProperty("maxPayloadBytes", NullValueHandling = NullValueHandling.Ignore)]
+        public long? MaxPayloadBytes { get; private set; }
 
         [JsonConstructor]
         public ResourceViewCapability(string view, bool supportsOffset = false,
             bool supportsFields = false, bool supportsStream = false,
-            int? maxItemsPerBatch = null, int? maxBatchBytes = null)
+            int? maxItemsPerBatch = null, int? maxBatchBytes = null, long? maxPayloadBytes = null)
         {
             if (string.IsNullOrWhiteSpace(view)) throw new ArgumentException("A resource view is required.", nameof(view));
             if (maxItemsPerBatch.HasValue && maxItemsPerBatch.Value <= 0)
                 throw new ArgumentOutOfRangeException(nameof(maxItemsPerBatch));
             if (maxBatchBytes.HasValue && maxBatchBytes.Value <= 0)
                 throw new ArgumentOutOfRangeException(nameof(maxBatchBytes));
+            if (maxPayloadBytes.HasValue && maxPayloadBytes.Value <= 0)
+                throw new ArgumentOutOfRangeException(nameof(maxPayloadBytes));
             View = view.Trim().ToLowerInvariant();
             SupportsOffset = supportsOffset;
             SupportsFields = supportsFields;
             SupportsStream = supportsStream;
             MaxItemsPerBatch = maxItemsPerBatch;
             MaxBatchBytes = maxBatchBytes;
+            MaxPayloadBytes = maxPayloadBytes;
         }
     }
 

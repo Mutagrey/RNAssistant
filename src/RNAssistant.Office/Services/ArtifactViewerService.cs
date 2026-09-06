@@ -468,21 +468,31 @@ namespace RNAssistant.Office.Services
                 return new ResourceViewCapability[0];
             var mime = NormalizeMimeType(attachment.ContentType);
             var views = new List<ResourceViewCapability> {
-                new ResourceViewCapability(ResourceRepresentations.Raw, maxBatchBytes: (int)MaximumRawBytes)
+                new ResourceViewCapability(ResourceRepresentations.Raw, supportsOffset: true, supportsStream: true,
+                    maxItemsPerBatch: ResourceDataPlaneService.MaximumBinaryChunkBytes,
+                    maxBatchBytes: ResourceDataPlaneService.MaximumBinaryChunkBytes, maxPayloadBytes: MaximumRawBytes)
             };
             if (attachment.ContentByteLength.Value == 0 || attachment.ContentByteLength.Value > MaximumImageBytes) return views;
             if (string.Equals(artifact.Kind, ChatArtifactKinds.Image, StringComparison.OrdinalIgnoreCase) &&
                 string.Equals(attachment.Kind, "image", StringComparison.OrdinalIgnoreCase) && IsImageMimeType(mime))
                 views.AddRange(new[] {
-                    new ResourceViewCapability(ResourceRepresentations.Image, maxBatchBytes: (int)MaximumImageBytes),
-                    new ResourceViewCapability(ResourceRepresentations.Thumbnail, maxBatchBytes: (int)MaximumImageThumbnailBytes)
+                    new ResourceViewCapability(ResourceRepresentations.Image, supportsOffset: true, supportsStream: true,
+                    maxItemsPerBatch: ResourceDataPlaneService.MaximumBinaryChunkBytes,
+                    maxBatchBytes: ResourceDataPlaneService.MaximumBinaryChunkBytes, maxPayloadBytes: MaximumImageBytes),
+                    new ResourceViewCapability(ResourceRepresentations.Thumbnail, supportsOffset: true, supportsStream: true,
+                    maxItemsPerBatch: ResourceDataPlaneService.MaximumBinaryChunkBytes,
+                    maxBatchBytes: ResourceDataPlaneService.MaximumBinaryChunkBytes, maxPayloadBytes: MaximumImageThumbnailBytes)
                 });
             if (string.Equals(artifact.Kind, ChatArtifactKinds.Attachment, StringComparison.OrdinalIgnoreCase) &&
                 string.Equals(attachment.Kind, "pdf", StringComparison.OrdinalIgnoreCase) && mime == "application/pdf" &&
                 attachment.PageCount > 0 && attachment.PageCount <= ArtifactPdfViewerService.MaximumPages)
                 views.AddRange(new[] {
-                    new ResourceViewCapability(ResourceRepresentations.RenderPage, maxBatchBytes: (int)ArtifactPdfViewerService.MaximumPageImageBytes),
-                    new ResourceViewCapability(ResourceRepresentations.PageThumbnail, maxBatchBytes: (int)ArtifactPdfViewerService.MaximumThumbnailImageBytes)
+                    new ResourceViewCapability(ResourceRepresentations.RenderPage, supportsOffset: true, supportsStream: true,
+                    maxItemsPerBatch: ResourceDataPlaneService.MaximumBinaryChunkBytes,
+                    maxBatchBytes: ResourceDataPlaneService.MaximumBinaryChunkBytes, maxPayloadBytes: ArtifactPdfViewerService.MaximumPageImageBytes),
+                    new ResourceViewCapability(ResourceRepresentations.PageThumbnail, supportsOffset: true, supportsStream: true,
+                    maxItemsPerBatch: ResourceDataPlaneService.MaximumBinaryChunkBytes,
+                    maxBatchBytes: ResourceDataPlaneService.MaximumBinaryChunkBytes, maxPayloadBytes: ArtifactPdfViewerService.MaximumThumbnailImageBytes)
                 });
             return views;
         }

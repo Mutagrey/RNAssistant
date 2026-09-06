@@ -23,8 +23,8 @@
   function createImage(options) {
     options = options || {};
     if (typeof window.Viewer !== "function") throw new Error("Viewer.js is unavailable.");
-    var objectUrl = options.data && options.data.url;
-    if (!/^https:\/\/rnassistant\.local-resource\/v1\/[a-f0-9]{64}$/.test(objectUrl || "")) {
+    var objectUrl = options.data && options.data.objectUrl;
+    if (!/^blob:/.test(objectUrl || "")) {
       throw new Error("An exact resource image lease is required.");
     }
     var root = element("div", "rn-image-viewer");
@@ -409,7 +409,7 @@
     function pdfThumbnailUrl(page) {
       var key = String(page.pageIndex) + ":" + String(page.imageContentSha256 || "");
       if (thumbnailUrls[key]) return thumbnailUrls[key];
-      thumbnailUrls[key] = page.data.url;
+      thumbnailUrls[key] = page.data.objectUrl;
       return thumbnailUrls[key];
     }
 
