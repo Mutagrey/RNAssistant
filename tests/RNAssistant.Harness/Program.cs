@@ -709,6 +709,8 @@ namespace RNAssistant.Harness
                 Test("resource cutover: binary capabilities and retained bounds", ResourceBinaryCapabilitiesAndRetainedBounds),
                 Test("resource cutover: raw original bytes", ResourceRawOriginalBytes),
                 Test("resource cutover: raw admission guards", ResourceRawAdmissionGuards),
+                Test("resource cutover: raw stored originals", ResourceRawStoredOriginals),
+                Test("resource cutover: raw stored admission", ResourceRawStoredAdmission),
                 Test("resource cutover: binary chunk budget", ResourceBinaryChunkBudget),
                 Test("resources: rejects ambiguous URI", ResourceUriRejectsAmbiguousAddresses),
                 Test("resources: reference pins revision", ResourceReferencePinsRevision),

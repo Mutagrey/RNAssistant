@@ -230,6 +230,106 @@ namespace RNAssistant.Harness
             });
         }
 
+        private static void ResourceRawStoredOriginals()
+        {
+            WithTempPaths(paths =>
+            {
+                var payloads = new ChatBlobStore(paths);
+                var store = new ResourceAuthorityStore(paths);
+                var authority = new ResourceAuthorityService(store, store, new ResourceMutationJournal(paths), payloads);
+                var gateway = new ResourceGatewayService(null, null, null, authority: authority,
+                    loadArtifactBody: (chat, id) => { throw new InvalidOperationException("raw must not hydrate inline text"); });
+                var session = new ChatSession();
+                foreach (var kind in new[] { ChatArtifactKinds.File, ChatArtifactKinds.Markdown, ChatArtifactKinds.PlanDocument,
+                    ChatArtifactKinds.TaskList, ChatArtifactKinds.Chart })
+                {
+                    var bytes = System.Text.Encoding.UTF8.GetBytes("\uFEFF{\"kind\":\"" + kind + "\",\"value\":\"語😀\"}\r\n");
+                    var source = payloads.StoreBytes(bytes, "application/json");
+                    var artifact = new ChatArtifact { Kind = kind, MimeType = source.ContentType,
+                        ContentSha256 = source.Sha256, ContentByteLength = source.ByteLength, InlineText = "not the original" };
+                    session.Artifacts.Add(artifact);
+                    var exact = ChatResourceUri.CreateArtifactRevision(session, artifact);
+                    var descriptor = gateway.Resolve(session, exact.Uri).Resource;
+                    AssertTrue(descriptor.Representations.Contains("raw"), "stored original offers raw without an attachment reader");
+                    AssertEqual(1, descriptor.ViewCapabilities.Count, "stored originals do not advertise image/PDF rendering");
+                    AssertTrue(gateway.List(session, "chat", kind, null, 20).Items.Single().Representations.Contains("raw"),
+                        "metadata list and resolve agree");
+                    var before = System.IO.File.ReadAllBytes(payloads.PathFor(source.Sha256));
+                    using (var data = new ResourceDataPlaneService(gateway))
+                    {
+                        var opened = data.Open(session, "workspace", exact, "raw");
+                        AssertEqual(source.Sha256, opened.Binary.Payload.Sha256, "stored raw retains original byte identity");
+                        AssertEqual("application/json", opened.Descriptor.MimeType, "source MIME remains metadata");
+                        var response = new ResourceDataRouter(data).Handle("GET", opened.Url + "?offset=0&limit=" + opened.MaxBatchItems,
+                            System.Threading.CancellationToken.None);
+                        AssertEqual(200, response.StatusCode, "stored raw uses the shared byte route");
+                        AssertEqual("application/octet-stream", response.ContentType, "stored raw delivery stays inert");
+                        using (var copied = new System.IO.MemoryStream())
+                        { response.Body.CopyTo(copied); AssertTrue(bytes.SequenceEqual(copied.ToArray()), "no JSON/UTF-8 normalization"); }
+                    }
+                    AssertTrue(before.SequenceEqual(System.IO.File.ReadAllBytes(payloads.PathFor(source.Sha256))), "raw does not rewrite source CAS");
+                    var scan = new CasReachabilityScan(); store.ScanCasReferences(scan);
+                    AssertTrue(scan.References.Any(item => item.Reference.Sha256 == source.Sha256), "raw source is an authority retention root");
+                }
+                var old = session.Artifacts[0];
+                var oldRef = ChatResourceUri.CreateArtifactRevision(session, old);
+                var nextSource = payloads.StoreText("new file revision", "text/plain");
+                session.Artifacts.Add(new ChatArtifact { Kind = old.Kind, ParentArtifactId = old.Id, Revision = 2,
+                    ContentSha256 = nextSource.Sha256, ContentByteLength = nextSource.ByteLength, MimeType = nextSource.ContentType });
+                var retained = gateway.Read(session, new ResourceReadRequest { Reference = oldRef, Representation = "raw" });
+                AssertEqual(old.ContentSha256, retained.Result.Binary.Payload.Sha256, "new artifact cannot replace exact historical raw");
+                System.IO.File.Delete(payloads.PathFor(old.ContentSha256));
+                using (var data = new ResourceDataPlaneService(gateway))
+                {
+                    var opened = data.Open(session, "workspace", oldRef, "raw");
+                    var missing = new ResourceDataRouter(data).Handle("GET", opened.Url, System.Threading.CancellationToken.None);
+                    AssertEqual(409, missing.StatusCode, "missing retained bytes refuse instead of using inline text");
+                }
+            });
+        }
+
+        private static void ResourceRawStoredAdmission()
+        {
+            WithTempPaths(paths =>
+            {
+                var payloads = new ChatBlobStore(paths);
+                var store = new ResourceAuthorityStore(paths);
+                var authority = new ResourceAuthorityService(store, store, new ResourceMutationJournal(paths), payloads);
+                var source = payloads.StoreBytes(new byte[0], "text/plain");
+                var session = new ChatSession();
+                var artifact = new ChatArtifact { Kind = ChatArtifactKinds.File, MimeType = source.ContentType,
+                    ContentSha256 = source.Sha256, ContentByteLength = source.ByteLength, InlineText = "must not be used" };
+                session.Artifacts.Add(artifact);
+                var gateway = new ResourceGatewayService(null, null, null, authority: authority);
+                var exact = ChatResourceUri.CreateArtifactRevision(session, artifact);
+                Func<ResourceReadSelection> read = () => gateway.Read(session, new ResourceReadRequest { Reference = exact, Representation = "raw" });
+                AssertEqual(0L, read().Result.Binary.Payload.ByteLength, "empty stored original is valid");
+                foreach (var metadata in new[] { "{\"attachmentId\":\"missing\"}", "{\"AttachmentId\":null}", "not JSON" })
+                {
+                    artifact.MetadataJson = metadata;
+                    AssertTrue(!gateway.Resolve(session, exact.Uri).Resource.Representations.Contains("raw"), "uncertain provenance advertises no stored raw");
+                    AssertEqual("RESOURCE_VIEW_UNAVAILABLE", RuntimeThrows<ResourceRequestException>(() => read()).ErrorCode,
+                        "broken attachment or invalid metadata cannot fall back to stored/retained body");
+                }
+                artifact.MetadataJson = null;
+                artifact.ContentByteLength = ArtifactViewerService.MaximumRawBytes + 1;
+                AssertEqual("RESOURCE_VIEW_UNAVAILABLE", RuntimeThrows<ResourceRequestException>(() => read()).ErrorCode, "oversized original refuses before CAS read");
+                artifact.ContentByteLength = 0;
+                artifact.Kind = ChatArtifactKinds.Compaction;
+                AssertEqual("RESOURCE_VIEW_UNAVAILABLE", RuntimeThrows<ResourceRequestException>(() => read()).ErrorCode, "internal checkpoint is not a raw file");
+                artifact.Kind = ChatArtifactKinds.File;
+                RuntimeThrows<InvalidOperationException>(() => gateway.Read(new ChatSession(), new ResourceReadRequest { Reference = exact, Representation = "raw" }));
+                RuntimeThrows<ResourceRequestException>(() => gateway.Read(session, new ResourceReadRequest { Reference = exact, Representation = "raw", ViewPath = "0" }));
+                var absent = new ChatArtifact { Kind = ChatArtifactKinds.Markdown, MimeType = "text/markdown",
+                    ContentSha256 = ArtifactViewerService.Sha256(new byte[] { 42 }), ContentByteLength = 1, InlineText = "*" };
+                session.Artifacts.Add(absent);
+                var absentRef = ChatResourceUri.CreateArtifactRevision(session, absent);
+                AssertEqual("RESOURCE_SNAPSHOT_UNAVAILABLE", RuntimeThrows<ResourceRequestException>(() => gateway.Read(session,
+                    new ResourceReadRequest { Reference = absentRef, Representation = "raw" })).ErrorCode, "initial missing CAS has no inline hydration fallback");
+                AssertTrue(store.GetView(authority.Scope(session, false), absentRef, "binary:raw") == null, "missing CAS cannot publish a view");
+            });
+        }
+
         private static void ResourceBinaryChunkBudget()
         {
             WithTempPaths(paths =>

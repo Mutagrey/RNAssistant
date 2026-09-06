@@ -82,7 +82,7 @@ namespace RNAssistant.Office.Services
             _registry = new ResourceProviderRegistry(providers);
             _beginLiveOfficeRead = beginLiveOfficeRead;
             _authority = authority;
-            if (readAttachmentBytes != null) _mediaViews = new ArtifactViewerService(this, readAttachmentBytes);
+            if (authority?.Payloads != null) _mediaViews = new ArtifactViewerService(this, readAttachmentBytes);
         }
 
         internal ResourceGatewayService(IEnumerable<IResourceProvider> providers)

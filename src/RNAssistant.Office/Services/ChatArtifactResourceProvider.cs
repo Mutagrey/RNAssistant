@@ -20,6 +20,7 @@ namespace RNAssistant.Office.Services
         private readonly Func<ChatAttachment, int, string> _readAttachmentText;
         private readonly ChatHtmlResourceCatalog _htmlResources;
         private readonly bool _binaryViewsAvailable;
+        private readonly bool _storedBinaryViewsAvailable;
 
         public ChatArtifactResourceProvider(
             Func<ChatSession, string, bool> loadArtifactBody = null,
@@ -30,6 +31,7 @@ namespace RNAssistant.Office.Services
             _readAttachmentText = readAttachmentText;
             _htmlResources = new ChatHtmlResourceCatalog(loadArtifactBody, payloads);
             _binaryViewsAvailable = binaryViewsAvailable;
+            _storedBinaryViewsAvailable = payloads != null;
         }
 
         public string Id { get { return ProviderName; } }
@@ -301,9 +303,9 @@ namespace RNAssistant.Office.Services
                 Representations = representations,
                 CreatedUtc = artifact.CreatedUtc
             };
-            if (_binaryViewsAvailable)
+            if (_storedBinaryViewsAvailable)
             {
-                result.ViewCapabilities.AddRange(ArtifactViewerService.BinaryViewCapabilities(artifact, attachment));
+                result.ViewCapabilities.AddRange(ArtifactViewerService.BinaryViewCapabilities(artifact, attachment, _binaryViewsAvailable));
                 result.Representations.AddRange(result.ViewCapabilities.Select(view => view.View));
             }
             if (!compact)

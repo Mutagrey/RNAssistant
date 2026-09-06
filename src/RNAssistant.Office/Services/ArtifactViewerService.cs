@@ -102,6 +102,15 @@ namespace RNAssistant.Office.Services
         internal byte[] ReadRawSource(ChatSession session, string resourceUri)
         {
             var artifact = ResolveExactArtifact(session, resourceUri);
+            if (IsStoredRawSource(artifact))
+            {
+                var payload = new PayloadRef(artifact.ContentSha256, artifact.ContentByteLength.Value, artifact.MimeType);
+                var bytes = _gateway.Authority?.Payloads?.ReadBytes(payload.ToBlobReference());
+                if (bytes == null)
+                    throw new ResourceRequestException("The exact stored original is unavailable.",
+                        "RESOURCE_SNAPSHOT_UNAVAILABLE", false);
+                return bytes;
+            }
             var attachment = ChatArtifactResourceProvider.FindExactAttachment(session, artifact);
             if (_readAttachmentBytes == null || !IsRawSource(artifact, attachment))
                 throw new ResourceRequestException("The exact original attachment is unavailable or exceeds the raw view bound.",
@@ -462,16 +471,18 @@ namespace RNAssistant.Office.Services
         // Discovery is metadata-only. Byte integrity and renderer availability are
         // still checked by the exact read owners, never inferred from a capability.
         internal static IReadOnlyList<ResourceViewCapability> BinaryViewCapabilities(
-            ChatArtifact artifact, ChatAttachment attachment)
+            ChatArtifact artifact, ChatAttachment attachment, bool attachmentReaderAvailable)
         {
-            if (!IsRawSource(artifact, attachment))
+            var stored = IsStoredRawSource(artifact);
+            if (!stored && (!attachmentReaderAvailable || !IsRawSource(artifact, attachment)))
                 return new ResourceViewCapability[0];
-            var mime = NormalizeMimeType(attachment.ContentType);
             var views = new List<ResourceViewCapability> {
                 new ResourceViewCapability(ResourceRepresentations.Raw, supportsOffset: true, supportsStream: true,
                     maxItemsPerBatch: ResourceDataPlaneService.MaximumBinaryChunkBytes,
                     maxBatchBytes: ResourceDataPlaneService.MaximumBinaryChunkBytes, maxPayloadBytes: MaximumRawBytes)
             };
+            if (stored) return views;
+            var mime = NormalizeMimeType(attachment.ContentType);
             if (attachment.ContentByteLength.Value == 0 || attachment.ContentByteLength.Value > MaximumImageBytes) return views;
             if (string.Equals(artifact.Kind, ChatArtifactKinds.Image, StringComparison.OrdinalIgnoreCase) &&
                 string.Equals(attachment.Kind, "image", StringComparison.OrdinalIgnoreCase) && IsImageMimeType(mime))
@@ -495,6 +506,25 @@ namespace RNAssistant.Office.Services
                     maxBatchBytes: ResourceDataPlaneService.MaximumBinaryChunkBytes, maxPayloadBytes: ArtifactPdfViewerService.MaximumThumbnailImageBytes)
                 });
             return views;
+        }
+
+        private static bool IsStoredRawSource(ChatArtifact artifact)
+        {
+            if (artifact == null || !IsSha256(artifact.ContentSha256) ||
+                !artifact.ContentByteLength.HasValue || artifact.ContentByteLength.Value < 0 ||
+                artifact.ContentByteLength.Value > MaximumRawBytes) return false;
+            var kind = (artifact.Kind ?? string.Empty).ToLowerInvariant();
+            if (kind != ChatArtifactKinds.File && kind != ChatArtifactKinds.Markdown &&
+                kind != ChatArtifactKinds.PlanDocument && kind != ChatArtifactKinds.TaskList &&
+                kind != ChatArtifactKinds.Chart) return false;
+            // Attachment provenance must never turn into a stored-body fallback when
+            // its source message is missing, ambiguous or has mismatched evidence.
+            try
+            {
+                var metadata = Newtonsoft.Json.Linq.JObject.Parse(artifact.MetadataJson ?? "{}");
+                return metadata.Property("attachmentId", StringComparison.OrdinalIgnoreCase) == null;
+            }
+            catch (Newtonsoft.Json.JsonException) { return false; }
         }
 
         private static bool IsRawSource(ChatArtifact artifact, ChatAttachment attachment)

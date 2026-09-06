@@ -575,8 +575,8 @@ Artifact list/resolve descriptors now advertise admitted binary views through th
 existing `representations` and typed `viewCapabilities`: image (20 MiB), image
 thumbnail (512 KiB), PDF page (10 MiB) and PDF thumbnail (1 MiB). The existing media
 owner supplies these metadata-only capabilities only for matching exact attachment
-evidence and admitted kind/MIME/extent; an unconfigured binary reader advertises
-none. These are `maxPayloadBytes` object bounds, not renderer availability.
+evidence and admitted kind/MIME/extent; an unconfigured attachment reader advertises
+no attachment binary views. These are `maxPayloadBytes` object bounds, not renderer availability.
 Binary views advertise sequential byte offsets/streaming and separate 256 KiB
 `maxBatchBytes`/`maxItemsPerBatch` limits. Gateway rejects unsupported views and row/field
 selectors before source hydration. Captured and retained views obey the same
@@ -591,8 +591,17 @@ Delivery uses the same binary lease with sequential byte offsets and chunks up t
 in the descriptor; the raw payload/HTTP MIME is inert `application/octet-stream`
 under the shared no-sniff/CSP route. HTML bindings accept `view: raw`, and the same
 `RN.resources` binary consumer and standalone export return original byte chunks.
-No new reader tool or store is introduced. Raw views for other provider domains
-remain open, as does real Windows/WebView2 qualification.
+The same raw owner also admits committed CAS originals for file, Markdown, plan,
+task-list and chart artifacts, without requiring an attachment reader. Discovery
+checks kind, exact hash/length, the same 20 MiB bound and absence of attachment
+provenance, without loading bodies. Reads verify the original CAS bytes directly;
+they never reserialize JSON, normalize text, hydrate `InlineText` or reconstruct a
+missing original. Broken/ambiguous attachment provenance and malformed metadata
+cannot become a stored-body fallback, including on retained reads. Internal
+checkpoints and HTML workspace aggregates are not raw files. Exact raw views and
+their byte payloads use the same authority retention roots and historical access.
+No new reader tool or store is introduced. Raw views for workspace members and
+other provider domains remain open, as does real Windows/WebView2 qualification.
 
 Binary opens reserve capture capacity before provider work in the existing 50 MiB
 upload/download transfer budget. A lease verifies and retains its bounded CAS body
