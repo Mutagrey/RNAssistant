@@ -53,6 +53,11 @@ HTML/bound-STA routing. The legacy public `excel.read_range` fixture path is rem
 missing-CAS refusal, metadata discovery and invalid/oversized capture rejection.
 `excel find replace:` retains scope/pattern/formula semantics and also checks search
 evidence invalidation after replacement and bound-STA/closed-workbook search.
+`excel tables:` checks named ListObject discovery, stable identity through moves/
+resizes (including equal cells), exact historical source/records without Office,
+missing-CAS refusal, incomplete/ambiguous catalog and pre-capture extent bounds.
+`excel read:` also checks named-table bound-STA/closed-workbook delivery. These
+host-neutral cases do not qualify real ListObjects or Defined Names.
 
 Word source cutover: `word resources:` and `word tools:` cover complete exact
 document/selection/range evidence, single-capture continuation, historical no-I/O,

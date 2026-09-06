@@ -177,6 +177,29 @@ Old accepted `excel.read_range` calls fail explicit protocol validation; no alia
 replay translation or public domain-output wrapper remains. Real Windows Excel/STA
 and final catalog/model qualification are still open.
 
+### Named Excel tables
+
+`Excel table: Sales` is discovered and read through the same generic tools and
+`ExcelResourceProvider`, not a separate table reader. The `excel-table` kind uses
+the bound document token plus case-normalized table name as its logical identity;
+moving or resizing the table does not turn a binding into a fixed A1 range.
+The existing typed `CaptureStructure("tables")` supplies metadata only. Named
+resolution requires a complete bounded catalog (up to 200 entries), one matching
+name and a local A1 rectangle. Ambiguous/missing names, incomplete catalogs and
+invalid extents fail explicitly; the 100000-cell bound precedes range capture.
+
+`text` and `formulas` retain the existing typed range snapshot, including sheet,
+address and dimensions. Those coordinates are part of the captured bytes, so a
+move with unchanged cell values still supersedes old evidence. `structure` keeps
+the existing profile. `table`/`records` use explicit path `$.values`, including the
+full table range (headers/totals when present), with shared row coverage and CAS
+parts. No second JSON store or fallback to the former address is introduced.
+Historical exact reads/projections need no table lookup or Office I/O; missing CAS
+does not read the current table. Native bound-STA/closed-workbook behavior is checked
+with fakes; real Windows ListObject/model/WebView2 qualification remains open.
+Defined Names (including external, dynamic and non-range references) and finer
+Excel coverage remain separate open requirements, not aliases to this table path.
+
 ### Excel search
 
 `excel.find_cells` captures through `ExcelSearchResourceService` → the existing

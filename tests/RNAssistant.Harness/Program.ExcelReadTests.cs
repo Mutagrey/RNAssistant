@@ -80,6 +80,12 @@ namespace RNAssistant.Harness
                         tools, new AppSettings(), false, false, chat);
                     AssertTrue(result.Success, "native read succeeds against a bound document session");
                     AssertTrue(ownerSta, "native backend dispatch runs on the bound document owner STA");
+                    inner.AddExcelTableForTest("Data", "A1:B4", "Sales", true, "");
+                    var tableOwnerSta = false;
+                    host.BeforeRead = operation => { if (operation == FakeOfficeAdapter.ExcelRangeReadOperation) tableOwnerSta = dispatcher.CheckAccess; };
+                    var tableRead = executor.ExecuteManual(Command(ResourceToolCatalog.ReadToolId,
+                        "target", "Excel table: Sales", "representation", "text"), tools, new AppSettings(), false, false, chat);
+                    AssertTrue(tableRead.Success && tableOwnerSta, "named resolution/capture uses the same bound owner STA");
                     var dispatched = inner.ExcelBackendCalls.Count;
                     dispatcher.Invoke(() => document.IsAlive = false);
                     var closed = executor.ExecuteManual(Command(ExcelReadToolIds.Inspect, "kind", "sheets"),
@@ -88,6 +94,10 @@ namespace RNAssistant.Harness
                         "closed bound workbook is rejected before dispatch");
                     AssertEqual(dispatched, inner.ExcelBackendCalls.Count,
                         "closed bound workbook never reaches the backend");
+                    var closedTable = executor.ExecuteManual(Command(ResourceToolCatalog.ReadToolId,
+                        "target", "Excel table: Sales", "representation", "text"), tools, new AppSettings(), false, false, chat);
+                    AssertTrue(!closedTable.Success, "closed workbook cannot resolve a current table");
+                    AssertEqual(dispatched, inner.ExcelBackendCalls.Count, "closed table read performs no backend work");
                 }
             });
         }
@@ -132,6 +142,94 @@ namespace RNAssistant.Harness
                 var removed = executor.ExecuteManual(Command("excel.read_range"), tools, new AppSettings(), false, false, session);
                 AssertEqual("unknown_tool", removed.ErrorCode, "removed reader has no manual fallback");
                 AssertEqual(reads, adapter.ExcelBackendCalls.Count, "removed reader cannot dispatch");
+            });
+        }
+
+        private static void ExcelNamedTableResources()
+        {
+            WithTempExecutor(FakeOfficeAdapter.ForHost("Excel"), (executor, adapter) =>
+            {
+                var session = NewSession(adapter); executor.BindResourceAuthority(session);
+                adapter.AddExcelTableForTest("Data", "C1:D2", "Sales", true, "");
+                // Equal cells at two extents isolate relocation from value drift.
+                foreach (var cell in new[] { "C1", "D1", "C2", "D2", "E1", "F1", "E2", "F2" })
+                    adapter.SetExcelCellForTest("Data", cell, "same");
+                var gateway = executor.ResourceGateway;
+                var listed = gateway.List(session, "excel", ExcelResourceProvider.TableKind, null, 20).Items.Single();
+                AssertEqual("Sales", listed.Title, "table discovery uses its semantic name");
+                AssertEqual(0, adapter.ExcelBackendCalls.Count(item => item == FakeOfficeAdapter.ExcelRangeReadOperation), "discovery does not read cells");
+                AssertTrue(gateway.Find(session, "Sales", "document").Items.Any(item => item.Target == "Excel table: Sales"), "generic find discovers named tables");
+                var tools = OfficeToolCatalog.ForHost("Excel").Concat(executor.GetControllerTools()).ToList();
+                var runtime = executor.CreateNativeRuntime(session, tools, new AppSettings(), "agent", false);
+                var first = ExecuteHtmlNative(runtime, ResourceToolCatalog.ReadToolId,
+                    new JObject { ["target"] = "Excel table: sales", ["representation"] = "text" });
+                AssertEqual(ToolExecutionOutcome.Ok, first.Outcome, "generic native reader accepts a named table case-insensitively");
+                var evidence = first.ResourceEvidence.Single();
+                AssertEqual(listed.Reference.Uri, evidence.Resource.Uri, "discovery and read share one named identity");
+                var original = (string)JObject.Parse(first.Result.DataJson)["text"];
+                AssertEqual("C1:D2", (string)JObject.Parse(original)["address"], "captured source includes physical extent");
+                adapter.SetExcelTableRangeForTest("Data", "Sales", "E1:F2");
+                var second = ExecuteHtmlNative(runtime, ResourceToolCatalog.ReadToolId,
+                    new JObject { ["target"] = "Excel table: Sales", ["representation"] = "text" });
+                AssertEqual(ToolExecutionOutcome.Ok, second.Outcome, "fresh read follows the table's new extent");
+                var fresh = second.ResourceEvidence.Single();
+                AssertEqual(evidence.Resource.Uri, fresh.Resource.Uri, "relocation preserves logical identity");
+                AssertTrue(evidence.Resource.Revision != fresh.Resource.Revision, "equal cells at a new extent still advance the exact revision");
+                AssertEqual(EvidenceState.Superseded, new EvidenceStateReducer().Reduce(evidence,
+                    executor.ResourceAuthority.CaptureMany(new[] { evidence.ScopeId })).State, "old extent is historical, not current");
+                var calls = adapter.ExcelBackendCalls.Count;
+                var historical = gateway.Read(session, new ResourceReadRequest { Reference = evidence.Resource, Representation = "text", MaxChars = 32000 }).Result;
+                AssertEqual(original, historical.Text, "historical table does not resolve its current address");
+                AssertEqual(calls, adapter.ExcelBackendCalls.Count, "historical source performs no Office I/O");
+                using (var data = new ResourceDataPlaneService(gateway))
+                {
+                    var opened = data.Open(session, "workspace", evidence.Resource, "records", "$.values");
+                    AssertEqual(evidence.Resource.Revision, opened.Descriptor.Reference.Revision, "HTML records stay on exact named source");
+                    AssertEqual(calls, adapter.ExcelBackendCalls.Count, "historical structural projection also avoids Office");
+                }
+                adapter.SetExcelTableRangeForTest("Data", "Sales", "E1:F3");
+                var rows = ExecuteHtmlNative(runtime, ResourceToolCatalog.ReadToolId,
+                    new JObject { ["target"] = "Excel table: Sales", ["representation"] = "records", ["path"] = "$.values", ["limit"] = 2 });
+                AssertEqual(ToolExecutionOutcome.Ok, rows.Outcome, "bounded model records follow table resize through the same provider");
+                var formulas = ExecuteHtmlNative(runtime, ResourceToolCatalog.ReadToolId,
+                    new JObject { ["target"] = "Excel table: Sales", ["representation"] = "formulas" });
+                AssertEqual(ToolExecutionOutcome.Ok, formulas.Outcome, "named table retains formula view");
+                System.IO.File.Delete(executor.Payloads.PathFor(evidence.Payload.Sha256));
+                calls = adapter.ExcelBackendCalls.Count;
+                AssertEqual("RESOURCE_SNAPSHOT_UNAVAILABLE", RuntimeThrows<ResourceRequestException>(() => gateway.Read(session,
+                    new ResourceReadRequest { Reference = evidence.Resource, Representation = "text" })).ErrorCode, "missing historical CAS never falls forward");
+                AssertEqual(calls, adapter.ExcelBackendCalls.Count, "missing CAS does not resolve or capture current table");
+            });
+        }
+
+        private static void ExcelNamedTableAdmission()
+        {
+            WithTempExecutor(FakeOfficeAdapter.ForHost("Excel"), (executor, adapter) =>
+            {
+                var session = NewSession(adapter); executor.BindResourceAuthority(session);
+                adapter.AddExcelTableForTest("Data", "A1:B4", "Sales", true, "");
+                var gateway = executor.ResourceGateway;
+                var reference = gateway.List(session, "excel", ExcelResourceProvider.TableKind, null, 20).Items.Single().Reference;
+                foreach (var defect in new[] { "truncated", "duplicate", "missing", "oversized", "external-address" })
+                {
+                    var table = new ExcelTableSnapshot { Name = "Sales", Sheet = "Data", Range = "A1:B4", Rows = 3, Columns = 2 };
+                    if (defect == "oversized") table.Range = "A1:Z10000";
+                    if (defect == "external-address") table.Range = "[other.xlsx]Data!A1:B4";
+                    var tables = defect == "missing" ? new List<ExcelTableSnapshot>() : new List<ExcelTableSnapshot> { table };
+                    if (defect == "duplicate") tables.Add(table);
+                    adapter.QueueExcelInspectSnapshot(new ExcelInspectSnapshot { Kind = "tables", Tables = tables,
+                        ReturnedCount = tables.Count, Truncated = defect == "truncated" });
+                    var reads = adapter.ExcelBackendCalls.Count(item => item == FakeOfficeAdapter.ExcelRangeReadOperation);
+                    RuntimeThrows<ResourceRequestException>(() => gateway.Read(session, new ResourceReadRequest { Reference = reference, Representation = "text" }));
+                    AssertEqual(reads, adapter.ExcelBackendCalls.Count(item => item == FakeOfficeAdapter.ExcelRangeReadOperation), defect + " refuses before cell capture");
+                    if (defect == "truncated")
+                    {
+                        adapter.QueueExcelInspectSnapshot(new ExcelInspectSnapshot { Kind = "tables", Tables = tables, ReturnedCount = tables.Count, Truncated = true });
+                        RuntimeThrows<ResourceRequestException>(() => gateway.List(session, "excel", ExcelResourceProvider.TableKind, null, 20));
+                    }
+                }
+                var foreign = NewSession(adapter); foreign.DocumentKey = "foreign-workbook";
+                RuntimeThrows<InvalidOperationException>(() => gateway.Read(foreign, new ResourceReadRequest { Reference = reference, Representation = "text" }));
             });
         }
 

@@ -39,6 +39,7 @@ namespace RNAssistant.Office.Services
         {
             return _scope.Read(session, () =>
             {
+                if (kind == TableKind) return ListTables(session, cursor, limit);
                 var structure = _reader.CaptureStructure("sheets");
                 var items = (structure.Sheets ?? new List<ExcelSheetSnapshot>()).Where(item => !string.IsNullOrWhiteSpace(item.UsedRange))
                     .Select(item => Describe(session, item.Name.ToUpperInvariant(), NormalizeAddress(item.UsedRange))).ToList();
@@ -64,6 +65,7 @@ namespace RNAssistant.Office.Services
             return _scope.Read(session, () => {
                 var address = Parse(session, uri);
                 if (address.Segments[1] == "search") return DescribeSearch(session, SearchRequest(address));
+                if (address.Segments[1] == "table") return FindTable(session, address.Segments[2]);
                 return Describe(session, address.Segments[2], address.Segments[3]);
             });
         }
@@ -81,6 +83,7 @@ namespace RNAssistant.Office.Services
             {
                 var parsed = Parse(session, request.Reference.Uri);
                 if (parsed.Segments[1] == "search") return ReadSearch(session, request, parsed);
+                if (parsed.Segments[1] == "table") return ReadTable(session, request, parsed.Segments[2]);
                 var view = string.IsNullOrWhiteSpace(request.Representation) || request.Representation == "auto" ? "text" : request.Representation;
                 if (view != "text" && view != "formulas" && view != "structure") throw Error("RESOURCE_VIEW_UNSUPPORTED", "This range supports text, formulas, structure (profile), table and records views.");
                 var range = parsed.Segments[3];
@@ -129,6 +132,9 @@ namespace RNAssistant.Office.Services
         private ResourceAddress Parse(ChatSession session, string uri)
         {
             var address = ResourceUri.Parse(uri);
+            if (address.Provider == Id && address.Segments.Count == 3 && address.Segments[1] == "table" &&
+                _scope.MatchesDocumentToken(session, address.Segments[0]) && NormalizeTableName(address.Segments[2]) == address.Segments[2])
+                return address;
             if (address.Provider == Id && address.Segments.Count == 5 && address.Segments[1] == "search" &&
                 _scope.MatchesDocumentToken(session, address.Segments[0]))
             { SearchRequest(address); return address; }

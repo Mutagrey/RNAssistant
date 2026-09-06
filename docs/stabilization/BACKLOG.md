@@ -28,6 +28,13 @@ service locator, второй store/read model или универсальный
 
 ## Existing defects outside the active slice
 
+- Resource intent discovery: `EnumerateIntentResources` does not propagate a
+  provider's `Truncated=true` when its final page has no continuation. Filtered
+  discovery can therefore report completeness for an incompletely captured
+  collection. Owner: `ResourceGatewayService.Intent`; address in the remaining
+  consumer audit with a bounded partial-provider fixture. Named Excel tables reject
+  incomplete catalogs and do not rely on this path to prove unique resolution.
+
 - Closed-document agent fixture still expects `common.html_data_bind` to be absent
   from the catalog (`agent: closed document keeps local tools`). The current
   resource-backed binding is not intrinsically Office-only; its Gateway guards

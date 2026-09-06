@@ -108,6 +108,15 @@ namespace RNAssistant.Harness
             });
         }
 
+        internal void SetExcelTableRangeForTest(string sheetName, string name, string address)
+        {
+            var table = ResolveFakeTableSheet(sheetName).Tables.Single(item => string.Equals(item.Name, name, StringComparison.OrdinalIgnoreCase));
+            var range = ParseRange(address);
+            table.Range = FormatRange(range);
+            table.Rows = range.End.Row - range.Start.Row + 1;
+            table.Columns = range.End.Column - range.Start.Column + 1;
+        }
+
         internal int ExcelTableCount(string sheetName)
         {
             FakeSheet sheet;
