@@ -528,8 +528,9 @@ HostRuntime/document serialization covers guard through read-back, not model/use
 Session events use schema 4; incompatible streams require explicit new/reset without
 deleting user history or fallback. Large accepted arguments, activity/results and
 pending execution payloads use CAS refs. Registered revisions, views and their parts
-remain retention roots even before the first head commit. Cold replay/checkpoints
-and bounded retention optimization remain open; current retention is conservative.
+remain retention roots even before the first head commit. Current retention is
+conservative. New checkpoints/retention optimization are not prerequisites for
+cutover unless a concrete correctness or boundedness failure requires them.
 
 ## Domain projections and UI
 
@@ -593,8 +594,8 @@ downloads share capture/lease limits and the 50 MiB transfer budget with uploads
 reservation precedes source validation and production. The ZIP remains a transient
 projection of one validated event snapshot, not a synthetic published resource or
 second store. Redaction, bounds and lifetime are owned by
-[Trajectory export](trajectory-export.md). General binary/raw resource-view
-negotiation and bounded cold replay remain separate open gates.
+[Trajectory export](trajectory-export.md). Binary/raw resource views use the shared
+route described below; a separate cold-replay optimization is not a blanket gate.
 
 Diagnostic event payload previews also use these download slots and the same
 sequential reader. `TrajectoryPayloadService` resolves the exact event in a complete
@@ -777,10 +778,59 @@ projection sites; editor/preview/export now pull exact source through the same
 member provider/CAS/download. Preview assembly refuses missing source bodies.
 No compatibility alias, dual-write or feature flag restores these paths.
 
-Still open within this same cutover: remaining definition/domain read consumers, finer
-Excel coverage/named resources,
-remaining bulk upload/export surfaces, bounded history/retention
-optimization and final documentation cleanup. These are not permanent adapters.
+The acceptance reconciliation below replaces the former blanket TODOs for
+"remaining consumers", named resources and cold-replay/retention optimization.
+Do not treat those labels as authorization for further provider expansion.
+
+## MASTER acceptance reconciliation — 2026-09-07
+
+This is a source/existing-check review of MASTER §8, not a new test run, Windows
+qualification or assertion that every repository path was exhaustively proved.
+Test method names below are in `tests/RNAssistant.Harness`; implementation owners
+are in `src/RNAssistant.Office/Services` unless another layer is stated.
+
+| MASTER scenario | Current implementation / existing check | Remaining acceptance gap |
+|---|---|---|
+| Historical exact revision; continuation cannot cross revisions | Gateway/ResourceSnapshotReadService; `ResourceLiveContinuationsUseLogicalRevisions`, `ResourceRetainedPayloadsFailClosed` | No new architecture required by this review |
+| Restore/rollback create new lineage even with equal bytes | ResourceMutationAuthorityObserver; `LocalResourceRestorePublishesNewLogicalRevision`, `VbaRestorePreservesExactSourceLineage` | Real Office restore remains Windows evidence |
+| Save As preserves logical document identity | Document authority binding; `DocumentAuthoritySurvivesSaveAsAndSeparatesCopy` | Real COM/window lifetime remains Windows evidence |
+| Guarded write cannot publish over unexpected head | HostRuntime/domain guard, mutation lease, authority compare-and-publish; `ResourceAuthorityAtomicCommitAndReplay` plus existing VBA/editor guard cases | Include the production mutation/publication boundary in the focused integration check below; store conflict alone is not end-to-end proof |
+| Changed/no-op/unknown effects; cross-chat invalidation | ResourceMutationAuthorityObserver/OfficeResourceMutationDomain + Core EvidenceStateReducer; `ExcelWriteUsesExactNativeOwnership`, `ResourceEvidenceUsesFrozenAuthority`, `ResourceAuthorityAtomicCommitAndReplay`, `ResourceChatLifecyclePersistenceFailure` | Component coverage exists, but the combined two-chat read → native write/no-op/unknown → next compile scenario is not established by these checks |
+| One coherent frozen authority tuple | UseInput captures published tools/skills/prompts together; CompileCurrent independently calls CaptureMany | Open catalog-generation race described below |
+| Every normal model request uses one compiler | ConversationKernelAdapter.Model → ConversationModelSession.CreateRequest → ModelContextCompiler; repair also uses compiler; `ResourceCompilerFiltersBeforeBudget` | Preserve this route when closing the catalog race; no second builder |
+| Large payloads remain reference-first/bounded | Existing CAS/download/upload owners; `ResourceRuntimePayloadStorage`, `ResourceCompletedCallDoesNotHydrateArguments`, binary/raw admission cases | Known source-allocation limits below are not closed by transport bounds |
+| HTML/viewers use Gateway, not copied current JSON | ResourceDataPlaneService and resource-backed bindings; `ResourceBoundedTableLeaseUsesOneSnapshot`, `tests/web/resource-data-plane.test.js` | Real WebView2 qualification; HtmlWorkspaceDataSource now contains binding metadata, not the removed Json body |
+| Slow consumer cannot create unbounded buffering | Pull-based reads, busy/lease/byte limits; `ResourceBinaryChunkBudget`, sequential stream/download/upload browser cases | Real WebView2 responsiveness qualification |
+| Schema/mapping change invalidates derived currentness | ResourceStateProvider/ResourceDerivedViewService + reducer dependencies; `ResourceSchemaMappingDerivedPublication` | No new semantic layer required by this review |
+| Wave 5 retention roots and unavailable historical payloads | Core CasMaintenanceService scans chats, VBA journal, authority revisions/views/parts and mutation journal; `ResourceUnpublishedRevisionRetention`, retained missing/corrupt-CAS cases | Conservative retention already protects roots; do not invent a new GC/checkpoint subsystem |
+
+Finite remaining order:
+
+1. **Catalog capture correctness.** `ConversationKernelAdapter.SendAsync` checks
+   the catalog generation before `CreateRequest`; `UseInput` retains the published
+   bodies, but `ConversationModelSession.CompileCurrent` later captures fresh
+   catalog authority. A publication between those operations can pair the old
+   tools/skills/prompts with newer catalog heads/generation. Carry/check one
+   coherent publication at the final freeze boundary; add one deterministic
+   intervening-publication regression. This is a code-inspection finding, not yet
+   a reproduced live race. Owner: existing catalog capture/model-session owners.
+2. **Integrated mutation acceptance.** Use the existing fake native route and
+   compiler to establish two-chat changed/no-op/unknown behavior plus a guarded
+   refusal. Reuse existing domain checks; fix only a demonstrated failure.
+   OfficeResourceMutationDomain currently invalidates conservatively. Finer
+   sectional validity is not mandatory: Evidence/Compiler §5 and Authority §47
+   explicitly allow conservative resource-head semantics.
+3. **Resolve existing source-allocation qualification.** Outlook `MailItem.Body`
+   allocates before its ceiling is checked (tracked in RISK_REGISTER); Inspector
+   request serialization also precedes preview truncation. Distinguish source
+   allocation from bounded transport, and record an explicit owner decision or
+   correction before claiming bounded-source qualification. Do not turn this into
+   a new diagnostics/performance project.
+4. Align the final removal records with these results, then run the already-required
+   Windows/Office/WebView2 qualification. Only concrete reachable bypasses found
+   during this closure justify further consumer changes. No more named resource
+   kinds, universal raw expansion, finer Excel coverage or checkpoint optimization
+   are scheduled by this reconciliation.
 
 ## Delivery order
 
