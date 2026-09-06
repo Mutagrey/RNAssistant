@@ -330,6 +330,78 @@ namespace RNAssistant.Harness
             });
         }
 
+        private static void ResourceRawWorkspaceFiles()
+        {
+            WithTempPaths(paths =>
+            {
+                var adapter = FakeOfficeAdapter.ForHost("Excel");
+                var store = new ResourceAuthorityStore(paths);
+                var executor = new OfficeToolExecutor(adapter, new VbaJournalStore(paths), new SkillStore(paths), new ToolStore(paths),
+                    paths: paths, resourceAuthorityStore: store);
+                var session = NewSession(adapter);
+                var text = "\ufeff<main>\r\n" + new string('я', 140000) + "😀</main>";
+                executor.MutateLocalResources(session, "common.html_workspace_write_file", null,
+                    () => HtmlWorkspaceToolService.UpsertFile(session, "index.html", "html", text, true));
+                executor.MutateLocalResources(session, "common.html_workspace_write_file", null,
+                    () => HtmlWorkspaceToolService.UpsertFile(session, "empty.css", "css", "", false));
+                executor.MutateLocalResources(session, "common.html_workspace_bind_data", null,
+                    () => HtmlWorkspaceToolService.UpsertDataSource(session, "data", "{\"count\":1}"));
+                var gateway = executor.ResourceGateway;
+                var files = gateway.List(session, "chat", ChatHtmlResourceCatalog.FileKind, null, 20).Items;
+                var file = files.Single(item => item.Title == "index.html");
+                AssertTrue(file.Representations.Contains("raw"), "file discovery offers raw");
+                AssertEqual(ArtifactViewerService.MaximumRawBytes, file.ViewCapabilities.Single(item => item.View == "raw").MaxPayloadBytes.Value,
+                    "file raw shares the object bound");
+                var resolved = gateway.ResolveMember(session, file.Parent.Uri, "index.html", "file").Resource;
+                AssertEqual(file.Reference.Uri, resolved.Reference.Uri, "raw retains canonical member identity, not the parent artifact");
+                var source = gateway.Read(session, new ResourceReadRequest { Reference = file.Reference, Representation = "source", MaxChars = 256 }).Result;
+                using (var data = new ResourceDataPlaneService(gateway))
+                {
+                    var opened = data.Open(session, "workspace", file.Reference, "raw");
+                    AssertEqual(source.CompleteViewPayload.Sha256, opened.Binary.Payload.Sha256, "raw and source share the same exact CAS bytes");
+                    AssertEqual(file.Reference.Uri, opened.Descriptor.Reference.Uri, "binary lease stays pinned to the file");
+                    AssertTrue(JObject.FromObject(opened)["text"] == null, "control plane carries no source body");
+                    executor.MutateLocalResources(session, "common.html_workspace_write_file", null,
+                        () => HtmlWorkspaceToolService.UpsertFile(session, "index.html", "html", "<p>changed</p>", true));
+                    var router = new ResourceDataRouter(data);
+                    using (var output = new System.IO.MemoryStream())
+                    {
+                        while (output.Length < opened.Binary.Payload.ByteLength)
+                        {
+                            var chunk = router.Handle("GET", opened.Url + "?offset=" + output.Length + "&limit=" + opened.MaxBatchItems,
+                                System.Threading.CancellationToken.None);
+                            AssertEqual(200, chunk.StatusCode, "file raw streams through the shared byte route after workspace drift");
+                            AssertEqual("application/octet-stream", chunk.ContentType, "HTML source bytes stay inert");
+                            chunk.Body.CopyTo(output);
+                        }
+                        AssertEqual(text, new System.Text.UTF8Encoding(false, true).GetString(output.ToArray()), "exact BOM/CRLF/Unicode across chunks");
+                    }
+                    var empty = data.Open(session, "workspace", files.Single(item => item.Title == "empty.css").Reference, "raw");
+                    AssertEqual(0L, empty.Binary.Payload.ByteLength, "empty workspace source is valid raw");
+                    var emptyResponse = router.Handle("GET", empty.Url, System.Threading.CancellationToken.None);
+                    AssertEqual(200, emptyResponse.StatusCode, "empty source verifies through the same route");
+                    var retained = data.Open(session, "workspace", file.Reference, "raw");
+                    var scan = new CasReachabilityScan(); store.ScanCasReferences(scan);
+                    AssertTrue(scan.References.Any(item => item.Reference.Sha256 == file.ContentSha256), "member raw bytes remain authority roots");
+                    System.IO.File.Delete(executor.Payloads.PathFor(retained.Binary.Payload.Sha256));
+                    var missing = router.Handle("GET", retained.Url, System.Threading.CancellationToken.None);
+                    AssertEqual(409, missing.StatusCode, "missing member CAS cannot be rebuilt from retained parent source");
+                }
+                var binding = gateway.List(session, "chat", ChatHtmlResourceCatalog.DataKind, null, 20).Items.Single();
+                AssertTrue(!binding.Representations.Contains("raw"), "binding metadata is not bound data");
+                AssertEqual("RESOURCE_VIEW_UNAVAILABLE", RuntimeThrows<ResourceRequestException>(() => gateway.Read(session,
+                    new ResourceReadRequest { Reference = binding.Reference, Representation = "raw" })).ErrorCode, "binding cannot masquerade as raw data");
+                RuntimeThrows<ResourceRequestException>(() => gateway.Read(session,
+                    new ResourceReadRequest { Reference = file.Reference, Representation = "raw", ViewPath = "0" }));
+                RuntimeThrows<ResourceRequestException>(() => gateway.Read(session,
+                    new ResourceReadRequest { Reference = file.Reference, Representation = "raw", RowOffset = 1 }));
+                RuntimeThrows<ResourceRequestException>(() => gateway.Read(session,
+                    new ResourceReadRequest { Reference = new ResourceRef(file.Reference.Uri, "999"), Representation = "raw" }));
+                RuntimeThrows<InvalidOperationException>(() => gateway.Read(new ChatSession(),
+                    new ResourceReadRequest { Reference = file.Reference, Representation = "raw" }));
+            });
+        }
+
         private static void ResourceBinaryChunkBudget()
         {
             WithTempPaths(paths =>

@@ -45,6 +45,12 @@ namespace RNAssistant.Office.Services
         ResourceRef ResolveIdentity(ChatSession session, ResourceIdentity identity);
     }
 
+    // Capture only. Exact-view retention, publication and byte transport belong to Gateway.
+    internal interface IResourceRawSource
+    {
+        byte[] ReadRawSource(ChatSession session, ResourceRef reference);
+    }
+
     internal interface IResourceMemberResolver
     {
         ResourceDescriptor ResolveMember(ChatSession session, string parentUri,

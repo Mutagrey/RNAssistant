@@ -8,7 +8,7 @@ using RNAssistant.Core.Services;
 
 namespace RNAssistant.Office.Services
 {
-    internal sealed class ChatArtifactResourceProvider : IResourceProvider, IResourceMemberResolver, IResourceIdentityResolver
+    internal sealed class ChatArtifactResourceProvider : IResourceProvider, IResourceMemberResolver, IResourceIdentityResolver, IResourceRawSource
     {
         public const string ProviderName = "chat";
         private const int MaximumListItems = 50;
@@ -19,22 +19,48 @@ namespace RNAssistant.Office.Services
         private readonly Func<ChatSession, string, bool> _loadArtifactBody;
         private readonly Func<ChatAttachment, int, string> _readAttachmentText;
         private readonly ChatHtmlResourceCatalog _htmlResources;
-        private readonly bool _binaryViewsAvailable;
-        private readonly bool _storedBinaryViewsAvailable;
+        private readonly Func<ChatAttachment, byte[]> _readAttachmentBytes;
+        private readonly RNAssistant.Core.Storage.ChatBlobStore _payloads;
 
         public ChatArtifactResourceProvider(
             Func<ChatSession, string, bool> loadArtifactBody = null,
             Func<ChatAttachment, int, string> readAttachmentText = null,
-            RNAssistant.Core.Storage.ChatBlobStore payloads = null, bool binaryViewsAvailable = false)
+            RNAssistant.Core.Storage.ChatBlobStore payloads = null, Func<ChatAttachment, byte[]> readAttachmentBytes = null)
         {
             _loadArtifactBody = loadArtifactBody;
             _readAttachmentText = readAttachmentText;
             _htmlResources = new ChatHtmlResourceCatalog(loadArtifactBody, payloads);
-            _binaryViewsAvailable = binaryViewsAvailable;
-            _storedBinaryViewsAvailable = payloads != null;
+            _readAttachmentBytes = readAttachmentBytes;
+            _payloads = payloads;
         }
 
         public string Id { get { return ProviderName; } }
+
+        public byte[] ReadRawSource(ChatSession session, ResourceRef reference)
+        {
+            var address = ParseAddress(session, reference.Uri);
+            var artifact = FindExactArtifact(session, address.ArtifactId);
+            EnsureRevision(artifact, address.Revision);
+            ResourceReadCursor.ValidatePinned(new ResourceReadRequest { Reference = reference }, address.Revision.ToString(System.Globalization.CultureInfo.InvariantCulture));
+            if (address.IsMember) return _htmlResources.ReadRawMember(session, artifact, address);
+            EnsureNotRemoved(session, artifact, reference.Uri);
+            if (ArtifactViewerService.IsStoredRawSource(artifact))
+            {
+                var payload = new PayloadRef(artifact.ContentSha256, artifact.ContentByteLength.Value, artifact.MimeType);
+                var bytes = _payloads?.ReadBytes(payload.ToBlobReference());
+                if (bytes == null)
+                    throw new ResourceRequestException("The exact stored original is unavailable.", "RESOURCE_SNAPSHOT_UNAVAILABLE", false);
+                return bytes;
+            }
+            var attachment = FindExactAttachment(session, artifact);
+            if (_readAttachmentBytes == null || !ArtifactViewerService.IsRawSource(artifact, attachment))
+                throw new ResourceRequestException("The exact original attachment is unavailable or exceeds the raw view bound.", "RESOURCE_VIEW_UNAVAILABLE", false);
+            var original = _readAttachmentBytes(attachment);
+            if (original == null || original.LongLength != attachment.ContentByteLength.Value ||
+                !string.Equals(ArtifactViewerService.Sha256(original), attachment.ContentSha256, StringComparison.OrdinalIgnoreCase))
+                throw new InvalidOperationException("Artifact raw bytes do not match exact revision evidence.");
+            return original;
+        }
 
         public ResourceListPage List(ChatSession session, string kind, string cursor, int limit)
         {
@@ -303,9 +329,9 @@ namespace RNAssistant.Office.Services
                 Representations = representations,
                 CreatedUtc = artifact.CreatedUtc
             };
-            if (_storedBinaryViewsAvailable)
+            if (_payloads != null)
             {
-                result.ViewCapabilities.AddRange(ArtifactViewerService.BinaryViewCapabilities(artifact, attachment, _binaryViewsAvailable));
+                result.ViewCapabilities.AddRange(ArtifactViewerService.BinaryViewCapabilities(artifact, attachment, _readAttachmentBytes != null));
                 result.Representations.AddRange(result.ViewCapabilities.Select(view => view.View));
             }
             if (!compact)

@@ -99,25 +99,6 @@ namespace RNAssistant.Office.Services
             return _pdfViewer.ReadThumbnail(session, resourceUri, pageIndex);
         }
 
-        internal byte[] ReadRawSource(ChatSession session, string resourceUri)
-        {
-            var artifact = ResolveExactArtifact(session, resourceUri);
-            if (IsStoredRawSource(artifact))
-            {
-                var payload = new PayloadRef(artifact.ContentSha256, artifact.ContentByteLength.Value, artifact.MimeType);
-                var bytes = _gateway.Authority?.Payloads?.ReadBytes(payload.ToBlobReference());
-                if (bytes == null)
-                    throw new ResourceRequestException("The exact stored original is unavailable.",
-                        "RESOURCE_SNAPSHOT_UNAVAILABLE", false);
-                return bytes;
-            }
-            var attachment = ChatArtifactResourceProvider.FindExactAttachment(session, artifact);
-            if (_readAttachmentBytes == null || !IsRawSource(artifact, attachment))
-                throw new ResourceRequestException("The exact original attachment is unavailable or exceeds the raw view bound.",
-                    "RESOURCE_VIEW_UNAVAILABLE", false);
-            return ReadExactAttachmentBytes(attachment, MaximumRawBytes, "raw");
-        }
-
         public ArtifactImageViewerDto ReadImage(ChatSession session, string resourceUri)
         {
             ResourceDescriptor descriptor;
@@ -508,7 +489,7 @@ namespace RNAssistant.Office.Services
             return views;
         }
 
-        private static bool IsStoredRawSource(ChatArtifact artifact)
+        internal static bool IsStoredRawSource(ChatArtifact artifact)
         {
             if (artifact == null || !IsSha256(artifact.ContentSha256) ||
                 !artifact.ContentByteLength.HasValue || artifact.ContentByteLength.Value < 0 ||
@@ -527,7 +508,7 @@ namespace RNAssistant.Office.Services
             catch (Newtonsoft.Json.JsonException) { return false; }
         }
 
-        private static bool IsRawSource(ChatArtifact artifact, ChatAttachment attachment)
+        internal static bool IsRawSource(ChatArtifact artifact, ChatAttachment attachment)
         {
             return artifact != null && attachment != null &&
                 (string.Equals(artifact.Kind, ChatArtifactKinds.Attachment, StringComparison.OrdinalIgnoreCase) ||

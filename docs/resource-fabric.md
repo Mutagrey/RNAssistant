@@ -600,8 +600,19 @@ missing original. Broken/ambiguous attachment provenance and malformed metadata
 cannot become a stored-body fallback, including on retained reads. Internal
 checkpoints and HTML workspace aggregates are not raw files. Exact raw views and
 their byte payloads use the same authority retention roots and historical access.
-No new reader tool or store is introduced. Raw views for workspace members and
-other provider domains remain open, as does real Windows/WebView2 qualification.
+Workspace file members also offer `raw`: UTF-8 bytes of the exact committed file
+source, not bytes of the parent workspace JSON. BOM, CRLF and Unicode are preserved;
+the byte hash matches the same member's `source` CAS payload. Empty files are valid.
+The existing member catalog checks the 20 MiB bound before encoding. Data-binding
+members deliberately do not offer `raw`: a binding descriptor is not the bound data;
+consumers read that resource's advertised view instead.
+`ChatArtifactResourceProvider` owns all raw capture through `IResourceRawSource`;
+the former viewer raw-reader is removed. Gateway resolves the exact descriptor,
+preserving member identity, verifies length/hash before registering a view and uses
+the existing binary retention/chunk route. Workspace edits do not replace historical
+file reads, and missing retained CAS is not rebuilt from the parent snapshot.
+No new reader tool or store is introduced. Other provider view-negotiation gaps and
+real Windows/WebView2 qualification remain open.
 
 Binary opens reserve capture capacity before provider work in the existing 50 MiB
 upload/download transfer budget. A lease verifies and retains its bounded CAS body

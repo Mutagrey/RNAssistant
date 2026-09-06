@@ -15,22 +15,21 @@ namespace RNAssistant.Office.Services
 
         private ResourceReadSelection ReadBinaryView(ChatSession session, ResourceReadRequest request)
         {
-            if (_mediaViews == null || _authority?.Payloads == null)
+            if (_authority?.Payloads == null)
                 throw new ResourceRequestException("The binary view provider is unavailable.", "RESOURCE_VIEW_UNAVAILABLE", false);
             ResourceReadCursor.RejectCursor(request);
             if (request.RowOffset != 0 || request.Fields != null && request.Fields.Count != 0)
                 throw new ResourceRequestException("Binary views do not support row offsets or field selectors.", "RESOURCE_VIEW_INVALID", false);
-            var artifact = ArtifactViewerService.ResolveExactArtifact(session, request.Reference.Uri);
-            var exact = ChatResourceUri.CreateArtifactRevision(session, artifact);
-            if (request.Reference.IsExact && exact.Revision != request.Reference.Revision)
-                throw new ResourceRequestException("The binary view revision is unavailable.", "RESOURCE_SNAPSHOT_UNAVAILABLE", false);
             var page = 0;
             var raw = request.Representation == ResourceRepresentations.Raw;
             var paged = request.Representation == ResourceRepresentations.RenderPage || request.Representation == ResourceRepresentations.PageThumbnail;
             if (paged && (!int.TryParse(request.ViewPath, NumberStyles.None, CultureInfo.InvariantCulture, out page) || page < 0) ||
                 !paged && !string.IsNullOrEmpty(request.ViewPath))
                 throw new ResourceRequestException("An exact zero-based page selector is required for page views only.", "RESOURCE_VIEW_INVALID", false);
-            var descriptor = Resolve(session, exact.Uri).Resource;
+            var descriptor = Resolve(session, request.Reference.Uri).Resource;
+            var exact = descriptor.Reference;
+            if (!exact.IsExact || request.Reference.IsExact && exact.Revision != request.Reference.Revision)
+                throw new ResourceRequestException("The binary view revision is unavailable.", "RESOURCE_SNAPSHOT_UNAVAILABLE", false);
             var capability = descriptor.ViewCapabilities.SingleOrDefault(item => item.View == request.Representation);
             if (capability?.MaxPayloadBytes == null)
                 throw new ResourceRequestException("The resource does not offer this binary view.", "RESOURCE_VIEW_UNAVAILABLE", false);
@@ -55,9 +54,18 @@ namespace RNAssistant.Office.Services
                 binary = new ResourceBinaryView();
                 if (raw)
                 {
-                    bytes = _mediaViews.ReadRawSource(session, exact.Uri);
+                    var source = ProviderFor(exact.Uri) as IResourceRawSource;
+                    if (source == null)
+                        throw new ResourceRequestException("The raw source provider is unavailable.", "RESOURCE_VIEW_UNAVAILABLE", false);
+                    bytes = source.ReadRawSource(session, exact);
+                    if (bytes == null || bytes.LongLength > capability.MaxPayloadBytes.Value ||
+                        bytes.LongLength != descriptor.ByteLength ||
+                        !string.Equals(ArtifactViewerService.Sha256(bytes), descriptor.ContentSha256, StringComparison.OrdinalIgnoreCase))
+                        throw new ResourceRequestException("The raw source does not match its exact descriptor.", "RESOURCE_SNAPSHOT_UNAVAILABLE", false);
                     mimeType = "application/octet-stream";
                 }
+                else if (_mediaViews == null)
+                    throw new ResourceRequestException("The media view provider is unavailable.", "RESOURCE_VIEW_UNAVAILABLE", false);
                 else if (paged)
                 {
                     var image = request.Representation == ResourceRepresentations.PageThumbnail

@@ -65,6 +65,18 @@ namespace RNAssistant.Office.Services
             return result;
         }
 
+        internal byte[] ReadRawMember(ChatSession session, ChatArtifact artifact,
+            ChatArtifactResourceProvider.ChatArtifactAddress address)
+        {
+            var member = FindRequiredMember(session, artifact, address);
+            if (_payloads == null || member.MemberType != "file" ||
+                System.Text.Encoding.UTF8.GetByteCount(member.Content) > ArtifactViewerService.MaximumRawBytes)
+                throw new ResourceRequestException("This member does not offer a bounded raw source.", "RESOURCE_VIEW_UNAVAILABLE", false);
+            // Workspace files are committed strings, not uploaded byte originals.
+            // Encode their exact source once; never serialize a binding as its bound data.
+            return System.Text.Encoding.UTF8.GetBytes(member.Content);
+        }
+
         public ResourceReadSelection ReadMember(
             ChatSession session,
             ChatArtifact artifact,

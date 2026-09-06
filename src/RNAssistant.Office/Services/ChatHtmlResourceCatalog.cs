@@ -270,7 +270,7 @@ namespace RNAssistant.Office.Services
             }
         }
 
-        private static ResourceDescriptor Describe(HtmlMember member)
+        private ResourceDescriptor Describe(HtmlMember member)
         {
             var descriptor = new ResourceDescriptor
             {
@@ -291,6 +291,15 @@ namespace RNAssistant.Office.Services
             descriptor.Representations.Add(member.MemberType == "file"
                 ? ResourceRepresentations.Source
                 : ResourceRepresentations.Text);
+            if (_payloads != null && member.MemberType == "file" && descriptor.ByteLength <= ArtifactViewerService.MaximumRawBytes)
+            {
+                descriptor.Representations.Add(ResourceRepresentations.Raw);
+                descriptor.ViewCapabilities.Add(new ResourceViewCapability(ResourceRepresentations.Raw,
+                    supportsOffset: true, supportsStream: true,
+                    maxItemsPerBatch: ResourceDataPlaneService.MaximumBinaryChunkBytes,
+                    maxBatchBytes: ResourceDataPlaneService.MaximumBinaryChunkBytes,
+                    maxPayloadBytes: ArtifactViewerService.MaximumRawBytes));
+            }
             descriptor.Metadata["name"] = member.Title ?? string.Empty;
             descriptor.Metadata["revisionArtifactId"] = member.Artifact.Id;
             descriptor.Metadata["active"] = member.Active ? "true" : "false";
