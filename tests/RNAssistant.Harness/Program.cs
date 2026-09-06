@@ -694,6 +694,7 @@ namespace RNAssistant.Harness
                 Test("resource cutover: runtime payload storage and exact hydration", ResourceRuntimePayloadStorage),
                 Test("resource cutover: unpublished revision retention roots", ResourceUnpublishedRevisionRetention),
                 Test("resource cutover: canonical binary data plane", ResourceBinaryLeaseUsesCanonicalViews),
+                Test("resource cutover: binary capabilities and retained bounds", ResourceBinaryCapabilitiesAndRetainedBounds),
                 Test("resources: rejects ambiguous URI", ResourceUriRejectsAmbiguousAddresses),
                 Test("resources: reference pins revision", ResourceReferencePinsRevision),
                 Test("resources: registry rejects duplicate providers", ResourceRegistryRejectsDuplicateProviders),

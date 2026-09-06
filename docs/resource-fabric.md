@@ -436,6 +436,17 @@ Text leases close after each bounded page; media leases close on replacement,
 eviction and chat change, including late responses. Full text is an explicit
 bounded user action, not an eager workspace cache.
 
+Artifact list/resolve descriptors now advertise admitted binary views through the
+existing `representations` and typed `viewCapabilities`: image (20 MiB), image
+thumbnail (512 KiB), PDF page (10 MiB) and PDF thumbnail (1 MiB). The existing media
+owner supplies these metadata-only capabilities only for matching exact attachment
+evidence and admitted kind/MIME/extent; an unconfigured binary reader advertises
+none. These are whole-response bounds, not a claim of byte/record streaming or
+native renderer availability. Gateway rejects unsupported views and row/field
+selectors before source hydration. Captured and retained views obey the same
+per-view byte limit and MIME contract; retained data cannot bypass negotiation.
+General original-byte `raw` views and their bounded transport remain open.
+
 Authority notifications coalesce to bounded scope/generation metadata.
 `RN.resources.subscribe` receives authorized binding names only; it does not create
 a pushed dataset or another freshness cache. Notifications currently reach

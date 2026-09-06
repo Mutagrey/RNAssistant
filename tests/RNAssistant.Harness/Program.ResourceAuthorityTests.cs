@@ -34,6 +34,21 @@ namespace RNAssistant.Harness
                 using (var data = new ResourceDataPlaneService(gateway, (chat, owner) => chat == session.Id && owner == "viewer"))
                 {
                     var exact = ChatResourceUri.CreateArtifactRevision(session, artifact);
+                    var described = gateway.Resolve(session, exact.Uri).Resource;
+                    AssertTrue(described.Representations.Contains("image") && described.Representations.Contains("thumbnail"),
+                        "existing image views are discoverable before capture");
+                    var imageCapability = described.ViewCapabilities.Single(item => item.View == "image");
+                    AssertEqual((int)ArtifactViewerService.MaximumImageBytes, imageCapability.MaxBatchBytes.Value, "declared image bound");
+                    AssertTrue(!imageCapability.SupportsOffset && !imageCapability.SupportsFields && !imageCapability.SupportsStream,
+                        "whole binary delivery does not advertise record streaming");
+                    AssertEqual(2, gateway.List(session, "chat", null, null, 10).Items.Single().ViewCapabilities.Count,
+                        "list and resolve share metadata-only capabilities");
+                    AssertEqual("RESOURCE_VIEW_UNAVAILABLE", RuntimeThrows<ResourceRequestException>(() =>
+                        data.Open(session, "viewer", exact, "render-page", "0")).ErrorCode, "image cannot negotiate a PDF view");
+                    AssertEqual("RESOURCE_VIEW_INVALID", RuntimeThrows<ResourceRequestException>(() => gateway.Read(session,
+                        new ResourceReadRequest { Reference = exact, Representation = "image", Fields = new List<string> { "field" } })).ErrorCode,
+                        "unsupported binary selectors refuse before capture");
+                    AssertEqual(0, reads, "discovery and failed negotiation read no source bytes");
                     var opened = data.Open(session, "viewer", exact, "image");
                     AssertTrue(opened.Binary != null && opened.Binary.Payload.Sha256 == hash, "lease pins the CAS binary view");
                     var wire = Newtonsoft.Json.JsonConvert.SerializeObject(opened);
@@ -63,6 +78,54 @@ namespace RNAssistant.Harness
                     AssertTrue(data.Open(session, "viewer", exact, "image").LeaseId != null,
                         "cancelled opens and closed workspaces release every reserved slot");
                 }
+            });
+        }
+
+        private static void ResourceBinaryCapabilitiesAndRetainedBounds()
+        {
+            WithTempPaths(paths =>
+            {
+                var payloads = new ChatBlobStore(paths);
+                var store = new ResourceAuthorityStore(paths);
+                var authority = new ResourceAuthorityService(store, store, new ResourceMutationJournal(paths), payloads);
+                var source = payloads.StoreBytes(new byte[] { 1, 2, 3 }, "application/pdf");
+                var attachment = new ChatAttachment { Id = "binary-source", Kind = "pdf", ContentType = "application/pdf",
+                    ContentSha256 = source.Sha256, ContentByteLength = source.ByteLength, PageCount = 2 };
+                var message = new ChatMessage { Role = "user", Attachments = new List<ChatAttachment> { attachment } };
+                var artifact = new ChatArtifact { Kind = ChatArtifactKinds.Attachment, MimeType = "application/pdf",
+                    SourceMessageId = message.Id, ContentSha256 = source.Sha256, ContentByteLength = source.ByteLength,
+                    MetadataJson = "{\"attachmentId\":\"binary-source\"}" };
+                var session = new ChatSession(); session.Messages.Add(message); session.Artifacts.Add(artifact);
+                var reads = 0;
+                var gateway = new ResourceGatewayService(null, null, null, authority: authority,
+                    readAttachmentBytes: item => { reads++; throw new InvalidOperationException("unexpected hydration"); });
+                var exact = ChatResourceUri.CreateArtifactRevision(session, artifact);
+                var descriptor = gateway.Resolve(session, exact.Uri).Resource;
+                AssertEqual((int)ArtifactPdfViewerService.MaximumPageImageBytes,
+                    descriptor.ViewCapabilities.Single(item => item.View == "render-page").MaxBatchBytes.Value, "PDF page bound");
+                AssertEqual((int)ArtifactPdfViewerService.MaximumThumbnailImageBytes,
+                    descriptor.ViewCapabilities.Single(item => item.View == "page-thumbnail").MaxBatchBytes.Value, "PDF thumbnail bound");
+                AssertTrue(!descriptor.Representations.Contains("image"), "PDF original is not an image view");
+                AssertEqual(0, new ResourceGatewayService(null, null, null, authority: authority)
+                    .Resolve(session, exact.Uri).Resource.ViewCapabilities.Count, "unconfigured binary owner advertises no binary views");
+                attachment.ContentType = "text/html";
+                AssertEqual(0, gateway.Resolve(session, exact.Uri).Resource.ViewCapabilities.Count, "inconsistent MIME offers no binary view");
+                attachment.ContentType = "application/pdf";
+                var scope = authority.Scope(session, false);
+                store.RegisterRevision(scope, new ResourceRevisionMetadata(exact, source.Sha256));
+                foreach (var view in new[] { "render-page", "page-thumbnail" })
+                {
+                    var retained = new ResourceBinaryView { Payload = view == "render-page"
+                        ? new PayloadRef(source.Sha256, source.ByteLength, "text/html")
+                        : new PayloadRef(source.Sha256, ArtifactPdfViewerService.MaximumThumbnailImageBytes + 1, "image/jpeg") };
+                    var metadata = PayloadRef.FromBlob(payloads.StoreText(Newtonsoft.Json.JsonConvert.SerializeObject(retained), "application/json"));
+                    store.RegisterView(scope, new ResourceRevisionView(exact, "binary:" + view + ":0", retained.Payload.Sha256,
+                        metadata, ResourceCoverage.Whole(), new[] { retained.Payload }));
+                    AssertEqual("RESOURCE_SNAPSHOT_UNAVAILABLE", RuntimeThrows<ResourceRequestException>(() => gateway.Read(session,
+                        new ResourceReadRequest { Reference = exact, Representation = view, ViewPath = "0" })).ErrorCode,
+                        "retained metadata cannot bypass the negotiated MIME or per-view bound");
+                }
+                AssertEqual(0, reads, "discovery and rejected retained views do not render or hydrate source bytes");
             });
         }
 

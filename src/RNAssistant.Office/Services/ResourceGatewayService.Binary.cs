@@ -1,5 +1,6 @@
 using System;
 using System.Globalization;
+using System.Linq;
 using RNAssistant.Core.Models;
 using RNAssistant.Core.Services;
 using RNAssistant.Core.Storage;
@@ -17,6 +18,8 @@ namespace RNAssistant.Office.Services
             if (_mediaViews == null || _authority?.Payloads == null)
                 throw new ResourceRequestException("The binary view provider is unavailable.", "RESOURCE_VIEW_UNAVAILABLE", false);
             ResourceReadCursor.RejectCursor(request);
+            if (request.RowOffset != 0 || request.Fields != null && request.Fields.Count != 0)
+                throw new ResourceRequestException("Binary views do not support row offsets or field selectors.", "RESOURCE_VIEW_INVALID", false);
             var artifact = ArtifactViewerService.ResolveExactArtifact(session, request.Reference.Uri);
             var exact = ChatResourceUri.CreateArtifactRevision(session, artifact);
             if (request.Reference.IsExact && exact.Revision != request.Reference.Revision)
@@ -27,6 +30,9 @@ namespace RNAssistant.Office.Services
                 !paged && !string.IsNullOrEmpty(request.ViewPath))
                 throw new ResourceRequestException("An exact zero-based page selector is required for page views only.", "RESOURCE_VIEW_INVALID", false);
             var descriptor = Resolve(session, exact.Uri).Resource;
+            var capability = descriptor.ViewCapabilities.SingleOrDefault(item => item.View == request.Representation);
+            if (capability?.MaxBatchBytes == null)
+                throw new ResourceRequestException("The resource does not offer this binary view.", "RESOURCE_VIEW_UNAVAILABLE", false);
             descriptor.Metadata["sourceContentSha256"] = descriptor.ContentSha256;
             var view = "binary:" + request.Representation + (paged ? ":" + page.ToString(CultureInfo.InvariantCulture) : string.Empty);
             var scope = _authority.Scope(session, false);
@@ -73,7 +79,10 @@ namespace RNAssistant.Office.Services
                 revisions.RegisterView(scope, new ResourceRevisionView(exact, view, binary.Payload.Sha256,
                     metadata, ResourceCoverage.Whole(), new[] { binary.Payload }));
             }
-            if (binary?.Payload == null || binary.Payload.ByteLength <= 0 || binary.Payload.ByteLength > ArtifactViewerService.MaximumImageBytes)
+            var expectedMime = request.Representation == ResourceRepresentations.Image
+                ? ArtifactViewerService.NormalizeMimeType(descriptor.MimeType) : "image/jpeg";
+            if (binary?.Payload == null || binary.Payload.ByteLength <= 0 || binary.Payload.ByteLength > capability.MaxBatchBytes.Value ||
+                binary.Payload.ContentType != expectedMime)
                 throw new ResourceRequestException("The exact binary payload is unavailable.", "RESOURCE_SNAPSHOT_UNAVAILABLE", false);
             var coverage = paged ? new ResourceCoverage(ResourceCoverageKinds.PageRange, start: page, end: page + 1) : ResourceCoverage.Whole();
             var result = new ResourceReadSelection { Result = new ResourceReadResult {

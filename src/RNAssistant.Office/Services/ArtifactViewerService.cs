@@ -448,6 +448,34 @@ namespace RNAssistant.Office.Services
                 bytes[bytes.Length - 2] == 0xff && bytes[bytes.Length - 1] == 0xd9;
         }
 
+        // Discovery is metadata-only. Byte integrity and renderer availability are
+        // still checked by the exact read owners, never inferred from a capability.
+        internal static IReadOnlyList<ResourceViewCapability> BinaryViewCapabilities(
+            ChatArtifact artifact, ChatAttachment attachment)
+        {
+            if (artifact == null || attachment == null || !IsSha256(attachment.ContentSha256) ||
+                !attachment.ContentByteLength.HasValue || attachment.ContentByteLength.Value <= 0 ||
+                attachment.ContentByteLength.Value > MaximumImageBytes)
+                return new ResourceViewCapability[0];
+            var mime = NormalizeMimeType(attachment.ContentType);
+            if (!string.Equals(NormalizeMimeType(artifact.MimeType), mime, StringComparison.Ordinal))
+                return new ResourceViewCapability[0];
+            if (string.Equals(artifact.Kind, ChatArtifactKinds.Image, StringComparison.OrdinalIgnoreCase) &&
+                string.Equals(attachment.Kind, "image", StringComparison.OrdinalIgnoreCase) && IsImageMimeType(mime))
+                return new[] {
+                    new ResourceViewCapability(ResourceRepresentations.Image, maxBatchBytes: (int)MaximumImageBytes),
+                    new ResourceViewCapability(ResourceRepresentations.Thumbnail, maxBatchBytes: (int)MaximumImageThumbnailBytes)
+                };
+            if (string.Equals(artifact.Kind, ChatArtifactKinds.Attachment, StringComparison.OrdinalIgnoreCase) &&
+                string.Equals(attachment.Kind, "pdf", StringComparison.OrdinalIgnoreCase) && mime == "application/pdf" &&
+                attachment.PageCount > 0 && attachment.PageCount <= ArtifactPdfViewerService.MaximumPages)
+                return new[] {
+                    new ResourceViewCapability(ResourceRepresentations.RenderPage, maxBatchBytes: (int)ArtifactPdfViewerService.MaximumPageImageBytes),
+                    new ResourceViewCapability(ResourceRepresentations.PageThumbnail, maxBatchBytes: (int)ArtifactPdfViewerService.MaximumThumbnailImageBytes)
+                };
+            return new ResourceViewCapability[0];
+        }
+
         private static bool IsImageMimeType(string mimeType)
         {
             return mimeType == "image/jpeg" || mimeType == "image/png" ||
