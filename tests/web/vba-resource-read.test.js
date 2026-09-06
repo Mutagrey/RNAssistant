@@ -108,7 +108,8 @@ function fixture(text = "Sub Main()\r\n'😀\r\nEnd Sub\r\n") {
       assert.ok(page.includes(file + "?v=vba-upload-20260906-1"));
     });
     ["app-chat-state.js", "app-chat-session.js"].forEach(file => {
-      assert.ok(page.includes(file + "?v=html-read-20260906-1"));
+      assert.ok(page.includes(file + "?v=" +
+        (file === "app-chat-state.js" ? "context-usage-display-20260907-1" : "startup-secondary-lazy-20260907-1")));
     });
     console.log("PASS VBA resource read: cancellation aborts active transfer and is wired to owner lifecycle");
   }

@@ -55,7 +55,7 @@ console.log("PASS HTML ECharts: sandbox/export assembly receives the exact local
 // Resource capture/reading is covered by html-workspace-export; this fixture pins
 // an empty view to exercise standalone dependency/script ordering.
 const reference = { uri: "rna://test/data", revision: "r1" };
-const resourceSnapshot = { version: 1, resources: [{ name: "sales", descriptor: { reference }, view: "table", path: "$",
+const resourceSnapshot = { version: 2, resources: [{ name: "sales", descriptor: { reference }, view: "table", path: "$",
   maxBatchItems: 32000, maxBatchBytes: 4096, parts: [{ id: "rn-export-part-0", offset: 0, nextOffset: 0, done: true }] }],
   parts: [{ id: "rn-export-part-0", text: JSON.stringify({ resource: reference, view: "table", rows: [], columns: [],
     offset: 0, nextOffset: 0, done: true, coverage: { kind: "record-range", start: 0, end: 0 } }) }] };
@@ -142,7 +142,7 @@ const index = fs.readFileSync(path.join(root, "web/index.html"), "utf8");
 const captureIndex = index.indexOf("app-echarts-sandbox-runtime.js?v=ui-lazy-20260903-1");
 const vendorIndex = index.indexOf("js/vendor/echarts.min.js");
 const finishIndex = index.indexOf("RNAssistantEChartsSandboxRuntime.finish()");
-const previewIndex = index.indexOf("app-html-workspace-preview.js?v=html-read-20260906-1");
+const previewIndex = index.indexOf("app-html-workspace-preview.js?v=binary-chunks-20260906-1");
 assert.ok(captureIndex >= 0 && captureIndex < previewIndex);
 assert.equal(vendorIndex, -1, "ECharts vendor is not parsed during main WebView startup");
 assert.equal(finishIndex, -1, "ECharts capture is finalized by the on-demand loader");

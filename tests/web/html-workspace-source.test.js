@@ -131,9 +131,12 @@ function fixture(texts = ["\ufeff<main>\r\n" + "я".repeat(140000) + "😀</main
     console.log("PASS HTML source: editor sync requires verified source actually rendered, never its old placeholder");
   }
   const index = read("index.html");
-  ["source", "model", "editor", "preview", "actions"].map(part => "app-html-workspace-" + part + ".js")
-    .concat(["app-html-workspace.js", "app-chat-state.js", "app-chat-session.js"])
+  ["source", "model", "editor", "actions"].map(part => "app-html-workspace-" + part + ".js")
     .forEach(file => assert.ok(index.includes(file + "?v=html-read-20260906-1"), file));
+  assert.ok(index.includes("app-html-workspace-preview.js?v=binary-chunks-20260906-1"));
+  assert.ok(index.includes("app-html-workspace.js?v=html-read-20260906-1"));
+  assert.ok(index.includes("app-chat-state.js?v=context-usage-display-20260907-1"));
+  assert.ok(index.includes("app-chat-session.js?v=startup-secondary-lazy-20260907-1"));
   assert.ok(index.includes('id="reloadHtmlWorkspaceSourceButton"'));
   assert.ok(index.indexOf("app-resource-download.js?v=") < index.indexOf("app-html-workspace-source.js?v="));
   console.log("PASS HTML source: source/editor/preview/export and lifecycle delivery graph is switched together");

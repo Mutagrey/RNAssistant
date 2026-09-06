@@ -104,10 +104,10 @@ assert.equal(/(?:src|href)="(?:https?:)?\/\//i.test(index), false, "main UI cont
 const cspMatch = index.match(/<meta\s+http-equiv="Content-Security-Policy"\s+content="([^"]+)"/i);
 assert.ok(cspMatch, "main UI CSP is required");
 const csp = directives(cspMatch[1]);
-assert.deepEqual(csp["connect-src"], ["'none'"]);
+assert.deepEqual(csp["connect-src"], ["https://rnassistant.local-resource/v1/"]);
 assert.deepEqual(csp["worker-src"], ["'none'"]);
 assert.deepEqual(csp["font-src"], ["'self'"]);
-assert.deepEqual(csp["img-src"], ["'self'", "data:", "blob:"]);
+assert.deepEqual(csp["img-src"], ["'self'", "data:", "blob:", "https://rnassistant.local-resource/v1/"]);
 assert.deepEqual(manifest.policy.csp.connectSrc, csp["connect-src"]);
 assert.deepEqual(manifest.policy.csp.workerSrc, csp["worker-src"]);
 assert.deepEqual(manifest.policy.csp.fontSrc, csp["font-src"]);

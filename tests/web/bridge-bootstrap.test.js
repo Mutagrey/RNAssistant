@@ -88,7 +88,7 @@ function createContext() {
     context.renderVbaProject = () => {};
     context.updateVbaMacroRunState = () => {};
     context.log = () => {};
-    context.$ = () => ({ textContent: "" });
+    context.$ = () => ({ textContent: "", classList: { contains: () => false } });
     vm.runInContext(chatSessionSource, context, { filename: "app-chat-session.js" });
     context.state.bridgeToken = "token-from-partial-init";
     context.applyBridgeUnavailableState(new Error("initial projection failed"));

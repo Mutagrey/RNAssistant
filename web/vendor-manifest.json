@@ -9,7 +9,7 @@
     "dynamicImport": "deny",
     "csp": {
       "connectSrc": [
-        "'none'"
+        "https://rnassistant.local-resource/v1/"
       ],
       "fontSrc": [
         "'self'"
