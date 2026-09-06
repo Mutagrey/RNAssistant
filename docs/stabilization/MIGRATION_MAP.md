@@ -17,8 +17,8 @@ adapters не означает завершение resource-consumer cleanup. �
 Current closure scope is the [MASTER acceptance reconciliation](../resource-fabric.md#master-acceptance-reconciliation--2026-09-07).
 Older broad "remaining consumers/coverage" labels below are not additional work
 packages. The catalog-capture/final-freeze publication race is fixed host-neutral;
-next are integrated mutation acceptance, named source-allocation limits and final
-Windows qualification. Finer Excel coverage and new checkpoints are not mandatory
+integrated two-chat mutation/guard acceptance is checked host-neutral. Next are
+named source-allocation limits and final Windows qualification. Finer Excel coverage and new checkpoints are not mandatory
 replacement paths or prerequisites merely because they could be improved.
 
 | Replaced/pending contour | Canonical owner | Consumers / removal gate | State |

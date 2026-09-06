@@ -794,8 +794,8 @@ are in `src/RNAssistant.Office/Services` unless another layer is stated.
 | Historical exact revision; continuation cannot cross revisions | Gateway/ResourceSnapshotReadService; `ResourceLiveContinuationsUseLogicalRevisions`, `ResourceRetainedPayloadsFailClosed` | No new architecture required by this review |
 | Restore/rollback create new lineage even with equal bytes | ResourceMutationAuthorityObserver; `LocalResourceRestorePublishesNewLogicalRevision`, `VbaRestorePreservesExactSourceLineage` | Real Office restore remains Windows evidence |
 | Save As preserves logical document identity | Document authority binding; `DocumentAuthoritySurvivesSaveAsAndSeparatesCopy` | Real COM/window lifetime remains Windows evidence |
-| Guarded write cannot publish over unexpected head | HostRuntime/domain guard, mutation lease, authority compare-and-publish; `ResourceAuthorityAtomicCommitAndReplay` plus existing VBA/editor guard cases | Include the production mutation/publication boundary in the focused integration check below; store conflict alone is not end-to-end proof |
-| Changed/no-op/unknown effects; cross-chat invalidation | ResourceMutationAuthorityObserver/OfficeResourceMutationDomain + Core EvidenceStateReducer; `ExcelWriteUsesExactNativeOwnership`, `ResourceEvidenceUsesFrozenAuthority`, `ResourceAuthorityAtomicCommitAndReplay`, `ResourceChatLifecyclePersistenceFailure` | Component coverage exists, but the combined two-chat read → native write/no-op/unknown → next compile scenario is not established by these checks |
+| Guarded write cannot publish over unexpected head | HostRuntime/domain guard, mutation lease, authority compare-and-publish; extended `VbaConfirmedMutationRejectsStaleSnapshot` | Checked host-neutral: another chat observes a replacement revision while confirmation waits; stale confirmation performs no mutation/publication or backup. Guard mismatch may separately publish conservative ExternalDriftObserved/Unknown; the competing historical snapshot remains intact |
+| Changed/no-op/unknown effects; cross-chat invalidation | ResourceMutationAuthorityObserver/OfficeResourceMutationDomain + Core EvidenceStateReducer; `ResourceTwoChatMutationsReachCompiler` | Checked through two executors sharing document authority, native Excel read/write, persisted paired read facts and actual ConversationModelSession.CreateRequest. No-op retains current evidence; changed-without-captured-after-state and lost-read-back remove uncertain content. Compiler/historical reads perform no Office I/O or replay |
 | One coherent frozen authority tuple | UseInput carries the captured catalog generation through CreateAsync/RebindAuthority; CompileCurrent checks it against the same frozen CaptureMany tuple | Fixed host-neutral: intervening publication fails before compilation/request dispatch; the extended `ResourcePromptPublicationIsFrozen` checks rejection, fresh rebind and retained request/repair |
 | Every normal model request uses one compiler | ConversationKernelAdapter.Model → ConversationModelSession.CreateRequest → ModelContextCompiler; repair also uses compiler; `ResourceCompilerFiltersBeforeBudget` | Preserve this route when closing the catalog race; no second builder |
 | Large payloads remain reference-first/bounded | Existing CAS/download/upload owners; `ResourceRuntimePayloadStorage`, `ResourceCompletedCallDoesNotHydrateArguments`, binary/raw admission cases | Known source-allocation limits below are not closed by transport bounds |
@@ -816,12 +816,17 @@ Finite remaining order:
    repair also closes over the original catalog/settings/budget rather than later
    rebound session fields. The existing frozen-prompt test now deterministically
    covers this interval. Owner: existing catalog capture/model-session owners.
-2. **Integrated mutation acceptance.** Use the existing fake native route and
-   compiler to establish two-chat changed/no-op/unknown behavior plus a guarded
-   refusal. Reuse existing domain checks; fix only a demonstrated failure.
-   OfficeResourceMutationDomain currently invalidates conservatively. Finer
-   sectional validity is not mandatory: Evidence/Compiler §5 and Authority §47
-   explicitly allow conservative resource-head semantics.
+2. **Integrated mutation acceptance — complete host-neutral.** The new two-chat
+   scenario covers changed/no-op/unknown through native Excel execution, the shared
+   journal/authority and the next actual model request. Verified change without a
+   captured complete after-state yields an Unknown head, while the durable effect
+   remains VerifiedChanged (distinct from UnknownAfterDispatch). No-op preserves
+   the head/generation; prior frozen requests and historical CAS remain unchanged.
+   The existing stale VBA confirmation case now checks competing authority state,
+   no mutation publication/backup, separate conservative guard-drift publication
+   and retained replacement bytes. Two focused checks cover all four scenarios;
+   no production change was required. Finer sectional validity is not mandatory:
+   Evidence/Compiler §5 and Authority §47 permit conservative head semantics.
 3. **Resolve existing source-allocation qualification.** Outlook `MailItem.Body`
    allocates before its ceiling is checked (tracked in RISK_REGISTER); Inspector
    request serialization also precedes preview truncation. Distinguish source

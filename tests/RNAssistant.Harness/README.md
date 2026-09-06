@@ -39,6 +39,15 @@ version check still apply.
 
 ## Test map
 
+`resource cutover: two chat mutations` covers three outcomes through separate
+executors/shared document authority, native Excel read/write, persisted read facts
+and the next actual model request: no-op keeps evidence, verified change without
+captured after-state and lost read-back exclude uncertain content. Historical CAS
+and old frozen requests survive; compile/retained reads do not call Office/replay.
+`vba: confirmed mutation rejects stale snapshot` also checks the competing chat's
+new revision: refusal has no mutation commit/backup, while separate conservative
+guard drift may make the head Unknown without deleting the retained replacement.
+
 `resource cutover: frozen prompt publication` also checks catalog publication
 between model-session capture and final compile: mixed generation is refused,
 the last receipt remains unchanged, fresh rebind succeeds, and the original

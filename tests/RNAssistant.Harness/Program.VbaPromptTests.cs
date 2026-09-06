@@ -1290,6 +1290,10 @@ namespace RNAssistant.Harness
                 var executor = new OfficeToolExecutor(adapter, backupStore, new SkillStore(paths));
                 var session = NewSession(adapter);
                 var tools = OfficeToolCatalog.ForHost(adapter.HostName).Concat(executor.GetControllerTools()).ToList();
+                executor.BindResourceAuthority(session);
+                var target = executor.ResourceGateway.ResolveIntentTarget(session, "VBA module: Module1").Reference;
+                var original = executor.ResourceGateway.Read(session, new ResourceReadRequest {
+                    Reference = new ResourceRef(target.Uri), Representation = "source", MaxChars = 32000 }).Result.Resource.Reference;
 
                 var command = Command(
                     "common.vba_apply_patch",
@@ -1308,22 +1312,41 @@ namespace RNAssistant.Harness
                 AssertTrue(!string.IsNullOrWhiteSpace(persisted.PreparedStateJson),
                     "typed prepared state survives persistence");
                 var otherExecutor = new OfficeToolExecutor(adapter, backupStore, new SkillStore(paths));
+                var otherSession = NewSession(adapter);
+                otherExecutor.BindResourceAuthority(otherSession);
+                AssertEqual(session.DocumentAuthorityId, otherSession.DocumentAuthorityId, "competing chat shares the document authority");
                 using (var accessDeadline = new CancellationTokenSource(2000))
                 {
-                    var available = otherExecutor.RunVbaMacro("Module1.Main", NewSession(adapter), accessDeadline.Token);
+                    var available = otherExecutor.RunVbaMacro("Module1.Main", otherSession, accessDeadline.Token);
                     AssertEqual("unknown", available.Status,
                         "another executor dispatches while confirmation waits without inferring effect");
                     AssertEqual("Module1.Main", adapter.RanMacros.Last(),
                         "another executor acquires document access while confirmation waits");
                 }
                 adapter.VbaModuleCode = "Sub Main()\nDebug.Print \"changed elsewhere\"\nEnd Sub";
+                var replacement = otherExecutor.ResourceGateway.Read(otherSession, new ResourceReadRequest {
+                    Reference = new ResourceRef(target.Uri), Representation = "source", MaxChars = 32000 }).Result.Resource.Reference;
+                AssertTrue(original.Revision != replacement.Revision, "competing observed state has a new logical revision");
+                var scope = executor.ResourceAuthority.Scope(session, true);
+                var beforeRefusal = executor.ResourceAuthority.Store.Capture(scope);
                 pending.Record = persisted;
-                var stale = ToolRunResultFactory.Create(
-                    ConfirmVbaNative(pending));
+                var refused = ConfirmVbaNative(pending);
+                var stale = ToolRunResultFactory.Create(refused);
 
                 AssertEqual("stale_vba_module", stale.ErrorCode, "confirmed stale mutation rejected");
                 AssertContains(adapter.VbaModuleCode, "changed elsewhere", "stale mutation does not overwrite external change");
                 AssertEqual(0, backupStore.List("Excel", "doc").Count, "stale mutation does not create a needless backup");
+                var afterRefusal = executor.ResourceAuthority.Store.Capture(scope);
+                AssertTrue(!refused.MayHaveDispatched && refused.AuthorityCommitId == null, "guard refusal cannot publish a mutation over the competing head");
+                var drift = afterRefusal.Commits.Single(item => item.NewGeneration > beforeRefusal.Generation);
+                AssertEqual(AuthorityCommitReason.ExternalDrift, drift.Reason, "guard mismatch is a separate conservative drift observation");
+                AssertEqual(ResourceEffectOutcome.ExternalDriftObserved, drift.Effect.Outcome, "refusal does not invent a successful or uncertain write effect");
+                AssertEqual(HeadKnowledge.Unknown, afterRefusal.GetHead(target.Identity).Knowledge, "uncaptured replacement is Unknown, never the stale prepared revision");
+                AssertEqual(replacement.Revision, drift.HeadChanges.Single().Before.Revision.Revision, "drift is based on the competing head, not the prepared one");
+                var retained = executor.ResourceGateway.Read(session, new ResourceReadRequest {
+                    Reference = replacement, Representation = "source", MaxChars = 32000 }).Result;
+                AssertContains(retained.Text, "changed elsewhere", "guard refusal preserves the competing historical snapshot");
+                AssertEqual(0, new ResourceMutationJournal(paths).Unresolved().Count, "guard refusal leaves no unresolved authority attempt");
             });
         }
 

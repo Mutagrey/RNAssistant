@@ -1492,6 +1492,94 @@ namespace RNAssistant.Harness
             });
         }
 
+        private static void ResourceTwoChatMutationsReachCompiler()
+        {
+            foreach (var scenario in new[] { "changed", "no-op", "unknown" })
+            WithTempPaths(paths =>
+            {
+                var adapter = FakeOfficeAdapter.ForHost("Excel");
+                var reader = new OfficeToolExecutor(adapter, new VbaJournalStore(paths), new SkillStore(paths), new ToolStore(paths), paths: paths);
+                var writer = new OfficeToolExecutor(adapter, new VbaJournalStore(paths), new SkillStore(paths), new ToolStore(paths), paths: paths);
+                var chatA = NewSession(adapter); var chatB = NewSession(adapter);
+                reader.BindResourceAuthority(chatA); writer.BindResourceAuthority(chatB);
+                AssertTrue(chatA.Id != chatB.Id, "two independent conversations");
+                AssertEqual(chatA.DocumentAuthorityId, chatB.DocumentAuthorityId, "both conversations bind the same document authority");
+                var publication = reader.CaptureCatalogs();
+                var catalog = ConversationRunService.PrepareToolsForRun(reader.CaptureRunnableCatalog(publication));
+                var skills = reader.CaptureSkills(publication);
+                var settings = PromptSettingsService.ApplyPublishedTemplates(new AppSettings {
+                    ContextWindowOverrideTokens = 64000, MaxTokens = 1024 }, publication.PromptsJson);
+                var readRuntime = reader.CreateNativeRuntime(chatA, catalog, settings, "agent", false);
+                var writeRuntime = writer.CreateNativeRuntime(chatB, catalog, settings, "agent", false);
+                const string marker = "TWO_CHAT_RETAINED_CELL";
+                adapter.SetExcelCellForTest("Data", "J1", marker);
+                var read = ExecuteHtmlNative(readRuntime, ResourceToolCatalog.ReadToolId,
+                    new JObject { ["target"] = "Excel range: Data!J1", ["representation"] = "text" });
+                AssertEqual(ToolExecutionOutcome.Ok, read.Outcome, "chat A native read succeeds");
+                var evidence = read.ResourceEvidence.Single();
+                var command = Command(ResourceToolCatalog.ReadToolId, "target", "Excel range: Data!J1", "representation", "text");
+                command.ToolCallId = read.Context.Call.Id;
+                chatA.Messages.Add(new ChatMessage { Role = "user", Content = "Read the cell and use the observation." });
+                chatA.Messages.Add(AgentJsonProtocol.CreateToolCallMessage(new AgentToolCall {
+                    Id = command.ToolCallId, Name = command.ToolId,
+                    Arguments = new Dictionary<string, object> { ["target"] = "Excel range: Data!J1", ["representation"] = "text" }
+                }, "Read the cell.", null, settings.ToolResultRole, new AcceptedToolCallOrigin("read-step", "read-attempt", 0)));
+                chatA.Messages.Add(AgentJsonProtocol.CreateToolResultMessage(command,
+                    new ToolResultMaterialization(read.Result, resourceEvidence: read.ResourceEvidence), settings.ToolResultRole));
+                foreach (var fact in chatA.Messages.Where(item => item.ProtocolMessage)) fact.RunId = "read-run";
+                var chats = new ChatStore(paths); chats.Save(chatA); chats.Save(chatB);
+                using (var model = ConversationModelSession.CreateAsync(adapter, null, null, EventStore(chats), ChatModes.Agent,
+                    "Use the observation.", chatA, NewContext(adapter), settings, catalog, skills.Skills, null, true, null,
+                    System.Threading.CancellationToken.None, reader.ResourceAuthority, reader.Payloads, () => skills,
+                    publication.Authority.Generation).GetAwaiter().GetResult())
+                {
+                    var callContext = new RNAssistant.Core.ModelProtocol.ModelProtocolCallContext(new string[0]);
+                    var before = model.CreateRequest("before-write", callContext);
+                    AssertTrue(string.Join("\n", before.AcceptedMessages.Select(item => item.Content)).Contains(marker), "current read reaches the first request");
+                    var generation = reader.ResourceAuthority.Store.Capture(evidence.ScopeId).Generation;
+                    if (scenario == "unknown") adapter.BeforeExcelBackendCall = operation => {
+                        if (operation == FakeOfficeAdapter.ExcelWriteApplyOperation)
+                            adapter.ThrowOnExcelBackendOperation = FakeOfficeAdapter.ExcelWriteReadOperation;
+                    };
+                    var write = ExecuteHtmlNative(writeRuntime, ExcelWriteToolIds.WriteRange,
+                        new JObject { ["kind"] = "value", ["sheet"] = "Data", ["address"] = "J1",
+                            ["value"] = scenario == "no-op" ? marker : "NEW_CELL_STATE" });
+                    adapter.BeforeExcelBackendCall = null; adapter.ThrowOnExcelBackendOperation = null;
+                    AssertEqual(scenario == "unknown" ? ToolExecutionOutcome.Unknown : ToolExecutionOutcome.Ok, write.Outcome, scenario + " native outcome");
+                    AssertEqual(scenario == "no-op" ? ToolEffectEvidence.VerifiedNoChange : scenario == "unknown" ? ToolEffectEvidence.Unknown : ToolEffectEvidence.VerifiedChange,
+                        write.Evidence.Effect, scenario + " read-back evidence");
+                    var calls = adapter.ExcelBackendCalls.Count;
+                    var after = model.CreateRequest("after-write", callContext);
+                    var frozen = after.ContextSnapshot.Authority.Resources;
+                    var head = frozen.Get(evidence.ScopeId).GetHead(evidence.Resource.Identity);
+                    AssertEqual(scenario == "no-op" ? EvidenceState.Current : EvidenceState.Unknown,
+                        new EvidenceStateReducer().Reduce(evidence, frozen).State, scenario + " reaches chat A through shared authority");
+                    AssertEqual(scenario == "no-op", string.Join("\n", after.AcceptedMessages.Select(item => item.Content)).Contains(marker),
+                        scenario + " controls old body residency in the next actual model request");
+                    if (scenario == "no-op")
+                    {
+                        AssertEqual(evidence.Resource.Revision, head.Revision.Revision, "no-op preserves the exact head");
+                        AssertEqual(generation, frozen.Get(evidence.ScopeId).Generation, "undispatched no-op does not advance authority");
+                    }
+                    else
+                    {
+                        AssertEqual(HeadKnowledge.Unknown, head.Knowledge, "uncaptured after-state cannot invent an exact head");
+                        var commit = frozen.Get(evidence.ScopeId).Commits.Single(item => item.CommitId == write.AuthorityCommitId);
+                        AssertEqual(scenario == "unknown" ? ResourceEffectOutcome.UnknownAfterDispatch : ResourceEffectOutcome.VerifiedChanged,
+                            commit.Effect.Outcome, "verified change and lost read-back remain distinct durable effects");
+                        AssertEqual(1, after.ContextSnapshot.Receipt.ExcludedUnknown, "compiler excludes uncertain read before hydration");
+                    }
+                    AssertEqual(EvidenceState.Current, new EvidenceStateReducer().Reduce(evidence, before.ContextSnapshot.Authority.Resources).State,
+                        "a later write cannot mutate the prior frozen request");
+                    var retained = reader.ResourceGateway.Read(chatA, new ResourceReadRequest {
+                        Reference = evidence.Resource, Representation = "text", MaxChars = 32000 }).Result;
+                    AssertContains(retained.Text, marker, "historical source remains available after invalidation");
+                    AssertEqual(calls, adapter.ExcelBackendCalls.Count, "next compile and historical read perform no Office I/O or write replay");
+                    AssertEqual(0, new ResourceMutationJournal(paths).Unresolved().Count, "completed outcome leaves no unresolved mutation attempt");
+                }
+            });
+        }
+
         private static void ResourceEvidenceUsesFrozenAuthority()
         {
             var scope = new ResourceAuthorityScopeId("document", "d");
