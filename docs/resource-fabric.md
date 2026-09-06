@@ -796,7 +796,7 @@ are in `src/RNAssistant.Office/Services` unless another layer is stated.
 | Save As preserves logical document identity | Document authority binding; `DocumentAuthoritySurvivesSaveAsAndSeparatesCopy` | Real COM/window lifetime remains Windows evidence |
 | Guarded write cannot publish over unexpected head | HostRuntime/domain guard, mutation lease, authority compare-and-publish; `ResourceAuthorityAtomicCommitAndReplay` plus existing VBA/editor guard cases | Include the production mutation/publication boundary in the focused integration check below; store conflict alone is not end-to-end proof |
 | Changed/no-op/unknown effects; cross-chat invalidation | ResourceMutationAuthorityObserver/OfficeResourceMutationDomain + Core EvidenceStateReducer; `ExcelWriteUsesExactNativeOwnership`, `ResourceEvidenceUsesFrozenAuthority`, `ResourceAuthorityAtomicCommitAndReplay`, `ResourceChatLifecyclePersistenceFailure` | Component coverage exists, but the combined two-chat read → native write/no-op/unknown → next compile scenario is not established by these checks |
-| One coherent frozen authority tuple | UseInput captures published tools/skills/prompts together; CompileCurrent independently calls CaptureMany | Open catalog-generation race described below |
+| One coherent frozen authority tuple | UseInput carries the captured catalog generation through CreateAsync/RebindAuthority; CompileCurrent checks it against the same frozen CaptureMany tuple | Fixed host-neutral: intervening publication fails before compilation/request dispatch; the extended `ResourcePromptPublicationIsFrozen` checks rejection, fresh rebind and retained request/repair |
 | Every normal model request uses one compiler | ConversationKernelAdapter.Model → ConversationModelSession.CreateRequest → ModelContextCompiler; repair also uses compiler; `ResourceCompilerFiltersBeforeBudget` | Preserve this route when closing the catalog race; no second builder |
 | Large payloads remain reference-first/bounded | Existing CAS/download/upload owners; `ResourceRuntimePayloadStorage`, `ResourceCompletedCallDoesNotHydrateArguments`, binary/raw admission cases | Known source-allocation limits below are not closed by transport bounds |
 | HTML/viewers use Gateway, not copied current JSON | ResourceDataPlaneService and resource-backed bindings; `ResourceBoundedTableLeaseUsesOneSnapshot`, `tests/web/resource-data-plane.test.js` | Real WebView2 qualification; HtmlWorkspaceDataSource now contains binding metadata, not the removed Json body |
@@ -806,14 +806,16 @@ are in `src/RNAssistant.Office/Services` unless another layer is stated.
 
 Finite remaining order:
 
-1. **Catalog capture correctness.** `ConversationKernelAdapter.SendAsync` checks
-   the catalog generation before `CreateRequest`; `UseInput` retains the published
-   bodies, but `ConversationModelSession.CompileCurrent` later captures fresh
-   catalog authority. A publication between those operations can pair the old
-   tools/skills/prompts with newer catalog heads/generation. Carry/check one
-   coherent publication at the final freeze boundary; add one deterministic
-   intervening-publication regression. This is a code-inspection finding, not yet
-   a reproduced live race. Owner: existing catalog capture/model-session owners.
+1. **Catalog capture correctness — complete host-neutral.** The generation from
+   `UseInput` accompanies the active tools/skills/prompts into the model session.
+   `CompileCurrent` compares it with the catalog scope in its single frozen
+   `CaptureMany` result, before compilation or receipt publication. An intervening
+   publication returns `RESOURCE_CATALOG_CHANGED`; no mixed request reaches the
+   provider, and no automatic model/tool replay is introduced. Fresh capture/rebind
+   permits the next request. Publication after freeze cannot alter that request;
+   repair also closes over the original catalog/settings/budget rather than later
+   rebound session fields. The existing frozen-prompt test now deterministically
+   covers this interval. Owner: existing catalog capture/model-session owners.
 2. **Integrated mutation acceptance.** Use the existing fake native route and
    compiler to establish two-chat changed/no-op/unknown behavior plus a guarded
    refusal. Reuse existing domain checks; fix only a demonstrated failure.

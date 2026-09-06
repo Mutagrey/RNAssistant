@@ -30,6 +30,7 @@ namespace RNAssistant.Office.Services
         private IReadOnlyList<ToolCatalogEntry> _runnableCatalog;
         private IReadOnlyList<SkillDefinition> _skills;
         private SkillCatalogSnapshot _skillSnapshot;
+        private long? _catalogGeneration;
         private Action<string, string, ChatActivity> _progress;
         private ModelContextCompiler _compiler;
         private ResourceAuthorityService _authority;
@@ -71,8 +72,10 @@ namespace RNAssistant.Office.Services
             Action<string, string, ChatActivity> progress,
             CancellationToken cancellationToken,
             ResourceAuthorityService authority = null, ChatBlobStore payloads = null,
-            Func<SkillCatalogSnapshot> captureSkills = null)
+            Func<SkillCatalogSnapshot> captureSkills = null, long? catalogGeneration = null)
         {
+            if (authority != null && !catalogGeneration.HasValue || catalogGeneration < 0)
+                throw new ArgumentException("An authority-backed model session requires its captured catalog generation.", nameof(catalogGeneration));
             var owner = new ConversationModelSession(adapter, contextCompactionService, attachmentAnalysisService,
                 eventStore, session)
             {
@@ -85,6 +88,7 @@ namespace RNAssistant.Office.Services
                 _progress = progress
             };
             owner._authority = authority;
+            owner._catalogGeneration = catalogGeneration;
             owner._payloads = payloads;
             owner._skillSnapshot = captureSkills == null ? new SkillCatalogSnapshot(skills) : captureSkills();
             owner._compiler = new ModelContextCompiler(payloads);
@@ -105,13 +109,16 @@ namespace RNAssistant.Office.Services
                 .GroupBy(item => item.EvidenceId, StringComparer.Ordinal).Select(group => group.First()).ToList();
             var options = BuildRequestOptions(_mode, _settings.AgentResponseMode, activeTools, _session, _runCache);
             options.TraceStepId = stepId;
+            var settings = _settings;
+            var catalog = _runnableCatalog;
+            var budget = RequestMessageBudget(activeTools);
             return new ModelProtocolRequest
             {
                 Settings = _settings,
                 AcceptedMessages = _lastSnapshot.Messages,
                 ContextSnapshot = snapshot,
                 CompileRepair = notice => _compiler.Compile(snapshot.Authority, snapshot.Messages, new[] { notice },
-                    null, _runnableCatalog, _settings, RequestMessageBudget(activeTools)).Messages,
+                    null, catalog, settings, budget).Messages,
                 CallableTools = activeTools,
                 RunnableCatalog = _runnableCatalog,
                 CallContext = callContext,
@@ -120,11 +127,13 @@ namespace RNAssistant.Office.Services
         }
 
         internal void RebindAuthority(IReadOnlyList<ToolCatalogEntry> catalog, SkillCatalogSnapshot skills,
-            AppSettings settings, DocumentContext context)
+            AppSettings settings, DocumentContext context, long catalogGeneration)
         {
+            if (catalogGeneration < 0) throw new ArgumentOutOfRangeException(nameof(catalogGeneration));
             var pack = CallableToolPack.Create(_mode, _adapter.HostName, _session.LastRun?.RunId, catalog,
                 _toolPackJournal.ReadAccepted());
             _runnableCatalog = catalog; _toolPack = pack; _skillSnapshot = skills; _skills = skills.Skills;
+            _catalogGeneration = catalogGeneration;
             _settings = settings;
             _context = context == null ? null : JsonConvert.DeserializeObject<DocumentContext>(JsonConvert.SerializeObject(context));
             _packState = null;
@@ -366,6 +375,11 @@ namespace RNAssistant.Office.Services
                 scopes.Add(ResourceAuthorityScopeId.Document(new DocumentAuthorityId(_session.DocumentAuthorityId)));
             var resources = _authority == null ? new ResourceAuthoritySnapshotSet(scopes.Distinct().Select(scope =>
                 new ResourceAuthoritySnapshot(scope, 0, null, 0, new ResourceHeadState[0]))) : _authority.CaptureMany(scopes);
+            // Compare against this same frozen tuple, not a second current-head read.
+            // A later publication may affect the next request, never this one.
+            if (_catalogGeneration.HasValue && resources.Get(CatalogPublicationService.ScopeId).Generation != _catalogGeneration.Value)
+                throw new ResourceRequestException("Published catalogs changed before the model snapshot was frozen. Capture fresh catalogs before retrying the request.",
+                    "RESOURCE_CATALOG_CHANGED", true);
             var frozen = new ModelAuthoritySnapshot(resources, _toolPack.Revision, skills, ResourceStateProvider.CaptureSchemas(resources),
                 _session.Revision);
             _currentAuthority = frozen;

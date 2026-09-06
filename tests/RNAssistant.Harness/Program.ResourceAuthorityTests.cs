@@ -741,30 +741,62 @@ namespace RNAssistant.Harness
             WithTempPaths(paths =>
             {
                 var adapter = FakeOfficeAdapter.ForHost("Word");
-                var settings = new AppSettings { SystemPrompt = "PUBLISHED_ONE" };
+                var settings = new AppSettings { SystemPrompt = "PUBLISHED_ONE", ContextWindowOverrideTokens = 64000, MaxTokens = 1024 };
                 var executor = new OfficeToolExecutor(adapter, new VbaJournalStore(paths),
                     new SkillStore(paths), new ToolStore(paths), () => settings, value => settings = value, paths);
                 var first = executor.CaptureCatalogs();
-                var secondSettings = settings.Clone();
-                secondSettings.SystemPrompt = "PUBLISHED_TWO";
-                var library = executor.GetPromptLibrary();
-                executor.SaveSettingsControls(settings, new RNAssistant.Office.Contracts.SaveSettingsPayload {
-                    Settings = RNAssistant.Office.Contracts.SettingsControlsDto.From(secondSettings), ExpectedPromptPublication = library.Publication },
-                    new RNAssistant.Office.Contracts.PromptMutationBatch { Type = RNAssistant.Office.Contracts.PromptMutationBatch.ContractType, ContractVersion = 1,
-                        Changes = new[] { new RNAssistant.Office.Contracts.PromptFieldChange {
-                            Resource = library.Items.Single(item => item.Key == "systemPrompt").Resource, Value = secondSettings.SystemPrompt } } },
-                    value => settings = value);
-                var second = executor.CaptureCatalogs();
-                AssertEqual(first.Authority.Generation + 1, second.Authority.Generation,
-                    "manual settings publication advances one shared catalog commit");
-                var runtimeSettings = new AppSettings { Model = "REQUEST_LOCAL_MODEL", SystemPrompt = "UNPUBLISHED" };
-                AssertEqual("PUBLISHED_ONE", PromptSettingsService.ApplyPublishedTemplates(runtimeSettings, first.PromptsJson).SystemPrompt,
-                    "the old captured prompt generation cannot change");
-                var active = PromptSettingsService.ApplyPublishedTemplates(runtimeSettings, second.PromptsJson);
-                AssertEqual("PUBLISHED_TWO", active.SystemPrompt, "the next request uses committed templates");
-                AssertEqual(runtimeSettings.Model, active.Model, "prompt activation cannot replace model routing/settings");
-                AssertEqual("UNPUBLISHED", runtimeSettings.SystemPrompt, "activation does not mutate the caller's settings");
-                AssertEqual(first.Skills.Generation, second.Skills.Generation, "a prompt publication does not invent new skill content");
+                var session = NewSession(adapter);
+                var chats = new ChatStore(paths); chats.Save(session);
+                var firstTools = ConversationRunService.PrepareToolsForRun(executor.CaptureRunnableCatalog(first));
+                var firstSkills = executor.CaptureSkills(first);
+                var firstSettings = PromptSettingsService.ApplyPublishedTemplates(settings, first.PromptsJson);
+                using (var model = ConversationModelSession.CreateAsync(adapter, null, null, EventStore(chats),
+                    ChatModes.Agent, "Check the frozen publication.", session, NewContext(adapter), firstSettings,
+                    firstTools, firstSkills.Skills, null, false, null, System.Threading.CancellationToken.None,
+                    executor.ResourceAuthority, executor.Payloads, () => firstSkills, first.Authority.Generation).GetAwaiter().GetResult())
+                {
+                    var callContext = new RNAssistant.Core.ModelProtocol.ModelProtocolCallContext(new string[0]);
+                    var before = model.CreateRequest("before-publication", callContext);
+                    var repairNotice = new ChatMessage { Role = "user", Content = "Repair the response." };
+                    var originalRepair = JToken.FromObject(before.CompileRepair(repairNotice));
+                    var secondSettings = settings.Clone();
+                    secondSettings.SystemPrompt = "PUBLISHED_TWO";
+                    var library = executor.GetPromptLibrary();
+                    executor.SaveSettingsControls(settings, new RNAssistant.Office.Contracts.SaveSettingsPayload {
+                        Settings = RNAssistant.Office.Contracts.SettingsControlsDto.From(secondSettings), ExpectedPromptPublication = library.Publication },
+                        new RNAssistant.Office.Contracts.PromptMutationBatch { Type = RNAssistant.Office.Contracts.PromptMutationBatch.ContractType, ContractVersion = 1,
+                            Changes = new[] { new RNAssistant.Office.Contracts.PromptFieldChange {
+                                Resource = library.Items.Single(item => item.Key == "systemPrompt").Resource, Value = secondSettings.SystemPrompt } } },
+                        value => settings = value);
+                    var second = executor.CaptureCatalogs();
+                    AssertEqual(first.Authority.Generation + 1, second.Authority.Generation,
+                        "manual settings publication advances one shared catalog commit");
+                    var runtimeSettings = new AppSettings { Model = "REQUEST_LOCAL_MODEL", SystemPrompt = "UNPUBLISHED" };
+                    AssertEqual("PUBLISHED_ONE", PromptSettingsService.ApplyPublishedTemplates(runtimeSettings, first.PromptsJson).SystemPrompt,
+                        "the old captured prompt generation cannot change");
+                    var active = PromptSettingsService.ApplyPublishedTemplates(runtimeSettings, second.PromptsJson);
+                    AssertEqual("PUBLISHED_TWO", active.SystemPrompt, "the next request uses committed templates");
+                    AssertEqual(runtimeSettings.Model, active.Model, "prompt activation cannot replace model routing/settings");
+                    AssertEqual("UNPUBLISHED", runtimeSettings.SystemPrompt, "activation does not mutate the caller's settings");
+                    AssertEqual(first.Skills.Generation, second.Skills.Generation, "a prompt publication does not invent new skill content");
+                    AssertEqual(first.Authority.Generation, before.ContextSnapshot.Authority.Resources.Get(CatalogPublicationService.ScopeId).Generation,
+                        "a publication after freeze cannot change the existing request's authority");
+                    AssertEqual("PUBLISHED_ONE", before.Settings.SystemPrompt, "an existing request keeps its original published prompt");
+                    var receipt = session.LastContextReceipt.SnapshotId;
+                    var conflict = RuntimeThrows<ResourceRequestException>(() => model.CreateRequest("intervening-publication", callContext));
+                    AssertEqual("RESOURCE_CATALOG_CHANGED", conflict.ErrorCode,
+                        "publication between active catalog capture and final freeze refuses a mixed request");
+                    AssertEqual(receipt, session.LastContextReceipt.SnapshotId, "a rejected freeze cannot publish a mixed context receipt");
+                    var freshTools = ConversationRunService.PrepareToolsForRun(executor.CaptureRunnableCatalog(second));
+                    model.RebindAuthority(freshTools, executor.CaptureSkills(second),
+                        PromptSettingsService.ApplyPublishedTemplates(settings, second.PromptsJson), NewContext(adapter), second.Authority.Generation);
+                    var next = model.CreateRequest("fresh-publication", callContext);
+                    AssertEqual(second.Authority.Generation, next.ContextSnapshot.Authority.Resources.Get(CatalogPublicationService.ScopeId).Generation,
+                        "explicit fresh binding matches the final frozen catalog authority");
+                    AssertEqual("PUBLISHED_TWO", next.Settings.SystemPrompt, "the next coherent request uses the new prompt");
+                    AssertTrue(JToken.DeepEquals(originalRepair, JToken.FromObject(before.CompileRepair(repairNotice))),
+                        "repair of a frozen request does not switch to a rebound catalog");
+                }
             });
         }
 

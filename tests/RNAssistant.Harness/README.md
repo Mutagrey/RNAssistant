@@ -39,6 +39,12 @@ version check still apply.
 
 ## Test map
 
+`resource cutover: frozen prompt publication` also checks catalog publication
+between model-session capture and final compile: mixed generation is refused,
+the last receipt remains unchanged, fresh rebind succeeds, and the original
+request/repair stays pinned. Use with the existing model-session compaction and
+durable admission checks when changing this boundary; no Office validation here.
+
 `resources: discovery preserves` covers ordinary vs terminal pagination, filtered
 and empty incomplete captures, multi-provider accumulation, truncated search and
 refusal to infer a unique semantic target from incomplete enumeration. Use with

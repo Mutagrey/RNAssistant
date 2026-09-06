@@ -19,13 +19,15 @@ Phase 2C3B заменяет этот reset preservation/review flow; Core settin
 Phase 2C3C переключает actual wire/history на v3 и проверяет preflight, run IDs, singleton
 safety, refusal и review/reset на prompt schema 12. Windows/live-provider gates остаются.
 
-Resource cutover / catalog freeze (2026-09-07, open code-inspection finding):
-`ConversationKernelAdapter.SendAsync` checks catalog generation and `UseInput`
-captures published tools/skills/prompts, but `ConversationModelSession.CompileCurrent`
-subsequently calls `CaptureMany` again. An intervening publication can pair older
-active bodies with newer catalog authority in one model snapshot. Owner: existing
-catalog capture / model-session boundary. Removal gate: one coherent final freeze
-and deterministic intervening-publication regression; not yet live-reproduced.
+Resource cutover / catalog freeze (2026-09-07, fixed host-neutral): the generation
+captured by `UseInput` is carried into the model session and compared against its
+final frozen `CaptureMany` tuple. Intervening publication refuses with
+`RESOURCE_CATALOG_CHANGED` before compilation/dispatch; fresh binding is required,
+without automatic model/tool replay. Existing request/repair retains its original
+publication and settings/budget. The extended frozen-prompt regression covers
+publication between capture and freeze, unchanged receipt on refusal and successful
+fresh rebind. Owner: existing catalog capture / model-session boundary. Real
+Windows execution remains unqualified.
 See the finite closure order in [Resource Fabric](../resource-fabric.md#master-acceptance-reconciliation--2026-09-07).
 
 Resource cutover / generic search capture (2026-09-06, fixed host-neutral): Gateway

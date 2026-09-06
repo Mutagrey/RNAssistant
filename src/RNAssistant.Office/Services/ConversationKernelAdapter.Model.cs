@@ -33,12 +33,16 @@ namespace RNAssistant.Office.Services
                             _executor.CaptureSkills().Skills, _input.Attachments)
                         : await _refresh(cancellationToken).ConfigureAwait(false);
                     UseInput(fresh);
-                    _modelSession.RebindAuthority(_catalog, _skillSnapshot, _input.Settings, _input.Context);
+                    _modelSession.RebindAuthority(_catalog, _skillSnapshot, _input.Settings, _input.Context, _catalogGeneration);
                 }
                 _lastModel = await _protocol.GetResponseAsync(
                     _modelSession.CreateRequest(request.StepId,
                         new ModelProtocolCallContext(ConversationProtocolContext.BatchSafeReadIds(_catalog))),
                     ConversationStreamProgressProjector.ForProtocol(_progress), cancellationToken).ConfigureAwait(false);
+            }
+            catch (ResourceRequestException ex) when (ex.ErrorCode == "RESOURCE_CATALOG_CHANGED")
+            {
+                return AgentModelResult.Failed(ModelProtocolFailureKind.Infrastructure, ex.Message);
             }
             finally
             {
@@ -64,7 +68,7 @@ namespace RNAssistant.Office.Services
             _modelSession = await ConversationModelSession.CreateAsync(_adapter, _compaction, _attachments, _eventStore,
                 _policy.Mode, _text, _session, _input.Context, _input.Settings, _catalog, _skills,
                 _input.Attachments, _confirmedCommand != null, _progress, cancellationToken,
-                _executor.ResourceAuthority, _executor.Payloads, () => _skillSnapshot).ConfigureAwait(false);
+                _executor.ResourceAuthority, _executor.Payloads, () => _skillSnapshot, _catalogGeneration).ConfigureAwait(false);
         }
 
     }
