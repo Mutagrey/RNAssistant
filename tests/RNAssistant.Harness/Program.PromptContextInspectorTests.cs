@@ -158,6 +158,44 @@ namespace RNAssistant.Harness
             });
         }
 
+        private static void PromptContextInspectorRawSerializationIsBounded()
+        {
+            const int limit = 512000;
+            Func<string, string> baseline = content => Newtonsoft.Json.JsonConvert.SerializeObject(new
+            {
+                mode = "chat", model = "model", estimated = true,
+                messages = new[] { new { role = "user", content, protocolMessage = false, toolCalls = new object[0], attachments = new object[0] } }
+            }, Newtonsoft.Json.Formatting.Indented);
+            var overhead = baseline("").Length;
+            var start = baseline("").IndexOf("\"content\": \"", StringComparison.Ordinal) + "\"content\": \"".Length;
+            foreach (var content in new[] { "quote \" newline\n emoji 🦊", new string('x', limit - overhead - 1),
+                new string('x', limit - overhead), new string('x', limit - overhead + 1),
+                new string('\n', limit * 2), new string('x', limit - start - 1) + "🦊tail" })
+            {
+                var expected = baseline(content);
+                var isTruncated = expected.Length > limit;
+                var length = Math.Min(expected.Length, limit);
+                if (isTruncated && char.IsHighSurrogate(expected[length - 1])) length--;
+                expected = expected.Substring(0, length) + (isTruncated ? "\n\n[structure truncated]" : "");
+                bool truncated;
+                var actual = PromptContextInspectorService.BuildRawRequest("chat", "model",
+                    new[] { new ChatMessage { Role = "user", Content = content } }, null, out truncated);
+                AssertEqual(isTruncated, truncated, "exact preview boundary flag");
+                AssertEqual(expected, actual, "bounded JSON preserves the original serialized prefix");
+                AssertTrue(new System.Text.UTF8Encoding(false, true).GetByteCount(actual) <= PromptContextInspectorDownloadService.MaximumBytes,
+                    "Unicode-safe preview fits existing download admission");
+            }
+            bool stopped;
+            PromptContextInspectorService.BuildRawRequest("chat", "model", InspectorOversizedThenThrow(), null, out stopped);
+            AssertTrue(stopped, "preview stops before enumerating the remaining request");
+        }
+
+        private static IEnumerable<ChatMessage> InspectorOversizedThenThrow()
+        {
+            yield return new ChatMessage { Role = "user", Content = new string('\n', 4 * 1024 * 1024) };
+            throw new InvalidOperationException("Inspector must not enumerate messages after the preview limit.");
+        }
+
         private static void PromptContextInspectorExactDownload()
         {
             var session = new ChatSession { Id = "inspector-chat" };

@@ -1,7 +1,7 @@
 # Resource Fabric
 
 Status: unified direct cutover **complete host-neutral** (2026-09-07), with explicit
-user-deferred Outlook/Inspector source-allocation limits and open Windows gates.
+unresolved Outlook source-allocation limits and open Windows gates.
 This is not bounded-source qualification or beta/RC/release readiness. Execution order and
 acceptance gates belong to [Resource MASTER](stabilization/resource-cutover/MASTER.md).
 Read its normative documents in order: [URF](stabilization/resource-cutover/UNIVERSAL_RESOURCE_FABRIC.md),
@@ -619,8 +619,13 @@ bounded raw-text cache and closes the lease on success/failure, panel close or c
 change, including late setup responses. Closing cancels delivery, not an already
 running synchronous compiler capture. This is a disposable diagnostic projection,
 not a new resource publication/store; compiler and context-budget semantics are
-unchanged. Pre-truncation raw serialization allocation and real WebView2 lifecycle
-qualification remain open.
+unchanged. Raw JSON now serializes directly into a bounded preview writer and stops
+enumerating the request at the first character beyond the limit. String/property
+prefixes also bound Json.NET escape-buffer allocation before serialization. Small
+requests retain their exact JSON; large ones retain the same surrogate-safe prefix
+and explicit truncation marker. No full intermediate JSON string is built. This
+closes the Inspector serialization-allocation defect host-neutral, not the memory
+cost of the existing compiler/input snapshot or real WebView2 qualification.
 
 The unused `getRuntimeLog`/`clearRuntimeLog` bridge commands, inline response DTO
 and exclusive tail/clear helpers are removed, not replaced by a new download.
@@ -793,7 +798,8 @@ Do not treat those labels as authorization for further provider expansion.
 This reconciles MASTER §8 with the implementation and focused host-neutral checks.
 It is not Windows qualification or an assertion that every repository path was
 exhaustively proved. Final closure is host-neutral only (2026-09-07); the user
-explicitly deferred the two source-allocation limits below.
+initially deferred two source-allocation limits; Inspector serialization is now
+corrected host-neutral, while Outlook remains unresolved.
 Test method names below are in `tests/RNAssistant.Harness`; implementation owners
 are in `src/RNAssistant.Office/Services` unless another layer is stated.
 
@@ -839,10 +845,10 @@ Finite closure status:
    and retained replacement bytes. Two focused checks cover all four scenarios;
    no production change was required. Finer sectional validity is not mandatory:
    Evidence/Compiler §5 and Authority §47 permit conservative head semantics.
-3. **Source allocation — explicitly deferred by the user, not qualified.** Outlook `MailItem.Body`
-   allocates before its ceiling is checked (tracked in RISK_REGISTER); Inspector
-   request serialization also precedes preview truncation. Distinguish source
-   allocation from bounded transport. Owners and concrete revisit triggers are in
+3. **Source allocation — Outlook unresolved; Inspector fixed host-neutral.** Outlook `MailItem.Body`
+   allocates before its ceiling is checked (tracked in RISK_REGISTER). Inspector
+   JSON serialization now stops at its bounded preview, including bounded escape
+   buffers; compiler/input allocation is unchanged. Owners and revisit triggers are in
    [BACKLOG](stabilization/BACKLOG.md#user-deferred-source-allocation--2026-09-07);
    risks remain open. This is permission to finish host-neutral cleanup, not evidence
    of bounded-source safety or a new diagnostics/performance project.

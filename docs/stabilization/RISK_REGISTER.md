@@ -48,11 +48,11 @@ Real COM membership/unsaved-mail and large-mail execution remain unqualified;
 no scope/large-mail Windows gate is closed.
 
 Resource cutover / allocation deferral (2026-09-07, explicit user decision): Outlook
-whole-string allocation above and Inspector request serialization before preview
-truncation are deferred beyond host-neutral cleanup. Owners/triggers are recorded
-in [BACKLOG](BACKLOG.md#user-deferred-source-allocation--2026-09-07). Inspector's
-bounded transfer does not bound construction of the source JSON. Neither this
-decision nor the completed consumer switch qualifies bounded source allocation,
+whole-string allocation above remains unresolved. Inspector's initially deferred
+full-JSON-then-truncate path is now replaced by bounded early-stop serialization,
+including bounded string escape buffers; its compiler/input snapshot is unchanged.
+Owners/triggers are recorded in [BACKLOG](BACKLOG.md#user-deferred-source-allocation--2026-09-07).
+This host-neutral correction does not qualify Outlook source allocation,
 real WebView2 responsiveness, Windows/Office or a release candidate.
 
 | ID | Priority | Риск | Владелец | Защита / фаза | Статус |

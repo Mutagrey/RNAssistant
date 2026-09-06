@@ -279,6 +279,7 @@ namespace RNAssistant.Harness
                 Test("context: compaction preserves tool protocol pairs", CompactionPreservesToolProtocolPairs),
                 Test("context inspector: builds agent snapshot", PromptContextInspectorBuildsAgentSnapshot),
                 Test("context inspector: raw JSON is opt-in", PromptContextInspectorRawJsonIsOptIn),
+                Test("context inspector: raw serialization stops at preview limit", PromptContextInspectorRawSerializationIsBounded),
                 Test("context inspector: exact download replaces inline body", PromptContextInspectorExactDownload),
                 Test("context inspector: download reservation and refusal cleanup", PromptContextInspectorDownloadGuards),
                 Test("context inspector: concurrent settings are isolated", PromptContextInspectorIsolatesConcurrentSettings),

@@ -28,17 +28,13 @@ service locator, второй store/read model или универсальный
 
 ## User-deferred source allocation — 2026-09-07
 
-The user explicitly approved closing host-neutral Resource cutover before these
-two corrections. Bounded transport is implemented; bounded source allocation is
-not qualified. They do not authorize another diagnostics/performance workstream.
+The user initially deferred two corrections. Inspector JSON serialization is now
+fixed host-neutral in its canonical owner; only Outlook remains here. Bounded
+transport alone does not qualify source allocation.
 
 - Outlook backend/resource owner: `MailItem.Body` allocates the whole COM string
   before rejecting its size. Revisit with a concrete large-mail Windows failure
   or before claiming bounded-source qualification; keep real Outlook gates open.
-- Inspector owner: request JSON serialization precedes preview truncation.
-  Revisit for a reproducible large-request memory/responsiveness problem or before
-  claiming bounded-source qualification. The bounded download/preview remains;
-  do not add a second compiler/store or change context semantics to optimize it.
 
 ## Existing defects outside the completed cutover
 

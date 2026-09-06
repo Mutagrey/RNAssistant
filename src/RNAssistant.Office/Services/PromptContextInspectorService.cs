@@ -227,13 +227,9 @@ namespace RNAssistant.Office.Services
 
             if (includeRaw)
             {
-                var raw = BuildRawRequest(mode, settings.Model, messages, options);
-                response.RawTruncated = raw.Length > MaxRawChars;
-                var length = Math.Min(raw.Length, MaxRawChars);
-                if (response.RawTruncated && length > 0 && char.IsHighSurrogate(raw[length - 1])) length--;
-                response.RawRequestJson = response.RawTruncated
-                    ? raw.Substring(0, length) + "\n\n[structure truncated]"
-                    : raw;
+                bool truncated;
+                response.RawRequestJson = BuildRawRequest(mode, settings.Model, messages, options, out truncated);
+                response.RawTruncated = truncated;
             }
 
             return response;
@@ -1006,13 +1002,13 @@ namespace RNAssistant.Office.Services
             };
         }
 
-        private static string BuildRawRequest(
+        internal static string BuildRawRequest(
             string mode,
             string model,
             IEnumerable<ChatMessage> messages,
-            LlmRequestOptions options)
+            LlmRequestOptions options, out bool truncated)
         {
-            return JsonConvert.SerializeObject(new
+            var structure = new
             {
                 mode = mode,
                 model = model ?? string.Empty,
@@ -1042,10 +1038,63 @@ namespace RNAssistant.Office.Services
                     responseSchemaJson = options.ResponseSchemaJson,
                     reasoningEnabled = options.ReasoningEnabled
                 }
-            }, Formatting.Indented, new JsonSerializerSettings
+            };
+            var output = new RawPreviewWriter();
+            using (var writer = new RawPreviewJsonWriter(output) { Formatting = Formatting.Indented, AutoCompleteOnClose = false })
             {
-                NullValueHandling = NullValueHandling.Ignore
-            });
+                var serializer = JsonSerializer.Create(new JsonSerializerSettings { NullValueHandling = NullValueHandling.Ignore });
+                try { serializer.Serialize(writer, structure); }
+                catch (RawPreviewLimitException) { }
+            }
+            truncated = output.Truncated;
+            return output.Result();
+        }
+
+        // Stop enumeration/serialization at the preview boundary, not after building
+        // a full JSON string. This exception belongs only to this diagnostic sink.
+        private sealed class RawPreviewLimitException : Exception { }
+
+        private sealed class RawPreviewWriter : TextWriter
+        {
+            private readonly StringBuilder _buffer = new StringBuilder();
+            public override Encoding Encoding { get { return Encoding.UTF8; } }
+            internal bool Truncated { get; private set; }
+            public override void Write(char value)
+            {
+                if (_buffer.Length == MaxRawChars) { Truncated = true; throw new RawPreviewLimitException(); }
+                _buffer.Append(value);
+            }
+            public override void Write(string value)
+            {
+                if (value == null) return;
+                var count = Math.Min(value.Length, MaxRawChars - _buffer.Length);
+                _buffer.Append(value, 0, count);
+                if (count < value.Length) { Truncated = true; throw new RawPreviewLimitException(); }
+            }
+            public override void Write(char[] value, int index, int count)
+            {
+                var available = Math.Min(count, MaxRawChars - _buffer.Length);
+                _buffer.Append(value, index, available);
+                if (available < count) { Truncated = true; throw new RawPreviewLimitException(); }
+            }
+            internal string Result()
+            {
+                if (Truncated && _buffer.Length > 0 && char.IsHighSurrogate(_buffer[_buffer.Length - 1])) _buffer.Length--;
+                return _buffer.ToString() + (Truncated ? "\n\n[structure truncated]" : string.Empty);
+            }
+        }
+
+        private sealed class RawPreviewJsonWriter : JsonTextWriter
+        {
+            internal RawPreviewJsonWriter(TextWriter output) : base(output) { }
+            // Json.NET may allocate an escape buffer proportional to the input string.
+            // A longer value cannot fit even without escaping; its bounded prefix
+            // necessarily hits the sink limit before a synthetic closing quote.
+            private static string Prefix(string value)
+            { return value != null && value.Length > MaxRawChars + 1 ? value.Substring(0, MaxRawChars + 1) : value; }
+            public override void WriteValue(string value) { base.WriteValue(Prefix(value)); }
+            public override void WritePropertyName(string name) { base.WritePropertyName(Prefix(name)); }
+            public override void WritePropertyName(string name, bool escape) { base.WritePropertyName(Prefix(name), escape); }
         }
 
         private static bool IsInstructionRole(string role)
