@@ -59,15 +59,6 @@ service locator, второй store/read model или универсальный
   slice. Owner: Tool catalog/qualification. Review each changed property against
   its canonical owner and update the baseline before final post-cutover Windows
   qualification; do not regenerate unchecked hashes or report this gate as green.
-- VBA canonical hash versus raw source snapshot: after reading an LF module,
-  changing only line endings to CRLF can reuse the same canonical revision while
-  attempting to register different immutable view bytes. The Gateway then fails
-  with `An immutable revision view was changed`; it does not return a fresh editable
-  snapshot. Reproduced by the 2026-09-06 Tool source check using the existing VBA
-  provider/authority path. Owner: ResourceAuthority/VbaResourceProvider. Resolve
-  revision/view identity without rewriting retained snapshots or using equal hashes
-  as revision identity; verify LF/CRLF-only drift and historical exact reads in a
-  dedicated authority slice. No editor fallback or automatic write is admitted.
 - Tool package README leading `U+FEFF`: `StorageFileSystem` writes a UTF-8 sidecar
   without a separate BOM, while `ToolStore.TryReadUtf8` strips its first BOM-shaped
   character. A literal leading `U+FEFF` therefore yields a different read-back and

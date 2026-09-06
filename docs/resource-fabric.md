@@ -67,6 +67,9 @@ plane: `getVbaModule` carries typed metadata and an exact resource reference, no
 source code inside `ToolRunResult.DataJson`. The editor only enables complete,
 integrity-checked code and keeps the normalized VBA write guard separate from the
 raw CAS/transport SHA-256. See [VBA journal](vba-mutation-journal.md#editor-source-reads).
+Equal normalized guards do not certify equal immutable bytes: a fresh complete
+capture with changed line endings receives a new logical revision. Repeated exact
+bytes retain that revision; historical LF/CRLF snapshots are never rewritten.
 
 Model discovery/read uses `common.resources_find/read` with runtime-resolved
 semantic targets and exact internal references/continuations. Live document/VBA

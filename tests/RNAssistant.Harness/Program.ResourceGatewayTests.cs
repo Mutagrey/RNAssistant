@@ -1806,6 +1806,18 @@ namespace RNAssistant.Harness
                     "VBA source read exposes continuation");
                 AssertTrue(!string.IsNullOrWhiteSpace(firstSource.Resource.Reference.Revision),
                     "VBA source read carries exact revision evidence");
+                var crlfSource = sharedVbaSource.Replace("\n", "\r\n");
+                adapter.SetVbaModule("ResourceModule", crlfSource, "StdModule");
+                var lineEndingChange = ReadResource(gateway, session, component.Reference.Uri,
+                    ResourceRepresentations.Source, null, 32000).Result;
+                AssertEqual(firstSource.ContentSha256, lineEndingChange.ContentSha256, "line endings preserve the canonical VBA mutation guard");
+                AssertTrue(firstSource.Resource.Reference.Revision != lineEndingChange.Resource.Reference.Revision,
+                    "equal canonical guards do not alias different immutable source bytes");
+                AssertEqual(crlfSource, lineEndingChange.Text, "fresh source retains exact CRLF bytes");
+                AssertEqual(lineEndingChange.Resource.Reference.Revision, ReadResource(gateway, session, component.Reference.Uri,
+                    ResourceRepresentations.Source, null, 32000).Result.Resource.Reference.Revision, "unchanged exact bytes preserve the logical revision");
+                AssertEqual(sharedVbaSource, ReadResource(gateway, session, component.Reference.Uri, ResourceRepresentations.Source,
+                    null, 32000, firstSource.Resource.Reference.Revision).Result.Text, "historical LF source is not rewritten");
                 var twinComponent = VbaComponent(executor, session, "ResourceTwin");
                 ResourceRequestException vbaCrossResource = null;
                 try

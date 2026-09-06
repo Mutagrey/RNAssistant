@@ -269,8 +269,14 @@ namespace RNAssistant.Office.Services
             if (live && head != null && head.Knowledge == HeadKnowledge.Known)
             {
                 var currentMetadata = _revisions.GetView(scope, head.Revision, result.Representation);
-                if (currentMetadata == null || string.Equals(currentMetadata.ContentSha256,
-                    contentSha256, StringComparison.OrdinalIgnoreCase))
+                // Domain guards may normalize text (for example VBA line endings).
+                // Equal guards cannot certify equal immutable source bytes.
+                var wholeHash = result.CompleteViewPayload?.Sha256 ??
+                    (result.Offset == 0 && result.Complete && result.Text != null ? TextPatternEngine.Sha256(result.Text) : null);
+                var bytesDiffer = currentMetadata?.Coverage.Kind == ResourceCoverageKinds.Whole &&
+                    currentMetadata.Payload != null && wholeHash != null && currentMetadata.Payload.Sha256 != wholeHash;
+                if (!bytesDiffer && (currentMetadata == null || string.Equals(currentMetadata.ContentSha256,
+                    contentSha256, StringComparison.OrdinalIgnoreCase)))
                     exact = head.Revision.Copy();
             }
             if (exact == null)
