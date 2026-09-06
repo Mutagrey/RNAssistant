@@ -260,6 +260,8 @@ function applyChatState(response) {
   }
   if (response.contextUsage || response.ContextUsage) {
     state.contextUsage = response.contextUsage || response.ContextUsage || {};
+    state.contextUsageBase = cloneContextUsage(state.contextUsage);
+    state.contextUsageBaseContextSignature = contextUsageContextSignature();
     syncTokenEstimateCalibrationFromUsage();
   }
   if ((response.htmlWorkspace || response.HtmlWorkspace) && (chatChanged || !state.htmlWorkspaceDirty)) {
@@ -627,6 +629,13 @@ function logToolResults(results) {
   });
 }
 
+function cloneContextUsage(usage) {
+  var source = usage || {};
+  var clone = {};
+  Object.keys(source).forEach(function (key) { clone[key] = source[key]; });
+  return clone;
+}
+
 function lastTokenUsageText() {
   for (var i = state.messages.length - 1; i >= 0; i -= 1) {
     var total = messageTotalTokens(state.messages[i]);
@@ -677,53 +686,54 @@ function renderContextMeter() {
 }
 
 function updateEstimatedContextUsage() {
-  var used = 0;
-  state.messages.forEach(function (message) {
-    if (messageActivity(message) || message.ExcludeFromModelContext || message.excludeFromModelContext) return;
+  var base = state.contextUsageBase || state.contextUsage || {};
+  var baseUsed = Number(base.usedTokens || base.UsedTokens || 0);
+  var used = baseUsed;
+  var localDelta = 0;
+  var scanned = 0;
+  for (var index = (state.messages || []).length - 1; index >= 0 && scanned < 128; index -= 1, scanned += 1) {
+    var message = state.messages[index];
+    if (!(message && (message.Local || message.local || message.Pending || message.pending || message.Failed || message.failed))) {
+      continue;
+    }
+    if (messageActivity(message) || message.ExcludeFromModelContext || message.excludeFromModelContext) continue;
     var role = messageRole(message).toLowerCase();
     var protocol = !!(message.ProtocolMessage || message.protocolMessage);
     if (role !== "user" && role !== "assistant" &&
-        !(protocol && (role === "tool" || role === "developer"))) return;
+        !(protocol && (role === "tool" || role === "developer"))) continue;
     var content = messageContent(message);
     var pending = message.Local || message.local || message.Pending || message.pending;
     var toolCalls = message.ToolCalls || message.toolCalls || [];
-    if (!content.trim() && !pending && !toolCalls.length && role !== "tool") return;
-    used += 4 + estimateTextTokens(role) + estimateTextTokens(content);
+    if (!content.trim() && !pending && !toolCalls.length && role !== "tool") continue;
+    localDelta += 4 + estimateTextTokens(role) + estimateTextTokens(content);
     if (toolCalls.length) {
-      used += 8;
+      localDelta += 8;
       toolCalls.forEach(function (call) {
         call = call || {};
-        used += 4 + estimateTextTokens(call.Id || call.id || "") +
+        localDelta += 4 + estimateTextTokens(call.Id || call.id || "") +
           estimateTextTokens(call.Name || call.name || "") +
           estimateTextTokens(call.ArgumentsJson || call.argumentsJson || "");
       });
     }
     if (role === "tool") {
-      used += 2 + estimateTextTokens(message.ToolCallId || message.toolCallId || "") +
+      localDelta += 2 + estimateTextTokens(message.ToolCallId || message.toolCallId || "") +
         estimateTextTokens(message.ToolName || message.toolName || "");
     }
     messageAttachments(message).forEach(function (attachment) {
       var extracted = String(attachment.ExtractedText || attachment.extractedText || "");
       var chars = Math.max(Number(attachment.ExtractedCharCount || attachment.extractedCharCount || 0), extracted.length);
-      used += estimateCharacterCountTokens(chars);
-      if (attachmentKind(attachment) === "image") used += 4096;
+      localDelta += estimateCharacterCountTokens(chars);
+      if (attachmentKind(attachment) === "image") localDelta += 4096;
       if (attachmentKind(attachment) === "audio") {
-        used += Math.ceil(Number(attachment.Size || attachment.size || 0) / 512);
+        localDelta += Math.ceil(Number(attachment.Size || attachment.size || 0) / 512);
       }
     });
-  });
-  var includedContext = {};
-  contextNotes().forEach(function (note) {
-    var text = noteText(note);
-    var reference = noteReference(note);
-    var identity = reference
-      ? [noteHost(note), noteKind(note), reference].join("|").toLowerCase()
-      : noteId(note);
-    if (!text.trim() || includedContext[identity]) return;
-    includedContext[identity] = true;
-    used += estimateTextTokens(text);
-  });
-  if (used > 0) used += effectiveTokenEstimateIntercept();
+  }
+  var contextDelta = contextUsageContextSignature() === state.contextUsageBaseContextSignature
+    ? 0
+    : estimateCurrentContextTokens();
+  used += localDelta + contextDelta;
+  if (used > 0 && !baseUsed) used += effectiveTokenEstimateIntercept();
 
   var settings = state.settings || {};
   var override = Number(settings.ContextWindowOverrideTokens || settings.contextWindowOverrideTokens || 0);
@@ -747,6 +757,10 @@ function updateEstimatedContextUsage() {
     limitTokens: limit,
     percent: limit ? Math.min(100, Math.round(used * 100 / limit)) : 0,
     actual: false,
+    clientEstimated: true,
+    baseUsedTokens: baseUsed,
+    localDeltaTokens: localDelta,
+    contextDeltaTokens: contextDelta,
     contextWindowTokens: windowTokens,
     reservedOutputTokens: reservedOutput,
     maxOutputTokens: maxOutput,
@@ -758,6 +772,34 @@ function updateEstimatedContextUsage() {
     manualEstimateMultiplier: Number(settings.TokenEstimateMultiplier || settings.tokenEstimateMultiplier || 1),
     autoCalibrateEstimate: settings.AutoCalibrateTokenEstimate !== false && settings.autoCalibrateTokenEstimate !== false
   };
+}
+
+function contextUsageContextSignature() {
+  return contextNotes().map(function (note) {
+    return [
+      noteId(note),
+      noteHost(note),
+      noteKind(note),
+      noteReference(note),
+      noteText(note).length
+    ].join("|");
+  }).join("\n");
+}
+
+function estimateCurrentContextTokens() {
+  var includedContext = {};
+  var used = 0;
+  contextNotes().forEach(function (note) {
+    var text = noteText(note);
+    var reference = noteReference(note);
+    var identity = reference
+      ? [noteHost(note), noteKind(note), reference].join("|").toLowerCase()
+      : noteId(note);
+    if (!text.trim() || includedContext[identity]) return;
+    includedContext[identity] = true;
+    used += estimateTextTokens(text);
+  });
+  return used;
 }
 
 function estimateTextTokens(text) {
