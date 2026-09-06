@@ -18,6 +18,8 @@ namespace RNAssistant.Harness
         internal const string WordPageBreakOperation = "word.page_break.direct";
         internal const string WordCommentOperation = "word.comment.direct";
         internal int WordTextMaterializationCount { get; private set; }
+        internal int WordStoryMaterializationCount { get; private set; }
+        internal Func<WordStoryReadRequest, IReadOnlyList<WordStorySnapshot>> WordStoriesFactory { get; set; }
 
         public WordTextSnapshot ReadText(WordTextReadRequest request)
         {
@@ -51,6 +53,10 @@ namespace RNAssistant.Harness
             BeginWordBackendCall(WordReadStoriesOperation);
             var scope = request == null || string.IsNullOrWhiteSpace(request.Scope)
                 ? "main" : request.Scope;
+            if (request?.MaxCharacters > 0 && _wordText.Length > request.MaxCharacters)
+                throw new WordBackendException("Choose a narrower Word search scope.", "RESOURCE_SNAPSHOT_TOO_LARGE", false);
+            WordStoryMaterializationCount++;
+            if (WordStoriesFactory != null) return WordStoriesFactory(request);
             return new[]
             {
                 new WordStorySnapshot

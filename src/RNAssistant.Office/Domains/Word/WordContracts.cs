@@ -23,6 +23,14 @@ namespace RNAssistant.Office.Domains.Word
     public sealed class WordStoryReadRequest
     {
         public string Scope { get; set; }
+        public int MaxCharacters { get; set; }
+        public int MaxStories { get; set; }
+    }
+
+    public sealed class WordSearchSnapshot
+    {
+        public string Scope { get; set; }
+        public IReadOnlyList<WordStorySnapshot> Stories { get; set; }
     }
 
     public sealed class WordStorySnapshot

@@ -41,7 +41,38 @@ namespace RNAssistant.Office.Domains.Word
             return snapshot;
         }
 
-        public WordOutcome Find(
+        internal WordSearchSnapshot CaptureSearch(string scope, CancellationToken cancellationToken)
+        {
+            WordOutcome failure;
+            scope = Scope(scope, out failure);
+            if (failure != null) throw new WordBackendException(failure.Message, "word_scope_invalid", false);
+            cancellationToken.ThrowIfCancellationRequested();
+            var snapshot = new WordSearchSnapshot { Scope = scope, Stories = _backend.ReadStories(
+                new WordStoryReadRequest { Scope = scope, MaxCharacters = MaximumTextCharacters, MaxStories = 256 }) };
+            cancellationToken.ThrowIfCancellationRequested();
+            ValidateSearchSnapshot(snapshot);
+            return snapshot;
+        }
+
+        internal static void ValidateSearchSnapshot(WordSearchSnapshot snapshot)
+        {
+            if (snapshot == null || (snapshot.Scope != "main" && snapshot.Scope != "selection" && snapshot.Scope != "all") ||
+                snapshot.Stories == null || snapshot.Stories.Count == 0 || snapshot.Stories.Count > 256)
+                throw new WordBackendException("Invalid Word search snapshot.", "word_story_snapshot_invalid", false);
+            long characters = 0, extent = 0;
+            foreach (var story in snapshot.Stories)
+            {
+                if (story == null || string.IsNullOrWhiteSpace(story.Kind) || story.Kind.Length > 128 ||
+                    story.Text == null || story.Start < 0 || story.End < story.Start)
+                    throw new WordBackendException("Incomplete Word search story.", "word_story_snapshot_invalid", false);
+                characters += story.Text.Length; extent += (long)story.End - story.Start;
+                if (characters > MaximumTextCharacters || extent > MaximumTextCharacters)
+                    throw new WordBackendException("Choose a narrower search scope.", "RESOURCE_SNAPSHOT_TOO_LARGE", false);
+            }
+        }
+
+        internal static WordOutcome Find(
+            WordSearchSnapshot snapshot,
             WordReplaceRequest request,
             int maxResults,
             int contextChars,
@@ -59,12 +90,16 @@ namespace RNAssistant.Office.Domains.Word
             try
             {
                 cancellationToken.ThrowIfCancellationRequested();
-                var stories = ReadStories(scope);
+                ValidateSearchSnapshot(snapshot);
+                if (snapshot.Scope != scope)
+                    return Failure("Word search scope does not match its snapshot.", "word_story_snapshot_invalid", false);
+                var stories = snapshot.Stories;
                 var matches = new JArray();
                 var total = 0;
                 var options = Options(request);
                 foreach (var story in stories)
                 {
+                    cancellationToken.ThrowIfCancellationRequested();
                     var found = TextPatternEngine.Find(
                         story.Text, request.Find, options,
                         Math.Max(1, maxResults - matches.Count), contextChars);
@@ -81,7 +116,6 @@ namespace RNAssistant.Office.Domains.Word
                         });
                     }
                 }
-                var scopeHash = ScopeHash(stories);
                 return WordOutcome.Ok(
                     "Text matches found: " + total,
                     new JObject
@@ -91,8 +125,6 @@ namespace RNAssistant.Office.Domains.Word
                         ["matchCount"] = total,
                         ["returnedCount"] = matches.Count,
                         ["truncated"] = total > matches.Count,
-                        ["scopeSha256"] = scopeHash,
-                        ["contentSha256"] = scopeHash,
                         ["matches"] = matches
                     }.ToString(Formatting.None),
                     WordEffect.None);

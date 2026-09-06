@@ -48,6 +48,9 @@ Word source cutover: `word resources:` and `word tools:` cover complete exact
 document/selection/range evidence, single-capture continuation, historical no-I/O,
 removed-call refusal, pre-materialization bounds and bound-STA/closed-document
 source access. Fake checks do not qualify real Word COM text or selection semantics.
+`word search:` covers exact story-scope CAS evidence (including zero matches),
+regex/coordinates/output bounds, historical no-I/O and malformed/oversized capture
+refusal; `word tools:` also checks mutation invalidation and search bound-STA/close.
 
 PowerPoint source cutover: `powerpoint resources:` and `powerpoint tools:` cover
 document/slide text and notes, exact CAS evidence, one-capture paging, historical

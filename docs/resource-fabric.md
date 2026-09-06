@@ -183,9 +183,32 @@ authority, so internal pages and historical exact reads do not recapture live Wo
 The one-million-character capture ceiling is checked before COM `Range.Text`;
 oversized document/selection reads fail explicitly and require a narrower target,
 not clipped text presented as complete. Empty exact ranges remain readable.
-HTML uses this same provider. Word search, inspection and mutations keep their
-specialized owners. Real Word range/selection/STA and final catalog qualification
-remain open on Windows.
+HTML uses this same provider. Word inspection and mutations keep their specialized
+owners. Real Word range/selection/STA and final catalog qualification remain open
+on Windows.
+
+`word.find_text` keeps its semantic literal/regex/main/selection/all contract but
+executes through `WordSearchResourceService` → Gateway → the existing document
+provider → `WordService.CaptureSearch`. Matching is a pure Word domain operation
+over the retained snapshot; the direct tool-adapter/backend search path is removed.
+`Word search scope: main|selection|all` are discoverable scope-collection resources:
+their exact JSON contains scope plus story kind/start/end/text, not runtime story
+IDs. They share the existing document authority and CAS; no search store or separate
+freshness state is introduced. Historical source pages can be read through the
+ordinary resource reader without new Word I/O.
+
+Capture bounds are 256 stories and one million aggregate text/range characters;
+the provider also caps serialized JSON at one million characters. The bound backend
+checks story count and aggregate ranges before `Range.Text`, then verifies the actual
+text extent. Invalid regex is refused before capture; malformed/oversized snapshots
+fail explicitly. Matching retains absolute coordinates within each named story,
+case/whole-word behavior and output limits. Both positive and zero-match searches
+carry complete exact CAS evidence; later observed scope drift or document mutation
+invalidates previous evidence through the shared reducer. Search results no longer
+expose scope/content hashes as public coordinates. Missing retained payloads never
+fall forward. Actual Word story enumeration, COM and WebView qualification remain
+open; generic `resources_find` scan publication and other host search consumers are
+separate remaining cutover work.
 
 ## PowerPoint slide reads
 

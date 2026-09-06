@@ -450,6 +450,8 @@ namespace RNAssistant.Harness
                 Test("word tools: native ownership and direct backend", WordToolsUseExactNativeOwnership),
                 Test("word resources: exact source evidence and retained pages", WordResourceReadsRetainExactEvidence),
                 Test("word resources: bounds precede source capture", WordResourceBoundsRejectBeforeMaterialization),
+                Test("word search: exact snapshots and zero-match drift", WordSearchRetainsExactSnapshots),
+                Test("word search: bounds and invalid input", WordSearchRejectsInvalidCaptures),
                 Test("word tools: family semantics", WordToolsPreserveFamilySemantics),
                 Test("word tools: dispatch fault classification", WordToolsClassifyDispatchFaults),
                 Test("word tools: bound document scope", WordToolsUseBoundDocumentScope),

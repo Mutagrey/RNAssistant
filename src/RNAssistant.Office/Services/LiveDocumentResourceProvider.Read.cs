@@ -41,7 +41,8 @@ namespace RNAssistant.Office.Services
                     };
                 }
 
-                var content = IsOutlook ? ReadOutlookSource(target, representation)
+                var content = IsWord && IsWordSearch(target) ? ReadWordSearch(target)
+                    : IsOutlook ? ReadOutlookSource(target, representation)
                     : representation == ResourceRepresentations.Source
                     ? ReadPowerPointSource(target, true)
                     : representation == ResourceRepresentations.Structure
@@ -267,6 +268,8 @@ namespace RNAssistant.Office.Services
         {
             value = (value ?? string.Empty).Trim().ToLowerInvariant();
             if (value.Length == 0 || value == "auto") return ResourceRepresentations.Text;
+            if (IsWord && IsWordSearch(target) && value != ResourceRepresentations.Text && value != ResourceRepresentations.Metadata)
+                throw new ResourceRequestException("Word search scopes expose exact text JSON.", "RESOURCE_VIEW_UNSUPPORTED", false);
             if (IsOutlook && target == OutlookCollectionKey && (value == ResourceRepresentations.Structure || value == ResourceRepresentations.Source))
                 throw new ResourceRequestException("Read collection text metadata or records at $.messages.", "RESOURCE_VIEW_UNSUPPORTED", false);
             if (value == ResourceRepresentations.Source && (IsOutlook || (IsPowerPoint && target != "selection"))) return value;

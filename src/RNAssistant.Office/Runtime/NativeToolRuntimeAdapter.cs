@@ -152,7 +152,7 @@ namespace RNAssistant.Office.Runtime
                             "Word handler dependencies are unavailable.");
                     handler = new WordToolHandler(
                         registration.Descriptor.Id, wordTools,
-                        hostRuntime, session);
+                        hostRuntime, session, gateway);
                 }
                 else if (PowerPointToolIds.Owns(registration.Descriptor.Id))
                 {

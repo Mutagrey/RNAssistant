@@ -6,6 +6,7 @@ using RNAssistant.Core.Models;
 using RNAssistant.Core.Tools;
 using RNAssistant.Office.Domains.Word;
 using RNAssistant.Office.Runtime;
+using RNAssistant.Office.Services;
 using RuntimeResult = RNAssistant.Core.Tools.Contracts.ToolResult;
 
 namespace RNAssistant.Office.Tools
@@ -16,12 +17,13 @@ namespace RNAssistant.Office.Tools
         private readonly WordToolAdapter _adapter;
         private readonly HostRuntime _runtime;
         private readonly ChatSession _session;
+        private readonly WordSearchResourceService _search;
 
         internal WordToolHandler(
             string toolId,
             WordToolAdapter adapter,
             HostRuntime runtime,
-            ChatSession session)
+            ChatSession session, ResourceGatewayService gateway)
         {
             if (!WordToolIds.Owns(toolId))
                 throw new ArgumentException(
@@ -30,11 +32,13 @@ namespace RNAssistant.Office.Tools
             _adapter = adapter ?? throw new ArgumentNullException(nameof(adapter));
             _runtime = runtime ?? throw new ArgumentNullException(nameof(runtime));
             _session = session;
+            _search = new WordSearchResourceService(gateway);
         }
 
         internal static ToolBinding BindingFor(string toolId)
         {
             if (!WordToolIds.Owns(toolId)) return null;
+            if (toolId == WordToolIds.FindText) return new ToolBinding("word.find.text.resource.v1");
             return new ToolBinding(
                 "word." + toolId.Substring("word.".Length).Replace('_', '.') +
                 ".v1");
@@ -50,6 +54,11 @@ namespace RNAssistant.Office.Tools
                     "word_session_required", false);
             try
             {
+                if (_toolId == WordToolIds.FindText)
+                    return Task.FromResult(_runtime.ReadDocument(Target(_session), cancellationToken, delegate {
+                        context.MarkDispatchPossible();
+                        return _search.Find(_session, context.Arguments, cancellationToken);
+                    }));
                 var outcome = WordToolIds.IsRead(_toolId)
                     ? _runtime.ReadDocument(
                         Target(_session), cancellationToken, delegate

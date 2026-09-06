@@ -152,6 +152,88 @@ namespace RNAssistant.Harness
             });
         }
 
+        private static void WordSearchRetainsExactSnapshots()
+        {
+            WithTempExecutor(FakeOfficeAdapter.ForHost("Word"), (executor, adapter) =>
+            {
+                var body = new string('x', 35000) + "\nneedle NEEDLE\n" + new string('y', 35000);
+                adapter.WordStoriesFactory = request => new[] { new WordStorySnapshot {
+                    Id = "private-story-key", Kind = request.Scope == "selection" ? "selection" : "main",
+                    Start = 100, End = 100 + body.Length, Text = body } };
+                var session = NewSession(adapter);
+                executor.BindResourceAuthority(session);
+                var tools = OfficeToolCatalog.ForHost("Word").Concat(executor.GetControllerTools()).ToList();
+                var runtime = executor.CreateNativeRuntime(session, tools, new AppSettings(), "agent", false);
+                var discovered = executor.ResourceGateway.Find(session, "", "document");
+                AssertEqual(3, discovered.Items.Count(item => item.Type == "Word search scope"), "search scopes are metadata-only resources");
+                AssertEqual(0, adapter.WordStoryMaterializationCount, "discovery does not read stories");
+                var args = new JObject { ["query"] = "n(e{2})dle", ["mode"] = "regex", ["scope"] = "selection",
+                    ["wholeWord"] = true, ["maxResults"] = 1, ["contextChars"] = 10 };
+                var found = ExecuteHtmlNative(runtime, WordToolIds.FindText, args);
+                AssertEqual(ToolExecutionOutcome.Ok, found.Outcome, "regex search uses exact capture");
+                var data = JObject.Parse(found.Result.DataJson);
+                AssertEqual(2, (int)data["matchCount"], "case-insensitive regex and whole-word matching preserved");
+                AssertTrue((bool)data["truncated"] && (int)data["returnedCount"] == 1, "result bound preserves total matches");
+                AssertEqual(35101, (int)data["matches"][0]["start"], "selection coordinates retain absolute start");
+                var evidence = found.ResourceEvidence.Single();
+                AssertTrue(evidence.Complete && evidence.Payload != null && evidence.Resource.IsExact, "search carries whole exact CAS evidence");
+                AssertEqual(1, adapter.WordStoryMaterializationCount, "search hydrates the complete source once");
+                var old = executor.ResourceGateway.Read(session, new ResourceReadRequest {
+                    Reference = evidence.Resource, Representation = "text", MaxChars = 32000 }).Result;
+                AssertTrue(!old.Text.Contains("private-story-key"), "runtime story ids are not source body content");
+                body = "changed without matches";
+                var negative = ExecuteHtmlNative(runtime, WordToolIds.FindText, args);
+                AssertEqual(ToolExecutionOutcome.Ok, negative.Outcome, "negative search is a real observation");
+                AssertEqual(0, (int)JObject.Parse(negative.Result.DataJson)["matchCount"], "no matches after drift");
+                AssertTrue(negative.ResourceEvidence.Single().Complete, "negative search retains exact source evidence");
+                AssertEqual(EvidenceState.Superseded, new EvidenceStateReducer().Reduce(evidence,
+                    executor.ResourceAuthority.CaptureMany(new[] { evidence.ScopeId })).State, "zero-match search supersedes old evidence");
+                var count = adapter.WordStoryMaterializationCount;
+                var next = executor.ResourceGateway.Read(session, new ResourceReadRequest { Reference = evidence.Resource,
+                    Representation = "text", Cursor = old.NextCursor, MaxChars = 32000 }).Result;
+                AssertTrue(next.Text.Contains("needle NEEDLE"), "historical continuation retains searched bytes");
+                AssertEqual(count, adapter.WordStoryMaterializationCount, "historical pages do no Office reads");
+                adapter.WordStoriesFactory = request => new[] {
+                    new WordStorySnapshot { Kind = "main", Start = 0, End = 6, Text = "needle" },
+                    new WordStorySnapshot { Kind = "footnote", Start = 20, End = 26, Text = "needle" } };
+                var all = ExecuteHtmlNative(runtime, WordToolIds.FindText, new JObject { ["query"] = "needle", ["scope"] = "all" });
+                var allMatches = (JArray)JObject.Parse(all.Result.DataJson)["matches"];
+                AssertEqual("footnote", (string)allMatches[1]["story"], "all-story search preserves domain story kinds");
+                AssertEqual(20, (int)allMatches[1]["start"], "all-story coordinates remain local to the named story");
+                System.IO.File.Delete(executor.Payloads.PathFor(evidence.Payload.Sha256));
+                var denied = false;
+                try { executor.ResourceGateway.Read(session, new ResourceReadRequest { Reference = evidence.Resource, Representation = "text" }); }
+                catch (ResourceRequestException error) { denied = error.ErrorCode == "RESOURCE_SNAPSHOT_UNAVAILABLE"; }
+                AssertTrue(denied, "missing exact source never falls back to a fresh search capture");
+            });
+        }
+
+        private static void WordSearchRejectsInvalidCaptures()
+        {
+            WithTempExecutor(FakeOfficeAdapter.ForHost("Word"), (executor, adapter) =>
+            {
+                var session = NewSession(adapter);
+                var tools = OfficeToolCatalog.ForHost("Word").Concat(executor.GetControllerTools()).ToList();
+                var invalid = executor.ExecuteManual(Command(WordToolIds.FindText, "query", "[", "mode", "regex"),
+                    tools, new AppSettings(), false, false, session);
+                AssertTrue(!invalid.Success && adapter.WordStoryMaterializationCount == 0, "invalid regex is refused before source capture");
+                adapter.Write(new WordWriteRequest { Mode = "replaceselection", Text = new string('x', WordService.MaximumTextCharacters + 1) }, () => { });
+                var oversized = executor.ExecuteManual(Command(WordToolIds.FindText, "query", "x"), tools, new AppSettings(), false, false, session);
+                AssertEqual("RESOURCE_SNAPSHOT_TOO_LARGE", oversized.ErrorCode, "oversized search requires narrower scope");
+                AssertEqual(0, adapter.WordStoryMaterializationCount, "search bound precedes text materialization");
+                adapter.Write(new WordWriteRequest { Mode = "replaceselection", Text = "" }, () => { });
+                adapter.WordStoriesFactory = request => new[] { new WordStorySnapshot { Kind = "main", Start = 0, End = 1, Text = null } };
+                var missing = executor.ExecuteManual(Command(WordToolIds.FindText, "query", "x"), tools, new AppSettings(), false, false, session);
+                AssertEqual("word_story_snapshot_invalid", missing.ErrorCode, "missing story text cannot become a successful empty search");
+                adapter.WordStoriesFactory = null;
+                var empty = executor.ExecuteManual(Command(WordToolIds.FindText, "query", "x"), tools, new AppSettings(), false, false, session);
+                AssertTrue(empty.Success && (int)JObject.Parse(empty.DataJson)["matchCount"] == 0, "genuine empty source is searchable");
+                var oldAdapter = new WordToolAdapter(adapter).Execute(WordToolIds.FindText,
+                    new System.Collections.Generic.Dictionary<string, object> { { "query", "x" } }, null, CancellationToken.None);
+                AssertEqual(WordOutcomeStatus.Error, oldAdapter.Status, "direct Word adapter no longer dispatches search");
+            });
+        }
+
         private static void WordResourceBoundsRejectBeforeMaterialization()
         {
             WithTempExecutor(FakeOfficeAdapter.ForHost("Word"), (executor, adapter) =>
@@ -209,6 +291,10 @@ namespace RNAssistant.Harness
                     AssertTrue(adapter.WordText.IndexOf(
                         "sales", StringComparison.Ordinal) >= 0,
                         "Word replacement updates exact text");
+                    var searchEvidence = found.ResourceEvidence.Single();
+                    AssertTrue(new EvidenceStateReducer().Reduce(searchEvidence,
+                        executor.ResourceAuthority.CaptureMany(new[] { searchEvidence.ScopeId })).State != EvidenceState.Current,
+                        "verified Word mutation invalidates prior search evidence through shared authority");
 
                     var noChange = ExecuteNativeConfirmed(
                         runtime, replaceCall, runtime.Describe(replaceCall));
@@ -323,12 +409,15 @@ namespace RNAssistant.Harness
                     var host = new BoundTestOfficeAdapter(sessionPort, inner);
                     var ownerSta = false;
                     var sourceOwnerSta = false;
+                    var searchOwnerSta = false;
                     host.BeforeRead = operation =>
                     {
                         if (operation == FakeOfficeAdapter.WordWriteOperation)
                             ownerSta = dispatcher.CheckAccess;
                         if (operation == FakeOfficeAdapter.WordReadTextOperation)
                             sourceOwnerSta = dispatcher.CheckAccess;
+                        if (operation == FakeOfficeAdapter.WordReadStoriesOperation)
+                            searchOwnerSta = dispatcher.CheckAccess;
                     };
                     var executor = new OfficeToolExecutor(
                         host, new VbaJournalStore(paths),
@@ -351,6 +440,10 @@ namespace RNAssistant.Harness
                     var sourceRead = executor.ExecuteManual(Command(ResourceToolCatalog.ReadToolId,
                         "target", "Word range: 0:8"), tools, new AppSettings(), false, false, chat);
                     AssertTrue(sourceRead.Success && sourceOwnerSta, "resource source uses the same bound owner STA");
+                    var searchRead = executor.ExecuteManual(Command(WordToolIds.FindText,
+                        "query", "bound"), tools, new AppSettings(), false, false, chat);
+                    AssertTrue(searchRead.Success && searchOwnerSta, "search resource capture uses the bound owner STA");
+                    var storyReads = inner.WordStoryMaterializationCount;
                     var sourceReads = inner.WordTextMaterializationCount;
 
                     var dispatched = inner.WordBackendCalls.Count(operation =>
@@ -370,6 +463,10 @@ namespace RNAssistant.Harness
                         "target", "Word range: 0:8"), tools, new AppSettings(), false, false, chat);
                     AssertEqual("active_document_changed", closedRead.ErrorCode, "closed bound resource target cannot read Office");
                     AssertEqual(sourceReads, inner.WordTextMaterializationCount, "closed source never materializes");
+                    var closedSearch = executor.ExecuteManual(Command(WordToolIds.FindText,
+                        "query", "bound"), tools, new AppSettings(), false, false, chat);
+                    AssertEqual("active_document_changed", closedSearch.ErrorCode, "closed bound search cannot read Office");
+                    AssertEqual(storyReads, inner.WordStoryMaterializationCount, "closed search never materializes stories");
                 }
             });
         }

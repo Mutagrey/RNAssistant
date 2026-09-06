@@ -53,15 +53,26 @@ namespace RNAssistant.OfficeHosts
             WordStoryReadRequest request)
         {
             var ranges = StoryRanges(
-                Document(), request == null ? null : request.Scope);
-            return ranges.Select(item => new WordStorySnapshot
+                Document(), request == null ? null : request.Scope, request?.MaxStories > 0 ? request.MaxStories : int.MaxValue);
+            var snapshots = ranges.Select(item => new WordStorySnapshot
             {
                 Id = item.Id,
                 Kind = item.Kind,
                 Start = item.Range.Start,
-                End = item.Range.End,
-                Text = item.Range.Text ?? string.Empty
+                End = item.Range.End
             }).ToArray();
+            if (request?.MaxCharacters > 0 && snapshots.Sum(item => (long)item.End - item.Start) > request.MaxCharacters)
+                throw new WordBackendException("Choose a narrower Word search scope.", "RESOURCE_SNAPSHOT_TOO_LARGE", false);
+            long characters = 0;
+            for (var index = 0; index < snapshots.Length; index++)
+            {
+                var text = ranges[index].Range.Text ?? string.Empty;
+                characters += text.Length;
+                if (request?.MaxCharacters > 0 && characters > request.MaxCharacters)
+                    throw new WordBackendException("Word search text exceeds its snapshot bound.", "RESOURCE_SNAPSHOT_TOO_LARGE", false);
+                snapshots[index].Text = text;
+            }
+            return snapshots;
         }
 
         public WordInspectionSnapshot Inspect(WordInspectRequest request)
@@ -412,7 +423,7 @@ namespace RNAssistant.OfficeHosts
         }
 
         private static List<StoryRange> StoryRanges(
-            Word.Document document, string scope)
+            Word.Document document, string scope, int maximumStories = int.MaxValue)
         {
             var normalized = string.IsNullOrWhiteSpace(scope)
                 ? "main" : scope.Trim().ToLowerInvariant();
@@ -446,6 +457,8 @@ namespace RNAssistant.OfficeHosts
                 var ordinal = 0;
                 while (range != null)
                 {
+                    if (result.Count >= maximumStories)
+                        throw new WordBackendException("Too many Word stories in the search scope.", "RESOURCE_SNAPSHOT_TOO_LARGE", false);
                     result.Add(new StoryRange
                     {
                         Id = type + ":" + ordinal,
