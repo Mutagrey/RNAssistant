@@ -20,6 +20,8 @@
   var filePath = workspaceModel.filePath;
   var fileKind = workspaceModel.fileKind;
   var fileContent = workspaceModel.fileContent;
+  var workspaceSource = window.RNAssistantHtmlWorkspaceSource.create({ state: state, send: send,
+    cancelRequest: function (id) { return cancelBridgeRequest(id); }, changed: function () { renderHtmlWorkspace(); } });
   var dataId = workspaceModel.dataId;
   var dataName = workspaceModel.dataName;
   var dataJson = workspaceModel.dataJson;
@@ -97,6 +99,7 @@
     state: state,
     model: workspaceModel,
     preview: htmlPreview,
+    source: workspaceSource,
     closeResources: closePreviewResources,
     artifacts: workspaceArtifacts,
     artifactActions: {
@@ -504,6 +507,21 @@
     renderHtmlWorkspace();
   }
 
+  var sourceReloadPending = false;
+  async function reloadHtmlWorkspaceSources() {
+    if (sourceReloadPending || state.bridgeUnavailable || state.htmlWorkspaceExportPending || !state.activeChatId) return;
+    if (state.htmlWorkspaceDirty && !window.confirm("Перезагрузить workspace и отбросить несохранённые правки? Сначала скопируйте нужный текст.")) return;
+    var chatId = state.activeChatId, editVersion = state.htmlWorkspaceEditVersion || 0;
+    sourceReloadPending = true; workspaceSource.release(); workspaceActions.cancelWrite();
+    try {
+      var response = await send("getHtmlWorkspace", { chatId: chatId });
+      if (state.activeChatId !== chatId) return;
+      if ((state.htmlWorkspaceEditVersion || 0) !== editVersion) throw new Error("Появились новые правки. Workspace не заменён.");
+      applyHtmlWorkspaceResponse(response, chatId);
+    } catch (error) { log(error.message, "error"); }
+    finally { sourceReloadPending = false; }
+  }
+
   function refreshArtifactsTab() {
     refreshArtifactsTabProjection();
     var synchronization = !state.htmlWorkspaceDirty && typeof synchronizeChatState === "function"
@@ -529,6 +547,7 @@
     function isCurrent() {
       return state.activeChatId === exportState.chatId && state.activeHtmlArtifactId === exportState.revisionArtifactId && !state.htmlWorkspaceDirty;
     }
+    await workspaceSource.exportSources(exportedWorkspace, isCurrent);
     if (htmlPreview.usesECharts(exportedFiles)) await htmlPreview.ensureECharts();
     var snapshot = await window.RNAssistantHtmlResourceExport.capture(exportState.resourceExport, {
       fetch: window.fetch.bind(window), isCurrent: isCurrent
@@ -590,6 +609,7 @@
       if (selectedItem() && selectedItem().type === "collection") renderHtmlWorkspaceEditor();
     });
     $("saveHtmlWorkspaceButton").addEventListener("click", workspaceActions.saveSelection);
+    $("reloadHtmlWorkspaceSourceButton").addEventListener("click", reloadHtmlWorkspaceSources);
     $("deleteHtmlWorkspaceButton").addEventListener("click", workspaceActions.deleteSelection);
     $("undoHtmlWorkspaceButton").addEventListener("click", workspaceActions.undo);
     $("redoHtmlWorkspaceButton").addEventListener("click", workspaceActions.redo);
@@ -627,6 +647,8 @@
   window.bindHtmlWorkspaceActions = bindHtmlWorkspaceActions;
   window.saveHtmlWorkspaceSelection = workspaceActions.saveSelection;
   window.cancelHtmlWorkspaceWrite = workspaceActions.cancelWrite;
+  window.cancelHtmlWorkspaceRead = workspaceSource.release;
+  if (typeof window.addEventListener === "function") window.addEventListener("pagehide", workspaceSource.release);
   if (typeof window.addEventListener === "function") window.addEventListener("pagehide", workspaceActions.cancelWrite);
   window.closeArtifactViewerResources = workspaceActions.closeArtifactViewers;
   window.markHtmlWorkspaceDirty = markHtmlWorkspaceDirty;

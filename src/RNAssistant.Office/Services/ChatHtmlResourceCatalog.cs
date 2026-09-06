@@ -7,6 +7,7 @@ using Newtonsoft.Json;
 using RNAssistant.Core.Models;
 using RNAssistant.Core.Services;
 using RNAssistant.Core.Tools;
+using RNAssistant.Core.Storage;
 
 namespace RNAssistant.Office.Services
 {
@@ -19,10 +20,12 @@ namespace RNAssistant.Office.Services
         private const int MaximumSearchCharactersPerMember = 128000;
 
         private readonly Func<ChatSession, string, bool> _loadArtifactBody;
+        private readonly ChatBlobStore _payloads;
 
-        public ChatHtmlResourceCatalog(Func<ChatSession, string, bool> loadArtifactBody)
+        public ChatHtmlResourceCatalog(Func<ChatSession, string, bool> loadArtifactBody, ChatBlobStore payloads = null)
         {
             _loadArtifactBody = loadArtifactBody;
+            _payloads = payloads;
         }
 
         public static bool SupportsKind(string kind)
@@ -303,6 +306,12 @@ namespace RNAssistant.Office.Services
         private static ResourceRef Reference(HtmlMember member)
         {
             return new ResourceRef(CreateUri(member), RevisionText(member));
+        }
+
+        internal static ResourceRef FileReference(ChatSession session, ChatArtifact artifact, string fileId)
+        {
+            return Reference(new HtmlMember { Session = session, Artifact = artifact,
+                MemberType = "file", MemberKey = MemberKey("file", fileId) });
         }
 
         private static string CreateUri(HtmlMember member)

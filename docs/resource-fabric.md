@@ -288,8 +288,13 @@ controls cross the bridge; complete source enters the existing CAS-backed mutati
 intent and existing HTML writer/commit barrier. Before dispatch, the editor guard,
 Known logical publication and exact immutable source must agree under the mutation
 lease. Draft/lease cancellation and bounds are in
-[Artifact Library](artifact-library.md#html-editor-uploads). The outgoing workspace
-source/preview read transport remains an open consumer, not a second implementation.
+[Artifact Library](artifact-library.md#html-editor-uploads). Outgoing workspace
+files are now metadata plus exact existing member refs in every init/chat/mutation/
+export projection. Selected source, preview and export use the same HTML member
+provider's complete CAS views and shared download owner, with one bounded browser
+producer and no inline body fallback. Unloaded source cannot become an empty draft;
+dirty drafts keep their original workspace guard across newer metadata pushes.
+Read/cancel/reload bounds are in [source downloads](artifact-library.md#html-editor-source-downloads).
 
 Trajectory ZIP export uses the same owner-scoped data plane at
 `/v1/download/<opaque-lease>`, with metadata-only bridge setup, sequential 256 KiB
@@ -386,10 +391,12 @@ separate state/Office retained text readers, externally hash-bound Office/state/
 continuations, and read-side exposure of prepared state/context/catalog identities.
 HTML workspace file/data Save/create inline bridge bodies are also removed; the
 four UI callers share one upload writer and the existing guarded domain owner.
+Outgoing `HtmlWorkspaceDto.Files` domain-body cloning is removed from all four
+projection sites; editor/preview/export now pull exact source through the same
+member provider/CAS/download. Preview assembly refuses missing source bodies.
 No compatibility alias, dual-write or feature flag restores these paths.
 
-Still open within this same cutover: outgoing HTML workspace source/preview hydration,
-remaining definition/domain read consumers, finer
+Still open within this same cutover: remaining definition/domain read consumers, finer
 Excel coverage/named resources, complete binary/raw view negotiation,
 remaining bulk upload/export surfaces, bounded history/retention
 optimization and final documentation cleanup. These are not permanent adapters.

@@ -94,6 +94,14 @@ namespace RNAssistant.Office
                 new HtmlWorkspaceEditorResourceService(_toolExecutor, _resourceData).BeginUpload(session, request, token));
         }
 
+        public Task<HtmlWorkspaceSourceResponse> ReadHtmlWorkspaceSourceAsync(HtmlWorkspaceSourceRequest request, CancellationToken token)
+        {
+            if (request == null || string.IsNullOrWhiteSpace(request.ChatId))
+                throw new InvalidOperationException("RESOURCE_ACCESS_DENIED: an explicit chat is required.");
+            var session = HtmlWorkspaceEditorResourceService.CaptureSourceSession(LoadAddressedSession(request.ChatId), request);
+            return Task.Run(() => new HtmlWorkspaceEditorResourceService(_toolExecutor, _resourceData).OpenSource(session, request, token), token);
+        }
+
         public ResourceDataCloseResponse CancelHtmlWorkspaceMutationUpload(ResourceUploadLeaseRequest request)
         {
             if (request == null || string.IsNullOrWhiteSpace(request.ChatId))
@@ -305,9 +313,7 @@ namespace RNAssistant.Office
                 ActiveHtmlArtifactId = session == null ? string.Empty : session.ActiveHtmlArtifactId,
                 Artifacts = ChatArtifactDto.From(session),
                 ArtifactLibrary = ArtifactLibraryProjectionService.Project(session),
-                Workspace = HtmlWorkspaceDto.From(
-                    session == null ? null : HtmlWorkspaceToolService.NormalizeWorkspace(session.HtmlWorkspace),
-                    session == null ? null : session.HtmlWorkspaceRecovery),
+                Workspace = HtmlWorkspaceEditorResourceService.Metadata(session),
                 StaticPreflight = preflightDto,
                 RedoChoiceRequired = redoChoiceRequired
             };

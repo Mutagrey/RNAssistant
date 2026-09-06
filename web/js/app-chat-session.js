@@ -280,6 +280,7 @@ function applyInitState(init) {
   state.prompts = init.prompts;
   if (typeof releasePromptEditorContext === "function") releasePromptEditorContext();
   if (typeof window.cancelHtmlWorkspaceWrite === "function") window.cancelHtmlWorkspaceWrite();
+  if (typeof window.cancelHtmlWorkspaceRead === "function") window.cancelHtmlWorkspaceRead();
   state.hasApiKey = !!(init.hasApiKey || init.HasApiKey);
   state.hasHistorySecret = !!(init.hasHistorySecret || init.HasHistorySecret);
   if (typeof cancelToolLibraryWrite === "function") cancelToolLibraryWrite();
@@ -360,6 +361,7 @@ function applyBridgeUnavailableState(error) {
   state.bridgeToken = "";
   if (typeof releasePromptEditorContext === "function") releasePromptEditorContext();
   if (typeof window.cancelHtmlWorkspaceWrite === "function") window.cancelHtmlWorkspaceWrite();
+  if (typeof window.cancelHtmlWorkspaceRead === "function") window.cancelHtmlWorkspaceRead();
   document.body.classList.add("bridge-unavailable");
   resetMessageEditState();
   state.appVersion = "";

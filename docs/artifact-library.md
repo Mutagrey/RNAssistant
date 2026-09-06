@@ -325,6 +325,37 @@ cosmetic drop-in or silently run beside PDFtoImage. Official references:
 [viewer options](https://github.com/mozilla/pdf.js/wiki/Viewer-options) and
 [binary-data opening](https://github.com/mozilla/pdf.js/wiki/Frequently-Asked-Questions).
 
+## HTML editor source downloads
+
+Init, chat-state, mutation and export responses use body-free
+`HtmlWorkspaceFileDto` entries: id/path/kind, exact existing HTML member `ResourceRef`,
+byte/character length and SHA-256. `HtmlWorkspaceDto.revisionArtifactId` identifies
+the displayed workspace, independently of a newer published active pointer.
+`HtmlWorkspaceEditorResourceService.Metadata` is the single projection owner;
+no response clones current file content or reintroduces an inline read fallback.
+
+The selected editor file is pulled on demand. Preview and export require the
+complete bounded workspace source set before assembly; missing files are errors,
+never empty substitutes. The same `html-editor` download consumer uses the existing
+Gateway/Chat HTML member provider and complete immutable CAS views, then the shared
+sequential byte downloader. Each background read retains only a copy of its exact
+parent artifact, not the active run's mutable artifact list. Source transport is
+inert UTF-8; it neither executes HTML nor adds model evidence. Historical exact
+reads do not switch the active workspace, and opened leases retain their snapshot.
+
+Per-file bounds remain 300,000 characters / 1,200,000 bytes; the current workspace
+cache is limited by the existing 100-file and 1,500,000-source-character bounds.
+There is one source producer, coalesced demand/cancellation and no automatic retry
+after read/integrity failure. Late leases close in the original owner. Chat/page
+cleanup, exact resource/hash/length checks and strict decoding precede hydration.
+Unloaded or not-yet-rendered source cannot be synchronized from an old editor
+placeholder into a draft, edited or saved as empty.
+Same-chat metadata pushes preserve dirty source and its original revision guard;
+they cannot silently rebase it. `Исходники ↻` explicitly reloads/retries, confirms
+discarding dirty edits, and preserves edits made while the reload was in flight.
+Real Windows/WebView2 render, reload/cancel, export and multi-window qualification
+remain open.
+
 ## HTML editor uploads
 
 HTML/CSS/JS Save/create and JSON Save/create use the same shared bounded upload
@@ -347,9 +378,8 @@ acknowledged chunks, chat/page cancellation and late-lease cleanup. Changed draf
 prevent dispatch; edits made after dispatch are not replaced or silently rebased
 by Save's acknowledgement. Lost/late responses require explicit refresh/review,
 never automatic retry. Creation cannot discard an existing dirty draft. Upload
-alone creates neither an artifact nor model evidence. Outgoing workspace/editor
-source and preview hydration are still an open read-transport consumer in the
-same Resource cutover; this upload slice does not introduce a parallel read path.
+alone creates neither an artifact nor model evidence. Outgoing source, preview and
+export hydration use the shared [source reader](#html-editor-source-downloads).
 
 ## Edit and delete semantics
 

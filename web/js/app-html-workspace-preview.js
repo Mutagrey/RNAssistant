@@ -269,6 +269,8 @@
 
   function build(options) {
     options = options || {};
+    if ((options.files || []).some(function (file) { return typeof prop(file, "Content", "content", null) !== "string"; }))
+      throw new Error("RESOURCE_SOURCE_REQUIRED: load every exact workspace source before assembly.");
     var files = options.files || [];
     var dataSources = options.dataSources || [];
     if (options.hostBridge === false && dataSources.length && !options.resourceSnapshot)

@@ -679,6 +679,7 @@ namespace RNAssistant.Harness
                 Test("html editor: upload through existing commit owner", HtmlEditorUploadUsesExistingCommitOwner),
                 Test("html editor: invalid uploads and stale drafts", HtmlEditorRejectsInvalidUploadsAndStaleDrafts),
                 Test("html editor: typed bridge rejects inline bodies", HtmlEditorBridgeRejectsInlineBodies),
+                Test("html editor: exact source and metadata-only projection", HtmlEditorReadsExactSourceWithoutInlineProjection),
                 Test("resource cutover: runtime payload storage and exact hydration", ResourceRuntimePayloadStorage),
                 Test("resource cutover: unpublished revision retention roots", ResourceUnpublishedRevisionRetention),
                 Test("resource cutover: canonical binary data plane", ResourceBinaryLeaseUsesCanonicalViews),

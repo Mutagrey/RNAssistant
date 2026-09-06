@@ -201,6 +201,7 @@ function applyChatState(response) {
     if (typeof cancelToolDocumentationRead === "function") cancelToolDocumentationRead();
     if (typeof releasePromptEditorContext === "function") releasePromptEditorContext();
     if (typeof window.cancelHtmlWorkspaceWrite === "function") window.cancelHtmlWorkspaceWrite();
+    if (typeof window.cancelHtmlWorkspaceRead === "function") window.cancelHtmlWorkspaceRead();
     if (typeof window.closeArtifactViewerResources === "function") window.closeArtifactViewerResources();
     state.artifactViewerPages = {};
     state.artifactViewerThumbnails = { items: {}, order: [], queue: [], pending: 0 };
@@ -261,7 +262,7 @@ function applyChatState(response) {
     state.contextUsage = response.contextUsage || response.ContextUsage || {};
     syncTokenEstimateCalibrationFromUsage();
   }
-  if (response.htmlWorkspace || response.HtmlWorkspace) {
+  if ((response.htmlWorkspace || response.HtmlWorkspace) && (chatChanged || !state.htmlWorkspaceDirty)) {
     state.htmlWorkspace = response.htmlWorkspace || response.HtmlWorkspace || { activeFileId: "", files: [], dataSources: [], history: [], redoHistory: [], redoBranches: [], recovery: { status: "empty", canMutate: true, candidates: [] } };
     state.htmlWorkspaceDirty = false;
   }

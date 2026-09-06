@@ -710,9 +710,7 @@ namespace RNAssistant.Office
                 ContextUsage = completion == null
                     ? ContextUsageEstimator.FromSession(session, settings)
                     : completion.ContextUsage ?? ContextUsageEstimator.FromSession(session, settings),
-                HtmlWorkspace = HtmlWorkspaceDto.From(
-                    session == null ? null : HtmlWorkspaceToolService.NormalizeWorkspace(session.HtmlWorkspace),
-                    session == null ? null : session.HtmlWorkspaceRecovery)
+                HtmlWorkspace = HtmlWorkspaceEditorResourceService.Metadata(session)
             };
         }
 

@@ -28,6 +28,13 @@ service locator, второй store/read model или универсальный
 
 ## Existing defects outside the active slice
 
+- HTML source-tool fixture still exercises retired `RNAssistantData.missingData`
+  while expecting the current `script.data_source_missing` finding. The focused
+  `tools: html source read search and patch` check passes its read/search/patch
+  assertions but fails this later diagnostic assertion (2026-09-06 source-download
+  slice); the diagnostic owner is unchanged by this slice. Owner: HTML diagnostics
+  qualification. Review the fixture against `RN.resources` in a separate slice;
+  do not reintroduce the removed data API or report the entire check as passing.
 - Web Plan fixture has stale unrelated VBA delivery evidence:
   `tests/web/plan-document.test.js:102` still requires
   `app-vba.js?v=resource-intent-20260902-1`, while the preceding committed UI already

@@ -70,6 +70,20 @@ vm.runInContext(fs.readFileSync(path.join(root, "web/js/app-chat-state.js"), "ut
 }
 
 {
+  const draft = { revisionArtifactId: "html-old", files: [{ content: "unsaved" }] };
+  ui.state.htmlWorkspace = draft; ui.state.htmlWorkspaceDirty = true;
+  ui.applyPushedChatState({ type: "chatState", scope: "full", payload: {
+    activeChatId: "chat-a", sessionRevision: 5, activeHtmlArtifactId: "html-new",
+    htmlWorkspace: { revisionArtifactId: "html-new", files: [{ source: { uri: "exact-new", revision: "2" } }] }
+  } });
+  assert.equal(ui.state.activeHtmlArtifactId, "html-new", "published head advances normally");
+  assert.equal(ui.state.htmlWorkspace, draft, "new metadata cannot replace a dirty source draft");
+  assert.equal(ui.state.htmlWorkspaceDirty, true, "draft remains pinned to its original workspace, never silently rebased");
+  ui.state.htmlWorkspaceDirty = false;
+  console.log("PASS artifact commit: new metadata preserves dirty HTML source and its original revision guard");
+}
+
+{
   const controller = fs.readFileSync(
     path.join(root, "src/RNAssistant.Office/Controller/AssistantController.ChatExecution.cs"), "utf8");
   const save = controller.indexOf("_conversationStore.Save(session);");
@@ -85,7 +99,7 @@ vm.runInContext(fs.readFileSync(path.join(root, "web/js/app-chat-state.js"), "ut
   assert.match(attachments, /committed:\s*"Оригинал"/);
   const index = fs.readFileSync(path.join(root, "web/index.html"), "utf8");
   assert.ok(index.includes("app-core.js?v=chat-sync-20260903-1"), "core has the chat sync cache key");
-  assert.ok(index.includes("app-chat-state.js?v=html-write-20260906-1"), "chat state has the resource lifecycle cache key");
+  assert.ok(index.includes("app-chat-state.js?v=html-read-20260906-1"), "chat state has the resource lifecycle cache key");
   assert.ok(index.includes("app-messages.js?v=ui-lazy-20260903-1"), "messages have the lazy UI cache key");
   assert.ok(index.includes("app-attachments.js?v=vba-upload-20260906-1"),
     "attachment staging has the current pre-dispatch barrier cache key");
@@ -111,4 +125,4 @@ vm.runInContext(fs.readFileSync(path.join(root, "web/js/app-chat-state.js"), "ut
   console.log("PASS artifact commit: tool-result artifacts publish before terminal response");
 }
 
-console.log("OK 4/4");
+console.log("OK 5/5");

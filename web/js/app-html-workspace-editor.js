@@ -6,6 +6,8 @@
     var state = options.state;
     var model = options.model;
     var htmlPreview = options.preview;
+    var source = options.source;
+    var renderedFile = null, renderedSourceKey = null;
     var workspaceArtifacts = options.artifacts;
     var htmlPreviewRefreshTimer = 0;
     var workspace = model.workspace;
@@ -54,6 +56,10 @@
         (selected.type === "plan" || selected.type === "artifact" || selected.type === "collection"));
     }
 
+    function fileIsInEditor(file) {
+      return source.ready(file) && renderedFile === file && renderedSourceKey === file.sourceReadKey;
+    }
+
     function syncHtmlEditorToState() {
       var selected = selectedItem();
       if (!selected) {
@@ -69,6 +75,7 @@
       } else if (selected.type === "data") {
         return;
       } else {
+        if (!fileIsInEditor(selected.item)) return;
         setFileContent(selected.item, value);
       }
     }
@@ -77,8 +84,10 @@
       var selected = selectedItem();
       if (!selected || selected.type === "artifact" || selected.type === "collection" || selected.type === "data") return;
       if (recoveryBlocked() && selected.type !== "plan") return;
+      if (selected.type === "file" && !fileIsInEditor(selected.item)) return;
       syncHtmlEditorToState();
       state.htmlWorkspaceDirty = true;
+      state.htmlWorkspaceEditVersion = (state.htmlWorkspaceEditVersion || 0) + 1;
       updateHtmlWorkspaceStatus();
       scheduleHtmlWorkspacePreviewRefresh();
     }
@@ -134,7 +143,8 @@
       }
       if (save) {
         save.disabled = state.bridgeUnavailable || !selected || selected.type === "artifact" ||
-          selected.type === "collection" || !state.htmlWorkspaceDirty || (blocked && selected.type !== "plan");
+          selected.type === "collection" || !state.htmlWorkspaceDirty || (blocked && selected.type !== "plan") ||
+          selected.type === "file" && (!source.ready(selected.item) || !source.current(workspace()));
         save.title = "Сохранить изменения (Ctrl+S)";
       }
       if ($("refreshHtmlDataButton")) {
@@ -222,9 +232,7 @@
       syncHtmlEditorToState();
       state.htmlWorkspaceMode = mode === "edit" ? "edit" : "preview";
       applyHtmlWorkspaceMode();
-      if (state.htmlWorkspaceMode === "preview") {
-        renderHtmlWorkspacePreview();
-      }
+      renderHtmlWorkspaceEditor();
     }
 
     function applyHtmlWorkspaceMode() {
@@ -249,7 +257,7 @@
       }
       if (selected.type === "collection") return "";
       if (selected.type === "artifact") return artifactInlineText(selected.item);
-      return selected.type === "data" ? dataJson(selected.item) : fileContent(selected.item);
+      return selected.type === "data" ? dataJson(selected.item) : (source.ready(selected.item) ? fileContent(selected.item) : "");
     }
 
     function renderHtmlWorkspaceEditor() {
@@ -263,6 +271,9 @@
       var isArtifact = !!selected && selected.type === "artifact";
       var isCollection = !!selected && selected.type === "collection";
       var blocked = recoveryBlocked();
+      var wanted = isPlan || isArtifact || isCollection || !selected ? [] :
+        state.htmlWorkspaceMode === "edit" ? (selected.type === "file" ? [selected.item] : []) : files();
+      var sourcesReady = source.ensure(wanted);
       if (editor) {
         editor.classList.toggle("is-empty", !hasItems);
       }
@@ -284,6 +295,7 @@
             (isPlan ? "План · Markdown · v" + artifactRevision(selected.item) : (isArtifact ? workspaceArtifacts.typeLabel(artifactKind(selected.item)) + " · только чтение" : (selected.type === "data" ? ("Ресурс · " + bindingValue(binding, "View", "view", "text") + " · " + bindingValue(binding, "Policy", "policy", "exact")) : (fileKind(selected.item) || "file")))))
           : "";
         meta.title = binding ? dataJson(selected.item) : "";
+        if (wanted.length && !sourcesReady) meta.textContent += " · " + source.message();
       }
       var previewButton = document.querySelector('.html-workspace-mode-button[data-html-mode="preview"]');
       var editButton = document.querySelector('.html-workspace-mode-button[data-html-mode="edit"]');
@@ -307,8 +319,11 @@
       } else if ($("htmlWorkspaceEditorInput")) {
         $("htmlWorkspaceEditorInput").value = isArtifact || isCollection ? "" : selectedEditorValue(selected);
       }
+      renderedFile = selected && selected.type === "file" && source.ready(selected.item) ? selected.item : null;
+      renderedSourceKey = renderedFile ? renderedFile.sourceReadKey : null;
       if (typeof setCodeEditorReadOnly === "function") setCodeEditorReadOnly("htmlWorkspaceEditorInput",
-        isArtifact || isCollection || selected && selected.type === "data" || (blocked && !isPlan));
+        isArtifact || isCollection || selected && selected.type === "data" || (blocked && !isPlan) ||
+        selected && selected.type === "file" && !source.ready(selected.item));
       renderHtmlWorkspacePreview();
     }
 
@@ -331,7 +346,13 @@
       }
       detail.replaceChildren();
       frame.removeAttribute("src");
+      if (state.htmlWorkspaceMode === "edit") { frame.srcdoc = ""; return; }
       var workspaceFiles = files();
+      if (!source.current(workspace()) || !workspaceFiles.every(source.ready)) {
+        frame.srcdoc = "";
+        detail.classList.remove("hidden"); detail.textContent = source.message(); frame.classList.add("hidden");
+        return;
+      }
       if (typeof htmlPreview.usesECharts === "function" && htmlPreview.usesECharts(workspaceFiles) &&
           typeof htmlPreview.echartsReady === "function" && !htmlPreview.echartsReady()) {
         frame.srcdoc = "<!doctype html><html><body style=\"font-family:Segoe UI,Arial,sans-serif;padding:24px;color:#475467\">Загрузка диаграммы...</body></html>";

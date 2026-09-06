@@ -349,7 +349,7 @@ namespace RNAssistant.Office.Services
             return reference == null ? null : new ResourceRef(reference.Uri, reference.Revision);
         }
 
-        private static ChatArtifact CloneArtifact(ChatArtifact artifact)
+        internal static ChatArtifact CloneArtifact(ChatArtifact artifact)
         {
             return new ChatArtifact
             {

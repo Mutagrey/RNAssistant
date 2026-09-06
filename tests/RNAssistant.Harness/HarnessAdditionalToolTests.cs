@@ -578,8 +578,10 @@ namespace RNAssistant.Harness
             HtmlWorkspaceToolService.UpsertFile(transportSession, "index.html", "html", "HISTORY_SECOND", true);
             HtmlWorkspaceToolService.UpsertFile(transportSession, "index.html", "html", "CURRENT_THIRD", true);
 
-            var bridgeJson = JsonConvert.SerializeObject(HtmlWorkspaceDto.From(transportSession.HtmlWorkspace));
-            AssertContains(bridgeJson, "CURRENT_THIRD", "bridge workspace includes current file content");
+            var bridge = HtmlWorkspaceEditorResourceService.Metadata(transportSession);
+            var bridgeJson = JsonConvert.SerializeObject(bridge);
+            AssertTrue(bridge.Files.Single().Source.IsExact, "bridge workspace identifies the exact current source");
+            AssertTrue(bridgeJson.IndexOf("CURRENT_THIRD", StringComparison.Ordinal) < 0, "current source is pulled separately, never echoed through bridge state");
             AssertTrue(bridgeJson.IndexOf("CURRENT_FIRST", StringComparison.Ordinal) < 0, "bridge workspace omits old snapshot bodies");
             AssertTrue(bridgeJson.IndexOf("HISTORY_SECOND", StringComparison.Ordinal) < 0, "bridge workspace history contains metadata only");
 

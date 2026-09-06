@@ -72,6 +72,8 @@
         throw new Error("Сохранение уже выполняется или чат недоступен.");
       if (creating && state.htmlWorkspaceDirty) throw new Error("Сначала сохраните изменения текущего артефакта.");
       if (typeof state.activeHtmlArtifactId !== "string") throw new Error("Сначала загрузите HTML workspace.");
+      if (!state.htmlWorkspace || state.htmlWorkspace.revisionArtifactId !== state.activeHtmlArtifactId)
+        throw new Error("Черновик workspace устарел. Скопируйте правки и перезагрузите исходники.");
       if (typeof content !== "string" || content.length > 300000) throw new Error("Лимит исходного текста — 300000 символов.");
       var bytes = new TextEncoder().encode(content);
       if (new TextDecoder("utf-8", { fatal: true, ignoreBOM: true }).decode(bytes) !== content)

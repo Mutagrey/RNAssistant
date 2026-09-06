@@ -23,6 +23,7 @@ namespace RNAssistant.Office.WebView
             "readPromptSource",
             "beginPromptMutationUpload",
             "beginHtmlWorkspaceMutationUpload",
+            "readHtmlWorkspaceSource",
             "saveHtmlWorkspaceFile",
             "saveHtmlWorkspaceData",
             "saveSettings",

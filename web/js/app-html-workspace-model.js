@@ -128,7 +128,7 @@
     }
 
     function fileContent(file) {
-      return prop(file, "Content", "content", "") || "";
+      return prop(file, "Content", "content", null);
     }
 
     function setFileContent(file, value) {

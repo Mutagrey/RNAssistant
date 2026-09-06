@@ -24,6 +24,59 @@ namespace RNAssistant.Office.Services
         internal HtmlWorkspaceEditorResourceService(OfficeToolExecutor executor, ResourceDataPlaneService data)
         { _executor = executor; _data = data; }
 
+        internal static HtmlWorkspaceDto Metadata(ChatSession session)
+        {
+            var result = HtmlWorkspaceDto.From(session == null ? null : HtmlWorkspaceToolService.NormalizeWorkspace(session.HtmlWorkspace),
+                session?.HtmlWorkspaceRecovery);
+            result.RevisionArtifactId = session?.ActiveHtmlArtifactId ?? "";
+            var artifact = session?.Artifacts?.SingleOrDefault(item => item != null && item.Id == result.RevisionArtifactId);
+            if (artifact != null && artifact.Kind == ChatArtifactKinds.HtmlWorkspace)
+                foreach (var file in result.Files) file.Source = ChatHtmlResourceCatalog.FileReference(session, artifact, file.Id);
+            return result;
+        }
+
+        internal HtmlWorkspaceSourceResponse OpenSource(ChatSession session, HtmlWorkspaceSourceRequest request, CancellationToken token)
+        {
+            if (session == null || request == null || request.ChatId != session.Id || request.Resource?.IsExact != true)
+                throw Error("RESOURCE_ACCESS_DENIED", "An exact addressed HTML source is required.");
+            var exact = request.Resource.Copy();
+            var address = ChatArtifactResourceProvider.ParseAddress(session, exact.Uri);
+            if (!address.IsMember || address.MemberType != "file")
+                throw Error("RESOURCE_ACCESS_DENIED", "Only exact HTML workspace files are supported.");
+            HtmlWorkspaceSourceResponse response = null;
+            var lease = _data.OpenDownload(session, Owner, MaximumSourceBytes, cancellation =>
+            {
+                cancellation.ThrowIfCancellationRequested();
+                var read = _executor.ResourceGateway.Read(session, new ResourceReadRequest { Reference = exact,
+                    Representation = ResourceRepresentations.Source, MaxChars = 32000 }).Result;
+                var payload = read?.CompleteViewPayload;
+                if (read?.Resource?.Reference == null || read.Resource.Reference.Uri != exact.Uri || read.Resource.Reference.Revision != exact.Revision ||
+                    read.Resource.Kind != ChatHtmlResourceCatalog.FileKind || read.Representation != ResourceRepresentations.Source || payload == null ||
+                    payload.ByteLength > MaximumSourceBytes || read.TotalCharacters < 0 || read.TotalCharacters > HtmlWorkspaceToolService.MaxHtmlChars)
+                    throw Error("RESOURCE_SNAPSHOT_UNAVAILABLE", "A complete bounded HTML file snapshot is required.");
+                var bytes = _executor.Payloads.ReadBytes(payload.ToBlobReference());
+                if (bytes == null || new UTF8Encoding(false, true).GetString(bytes).Length != read.TotalCharacters)
+                    throw Error("RESOURCE_SNAPSHOT_UNAVAILABLE", "The exact HTML source is incomplete.");
+                response = new HtmlWorkspaceSourceResponse { ChatId = session.Id, Resource = exact, TotalCharacters = read.TotalCharacters };
+                return new ResourceDownloadContent { Bytes = bytes, ContentType = ContentType };
+            }, token);
+            try { token.ThrowIfCancellationRequested(); response.Data = lease; return response; }
+            catch { _data.Close(session.Id, Owner, lease.LeaseId); throw; }
+        }
+
+        internal static ChatSession CaptureSourceSession(ChatSession session, HtmlWorkspaceSourceRequest request)
+        {
+            if (session == null || request == null || request.ChatId != session.Id || request.Resource?.IsExact != true)
+                throw Error("RESOURCE_ACCESS_DENIED", "An exact addressed HTML source is required.");
+            var address = ChatArtifactResourceProvider.ParseAddress(session, request.Resource.Uri);
+            if (!address.IsMember || address.MemberType != "file") throw Error("RESOURCE_ACCESS_DENIED", "An exact file member is required.");
+            var artifact = session.Artifacts.SingleOrDefault(item => item != null && item.Id == address.ArtifactId && item.Revision == address.Revision);
+            if (artifact == null) throw Error("RESOURCE_SNAPSHOT_UNAVAILABLE", "The exact HTML revision is unavailable.");
+            // Retain only this immutable revision, not the running session's mutable lists.
+            return new ChatSession { Id = session.Id, Host = session.Host, DocumentKey = session.DocumentKey,
+                DocumentAuthorityId = session.DocumentAuthorityId, Artifacts = new List<ChatArtifact> { ChatCloneService.CloneArtifact(artifact) } };
+        }
+
         internal ResourceUploadOpenResponse BeginUpload(ChatSession session, HtmlWorkspaceMutationUploadRequest request, CancellationToken token)
         {
             if (request == null) throw Error("RESOURCE_ACCESS_DENIED", "An addressed HTML upload is required.");

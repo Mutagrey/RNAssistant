@@ -60,7 +60,7 @@ namespace RNAssistant.Office.Services
         {
             var providers = new List<IResourceProvider>
             {
-                new ChatArtifactResourceProvider(loadArtifactBody, readAttachmentText)
+                new ChatArtifactResourceProvider(loadArtifactBody, readAttachmentText, authority?.Payloads)
             };
             if (authority?.Payloads != null)
             {

@@ -87,6 +87,69 @@ namespace RNAssistant.Harness
             });
         }
 
+        private static void HtmlEditorReadsExactSourceWithoutInlineProjection()
+        {
+            WithTempPaths(paths =>
+            {
+                var adapter = FakeOfficeAdapter.ForHost("Excel");
+                var executor = new OfficeToolExecutor(adapter, new VbaJournalStore(paths), new SkillStore(paths), new ToolStore(paths));
+                var session = NewSession(adapter);
+                var text = "\ufeff<main>\r\n" + new string('я', 140000) + "😀</main>";
+                executor.MutateLocalResources(session, "common.html_workspace_write_file", null,
+                    () => HtmlWorkspaceToolService.UpsertFile(session, "index.html", "html", text, true));
+                executor.MutateLocalResources(session, "common.html_workspace_write_file", null,
+                    () => HtmlWorkspaceToolService.UpsertFile(session, "empty.css", "css", "", false));
+                var metadata = HtmlWorkspaceEditorResourceService.Metadata(session);
+                var projection = JObject.FromObject(metadata);
+                AssertEqual(session.ActiveHtmlArtifactId, metadata.RevisionArtifactId, "projection identifies its displayed workspace revision");
+                AssertTrue(projection["files"].All(file => file["content"] == null && file["Content"] == null && file["source"] != null), "init/chat/save/export all use metadata-only file DTOs");
+                AssertTrue(projection.ToString().Length < 8000, "large file body is absent from the workspace projection");
+                using (var data = new ResourceDataPlaneService(executor.ResourceGateway))
+                {
+                    var editor = new HtmlWorkspaceEditorResourceService(executor, data);
+                    var file = metadata.Files.Single(item => item.Path == "index.html");
+                    var request = new HtmlWorkspaceSourceRequest { ChatId = session.Id, Resource = file.Source };
+                    var sourceSession = HtmlWorkspaceEditorResourceService.CaptureSourceSession(session, request);
+                    AssertEqual(1, sourceSession.Artifacts.Count, "background source capture retains only its immutable parent revision");
+                    AssertTrue(!object.ReferenceEquals(session.Artifacts.Single(item => item.Id == metadata.RevisionArtifactId), sourceSession.Artifacts[0]), "source hydration cannot mutate the active run's artifact object");
+                    var response = editor.OpenSource(sourceSession, request, CancellationToken.None);
+                    AssertEqual(file.Sha256, response.Data.Payload.Sha256, "download matches exact file metadata");
+                    AssertEqual(file.ByteLength, (int)response.Data.Payload.ByteLength, "complete bounded source byte length");
+                    AssertTrue(JObject.FromObject(response)["content"] == null && JObject.FromObject(response)["text"] == null, "read response contains no source body");
+                    executor.MutateLocalResources(session, "common.html_workspace_write_file", null,
+                        () => HtmlWorkspaceToolService.UpsertFile(session, "index.html", "html", "new revision", true));
+                    using (var output = new MemoryStream())
+                    {
+                        for (var offset = 0; offset < response.Data.Payload.ByteLength;)
+                        {
+                            string mime;
+                            var bytes = data.ReadDownload(response.Data.LeaseId, offset, (int)Math.Min(100000, response.Data.Payload.ByteLength - offset), CancellationToken.None, out mime);
+                            AssertEqual("text/plain; charset=utf-8", mime, "inert source bytes"); output.Write(bytes, 0, bytes.Length); offset += bytes.Length;
+                        }
+                        AssertEqual(text, new UTF8Encoding(false, true).GetString(output.ToArray()), "open snapshot survives later workspace revisions; exact BOM/CRLF/Unicode");
+                    }
+                    RuntimeThrows<ResourceRequestException>(() => data.Close("other", HtmlWorkspaceEditorResourceService.Owner, response.Data.LeaseId));
+                    data.Close(session.Id, HtmlWorkspaceEditorResourceService.Owner, response.Data.LeaseId);
+                    var historical = editor.OpenSource(session, request, CancellationToken.None);
+                    AssertEqual(file.Sha256, historical.Data.Payload.Sha256, "historical source reuses the retained Gateway/CAS view");
+                    data.Close(session.Id, HtmlWorkspaceEditorResourceService.Owner, historical.Data.LeaseId);
+                    request.Resource = metadata.Files.Single(item => item.Path == "empty.css").Source;
+                    var empty = editor.OpenSource(session, request, CancellationToken.None);
+                    AssertEqual(0L, empty.Data.Payload.ByteLength, "empty source is still complete and editable");
+                    data.Close(session.Id, HtmlWorkspaceEditorResourceService.Owner, empty.Data.LeaseId);
+                    RuntimeThrows<OperationCanceledException>(() => editor.OpenSource(session, request, new CancellationToken(true)));
+                    request.ChatId = "other";
+                    RuntimeThrows<ResourceRequestException>(() => editor.OpenSource(session, request, CancellationToken.None));
+                    request.ChatId = session.Id; request.Resource = new ResourceRef(file.Source.Uri);
+                    RuntimeThrows<ResourceRequestException>(() => editor.OpenSource(session, request, CancellationToken.None));
+                    request.Resource = RNAssistant.Core.Services.ChatResourceUri.CreateArtifactRevision(session, session.Artifacts.First());
+                    RuntimeThrows<ResourceRequestException>(() => editor.OpenSource(session, request, CancellationToken.None));
+                    AssertEqual(0, session.Messages.Count, "UI hydration grants no model evidence");
+                    AssertEqual(0, adapter.VbaBackendCalls.Count, "HTML source never calls Office");
+                }
+            });
+        }
+
         private static void HtmlEditorRejectsInvalidUploadsAndStaleDrafts()
         {
             WithTempPaths(paths =>

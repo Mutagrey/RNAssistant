@@ -22,11 +22,12 @@ namespace RNAssistant.Office.Services
 
         public ChatArtifactResourceProvider(
             Func<ChatSession, string, bool> loadArtifactBody = null,
-            Func<ChatAttachment, int, string> readAttachmentText = null)
+            Func<ChatAttachment, int, string> readAttachmentText = null,
+            RNAssistant.Core.Storage.ChatBlobStore payloads = null)
         {
             _loadArtifactBody = loadArtifactBody;
             _readAttachmentText = readAttachmentText;
-            _htmlResources = new ChatHtmlResourceCatalog(loadArtifactBody);
+            _htmlResources = new ChatHtmlResourceCatalog(loadArtifactBody, payloads);
         }
 
         public string Id { get { return ProviderName; } }

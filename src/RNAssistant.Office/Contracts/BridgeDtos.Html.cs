@@ -63,6 +63,19 @@ namespace RNAssistant.Office.Contracts
         public long ByteLength { get; set; }
     }
 
+    public sealed class HtmlWorkspaceSourceRequest : ChatPayload
+    {
+        [JsonProperty("resource", Required = Required.Always)] public ResourceRef Resource { get; set; }
+    }
+
+    public sealed class HtmlWorkspaceSourceResponse
+    {
+        [JsonProperty("chatId")] public string ChatId { get; set; }
+        [JsonProperty("resource")] public ResourceRef Resource { get; set; }
+        [JsonProperty("totalCharacters")] public int TotalCharacters { get; set; }
+        [JsonProperty("data")] public ResourceDownloadOpenResponse Data { get; set; }
+    }
+
     public abstract class HtmlWorkspaceMutationPayload : ChatPayload
     {
         // Empty is an explicit guard for a workspace that has not been created yet.
@@ -219,10 +232,22 @@ namespace RNAssistant.Office.Contracts
         public int? Column { get; set; }
     }
 
+    public sealed class HtmlWorkspaceFileDto
+    {
+        [JsonProperty("id")] public string Id { get; set; }
+        [JsonProperty("path")] public string Path { get; set; }
+        [JsonProperty("kind")] public string Kind { get; set; }
+        [JsonProperty("source")] public ResourceRef Source { get; set; }
+        [JsonProperty("byteLength")] public int ByteLength { get; set; }
+        [JsonProperty("characters")] public int Characters { get; set; }
+        [JsonProperty("sha256")] public string Sha256 { get; set; }
+    }
+
     public sealed class HtmlWorkspaceDto
     {
+        [JsonProperty("revisionArtifactId")] public string RevisionArtifactId { get; set; }
         [JsonProperty("activeFileId")] public string ActiveFileId { get; set; }
-        [JsonProperty("files")] public IReadOnlyList<HtmlWorkspaceFile> Files { get; set; }
+        [JsonProperty("files")] public IReadOnlyList<HtmlWorkspaceFileDto> Files { get; set; }
         [JsonProperty("dataSources")] public IReadOnlyList<HtmlWorkspaceDataSource> DataSources { get; set; }
         [JsonProperty("history")] public IReadOnlyList<HtmlWorkspaceSnapshotDto> History { get; set; }
         [JsonProperty("redoHistory")] public IReadOnlyList<HtmlWorkspaceSnapshotDto> RedoHistory { get; set; }
@@ -242,7 +267,10 @@ namespace RNAssistant.Office.Contracts
             return new HtmlWorkspaceDto
             {
                 ActiveFileId = workspace.ActiveFileId,
-                Files = HtmlWorkspaceCopyService.CloneFiles(workspace.Files),
+                Files = (workspace.Files ?? new List<HtmlWorkspaceFile>()).Where(file => file != null).Select(file =>
+                    new HtmlWorkspaceFileDto { Id = file.Id, Path = file.Path, Kind = file.Kind,
+                        ByteLength = System.Text.Encoding.UTF8.GetByteCount(file.Content ?? ""), Characters = (file.Content ?? "").Length,
+                        Sha256 = RNAssistant.Core.Tools.TextPatternEngine.Sha256(file.Content ?? "") }).ToArray(),
                 DataSources = HtmlWorkspaceCopyService.CloneDataSources(workspace.DataSources),
                 History = SnapshotSummaries(workspace.History),
                 RedoHistory = redoBranches.Select(item => new HtmlWorkspaceSnapshotDto

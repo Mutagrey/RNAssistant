@@ -142,7 +142,7 @@ const index = fs.readFileSync(path.join(root, "web/index.html"), "utf8");
 const captureIndex = index.indexOf("app-echarts-sandbox-runtime.js?v=ui-lazy-20260903-1");
 const vendorIndex = index.indexOf("js/vendor/echarts.min.js");
 const finishIndex = index.indexOf("RNAssistantEChartsSandboxRuntime.finish()");
-const previewIndex = index.indexOf("app-html-workspace-preview.js?v=resource-export-20260905-1");
+const previewIndex = index.indexOf("app-html-workspace-preview.js?v=html-read-20260906-1");
 assert.ok(captureIndex >= 0 && captureIndex < previewIndex);
 assert.equal(vendorIndex, -1, "ECharts vendor is not parsed during main WebView startup");
 assert.equal(finishIndex, -1, "ECharts capture is finalized by the on-demand loader");

@@ -159,6 +159,8 @@ namespace RNAssistant.Office.Services
                     Representation = representation,
                     Text = member.Content.Substring(offset, length),
                     ContentSha256 = TextPatternEngine.Sha256(member.Content),
+                    CompleteViewPayload = member.MemberType == "file" && representation == ResourceRepresentations.Source && _payloads != null
+                        ? PayloadRef.FromBlob(_payloads.StoreText(member.Content, member.ContentType)) : null,
                     Offset = offset,
                     ReturnedCharacters = length,
                     TotalCharacters = member.Content.Length,

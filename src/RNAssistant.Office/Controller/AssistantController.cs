@@ -259,9 +259,7 @@ namespace RNAssistant.Office
                 ActiveTaskListArtifactId = session.ActiveTaskListArtifactId,
                 ActivePlanDocumentArtifactId = session.ActivePlanDocumentArtifactId,
                 ContextUsage = ContextUsageEstimator.FromSession(session, chatSettings),
-                HtmlWorkspace = HtmlWorkspaceDto.From(
-                    session == null ? null : HtmlWorkspaceToolService.NormalizeWorkspace(session.HtmlWorkspace),
-                    session == null ? null : session.HtmlWorkspaceRecovery),
+                HtmlWorkspace = HtmlWorkspaceEditorResourceService.Metadata(session),
                 QuickAction = DequeueQuickAction()
             };
         }

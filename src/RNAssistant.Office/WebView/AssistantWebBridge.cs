@@ -399,6 +399,9 @@ namespace RNAssistant.Office.WebView
                     case "getHtmlWorkspace":
                         responsePayload = _controller.GetHtmlWorkspace(Payload<ChatPayload>(payload).ChatId);
                         break;
+                    case "readHtmlWorkspaceSource":
+                        responsePayload = await _controller.ReadHtmlWorkspaceSourceAsync(Payload<HtmlWorkspaceSourceRequest>(payload), cancellationToken).ConfigureAwait(false);
+                        break;
                     case "saveHtmlWorkspaceFile":
                         responsePayload = _controller.SaveHtmlWorkspaceFile(
                             payload.ToObject<HtmlWorkspaceFilePayload>(JsonSerializer.Create(

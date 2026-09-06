@@ -269,11 +269,11 @@ vm.runInContext(fs.readFileSync(path.join(root, "web/js/app-html-workspace-actio
 
   const index = fs.readFileSync(path.join(root, "web/index.html"), "utf8");
   ["app-html-resource-export.js", "app-html-workspace-preview.js"]
-    .forEach(asset => assert.ok(index.includes(asset + "?v=resource-export-20260905-1"), asset));
+    .forEach(asset => assert.ok(index.includes(asset + "?v=" + (asset === "app-html-resource-export.js" ? "resource-export-20260905-1" : "html-read-20260906-1")), asset));
   ["app-html-workspace-actions.js", "app-html-workspace.js"]
-    .forEach(asset => assert.ok(index.includes(asset + "?v=html-write-20260906-1"), asset));
+    .forEach(asset => assert.ok(index.includes(asset + "?v=html-read-20260906-1"), asset));
   assert.ok(index.indexOf("app-html-resource-export.js?v=") < index.indexOf("app-html-workspace-preview.js?v="));
-  assert.ok(index.includes("app-html-workspace-editor.js?v=ui-lazy-20260903-1"));
+  assert.ok(index.includes("app-html-workspace-editor.js?v=html-read-20260906-1"));
   assert.ok(index.includes(
     "app-html-workspace-artifacts.js?v=html-source-resource-20260905-1"));
   assert.ok(index.includes("app-html-workspace.css?v=html-export-20260831-1"));

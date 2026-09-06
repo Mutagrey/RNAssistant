@@ -14,9 +14,9 @@ assert.equal(index.includes('<script src="js/vendor/echarts.min.js"></script>'),
   "the 1 MiB chart vendor must not block WebView startup");
 assert.match(index, /app-echarts-sandbox-runtime\.js\?v=ui-lazy-20260903-1/);
 ["app-messages.js", "app-context.js", "app-model-render.js", "app-html-workspace-editor.js"].forEach(asset => {
-  assert.ok(index.includes(asset + "?v=ui-lazy-20260903-1"), asset + " uses the lazy UI cache key");
+  assert.ok(index.includes(asset + "?v=" + (asset === "app-html-workspace-editor.js" ? "html-read-20260906-1" : "ui-lazy-20260903-1")), asset + " uses the current UI cache key");
 });
-assert.ok(index.includes("app-html-workspace.js?v=html-write-20260906-1"), "HTML workspace uses the resource source cache key");
+assert.ok(index.includes("app-html-workspace.js?v=html-read-20260906-1"), "HTML workspace uses the resource source cache key");
 assert.doesNotMatch(app, /initializeCodeEditors\(\);/,
   "hidden CodeMirror editors must not be created during DOMContentLoaded");
 assert.doesNotMatch(session, /loadModelCatalog\(false\)/,

@@ -109,16 +109,16 @@ vm.runInContext(source, context, { filename: "app-artifacts.js" });
   assert.match(htmlUi, /RNAssistantRunViewState\.accept/);
   const index = fs.readFileSync(path.join(root, "web/index.html"), "utf8");
   assert.ok(index.includes("app-core.js?v=chat-sync-20260903-1"), "core has the chat sync cache key");
-  assert.ok(index.includes("app-chat-state.js?v=html-write-20260906-1"), "chat state has the resource lifecycle cache key");
-  assert.ok(index.includes("app-chat-session.js?v=html-write-20260906-1"), "chat session has the resource lifecycle cache key");
+  assert.ok(index.includes("app-chat-state.js?v=html-read-20260906-1"), "chat state has the resource lifecycle cache key");
+  assert.ok(index.includes("app-chat-session.js?v=html-read-20260906-1"), "chat session has the resource lifecycle cache key");
   assert.ok(index.includes("app-artifacts.js?v=chart-resource-card-20260903-1"), "artifact cards have the chart resource cache key");
-  assert.ok(index.includes("app-html-workspace-model.js?v=artifact-gallery-20260902-1"), "artifact selection model has the gallery cache key");
-  assert.ok(index.includes("app-html-workspace.js?v=html-write-20260906-1"), "artifact actions have the current resource cache key");
-  assert.ok(index.includes("app-html-workspace-actions.js?v=html-write-20260906-1"), "artifact tool calls have the current resource cache key");
+  assert.ok(index.includes("app-html-workspace-model.js?v=html-read-20260906-1"), "artifact selection model has the gallery cache key");
+  assert.ok(index.includes("app-html-workspace.js?v=html-read-20260906-1"), "artifact actions have the current resource cache key");
+  assert.ok(index.includes("app-html-workspace-actions.js?v=html-read-20260906-1"), "artifact tool calls have the current resource cache key");
   assert.ok(index.includes("app-artifact-viewer-actions.js?v=artifact-gallery-20260902-1"), "artifact paging owner has the gallery cache key");
   assert.ok(index.includes("app-html-workspace-artifacts.js?v=html-source-resource-20260905-1"), "artifact detail has the current source viewer cache key");
   assert.ok(index.includes("app-chart-artifacts.js?v=ui-lazy-20260903-1"), "chart artifact renderer has the lazy UI cache key");
-  assert.ok(index.includes("app-html-workspace-editor.js?v=ui-lazy-20260903-1"), "artifact action bridge has the lazy UI cache key");
+  assert.ok(index.includes("app-html-workspace-editor.js?v=html-read-20260906-1"), "artifact action bridge has the lazy UI cache key");
   console.log("PASS artifact library: client lineage inference and Plan JSON label are removed");
 }
 

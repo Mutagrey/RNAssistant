@@ -10,7 +10,7 @@ function deferred() { let resolve; const promise = new Promise(done => { resolve
 
 function fixture(text = "<main>before</main>") {
   const calls = [], chunks = [], logs = [], alerts = [], applied = [], cancelled = [];
-  const state = { activeChatId: "chat-a", activeHtmlArtifactId: "html-r1", htmlWorkspace: {}, htmlWorkspaceDirty: true };
+  const state = { activeChatId: "chat-a", activeHtmlArtifactId: "html-r1", htmlWorkspace: { revisionArtifactId: "html-r1" }, htmlWorkspaceDirty: true };
   const item = { content: text };
   const selected = { type: "file", item, path: "index.html", kind: "html" };
   const id = "a".repeat(64);
@@ -151,7 +151,7 @@ function fixture(text = "<main>before</main>") {
   }
   const index = read("index.html");
   ["app-html-workspace-actions.js", "app-html-workspace.js", "app-chat-state.js", "app-chat-session.js"]
-    .forEach(file => assert.ok(index.includes(file + "?v=html-write-20260906-1")));
+    .forEach(file => assert.ok(index.includes(file + "?v=html-read-20260906-1")));
   assert.ok(index.indexOf("app-resource-upload.js?v=") < index.indexOf("app-html-workspace-actions.js?v="));
   assert.match(read("js/app-html-workspace.js"), /addEventListener\("pagehide", workspaceActions.cancelWrite\)/);
   ["app-chat-state.js", "app-chat-session.js"].forEach(file => assert.match(read("js/" + file), /window.cancelHtmlWorkspaceWrite\(\)/));
