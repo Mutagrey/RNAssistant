@@ -249,6 +249,8 @@
     <Compile Include="Services\CatalogPublicationService.cs" />
     <Compile Include="Services\CatalogResourceProvider.cs" />
     <Compile Include="Services\ExcelResourceProvider.cs" />
+    <Compile Include="Services\ExcelResourceProvider.Search.cs" />
+    <Compile Include="Services\ExcelSearchResourceService.cs" />
     <Compile Include="Contracts\BridgeDtos.ResourceData.cs" />
     <Compile Include="Services\ResourceGatewayService.Intent.cs" />
     <Compile Include="Services\ResourceProviderRegistry.cs" />

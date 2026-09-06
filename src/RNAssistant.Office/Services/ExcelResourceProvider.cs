@@ -10,7 +10,7 @@ using RNAssistant.Office.Domains.Excel;
 
 namespace RNAssistant.Office.Services
 {
-    internal sealed class ExcelResourceProvider : ILiveOfficeResourceProvider
+    internal sealed partial class ExcelResourceProvider : ILiveOfficeResourceProvider
     {
         internal const string ProviderName = "excel";
         internal const string RangeKind = "excel-range";
@@ -20,7 +20,8 @@ namespace RNAssistant.Office.Services
         public string Id { get { return ProviderName; } }
         internal ExcelResourceProvider(IOfficeApplicationAdapter adapter, IExcelReadBackend backend,
             RNAssistant.Core.Storage.ChatBlobStore payloads)
-        { _reader = new ExcelReadService(backend); _scope = new LiveOfficeResourceScope(adapter); _payloads = payloads; }
+        { _reader = new ExcelReadService(backend); _scope = new LiveOfficeResourceScope(adapter); _payloads = payloads;
+            _searchBackend = (adapter as IExcelBackendProvider)?.ExcelFindReplaceBackend; }
 
         internal ResourceDescriptor ResolveRange(ChatSession session, string target)
         {
@@ -41,6 +42,13 @@ namespace RNAssistant.Office.Services
                 var structure = _reader.CaptureStructure("sheets");
                 var items = (structure.Sheets ?? new List<ExcelSheetSnapshot>()).Where(item => !string.IsNullOrWhiteSpace(item.UsedRange))
                     .Select(item => Describe(session, item.Name.ToUpperInvariant(), NormalizeAddress(item.UsedRange))).ToList();
+                if (kind == SearchKind)
+                {
+                    items = new List<ResourceDescriptor> { DescribeSearch(session, new ExcelCellScopeRequest { Scope = "workbook" }),
+                        DescribeSearch(session, new ExcelCellScopeRequest { Scope = "selection" }) };
+                    items.AddRange((structure.Sheets ?? new List<ExcelSheetSnapshot>()).Select(item =>
+                        DescribeSearch(session, new ExcelCellScopeRequest { Scope = "sheet", Sheet = item.Name })));
+                }
                 var binding = ResourceReadCursor.ListBinding(Id, kind);
                 var position = ResourceReadCursor.ParseRevisionBound(cursor, binding);
                 var revision = ResourceReadCursor.CollectionRevision(items);
@@ -55,6 +63,7 @@ namespace RNAssistant.Office.Services
         {
             return _scope.Read(session, () => {
                 var address = Parse(session, uri);
+                if (address.Segments[1] == "search") return DescribeSearch(session, SearchRequest(address));
                 return Describe(session, address.Segments[2], address.Segments[3]);
             });
         }
@@ -71,6 +80,7 @@ namespace RNAssistant.Office.Services
             return _scope.Read(session, () =>
             {
                 var parsed = Parse(session, request.Reference.Uri);
+                if (parsed.Segments[1] == "search") return ReadSearch(session, request, parsed);
                 var view = string.IsNullOrWhiteSpace(request.Representation) || request.Representation == "auto" ? "text" : request.Representation;
                 if (view != "text" && view != "formulas" && view != "structure") throw Error("RESOURCE_VIEW_UNSUPPORTED", "This range supports text, formulas, structure (profile), table and records views.");
                 var range = parsed.Segments[3];
@@ -80,24 +90,28 @@ namespace RNAssistant.Office.Services
                 var text = view == "structure" ? ExcelReadService.ProfileOutput(snapshot).ToString(Formatting.None) :
                     JsonConvert.SerializeObject(view == "formulas" ? snapshot.Formulas : snapshot.Values);
                 if (text.Length > ChatArtifactLimits.MaximumTextCharacters) throw Error("RESOURCE_SNAPSHOT_TOO_LARGE", "Choose a narrower range for this view.");
-                var hash = TextPatternEngine.Sha256(text);
-                var binding = ResourceReadCursor.ReadBinding(request.Reference.Uri, view);
-                var position = ResourceReadCursor.ParseRevisionBound(request, binding);
-                ResourceReadCursor.ValidateContinuation(position, hash);
-                if (request.Reference.IsExact && request.Reference.Revision != hash)
-                    throw Error("RESOURCE_REVISION_CHANGED", "The live range differs from the expected exact snapshot.");
-                if (position.Offset > text.Length) throw Error("RESOURCE_CURSOR_INVALID", "The cursor exceeds this exact range view.");
-                var count = Math.Min(text.Length - position.Offset, Math.Max(1, Math.Min(32000, request.MaxChars <= 0 ? 32000 : request.MaxChars)));
-                var next = position.Offset + count;
-                var descriptor = Describe(session, parsed.Segments[2], range);
-                descriptor.Reference = new ResourceRef(request.Reference.Uri, hash);
-                return new ResourceReadSelection { Result = new ResourceReadResult { Resource = descriptor, Representation = view,
-                    Text = text.Substring(position.Offset, count), ContentSha256 = hash, Offset = position.Offset,
-                    CompleteViewPayload = _payloads == null ? null : PayloadRef.FromBlob(_payloads.StoreText(text, "application/json")),
-                    ReturnedCharacters = count, TotalCharacters = text.Length, Complete = next == text.Length, Truncated = next < text.Length,
-                    NextCursor = next < text.Length ? ResourceReadCursor.CreateRevisionBound(next, hash, binding) : null },
-                    ResourceRefs = new[] { descriptor.Reference.Copy() } };
+                return SelectCapture(request, Describe(session, parsed.Segments[2], range), text, view);
             });
+        }
+
+        private ResourceReadSelection SelectCapture(ResourceReadRequest request, ResourceDescriptor descriptor, string text, string view)
+        {
+            var hash = TextPatternEngine.Sha256(text);
+            var binding = ResourceReadCursor.ReadBinding(request.Reference.Uri, view);
+            var position = ResourceReadCursor.ParseRevisionBound(request, binding);
+            ResourceReadCursor.ValidateContinuation(position, hash);
+            if (request.Reference.IsExact && request.Reference.Revision != hash)
+                throw Error("RESOURCE_REVISION_CHANGED", "The live range differs from the expected exact snapshot.");
+            if (position.Offset > text.Length) throw Error("RESOURCE_CURSOR_INVALID", "The cursor exceeds this exact range view.");
+            var count = Math.Min(text.Length - position.Offset, Math.Max(1, Math.Min(32000, request.MaxChars <= 0 ? 32000 : request.MaxChars)));
+            var next = position.Offset + count;
+            descriptor.Reference = new ResourceRef(request.Reference.Uri, hash);
+            return new ResourceReadSelection { Result = new ResourceReadResult { Resource = descriptor, Representation = view,
+                Text = text.Substring(position.Offset, count), ContentSha256 = hash, Offset = position.Offset,
+                CompleteViewPayload = _payloads == null ? null : PayloadRef.FromBlob(_payloads.StoreText(text, "application/json")),
+                ReturnedCharacters = count, TotalCharacters = text.Length, Complete = next == text.Length, Truncated = next < text.Length,
+                NextCursor = next < text.Length ? ResourceReadCursor.CreateRevisionBound(next, hash, binding) : null },
+                ResourceRefs = new[] { descriptor.Reference.Copy() } };
         }
 
         private ResourceDescriptor Describe(ChatSession session, string sheet, string range)
@@ -115,6 +129,9 @@ namespace RNAssistant.Office.Services
         private ResourceAddress Parse(ChatSession session, string uri)
         {
             var address = ResourceUri.Parse(uri);
+            if (address.Provider == Id && address.Segments.Count == 5 && address.Segments[1] == "search" &&
+                _scope.MatchesDocumentToken(session, address.Segments[0]))
+            { SearchRequest(address); return address; }
             if (address.Provider != Id || address.Segments.Count != 4 || address.Segments[1] != "range" ||
                 !_scope.MatchesDocumentToken(session, address.Segments[0]) || NormalizeAddress(address.Segments[3]) != address.Segments[3])
                 throw Error("RESOURCE_ACCESS_DENIED", "The range does not belong to this exact document scope.");

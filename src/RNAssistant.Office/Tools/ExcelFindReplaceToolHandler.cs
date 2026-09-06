@@ -6,6 +6,7 @@ using RNAssistant.Core.Models;
 using RNAssistant.Core.Tools;
 using RNAssistant.Office.Domains.Excel;
 using RNAssistant.Office.Runtime;
+using RNAssistant.Office.Services;
 using RuntimeResult = RNAssistant.Core.Tools.Contracts.ToolResult;
 
 namespace RNAssistant.Office.Tools
@@ -13,7 +14,7 @@ namespace RNAssistant.Office.Tools
     internal sealed class ExcelFindReplaceToolHandler : IToolHandler
     {
         internal static readonly ToolBinding FindBinding =
-            new ToolBinding("excel.find.cells.v1");
+            new ToolBinding("excel.find.cells.resource.v1");
         internal static readonly ToolBinding ReplaceBinding =
             new ToolBinding("excel.replace.cells.v1");
 
@@ -21,12 +22,13 @@ namespace RNAssistant.Office.Tools
         private readonly ExcelFindReplaceToolAdapter _adapter;
         private readonly HostRuntime _runtime;
         private readonly ChatSession _session;
+        private readonly ExcelSearchResourceService _search;
 
         internal ExcelFindReplaceToolHandler(
             string toolId,
             ExcelFindReplaceToolAdapter adapter,
             HostRuntime runtime,
-            ChatSession session)
+            ChatSession session, ResourceGatewayService gateway)
         {
             if (!ExcelFindReplaceToolIds.Owns(toolId))
                 throw new ArgumentException(
@@ -35,6 +37,7 @@ namespace RNAssistant.Office.Tools
             _adapter = adapter ?? throw new ArgumentNullException(nameof(adapter));
             _runtime = runtime ?? throw new ArgumentNullException(nameof(runtime));
             _session = session;
+            _search = new ExcelSearchResourceService(gateway);
         }
 
         internal static ToolBinding BindingFor(string toolId)
@@ -64,16 +67,11 @@ namespace RNAssistant.Office.Tools
         {
             try
             {
-                var outcome = _runtime.ReadDocument(Target(_session), cancellationToken, delegate
+                return Task.FromResult(_runtime.ReadDocument(Target(_session), cancellationToken, delegate
                 {
                     context.MarkDispatchPossible();
-                    return _adapter.Find(context.Arguments, cancellationToken);
-                });
-                var result = outcome.Success
-                    ? RuntimeResult.Ok(outcome.Message, outcome.DataJson)
-                    : RuntimeResult.Error(outcome.Message, outcome.DataJson);
-                return Task.FromResult(
-                    new ToolHandlerResult(result, ToolEffectEvidence.None));
+                    return _search.Find(_session, context.Arguments, cancellationToken);
+                }));
             }
             catch (OfficeDocumentGuardException ex)
             {

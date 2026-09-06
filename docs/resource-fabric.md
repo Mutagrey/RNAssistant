@@ -177,6 +177,34 @@ Old accepted `excel.read_range` calls fail explicit protocol validation; no alia
 replay translation or public domain-output wrapper remains. Real Windows Excel/STA
 and final catalog/model qualification are still open.
 
+### Excel search
+
+`excel.find_cells` captures through `ExcelSearchResourceService` → the existing
+Excel provider/Gateway/CAS, then invokes pure `ExcelFindReplaceService.Find` over
+the exact cell snapshot. The direct adapter search method and public scope/content
+hashes are removed. Matches retain sheet/cell/field coordinates and bounded previews,
+not complete value/formula copies; full cell data uses the resource readers.
+Literal/regex, case/whole-word and values/formulas/both semantics remain unchanged.
+
+`Excel search scope: workbook`, `selection`, `sheet 'Name'` and
+`range 'Name'!A1:B10` expose exact text JSON with scope and captured cell fields.
+Workbook, selection and named-sheet scopes are body-free discoverable; explicit
+range scopes can also be discovered/resolved. Apostrophes in sheet names are doubled.
+Omitting a sheet retains the existing bound active-sheet behavior; omitted tool
+scope still infers range from address, sheet from sheet name, otherwise workbook.
+Named/multi-area range interpretation remains with the bound Excel backend.
+
+Capture admits at most 100,000 cells and one million aggregate field characters;
+serialized JSON is independently capped at one million characters. Native range
+cell counts are checked before cell materialization. Invalid/duplicate cells and
+oversize sources fail explicitly, never produce a prefix-as-complete snapshot.
+Invalid regex is refused before capture. Positive, zero-match and blank-cell results
+retain complete exact evidence; drift and replacement invalidate previous evidence.
+Historical pages do no Excel I/O, and missing CAS never falls forward. Search scopes
+share the existing provider's exact paging owner, not a second store or transport.
+Replacement preparation/read-back stays with its existing domain owner. Windows COM
+selection/named-range/count limits, real model and WebView qualification remain open.
+
 ## Word text reads
 
 `word.read_text` is removed. Document and selection targets discovered through

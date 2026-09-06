@@ -14,6 +14,8 @@ namespace RNAssistant.Office.Domains.Excel
         public const int MaxResults = 500;
         public const int MaxContextChars = 1000;
         public const int MaxReplacements = 10000;
+        public const int MaximumSearchCharacters = 1000000;
+        public const int MaximumSearchCells = 100000;
 
         private readonly IExcelFindReplaceBackend _backend;
 
@@ -22,7 +24,30 @@ namespace RNAssistant.Office.Domains.Excel
             _backend = backend ?? throw new ArgumentNullException(nameof(backend));
         }
 
-        public ExcelFindOutcome Find(ExcelFindRequest request, CancellationToken cancellationToken)
+        public ExcelSearchSnapshot CaptureSearch(ExcelCellScopeRequest request, CancellationToken cancellationToken)
+        {
+            var cells = new List<ExcelCellSnapshot>();
+            var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            long characters = 0;
+            request.MaxCells = MaximumSearchCells;
+            cancellationToken.ThrowIfCancellationRequested();
+            _backend.ReadScope(request, cell => {
+                cancellationToken.ThrowIfCancellationRequested();
+                ValidateCell(cell);
+                if (cell.Value == null || cell.Formula == null || cell.Sheet.Length > 128 || cell.Address.Length > 128 ||
+                    !seen.Add(CellKey(cell.Sheet, cell.Address)))
+                    throw new ExcelFindReplaceBackendException("Invalid or duplicate search cell.", "excel_scope_snapshot_invalid", false);
+                characters += cell.Sheet.Length + cell.Address.Length + cell.Value.Length + cell.Formula.Length;
+                if (cells.Count >= MaximumSearchCells || characters > MaximumSearchCharacters)
+                    throw new ExcelFindReplaceBackendException("Choose a smaller Excel search scope.", "RESOURCE_SNAPSHOT_TOO_LARGE", false);
+                cells.Add(new ExcelCellSnapshot { Sheet = cell.Sheet, Address = cell.Address, Value = cell.Value,
+                    Formula = cell.Formula, HasFormula = cell.HasFormula });
+            });
+            cancellationToken.ThrowIfCancellationRequested();
+            return new ExcelSearchSnapshot { Scope = request.Scope, Sheet = request.Sheet, Address = request.Address, Cells = cells };
+        }
+
+        internal static ExcelFindOutcome Find(ExcelSearchSnapshot snapshot, ExcelFindRequest request, CancellationToken cancellationToken)
         {
             request = request ?? new ExcelFindRequest();
             if (string.IsNullOrWhiteSpace(request.Query))
@@ -48,15 +73,15 @@ namespace RNAssistant.Office.Domains.Excel
                 WholeWord = request.WholeWord
             };
             var matches = new JArray();
-            var hash = new StringBuilder();
             var total = 0;
             try
             {
-                _backend.ReadScope(ScopeRequest(scope, request.Sheet, request.Address), cell =>
+                if (snapshot == null || snapshot.Cells == null || snapshot.Scope != scope)
+                    return FindFailure("The exact search snapshot is unavailable.", "RESOURCE_SNAPSHOT_UNAVAILABLE", false);
+                foreach (var cell in snapshot.Cells)
                 {
                     cancellationToken.ThrowIfCancellationRequested();
                     ValidateCell(cell);
-                    AppendHash(hash, cell);
                     foreach (var field in SearchFields(cell, lookIn))
                     {
                         var found = TextPatternEngine.Find(
@@ -76,14 +101,11 @@ namespace RNAssistant.Office.Domains.Excel
                                 ["field"] = field.Name,
                                 ["start"] = match.Index,
                                 ["end"] = match.Index + match.Length,
-                                ["value"] = cell.Value ?? string.Empty,
-                                ["formula"] = cell.Formula ?? string.Empty,
                                 ["preview"] = match.Preview ?? string.Empty
                             });
                         }
                     }
-                });
-                var scopeHash = TextPatternEngine.Sha256(hash.ToString());
+                }
                 var data = new JObject
                 {
                     ["query"] = request.Query,
@@ -92,8 +114,6 @@ namespace RNAssistant.Office.Domains.Excel
                     ["matchCount"] = total,
                     ["returnedCount"] = matches.Count,
                     ["truncated"] = total > matches.Count,
-                    ["scopeSha256"] = scopeHash,
-                    ["contentSha256"] = scopeHash,
                     ["matches"] = matches
                 };
                 return ExcelFindOutcome.Ok("Cells found: " + total,
@@ -270,7 +290,7 @@ namespace RNAssistant.Office.Domains.Excel
             }
         }
 
-        private static string NormalizeScope(
+        internal static string NormalizeScope(
             string scope, string sheet, string address, string defaultScope)
         {
             if (string.IsNullOrWhiteSpace(scope))
@@ -282,13 +302,13 @@ namespace RNAssistant.Office.Domains.Excel
                 scope == "range" || scope == "selection" ? scope : null;
         }
 
-        private static string NormalizeMode(string value)
+        internal static string NormalizeMode(string value)
         {
             value = string.IsNullOrWhiteSpace(value) ? "literal" : value.Trim().ToLowerInvariant();
             return value == "literal" || value == "regex" ? value : null;
         }
 
-        private static string NormalizeFindLookIn(string value)
+        internal static string NormalizeFindLookIn(string value)
         {
             value = string.IsNullOrWhiteSpace(value) ? "values" : value.Trim().ToLowerInvariant();
             return value == "values" || value == "formulas" || value == "both" ? value : null;

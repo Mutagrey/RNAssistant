@@ -1,11 +1,14 @@
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using RNAssistant.Office.Domains.Excel;
 
 namespace RNAssistant.Harness
 {
     internal sealed partial class FakeOfficeAdapter
     {
+        public int ExcelSearchCellCaptureCount { get; private set; }
+        public Func<ExcelCellSnapshot, ExcelCellSnapshot> ExcelSearchCellTransform { get; set; }
         internal void SetExcelFormula(string sheetName, string address, string formula)
         {
             FakeSheet sheet;
@@ -24,7 +27,11 @@ namespace RNAssistant.Harness
             BeginExcelBackendCall(ExcelFindScopeReadOperation);
             if (request == null) throw new ArgumentNullException(nameof(request));
             if (visit == null) throw new ArgumentNullException(nameof(visit));
-            foreach (var scope in ResolveFakeScope(request))
+            var scopes = ResolveFakeScope(request).ToList();
+            if (request.MaxCells > 0 && scopes.Sum(scope =>
+                ((long)scope.Range.End.Row - scope.Range.Start.Row + 1) * (scope.Range.End.Column - scope.Range.Start.Column + 1)) > request.MaxCells)
+                throw FindReplaceFailure("Choose a smaller Excel search scope.", "RESOURCE_SNAPSHOT_TOO_LARGE");
+            foreach (var scope in scopes)
             {
                 for (var row = scope.Range.Start.Row; row <= scope.Range.End.Row; row++)
                 {
@@ -35,7 +42,7 @@ namespace RNAssistant.Harness
                         object value;
                         if (!scope.Sheet.Cells.TryGetValue(key, out value)) value = null;
                         var text = Convert.ToString(value) ?? string.Empty;
-                        visit(new ExcelCellSnapshot
+                        var captured = new ExcelCellSnapshot
                         {
                             Sheet = scope.Sheet.Name,
                             Address = FormatAddress(new FakeCellAddress
@@ -46,7 +53,13 @@ namespace RNAssistant.Harness
                             Value = text,
                             Formula = text,
                             HasFormula = scope.Sheet.FormulaCells.Contains(key)
-                        });
+                        };
+                        if (request.MaxCells > 0)
+                        {
+                            ExcelSearchCellCaptureCount++;
+                            if (ExcelSearchCellTransform != null) captured = ExcelSearchCellTransform(captured);
+                        }
+                        visit(captured);
                     }
                 }
             }

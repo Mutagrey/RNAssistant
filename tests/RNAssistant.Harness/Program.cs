@@ -431,6 +431,8 @@ namespace RNAssistant.Harness
                 Test("excel find replace: pattern and scope semantics", ExcelFindReplacePreservesPatternAndScopeSemantics),
                 Test("excel find replace: dispatch fault classification", ExcelFindReplaceClassifiesDispatchFaults),
                 Test("excel find replace: bound document scope", ExcelFindReplaceUsesBoundDocumentScope),
+                Test("excel search: exact snapshots and zero-match drift", ExcelSearchRetainsExactSnapshots),
+                Test("excel search: incomplete captures rejected", ExcelSearchRejectsIncompleteCaptures),
                 Test("excel sheet: native ownership and direct backend", ExcelSheetUsesExactNativeOwnership),
                 Test("excel sheet: lifecycle semantics", ExcelSheetPreservesLifecycleSemantics),
                 Test("excel sheet: dispatch fault classification", ExcelSheetClassifiesDispatchFaults),

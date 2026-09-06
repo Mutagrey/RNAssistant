@@ -49,6 +49,10 @@ Excel range values/formulas/profile direct cutover: `Program.ExcelReadTests.cs`
 (`excel read:`) covers generic exact source evidence, retained profile continuation,
 drift supersession, bounds before materialization, removed-call rejection and shared
 HTML/bound-STA routing. The legacy public `excel.read_range` fixture path is removed.
+`excel search:` covers exact cell snapshots, zero-match drift, historical pages,
+missing-CAS refusal, metadata discovery and invalid/oversized capture rejection.
+`excel find replace:` retains scope/pattern/formula semantics and also checks search
+evidence invalidation after replacement and bound-STA/closed-workbook search.
 
 Word source cutover: `word resources:` and `word tools:` cover complete exact
 document/selection/range evidence, single-capture continuation, historical no-I/O,

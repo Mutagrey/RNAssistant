@@ -27,7 +27,19 @@ namespace RNAssistant.OfficeHosts
             if (request == null) throw new ArgumentNullException(nameof(request));
             if (visit == null) throw new ArgumentNullException(nameof(visit));
             var workbook = RequireWorkbook();
-            foreach (var range in ResolveScopeRanges(workbook, request))
+            var ranges = ResolveScopeRanges(workbook, request);
+            if (request.MaxCells > 0)
+            {
+                long count = 0;
+                foreach (var range in ranges)
+                {
+                    var size = Convert.ToInt64(range.Cells.CountLarge);
+                    if (size < 0 || size > request.MaxCells - count)
+                        throw Failure("Choose a smaller Excel search scope.", "RESOURCE_SNAPSHOT_TOO_LARGE", false);
+                    count += size;
+                }
+            }
+            foreach (var range in ranges)
             {
                 foreach (Excel.Range cell in range.Cells)
                 {

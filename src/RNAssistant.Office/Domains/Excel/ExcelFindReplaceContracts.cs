@@ -37,6 +37,15 @@ namespace RNAssistant.Office.Domains.Excel
         public string Scope { get; set; }
         public string Sheet { get; set; }
         public string Address { get; set; }
+        public int MaxCells { get; set; }
+    }
+
+    public sealed class ExcelSearchSnapshot
+    {
+        public string Scope { get; set; }
+        public string Sheet { get; set; }
+        public string Address { get; set; }
+        public IReadOnlyList<ExcelCellSnapshot> Cells { get; set; }
     }
 
     public sealed class ExcelCellSnapshot

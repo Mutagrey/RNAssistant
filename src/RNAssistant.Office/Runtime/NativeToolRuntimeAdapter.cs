@@ -109,7 +109,7 @@ namespace RNAssistant.Office.Runtime
                     if (excelFindReplace == null || hostRuntime == null)
                         throw new InvalidOperationException("Excel find/replace handler dependencies are unavailable.");
                     handler = new ExcelFindReplaceToolHandler(
-                        registration.Descriptor.Id, excelFindReplace, hostRuntime, session);
+                        registration.Descriptor.Id, excelFindReplace, hostRuntime, session, gateway);
                 }
                 else if (ExcelSheetToolIds.Owns(registration.Descriptor.Id))
                 {

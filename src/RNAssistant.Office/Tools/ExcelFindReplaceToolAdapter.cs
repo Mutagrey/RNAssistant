@@ -15,26 +15,6 @@ namespace RNAssistant.Office.Tools
                 backend ?? throw new ArgumentNullException(nameof(backend)));
         }
 
-        internal ExcelFindOutcome Find(
-            IDictionary<string, object> arguments,
-            CancellationToken cancellationToken)
-        {
-            arguments = arguments ?? new Dictionary<string, object>(StringComparer.OrdinalIgnoreCase);
-            return _service.Find(new ExcelFindRequest
-            {
-                Sheet = ToolArgumentReader.String(arguments, "sheet", string.Empty),
-                Address = ToolArgumentReader.String(arguments, "address", string.Empty),
-                Scope = ToolArgumentReader.String(arguments, "scope", string.Empty),
-                Query = ToolArgumentReader.String(arguments, "query", string.Empty),
-                Mode = ToolArgumentReader.String(arguments, "mode", "literal"),
-                MatchCase = ToolArgumentReader.Boolean(arguments, "matchCase", false),
-                WholeWord = ToolArgumentReader.Boolean(arguments, "wholeWord", false),
-                LookIn = ToolArgumentReader.String(arguments, "lookIn", "values"),
-                MaxResults = ToolArgumentReader.Int32(arguments, "maxResults", 50),
-                ContextChars = ToolArgumentReader.Int32(arguments, "contextChars", 80)
-            }, cancellationToken);
-        }
-
         internal ExcelReplaceOutcome Replace(
             IDictionary<string, object> arguments,
             Action markDispatchPossible,
