@@ -19,14 +19,13 @@ Phase 2C3B заменяет этот reset preservation/review flow; Core settin
 Phase 2C3C переключает actual wire/history на v3 и проверяет preflight, run IDs, singleton
 safety, refusal и review/reset на prompt schema 12. Windows/live-provider gates остаются.
 
-Resource cutover / generic search capture (2026-09-06, open): inspection of
-`ResourceGatewayService.Search` shows authority publication is currently driven by
-matched snippets only. A provider scan with zero matches can observe changed live
-text without publishing that drift; matched excerpts do not retain the whole scanned
-view. Owner: Gateway + live document/VBA search providers. Next bounded slice must
-publish typed scan observations (including no matches) and retain only complete
-captures with honest coverage. The Word specialized-search cutover does not close
-this separate generic discovery path; no global polling or background rescan.
+Resource cutover / generic search capture (2026-09-06, fixed host-neutral): Gateway
+now publishes typed live document/VBA scan captures independently of matches, then
+binds bounded snippet evidence to the published logical revisions. Zero-match drift,
+historical no-I/O reads, missing-CAS refusal, partial VBA coverage and body-free
+backup metadata pass focused checks. The matched-snippet publication path is removed;
+no global polling/background rescan. Owner: Gateway + live document/VBA providers.
+Real Windows/COM qualification and other host-specific search consumers remain open.
 
 Resource cutover / Outlook (2026-09-06, open): `MailItem.Body` materializes a whole
 COM string before the character ceiling can reject it; exact-capture completion

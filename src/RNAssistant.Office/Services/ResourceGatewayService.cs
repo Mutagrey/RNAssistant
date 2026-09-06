@@ -183,17 +183,32 @@ namespace RNAssistant.Office.Services
                 if (_authority != null) _authority.CaptureMany(new[] { _authority.Scope(session, provider is ILiveOfficeResourceProvider) });
                 var found = provider.Search(session, query, kind, limit, maxCharsPerMatch);
                 if (_authority != null && provider is ILiveOfficeResourceProvider)
-                    foreach (var match in found.Matches.Where(item => item.Reference != null && item.Reference.IsExact))
+                {
+                    foreach (var scan in found.Scans)
+                        _authority.PublishRead(session, new ResourceReadSelection { Result = scan }, null, true);
+                    foreach (var match in found.Matches)
                     {
-                        var observation = new ResourceReadSelection { Result = new ResourceReadResult {
+                        if (match.Representation == ResourceRepresentations.Metadata)
+                        {
+                            var descriptor = new ResourceDescriptor { Reference = match.Reference };
+                            _authority.ApplyHead(descriptor, session, true);
+                            match.Reference = descriptor.Reference;
+                            continue;
+                        }
+                        var scan = found.Scans.SingleOrDefault(item =>
+                            item.Resource.Reference.Uri == match.Reference.Uri && item.Representation == match.Representation);
+                        if (scan == null)
+                            throw new ResourceRequestException("Search matches require a captured source view.", "RESOURCE_SNAPSHOT_UNAVAILABLE", false);
+                        match.Reference = scan.Resource.Reference.Copy();
+                        var observation = new ResourceReadResult {
                             Resource = new ResourceDescriptor { Reference = match.Reference, Provider = provider.Id, Kind = match.Kind, Title = match.Title },
-                            Representation = match.Representation, ContentSha256 = match.Reference.Revision,
+                            Representation = match.Representation, ContentSha256 = scan.ContentSha256,
+                            AuthorityGeneration = scan.AuthorityGeneration,
                             Text = match.Snippet, Offset = match.SnippetOffset, ReturnedCharacters = (match.Snippet ?? string.Empty).Length,
-                            Complete = false } };
-                        _authority.PublishRead(session, observation, null, true);
-                        match.Reference = observation.Result.Resource.Reference;
-                        match.Evidence = _authority.Observe(session, observation.Result, true);
+                            Complete = false };
+                        match.Evidence = Evidence(session, observation);
                     }
+                }
                 return found;
             });
             result.Provider = provider.Id;

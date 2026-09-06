@@ -23,6 +23,91 @@ namespace RNAssistant.Harness
 {
     internal static partial class Program
     {
+        private static void GenericSearchPublishesZeroMatchScans()
+        {
+            WithTempExecutor(FakeOfficeAdapter.ForHost("Word"), (executor, adapter) =>
+            {
+                var body = "needle needle " + new string('w', 40000);
+                adapter.Write(new RNAssistant.Office.Domains.Word.WordWriteRequest { Mode = "replaceselection", Text = body }, () => { });
+                var session = NewSession(adapter);
+                executor.BindResourceAuthority(session);
+                var gateway = executor.ResourceGateway;
+                var found = gateway.Search(session, "document", "needle", LiveDocumentResourceProvider.DocumentKind, 1, 128);
+                AssertTrue(found.ScanTruncated && found.Scans.Single().Complete, "match limit does not truncate captured source");
+                var match = found.Matches.Single();
+                var evidence = match.Evidence.Single();
+                AssertTrue(match.Reference.Revision.StartsWith("r_") && !evidence.Complete && evidence.Payload != null,
+                    "snippet has logical exact revision and bounded CAS evidence");
+                AssertEqual(ResourceCoverageKinds.CharacterRange, evidence.Coverage.Kind, "snippet is not whole-source evidence");
+                AssertTrue(!JObject.Parse(JsonConvert.SerializeObject(found)).Properties().Any(p => p.Name.Equals("scans", StringComparison.OrdinalIgnoreCase)),
+                    "private source captures never serialize in search output");
+                var old = gateway.Read(session, new ResourceReadRequest { Reference = match.Reference, Representation = "text", MaxChars = 32000 }).Result;
+                AssertEqual(body.Substring(0, 32000), old.Text, "full search capture supports exact first page");
+                adapter.Write(new RNAssistant.Office.Domains.Word.WordWriteRequest { Mode = "replaceselection", Text = "changed without matches" }, () => { });
+                var negative = gateway.Search(session, "document", "needle", LiveDocumentResourceProvider.DocumentKind, 20, 128);
+                AssertEqual(0, negative.Matches.Count, "negative scan returns no matches");
+                AssertEqual(EvidenceState.Superseded, new EvidenceStateReducer().Reduce(evidence,
+                    executor.ResourceAuthority.CaptureMany(new[] { evidence.ScopeId })).State, "zero-match scan publishes drift");
+                var reads = adapter.WordTextMaterializationCount;
+                var next = gateway.Read(session, new ResourceReadRequest { Reference = match.Reference, Representation = "text", Cursor = old.NextCursor, MaxChars = 32000 }).Result;
+                AssertEqual(body.Substring(32000), next.Text, "historical page retains searched bytes after zero-match drift");
+                AssertEqual(reads, adapter.WordTextMaterializationCount, "historical search pages do no Office reads");
+                System.IO.File.Delete(executor.Payloads.PathFor(found.Scans.Single().Payload.Sha256));
+                var denied = false;
+                try { gateway.Read(session, new ResourceReadRequest { Reference = match.Reference, Representation = "text" }); }
+                catch (ResourceRequestException error) { denied = error.ErrorCode == "RESOURCE_SNAPSHOT_UNAVAILABLE"; }
+                AssertTrue(denied, "missing retained search capture never falls back to live text");
+            });
+        }
+
+        private static void GenericVbaSearchSeparatesScansAndMetadata()
+        {
+            WithTempPaths(paths =>
+            {
+                var adapter = FakeOfficeAdapter.ForHost("Excel");
+                var journal = new VbaJournalStore(paths);
+                var backupCode = "needle " + new string('b', 140000);
+                journal.Save(adapter.HostName, adapter.DocumentKey, adapter.DocumentTitle, "SavedModule", "StdModule", backupCode);
+                var executor = new OfficeToolExecutor(adapter, journal, new SkillStore(paths), new ToolStore(paths));
+                adapter.SetVbaModule("ScanModule", "needle " + new string('s', 500), "StdModule");
+                var session = NewSession(adapter);
+                executor.BindResourceAuthority(session);
+                var gateway = executor.ResourceGateway;
+                var metadata = gateway.Search(session, "vba", "SavedModule", VbaResourceProvider.BackupKind, 20, 128);
+                AssertEqual(0, metadata.Scans.Count, "backup metadata does not capture source");
+                AssertTrue(!metadata.Matches.Single().Reference.IsExact && metadata.Matches.Single().Evidence == null,
+                    "backup metadata hash is not a logical revision or source evidence");
+                var found = gateway.Search(session, "vba", "needle", VbaResourceProvider.ComponentKind, 20, 128);
+                var match = found.Matches.Single(m => m.Title == "ScanModule");
+                var evidence = match.Evidence.Single();
+                adapter.SetVbaModule("ScanModule", "changed", "StdModule");
+                var negative = gateway.Search(session, "vba", "needle", VbaResourceProvider.ComponentKind, 20, 128);
+                AssertEqual(0, negative.Matches.Count, "VBA no-match scan");
+                AssertEqual(EvidenceState.Superseded, new EvidenceStateReducer().Reduce(evidence,
+                    executor.ResourceAuthority.CaptureMany(new[] { evidence.ScopeId })).State, "VBA no-match scan publishes drift");
+                var reads = adapter.CountVbaCalls(FakeVbaOperation.ReadModule);
+                var retained = gateway.Read(session, new ResourceReadRequest { Reference = match.Reference, Representation = "source", MaxChars = 1000 }).Result;
+                AssertTrue(retained.Text.StartsWith("needle"), "complete VBA scan retained after drift");
+                AssertEqual(reads, adapter.CountVbaCalls(FakeVbaOperation.ReadModule), "retained VBA search view does no COM reads");
+                adapter.SetVbaModule("ScanModule", "needle " + new string('x', 140000), "StdModule");
+                var partial = gateway.Search(session, "vba", "needle", VbaResourceProvider.ComponentKind, 20, 128);
+                var scan = partial.Scans.Single(s => s.Resource.Title == "ScanModule");
+                AssertTrue(partial.ScanTruncated && !scan.Complete && scan.CompleteViewPayload == null && scan.ReturnedCharacters == 128000,
+                    "bounded VBA scan never claims full source capture");
+                AssertEqual(ResourceCoverageKinds.CharacterRange, scan.Coverage.Kind, "truncated scan has only prefix coverage");
+                var backups = gateway.Search(session, "vba", "needle", VbaResourceProvider.BackupKind, 20, 128);
+                AssertTrue(backups.ScanTruncated && !backups.Scans.Single().Complete && backups.Scans.Single().CompleteViewPayload != null,
+                    "backup search prefix and already-captured whole backup are distinct");
+                var backup = gateway.Read(session, new ResourceReadRequest { Reference = backups.Matches.Single().Reference,
+                    Representation = "source", MaxChars = 32000 }).Result;
+                AssertEqual(backupCode.Substring(0, 32000), backup.Text, "backup source reads use retained whole capture");
+                var metadataAfter = gateway.Search(session, "vba", "SavedModule", VbaResourceProvider.BackupKind, 20, 128);
+                AssertEqual(backups.Matches.Single().Reference.Revision, metadataAfter.Matches.Single().Reference.Revision,
+                    "metadata can advertise existing authority head without republishing source");
+                AssertEqual(0, metadataAfter.Scans.Count, "metadata remains body-free after publication");
+            });
+        }
+
         private static void ResourceToolSourceReplacesDefinitionRead()
         {
             WithTempPaths(paths =>

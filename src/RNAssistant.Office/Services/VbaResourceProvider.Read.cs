@@ -196,6 +196,12 @@ namespace RNAssistant.Office.Services
                     Math.Min(MaximumSearchCharactersPerResource, remaining));
                 result.ScannedCharacters += source.Code.Length;
                 result.ScanTruncated = result.ScanTruncated || source.Truncated;
+                result.Scans.Add(new ResourceReadResult {
+                    Resource = DescribeComponent(session, module, source.CodeSha256),
+                    Representation = ResourceRepresentations.Source, ContentSha256 = source.CodeSha256,
+                    Text = source.Code, ReturnedCharacters = source.Code.Length,
+                    TotalCharacters = source.Code.Length,
+                    Complete = !source.Truncated, Truncated = source.Truncated });
                 AddMatches(
                     query,
                     source.Code,
@@ -237,7 +243,7 @@ namespace RNAssistant.Office.Services
                         metadataText,
                         metadataIndex,
                         maxCharsPerMatch,
-                        new ResourceRef(BackupUri(session, metadata.BackupId), metadata.CodeSha256),
+                        new ResourceRef(BackupUri(session, metadata.BackupId)),
                         BackupKind,
                         metadata.ModuleName + " backup",
                         result);
@@ -255,6 +261,15 @@ namespace RNAssistant.Office.Services
                 var scanned = code.Substring(0, scanLength);
                 result.ScannedCharacters += scanLength;
                 if (scanLength < code.Length) result.ScanTruncated = true;
+                // The backup body is already materialized; retain it without expanding
+                // the bounded search prefix or claiming that the whole body was scanned.
+                if (_payloads == null)
+                    throw new ResourceRequestException("VBA snapshots require canonical CAS storage.", "RESOURCE_AUTHORITY_NOT_READY", false);
+                result.Scans.Add(new ResourceReadResult {
+                    Resource = DescribeBackup(session, backup), Representation = ResourceRepresentations.Source,
+                    ContentSha256 = backup.CodeSha256, Text = scanned, ReturnedCharacters = scanLength,
+                    TotalCharacters = code.Length, Complete = scanLength == code.Length, Truncated = scanLength < code.Length,
+                    CompleteViewPayload = PayloadRef.FromBlob(_payloads.StoreText(code, "text/plain; charset=utf-8")) });
                 AddMatches(
                     query,
                     scanned,

@@ -106,6 +106,11 @@ namespace RNAssistant.Office.Services
                 var contentSha256 = TextPatternEngine.Sha256(content);
                 result.ScannedCharacters = content.Length;
                 result.ScanTruncated = !IsExactSource(target) && content.Length >= MaximumMaterializedCharacters;
+                result.Scans.Add(new ResourceReadResult {
+                    Resource = Describe(session, target), Representation = ResourceRepresentations.Text,
+                    ContentSha256 = contentSha256, Text = content, ReturnedCharacters = content.Length,
+                    TotalCharacters = content.Length,
+                    Complete = !result.ScanTruncated, Truncated = result.ScanTruncated });
                 var index = 0;
                 while (result.Matches.Count < limit &&
                     (index = content.IndexOf(query, index, StringComparison.OrdinalIgnoreCase)) >= 0)

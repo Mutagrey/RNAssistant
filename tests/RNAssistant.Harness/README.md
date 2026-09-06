@@ -39,6 +39,12 @@ version check still apply.
 
 ## Test map
 
+`resource search:` covers generic live document/VBA zero-match drift publication,
+exact retained pages without Office reads, missing-CAS refusal, bounded snippet vs
+whole-capture coverage, truncated VBA prefixes and body-free backup metadata.
+Use with `resources: live Office and VBA` and `resources: gateway reads searches`
+for changes to the shared search capture/publication contract.
+
 Excel range values/formulas/profile direct cutover: `Program.ExcelReadTests.cs`
 (`excel read:`) covers generic exact source evidence, retained profile continuation,
 drift supersession, bounds before materialization, removed-call rejection and shared

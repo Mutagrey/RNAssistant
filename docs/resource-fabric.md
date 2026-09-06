@@ -69,7 +69,16 @@ integrity-checked code and keeps the normalized VBA write guard separate from th
 raw CAS/transport SHA-256. See [VBA journal](vba-mutation-journal.md#editor-source-reads).
 
 Model discovery/read uses `common.resources_find/read` with runtime-resolved
-semantic targets and exact internal references/continuations. A mutable semantic
+semantic targets and exact internal references/continuations. Live document/VBA
+search providers return typed, non-serialized scan captures independently of matches.
+Gateway publishes each captured view through the shared authority before binding
+bounded match evidence to that exact logical revision. Zero-match scans therefore
+publish observed drift too. Complete captures stay in the existing CAS for historical
+reads; bounded VBA prefixes retain only character-range coverage. Backup searches
+can retain an already-materialized whole body while honestly reporting a truncated
+search prefix. Metadata-only discovery neither reads nor publishes source bodies;
+it may advertise an existing authority head, never a provider hash as a revision.
+A mutable semantic
 target captures its current head on the first read, then pins all internal pages
 to that exact revision; it cannot get stuck on discovery's previous observation.
 The `catalogs` scope discovers definitions without execution admission.
@@ -207,8 +216,8 @@ carry complete exact CAS evidence; later observed scope drift or document mutati
 invalidates previous evidence through the shared reducer. Search results no longer
 expose scope/content hashes as public coordinates. Missing retained payloads never
 fall forward. Actual Word story enumeration, COM and WebView qualification remain
-open; generic `resources_find` scan publication and other host search consumers are
-separate remaining cutover work.
+open; other host-specific search consumers remain separate cutover work. Generic
+`resources_find` scan publication uses the shared provider/Gateway path above.
 
 ## PowerPoint slide reads
 

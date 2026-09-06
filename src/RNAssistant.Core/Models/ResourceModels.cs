@@ -261,6 +261,9 @@ namespace RNAssistant.Core.Models
 
     public sealed class ResourceSearchResult
     {
+        // Provider captures, including zero-match scans. Never part of search output.
+        [Newtonsoft.Json.JsonIgnore]
+        public List<ResourceReadResult> Scans { get; set; }
         [Newtonsoft.Json.JsonProperty("provider")]
         public string Provider { get; set; }
         [Newtonsoft.Json.JsonProperty("query")]
@@ -275,6 +278,7 @@ namespace RNAssistant.Core.Models
         public ResourceSearchResult()
         {
             Matches = new List<ResourceSearchMatch>();
+            Scans = new List<ResourceReadResult>();
         }
     }
 }

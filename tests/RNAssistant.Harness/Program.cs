@@ -478,6 +478,8 @@ namespace RNAssistant.Harness
                 Test("artifact viewer: exact image bytes", ArtifactViewerReadsExactImageBytes),
                 Test("artifact viewer: exact PDF preview", ArtifactViewerReadsExactPdfPreview),
                 Test("resources: live Office and VBA are bounded and guarded", LiveOfficeAndVbaResourcesAreBoundedAndGuarded),
+                Test("resource search: zero-match drift and exact snapshots", GenericSearchPublishesZeroMatchScans),
+                Test("resource search: VBA bounded scans and body-free metadata", GenericVbaSearchSeparatesScansAndMetadata),
                 Test("artifacts: prompt uses bounded working set", ArtifactPromptUsesBoundedWorkingSet),
                 Test("artifacts: historical attachments stay reference-only", HistoricalAttachmentsStayReferenceOnly),
                 Test("artifact library: immutable classes and labels", ArtifactLibraryProjectsImmutableClasses),
