@@ -64,19 +64,44 @@
     handle.addEventListener("mousedown", function (event) {
       event.preventDefault();
       var rect = layout.getBoundingClientRect();
+      var latestRatio = null;
+      var framePending = false;
+      var dragging = true;
       document.body.classList.add("resizing-pane");
 
-      function move(moveEvent) {
-        setSplitRatio(layout, (moveEvent.clientX - rect.left) / rect.width, true);
-        if (typeof refreshCodeEditors === "function") {
-          refreshCodeEditors();
+      function applyPendingRatio() {
+        framePending = false;
+        if (!dragging || latestRatio === null) {
+          return;
+        }
+        setSplitRatio(layout, latestRatio, false);
+      }
+
+      function scheduleApplyRatio() {
+        if (framePending) {
+          return;
+        }
+        framePending = true;
+        if (window.requestAnimationFrame) {
+          window.requestAnimationFrame(applyPendingRatio);
+        } else {
+          window.setTimeout(applyPendingRatio, 16);
         }
       }
 
+      function move(moveEvent) {
+        latestRatio = (moveEvent.clientX - rect.left) / rect.width;
+        scheduleApplyRatio();
+      }
+
       function up() {
+        dragging = false;
         document.body.classList.remove("resizing-pane");
         document.removeEventListener("mousemove", move);
         document.removeEventListener("mouseup", up);
+        if (latestRatio !== null) {
+          setSplitRatio(layout, latestRatio, true);
+        }
         if (typeof refreshCodeEditors === "function") {
           refreshCodeEditors();
         }
