@@ -280,10 +280,8 @@ namespace RNAssistant.Office.Tools
         { return PromptEditorResourceService.Metadata(_catalogPublication.Current("prompts")); }
         internal IReadOnlyList<ToolCatalogEntry> CapturePublishedTools() { return _catalogPublication.CaptureTools(); }
         internal long CaptureCatalogGeneration() { return _catalogPublication.CaptureGeneration(); }
-        internal IReadOnlyList<ToolCatalogEntry> CaptureRunnableCatalog()
-        { return new ToolCatalogService(_adapter, this).GetFreshConversationTools(); }
-        internal IReadOnlyList<ToolCatalogEntry> CaptureRunnableCatalog(PublishedCatalogSnapshot publication)
-        { return new ToolCatalogService(_adapter, this).GetVisibleTools(publication.Tools); }
+        internal IReadOnlyList<ToolCatalogEntry> CapturePublishedGlobalTools(PublishedCatalogSnapshot publication)
+        { return new ToolCatalogService(_adapter, this).GetPublishedGlobalTools(publication.Tools); }
         internal SkillCatalogSnapshot CaptureSkills(PublishedCatalogSnapshot publication = null)
         {
             var published = publication == null ? _capabilityCatalogService.CaptureSkills() :

@@ -818,7 +818,11 @@ Finite remaining order:
    permits the next request. Publication after freeze cannot alter that request;
    repair also closes over the original catalog/settings/budget rather than later
    rebound session fields. The existing frozen-prompt test now deterministically
-   covers this interval. Owner: existing catalog capture/model-session owners.
+   covers this interval. Published global-tool projection does not rediscover
+   document VBA; bound host/document registrations come from the input owner.
+   Local closed-document runs and default publication refresh perform no incidental
+   Office discovery. Explicit Library/document discovery keeps its existing guarded
+   owner. Owner: existing catalog capture/model-session owners.
 2. **Integrated mutation acceptance — complete host-neutral.** The new two-chat
    scenario covers changed/no-op/unknown through native Excel execution, the shared
    journal/authority and the next actual model request. Verified change without a

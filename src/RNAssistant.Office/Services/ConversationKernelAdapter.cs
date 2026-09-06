@@ -111,7 +111,7 @@ namespace RNAssistant.Office.Services
             // Host/document registrations are provided by their bound owner. Global packages
             // must be replaced from this publication, including deletions, before activation.
             var tools = input.Tools.Where(tool => !string.Equals(tool.Scope, "global", StringComparison.OrdinalIgnoreCase))
-                .Concat(_executor.CaptureRunnableCatalog(publication).Where(tool => tool.Scope == "global")).ToList();
+                .Concat(_executor.CapturePublishedGlobalTools(publication)).ToList();
             _catalog = ConversationRunService.PrepareToolsForRun(tools);
             var publishedSkills = _executor.CaptureSkills(publication);
             _skills = _policy.SelectSkills(publishedSkills.Skills);

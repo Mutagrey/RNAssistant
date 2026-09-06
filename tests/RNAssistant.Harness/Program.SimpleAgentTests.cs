@@ -501,8 +501,8 @@ namespace RNAssistant.Harness
                     "exact local HTML schema is available after read");
                 AssertTrue(prompt.IndexOf("excel.read_range", StringComparison.OrdinalIgnoreCase) < 0,
                     "Office tools omitted for a closed document");
-                AssertTrue(prompt.IndexOf("common.html_data_bind", StringComparison.OrdinalIgnoreCase) < 0,
-                    "Office-backed HTML binding omitted for a closed document");
+                AssertContains(prompt, "common.html_data_bind",
+                    "resource binding remains available for local resources when Office is closed");
                 AssertEqual(0, adapter.TotalBackendCallCount, "local tool does not enter Office adapter");
 
                 var blocked = executor.ExecuteManual(

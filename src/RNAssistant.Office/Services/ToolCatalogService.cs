@@ -33,9 +33,12 @@ namespace RNAssistant.Office.Services
         }
 
         public List<ToolCatalogEntry> GetVisibleTools()
-        { return GetVisibleTools(_toolExecutor.CapturePublishedTools()); }
+        { return GetVisibleTools(_toolExecutor.CapturePublishedTools(), true); }
 
-        internal List<ToolCatalogEntry> GetVisibleTools(IReadOnlyList<ToolCatalogEntry> published)
+        internal IReadOnlyList<ToolCatalogEntry> GetPublishedGlobalTools(IReadOnlyList<ToolCatalogEntry> published)
+        { return GetVisibleTools(published, false).Where(tool => tool.Scope == "global").ToList(); }
+
+        private List<ToolCatalogEntry> GetVisibleTools(IReadOnlyList<ToolCatalogEntry> published, bool discoverDocument)
         {
             var result = new Dictionary<string, ToolCatalogEntry>(StringComparer.OrdinalIgnoreCase);
             foreach (var tool in _toolExecutor.GetHostTools())
@@ -67,7 +70,7 @@ namespace RNAssistant.Office.Services
                 }
             }
 
-            DiscoverDocumentVbaTools(result);
+            if (discoverDocument) DiscoverDocumentVbaTools(result);
 
             return result.Values.OrderBy(s => s.Host).ThenBy(s => s.Id).ToList();
         }

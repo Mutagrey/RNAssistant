@@ -747,7 +747,8 @@ namespace RNAssistant.Harness
                 var first = executor.CaptureCatalogs();
                 var session = NewSession(adapter);
                 var chats = new ChatStore(paths); chats.Save(session);
-                var firstTools = ConversationRunService.PrepareToolsForRun(executor.CaptureRunnableCatalog(first));
+                var firstTools = ConversationRunService.PrepareToolsForRun(executor.GetHostTools()
+                    .Concat(executor.GetControllerTools()).Concat(executor.CapturePublishedGlobalTools(first)));
                 var firstSkills = executor.CaptureSkills(first);
                 var firstSettings = PromptSettingsService.ApplyPublishedTemplates(settings, first.PromptsJson);
                 using (var model = ConversationModelSession.CreateAsync(adapter, null, null, EventStore(chats),
@@ -787,7 +788,8 @@ namespace RNAssistant.Harness
                     AssertEqual("RESOURCE_CATALOG_CHANGED", conflict.ErrorCode,
                         "publication between active catalog capture and final freeze refuses a mixed request");
                     AssertEqual(receipt, session.LastContextReceipt.SnapshotId, "a rejected freeze cannot publish a mixed context receipt");
-                    var freshTools = ConversationRunService.PrepareToolsForRun(executor.CaptureRunnableCatalog(second));
+                    var freshTools = ConversationRunService.PrepareToolsForRun(executor.GetHostTools()
+                        .Concat(executor.GetControllerTools()).Concat(executor.CapturePublishedGlobalTools(second)));
                     model.RebindAuthority(freshTools, executor.CaptureSkills(second),
                         PromptSettingsService.ApplyPublishedTemplates(settings, second.PromptsJson), NewContext(adapter), second.Authority.Generation);
                     var next = model.CreateRequest("fresh-publication", callContext);
@@ -1505,7 +1507,8 @@ namespace RNAssistant.Harness
                 AssertTrue(chatA.Id != chatB.Id, "two independent conversations");
                 AssertEqual(chatA.DocumentAuthorityId, chatB.DocumentAuthorityId, "both conversations bind the same document authority");
                 var publication = reader.CaptureCatalogs();
-                var catalog = ConversationRunService.PrepareToolsForRun(reader.CaptureRunnableCatalog(publication));
+                var catalog = ConversationRunService.PrepareToolsForRun(reader.GetHostTools()
+                    .Concat(reader.GetControllerTools()).Concat(reader.CapturePublishedGlobalTools(publication)));
                 var skills = reader.CaptureSkills(publication);
                 var settings = PromptSettingsService.ApplyPublishedTemplates(new AppSettings {
                     ContextWindowOverrideTokens = 64000, MaxTokens = 1024 }, publication.PromptsJson);

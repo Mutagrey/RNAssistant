@@ -29,7 +29,7 @@ namespace RNAssistant.Office.Services
                     // the request boundary. Exact admitted optional schemas are reconstructed by
                     // the existing admission journal; changed ones must be admitted again.
                     var fresh = _refresh == null
-                        ? new ConversationRunInput(_input.Settings, _input.Context, _executor.CaptureRunnableCatalog(),
+                        ? new ConversationRunInput(_input.Settings, _input.Context, _input.Tools,
                             _executor.CaptureSkills().Skills, _input.Attachments)
                         : await _refresh(cancellationToken).ConfigureAwait(false);
                     UseInput(fresh);

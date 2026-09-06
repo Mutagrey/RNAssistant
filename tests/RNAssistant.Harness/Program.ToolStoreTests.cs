@@ -88,6 +88,16 @@ namespace RNAssistant.Harness
                     CustomTool("Word", "word.hidden")
                 });
                 var executor = new OfficeToolExecutor(adapter, new VbaJournalStore(paths), new SkillStore(paths), toolStore);
+                var publication = executor.CaptureCatalogs();
+                var callsBeforePublication = adapter.TotalBackendCallCount;
+                var globals = executor.CapturePublishedGlobalTools(publication);
+                AssertTrue(globals.All(tool => tool.Scope == "global"), "global capture excludes document registrations");
+                var customGlobal = globals.Single(tool => !tool.BuiltIn);
+                AssertEqual("excel.custom", customGlobal.Id, "published host package remains callable and other hosts are excluded");
+                AssertTrue(customGlobal.Binding != null && customGlobal.Policy != null,
+                    "published global keeps its exact typed runtime binding and policy");
+                AssertEqual(callsBeforePublication, adapter.TotalBackendCallCount,
+                    "published global capture does not discover live document VBA");
                 var catalog = new ToolCatalogService(adapter, executor).GetVisibleTools();
 
                 AssertTrue(HasTool(catalog, "excel.add_sheet"), "built-in tool visible");
