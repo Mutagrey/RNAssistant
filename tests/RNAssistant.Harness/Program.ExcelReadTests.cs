@@ -86,6 +86,12 @@ namespace RNAssistant.Harness
                     var tableRead = executor.ExecuteManual(Command(ResourceToolCatalog.ReadToolId,
                         "target", "Excel table: Sales", "representation", "text"), tools, new AppSettings(), false, false, chat);
                     AssertTrue(tableRead.Success && tableOwnerSta, "named resolution/capture uses the same bound owner STA");
+                    inner.ExcelNamesForTest.Add(new ExcelNameSnapshot { Name = "SalesRange", RefersTo = "=Data!$A$1:$B$4",
+                        TargetKind = ExcelNameTargetKind.BoundRange, Sheet = "Data", Address = "A1:B4" });
+                    tableOwnerSta = false;
+                    var nameRead = executor.ExecuteManual(Command(ResourceToolCatalog.ReadToolId,
+                        "target", "Excel name: SalesRange", "representation", "text"), tools, new AppSettings(), false, false, chat);
+                    AssertTrue(nameRead.Success && tableOwnerSta, "defined-name resolution/capture uses the bound owner STA");
                     var dispatched = inner.ExcelBackendCalls.Count;
                     dispatcher.Invoke(() => document.IsAlive = false);
                     var closed = executor.ExecuteManual(Command(ExcelReadToolIds.Inspect, "kind", "sheets"),
@@ -98,6 +104,10 @@ namespace RNAssistant.Harness
                         "target", "Excel table: Sales", "representation", "text"), tools, new AppSettings(), false, false, chat);
                     AssertTrue(!closedTable.Success, "closed workbook cannot resolve a current table");
                     AssertEqual(dispatched, inner.ExcelBackendCalls.Count, "closed table read performs no backend work");
+                    var closedName = executor.ExecuteManual(Command(ResourceToolCatalog.ReadToolId,
+                        "target", "Excel name: SalesRange", "representation", "text"), tools, new AppSettings(), false, false, chat);
+                    AssertTrue(!closedName.Success, "closed workbook cannot resolve a current defined name");
+                    AssertEqual(dispatched, inner.ExcelBackendCalls.Count, "closed defined-name read performs no backend work");
                 }
             });
         }
@@ -228,6 +238,128 @@ namespace RNAssistant.Harness
                         RuntimeThrows<ResourceRequestException>(() => gateway.List(session, "excel", ExcelResourceProvider.TableKind, null, 20));
                     }
                 }
+                var foreign = NewSession(adapter); foreign.DocumentKey = "foreign-workbook";
+                RuntimeThrows<InvalidOperationException>(() => gateway.Read(foreign, new ResourceReadRequest { Reference = reference, Representation = "text" }));
+            });
+        }
+
+        private static void ExcelDefinedNameResources()
+        {
+            WithTempExecutor(FakeOfficeAdapter.ForHost("Excel"), (executor, adapter) =>
+            {
+                var session = NewSession(adapter); executor.BindResourceAuthority(session);
+                var name = new ExcelNameSnapshot { Name = "Sales", RefersTo = "=Data!$C$1:$D$2",
+                    TargetKind = ExcelNameTargetKind.BoundRange, Sheet = "Data", Address = "C1:D2" };
+                adapter.ExcelNamesForTest.Add(name);
+                adapter.ExcelNamesForTest.Add(new ExcelNameSnapshot { Name = "Data!Sales", RefersTo = "=42" });
+                foreach (var cell in new[] { "C1", "D1", "C2", "D2", "E1", "F1", "E2", "F2" })
+                    adapter.SetExcelCellForTest("Data", cell, "same");
+                var gateway = executor.ResourceGateway;
+                var listed = gateway.List(session, "excel", ExcelResourceProvider.NameKind, null, 20).Items;
+                AssertEqual(2, listed.Select(item => item.Reference.Uri).Distinct().Count(), "global and sheet-qualified names have distinct identities");
+                AssertTrue(gateway.Find(session, "Sales", "document").Items.Any(item => item.Target == "Excel name: Sales"), "generic find discovers defined names");
+                AssertEqual("Excel name: Data!Sales", gateway.Find(session, "Excel name: Data!Sales", "document").Items.Single().Target,
+                    "qualified name bypasses A1 target parsing");
+                AssertEqual(0, adapter.ExcelBackendCalls.Count(item => item == FakeOfficeAdapter.ExcelRangeReadOperation), "name discovery does not read cells");
+                var tools = OfficeToolCatalog.ForHost("Excel").Concat(executor.GetControllerTools()).ToList();
+                var runtime = executor.CreateNativeRuntime(session, tools, new AppSettings(), "agent", false);
+                var first = ExecuteHtmlNative(runtime, ResourceToolCatalog.ReadToolId,
+                    new JObject { ["target"] = "Excel name: sales", ["representation"] = "text" });
+                AssertEqual(ToolExecutionOutcome.Ok, first.Outcome, "generic native reader accepts a case-insensitive exact name");
+                var evidence = first.ResourceEvidence.Single();
+                AssertEqual(listed.Single(item => item.Title == "Sales").Reference.Uri, evidence.Resource.Uri, "read and discovery share identity");
+                var original = (string)JObject.Parse(first.Result.DataJson)["text"];
+                AssertEqual(name.RefersTo, (string)JObject.Parse(original).SelectToken("definition.refersTo"), "source retains the full definition");
+                AssertEqual("C1:D2", (string)JObject.Parse(original).SelectToken("range.address"), "source retains the observed extent");
+                name.RefersTo = "=OFFSET(Data!$C$1,0,0,2,2)";
+                var changed = ExecuteHtmlNative(runtime, ResourceToolCatalog.ReadToolId,
+                    new JObject { ["target"] = "Excel name: Sales", ["representation"] = "text" });
+                AssertEqual(ToolExecutionOutcome.Ok, changed.Outcome, "resolved dynamic definition uses the same bound range capture");
+                var changedEvidence = changed.ResourceEvidence.Single();
+                AssertTrue(evidence.Resource.Revision != changedEvidence.Resource.Revision, "definition drift alone advances revision");
+                name.Address = "E1:F2";
+                var moved = ExecuteHtmlNative(runtime, ResourceToolCatalog.ReadToolId,
+                    new JObject { ["target"] = "Excel name: Sales", ["representation"] = "text" });
+                AssertEqual(ToolExecutionOutcome.Ok, moved.Outcome, "fresh read follows a changed resolved extent");
+                AssertEqual(evidence.Resource.Uri, moved.ResourceEvidence.Single().Resource.Uri, "name identity survives relocation");
+                AssertTrue(changedEvidence.Resource.Revision != moved.ResourceEvidence.Single().Resource.Revision, "extent drift advances revision despite equal cells");
+                AssertEqual(EvidenceState.Superseded, new EvidenceStateReducer().Reduce(evidence,
+                    executor.ResourceAuthority.CaptureMany(new[] { evidence.ScopeId })).State, "old definition is historical");
+                adapter.ExcelNamesForTest.Remove(name);
+                var calls = adapter.ExcelBackendCalls.Count;
+                AssertEqual(original, gateway.Read(session, new ResourceReadRequest { Reference = evidence.Resource,
+                    Representation = "text", MaxChars = 32000 }).Result.Text, "retained read survives removal of the live name");
+                using (var data = new ResourceDataPlaneService(gateway))
+                {
+                    var opened = data.Open(session, "workspace", evidence.Resource, "records", "$.range.values");
+                    AssertEqual(evidence.Resource.Revision, opened.Descriptor.Reference.Revision, "HTML records retain exact definition revision");
+                }
+                AssertEqual(calls, adapter.ExcelBackendCalls.Count, "historical text and records perform no Office I/O");
+                adapter.ExcelNamesForTest.Add(name); name.Address = "E1:F3";
+                foreach (var view in new[] { "records", "formulas", "structure" })
+                {
+                    var args = new JObject { ["target"] = "Excel name: Sales", ["representation"] = view };
+                    if (view == "records") { args["path"] = "$.range.values"; args["limit"] = 2; }
+                    var read = ExecuteHtmlNative(runtime, ResourceToolCatalog.ReadToolId, args);
+                    AssertEqual(ToolExecutionOutcome.Ok, read.Outcome, "resized name supports shared " + view + " view");
+                }
+                System.IO.File.Delete(executor.Payloads.PathFor(evidence.Payload.Sha256));
+                calls = adapter.ExcelBackendCalls.Count;
+                AssertEqual("RESOURCE_SNAPSHOT_UNAVAILABLE", RuntimeThrows<ResourceRequestException>(() => gateway.Read(session,
+                    new ResourceReadRequest { Reference = evidence.Resource, Representation = "text" })).ErrorCode, "missing name CAS never falls forward");
+                AssertEqual(calls, adapter.ExcelBackendCalls.Count, "missing CAS does not consult current name");
+            });
+        }
+
+        private static void ExcelDefinedNameAdmission()
+        {
+            WithTempExecutor(FakeOfficeAdapter.ForHost("Excel"), (executor, adapter) =>
+            {
+                var session = NewSession(adapter); executor.BindResourceAuthority(session);
+                var gateway = executor.ResourceGateway;
+                foreach (var kind in new[] { ExcelNameTargetKind.Unresolved, ExcelNameTargetKind.ForeignRange, ExcelNameTargetKind.MultipleAreas })
+                {
+                    adapter.ExcelNamesForTest.Add(new ExcelNameSnapshot { Name = kind.ToString(), RefersTo = "=42",
+                        TargetKind = kind, Sheet = "Data", Address = "A1:B4" });
+                    var descriptor = gateway.List(session, "excel", ExcelResourceProvider.NameKind, null, 20).Items.Single(item => item.Title == kind.ToString());
+                    AssertTrue(descriptor.Representations.SequenceEqual(new[] { "metadata" }), "unverified targets advertise metadata only: " + kind);
+                    var metadata = gateway.Read(session, new ResourceReadRequest { Reference = descriptor.Reference, Representation = "auto" }).Result;
+                    AssertEqual("=42", (string)JObject.Parse(metadata.Text)["refersTo"], "metadata preserves unresolved/external definition");
+                    AssertEqual("RESOURCE_VIEW_UNAVAILABLE", RuntimeThrows<ResourceRequestException>(() => gateway.Read(session,
+                        new ResourceReadRequest { Reference = descriptor.Reference, Representation = "text" })).ErrorCode, "unverified range fields cannot authorize cells");
+                }
+                AssertEqual(0, adapter.ExcelBackendCalls.Count(item => item == FakeOfficeAdapter.ExcelRangeReadOperation), "metadata/unsupported views never capture local cells");
+                adapter.ExcelNamesForTest.Clear();
+                var name = new ExcelNameSnapshot { Name = "Sales", RefersTo = "=Data!$A$1:$B$4",
+                    TargetKind = ExcelNameTargetKind.BoundRange, Sheet = "Data", Address = "A1:B4" };
+                adapter.ExcelNamesForTest.Add(name);
+                var reference = gateway.List(session, "excel", ExcelResourceProvider.NameKind, null, 20).Items.Single().Reference;
+                foreach (var defect in new[] { "truncated", "duplicate", "missing", "oversized", "external-address" })
+                {
+                    name.Address = defect == "oversized" ? "A1:Z10000" : defect == "external-address" ? "[other.xlsx]Data!A1:B4" : "A1:B4";
+                    var names = defect == "missing" ? new List<ExcelNameSnapshot>() : new List<ExcelNameSnapshot> { name };
+                    if (defect == "duplicate") names.Add(name);
+                    adapter.QueueExcelInspectSnapshot(new ExcelInspectSnapshot { Kind = "names", Names = names,
+                        ReturnedCount = names.Count, Truncated = defect == "truncated" });
+                    RuntimeThrows<ResourceRequestException>(() => gateway.Read(session, new ResourceReadRequest { Reference = reference, Representation = "text" }));
+                    AssertEqual(0, adapter.ExcelBackendCalls.Count(item => item == FakeOfficeAdapter.ExcelRangeReadOperation), defect + " refuses before cell capture");
+                }
+                name.Address = "A1:B4";
+                foreach (var defect in new[] { "invalid-kind", "missing-sheet", "missing-address", "control-sheet" })
+                {
+                    name.TargetKind = defect == "invalid-kind" ? (ExcelNameTargetKind)999 : ExcelNameTargetKind.BoundRange;
+                    name.Sheet = defect == "missing-sheet" ? null : defect == "control-sheet" ? "Data\n" : "Data";
+                    name.Address = defect == "missing-address" ? null : "A1:B4";
+                    RuntimeThrows<ExcelReadBackendException>(() => gateway.List(session, "excel", ExcelResourceProvider.NameKind, null, 20));
+                }
+                name.Sheet = "Data";
+                adapter.ExcelNamesForTest.Add(name);
+                RuntimeThrows<ResourceRequestException>(() => gateway.List(session, "excel", ExcelResourceProvider.NameKind, null, 20));
+                adapter.ExcelNamesForTest.Clear();
+                for (var index = 0; index <= ExcelReadService.MaxInspectItems; index++)
+                    adapter.ExcelNamesForTest.Add(new ExcelNameSnapshot { Name = "Name" + index, RefersTo = "=42" });
+                AssertEqual("RESOURCE_SNAPSHOT_TOO_LARGE", RuntimeThrows<ResourceRequestException>(() => gateway.List(session,
+                    "excel", ExcelResourceProvider.NameKind, null, 20)).ErrorCode, "incomplete name catalog is never advertised as complete");
                 var foreign = NewSession(adapter); foreign.DocumentKey = "foreign-workbook";
                 RuntimeThrows<InvalidOperationException>(() => gateway.Read(foreign, new ResourceReadRequest { Reference = reference, Representation = "text" }));
             });

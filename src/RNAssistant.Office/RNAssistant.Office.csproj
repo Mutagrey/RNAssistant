@@ -251,6 +251,7 @@
     <Compile Include="Services\ExcelResourceProvider.cs" />
     <Compile Include="Services\ExcelResourceProvider.Search.cs" />
     <Compile Include="Services\ExcelResourceProvider.Tables.cs" />
+    <Compile Include="Services\ExcelResourceProvider.Names.cs" />
     <Compile Include="Services\ExcelSearchResourceService.cs" />
     <Compile Include="Contracts\BridgeDtos.ResourceData.cs" />
     <Compile Include="Services\ResourceGatewayService.Intent.cs" />

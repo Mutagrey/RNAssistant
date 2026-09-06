@@ -425,6 +425,8 @@ namespace RNAssistant.Harness
                 Test("excel read: HTML binding shares typed route", ExcelReadHtmlUsesSharedRoute),
                 Test("excel tables: named resource identity and retained views", ExcelNamedTableResources),
                 Test("excel tables: bounded unambiguous resolution", ExcelNamedTableAdmission),
+                Test("excel names: exact definition identity and retained views", ExcelDefinedNameResources),
+                Test("excel names: bound range proof and admission", ExcelDefinedNameAdmission),
                 Test("excel write: native ownership and verified policy", ExcelWriteUsesExactNativeOwnership),
                 Test("excel write: kinds normalization and exact verification", ExcelWriteNormalizesAndVerifiesKinds),
                 Test("excel write: dispatch fault classification", ExcelWriteClassifiesDispatchFaults),

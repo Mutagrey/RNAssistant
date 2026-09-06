@@ -101,10 +101,20 @@ namespace RNAssistant.Office.Domains.Excel
         [JsonProperty("columns")] public int Columns { get; set; }
     }
 
+    [JsonConverter(typeof(Newtonsoft.Json.Converters.StringEnumConverter))]
+    public enum ExcelNameTargetKind
+    {
+        Unresolved,
+        BoundRange,
+        ForeignRange,
+        MultipleAreas
+    }
+
     public sealed class ExcelNameSnapshot
     {
         [JsonProperty("name")] public string Name { get; set; }
         [JsonProperty("refersTo")] public string RefersTo { get; set; }
+        [JsonProperty("targetKind")] public ExcelNameTargetKind TargetKind { get; set; }
         [JsonProperty("sheet", NullValueHandling = NullValueHandling.Ignore)] public string Sheet { get; set; }
         [JsonProperty("address", NullValueHandling = NullValueHandling.Ignore)] public string Address { get; set; }
     }

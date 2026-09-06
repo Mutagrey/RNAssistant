@@ -100,6 +100,7 @@ namespace RNAssistant.Harness
         public string RuntimeDocumentKeyValue { get; set; }
         public string DocumentPathValue { get; set; }
         private ExcelInspectSnapshot _nextExcelInspectSnapshot;
+        public List<ExcelNameSnapshot> ExcelNamesForTest { get; } = new List<ExcelNameSnapshot>();
         private ExcelWriteBackendException _nextExcelWriteApplyFailure;
         private ExcelSheetBackendException _nextExcelSheetApplyFailure;
         private ExcelRangeMutationBackendException _nextExcelRangeMutationApplyFailure;
@@ -660,7 +661,12 @@ namespace RNAssistant.Harness
             }
             else if (kind == "names")
             {
-                snapshot.Names = new List<ExcelNameSnapshot>();
+                snapshot.Names = ExcelNamesForTest.Take(maxItems).Select(name => new ExcelNameSnapshot {
+                    Name = name.Name, RefersTo = name.RefersTo, TargetKind = name.TargetKind,
+                    Sheet = name.Sheet, Address = name.Address
+                }).ToList();
+                snapshot.ReturnedCount = snapshot.Names.Count;
+                snapshot.Truncated = ExcelNamesForTest.Count > maxItems;
             }
             else if (kind == "shapes")
             {

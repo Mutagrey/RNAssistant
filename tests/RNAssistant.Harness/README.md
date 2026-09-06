@@ -61,8 +61,12 @@ evidence invalidation after replacement and bound-STA/closed-workbook search.
 `excel tables:` checks named ListObject discovery, stable identity through moves/
 resizes (including equal cells), exact historical source/records without Office,
 missing-CAS refusal, incomplete/ambiguous catalog and pre-capture extent bounds.
-`excel read:` also checks named-table bound-STA/closed-workbook delivery. These
-host-neutral cases do not qualify real ListObjects or Defined Names.
+`excel names:` checks global/sheet-qualified identity, dynamic definition/extent
+drift with equal cells, historical source/records after live removal, missing CAS,
+metadata-only unresolved/foreign/multi-area names and complete bounded catalogs.
+Only explicit bound-range proof admits cells; invalid proof/extent fails closed.
+`excel read:` also checks named-table/name bound-STA/closed-workbook delivery.
+These host-neutral cases do not qualify real ListObjects or Defined Names COM.
 
 Word source cutover: `word resources:` and `word tools:` cover complete exact
 document/selection/range evidence, single-capture continuation, historical no-I/O,

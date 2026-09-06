@@ -206,8 +206,34 @@ parts. No second JSON store or fallback to the former address is introduced.
 Historical exact reads/projections need no table lookup or Office I/O; missing CAS
 does not read the current table. Native bound-STA/closed-workbook behavior is checked
 with fakes; real Windows ListObject/model/WebView2 qualification remains open.
-Defined Names (including external, dynamic and non-range references) and finer
-Excel coverage remain separate open requirements, not aliases to this table path.
+
+### Excel Defined Names
+
+`Excel name: Sales` and `Excel name: Data!Sales` use the existing Excel provider
+and generic discovery/read tools. The `excel-defined-name` identity is the bound
+document token plus the case-normalized exact name reported by Excel; sheet
+qualification is preserved, never guessed or aliased to a workbook-scoped name.
+Resolution requires one match in a complete catalog of at most 200 names.
+
+The typed backend classifies `RefersToRange`: only `BoundRange` (one area whose
+worksheet belongs to the exact bound workbook runtime) permits cell capture.
+`Unresolved`, `ForeignRange` and `MultipleAreas` expose metadata only, even if a
+snapshot contains sheet/address fields. Constants, unresolved formulas and external
+references are not evaluated by the provider or redirected to a local sheet.
+Dynamic definitions use their observed single bound extent when available. Local
+A1 validation and the 100000-cell bound precede capture; unsupported/full-column
+extents remain discoverable as metadata but fail an unsupported/oversized body read.
+
+`metadata` retains the full definition; discovery carries only a bounded preview.
+`text`/`formulas` capture the definition and typed range snapshot together;
+`structure` wraps the existing domain profile with the same definition.
+`table`/`records` use `$.range.values`. Definition changes or extent changes advance
+the revision even when cell values remain equal. Exact retained reads/projections
+use shared CAS without resolving the live name, including after its removal;
+missing CAS never falls forward. Fresh observations are not continuous monitoring.
+Host-neutral tests cover this routing and bound-STA/closed-session refusal. Real
+Windows name resolution, external/dynamic/multi-area COM behavior and WebView2
+qualification remain open, as does finer Excel impact/coverage qualification.
 
 ### Excel search
 

@@ -400,13 +400,16 @@ namespace RNAssistant.OfficeHosts
                 Excel.Range target = null;
                 try { target = name.RefersToRange; } catch { }
                 var sheet = target == null ? null : target.Worksheet as Excel.Worksheet;
+                var targetKind = target == null ? ExcelNameTargetKind.Unresolved :
+                    !BelongsToSession(sheet) ? ExcelNameTargetKind.ForeignRange :
+                    target.Areas.Count != 1 ? ExcelNameTargetKind.MultipleAreas : ExcelNameTargetKind.BoundRange;
                 names.Add(new ExcelNameSnapshot
                 {
                     Name = name.Name,
                     RefersTo = Convert.ToString(name.RefersTo),
-                    Sheet = sheet == null ? null : sheet.Name,
-                    Address = target == null
-                        ? null : SafeString(delegate { return target.Address[false, false]; })
+                    TargetKind = targetKind,
+                    Sheet = targetKind == ExcelNameTargetKind.BoundRange ? sheet.Name : null,
+                    Address = targetKind == ExcelNameTargetKind.BoundRange ? target.Address[false, false] : null
                 });
             }
             return new ExcelInspectSnapshot

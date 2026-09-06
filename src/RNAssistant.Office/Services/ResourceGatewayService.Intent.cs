@@ -40,6 +40,11 @@ namespace RNAssistant.Office.Services
                 var excel = _registry.All().OfType<ExcelResourceProvider>().SingleOrDefault();
                 if (excel != null) AddIntentState(states, WithProvider(excel, session, () => excel.ResolveTable(session, query.Substring(13))));
             }
+            else if ((scope == "all" || scope == "document") && query.StartsWith("Excel name: ", StringComparison.Ordinal))
+            {
+                var excel = _registry.All().OfType<ExcelResourceProvider>().SingleOrDefault();
+                if (excel != null) AddIntentState(states, WithProvider(excel, session, () => excel.ResolveName(session, query.Substring(12))));
+            }
             else if ((scope == "all" || scope == "document") && query.IndexOf('!') > 0)
             {
                 var excel = _registry.All().OfType<ExcelResourceProvider>().SingleOrDefault();
@@ -149,6 +154,14 @@ namespace RNAssistant.Office.Services
                 if (provider == null) throw new ResourceRequestException("PowerPoint resource provider is unavailable.", "RESOURCE_PROVIDER_UNAVAILABLE", false);
                 var descriptor = WithProvider(provider, session, () => provider.ResolvePowerPointSearch(session, target.Substring(25)));
                 return new ResourceIntentTarget { Target = IntentTarget(descriptor), Type = "PowerPoint search scope", Scope = "document",
+                    Descriptor = descriptor, Reference = descriptor.Reference };
+            }
+            if (target.StartsWith("Excel name: ", StringComparison.Ordinal))
+            {
+                var excel = _registry.All().OfType<ExcelResourceProvider>().SingleOrDefault();
+                if (excel == null) throw new ResourceRequestException("Excel resource provider is unavailable.", "RESOURCE_PROVIDER_UNAVAILABLE", false);
+                var descriptor = WithProvider(excel, session, () => excel.ResolveName(session, target.Substring(12)));
+                return new ResourceIntentTarget { Target = IntentTarget(descriptor), Type = "Excel name", Scope = "document",
                     Descriptor = descriptor, Reference = descriptor.Reference };
             }
             if (target.StartsWith("Excel table: ", StringComparison.Ordinal))
@@ -363,6 +376,7 @@ namespace RNAssistant.Office.Services
                     yield return new ResourceIntentPlan(provider, null, "document");
                     yield return new ResourceIntentPlan(provider, ExcelResourceProvider.SearchKind, "document");
                     yield return new ResourceIntentPlan(provider, ExcelResourceProvider.TableKind, "document");
+                    yield return new ResourceIntentPlan(provider, ExcelResourceProvider.NameKind, "document");
                 }
                 else if (provider is CatalogResourceProvider)
                 {
@@ -540,6 +554,7 @@ namespace RNAssistant.Office.Services
                 case "document": return "document";
                 case "Excel range": return "document";
                 case "Excel table": return "document";
+                case "Excel name": return "document";
                 case "Excel search scope": return "document";
                 case "Outlook mail":
                 case "Outlook collection":
@@ -582,6 +597,7 @@ namespace RNAssistant.Office.Services
                 case LiveDocumentResourceProvider.DocumentKind: return "document";
                 case ExcelResourceProvider.RangeKind: return "Excel range";
                 case ExcelResourceProvider.TableKind: return "Excel table";
+                case ExcelResourceProvider.NameKind: return "Excel name";
                 case ExcelResourceProvider.SearchKind: return "Excel search scope";
                 case LiveDocumentResourceProvider.OutlookMailKind: return "Outlook mail";
                 case LiveDocumentResourceProvider.OutlookCollectionKind: return "Outlook collection";
@@ -615,6 +631,7 @@ namespace RNAssistant.Office.Services
             if (descriptor.Provider == "catalog") return "catalogs";
             if (type == "Excel search scope") return "document";
             if (type == "Excel table") return "document";
+            if (type == "Excel name") return "document";
             if (type == "Outlook search scope") return "document";
             if (string.Equals(type, "document", StringComparison.Ordinal) || type == "Excel range" || type == "Word range" || type == "Word search scope" || type == "PowerPoint search scope" || type == "PowerPoint slide" || type == "Outlook mail" || type == "Outlook collection" || type == "Office observation") return "document";
             if (string.Equals(type, "selection", StringComparison.Ordinal)) return "selection";

@@ -66,7 +66,7 @@ namespace RNAssistant.Office.Domains.Excel
 
         internal ExcelInspectSnapshot CaptureStructure(string kind)
         {
-            if (kind != "sheets" && kind != "tables")
+            if (kind != "sheets" && kind != "tables" && kind != "names")
                 throw new ExcelReadBackendException("Unsupported structure view.", "excel_inspect_kind_invalid", false);
             var snapshot = _backend.Inspect(new ExcelInspectRequest { Kind = kind, MaxItems = MaxInspectItems, MaxSeries = MaxChartSeries });
             ValidateInspect(snapshot, kind, false);
@@ -118,7 +118,12 @@ namespace RNAssistant.Office.Domains.Excel
                 case "names":
                     if (snapshot.Names == null) throw InvalidBackend("Defined-name inspection returned no collection.");
                     ValidateItems(snapshot.Names, item => item != null &&
-                        !string.IsNullOrWhiteSpace(item.Name) && !string.IsNullOrWhiteSpace(item.RefersTo));
+                        !string.IsNullOrWhiteSpace(item.Name) && item.Name.Length <= 384 &&
+                        !string.IsNullOrWhiteSpace(item.RefersTo) && item.RefersTo.Length <= 8192 &&
+                        Enum.IsDefined(typeof(ExcelNameTargetKind), item.TargetKind) &&
+                        (item.TargetKind != ExcelNameTargetKind.BoundRange ||
+                            !string.IsNullOrWhiteSpace(item.Sheet) && item.Sheet.Length <= 128 && !item.Sheet.Any(char.IsControl) &&
+                            !string.IsNullOrWhiteSpace(item.Address) && item.Address.Length <= 256));
                     count = Count(snapshot.Names);
                     break;
                 case "shapes":

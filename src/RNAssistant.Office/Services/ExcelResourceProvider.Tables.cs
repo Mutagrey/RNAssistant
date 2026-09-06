@@ -18,9 +18,14 @@ namespace RNAssistant.Office.Services
         {
             var snapshot = CaptureTableCatalog();
             var items = snapshot.Tables.Select(table => DescribeTable(session, table)).ToList();
+            return PageNamedResources(items, TableKind, cursor, limit);
+        }
+
+        private ResourceListPage PageNamedResources(System.Collections.Generic.List<ResourceDescriptor> items, string kind, string cursor, int limit)
+        {
             if (items.Select(item => item.Reference.Uri).Distinct(StringComparer.Ordinal).Count() != items.Count)
-                throw Error("RESOURCE_TARGET_AMBIGUOUS", "The table catalog contains duplicate names.");
-            var binding = ResourceReadCursor.ListBinding(Id, TableKind);
+                throw Error("RESOURCE_TARGET_AMBIGUOUS", "The resource catalog contains duplicate names.");
+            var binding = ResourceReadCursor.ListBinding(Id, kind);
             var position = ResourceReadCursor.ParseRevisionBound(cursor, binding);
             var revision = ResourceReadCursor.CollectionRevision(items);
             ResourceReadCursor.ValidateContinuation(position, revision);
