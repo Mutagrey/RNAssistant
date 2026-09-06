@@ -29,6 +29,8 @@ namespace RNAssistant.Harness
             "powerpoint.move.direct";
 
         public int PowerPointSourceMaterializationCount { get; private set; }
+        public int PowerPointSearchMaterializationCount { get; private set; }
+        public Func<PowerPointTextScopeRequest, IReadOnlyList<PowerPointTextTargetSnapshot>> PowerPointSearchFactory { get; set; }
 
         public PowerPointSlideReadSnapshot ReadSlides(
             PowerPointReadSlidesRequest request)
@@ -107,6 +109,10 @@ namespace RNAssistant.Harness
             PowerPointTextScopeRequest request)
         {
             BeginPowerPointBackendCall(PowerPointReadTextOperation);
+            PowerPointSearchMaterializationCount++;
+            if (PowerPointSearchFactory != null) return PowerPointSearchFactory(request);
+            if (request.MaxCharacters > 0 && request.SlideIndex == 0 && _slides.Count > request.MaxSlides)
+                throw new PowerPointBackendException("PowerPoint slide limit exceeded.", "powerpoint_slide_limit_exceeded", false);
             return PowerPointTextTargets(request);
         }
 

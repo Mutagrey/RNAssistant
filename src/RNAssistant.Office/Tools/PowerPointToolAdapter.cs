@@ -38,12 +38,6 @@ namespace RNAssistant.Office.Tools
                         arguments, "slideIndex", 0)
                 }, cancellationToken);
             if (string.Equals(
-                toolId, PowerPointToolIds.SearchText, StringComparison.Ordinal))
-                return _service.Search(ReplaceRequest(arguments, "query"),
-                    ToolArgumentReader.Int32(arguments, "maxResults", 50),
-                    ToolArgumentReader.Int32(arguments, "contextChars", 80),
-                    cancellationToken);
-            if (string.Equals(
                 toolId, PowerPointToolIds.AddSlide, StringComparison.Ordinal))
                 return _service.AddSlide(new PowerPointAddSlideRequest
                 {

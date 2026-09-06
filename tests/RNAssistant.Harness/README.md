@@ -62,6 +62,10 @@ PowerPoint source cutover: `powerpoint resources:` and `powerpoint tools:` cover
 document/slide text and notes, exact CAS evidence, one-capture paging, historical
 no-I/O, explicit bounds, removed-call refusal, shared HTML capture and bound
 STA/closed-presentation routing. Real COM shapes/notes and selection remain unqualified.
+`powerpoint search:` adds regex/notes/coordinate/output semantics, complete evidence
+including zero matches/empty scopes, retained historical pages, missing-CAS refusal
+and malformed/oversized capture rejection. `powerpoint tools:` also checks search
+evidence invalidation after mutation and bound-STA/closed-presentation search.
 
 Outlook mail cutover: `outlook resources:`, `outlook capture:` and `outlook tools:`
 cover exact source/evidence/CAS paging, header-only discovery and attachment views,

@@ -42,6 +42,7 @@ namespace RNAssistant.Office.Services
                 }
 
                 var content = IsWord && IsWordSearch(target) ? ReadWordSearch(target)
+                    : IsPowerPoint && IsPowerPointSearch(target) ? ReadPowerPointSearch(target)
                     : IsOutlook ? ReadOutlookSource(target, representation)
                     : representation == ResourceRepresentations.Source
                     ? ReadPowerPointSource(target, true)
@@ -273,6 +274,8 @@ namespace RNAssistant.Office.Services
         {
             value = (value ?? string.Empty).Trim().ToLowerInvariant();
             if (value.Length == 0 || value == "auto") return ResourceRepresentations.Text;
+            if (IsPowerPoint && IsPowerPointSearch(target) && value != ResourceRepresentations.Text && value != ResourceRepresentations.Metadata)
+                throw new ResourceRequestException("PowerPoint search scopes expose exact text JSON.", "RESOURCE_VIEW_UNAVAILABLE", false);
             if (IsWord && IsWordSearch(target) && value != ResourceRepresentations.Text && value != ResourceRepresentations.Metadata)
                 throw new ResourceRequestException("Word search scopes expose exact text JSON.", "RESOURCE_VIEW_UNSUPPORTED", false);
             if (IsOutlook && target == OutlookCollectionKey && (value == ResourceRepresentations.Structure || value == ResourceRepresentations.Source))

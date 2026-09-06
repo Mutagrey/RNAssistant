@@ -72,6 +72,14 @@ namespace RNAssistant.Office.Domains.PowerPoint
         public int MaxSlides { get; set; }
         public int MaxShapesPerSlide { get; set; }
         public int MaxTargets { get; set; }
+        public int MaxCharacters { get; set; }
+    }
+
+    public sealed class PowerPointSearchSnapshot
+    {
+        public int SlideIndex { get; set; }
+        public bool IncludeNotes { get; set; }
+        public IReadOnlyList<PowerPointTextTargetSnapshot> Targets { get; set; }
     }
 
     public sealed class PowerPointTextTargetSnapshot

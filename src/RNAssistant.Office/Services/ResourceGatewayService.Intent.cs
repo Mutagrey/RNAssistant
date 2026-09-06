@@ -117,6 +117,14 @@ namespace RNAssistant.Office.Services
                 return new ResourceIntentTarget { Target = IntentTarget(descriptor), Type = "Word search scope", Scope = "document",
                     Descriptor = descriptor, Reference = descriptor.Reference };
             }
+            if (target.StartsWith("PowerPoint search scope: ", StringComparison.Ordinal))
+            {
+                var provider = _registry.All().OfType<LiveDocumentResourceProvider>().SingleOrDefault();
+                if (provider == null) throw new ResourceRequestException("PowerPoint resource provider is unavailable.", "RESOURCE_PROVIDER_UNAVAILABLE", false);
+                var descriptor = WithProvider(provider, session, () => provider.ResolvePowerPointSearch(session, target.Substring(25)));
+                return new ResourceIntentTarget { Target = IntentTarget(descriptor), Type = "PowerPoint search scope", Scope = "document",
+                    Descriptor = descriptor, Reference = descriptor.Reference };
+            }
             if (target.StartsWith("Excel range: ", StringComparison.Ordinal))
             {
                 var excel = _registry.All().OfType<ExcelResourceProvider>().SingleOrDefault();
@@ -294,6 +302,8 @@ namespace RNAssistant.Office.Services
                     yield return new ResourceIntentPlan(provider, null, "document");
                     if ((provider as LiveDocumentResourceProvider)?.IsWord == true)
                         yield return new ResourceIntentPlan(provider, LiveDocumentResourceProvider.WordSearchKind, "document");
+                    if ((provider as LiveDocumentResourceProvider)?.IsPowerPoint == true)
+                        yield return new ResourceIntentPlan(provider, LiveDocumentResourceProvider.PowerPointSearchKind, "document");
                     if ((provider as LiveDocumentResourceProvider)?.IsOutlook == true)
                         yield return new ResourceIntentPlan(provider, LiveDocumentResourceProvider.OutlookMailKind, "document");
                     yield return new ResourceIntentPlan(provider, LiveDocumentResourceProvider.SelectionKind, "selection");
@@ -489,6 +499,7 @@ namespace RNAssistant.Office.Services
                 case "PowerPoint slide":
                 case "Word range": return "document";
                 case "Word search scope": return "document";
+                case "PowerPoint search scope": return "document";
                 case "Office observation": return "document";
                 case "catalog":
                 case "tool source":
@@ -527,6 +538,7 @@ namespace RNAssistant.Office.Services
                 case LiveDocumentResourceProvider.PowerPointSlideKind: return "PowerPoint slide";
                 case LiveDocumentResourceProvider.WordRangeKind: return "Word range";
                 case LiveDocumentResourceProvider.WordSearchKind: return "Word search scope";
+                case LiveDocumentResourceProvider.PowerPointSearchKind: return "PowerPoint search scope";
                 case LiveDocumentResourceProvider.SelectionKind: return "selection";
                 case VbaResourceProvider.ProjectKind: return "VBA project";
                 case VbaResourceProvider.ComponentKind: return "VBA module";
@@ -550,7 +562,7 @@ namespace RNAssistant.Office.Services
             string type)
         {
             if (descriptor.Provider == "catalog") return "catalogs";
-            if (string.Equals(type, "document", StringComparison.Ordinal) || type == "Excel range" || type == "Word range" || type == "Word search scope" || type == "PowerPoint slide" || type == "Outlook mail" || type == "Outlook collection" || type == "Office observation") return "document";
+            if (string.Equals(type, "document", StringComparison.Ordinal) || type == "Excel range" || type == "Word range" || type == "Word search scope" || type == "PowerPoint search scope" || type == "PowerPoint slide" || type == "Outlook mail" || type == "Outlook collection" || type == "Office observation") return "document";
             if (string.Equals(type, "selection", StringComparison.Ordinal)) return "selection";
             if (string.Equals(type, "VBA backup", StringComparison.Ordinal)) return "backups";
             if (string.Equals(type, "VBA module", StringComparison.Ordinal) ||

@@ -161,7 +161,7 @@ namespace RNAssistant.Office.Runtime
                             "PowerPoint handler dependencies are unavailable.");
                     handler = new PowerPointToolHandler(
                         registration.Descriptor.Id, powerPointTools,
-                        hostRuntime, session);
+                        hostRuntime, session, gateway);
                 }
                 else if (OutlookToolIds.Owns(registration.Descriptor.Id))
                 {

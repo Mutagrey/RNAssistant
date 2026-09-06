@@ -6,6 +6,7 @@ using RNAssistant.Core.Models;
 using RNAssistant.Core.Tools;
 using RNAssistant.Office.Domains.PowerPoint;
 using RNAssistant.Office.Runtime;
+using RNAssistant.Office.Services;
 using RuntimeResult = RNAssistant.Core.Tools.Contracts.ToolResult;
 
 namespace RNAssistant.Office.Tools
@@ -16,12 +17,14 @@ namespace RNAssistant.Office.Tools
         private readonly PowerPointToolAdapter _adapter;
         private readonly HostRuntime _runtime;
         private readonly ChatSession _session;
+        private readonly PowerPointSearchResourceService _search;
 
         internal PowerPointToolHandler(
             string toolId,
             PowerPointToolAdapter adapter,
             HostRuntime runtime,
-            ChatSession session)
+            ChatSession session,
+            ResourceGatewayService gateway)
         {
             if (!PowerPointToolIds.Owns(toolId))
                 throw new ArgumentException(
@@ -30,11 +33,13 @@ namespace RNAssistant.Office.Tools
             _adapter = adapter ?? throw new ArgumentNullException(nameof(adapter));
             _runtime = runtime ?? throw new ArgumentNullException(nameof(runtime));
             _session = session;
+            _search = new PowerPointSearchResourceService(gateway);
         }
 
         internal static ToolBinding BindingFor(string toolId)
         {
             if (!PowerPointToolIds.Owns(toolId)) return null;
+            if (toolId == PowerPointToolIds.SearchText) return new ToolBinding("powerpoint.search.text.resource.v1");
             return new ToolBinding(
                 "powerpoint." +
                 toolId.Substring("powerpoint.".Length).Replace('_', '.') +
@@ -51,6 +56,11 @@ namespace RNAssistant.Office.Tools
                     "powerpoint_session_required", false);
             try
             {
+                if (_toolId == PowerPointToolIds.SearchText)
+                    return Task.FromResult(_runtime.ReadDocument(Target(_session), cancellationToken, delegate {
+                        context.MarkDispatchPossible();
+                        return _search.Search(_session, context.Arguments, cancellationToken);
+                    }));
                 var outcome = PowerPointToolIds.IsRead(_toolId)
                     ? _runtime.ReadDocument(
                         Target(_session), cancellationToken, delegate

@@ -17,6 +17,85 @@ namespace RNAssistant.Harness
 {
     internal static partial class Program
     {
+        private static void PowerPointSearchRetainsExactSnapshots()
+        {
+            WithTempExecutor(FakeOfficeAdapter.ForHost("PowerPoint"), (executor, adapter) =>
+            {
+                var body = new string('x', 35000) + " needle NEEDLE " + new string('y', 35000);
+                adapter.PowerPointSearchFactory = request => new[] {
+                    new PowerPointTextTargetSnapshot { TargetId = "private-target", SlideIndex = 2,
+                        ShapeName = "Body", Kind = request.IncludeNotes ? "notes" : "shape", Text = body } };
+                var session = NewSession(adapter);
+                executor.BindResourceAuthority(session);
+                var gateway = executor.ResourceGateway;
+                AssertEqual(2, gateway.Find(session, "", "document").Items.Count(i => i.Type == "PowerPoint search scope"), "deck search scopes are discoverable");
+                AssertEqual(0, adapter.PowerPointSearchMaterializationCount, "scope discovery is body-free");
+                var invalidTarget = false;
+                try { gateway.ResolveIntentTarget(session, "PowerPoint search scope: slide-2"); }
+                catch (ResourceRequestException error) { invalidTarget = error.ErrorCode == "RESOURCE_TARGET_INVALID"; }
+                AssertTrue(invalidTarget, "noncanonical scope spelling is not a hidden alias");
+                var runtime = executor.CreateNativeRuntime(session, OfficeToolCatalog.ForHost("PowerPoint").Concat(executor.GetControllerTools()).ToList(),
+                    new AppSettings(), "agent", false);
+                var args = new JObject { ["query"] = "n(e{2})dle", ["mode"] = "regex", ["wholeWord"] = true,
+                    ["scope"] = "slide", ["slideIndex"] = 2, ["includeNotes"] = true, ["maxResults"] = 1 };
+                var found = ExecuteHtmlNative(runtime, PowerPointToolIds.SearchText, args);
+                AssertEqual(ToolExecutionOutcome.Ok, found.Outcome, "regex search succeeds over exact slide capture");
+                var data = JObject.Parse(found.Result.DataJson);
+                AssertTrue((bool)data["truncated"] && (int)data["matchCount"] == 2, "match count and output limit preserved");
+                AssertEqual(35001, (int)data["matches"][0]["start"], "shape-local coordinates preserved");
+                AssertEqual("notes", (string)data["matches"][0]["kind"], "notes identity preserved");
+                AssertTrue(data["scopeSha256"] == null && data["contentSha256"] == null, "runtime hashes removed from public search output");
+                var evidence = found.ResourceEvidence.Single();
+                AssertTrue(evidence.Complete && evidence.Payload != null && evidence.Resource.IsExact, "search has complete exact evidence");
+                AssertEqual(1, adapter.PowerPointSearchMaterializationCount, "one bound capture per search");
+                var first = gateway.Read(session, new ResourceReadRequest { Reference = evidence.Resource, Representation = "text", MaxChars = 32000 }).Result;
+                AssertTrue(!first.Text.Contains("private-target"), "runtime target IDs are not source content");
+                body = "no matches";
+                var negative = ExecuteHtmlNative(runtime, PowerPointToolIds.SearchText, args);
+                AssertEqual(0, (int)JObject.Parse(negative.Result.DataJson)["matchCount"], "zero-match search completes");
+                AssertTrue(negative.ResourceEvidence.Single().Complete, "zero-match result retains full source evidence");
+                AssertEqual(EvidenceState.Superseded, new EvidenceStateReducer().Reduce(evidence,
+                    executor.ResourceAuthority.CaptureMany(new[] { evidence.ScopeId })).State, "zero-match capture publishes drift");
+                var reads = adapter.PowerPointSearchMaterializationCount;
+                var next = gateway.Read(session, new ResourceReadRequest { Reference = evidence.Resource, Representation = "text", Cursor = first.NextCursor, MaxChars = 32000 }).Result;
+                AssertTrue(next.Text.Contains("needle NEEDLE"), "historical pages preserve searched source");
+                AssertEqual(reads, adapter.PowerPointSearchMaterializationCount, "historical search source does no Office reads");
+                System.IO.File.Delete(executor.Payloads.PathFor(evidence.Payload.Sha256));
+                var denied = false;
+                try { gateway.Read(session, new ResourceReadRequest { Reference = evidence.Resource, Representation = "text" }); }
+                catch (ResourceRequestException error) { denied = error.ErrorCode == "RESOURCE_SNAPSHOT_UNAVAILABLE"; }
+                AssertTrue(denied, "missing exact CAS never falls forward to live PowerPoint");
+            });
+        }
+
+        private static void PowerPointSearchRejectsInvalidCaptures()
+        {
+            WithTempExecutor(FakeOfficeAdapter.ForHost("PowerPoint"), (executor, adapter) =>
+            {
+                var runtime = PowerPointRuntime(executor, adapter);
+                var invalid = ExecuteHtmlNative(runtime, PowerPointToolIds.SearchText, new JObject { ["query"] = "(", ["mode"] = "regex" });
+                AssertEqual(ToolExecutionOutcome.Error, invalid.Outcome, "invalid regex rejected");
+                AssertEqual(0, adapter.PowerPointSearchMaterializationCount, "invalid regex never captures Office text");
+                var target = new PowerPointTextTargetSnapshot { TargetId = "target", SlideIndex = 1, ShapeName = "Body", Kind = "shape", Text = "needle" };
+                adapter.PowerPointSearchFactory = request => new[] { target };
+                var args = new JObject { ["query"] = "needle", ["includeNotes"] = false };
+                var valid = ExecuteHtmlNative(runtime, PowerPointToolIds.SearchText, args);
+                AssertEqual(1, (int)JObject.Parse(valid.Result.DataJson)["matchCount"], "shape-only scope works");
+                target.Kind = "notes";
+                AssertEqual(ToolExecutionOutcome.Error, ExecuteHtmlNative(runtime, PowerPointToolIds.SearchText, args).Outcome, "unexpected notes refused");
+                target.Kind = "shape"; target.Text = new string('x', PowerPointService.MaximumTextCharacters + 1);
+                AssertEqual(ToolExecutionOutcome.Error, ExecuteHtmlNative(runtime, PowerPointToolIds.SearchText, args).Outcome, "oversized capture refused");
+                target.Text = null;
+                AssertEqual(ToolExecutionOutcome.Error, ExecuteHtmlNative(runtime, PowerPointToolIds.SearchText, args).Outcome, "null source is not empty source");
+                target.Text = "needle";
+                adapter.PowerPointSearchFactory = request => new[] { target, target };
+                AssertEqual(ToolExecutionOutcome.Error, ExecuteHtmlNative(runtime, PowerPointToolIds.SearchText, args).Outcome, "duplicate captured targets refused");
+                adapter.PowerPointSearchFactory = request => new PowerPointTextTargetSnapshot[0];
+                var empty = ExecuteHtmlNative(runtime, PowerPointToolIds.SearchText, args);
+                AssertTrue(empty.Outcome == ToolExecutionOutcome.Ok && empty.ResourceEvidence.Single().Complete, "empty search scope is a complete observation");
+            });
+        }
+
         private static void PowerPointToolsUseExactNativeOwnership()
         {
             WithTempExecutor(FakeOfficeAdapter.ForHost("PowerPoint"),
@@ -210,6 +289,10 @@ namespace RNAssistant.Harness
                     AssertEqual(ToolEffectEvidence.VerifiedChange,
                         replaced.Evidence.Effect,
                         "PowerPoint replacement exposes verified change");
+                    var evidence = found.ResourceEvidence.Single();
+                    AssertTrue(new EvidenceStateReducer().Reduce(evidence,
+                        executor.ResourceAuthority.CaptureMany(new[] { evidence.ScopeId })).State != EvidenceState.Current,
+                        "document mutation invalidates the previous search observation");
                     var noChange = ExecuteNativeConfirmed(
                         runtime, replaceCall, runtime.Describe(replaceCall));
                     AssertEqual(ToolEffectEvidence.VerifiedNoChange,
@@ -315,6 +398,7 @@ namespace RNAssistant.Harness
                     var host = new BoundTestOfficeAdapter(sessionPort, inner);
                     var ownerSta = false;
                     var sourceOwnerSta = false;
+                    var searchOwnerSta = false;
                     host.BeforeRead = operation =>
                     {
                         if (operation ==
@@ -322,6 +406,8 @@ namespace RNAssistant.Harness
                             ownerSta = dispatcher.CheckAccess;
                         if (operation == FakeOfficeAdapter.PowerPointReadSlidesOperation)
                             sourceOwnerSta = dispatcher.CheckAccess;
+                        if (operation == FakeOfficeAdapter.PowerPointReadTextOperation)
+                            searchOwnerSta = dispatcher.CheckAccess;
                     };
                     var executor = new OfficeToolExecutor(
                         host, new VbaJournalStore(paths),
@@ -345,6 +431,10 @@ namespace RNAssistant.Harness
                         "target", "PowerPoint slide: 1", "representation", "source"), tools, new AppSettings(), false, false, chat);
                     AssertTrue(sourceRead.Success && sourceOwnerSta, "resource source uses the bound presentation STA");
                     var sourceReads = inner.PowerPointSourceMaterializationCount;
+                    var search = executor.ExecuteManual(Command(PowerPointToolIds.SearchText, "query", "Revenue"),
+                        tools, new AppSettings(), false, false, chat);
+                    AssertTrue(search.Success && searchOwnerSta, "resource search uses bound presentation STA");
+                    var searchReads = inner.PowerPointSearchMaterializationCount;
 
                     var dispatched = inner.PowerPointBackendCalls.Count(
                         operation => operation ==
@@ -354,6 +444,10 @@ namespace RNAssistant.Harness
                         "target", "PowerPoint slide: 1"), tools, new AppSettings(), false, false, chat);
                     AssertTrue(!closedSource.Success, "closed presentation blocks fresh resource capture");
                     AssertEqual(sourceReads, inner.PowerPointSourceMaterializationCount, "closed source never reaches backend");
+                    var closedSearch = executor.ExecuteManual(Command(PowerPointToolIds.SearchText, "query", "Revenue"),
+                        tools, new AppSettings(), false, false, chat);
+                    AssertTrue(!closedSearch.Success, "closed presentation rejects search capture");
+                    AssertEqual(searchReads, inner.PowerPointSearchMaterializationCount, "closed search never reads text");
                     var closed = executor.ExecuteManual(Command(
                         PowerPointToolIds.AddSlide, "title", "Stale"),
                         tools, new AppSettings(), false, true, chat);

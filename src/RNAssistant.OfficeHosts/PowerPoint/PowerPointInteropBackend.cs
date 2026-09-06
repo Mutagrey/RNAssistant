@@ -92,6 +92,7 @@ namespace RNAssistant.OfficeHosts
             request = request ?? new PowerPointTextScopeRequest();
             var presentation = Presentation();
             var targets = new List<PowerPointTextTargetSnapshot>();
+            var remaining = request.MaxCharacters;
             var slides = SlidesForScope(presentation, request);
             foreach (var slide in slides)
             {
@@ -100,7 +101,7 @@ namespace RNAssistant.OfficeHosts
                         "PowerPoint slide exceeds the bounded shape limit.",
                         "powerpoint_shape_limit_exceeded", false);
                 foreach (PowerPoint.Shape shape in slide.Shapes)
-                    AddTextTarget(targets, slide, shape, "shape", request.MaxTargets);
+                    AddTextTarget(targets, slide, shape, "shape", request.MaxTargets, request.MaxCharacters > 0, ref remaining);
                 if (!request.IncludeNotes) continue;
                 var notes = slide.NotesPage.Shapes;
                 if (notes.Count > request.MaxShapesPerSlide)
@@ -108,7 +109,7 @@ namespace RNAssistant.OfficeHosts
                         "PowerPoint notes exceed the bounded shape limit.",
                         "powerpoint_shape_limit_exceeded", false);
                 foreach (PowerPoint.Shape shape in notes)
-                    AddTextTarget(targets, slide, shape, "notes", request.MaxTargets);
+                    AddTextTarget(targets, slide, shape, "notes", request.MaxTargets, request.MaxCharacters > 0, ref remaining);
             }
             return targets;
         }
@@ -494,9 +495,26 @@ namespace RNAssistant.OfficeHosts
         private static void AddTextTarget(
             ICollection<PowerPointTextTargetSnapshot> targets,
             PowerPoint.Slide slide, PowerPoint.Shape shape,
-            string kind, int maxTargets)
+            string kind, int maxTargets, bool boundedCapture, ref int remaining)
         {
-            var text = ShapeText(shape);
+            string text;
+            if (boundedCapture)
+            {
+                // Exact search capture must not suppress COM failures or materialize
+                // an unbounded Text value before checking the native range extent.
+                if (shape.HasTextFrame != MsoTriState.msoTrue || shape.TextFrame.HasText != MsoTriState.msoTrue) return;
+                if (targets.Count >= maxTargets)
+                    throw Failure("PowerPoint text scope exceeds the target limit.", "powerpoint_text_target_limit_exceeded", false);
+                var range = shape.TextFrame.TextRange;
+                var length = range.Length;
+                if (length < 0 || length > remaining)
+                    throw Failure("Choose a smaller PowerPoint search scope.", "RESOURCE_SNAPSHOT_TOO_LARGE", false);
+                text = range.Text;
+                if (text == null || text.Length > remaining)
+                    throw Failure("PowerPoint source changed during capture.", "powerpoint_read_snapshot_invalid", false);
+                remaining -= text.Length;
+            }
+            else text = ShapeText(shape);
             if (string.IsNullOrEmpty(text)) return;
             if (targets.Count >= maxTargets)
                 throw Failure(

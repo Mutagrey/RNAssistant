@@ -458,6 +458,8 @@ namespace RNAssistant.Harness
                 Test("powerpoint tools: native ownership and direct backend", PowerPointToolsUseExactNativeOwnership),
                 Test("powerpoint resources: exact sources and retained evidence", PowerPointResourcesRetainExactSources),
                 Test("powerpoint resources: incomplete captures rejected", PowerPointResourcesRejectIncompleteCaptures),
+                Test("powerpoint search: exact snapshots and zero-match drift", PowerPointSearchRetainsExactSnapshots),
+                Test("powerpoint search: bounds and invalid captures", PowerPointSearchRejectsInvalidCaptures),
                 Test("powerpoint tools: family semantics", PowerPointToolsPreserveFamilySemantics),
                 Test("powerpoint tools: dispatch fault classification", PowerPointToolsClassifyDispatchFaults),
                 Test("powerpoint tools: bound presentation scope", PowerPointToolsUseBoundPresentationScope),

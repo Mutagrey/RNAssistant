@@ -12,8 +12,48 @@ namespace RNAssistant.Office.Services
     internal sealed partial class LiveDocumentResourceProvider
     {
         internal const string PowerPointSlideKind = "powerpoint-slide";
+        internal const string PowerPointSearchKind = "powerpoint-search-scope";
         private readonly IPowerPointBackend _powerPoint;
-        private bool IsPowerPoint { get { return string.Equals(_adapter.HostName, "PowerPoint", StringComparison.OrdinalIgnoreCase); } }
+        internal bool IsPowerPoint { get { return string.Equals(_adapter.HostName, "PowerPoint", StringComparison.OrdinalIgnoreCase); } }
+
+        internal ResourceDescriptor ResolvePowerPointSearch(ChatSession session, string scope)
+        {
+            if (!IsPowerPoint || _powerPoint == null)
+                throw new ResourceRequestException("The bound PowerPoint reader is unavailable.", "RESOURCE_PROVIDER_UNAVAILABLE", false);
+            var key = "search-" + scope.Replace(':', '-');
+            if (!IsPowerPointSearch(key) || scope != key.Substring(7).Replace("slide-", "slide:"))
+                throw new ResourceRequestException("Use deck or slide:N, optionally followed by +notes.", "RESOURCE_TARGET_INVALID", false);
+            return _scope.Read(session, () => Describe(session, key));
+        }
+
+        private static bool IsPowerPointSearch(string target)
+        {
+            if (target == null || !target.StartsWith("search-", StringComparison.Ordinal)) return false;
+            var scope = target.Substring(7);
+            if (scope.EndsWith("+notes", StringComparison.Ordinal)) scope = scope.Substring(0, scope.Length - 6);
+            return scope == "deck" || IsPowerPointSlide(scope);
+        }
+
+        private string ReadPowerPointSearch(string target)
+        {
+            var notes = target.EndsWith("+notes", StringComparison.Ordinal);
+            var scope = target.Substring(7);
+            if (notes) scope = scope.Substring(0, scope.Length - 6);
+            try
+            {
+                var snapshot = new PowerPointService(_powerPoint).CaptureSearch(scope == "deck" ? 0 :
+                    int.Parse(scope.Substring(6), CultureInfo.InvariantCulture), notes, CancellationToken.None);
+                var json = new JObject { ["slideIndex"] = snapshot.SlideIndex, ["includeNotes"] = notes,
+                    ["targets"] = new JArray(snapshot.Targets.Select(item => new JObject {
+                        ["slideIndex"] = item.SlideIndex, ["shapeName"] = item.ShapeName,
+                        ["kind"] = item.Kind, ["text"] = item.Text })) }.ToString(Formatting.None);
+                if (json.Length > MaximumMaterializedCharacters)
+                    throw new ResourceRequestException("Choose a smaller PowerPoint search scope.", "RESOURCE_SNAPSHOT_TOO_LARGE", false);
+                return json;
+            }
+            catch (PowerPointBackendException error)
+            { throw new ResourceRequestException(error.Message, error.ErrorCode, error.Retryable); }
+        }
 
         internal ResourceDescriptor ResolvePowerPointSlide(ChatSession session, string target)
         {

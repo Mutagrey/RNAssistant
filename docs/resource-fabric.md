@@ -240,6 +240,27 @@ observation is separate and unchanged; it does not expose the slide `source` vie
 Real COM shape/notes capture, selection and final catalog/model qualification remain
 open on Windows.
 
+### PowerPoint search
+
+`powerpoint.search_text` keeps its literal/regex, case/whole-word, notes and
+shape-local coordinate semantics. `PowerPointSearchResourceService` captures through
+Gateway/CAS and invokes pure `PowerPointService.Search` over that exact snapshot;
+the direct adapter search path and public scope/content hashes are removed.
+`PowerPoint search scope: deck` and `deck+notes` are body-free discoverable resources;
+`slide:N` and `slide:N+notes` resolve a positive one-based slide explicitly. They
+expose `metadata` and exact `text` JSON containing slide index, shape name, kind and
+text, not private target IDs. As before, tool `slideIndex=0` searches the deck.
+
+Bound capture enforces 500 slides, 1000 shapes per slide/notes page, 5000 text
+targets and one million aggregate text characters; serialized JSON is also limited
+to one million characters. Search checks native text length before materialization
+and does not swallow COM read errors as empty text. Invalid regex is refused before
+capture. Complete evidence accompanies positive, zero-match and empty-scope results;
+observed drift or document mutation invalidates prior evidence. Historical pages
+use retained CAS without Office reads; missing payloads fail without live fallback.
+Mutation preparation/read-back retains its existing domain owner and is not a
+second search path. Real COM limits/enumeration and WebView qualification stay open.
+
 ## Outlook mail reads
 
 `OutlookService.CaptureMail` is the typed owner of complete mail-source capture

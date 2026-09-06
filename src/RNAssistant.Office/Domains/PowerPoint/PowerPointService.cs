@@ -106,7 +106,36 @@ namespace RNAssistant.Office.Domains.PowerPoint
             }
         }
 
-        public PowerPointOutcome Search(
+        public PowerPointSearchSnapshot CaptureSearch(int slideIndex, bool includeNotes, CancellationToken cancellationToken)
+        {
+            if (slideIndex < 0)
+                throw new PowerPointBackendException("slideIndex cannot be negative.", "invalid_arguments", false);
+            cancellationToken.ThrowIfCancellationRequested();
+            var targets = _backend.ReadTextTargets(new PowerPointTextScopeRequest {
+                Scope = slideIndex == 0 ? "deck" : "slide", SlideIndex = slideIndex, IncludeNotes = includeNotes,
+                MaxSlides = MaxSlides, MaxShapesPerSlide = MaxShapesPerSlide, MaxTargets = MaxTextTargets,
+                MaxCharacters = MaximumTextCharacters });
+            cancellationToken.ThrowIfCancellationRequested();
+            if (targets == null || targets.Count > MaxTextTargets)
+                throw new PowerPointBackendException("Invalid PowerPoint search capture.", "powerpoint_read_snapshot_invalid", false);
+            long characters = 0;
+            var ids = new HashSet<string>(StringComparer.Ordinal);
+            foreach (var target in targets)
+            {
+                if (target == null || target.Text == null || target.ShapeName == null || target.ShapeName.Length > 4096 ||
+                    target.SlideIndex < 1 || (slideIndex > 0 && target.SlideIndex != slideIndex) ||
+                    (target.Kind != "shape" && target.Kind != "notes") || (!includeNotes && target.Kind == "notes") ||
+                    string.IsNullOrWhiteSpace(target.TargetId) || !ids.Add(target.TargetId))
+                    throw new PowerPointBackendException("Invalid PowerPoint search target.", "powerpoint_read_snapshot_invalid", false);
+                characters += target.Text.Length;
+            }
+            if (characters > MaximumTextCharacters)
+                throw new PowerPointBackendException("Choose a smaller PowerPoint search scope.", "RESOURCE_SNAPSHOT_TOO_LARGE", false);
+            return new PowerPointSearchSnapshot { SlideIndex = slideIndex, IncludeNotes = includeNotes, Targets = targets };
+        }
+
+        internal static PowerPointOutcome Search(
+            PowerPointSearchSnapshot snapshot,
             PowerPointReplaceRequest request,
             int maxResults,
             int contextChars,
@@ -124,12 +153,15 @@ namespace RNAssistant.Office.Domains.PowerPoint
             try
             {
                 cancellationToken.ThrowIfCancellationRequested();
-                var targets = ReadTargets(request);
+                if (snapshot == null || snapshot.Targets == null || snapshot.SlideIndex != request.SlideIndex || snapshot.IncludeNotes != request.IncludeNotes)
+                    return Failure("The search capture does not match the requested scope.", "RESOURCE_SNAPSHOT_UNAVAILABLE", false);
+                var targets = snapshot.Targets;
                 var matches = new JArray();
                 var total = 0;
                 var options = Options(request);
                 foreach (var target in targets)
                 {
+                    cancellationToken.ThrowIfCancellationRequested();
                     var found = TextPatternEngine.Find(
                         target.Text, request.Find, options,
                         Math.Max(1, maxResults - matches.Count), contextChars);
@@ -148,7 +180,6 @@ namespace RNAssistant.Office.Domains.PowerPoint
                         });
                     }
                 }
-                var hash = TargetHash(targets);
                 return PowerPointOutcome.Ok(
                     "PowerPoint text matches found: " + total,
                     new JObject
@@ -156,8 +187,6 @@ namespace RNAssistant.Office.Domains.PowerPoint
                         ["matchCount"] = total,
                         ["returnedCount"] = matches.Count,
                         ["truncated"] = total > matches.Count,
-                        ["scopeSha256"] = hash,
-                        ["contentSha256"] = hash,
                         ["matches"] = matches
                     }.ToString(Formatting.None),
                     PowerPointEffect.None);
