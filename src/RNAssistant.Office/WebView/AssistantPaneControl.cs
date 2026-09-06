@@ -200,18 +200,57 @@ namespace RNAssistant.Office.WebView
                         response = _controller.HandleResourceData(method, url, _lifetimeCancellation.Token, body);
                 }
                 else response = await Task.Run(() => _controller.HandleResourceData(method, url, _lifetimeCancellation.Token));
-                if (_resourcesDisposed) { response.Body.Dispose(); return; }
-                e.Response = _webView.CoreWebView2.Environment.CreateWebResourceResponse(
-                    response.Body, response.StatusCode, response.Reason, response.Headers);
+                if (_resourcesDisposed || !TrySetResourceResponse(e, response))
+                {
+                    response.Body.Dispose();
+                    return;
+                }
             }
             catch (Exception ex)
             {
                 RuntimeLog.Error("Resource response failed: " + ex.GetType().Name);
                 if (!_resourcesDisposed)
-                    e.Response = _webView.CoreWebView2.Environment.CreateWebResourceResponse(
-                        new MemoryStream(), 503, "Resource unavailable", new Services.ResourceStreamResponse().Headers);
+                {
+                    var response = new Services.ResourceStreamResponse
+                    {
+                        StatusCode = 503,
+                        Reason = "Resource unavailable",
+                        Body = new MemoryStream()
+                    };
+                    if (!TrySetResourceResponse(e, response)) response.Body.Dispose();
+                }
             }
-            finally { deferral.Complete(); }
+            finally { CompleteResourceDeferral(deferral); }
+        }
+
+        private bool TrySetResourceResponse(CoreWebView2WebResourceRequestedEventArgs e, Services.ResourceStreamResponse response)
+        {
+            if (response == null || response.Body == null || _resourcesDisposed || IsDisposed || !IsHandleCreated)
+                return false;
+            if (InvokeRequired)
+            {
+                try { return (bool)Invoke(new Func<bool>(() => TrySetResourceResponse(e, response))); }
+                catch (ObjectDisposedException) { return false; }
+                catch (InvalidOperationException) { return false; }
+            }
+            if (_resourcesDisposed || _webView == null || _webView.IsDisposed || _webView.CoreWebView2 == null)
+                return false;
+            e.Response = _webView.CoreWebView2.Environment.CreateWebResourceResponse(
+                response.Body, response.StatusCode, response.Reason, response.Headers);
+            return true;
+        }
+
+        private void CompleteResourceDeferral(CoreWebView2Deferral deferral)
+        {
+            if (deferral == null) return;
+            if (!IsDisposed && IsHandleCreated && InvokeRequired)
+            {
+                try { Invoke(new Action(() => CompleteResourceDeferral(deferral))); return; }
+                catch (ObjectDisposedException) { }
+                catch (InvalidOperationException) { }
+            }
+            try { deferral.Complete(); }
+            catch (InvalidOperationException) { }
         }
 
         private void OnNavigationStarting(object sender, CoreWebView2NavigationStartingEventArgs e)
