@@ -650,6 +650,7 @@ function settle() { return new Promise(resolve => setImmediate(resolve)); }
   const resourceSource = fs.readFileSync(path.join(root, "web/js/app-resource-viewer.js"), "utf8");
   const actionSource = fs.readFileSync(path.join(root, "web/js/app-artifact-viewer-actions.js"), "utf8");
   assert.doesNotMatch(viewerSource, /send\(|chrome\.webview|fetch\(|XMLHttpRequest|createObjectURL/);
+  assert.match(actionSource, /window\.fetch\.bind\(window\)/);
   assert.match(viewerSource, /window\.markdown\(String\(options\.fullText\)\)/);
   assert.match(resourceSource, /new window\.Viewer\(image/);
   assert.match(resourceSource, /rn-pdf-thumbnail-rail/);

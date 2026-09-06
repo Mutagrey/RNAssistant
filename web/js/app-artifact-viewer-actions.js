@@ -428,7 +428,8 @@
         if (data.view !== "text" || data.maxBatchItems < 32000 || data.maxBatchBytes <= 0 || data.maxBatchBytes > 8 * 1024 * 1024) {
           throw new Error("Artifact text view has invalid negotiated bounds.");
         }
-        var fetched = await (options.fetch || window.fetch)(data.url + "?offset=" + expectedOffset + "&limit=32000", {
+        var fetchResource = options.fetch || window.fetch.bind(window);
+        var fetched = await fetchResource(data.url + "?offset=" + expectedOffset + "&limit=32000", {
           method: "GET", credentials: "omit", cache: "no-store", redirect: "error"
         });
         if (!fetched.ok) throw new Error("Artifact text resource read failed.");

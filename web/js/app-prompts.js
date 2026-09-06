@@ -87,7 +87,7 @@
             Object.prototype.hasOwnProperty.call(response, "text") || !response.data || !response.data.payload ||
             response.data.payload.contentType !== "text/markdown; charset=utf-8") throw new Error("Некорректный contract текста промпта.");
         var bytes = await window.RNAssistantResourceDownload.read(response.data,
-          { maxBytes: maximumSourceBytes, fetch: fetch, signal: operation.abort.signal, isCurrent: current });
+          { maxBytes: maximumSourceBytes, fetch: window.fetch.bind(window), signal: operation.abort.signal, isCurrent: current });
         var text = new TextDecoder("utf-8", { fatal: true, ignoreBOM: true }).decode(bytes);
         if (text.length !== response.totalCharacters) throw new Error("Неполный текст промпта.");
         await closePromptDownload(operation); active();
