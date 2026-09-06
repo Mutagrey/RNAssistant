@@ -19,6 +19,14 @@ Phase 2C3B заменяет этот reset preservation/review flow; Core settin
 Phase 2C3C переключает actual wire/history на v3 и проверяет preflight, run IDs, singleton
 safety, refusal и review/reset на prompt schema 12. Windows/live-provider gates остаются.
 
+Resource cutover / Outlook (2026-09-06, open): `MailItem.Body` materializes a whole
+COM string before the character ceiling can reject it; exact-capture completion
+does not prove bounded source allocation. Owner: Outlook backend/resource cutover.
+Also, the existing `ResolveMail(entryId)` uses session-wide `GetItemFromID` without
+checking Inspector/folder membership. The next resource slice must establish bound
+mail identity/discovery before exposing those targets; it must not inherit that
+lookup as unrestricted resource authority. No scope/large-mail Windows gate is closed.
+
 | ID | Priority | Риск | Владелец | Защита / фаза | Статус |
 |---|---|---|---|---|---|
 | R01 | P0 | Model completed скрывает write error/unknown или отсутствие write | AgentKernel / Application / UI | Phase 1C warning + Phase 3B2 shared kernel summary, actual event replay; production delivery R21 | contained host-neutral 1C; Windows qualification open |

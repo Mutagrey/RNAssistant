@@ -208,6 +208,28 @@ observation is separate and unchanged; it does not expose the slide `source` vie
 Real COM shape/notes capture, selection and final catalog/model qualification remain
 open on Windows.
 
+## Outlook capture prerequisite
+
+`OutlookService.CaptureMail` is the typed owner of complete mail-source capture
+and reply/update preparation. Its current `ReadMail` tool-output wrapper delegates
+to that same owner; it is still pending removal, not a second resource pipeline.
+Message/both reads return the entire body within the requested ceiling (at most
+one million characters) or fail explicitly. They never return a clipped body.
+The backend reads body once and derives the preparation token from those same
+captured fields; source/attachment getter failures are not replaced by empty values.
+Attachment-only capture does not access body or create a mutation token.
+`BodyCaptured` distinguishes no body capture from a genuinely empty body.
+Missing body/token/attachment metadata, mismatched explicit targets and cancellation
+fail before the snapshot reaches a caller or a mutation dispatch.
+
+Outlook OOM exposes `MailItem.Body` as one string: the character ceiling is enforced
+after that property read, **not** before COM materialization. Bounded body acquisition
+and real large-mail execution remain open. Folder search/collection previews and
+mutation read-back are separate existing contours, unchanged by this prerequisite.
+Next: bound mail discovery/identity (Inspector versus folder/selection), Gateway/CAS
+source views, consumer switch and removal of `outlook.read_mail`/its output wrapper.
+The current global EntryID lookup must not become unrestricted resource discovery.
+
 ## Conversation loop
 
 Controller clear/edit/message-delete/fork use typed `ChatResourceMutationIntent`

@@ -16,6 +16,7 @@ adapters не означает завершение resource-consumer cleanup. �
 
 | Replaced/pending contour | Canonical owner | Consumers / removal gate | State |
 |---|---|---|---|
+| Outlook direct reader/output wrapper and generic document/selection snapshot consumers | `OutlookService.CaptureMail` → pending bound resource provider/Gateway/CAS | Model/manual `outlook.read_mail`, resource observations; remove wrapper/id after Inspector/folder identity and all source consumers switch | OPEN. Exact body/attachment capture and shared reply/update preparation delivered 2026-09-06; no new resource path introduced. OOM pre-materialization bound and Windows qualification remain open |
 | Per-session VBA observed hashes and refresh callbacks | Shared ResourceAuthority + immutable conversation evidence | VBA guard/read-back, next model request | Removed; no parallel hash authority |
 | VBA restore without exact origin metadata | VBA journal preimage reference → prepared restore → shared authority commit | Restore confirmation/read-back | Exact live origin or exact independent backup pinned before confirmation; no history search by equal hash |
 | Mutable/untyped DocumentContext text injected into the model | ContextNoteRole → ModelContextCompiler + CAS/evidence reducer | Context bridge, normal request, Inspector, clone/upsert | Removed; explicit user instructions separate from supplied data/Office observations; untyped notes require reattachment, no preview fallback |

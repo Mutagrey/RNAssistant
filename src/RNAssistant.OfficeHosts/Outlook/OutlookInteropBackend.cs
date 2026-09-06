@@ -29,27 +29,31 @@ namespace RNAssistant.OfficeHosts
             if (string.Equals(request.Content, "attachments", StringComparison.Ordinal) ||
                 string.Equals(request.Content, "both", StringComparison.Ordinal))
             {
-                var count = mail.Attachments == null ? 0 : mail.Attachments.Count;
+                var collection = mail.Attachments;
+                if (collection == null)
+                    throw new OutlookBackendException("Outlook attachment metadata is unavailable.", "outlook_attachment_snapshot_invalid", false);
+                var count = collection.Count;
                 if (count > OutlookService.MaxAttachments)
                     throw new OutlookBackendException(
                         "Outlook attachment collection exceeds the safety limit.",
                         "outlook_attachment_limit_exceeded", false);
                 for (var index = 1; index <= count; index++)
                 {
-                    var attachment = mail.Attachments[index];
+                    var attachment = collection[index];
                     attachments.Add(new OutlookAttachmentSnapshot
                     {
                         Index = index,
-                        FileName = SafeString(delegate { return attachment.FileName; }),
-                        DisplayName = SafeString(delegate { return attachment.DisplayName; }),
-                        Size = SafeInt(delegate { return attachment.Size; }),
-                        Type = SafeString(delegate { return attachment.Type.ToString(); })
+                        FileName = attachment.FileName ?? string.Empty,
+                        DisplayName = attachment.DisplayName ?? string.Empty,
+                        Size = attachment.Size,
+                        Type = attachment.Type.ToString()
                     });
                 }
             }
             return new OutlookMailReadSnapshot
             {
-                Mail = Snapshot(mail, request.MaxChars, 0),
+                BodyCaptured = request.Content != "attachments",
+                Mail = CaptureSnapshot(mail, request.MaxChars, request.Content != "attachments"),
                 Attachments = attachments
             };
         }
@@ -221,6 +225,37 @@ namespace RNAssistant.OfficeHosts
             };
         }
 
+        private static OutlookMailSnapshot CaptureSnapshot(Outlook.MailItem mail, int maxChars, bool includeBody)
+        {
+            // OOM exposes Body as one string. Reject an oversized body after this property
+            // read; do not claim a pre-materialization bound or substitute a preview.
+            var body = includeBody ? mail.Body ?? string.Empty : null;
+            if (body != null && body.Length > maxChars)
+                throw new OutlookBackendException("The complete mail body exceeds the capture limit.", "RESOURCE_SNAPSHOT_TOO_LARGE", false);
+            var snapshot = new OutlookMailSnapshot
+            {
+                EntryId = mail.EntryID ?? string.Empty,
+                Subject = mail.Subject ?? string.Empty,
+                Sender = mail.SenderName ?? string.Empty,
+                SenderEmail = mail.SenderEmailAddress ?? string.Empty,
+                To = mail.To ?? string.Empty,
+                Cc = mail.CC ?? string.Empty,
+                Bcc = mail.BCC ?? string.Empty,
+                Received = mail.ReceivedTime,
+                Categories = mail.Categories ?? string.Empty,
+                Unread = mail.UnRead,
+                Body = body,
+                SearchBody = null
+            };
+            if (includeBody)
+                snapshot.StateToken = TextPatternEngine.Sha256(string.Join("\n", new[]
+                {
+                    string.IsNullOrEmpty(snapshot.EntryId) ? OutlookDocumentSession.MailIdentity(mail) : snapshot.EntryId,
+                    snapshot.Categories, snapshot.Unread ? "1" : "0", snapshot.Subject, body
+                }));
+            return snapshot;
+        }
+
         private static OutlookMailSnapshot Snapshot(
             Outlook.MailItem mail, int maxBodyChars, int maxSearchBodyChars)
         {
@@ -269,12 +304,6 @@ namespace RNAssistant.OfficeHosts
         {
             try { return getter() ?? string.Empty; }
             catch { return string.Empty; }
-        }
-
-        private static int SafeInt(Func<int> getter)
-        {
-            try { return getter(); }
-            catch { return 0; }
         }
 
         private static bool SafeBool(Func<bool> getter)

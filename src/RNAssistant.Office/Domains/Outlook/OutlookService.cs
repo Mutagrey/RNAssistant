@@ -22,6 +22,35 @@ namespace RNAssistant.Office.Domains.Outlook
             _backend = backend ?? throw new ArgumentNullException(nameof(backend));
         }
 
+        public OutlookMailReadSnapshot CaptureMail(
+            OutlookReadMailRequest request, CancellationToken cancellationToken)
+        {
+            if (request == null || request.MaxChars < 1 || request.MaxChars > MaxBodyChars ||
+                (request.Content != "message" && request.Content != "attachments" && request.Content != "both"))
+                throw new OutlookBackendException("Invalid exact mail capture request.", "invalid_arguments", false);
+            cancellationToken.ThrowIfCancellationRequested();
+            var snapshot = _backend.ReadMail(request);
+            cancellationToken.ThrowIfCancellationRequested();
+            var includeBody = request.Content != "attachments";
+            if (snapshot == null || snapshot.Mail == null || snapshot.Attachments == null ||
+                snapshot.BodyCaptured != includeBody ||
+                (includeBody && (snapshot.Mail.Body == null || snapshot.Mail.Body.Length > request.MaxChars ||
+                    string.IsNullOrEmpty(snapshot.Mail.StateToken))) ||
+                (!includeBody && (snapshot.Mail.Body != null || snapshot.Mail.StateToken != null)) ||
+                (!string.IsNullOrEmpty(request.EntryId) && request.EntryId != snapshot.Mail.EntryId))
+                throw new OutlookBackendException("Outlook backend returned an incomplete or mismatched capture.", "outlook_mail_snapshot_invalid", false);
+            if (snapshot.Attachments.Count > MaxAttachments)
+                throw new OutlookBackendException("Outlook attachment collection exceeds the safety limit.", "outlook_attachment_limit_exceeded", false);
+            for (var index = 0; index < snapshot.Attachments.Count; index++)
+            {
+                var attachment = snapshot.Attachments[index];
+                if (attachment == null || attachment.Index != index + 1 || attachment.Size < 0 ||
+                    attachment.FileName == null || attachment.DisplayName == null || attachment.Type == null)
+                    throw new OutlookBackendException("Outlook attachment metadata is incomplete.", "outlook_attachment_snapshot_invalid", false);
+            }
+            return snapshot;
+        }
+
         public OutlookOutcome ReadMail(
             OutlookReadMailRequest request,
             CancellationToken cancellationToken)
@@ -38,17 +67,8 @@ namespace RNAssistant.Office.Domains.Outlook
             try
             {
                 cancellationToken.ThrowIfCancellationRequested();
-                var snapshot = _backend.ReadMail(request);
-                if (snapshot == null || snapshot.Mail == null)
-                    return Failure(
-                        "Outlook mail backend returned no message.",
-                        "outlook_mail_snapshot_missing", true);
-                var attachments = snapshot.Attachments ??
-                    new OutlookAttachmentSnapshot[0];
-                if (attachments.Count > MaxAttachments)
-                    return Failure(
-                        "Outlook attachment collection exceeds the safety limit.",
-                        "outlook_attachment_limit_exceeded", false);
+                var snapshot = CaptureMail(request, cancellationToken);
+                var attachments = snapshot.Attachments;
                 if (request.Content == "attachments")
                     return OutlookOutcome.Ok(
                         "Attachments listed: " + attachments.Count,
@@ -276,15 +296,11 @@ namespace RNAssistant.Office.Domains.Outlook
                 cancellationToken.ThrowIfCancellationRequested();
                 if (request.Kind != "new")
                 {
-                    var target = _backend.ReadMail(new OutlookReadMailRequest
+                    var target = CaptureMail(new OutlookReadMailRequest
                     {
                         Content = "message",
-                        MaxChars = 1
-                    });
-                    if (target == null || target.Mail == null)
-                        return Failure(
-                            "Select an email first.",
-                            "outlook_mail_target_missing", true);
+                        MaxChars = MaxBodyChars
+                    }, cancellationToken);
                     request.ExpectedTargetToken = target.Mail.StateToken;
                 }
                 var result = _backend.CreateDraft(request, mark);
@@ -362,16 +378,12 @@ namespace RNAssistant.Office.Domains.Outlook
             try
             {
                 cancellationToken.ThrowIfCancellationRequested();
-                var target = _backend.ReadMail(new OutlookReadMailRequest
+                var target = CaptureMail(new OutlookReadMailRequest
                 {
                     Content = "message",
-                    MaxChars = 1
-                });
-                var before = target == null ? null : target.Mail;
-                if (before == null)
-                    return Failure(
-                        "Select an email first.",
-                        "outlook_mail_target_missing", true);
+                    MaxChars = MaxBodyChars
+                }, cancellationToken);
+                var before = target.Mail;
                 if ((request.Kind == "categories" && string.Equals(
                         before.Categories ?? string.Empty, request.Categories,
                         StringComparison.Ordinal)) ||

@@ -5,6 +5,8 @@ using RNAssistant.Core.Agent;
 using RNAssistant.Core.Models;
 using RNAssistant.Core.Storage;
 using RNAssistant.Core.Tools;
+using RNAssistant.Office.Domains.Outlook;
+using System.Threading;
 using RNAssistant.Office;
 using RNAssistant.Office.Runtime;
 using RNAssistant.Office.Tools;
@@ -74,13 +76,13 @@ namespace RNAssistant.Harness
                     var bound = executor.ExecuteManual(Command(
                         HtmlWorkspaceToolCatalog.BindDataToolId,
                         "name", "outlook_mail"), tools, new AppSettings(), false, false, session);
-                    AssertTrue(bound.Success,
-                        "Outlook HTML binding shares the typed read route: " +
-                        (bound.Message ?? bound.ErrorCode ?? "no error"));
+                    AssertTrue(!bound.Success,
+                        "HTML binding rejects removed accepted-result fallback without a resource target");
+                    AssertContains(bound.Message, "target", "implicit HTML bind fails for the missing semantic resource target");
                     AssertEqual(reads,
                         adapter.OutlookBackendCalls.Count(operation =>
                             operation == FakeOfficeAdapter.OutlookReadMailOperation),
-                        "Outlook HTML binding does not nest another backend read");
+                        "Rejected implicit HTML binding never recaptures Outlook");
 
                     var drafts = adapter.OutlookBackendCalls.Count(operation =>
                         operation == FakeOfficeAdapter.OutlookCreateDraftOperation);
@@ -98,6 +100,91 @@ namespace RNAssistant.Harness
                         "outlook-case", "OUTLOOK.READ_MAIL", "{}")) == null,
                         "Outlook native ownership has no case alias");
                 });
+        }
+
+        private static void OutlookCapturesPreserveCompleteBodies()
+        {
+            WithTempExecutor(FakeOfficeAdapter.ForHost("Outlook"), (executor, adapter) =>
+            {
+                var service = new OutlookService(adapter);
+                var body = "\uFEFFТело\r\n" + new string('x', 20000) + "\r\nКонец 😀";
+                adapter.OutlookSelectedBody = body;
+                var request = new OutlookReadMailRequest { Content = "both", MaxChars = OutlookService.MaxBodyChars };
+                var count = adapter.OutlookBodyMaterializationCount;
+                var exact = service.CaptureMail(request, CancellationToken.None);
+                AssertTrue(exact.BodyCaptured, "complete body is explicitly captured");
+                AssertEqual(body, exact.Mail.Body, "complete body preserves Unicode/BOM/CRLF");
+                AssertEqual(count + 1, adapter.OutlookBodyMaterializationCount, "capture reads body once");
+                AssertEqual(1, exact.Attachments.Count, "capture includes attachment metadata");
+
+                var rejected = service.ReadMail(new OutlookReadMailRequest { Content = "message", MaxChars = 10 }, CancellationToken.None);
+                AssertEqual(OutlookOutcomeStatus.Error, rejected.Status, "short requested limit is not clipped success");
+                AssertEqual("RESOURCE_SNAPSHOT_TOO_LARGE", rejected.ErrorCode, "oversize is explicit");
+                adapter.OutlookSelectedBody = new string('x', OutlookService.MaxBodyChars + 1);
+                count = adapter.OutlookBodyMaterializationCount;
+                var metadata = service.CaptureMail(new OutlookReadMailRequest { Content = "attachments", MaxChars = 1 }, CancellationToken.None);
+                AssertTrue(!metadata.BodyCaptured && metadata.Mail.Body == null && metadata.Mail.StateToken == null,
+                    "attachment metadata cannot impersonate a captured empty body or mutation guard");
+                AssertEqual(1, metadata.Attachments.Count, "large body does not block attachment metadata");
+                AssertEqual(count, adapter.OutlookBodyMaterializationCount, "attachment read never materializes body");
+
+                adapter.OutlookSelectedBody = string.Empty;
+                exact = service.CaptureMail(request, CancellationToken.None);
+                AssertTrue(exact.BodyCaptured && exact.Mail.Body == string.Empty && !string.IsNullOrEmpty(exact.Mail.StateToken),
+                    "a genuinely empty body is exact and distinct from no capture");
+            });
+        }
+
+        private static void OutlookCapturesRejectInvalidGuards()
+        {
+            WithTempExecutor(FakeOfficeAdapter.ForHost("Outlook"), (executor, adapter) =>
+            {
+                var service = new OutlookService(adapter);
+                var request = new OutlookReadMailRequest { Content = "both", EntryId = "mail-1", MaxChars = OutlookService.MaxBodyChars };
+                foreach (var fault in new Func<OutlookMailReadSnapshot, OutlookMailReadSnapshot>[]
+                {
+                    snapshot => null,
+                    snapshot => { snapshot.BodyCaptured = false; return snapshot; },
+                    snapshot => { snapshot.Mail.Body = null; return snapshot; },
+                    snapshot => { snapshot.Mail.StateToken = null; return snapshot; },
+                    snapshot => { snapshot.Mail.EntryId = "another-mail"; return snapshot; },
+                    snapshot => { snapshot.Attachments = null; return snapshot; },
+                    snapshot => { snapshot.Attachments[0].Size = -1; return snapshot; }
+                })
+                {
+                    adapter.OutlookReadSnapshotTransform = fault;
+                    var result = service.ReadMail(request, CancellationToken.None);
+                    AssertEqual(OutlookOutcomeStatus.Error, result.Status, "incomplete or mismatched capture fails closed");
+                }
+                adapter.OutlookReadSnapshotTransform = snapshot => { snapshot.BodyCaptured = false; return snapshot; };
+                var runtime = OutlookRuntime(executor, adapter);
+                foreach (var call in new[]
+                {
+                    new ToolCall("guard-reply", OutlookToolIds.CreateDraft, "{\"kind\":\"reply\",\"body\":\"answer\"}"),
+                    new ToolCall("guard-update", OutlookToolIds.UpdateMail, "{\"kind\":\"markRead\"}")
+                })
+                {
+                    var writes = adapter.OutlookBackendCalls.Count(operation =>
+                        operation == FakeOfficeAdapter.OutlookCreateDraftOperation || operation == FakeOfficeAdapter.OutlookUpdateMailOperation);
+                    var result = ExecuteNativeConfirmed(runtime, call, runtime.Describe(call));
+                    AssertEqual(ToolExecutionOutcome.Error, result.Outcome, "uncaptured body cannot authorize a mutation");
+                    AssertEqual(writes, adapter.OutlookBackendCalls.Count(operation =>
+                        operation == FakeOfficeAdapter.OutlookCreateDraftOperation || operation == FakeOfficeAdapter.OutlookUpdateMailOperation),
+                        "invalid capture is rejected before the mutation backend");
+                }
+                using (var cancellation = new CancellationTokenSource())
+                {
+                    adapter.OutlookReadSnapshotTransform = snapshot => { cancellation.Cancel(); return snapshot; };
+                    var cancelled = false;
+                    try { service.CaptureMail(request, cancellation.Token); }
+                    catch (OperationCanceledException) { cancelled = true; }
+                    AssertTrue(cancelled, "cancellation after backend capture cannot publish a snapshot");
+                    var reads = adapter.OutlookBodyMaterializationCount;
+                    try { service.CaptureMail(request, cancellation.Token); }
+                    catch (OperationCanceledException) { }
+                    AssertEqual(reads, adapter.OutlookBodyMaterializationCount, "pre-cancelled capture never enters backend");
+                }
+            });
         }
 
         private static void OutlookToolsPreserveFamilySemantics()
@@ -225,11 +312,14 @@ namespace RNAssistant.Harness
                     var inner = FakeOfficeAdapter.ForHost("Outlook");
                     var host = new BoundTestOfficeAdapter(sessionPort, inner);
                     var ownerSta = false;
+                    var readOwnerSta = false;
                     host.BeforeRead = operation =>
                     {
                         if (operation ==
                             FakeOfficeAdapter.OutlookCreateDraftOperation)
                             ownerSta = dispatcher.CheckAccess;
+                        if (operation == FakeOfficeAdapter.OutlookReadMailOperation)
+                            readOwnerSta = dispatcher.CheckAccess;
                     };
                     var executor = new OfficeToolExecutor(
                         host, new VbaJournalStore(paths),
@@ -250,10 +340,19 @@ namespace RNAssistant.Harness
                     AssertTrue(result.Success && ownerSta,
                         "Outlook mutation stays on bound owner STA");
 
+                    var source = executor.ExecuteManual(Command(OutlookToolIds.ReadMail, "content", "both"),
+                        tools, new AppSettings(), false, false, chat);
+                    AssertTrue(source.Success && readOwnerSta, "exact mail capture stays on bound owner STA");
+                    var sourceReads = inner.OutlookBodyMaterializationCount;
+
                     var dispatched = inner.OutlookBackendCalls.Count(
                         operation => operation ==
                             FakeOfficeAdapter.OutlookCreateDraftOperation);
                     dispatcher.Invoke(() => document.IsAlive = false);
+                    var closedSource = executor.ExecuteManual(Command(OutlookToolIds.ReadMail),
+                        tools, new AppSettings(), false, false, chat);
+                    AssertTrue(!closedSource.Success, "closed window cannot capture mail");
+                    AssertEqual(sourceReads, inner.OutlookBodyMaterializationCount, "closed capture never reaches the body getter");
                     var closed = executor.ExecuteManual(Command(
                         OutlookToolIds.CreateDraft,
                         "kind", "new", "body", "Stale"),

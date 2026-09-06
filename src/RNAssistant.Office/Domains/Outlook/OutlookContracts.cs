@@ -84,6 +84,7 @@ namespace RNAssistant.Office.Domains.Outlook
 
     public sealed class OutlookMailReadSnapshot
     {
+        public bool BodyCaptured { get; set; }
         public OutlookMailSnapshot Mail { get; set; }
         public IReadOnlyList<OutlookAttachmentSnapshot> Attachments { get; set; }
     }

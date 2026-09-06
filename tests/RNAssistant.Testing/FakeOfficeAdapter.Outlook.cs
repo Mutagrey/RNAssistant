@@ -28,6 +28,14 @@ namespace RNAssistant.Harness
             get { return OutlookSelected().Categories; }
         }
 
+        public int OutlookBodyMaterializationCount { get; private set; }
+        public Func<OutlookMailReadSnapshot, OutlookMailReadSnapshot> OutlookReadSnapshotTransform { get; set; }
+        public string OutlookSelectedBody
+        {
+            get { return OutlookSelected().Body; }
+            set { OutlookSelected().Body = value; }
+        }
+
         public OutlookMailReadSnapshot ReadMail(OutlookReadMailRequest request)
         {
             BeginOutlookBackendCall(OutlookReadMailOperation);
@@ -40,7 +48,14 @@ namespace RNAssistant.Harness
                 throw new OutlookBackendException(
                     "Mail item not found: " + (request.EntryId ?? string.Empty),
                     "outlook_mail_not_found", true);
-            var attachments = string.Equals(
+            var includeBody = request.Content != "attachments";
+            if (includeBody)
+            {
+                OutlookBodyMaterializationCount++;
+                if ((mail.Body ?? string.Empty).Length > request.MaxChars)
+                    throw new OutlookBackendException("The complete mail body exceeds the capture limit.", "RESOURCE_SNAPSHOT_TOO_LARGE", false);
+            }
+            var attachments = request.Content != "message" && string.Equals(
                 mail.EntryId, "mail-1", StringComparison.Ordinal)
                 ? new[]
                 {
@@ -54,11 +69,17 @@ namespace RNAssistant.Harness
                     }
                 }
                 : new OutlookAttachmentSnapshot[0];
-            return new OutlookMailReadSnapshot
+            var captured = OutlookSnapshot(mail, includeBody ? request.MaxChars : 0, 0);
+            captured.Body = includeBody ? mail.Body ?? string.Empty : null;
+            captured.SearchBody = null;
+            if (!includeBody) captured.StateToken = null;
+            var snapshot = new OutlookMailReadSnapshot
             {
-                Mail = OutlookSnapshot(mail, request.MaxChars, 0),
+                BodyCaptured = includeBody,
+                Mail = captured,
                 Attachments = attachments
             };
+            return OutlookReadSnapshotTransform == null ? snapshot : OutlookReadSnapshotTransform(snapshot);
         }
 
         public OutlookFolderSnapshot ReadFolder(OutlookFolderReadRequest request)
