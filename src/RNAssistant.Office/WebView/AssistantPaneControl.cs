@@ -11,7 +11,6 @@ using System.Windows.Forms;
 using Microsoft.Web.WebView2.Core;
 using Microsoft.Web.WebView2.WinForms;
 using Newtonsoft.Json;
-using Newtonsoft.Json.Linq;
 using RNAssistant.Office.Contracts;
 using RNAssistant.Office.Diagnostics;
 
@@ -416,7 +415,6 @@ namespace RNAssistant.Office.WebView
                     return;
                 }
 
-                RuntimeLog.Info("Web message received: " + DescribeMessageForLog(requestJson));
                 var responseJson = await _bridge.HandleMessageAsync(requestJson).ConfigureAwait(true);
                 PostBridgeMessage(responseJson);
             }
@@ -633,20 +631,6 @@ namespace RNAssistant.Office.WebView
         private static string EscapeJson(string value)
         {
             return (value ?? string.Empty).Replace("\\", "\\\\").Replace("\"", "\\\"");
-        }
-
-        private static string DescribeMessageForLog(string value)
-        {
-            try
-            {
-                var message = JObject.Parse(value ?? "{}");
-                return "type=" + (message.Value<string>("type") ?? string.Empty)
-                    + ", id=" + (message.Value<string>("id") ?? string.Empty);
-            }
-            catch
-            {
-                return "invalid JSON, chars=" + (value == null ? 0 : value.Length);
-            }
         }
 
         private bool IsKeyboardFocusInsidePane(IntPtr focusedWindow)
