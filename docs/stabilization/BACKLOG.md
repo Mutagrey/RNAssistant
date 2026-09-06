@@ -28,6 +28,14 @@ service locator, второй store/read model или универсальный
 
 ## Existing defects outside the active slice
 
+- Closed-document agent fixture still expects `common.html_data_bind` to be absent
+  from the catalog (`agent: closed document keeps local tools`). The current
+  resource-backed binding is not intrinsically Office-only; its Gateway guards
+  the selected provider. The unchanged catalog assertion fails before the updated
+  Excel resource-read assertion (2026-09-06). Owner: closed-document capability/HTML
+  qualification. Review that expectation and the remaining guarded-read assertion
+  together; do not hide local bindings or mark this check green to fix a fixture.
+
 - HTML source-tool fixture still exercises retired `RNAssistantData.missingData`
   while expecting the current `script.data_source_missing` finding. The focused
   `tools: html source read search and patch` check passes its read/search/patch

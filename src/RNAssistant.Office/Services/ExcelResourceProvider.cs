@@ -72,12 +72,13 @@ namespace RNAssistant.Office.Services
             {
                 var parsed = Parse(session, request.Reference.Uri);
                 var view = string.IsNullOrWhiteSpace(request.Representation) || request.Representation == "auto" ? "text" : request.Representation;
-                if (view != "text" && view != "formulas") throw Error("RESOURCE_VIEW_UNSUPPORTED", "This range supports text, formulas, table and records views.");
+                if (view != "text" && view != "formulas" && view != "structure") throw Error("RESOURCE_VIEW_UNSUPPORTED", "This range supports text, formulas, structure (profile), table and records views.");
                 var range = parsed.Segments[3];
                 if (CellCount(range) > ExcelReadService.MaxReadCells)
                     throw Error("RESOURCE_SNAPSHOT_TOO_LARGE", "Choose a narrower range; the bounded snapshot permits at most 100000 cells.");
-                var snapshot = _reader.CaptureRange(parsed.Segments[2], range, view == "formulas" ? "formulas" : "values");
-                var text = JsonConvert.SerializeObject(view == "formulas" ? snapshot.Formulas : snapshot.Values);
+                var snapshot = _reader.CaptureRange(parsed.Segments[2], range, view == "structure" ? "profile" : view == "formulas" ? "formulas" : "values");
+                var text = view == "structure" ? ExcelReadService.ProfileOutput(snapshot).ToString(Formatting.None) :
+                    JsonConvert.SerializeObject(view == "formulas" ? snapshot.Formulas : snapshot.Values);
                 if (text.Length > ChatArtifactLimits.MaximumTextCharacters) throw Error("RESOURCE_SNAPSHOT_TOO_LARGE", "Choose a narrower range for this view.");
                 var hash = TextPatternEngine.Sha256(text);
                 var binding = ResourceReadCursor.ReadBinding(request.Reference.Uri, view);
@@ -104,7 +105,7 @@ namespace RNAssistant.Office.Services
             var descriptor = new ResourceDescriptor { Reference = new ResourceRef(ResourceUri.Create(Id, _scope.DocumentToken(session), "range", sheet, range)),
                 Provider = Id, Kind = RangeKind, Title = sheet + "!" + range, MimeType = "application/json", Mutable = true,
                 Tracking = "externally-observed" };
-            descriptor.Representations.AddRange(new[] { "text", "formulas", "table", "records" });
+            descriptor.Representations.AddRange(new[] { "text", "formulas", "structure", "table", "records" });
             descriptor.Capabilities.Add("read");
             descriptor.Metadata["sheet"] = sheet; descriptor.Metadata["address"] = range;
             descriptor.Metadata["maximumSnapshotCells"] = ExcelReadService.MaxReadCells.ToString();

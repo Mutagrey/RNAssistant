@@ -6,9 +6,12 @@ using Newtonsoft.Json.Linq;
 using RNAssistant.Core.Agent;
 using RNAssistant.Core.Models;
 using RNAssistant.Core.Storage;
+using RNAssistant.Core.Services;
+using RNAssistant.Core.Tools;
 using RNAssistant.Office;
 using RNAssistant.Office.Domains.Excel;
 using RNAssistant.Office.Runtime;
+using RNAssistant.Office.Services;
 using RNAssistant.Office.Tools;
 
 namespace RNAssistant.Harness
@@ -25,7 +28,9 @@ namespace RNAssistant.Harness
                 var runtime = executor.CreateNativeRuntime(session, new[] { inspectDefinition }, new AppSettings(), "agent", false);
                 AssertTrue(runtime.Describe(new ToolCall("inspect", ExcelReadToolIds.Inspect, "{\"kind\":\"sheets\"}")) != null,
                     "composed inspect handler is described");
-                AssertTrue(runtime.Describe(new ToolCall("range", ExcelReadToolIds.ReadRange, "{}")) == null,
+                AssertTrue(!tools.Any(tool => tool.Id == "excel.read_range") &&
+                    DirectToolBindingCatalog.Resolve("excel.read_range") == null &&
+                    runtime.Describe(new ToolCall("range", "excel.read_range", "{}")) == null,
                     "static ownership does not create a handler absent from the captured catalog");
 
                 adapter.ExcelBackendCalls.Clear();
@@ -38,12 +43,13 @@ namespace RNAssistant.Harness
                     "inspect reaches one direct typed backend");
 
                 adapter.ExcelBackendCalls.Clear();
-                var range = executor.ExecuteManual(Command(ExcelReadToolIds.ReadRange,
-                    "sheet", "Data", "address", "A1:B4", "content", "values"),
+                var range = executor.ExecuteManual(Command(ResourceToolCatalog.ReadToolId,
+                    "target", "Excel range: Data!A1:B4", "representation", "text"),
                     tools, new AppSettings(), false, false, session);
                 AssertTrue(range.Success, "native range read succeeds");
                 var rangeJson = JObject.Parse(range.DataJson);
-                AssertEqual(8L, rangeJson["cellCount"].Value<long>(), "range reports exact cell count");
+                AssertEqual(8, JArray.Parse((string)rangeJson["text"]).SelectMany(row => row).Count(), "range returns all cells");
+                AssertTrue(range.ModelResourceRefs.Any(reference => reference.IsExact), "read carries exact refs");
                 AssertEqual(1, adapter.ExcelBackendCalls.Count(operation =>
                     operation == FakeOfficeAdapter.ExcelRangeReadOperation),
                     "range reaches one direct typed backend");
@@ -86,6 +92,49 @@ namespace RNAssistant.Harness
             });
         }
 
+        private static void ExcelRangeReadsRetainExactEvidence()
+        {
+            WithTempExecutor(FakeOfficeAdapter.ForHost("Excel"), (executor, adapter) =>
+            {
+                var session = NewSession(adapter);
+                executor.BindResourceAuthority(session);
+                var tools = OfficeToolCatalog.ForHost("Excel").Concat(executor.GetControllerTools()).ToList();
+                var runtime = executor.CreateNativeRuntime(session, tools, new AppSettings(), "agent", false);
+                adapter.SetExcelCellForTest("Data", "A1", new string('a', 20000));
+                adapter.SetExcelCellForTest("Data", "B1", new string('b', 20000));
+                var first = ExecuteHtmlNative(runtime, ResourceToolCatalog.ReadToolId,
+                    new JObject { ["target"] = "Excel range: Data!A1:B4", ["representation"] = "structure" });
+                AssertEqual(ToolExecutionOutcome.Ok, first.Outcome, "profile uses generic native resource read");
+                var evidence = first.ResourceEvidence.Single();
+                AssertTrue(evidence.Resource.IsExact && evidence.Payload != null && evidence.Complete,
+                    "complete profile records exact CAS-backed evidence");
+                var text = (string)JObject.Parse(first.Result.DataJson)["text"];
+                AssertTrue(text.Length > 32000, "fixture exercises internally pinned continuation");
+                AssertEqual(1, adapter.ExcelBackendCalls.Count(call => call == FakeOfficeAdapter.ExcelRangeReadOperation),
+                    "all profile pages share one bounded physical capture");
+                adapter.SetExcelCellForTest("Data", "B2", 999);
+                var next = ExecuteHtmlNative(runtime, ResourceToolCatalog.ReadToolId,
+                    new JObject { ["target"] = "Excel range: Data!A1:B4", ["representation"] = "structure" });
+                AssertEqual(ToolExecutionOutcome.Ok, next.Outcome, "fresh profile discovers drift");
+                AssertTrue(evidence.Resource.Revision != next.ResourceEvidence.Single().Resource.Revision,
+                    "profile drift advances logical revision");
+                AssertEqual(EvidenceState.Superseded, new EvidenceStateReducer().Reduce(evidence,
+                    executor.ResourceAuthority.CaptureMany(new[] { evidence.ScopeId })).State,
+                    "old profile cannot remain current model evidence");
+                var reads = adapter.ExcelBackendCalls.Count;
+                var historical = executor.ResourceGateway.Read(session, new ResourceReadRequest {
+                    Reference = evidence.Resource, Representation = "structure", MaxChars = 32000 }).Result;
+                AssertEqual(text.Substring(0, 32000), historical.Text, "historical profile uses retained exact bytes");
+                AssertEqual(reads, adapter.ExcelBackendCalls.Count, "historical profile performs no Office I/O");
+                string error;
+                AssertTrue(!ModelToolResultProjection.ValidateAcceptedCall(new ToolCall("old", "excel.read_range", "{}"), out error),
+                    "removed calls are explicitly rejected, never translated or replayed");
+                var removed = executor.ExecuteManual(Command("excel.read_range"), tools, new AppSettings(), false, false, session);
+                AssertEqual("unknown_tool", removed.ErrorCode, "removed reader has no manual fallback");
+                AssertEqual(reads, adapter.ExcelBackendCalls.Count, "removed reader cannot dispatch");
+            });
+        }
+
         private static void ExcelReadSelectorsAreCanonical()
         {
             WithTempExecutor(FakeOfficeAdapter.ForHost("Excel"), delegate(OfficeToolExecutor executor, FakeOfficeAdapter adapter)
@@ -115,14 +164,19 @@ namespace RNAssistant.Harness
 
                 foreach (var content in new[] { "values", "formulas", "profile" })
                 {
-                    var result = executor.ExecuteManual(Command(ExcelReadToolIds.ReadRange,
-                        "sheet", "Data", "address", "A1:B4", "content", content),
+                    var result = executor.ExecuteManual(Command(ResourceToolCatalog.ReadToolId,
+                        "target", "Excel range: Data!A1:B4", "representation",
+                        content == "profile" ? "structure" : content == "values" ? "text" : "formulas"),
                         tools, new AppSettings(), false, false, session);
                     AssertTrue(result.Success, "range representation succeeds: " + content);
-                    var json = JObject.Parse(result.DataJson);
-                    AssertEqual(content, (string)json["content"], "range representation is explicit");
-                    AssertEqual(4, json["rows"].Value<int>(), "range row count");
-                    AssertEqual(2, json["columns"].Value<int>(), "range column count");
+                    var projection = JObject.Parse(result.DataJson);
+                    AssertTrue((bool)projection["complete"], "complete resource view");
+                    var json = content == "profile" ? JObject.Parse((string)projection["text"]) : null;
+                    if (content != "profile") {
+                        var matrix = JArray.Parse((string)projection["text"]);
+                        AssertEqual(4, matrix.Count, "range row count");
+                        AssertEqual(2, matrix[0].Count(), "range column count");
+                    }
                     if (content == "profile")
                     {
                         AssertTrue(json["blankCells"] != null && json["formulaCells"] != null && json["sample"] != null,
@@ -130,11 +184,11 @@ namespace RNAssistant.Harness
                     }
                 }
 
-                var empty = executor.ExecuteManual(Command(ExcelReadToolIds.ReadRange,
-                    "sheet", "Data", "address", "D1:E2", "content", "values"),
+                var empty = executor.ExecuteManual(Command(ResourceToolCatalog.ReadToolId,
+                    "target", "Excel range: Data!D1:E2", "representation", "text"),
                     tools, new AppSettings(), false, false, session);
                 var emptyJson = JObject.Parse(empty.DataJson);
-                AssertTrue(empty.Success && emptyJson["values"].SelectMany(row => row).All(value => string.IsNullOrEmpty((string)value)),
+                AssertTrue(empty.Success && JArray.Parse((string)emptyJson["text"]).SelectMany(row => row).All(value => string.IsNullOrEmpty((string)value)),
                     "an explicit empty-cell range remains a successful snapshot");
 
                 var metadata = new ExcelReadService(new StubExcelReadBackend
@@ -160,11 +214,11 @@ namespace RNAssistant.Harness
             {
                 var session = NewSession(adapter);
                 var tools = OfficeToolCatalog.ForHost(adapter.HostName).Concat(executor.GetControllerTools()).ToList();
-                var oversized = executor.ExecuteManual(Command(ExcelReadToolIds.ReadRange,
-                    "sheet", "Data", "address", "A1:XFD1048576", "content", "values"),
+                var oversized = executor.ExecuteManual(Command(ResourceToolCatalog.ReadToolId,
+                    "target", "Excel range: Data!A1:XFD1048576", "representation", "text"),
                     tools, new AppSettings(), false, false, session);
                 AssertTrue(!oversized.Success, "oversized range fails");
-                AssertEqual("excel_range_too_large", oversized.ErrorCode, "oversized range keeps exact code");
+                AssertEqual("RESOURCE_SNAPSHOT_TOO_LARGE", oversized.ErrorCode, "oversized range keeps exact code");
                 AssertEqual(0, adapter.ExcelReadMaterializationCount,
                     "host checks dimensions before values/formulas materialization");
 
@@ -179,8 +233,8 @@ namespace RNAssistant.Harness
                 adapter.ExcelBackendCalls.Clear();
                 var wrongSession = NewSession(adapter);
                 wrongSession.DocumentKey = "other-document";
-                var wrongTarget = executor.ExecuteManual(Command(ExcelReadToolIds.ReadRange,
-                    "sheet", "Data", "address", "A1"), tools, new AppSettings(), false, false, wrongSession);
+                var wrongTarget = executor.ExecuteManual(Command(ResourceToolCatalog.ReadToolId,
+                    "target", "Excel range: Data!A1"), tools, new AppSettings(), false, false, wrongSession);
                 AssertEqual("active_document_changed", wrongTarget.ErrorCode,
                     "native handler checks the chat document expectation");
                 AssertEqual(0, adapter.ExcelBackendCalls.Count(operation =>
@@ -188,15 +242,14 @@ namespace RNAssistant.Harness
                     "wrong-target refusal occurs before backend dispatch");
             });
 
-            var inconsistent = new ExcelReadService(new StubExcelReadBackend
+            var inconsistent = RuntimeThrows<ExcelReadBackendException>(() => new ExcelReadService(new StubExcelReadBackend
             {
                 RangeResult = new ExcelRangeSnapshot
                 {
                     Sheet = "Data", Address = "A1:B2", Rows = 2, Columns = 2,
                     CellCount = 5, Values = Matrix(2, 2)
                 }
-            }).ReadRange("Data", "A1:B2", "values");
-            AssertTrue(!inconsistent.Success, "domain rejects inconsistent backend dimensions");
+            }).CaptureRange("Data", "A1:B2", "values"));
             AssertEqual("excel_read_snapshot_invalid", inconsistent.ErrorCode,
                 "inconsistent backend snapshot fails closed");
 
@@ -237,32 +290,14 @@ namespace RNAssistant.Harness
             {
                 var session = NewSession(adapter);
                 var tools = OfficeToolCatalog.ForHost(adapter.HostName).Concat(executor.GetControllerTools()).ToList();
-                var sourceArguments = new JObject
-                {
-                    ["sheet"] = "Data",
-                    ["address"] = "A1:B4",
-                    ["content"] = "values"
-                };
-                var source = executor.ExecuteManual(Command(
-                    ExcelReadToolIds.ReadRange,
-                    "sheet", "Data", "address", "A1:B4",
-                    "content", "values"), tools, new AppSettings(),
-                    false, false, session);
-                AssertTrue(source.Success,
-                    "HTML source read succeeds through the typed route");
-                AppendAcceptedHtmlSource(session, "excel_html_run",
-                    "excel_html_source", ExcelReadToolIds.ReadRange,
-                    sourceArguments,
-                    RNAssistant.Core.Tools.Contracts.ToolResult.Ok(
-                        source.Message, source.DataJson));
                 var bind = Command(HtmlWorkspaceToolCatalog.BindDataToolId,
                     "name", "sales",
-                    "transform", "table", "headers", "firstRow");
+                    "target", "Excel range: Data!A1:B4", "view", "text", "policy", "head");
                 var bound = executor.ExecuteManual(bind, tools, new AppSettings(), false, false, session);
                 AssertTrue(bound.Success, "HTML bind succeeds through the typed read route");
                 AssertEqual(1, adapter.ExcelBackendCalls.Count(operation =>
                     operation == FakeOfficeAdapter.ExcelRangeReadOperation),
-                    "HTML bind reuses the accepted direct read");
+                    "HTML bind captures through the same Gateway provider");
 
                 var refresh = executor.ExecuteManual(Command(HtmlWorkspaceToolCatalog.RefreshDataToolId, "name", "sales"),
                     tools, new AppSettings(), false, false, session);
@@ -305,27 +340,9 @@ namespace RNAssistant.Harness
                     };
                     var tools = OfficeToolCatalog.ForHost(host.HostName)
                         .Concat(executor.GetControllerTools()).ToList();
-                    var sourceArguments = new JObject
-                    {
-                        ["sheet"] = "Data",
-                        ["address"] = "A1:B4",
-                        ["content"] = "values"
-                    };
-                    var source = executor.ExecuteManual(Command(
-                        ExcelReadToolIds.ReadRange,
-                        "sheet", "Data", "address", "A1:B4",
-                        "content", "values"), tools, new AppSettings(),
-                        false, false, session);
-                    AssertTrue(source.Success,
-                        "bound HTML source read succeeds on owner STA");
-                    AppendAcceptedHtmlSource(session, "bound_excel_html_run",
-                        "bound_excel_html_source", ExcelReadToolIds.ReadRange,
-                        sourceArguments,
-                        RNAssistant.Core.Tools.Contracts.ToolResult.Ok(
-                            source.Message, source.DataJson));
                     var bind = Command(HtmlWorkspaceToolCatalog.BindDataToolId,
                         "name", "sales",
-                        "transform", "table", "headers", "firstRow");
+                        "target", "Excel range: Data!A1:B4", "view", "text", "policy", "head");
 
                     var bound = executor.ExecuteManual(
                         bind, tools, new AppSettings(), false, false, session);
@@ -338,7 +355,7 @@ namespace RNAssistant.Harness
                     AssertTrue(refreshed.Success,
                         "bound HTML refresh succeeds through owner STA dispatch");
                     AssertEqual(2, ownerStaReads,
-                        "accepted source read and refresh each dispatch once to owner STA");
+                        "bind and refresh each dispatch once to owner STA");
                 }
             });
         }

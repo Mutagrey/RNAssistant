@@ -40,13 +40,6 @@ namespace RNAssistant.Office.Tools
                     ToolArgumentReader.String(arguments, "sheet", string.Empty),
                     ToolArgumentReader.String(arguments, "chartName", string.Empty));
             }
-            if (string.Equals(toolId, ExcelReadToolIds.ReadRange, StringComparison.Ordinal))
-            {
-                return service.ReadRange(
-                    ToolArgumentReader.String(arguments, "sheet", string.Empty),
-                    ToolArgumentReader.String(arguments, "address", string.Empty),
-                    ToolArgumentReader.String(arguments, "content", "values"));
-            }
             return ExcelReadOutcome.Fail("Unsupported Excel read tool: " + toolId,
                 "{\"code\":\"unknown_tool\",\"retryable\":false}", "unknown_tool", false);
         }

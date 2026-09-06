@@ -404,7 +404,8 @@ namespace RNAssistant.Harness
         private static void SimpleAgentPromptContainsToolsAndSkills()
         {
             var adapter = FakeOfficeAdapter.ForHost("Excel");
-            var tools = OfficeToolCatalog.ForHost(adapter.HostName).Where(tool => tool.Id == "excel.add_sheet" || tool.Id == "excel.read_range").ToList();
+            var tools = OfficeToolCatalog.ForHost(adapter.HostName).Where(tool => tool.Id == "excel.add_sheet")
+                .Concat(ResourceToolCatalog.GetControllerTools()).ToList();
             var skills = new[]
             {
                 new SkillDefinition
@@ -422,9 +423,9 @@ namespace RNAssistant.Harness
                 NewSession(adapter), null);
             var prompt = FlattenSimple(messages);
             AssertContains(prompt, "\"type\":\"function\"", "native-like tool JSON");
-            AssertContains(prompt, "\"description\":\"Worksheet name; omit only when the active sheet is intended.\"", "argument description present");
+            AssertContains(prompt, "Exact readable target", "argument description present");
             AssertContains(prompt, "excel.add_sheet", "first tool present");
-            AssertContains(prompt, "excel.read_range", "second tool present");
+            AssertContains(prompt, "common.resources_read", "resource reader present");
             AssertContains(prompt, "common.test", "skill id present");
             AssertContains(prompt, "Test workflow", "skill description present");
             AssertTrue(prompt.IndexOf(SkillRevision.Compute(skills[0]), StringComparison.Ordinal) < 0,
@@ -505,7 +506,7 @@ namespace RNAssistant.Harness
                 AssertEqual(0, adapter.TotalBackendCallCount, "local tool does not enter Office adapter");
 
                 var blocked = executor.ExecuteManual(
-                    Command("excel.read_range", "sheet", "Data", "address", "A1:B2"),
+                    Command(ResourceToolCatalog.ReadToolId, "target", "Excel range: Data!A1:B2"),
                     tools,
                     new AppSettings(),
                     false,

@@ -26,8 +26,8 @@ namespace RNAssistant.Harness
             var call = new AgentToolCall
             {
                 Id = "call_1",
-                Name = "excel.read_range",
-                Arguments = new Dictionary<string, object> { ["address"] = "A1:B4" }
+                Name = ResourceToolCatalog.ReadToolId,
+                Arguments = new Dictionary<string, object> { ["target"] = "Excel range: Data!A1:B4" }
             };
             var callMessage = AgentJsonProtocol.CreateToolCallMessage(call, string.Empty, null,
                 ToolResultRoles.User, FixtureCallOrigin("inspector-step"));
@@ -60,7 +60,7 @@ namespace RNAssistant.Harness
                 Text = "Revenue 100; Cost 40"
             });
             var tools = OfficeToolCatalog.ForHost(adapter.HostName)
-                .Where(tool => tool.Id == "excel.read_range" || tool.Id == "excel.add_sheet")
+                .Where(tool => tool.Id == "excel.add_sheet").Concat(ResourceToolCatalog.GetControllerTools())
                 .ToList();
             var skills = new[]
             {

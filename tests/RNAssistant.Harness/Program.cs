@@ -417,6 +417,7 @@ namespace RNAssistant.Harness
                 Test("attachments: stores extracted text sidecar", AttachmentStoresExtractedTextSidecar),
                 Test("tool runtime: native resource tools manual and model paths", NativeResourceToolsUseRuntimeForManualAndModelCalls),
                 Test("excel read: native ownership and exact registration", ExcelReadUsesExactNativeOwnership),
+                Test("excel read: exact resource evidence and retained profile", ExcelRangeReadsRetainExactEvidence),
                 Test("excel read: selectors and canonical snapshots", ExcelReadSelectorsAreCanonical),
                 Test("excel read: bounds precede materialization", ExcelReadBoundsPrecedeMaterialization),
                 Test("excel read: HTML binding shares typed route", ExcelReadHtmlUsesSharedRoute),

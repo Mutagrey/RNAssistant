@@ -12,7 +12,6 @@ namespace RNAssistant.Office.Tools
     internal sealed class ExcelReadToolHandler : IToolHandler
     {
         internal static readonly ToolBinding InspectBinding = new ToolBinding("excel.read.inspect.v1");
-        internal static readonly ToolBinding RangeBinding = new ToolBinding("excel.read.range.v1");
 
         private readonly string _toolId;
         private readonly ExcelReadToolAdapter _adapter;
@@ -30,8 +29,7 @@ namespace RNAssistant.Office.Tools
 
         internal static ToolBinding BindingFor(string toolId)
         {
-            return string.Equals(toolId, ExcelReadToolIds.Inspect, StringComparison.Ordinal)
-                ? InspectBinding : RangeBinding;
+            return ExcelReadToolIds.Owns(toolId) ? InspectBinding : null;
         }
 
         public Task<ToolHandlerResult> ExecuteAsync(ToolHandlerContext context, CancellationToken cancellationToken)

@@ -3549,7 +3549,7 @@ namespace RNAssistant.Harness
             else if (consumer == "editor project")
                 result = executor.ReadVbaProjectForEditor(session);
             else if (consumer == "manual read")
-                result = executor.ExecuteManual(Command("excel.read_range", "sheet", "Data", "address", "A1:B2"),
+                result = executor.ExecuteManual(Command(ResourceToolCatalog.ReadToolId, "target", "Excel range: Data!A1:B2"),
                     tools, settings, false, true, session);
             else
                 throw new InvalidOperationException("Unknown concurrent read consumer: " + consumer);

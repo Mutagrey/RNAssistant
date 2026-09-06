@@ -234,7 +234,7 @@ namespace RNAssistant.Harness
             AssertTrue(HasTool(excel, "excel.inspect"), "excel inspection facade visible");
             AssertContains(FindTool(excel, "excel.inspect").Description, "Not a write preflight",
                 "excel inspection contract discourages unchanged preflight loops");
-            AssertTrue(HasTool(excel, "excel.read_range"), "excel range reader visible");
+            AssertTrue(!HasTool(excel, "excel.read_range"), "direct range reader is removed");
             AssertTrue(HasTool(excel, "excel.find_cells"), "excel find cells visible");
             AssertTrue(FindTool(excel, "excel.replace_cells").ArgumentSchemaJson.IndexOf("expectedScopeSha256", StringComparison.Ordinal) < 0,
                 "excel replacement owns current-scope checks");
@@ -278,7 +278,7 @@ namespace RNAssistant.Harness
                 { "PowerPoint", powerpoint },
                 { "Outlook", outlook }
             };
-            AssertEqual(15, excel.Count, "complete Excel tool count");
+            AssertEqual(14, excel.Count, "complete Excel tool count");
             AssertEqual(9, word.Count, "complete Word tool count");
             AssertEqual(9, powerpoint.Count, "complete PowerPoint tool count");
             AssertEqual(5, outlook.Count, "complete Outlook tool count");
@@ -311,12 +311,6 @@ namespace RNAssistant.Harness
                 });
             }
 
-            JObject readRangeSchema;
-            string readRangeSchemaError;
-            AssertTrue(ToolSchemaSupport.TryParse(FindTool(excel, "excel.read_range"), out readRangeSchema, out readRangeSchemaError), "excel.read_range schema parses");
-            string invalidRangeError;
-            AssertTrue(!ToolSchemaSupport.ValidateArguments(new JObject { ["kind"] = "values" }, readRangeSchema, true, out invalidRangeError), "excel.read_range rejects foreign kind");
-            AssertContains(invalidRangeError, "kind", "excel.read_range invalid field diagnostic");
         }
 
         private static JObject MinimalValidArguments(JObject schema)

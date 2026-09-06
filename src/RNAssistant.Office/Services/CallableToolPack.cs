@@ -21,7 +21,6 @@ namespace RNAssistant.Office.Services
 
         private static readonly HashSet<string> ExcelCoreToolIds = ExactIds(
             "excel.inspect",
-            "excel.read_range",
             "excel.find_cells",
             "excel.create_chat_chart",
             "excel.replace_cells",

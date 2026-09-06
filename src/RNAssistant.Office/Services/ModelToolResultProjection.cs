@@ -191,6 +191,9 @@ namespace RNAssistant.Office.Services
                 case "common.prompts_read":
                     error = "Prompt reads use common.resources_find/read and exact catalog evidence.";
                     return false;
+                case "excel.read_range":
+                    error = "Excel range reads use common.resources_read and exact document evidence.";
+                    return false;
                 case "common.vba_inspect":
                 case "common.vba_list_modules":
                 case "common.vba_read_module":

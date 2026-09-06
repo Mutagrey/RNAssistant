@@ -53,27 +53,6 @@ namespace RNAssistant.Office.Domains.Excel
             }
         }
 
-        public ExcelReadOutcome ReadRange(string sheet, string address, string content)
-        {
-            content = string.IsNullOrWhiteSpace(content) ? "values" : content.Trim().ToLowerInvariant();
-            if (content != "values" && content != "formulas" && content != "profile")
-                return Failure("content must be values, formulas, or profile.", "excel_range_content_invalid", false);
-            try
-            {
-                var snapshot = CaptureRange(sheet, address, content);
-                return ExcelReadOutcome.Ok(RangeMessage(snapshot, content),
-                    RangeOutput(snapshot, content).ToString(Formatting.None));
-            }
-            catch (ExcelReadBackendException ex)
-            {
-                return Failure(ex.Message, ex.ErrorCode, ex.Retryable, ex.DetailsJson);
-            }
-            catch (Exception ex)
-            {
-                return Failure("Excel range read failed: " + ex.Message, "excel_read_failed", true);
-            }
-        }
-
         internal ExcelRangeSnapshot CaptureRange(string sheet, string address, string content)
         {
             if (content != "values" && content != "formulas" && content != "profile")
@@ -210,20 +189,18 @@ namespace RNAssistant.Office.Domains.Excel
             return root;
         }
 
-        private static JObject RangeOutput(ExcelRangeSnapshot snapshot, string content)
+        internal static JObject ProfileOutput(ExcelRangeSnapshot snapshot)
         {
             var root = new JObject
             {
                 ["sheet"] = snapshot.Sheet ?? string.Empty,
                 ["address"] = snapshot.Address ?? string.Empty,
-                ["content"] = content,
+                ["content"] = "profile",
                 ["rows"] = snapshot.Rows,
                 ["columns"] = snapshot.Columns,
                 ["cellCount"] = snapshot.CellCount
             };
-            if (content == "values") root["values"] = JToken.FromObject(snapshot.Values);
-            else if (content == "formulas") root["formulas"] = JToken.FromObject(snapshot.Formulas);
-            else AddProfile(root, snapshot);
+            AddProfile(root, snapshot);
             return root;
         }
 
@@ -283,12 +260,6 @@ namespace RNAssistant.Office.Domains.Excel
         {
             return "Excel " + snapshot.Kind + " inspected: " + snapshot.ReturnedCount +
                 (snapshot.Truncated ? " item(s), truncated at the configured bound." : " item(s).");
-        }
-
-        private static string RangeMessage(ExcelRangeSnapshot snapshot, string content)
-        {
-            return "Excel range " + content + " read: " + (snapshot.Sheet ?? string.Empty) + "!" +
-                (snapshot.Address ?? string.Empty) + " (" + snapshot.CellCount + " cells).";
         }
 
         private static ExcelReadBackendException InvalidBackend(string message)

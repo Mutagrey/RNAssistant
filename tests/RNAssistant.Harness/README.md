@@ -39,6 +39,11 @@ version check still apply.
 
 ## Test map
 
+Excel range values/formulas/profile direct cutover: `Program.ExcelReadTests.cs`
+(`excel read:`) covers generic exact source evidence, retained profile continuation,
+drift supersession, bounds before materialization, removed-call rejection and shared
+HTML/bound-STA routing. The legacy public `excel.read_range` fixture path is removed.
+
 | Area | Main files | Useful filters |
 | --- | --- | --- |
 | Conversation and Agent | `Program.SimpleAgentTests.cs`, `Program.AgentSafetyTests.cs`, `Program.ToolDiscoveryTests.cs` | `conversation:`, `agent:` |

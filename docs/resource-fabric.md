@@ -146,6 +146,28 @@ document access owners retain their responsibilities. No upload grants execution
 or publication authority. Bounds and verified-prefix/draft rules are owned by
 [Tool Library](tool-library.md#library-mutation-uploads).
 
+## Excel range reads
+
+`excel.read_range` is removed from catalog, native bindings and the Excel core pack.
+Model/manual callers use `common.resources_read` with an explicit semantic target
+such as `Excel range: Data!A1:B4`: `text` returns values, `formulas` formulas,
+`structure` the existing domain-owned profile, and `table`/`records` bounded rows.
+Discover used ranges through `common.resources_find`; omitted active-sheet/selection
+defaults of the removed tool are not silently translated. `excel.inspect` remains
+the bounded workbook-object metadata action.
+
+`ExcelResourceProvider` is the only range-read entry over `ExcelReadService` and the
+bound backend. The 100000-cell ceiling precedes values/formulas materialization.
+The profile keeps existing counts, headers and ten-row sample; it is not a complete
+values/formulas representation. Each requested view records exact resource evidence
+and complete captured bytes in the existing CAS. Internal text continuations stay
+on the first logical revision; retained historical profile reads perform no Office
+I/O. Drift observed in a fresh view uses shared authority and evidence reduction.
+HTML bindings use the same Gateway/provider, not accepted direct-tool JSON.
+Old accepted `excel.read_range` calls fail explicit protocol validation; no alias,
+replay translation or public domain-output wrapper remains. Real Windows Excel/STA
+and final catalog/model qualification are still open.
+
 ## Conversation loop
 
 Controller clear/edit/message-delete/fork use typed `ChatResourceMutationIntent`
