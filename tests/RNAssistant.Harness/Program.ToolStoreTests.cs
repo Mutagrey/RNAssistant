@@ -281,7 +281,7 @@ namespace RNAssistant.Harness
             AssertEqual(14, excel.Count, "complete Excel tool count");
             AssertEqual(8, word.Count, "complete Word tool count");
             AssertEqual(8, powerpoint.Count, "complete PowerPoint tool count");
-            AssertEqual(5, outlook.Count, "complete Outlook tool count");
+            AssertEqual(4, outlook.Count, "complete Outlook tool count");
             foreach (var catalog in catalogs)
             {
                 AssertEqual(catalog.Value.Count, catalog.Value.Select(tool => tool.Id).Distinct(StringComparer.OrdinalIgnoreCase).Count(), catalog.Key + " ids are unique");

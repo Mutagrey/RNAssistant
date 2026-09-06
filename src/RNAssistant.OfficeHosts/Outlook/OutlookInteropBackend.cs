@@ -15,9 +15,39 @@ namespace RNAssistant.OfficeHosts
             _session = session ?? throw new ArgumentNullException(nameof(session));
         }
 
+        public OutlookMailDiscoverySnapshot DiscoverMail(int maxItems)
+        {
+            if (maxItems < 1 || maxItems > OutlookService.MaxItems)
+                throw new OutlookBackendException("Invalid discovery bound.", "invalid_arguments", false);
+            var result = new List<OutlookMailSummarySnapshot>();
+            if (_session.IsMailTarget)
+            {
+                result.Add(MailSummary(_session.SelectedMail()));
+                return new OutlookMailDiscoverySnapshot { BoundMail = true, Items = result };
+            }
+            var items = _session.Folder.Items;
+            items.Sort("[ReceivedTime]", true);
+            var total = items.Count;
+            for (var index = 1; index <= Math.Min(total, maxItems); index++)
+            {
+                var mail = items[index] as Outlook.MailItem;
+                if (mail != null) result.Add(MailSummary(mail));
+            }
+            return new OutlookMailDiscoverySnapshot { Items = result, Truncated = total > maxItems };
+        }
+
+        private static OutlookMailSummarySnapshot MailSummary(Outlook.MailItem mail)
+        {
+            if (mail == null) throw new OutlookBackendException("Bound mail is unavailable.", "outlook_mail_not_found", false);
+            return new OutlookMailSummarySnapshot { EntryId = mail.EntryID ?? string.Empty,
+                Subject = mail.Subject ?? string.Empty, Sender = mail.SenderName ?? string.Empty, Received = mail.ReceivedTime };
+        }
+
         public OutlookMailReadSnapshot ReadMail(OutlookReadMailRequest request)
         {
             request = request ?? new OutlookReadMailRequest();
+            if (request.BoundMailOnly && !_session.IsMailTarget)
+                throw new OutlookBackendException("This source requires a bound mail Inspector.", "outlook_mail_target_mismatch", false);
             var mail = _session.ResolveMail(request.EntryId);
             if (mail == null)
                 throw new OutlookBackendException(

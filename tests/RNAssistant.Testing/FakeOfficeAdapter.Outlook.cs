@@ -28,6 +28,20 @@ namespace RNAssistant.Harness
             get { return OutlookSelected().Categories; }
         }
 
+        public Func<OutlookMailDiscoverySnapshot, OutlookMailDiscoverySnapshot> OutlookDiscoveryTransform { get; set; }
+        public bool OutlookIsMailTarget { get; set; }
+        public bool OutlookExcludeSecondMail { get; set; }
+        public OutlookMailDiscoverySnapshot DiscoverMail(int maxItems)
+        {
+            BeginOutlookBackendCall("outlook.discover.direct");
+            var source = OutlookIsMailTarget ? new[] { OutlookSelected() } :
+                _outlookMail.Where(mail => !OutlookExcludeSecondMail || mail.EntryId != "mail-2").ToArray();
+            var snapshot = new OutlookMailDiscoverySnapshot { BoundMail = OutlookIsMailTarget, Truncated = source.Length > maxItems,
+                Items = source.Take(maxItems).Select(mail => new OutlookMailSummarySnapshot { EntryId = mail.EntryId,
+                    Subject = mail.Subject ?? string.Empty, Sender = mail.Sender ?? string.Empty, Received = mail.Received }).ToArray() };
+            return OutlookDiscoveryTransform == null ? snapshot : OutlookDiscoveryTransform(snapshot);
+        }
+
         public int OutlookBodyMaterializationCount { get; private set; }
         public Func<OutlookMailReadSnapshot, OutlookMailReadSnapshot> OutlookReadSnapshotTransform { get; set; }
         public string OutlookSelectedBody
@@ -44,6 +58,9 @@ namespace RNAssistant.Harness
                 ? OutlookSelected()
                 : _outlookMail.FirstOrDefault(item => string.Equals(
                     item.EntryId, request.EntryId, StringComparison.Ordinal));
+            if ((request.BoundMailOnly && !OutlookIsMailTarget) ||
+                (mail != null && ((OutlookIsMailTarget && mail != OutlookSelected()) ||
+                    (OutlookExcludeSecondMail && mail.EntryId == "mail-2")))) mail = null;
             if (mail == null)
                 throw new OutlookBackendException(
                     "Mail item not found: " + (request.EntryId ?? string.Empty),

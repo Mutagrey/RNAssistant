@@ -26,17 +26,6 @@ namespace RNAssistant.Office.Tools
             arguments = arguments ??
                 new Dictionary<string, object>(StringComparer.OrdinalIgnoreCase);
             if (string.Equals(
-                toolId, OutlookToolIds.ReadMail, StringComparison.Ordinal))
-                return _service.ReadMail(new OutlookReadMailRequest
-                {
-                    EntryId = ToolArgumentReader.String(
-                        arguments, "entryId", string.Empty),
-                    Content = ToolArgumentReader.String(
-                        arguments, "content", "message"),
-                    MaxChars = ToolArgumentReader.Int32(
-                        arguments, "maxChars", 12000)
-                }, cancellationToken);
-            if (string.Equals(
                 toolId, OutlookToolIds.SearchMail, StringComparison.Ordinal))
                 return _service.SearchMail(new OutlookSearchMailRequest
                 {

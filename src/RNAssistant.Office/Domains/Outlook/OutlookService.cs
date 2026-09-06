@@ -51,57 +51,21 @@ namespace RNAssistant.Office.Domains.Outlook
             return snapshot;
         }
 
-        public OutlookOutcome ReadMail(
-            OutlookReadMailRequest request,
-            CancellationToken cancellationToken)
+        public OutlookMailDiscoverySnapshot DiscoverMail(CancellationToken cancellationToken)
         {
-            request = request ?? new OutlookReadMailRequest();
-            request.EntryId = request.EntryId ?? string.Empty;
-            request.Content = Normalize(request.Content, "message");
-            request.MaxChars = Math.Max(1, Math.Min(MaxBodyChars, request.MaxChars));
-            if (request.Content != "message" &&
-                request.Content != "attachments" && request.Content != "both")
-                return Failure(
-                    "content must be message, attachments, or both.",
-                    "invalid_arguments", false);
-            try
-            {
-                cancellationToken.ThrowIfCancellationRequested();
-                var snapshot = CaptureMail(request, cancellationToken);
-                var attachments = snapshot.Attachments;
-                if (request.Content == "attachments")
-                    return OutlookOutcome.Ok(
-                        "Attachments listed: " + attachments.Count,
-                        AttachmentsJson(attachments), OutlookEffect.None);
-                if (request.Content == "both")
-                    return OutlookOutcome.Ok(
-                        "Email and attachments read.",
-                        new JObject
-                        {
-                            ["message"] = MailJson(snapshot.Mail),
-                            ["attachments"] = JArray.Parse(
-                                AttachmentsJson(attachments))
-                        }.ToString(Formatting.None),
-                        OutlookEffect.None);
-                return OutlookOutcome.Ok(
-                    string.IsNullOrWhiteSpace(request.EntryId)
-                        ? "Selected email read."
-                        : "Email read by EntryID.",
-                    MailJson(snapshot.Mail).ToString(Formatting.None),
-                    OutlookEffect.None);
-            }
-            catch (OperationCanceledException) { throw; }
-            catch (OutlookBackendException ex)
-            {
-                return Failure(
-                    ex.Message, ex.ErrorCode, ex.Retryable, ex.DetailsJson);
-            }
-            catch (Exception ex)
-            {
-                return Failure(
-                    "Outlook mail read failed: " + ex.Message,
-                    "outlook_read_failed", true);
-            }
+            cancellationToken.ThrowIfCancellationRequested();
+            var snapshot = _backend.DiscoverMail(MaxItems);
+            cancellationToken.ThrowIfCancellationRequested();
+            if (snapshot == null || snapshot.Items == null || snapshot.Items.Count > MaxItems ||
+                (snapshot.BoundMail && (snapshot.Items.Count != 1 || snapshot.Truncated)))
+                throw new OutlookBackendException("Invalid bound mail discovery.", "outlook_discovery_invalid", false);
+            var ids = new HashSet<string>(StringComparer.Ordinal);
+            foreach (var mail in snapshot.Items)
+                if (mail == null || mail.EntryId == null || mail.EntryId.Length > 4096 ||
+                    (!snapshot.BoundMail && string.IsNullOrWhiteSpace(mail.EntryId)) ||
+                    mail.Subject == null || mail.Sender == null || !ids.Add(mail.EntryId))
+                    throw new OutlookBackendException("Incomplete or duplicate mail identity.", "outlook_discovery_invalid", false);
+            return snapshot;
         }
 
         public OutlookOutcome SearchMail(
@@ -540,21 +504,6 @@ namespace RNAssistant.Office.Domains.Outlook
             return new KeyValuePair<string, string>(key, value ?? string.Empty);
         }
 
-        private static JObject MailJson(OutlookMailSnapshot mail)
-        {
-            return new JObject
-            {
-                ["entryId"] = mail.EntryId ?? string.Empty,
-                ["subject"] = mail.Subject ?? string.Empty,
-                ["sender"] = mail.Sender ?? string.Empty,
-                ["senderEmail"] = mail.SenderEmail ?? string.Empty,
-                ["received"] = new JValue(mail.Received),
-                ["categories"] = mail.Categories ?? string.Empty,
-                ["unread"] = mail.Unread,
-                ["body"] = mail.Body ?? string.Empty
-            };
-        }
-
         private static JObject CollectJson(OutlookMailSnapshot mail)
         {
             return new JObject
@@ -564,20 +513,6 @@ namespace RNAssistant.Office.Domains.Outlook
                 ["received"] = new JValue(mail.Received),
                 ["body"] = mail.Body ?? string.Empty
             };
-        }
-
-        private static string AttachmentsJson(
-            IEnumerable<OutlookAttachmentSnapshot> attachments)
-        {
-            return new JArray((attachments ??
-                new OutlookAttachmentSnapshot[0]).Select(item => new JObject
-                {
-                    ["index"] = item.Index,
-                    ["fileName"] = item.FileName ?? string.Empty,
-                    ["displayName"] = item.DisplayName ?? string.Empty,
-                    ["size"] = item.Size,
-                    ["type"] = item.Type ?? string.Empty
-                }).ToArray()).ToString(Formatting.None);
         }
 
         private static string DraftData(OutlookDraftBackendResult result)

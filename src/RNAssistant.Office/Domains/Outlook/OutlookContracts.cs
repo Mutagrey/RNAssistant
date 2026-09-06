@@ -6,8 +6,24 @@ namespace RNAssistant.Office.Domains.Outlook
     public sealed class OutlookReadMailRequest
     {
         public string EntryId { get; set; }
+        public bool BoundMailOnly { get; set; }
         public string Content { get; set; }
         public int MaxChars { get; set; }
+    }
+
+    public sealed class OutlookMailSummarySnapshot
+    {
+        public string EntryId { get; set; }
+        public string Subject { get; set; }
+        public string Sender { get; set; }
+        public DateTime Received { get; set; }
+    }
+
+    public sealed class OutlookMailDiscoverySnapshot
+    {
+        public bool BoundMail { get; set; }
+        public bool Truncated { get; set; }
+        public IReadOnlyList<OutlookMailSummarySnapshot> Items { get; set; }
     }
 
     public sealed class OutlookSearchMailRequest
@@ -123,6 +139,7 @@ namespace RNAssistant.Office.Domains.Outlook
 
     public interface IOutlookBackend
     {
+        OutlookMailDiscoverySnapshot DiscoverMail(int maxItems);
         OutlookMailReadSnapshot ReadMail(OutlookReadMailRequest request);
         OutlookFolderSnapshot ReadFolder(OutlookFolderReadRequest request);
         OutlookDraftBackendResult CreateDraft(

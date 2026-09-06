@@ -17,13 +17,14 @@ namespace RNAssistant.Office.Services
         private readonly IOfficeApplicationAdapter _adapter;
         private readonly LiveOfficeResourceScope _scope;
         private readonly RNAssistant.Core.Storage.ChatBlobStore _payloads;
-        private bool IsExactSource(string target) { return IsWord || (IsPowerPoint && target != "selection"); }
+        private bool IsExactSource(string target) { return IsOutlook || IsWord || (IsPowerPoint && target != "selection"); }
 
         public LiveDocumentResourceProvider(IOfficeApplicationAdapter adapter, RNAssistant.Core.Storage.ChatBlobStore payloads = null)
         {
             _adapter = adapter ?? throw new ArgumentNullException("adapter");
             _scope = new LiveOfficeResourceScope(adapter);
             _payloads = payloads;
+            if (IsOutlook) _outlook = (adapter as RNAssistant.Office.Domains.Outlook.IOutlookBackendProvider)?.OutlookBackend;
             if (IsPowerPoint) _powerPoint = (adapter as RNAssistant.Office.Domains.PowerPoint.IPowerPointBackendProvider)?.PowerPointBackend;
             if (IsWord) _word = (adapter as RNAssistant.Office.Domains.Word.IWordBackendProvider)?.WordBackend;
         }
@@ -35,6 +36,7 @@ namespace RNAssistant.Office.Services
             return _scope.Read(session, delegate
             {
                 limit = Math.Max(1, Math.Min(MaximumItems, limit <= 0 ? 20 : limit));
+                if (IsOutlook && kind == OutlookMailKind) return ListOutlookMail(session, cursor, limit);
                 var items = new List<ResourceDescriptor>();
                 if (string.IsNullOrWhiteSpace(kind) ||
                     string.Equals(kind, DocumentKind, StringComparison.OrdinalIgnoreCase))
@@ -81,6 +83,13 @@ namespace RNAssistant.Office.Services
 
         private ResourceDescriptor Describe(ChatSession session, string target)
         {
+            string outlookEntryId;
+            if (IsOutlook && TryOutlookMailKey(target, out outlookEntryId))
+            {
+                var mail = CaptureOutlookMail(target, false).Mail;
+                return DescribeOutlookMail(session, target, new RNAssistant.Office.Domains.Outlook.OutlookMailSummarySnapshot {
+                    EntryId = mail.EntryId, Subject = mail.Subject, Sender = mail.Sender, Received = mail.Received });
+            }
             var selection = string.Equals(target, "selection", StringComparison.Ordinal);
             var powerPointSlide = IsPowerPoint && IsPowerPointSlide(target);
             var wordRange = IsWord && target.StartsWith("range-", StringComparison.Ordinal);
@@ -89,14 +98,15 @@ namespace RNAssistant.Office.Services
                 Reference = new ResourceRef(CreateUri(session, target)),
                 Provider = ProviderName,
                 Kind = powerPointSlide ? PowerPointSlideKind : wordRange ? WordRangeKind : selection ? SelectionKind : DocumentKind,
-                Title = powerPointSlide ? target.Substring(6) : wordRange ? target.Substring(6).Replace('-', ':') : selection ? "Current Office selection" : _adapter.DocumentTitle ?? "Office document",
+                Title = IsOutlook ? (selection ? "Current Office selection" : "Current Outlook mail") : powerPointSlide ? target.Substring(6) : wordRange ? target.Substring(6).Replace('-', ':') : selection ? "Current Office selection" : _adapter.DocumentTitle ?? "Office document",
                 MimeType = "text/plain; charset=utf-8",
                 Mutable = true
             };
             descriptor.Representations.Add(ResourceRepresentations.Metadata);
             descriptor.Representations.Add(ResourceRepresentations.Structure);
             descriptor.Representations.Add(ResourceRepresentations.Text);
-            if (IsPowerPoint && !selection) descriptor.Representations.Add(ResourceRepresentations.Source);
+            if (IsOutlook || (IsPowerPoint && !selection)) descriptor.Representations.Add(ResourceRepresentations.Source);
+            if (IsOutlook) descriptor.Metadata["sourceTarget"] = "Current selected/open mail; use outlook-mail children for durable mail identity.";
             if (IsPowerPoint) descriptor.Metadata["slideTargetFormat"] = "PowerPoint slide: N (one-based); source includes text and notes";
             descriptor.Metadata["host"] = _adapter.HostName ?? string.Empty;
             descriptor.Metadata["live"] = "true";
@@ -104,7 +114,7 @@ namespace RNAssistant.Office.Services
             if (IsWord) descriptor.Metadata["rangeTargetFormat"] = "Word range: start:end (zero-based, end exclusive; main story)";
             if (!selection)
             {
-                descriptor.Metadata["childKinds"] = SelectionKind;
+                descriptor.Metadata["childKinds"] = IsOutlook ? SelectionKind + "," + OutlookMailKind : SelectionKind;
                 descriptor.Metadata["selectionDiscovery"] =
                     "List this provider with exact kind " + SelectionKind + ".";
             }
@@ -127,10 +137,12 @@ namespace RNAssistant.Office.Services
             {
                 return false;
             }
+            string outlookEntryId;
             if (!string.Equals(address.Segments[1], "root", StringComparison.Ordinal) &&
                 !string.Equals(address.Segments[1], "selection", StringComparison.Ordinal) &&
                 !(IsWord && IsWordRange(address.Segments[1])) &&
-                !(IsPowerPoint && IsPowerPointSlide(address.Segments[1])))
+                !(IsPowerPoint && IsPowerPointSlide(address.Segments[1])) &&
+                !(IsOutlook && TryOutlookMailKey(address.Segments[1], out outlookEntryId)))
             {
                 return false;
             }

@@ -218,7 +218,7 @@ namespace RNAssistant.MockDemo
 
             if (IsHost(host, "Outlook"))
             {
-                return "Готово: подготовил mock reply и проверил выбранное письмо через `outlook.read_mail`.";
+                return "Готово: подготовил mock reply и проверил выбранное письмо через `common.resources_read`.";
             }
 
             return "Готово: создал лист `Demo Report`, записал таблицу продаж, добавил график `Demo Sales` и проверил диапазон/список графиков.";

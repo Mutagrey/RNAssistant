@@ -133,8 +133,8 @@ namespace RNAssistant.OfficeHosts
             try
             {
                 var selection = _explorer.Selection;
-                return selection == null || selection.Count == 0
-                    ? null : selection[1] as Outlook.MailItem;
+                var mail = selection == null || selection.Count == 0 ? null : selection[1] as Outlook.MailItem;
+                return mail != null && MailBelongsToFolder(mail, _folder) ? mail : null;
             }
             catch { return null; }
         }
@@ -143,12 +143,31 @@ namespace RNAssistant.OfficeHosts
         {
             RequireAlive();
             if (string.IsNullOrWhiteSpace(entryId)) return SelectedMail();
+            if (_mail != null)
+                return string.Equals(_mail.EntryID, entryId, StringComparison.Ordinal) ? _mail : null;
             try
             {
-                return _application.Session.GetItemFromID(
-                    entryId, Type.Missing) as Outlook.MailItem;
+                var storeId = _folder.StoreID;
+                if (string.IsNullOrEmpty(storeId)) return null;
+                var mail = _application.Session.GetItemFromID(entryId, storeId) as Outlook.MailItem;
+                return mail != null && MailBelongsToFolder(mail, _folder) ? mail : null;
             }
             catch { return null; }
+        }
+
+        private static bool MailBelongsToFolder(Outlook.MailItem mail, Outlook.MAPIFolder folder)
+        {
+            try
+            {
+                var parent = mail.Parent as Outlook.MAPIFolder;
+                if (parent == null) return false;
+                var store = folder.StoreID;
+                var entry = folder.EntryID;
+                return !string.IsNullOrEmpty(store) && !string.IsNullOrEmpty(entry) &&
+                    string.Equals(store, parent.StoreID, StringComparison.OrdinalIgnoreCase) &&
+                    string.Equals(entry, parent.EntryID, StringComparison.OrdinalIgnoreCase);
+            }
+            catch { return false; }
         }
 
         internal string Title

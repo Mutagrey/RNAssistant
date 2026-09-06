@@ -41,7 +41,8 @@ namespace RNAssistant.Office.Services
                     };
                 }
 
-                var content = representation == ResourceRepresentations.Source
+                var content = IsOutlook ? ReadOutlookSource(target, representation)
+                    : representation == ResourceRepresentations.Source
                     ? ReadPowerPointSource(target, true)
                     : representation == ResourceRepresentations.Structure
                     ? ReadStructure(target)
@@ -135,6 +136,7 @@ namespace RNAssistant.Office.Services
 
         private string ReadText(string target)
         {
+            if (IsOutlook) return ReadOutlookSource(target, ResourceRepresentations.Text);
             if (IsWord) return ReadWordText(target);
             if (IsPowerPoint && target != "selection") return ReadPowerPointSource(target, false);
             if (string.Equals(target, "selection", StringComparison.Ordinal))
@@ -265,7 +267,7 @@ namespace RNAssistant.Office.Services
         {
             value = (value ?? string.Empty).Trim().ToLowerInvariant();
             if (value.Length == 0 || value == "auto") return ResourceRepresentations.Text;
-            if (value == ResourceRepresentations.Source && IsPowerPoint && target != "selection") return value;
+            if (value == ResourceRepresentations.Source && (IsOutlook || (IsPowerPoint && target != "selection"))) return value;
             if (value == ResourceRepresentations.Metadata ||
                 value == ResourceRepresentations.Structure ||
                 value == ResourceRepresentations.Text) return value;

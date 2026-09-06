@@ -458,6 +458,8 @@ namespace RNAssistant.Harness
                 Test("powerpoint tools: dispatch fault classification", PowerPointToolsClassifyDispatchFaults),
                 Test("powerpoint tools: bound presentation scope", PowerPointToolsUseBoundPresentationScope),
                 Test("outlook tools: native ownership and direct backend", OutlookToolsUseExactNativeOwnership),
+                Test("outlook resources: exact mail evidence and retained pages", OutlookResourcesRetainExactMail),
+                Test("outlook resources: bound mail scope and ambiguity", OutlookResourcesRespectMailScope),
                 Test("outlook capture: complete body and metadata isolation", OutlookCapturesPreserveCompleteBodies),
                 Test("outlook capture: invalid guards and cancellation", OutlookCapturesRejectInvalidGuards),
                 Test("outlook tools: family semantics", OutlookToolsPreserveFamilySemantics),

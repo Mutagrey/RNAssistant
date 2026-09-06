@@ -54,10 +54,11 @@ document/slide text and notes, exact CAS evidence, one-capture paging, historica
 no-I/O, explicit bounds, removed-call refusal, shared HTML capture and bound
 STA/closed-presentation routing. Real COM shapes/notes and selection remain unqualified.
 
-Outlook capture prerequisite: `outlook capture:` and `outlook tools:` cover full
-bodies versus attachment-only reads, malformed snapshots, cancellation, preparation
-failure before mutation and bound-STA/closed-window reads. These do not qualify
-OOM pre-materialization bounds or complete the pending Outlook resource cutover.
+Outlook mail cutover: `outlook resources:`, `outlook capture:` and `outlook tools:`
+cover exact source/evidence/CAS paging, header-only discovery and attachment views,
+scope refusal/ambiguity, removed-reader rejection, HTML and bound-STA/closed-window
+reads, malformed captures and preparation refusal before mutation. These do not
+qualify real COM membership/unsaved-mail or OOM pre-materialization bounds.
 
 | Area | Main files | Useful filters |
 | --- | --- | --- |

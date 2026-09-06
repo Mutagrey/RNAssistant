@@ -5,6 +5,8 @@ using RNAssistant.Core.Agent;
 using RNAssistant.Core.Models;
 using RNAssistant.Core.Storage;
 using RNAssistant.Core.Tools;
+using RNAssistant.Core.Services;
+using RNAssistant.Office.Services;
 using RNAssistant.Office.Domains.Outlook;
 using System.Threading;
 using RNAssistant.Office;
@@ -26,7 +28,6 @@ namespace RNAssistant.Harness
                     var runtime = OutlookRuntime(executor, adapter);
                     var ids = new[]
                     {
-                        OutlookToolIds.ReadMail,
                         OutlookToolIds.SearchMail,
                         OutlookToolIds.CreateDraft,
                         OutlookToolIds.UpdateMail,
@@ -49,40 +50,18 @@ namespace RNAssistant.Harness
                                 "Outlook mutation requires tool verification: " + id);
                     }
 
-                    var readCall = new ToolCall(
-                        "outlook-read", OutlookToolIds.ReadMail,
-                        "{\"content\":\"both\",\"maxChars\":12000}");
-                    var read = ExecuteNative(
-                        runtime, readCall, runtime.Describe(readCall));
-                    AssertEqual(ToolExecutionOutcome.Ok, read.Outcome,
-                        "Outlook read uses the typed backend");
-                    var readData = JObject.Parse(read.Result.DataJson);
-                    AssertEqual("Renewal follow-up",
-                        (string)readData["message"]["subject"],
-                        "Outlook read keeps the message shape");
-                    AssertEqual(1,
-                        ((JArray)readData["attachments"]).Count,
-                        "Outlook attachment projection is preserved");
-
-                    var reads = adapter.OutlookBackendCalls.Count(operation =>
-                        operation == FakeOfficeAdapter.OutlookReadMailOperation);
-                    AppendAcceptedHtmlSource(session, "outlook_html_run",
-                        "outlook_html_source", OutlookToolIds.ReadMail,
-                        new JObject
-                        {
-                            ["content"] = "both",
-                            ["maxChars"] = 12000
-                        }, read.Result);
-                    var bound = executor.ExecuteManual(Command(
-                        HtmlWorkspaceToolCatalog.BindDataToolId,
-                        "name", "outlook_mail"), tools, new AppSettings(), false, false, session);
-                    AssertTrue(!bound.Success,
-                        "HTML binding rejects removed accepted-result fallback without a resource target");
-                    AssertContains(bound.Message, "target", "implicit HTML bind fails for the missing semantic resource target");
-                    AssertEqual(reads,
-                        adapter.OutlookBackendCalls.Count(operation =>
-                            operation == FakeOfficeAdapter.OutlookReadMailOperation),
-                        "Rejected implicit HTML binding never recaptures Outlook");
+                    var target = executor.ResourceGateway.Find(session, "", "document").Items.First(item => item.Type == "Outlook mail" && item.Title.StartsWith("Renewal")).Target;
+                    var read = executor.ExecuteManual(Command(ResourceToolCatalog.ReadToolId, "target", target, "representation", "source"),
+                        tools, new AppSettings(), false, false, session);
+                    AssertTrue(read.Success, "Outlook source uses Gateway");
+                    var readData = JObject.Parse((string)JObject.Parse(read.DataJson)["text"]);
+                    AssertEqual("Renewal follow-up", (string)readData["message"]["subject"], "source contains message metadata");
+                    AssertEqual(1, ((JArray)readData["attachments"]).Count, "source contains attachment metadata");
+                    var reads = adapter.OutlookBodyMaterializationCount;
+                    var bound = executor.ExecuteManual(Command(HtmlWorkspaceToolCatalog.BindDataToolId,
+                        "name", "outlook_mail", "target", target, "view", "source"), tools, new AppSettings(), false, false, session);
+                    AssertTrue(bound.Success, "HTML uses the same exact Outlook resource");
+                    AssertEqual(reads + 1, adapter.OutlookBodyMaterializationCount, "HTML captures once via Gateway");
 
                     var drafts = adapter.OutlookBackendCalls.Count(operation =>
                         operation == FakeOfficeAdapter.OutlookCreateDraftOperation);
@@ -102,6 +81,108 @@ namespace RNAssistant.Harness
                 });
         }
 
+        private static void OutlookResourcesRetainExactMail()
+        {
+            WithTempExecutor(FakeOfficeAdapter.ForHost("Outlook"), (executor, adapter) =>
+            {
+                var body = "\uFEFFПисьмо\r\n" + new string('m', 70000) + "\r\nКонец 😀";
+                adapter.OutlookSelectedBody = body;
+                var session = NewSession(adapter);
+                executor.BindResourceAuthority(session);
+                var tools = OfficeToolCatalog.ForHost("Outlook").Concat(executor.GetControllerTools()).ToList();
+                var runtime = executor.CreateNativeRuntime(session, tools, new AppSettings(), "agent", false);
+                var count = adapter.OutlookBodyMaterializationCount;
+                var mail = executor.ResourceGateway.List(session, "document", LiveDocumentResourceProvider.OutlookMailKind, null, 10)
+                    .Items.First(item => item.Title.StartsWith("Renewal"));
+                AssertEqual(count, adapter.OutlookBodyMaterializationCount, "mail discovery reads headers, not body");
+                var target = ResourceGatewayService.IntentTarget(mail);
+                var legacy = adapter.DocumentSnapshotReadCount;
+                var first = ExecuteHtmlNative(runtime, ResourceToolCatalog.ReadToolId,
+                    new JObject { ["target"] = target, ["representation"] = "source" });
+                AssertEqual(ToolExecutionOutcome.Ok, first.Outcome, "generic source read succeeds");
+                var source = (string)JObject.Parse(first.Result.DataJson)["text"];
+                AssertEqual(body, (string)JObject.Parse(source)["message"]["body"], "exact mail body preserves Unicode/BOM/CRLF");
+                AssertEqual(count + 1, adapter.OutlookBodyMaterializationCount, "all internal source pages share one capture");
+                AssertEqual(legacy, adapter.DocumentSnapshotReadCount, "mail source bypasses old adapter snapshot");
+                var evidence = first.ResourceEvidence.Single();
+                AssertTrue(evidence.Resource.IsExact && evidence.Complete && evidence.Payload != null, "exact complete CAS evidence");
+
+                var metadata = ExecuteHtmlNative(runtime, ResourceToolCatalog.ReadToolId,
+                    new JObject { ["target"] = target, ["representation"] = "structure" });
+                AssertEqual(ToolExecutionOutcome.Ok, metadata.Outcome, "attachment/header view succeeds");
+                AssertEqual(count + 1, adapter.OutlookBodyMaterializationCount, "structure does not recapture body");
+                AssertTrue(!(bool)JObject.Parse((string)JObject.Parse(metadata.Result.DataJson)["text"])["bodyCaptured"],
+                    "metadata is not an empty body capture");
+
+                adapter.OutlookSelectedBody = "changed";
+                var fresh = ExecuteHtmlNative(runtime, ResourceToolCatalog.ReadToolId,
+                    new JObject { ["target"] = target, ["representation"] = "source" });
+                AssertEqual(ToolExecutionOutcome.Ok, fresh.Outcome, "fresh source observes drift");
+                AssertEqual(EvidenceState.Superseded, new EvidenceStateReducer().Reduce(evidence,
+                    executor.ResourceAuthority.CaptureMany(new[] { evidence.ScopeId })).State, "old mail source is superseded");
+                count = adapter.OutlookBodyMaterializationCount;
+                var retained = executor.ResourceGateway.Read(session, new ResourceReadRequest {
+                    Reference = evidence.Resource, Representation = "source", MaxChars = 32000 }).Result;
+                var next = executor.ResourceGateway.Read(session, new ResourceReadRequest {
+                    Reference = evidence.Resource, Representation = "source", Cursor = retained.NextCursor, MaxChars = 32000 }).Result;
+                AssertEqual(source.Substring(0, 32000), retained.Text, "retained mail remains exact");
+                AssertEqual(source.Substring(32000, 32000), next.Text, "retained continuation remains exact");
+                AssertEqual(count, adapter.OutlookBodyMaterializationCount, "historical mail performs no body reads");
+                string error;
+                AssertTrue(!tools.Any(tool => tool.Id == "outlook.read_mail") && DirectToolBindingCatalog.Resolve("outlook.read_mail") == null &&
+                    !ModelToolResultProjection.ValidateAcceptedCall(new ToolCall("old", "outlook.read_mail", "{}"), out error),
+                    "old reader has no catalog, binding or replay alias");
+                var removed = executor.ExecuteManual(Command("outlook.read_mail"), tools, new AppSettings(), false, false, session);
+                AssertEqual("unknown_tool", removed.ErrorCode, "old manual reader has no fallback");
+            });
+        }
+
+        private static void OutlookResourcesRespectMailScope()
+        {
+            WithTempExecutor(FakeOfficeAdapter.ForHost("Outlook"), (executor, adapter) =>
+            {
+                var session = NewSession(adapter);
+                executor.BindResourceAuthority(session);
+                var tools = OfficeToolCatalog.ForHost("Outlook").Concat(executor.GetControllerTools()).ToList();
+                var mails = executor.ResourceGateway.List(session, "document", LiveDocumentResourceProvider.OutlookMailKind, null, 10).Items;
+                var second = mails.First(item => item.Title.StartsWith("Quarterly"));
+                foreach (var inspector in new[] { false, true })
+                {
+                    adapter.OutlookIsMailTarget = inspector;
+                    adapter.OutlookExcludeSecondMail = !inspector;
+                    var count = adapter.OutlookBodyMaterializationCount;
+                    var listed = executor.ResourceGateway.List(session, "document", LiveDocumentResourceProvider.OutlookMailKind, null, 10);
+                    AssertEqual(1, listed.Items.Count, "discovery stays in the bound Inspector/folder");
+                    var denied = false;
+                    try { executor.ResourceGateway.Read(session, new ResourceReadRequest { Reference = second.Reference, Representation = "source" }); }
+                    catch (ResourceRequestException) { denied = true; }
+                    AssertTrue(denied, "old URI cannot bypass current bound mail membership");
+                    AssertEqual(count, adapter.OutlookBodyMaterializationCount, "out-of-scope mail is rejected before body access");
+                    var allowed = executor.ResourceGateway.Read(session, new ResourceReadRequest {
+                        Reference = listed.Items.Single().Reference, Representation = "text" }).Result;
+                    AssertTrue(allowed.Complete, "the admitted Inspector/folder mail remains readable");
+                }
+                adapter.OutlookIsMailTarget = false;
+                adapter.OutlookExcludeSecondMail = false;
+                var boundAlias = second.Reference.Uri.Substring(0, second.Reference.Uri.LastIndexOf('/') + 1) + "mail-bound";
+                var aliasDenied = false;
+                try { executor.ResourceGateway.Read(session, new ResourceReadRequest { Reference = new ResourceRef(boundAlias), Representation = "text" }); }
+                catch (ResourceRequestException) { aliasDenied = true; }
+                AssertTrue(aliasDenied, "Inspector-only unsaved-mail alias cannot resolve a folder selection");
+                adapter.OutlookDiscoveryTransform = snapshot => {
+                    var first = snapshot.Items[0];
+                    foreach (var item in snapshot.Items) { item.Subject = first.Subject; item.Sender = first.Sender; item.Received = first.Received; }
+                    return snapshot;
+                };
+                var duplicate = executor.ResourceGateway.List(session, "document", LiveDocumentResourceProvider.OutlookMailKind, null, 10).Items[0];
+                var before = adapter.OutlookBodyMaterializationCount;
+                var ambiguous = executor.ExecuteManual(Command(ResourceToolCatalog.ReadToolId,
+                    "target", ResourceGatewayService.IntentTarget(duplicate)), tools, new AppSettings(), false, false, session);
+                AssertTrue(!ambiguous.Success, "duplicate semantic targets are not silently selected");
+                AssertEqual(before, adapter.OutlookBodyMaterializationCount, "ambiguity never materializes mail body");
+            });
+        }
+
         private static void OutlookCapturesPreserveCompleteBodies()
         {
             WithTempExecutor(FakeOfficeAdapter.ForHost("Outlook"), (executor, adapter) =>
@@ -117,9 +198,8 @@ namespace RNAssistant.Harness
                 AssertEqual(count + 1, adapter.OutlookBodyMaterializationCount, "capture reads body once");
                 AssertEqual(1, exact.Attachments.Count, "capture includes attachment metadata");
 
-                var rejected = service.ReadMail(new OutlookReadMailRequest { Content = "message", MaxChars = 10 }, CancellationToken.None);
-                AssertEqual(OutlookOutcomeStatus.Error, rejected.Status, "short requested limit is not clipped success");
-                AssertEqual("RESOURCE_SNAPSHOT_TOO_LARGE", rejected.ErrorCode, "oversize is explicit");
+                AssertEqual("RESOURCE_SNAPSHOT_TOO_LARGE", OutlookCaptureError(service,
+                    new OutlookReadMailRequest { Content = "message", MaxChars = 10 }), "oversize is explicit, not clipped success");
                 adapter.OutlookSelectedBody = new string('x', OutlookService.MaxBodyChars + 1);
                 count = adapter.OutlookBodyMaterializationCount;
                 var metadata = service.CaptureMail(new OutlookReadMailRequest { Content = "attachments", MaxChars = 1 }, CancellationToken.None);
@@ -153,8 +233,8 @@ namespace RNAssistant.Harness
                 })
                 {
                     adapter.OutlookReadSnapshotTransform = fault;
-                    var result = service.ReadMail(request, CancellationToken.None);
-                    AssertEqual(OutlookOutcomeStatus.Error, result.Status, "incomplete or mismatched capture fails closed");
+                    AssertTrue(!string.IsNullOrEmpty(OutlookCaptureError(service, request)),
+                        "incomplete or mismatched capture fails closed");
                 }
                 adapter.OutlookReadSnapshotTransform = snapshot => { snapshot.BodyCaptured = false; return snapshot; };
                 var runtime = OutlookRuntime(executor, adapter);
@@ -212,14 +292,9 @@ namespace RNAssistant.Harness
                             collected.Result.DataJson)["months"]).Count,
                         "Outlook collection preserves monthly grouping");
 
-                    var exactRead = new ToolCall(
-                        "outlook-exact", OutlookToolIds.ReadMail,
-                        "{\"entryId\":\"mail-2\",\"content\":\"message\"}");
-                    var exact = ExecuteNative(
-                        runtime, exactRead, runtime.Describe(exactRead));
-                    AssertEqual("Quarterly plan",
-                        (string)JObject.Parse(exact.Result.DataJson)["subject"],
-                        "Outlook explicit EntryID remains exact");
+                    var exact = new OutlookService(adapter).CaptureMail(new OutlookReadMailRequest {
+                        EntryId = "mail-2", Content = "message", MaxChars = OutlookService.MaxBodyChars }, CancellationToken.None);
+                    AssertEqual("Quarterly plan", exact.Mail.Subject, "runtime-owned EntryID stays exact");
 
                     var draft = new ToolCall(
                         "outlook-draft", OutlookToolIds.CreateDraft,
@@ -340,7 +415,7 @@ namespace RNAssistant.Harness
                     AssertTrue(result.Success && ownerSta,
                         "Outlook mutation stays on bound owner STA");
 
-                    var source = executor.ExecuteManual(Command(OutlookToolIds.ReadMail, "content", "both"),
+                    var source = executor.ExecuteManual(Command(ResourceToolCatalog.ReadToolId, "target", "selection: Current Office selection", "representation", "source"),
                         tools, new AppSettings(), false, false, chat);
                     AssertTrue(source.Success && readOwnerSta, "exact mail capture stays on bound owner STA");
                     var sourceReads = inner.OutlookBodyMaterializationCount;
@@ -349,7 +424,7 @@ namespace RNAssistant.Harness
                         operation => operation ==
                             FakeOfficeAdapter.OutlookCreateDraftOperation);
                     dispatcher.Invoke(() => document.IsAlive = false);
-                    var closedSource = executor.ExecuteManual(Command(OutlookToolIds.ReadMail),
+                    var closedSource = executor.ExecuteManual(Command(ResourceToolCatalog.ReadToolId, "target", "selection: Current Office selection"),
                         tools, new AppSettings(), false, false, chat);
                     AssertTrue(!closedSource.Success, "closed window cannot capture mail");
                     AssertEqual(sourceReads, inner.OutlookBodyMaterializationCount, "closed capture never reaches the body getter");
@@ -365,6 +440,12 @@ namespace RNAssistant.Harness
                         "closed Outlook target never reaches direct backend");
                 }
             });
+        }
+
+        private static string OutlookCaptureError(OutlookService service, OutlookReadMailRequest request)
+        {
+            try { service.CaptureMail(request, CancellationToken.None); return null; }
+            catch (OutlookBackendException error) { return error.ErrorCode; }
         }
 
         private static NativeToolRuntimeAdapter OutlookRuntime(

@@ -22,10 +22,11 @@ safety, refusal и review/reset на prompt schema 12. Windows/live-provider gat
 Resource cutover / Outlook (2026-09-06, open): `MailItem.Body` materializes a whole
 COM string before the character ceiling can reject it; exact-capture completion
 does not prove bounded source allocation. Owner: Outlook backend/resource cutover.
-Also, the existing `ResolveMail(entryId)` uses session-wide `GetItemFromID` without
-checking Inspector/folder membership. The next resource slice must establish bound
-mail identity/discovery before exposing those targets; it must not inherit that
-lookup as unrestricted resource authority. No scope/large-mail Windows gate is closed.
+The former session-wide `ResolveMail(entryId)` lookup is contained host-neutral:
+Inspector lookup uses only its retained mail; folder lookup supplies StoreID and
+checks parent StoreID/EntryID before capture. Discovery reads bound headers only.
+Real COM membership/unsaved-mail and large-mail execution remain unqualified;
+no scope/large-mail Windows gate is closed.
 
 | ID | Priority | Риск | Владелец | Защита / фаза | Статус |
 |---|---|---|---|---|---|

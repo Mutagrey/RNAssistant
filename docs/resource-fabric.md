@@ -208,12 +208,26 @@ observation is separate and unchanged; it does not expose the slide `source` vie
 Real COM shape/notes capture, selection and final catalog/model qualification remain
 open on Windows.
 
-## Outlook capture prerequisite
+## Outlook mail reads
 
 `OutlookService.CaptureMail` is the typed owner of complete mail-source capture
-and reply/update preparation. Its current `ReadMail` tool-output wrapper delegates
-to that same owner; it is still pending removal, not a second resource pipeline.
-Message/both reads return the entire body within the requested ceiling (at most
+and reply/update preparation. `outlook.read_mail` and its output wrapper are removed.
+Model/manual reads and HTML bindings use the existing Gateway/document provider,
+shared authority, CAS and evidence. Source continuations retain the first capture;
+historical pages do not read Outlook or fall forward to another mail.
+
+`common.resources_find` discovers `Outlook mail` targets from header-only bounded
+discovery (up to 500 folder items; truncation remains explicit). Targets use subject,
+sender and received time; identical targets fail as ambiguous. Runtime owns EntryID
+and resource keys. An Inspector admits only its retained mail, including an unsaved
+mail; a folder lookup supplies its StoreID and verifies parent StoreID/EntryID.
+Moved/out-of-scope mail cannot be freshly read through a previously discovered URI.
+The document/selection aliases mean current selected/open mail, not the whole folder.
+Use a discovered mail child for stable mail identity within this bound scope.
+
+The `text` view contains the full body; `source` includes headers, body and attachment
+metadata (not attachment bytes); `structure` includes headers/attachment metadata
+without reading body. Message reads return the entire body within the ceiling (at most
 one million characters) or fail explicitly. They never return a clipped body.
 The backend reads body once and derives the preparation token from those same
 captured fields; source/attachment getter failures are not replaced by empty values.
@@ -225,10 +239,9 @@ fail before the snapshot reaches a caller or a mutation dispatch.
 Outlook OOM exposes `MailItem.Body` as one string: the character ceiling is enforced
 after that property read, **not** before COM materialization. Bounded body acquisition
 and real large-mail execution remain open. Folder search/collection previews and
-mutation read-back are separate existing contours, unchanged by this prerequisite.
-Next: bound mail discovery/identity (Inspector versus folder/selection), Gateway/CAS
-source views, consumer switch and removal of `outlook.read_mail`/its output wrapper.
-The current global EntryID lookup must not become unrestricted resource discovery.
+mutation read-back remain specialized existing contours. Real Inspector/folder/store
+membership, unsaved-mail identity, WebView2 and final catalog/model qualification
+remain open; this reader switch does not close those gates.
 
 ## Conversation loop
 
