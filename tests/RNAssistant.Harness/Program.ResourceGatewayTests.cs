@@ -304,6 +304,74 @@ namespace RNAssistant.Harness
                         out historyError),
                     "stored resource URI target requires explicit chat reset");
 
+                var backendCallsBeforeLegacyUri = adapter.TotalBackendCallCount;
+                foreach (var invalidTarget in new[]
+                {
+                    "vba://project/Legacy.dotm",
+                    "cas://sha256/deadbeef",
+                    "file://document/source",
+                    "https://example.test/resource"
+                })
+                {
+                    var invalidUri = execute(
+                        ResourceToolCatalog.ReadToolId,
+                        JsonConvert.SerializeObject(new
+                        {
+                            target = invalidTarget,
+                            representation = ResourceRepresentations.Text
+                        }));
+                    AssertEqual(ToolExecutionOutcome.Error, invalidUri.Outcome,
+                        "URI-like model target is rejected: " + invalidTarget);
+                    AssertEqual("resource_target_runtime_owned",
+                        (string)JObject.Parse(invalidUri.Result.DataJson)["code"],
+                        "URI-like target has the stable semantic recovery code");
+                    AssertTrue(invalidUri.Message.IndexOf(invalidTarget,
+                            StringComparison.OrdinalIgnoreCase) < 0,
+                        "URI-like target is not echoed into model context");
+                    AssertTrue(!ModelToolResultProjection.ValidateAcceptedCall(
+                            new ToolCall("invalid_history_" + invalidTarget.Length,
+                                ResourceToolCatalog.ReadToolId,
+                                JsonConvert.SerializeObject(new
+                                {
+                                    target = invalidTarget,
+                                    representation = ResourceRepresentations.Text
+                                })),
+                            out historyError),
+                        "stored URI-like target requires explicit chat reset");
+                }
+                AssertEqual(backendCallsBeforeLegacyUri, adapter.TotalBackendCallCount,
+                    "URI-like targets are rejected before Office provider access");
+
+                AssertTrue(!ModelToolResultProjection.ValidateAcceptedCall(
+                        new ToolCall("invalid_bind_history",
+                            HtmlWorkspaceToolCatalog.BindDataToolId,
+                            JsonConvert.SerializeObject(new
+                            {
+                                name = "source",
+                                target = "vba://project/Legacy.dotm"
+                            })),
+                        out historyError),
+                    "stored HTML binding URI target requires explicit chat reset");
+                AssertTrue(!ModelToolResultProjection.ValidateAcceptedCall(
+                        new ToolCall("invalid_restore_history",
+                            VbaToolCatalog.RestoreBackup,
+                            JsonConvert.SerializeObject(new
+                            {
+                                target = "vba://backup/legacy"
+                            })),
+                        out historyError),
+                    "stored VBA restore URI target requires explicit chat reset");
+                AssertTrue(ModelToolResultProjection.ValidateAcceptedCall(
+                        new ToolCall("semantic_history",
+                            ResourceToolCatalog.ReadToolId,
+                            JsonConvert.SerializeObject(new
+                            {
+                                target = "VBA project: Current.dotm VBA project",
+                                representation = ResourceRepresentations.Structure
+                            })),
+                        out historyError),
+                    "current semantic target remains replay-compatible");
+
                 var calls = new Dictionary<string, string>(StringComparer.Ordinal)
                 {
                     [ResourceToolCatalog.FindToolId] = "{\"query\":\"body\",\"scope\":\"conversation\"}",

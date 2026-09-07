@@ -103,6 +103,13 @@ equal-byte publications/restores remain distinct. Capability reference `action=n
 reconstructs the same logical cursor from durable evidence. Catalog children have
 no synthetic heads: the common reducer checks their immutable identity and exact
 root-publication dependency. Open leases remain pinned after publication changes.
+Model-facing semantic targets are opaque labels copied verbatim from
+`RUNTIME_CONTEXT` or `common.resources_find`; they never use a `scheme://` form.
+The shared resolver rejects every URI-shaped target (`rna://`, retired `vba://`,
+`cas://`, file/network URIs and equivalent schemes) before provider or Office
+access. Current-history validation applies the same rule to resource reads, HTML
+data bindings and VBA backup restores; retained calls containing such targets are
+explicit reset-only, not replayed or silently translated.
 `CatalogPublicationService` proves visibility from canonical authority commits,
 never prepared metadata alone; missing/corrupt CAS fails with
 `RESOURCE_SNAPSHOT_UNAVAILABLE`. Historical reads neither activate a generation nor

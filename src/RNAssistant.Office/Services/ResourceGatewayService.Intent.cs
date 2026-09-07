@@ -119,10 +119,10 @@ namespace RNAssistant.Office.Services
                     "resource_target_required",
                     true);
             }
-            if (IsRuntimeOwnedIntentTarget(target))
+            if (IsUriLikeIntentTarget(target))
             {
                 throw new ResourceRequestException(
-                    "Exact resource URIs are runtime-owned and cannot be used as model targets. Run common.resources_find and pass one exact returned semantic target.",
+                    "Resource URIs cannot be used as model targets. Copy one exact semantic target from RUNTIME_CONTEXT or common.resources_find; it never contains ://.",
                     "resource_target_runtime_owned",
                     true);
             }
@@ -261,10 +261,20 @@ namespace RNAssistant.Office.Services
             };
         }
 
-        internal static bool IsRuntimeOwnedIntentTarget(string target)
+        internal static bool IsUriLikeIntentTarget(string target)
         {
-            return (target ?? string.Empty).Trim().StartsWith(
-                "rna://", StringComparison.OrdinalIgnoreCase);
+            var value = (target ?? string.Empty).Trim();
+            var separator = value.IndexOf("://", StringComparison.Ordinal);
+            if (separator <= 0) return false;
+            if (!char.IsLetter(value[0])) return false;
+            for (var index = 1; index < separator; index++)
+            {
+                var character = value[index];
+                if (!char.IsLetterOrDigit(character) &&
+                    character != '+' && character != '-' && character != '.')
+                    return false;
+            }
+            return true;
         }
 
         private List<ResourceIntentState> EnumerateIntentResources(

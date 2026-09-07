@@ -296,12 +296,13 @@ namespace RNAssistant.Office.Services
                 if (arguments != null && ToolSchemaSupport.ValidateArguments(
                     arguments, parsedSchema, false, out validationError))
                 {
-                    if (string.Equals(call.Name, ResourceToolCatalog.ReadToolId,
-                            StringComparison.Ordinal) &&
-                        ResourceGatewayService.IsRuntimeOwnedIntentTarget(
-                            (string)arguments["target"]))
+                    var semanticTargetField = SemanticTargetField(call.Name);
+                    if (semanticTargetField != null &&
+                        ResourceGatewayService.IsUriLikeIntentTarget(
+                            (string)arguments[semanticTargetField]))
                     {
-                        error = "Stored common.resources_read target contains a runtime-owned URI.";
+                        error = "Stored " + call.Name + "." + semanticTargetField +
+                            " contains a URI instead of a current semantic target.";
                         return false;
                     }
                     return true;
@@ -314,6 +315,18 @@ namespace RNAssistant.Office.Services
                 error = "Stored " + call.Name + " arguments are not a JSON object for the current semantic schema.";
                 return false;
             }
+        }
+
+        private static string SemanticTargetField(string toolName)
+        {
+            if (string.Equals(toolName, ResourceToolCatalog.ReadToolId,
+                    StringComparison.Ordinal) ||
+                string.Equals(toolName, HtmlWorkspaceToolCatalog.BindDataToolId,
+                    StringComparison.Ordinal) ||
+                string.Equals(toolName, VbaToolCatalog.RestoreBackup,
+                    StringComparison.Ordinal))
+                return "target";
+            return null;
         }
 
         private static bool IsSwitchedResult(ChatMessage message)
