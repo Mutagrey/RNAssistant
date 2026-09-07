@@ -351,6 +351,14 @@ remain usable in the narrow Office task pane. CodeMirror refresh after tab chang
 `min-width:0`, overflow ownership and responsive grids are verified in real
 WebView2, not inferred from a desktop browser screenshot.
 
+The package editor stacks the wrapping component toolbar, metadata and full-width
+code editor vertically. Test arguments use neutral separated rows, themed controls
+at least 34 px high and a 760 px maximum form width; empty output is hidden.
+`tests/web/tool-library-layout.test.js` measures shipped markup/CSS and CodeMirror
+in Chromium at four pane/window combinations, in both themes and across repeated
+tab switches. This replaces CSS-string layout assertions; Windows WebView2/DPI
+qualification remains open.
+
 ## R61 delivery and gates
 
 1. **Done host-neutral (11O0, refreshed through 11O6):** freeze every effective built-in tool ID/schema by mode and host. For each

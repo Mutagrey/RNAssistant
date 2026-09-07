@@ -102,15 +102,6 @@
 }
 
 @media (max-width: 480px) {
-  .component-toolbar {
-    grid-template-columns: minmax(0, 1fr);
-  }
-
-  .component-toolbar label,
-  .component-toolbar button {
-    grid-column: 1;
-  }
-
   .tabs {
     display: grid;
     grid-template-columns: repeat(5, minmax(0, 1fr));

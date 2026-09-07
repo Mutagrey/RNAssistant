@@ -595,6 +595,12 @@ COM/VSTO behavior remains Windows-only: validate with Windows x64, Office and VS
 
 Tool editor smoke after pipeline removal: `node tests/web/tools-editor.test.js` exercises VBA draft creation, editor source synchronization and built-in clone rejection against the shipped HTML IDs. This is not Windows/WebView layout validation.
 
+Tool Library layout: `node tests/web/tool-library-layout.test.js` requires Playwright
+(resolvable through `NODE_PATH`) and Chromium; `BROWSER_EXECUTABLE` optionally selects
+installed Chrome. It checks actual shipped HTML/CSS and CodeMirror geometry at four
+pane/window sizes in both themes. Set `LAYOUT_SCREENSHOT=/tmp/library.png` to save
+per-size/theme/tab screenshots. This does not qualify Windows WebView2.
+
 Typed package-action normalization: `node tests/web/tool-package-actions.test.js`
 checks that install/remove accepts only result contract v1 with exact lowercase
 fields/effects and rejects the deleted PascalCase compatibility shape.

@@ -483,8 +483,9 @@
 }
 .vba-package-editor {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
-  gap: 10px;
+  grid-template-columns: minmax(0, 1fr);
+  align-content: start;
+  gap: 12px;
 }
 
 .vba-package-editor .wide {
@@ -497,7 +498,7 @@
 }
 
 .tool-page-tabs { width: 100%; min-width: 0; max-width: 100%; overflow-x: auto; overflow-y: hidden; }
-.tool-editor-page { display: grid; gap: 10px; width: 100%; min-width: 0; max-width: 100%; }
+.tool-editor-page { display: grid; align-content: start; gap: 10px; width: 100%; min-width: 0; max-width: 100%; }
 .tool-editor-page > *,
 .tool-editor-page .form-grid > *,
 .vba-package-editor > *,
@@ -517,8 +518,8 @@
 .json-editor-toolbar { display: flex; gap: 8px; align-items: center; justify-content: space-between; margin-bottom: 6px; color: var(--muted); font-size: 11px; font-weight: var(--label-font-weight); }
 .json-editor-toolbar button { min-height: 27px; padding: 2px 8px; font-size: 11px; }
 .tool-schema-json textarea { width: 100%; }
-.component-toolbar { display: grid; grid-template-columns: minmax(150px, 1fr) repeat(4, auto); gap: 6px; align-items: end; min-width: 0; }
-.component-toolbar label { width: 100%; min-width: 0; }
+.component-toolbar { display: flex; flex-wrap: wrap; gap: 6px; align-items: end; min-width: 0; }
+.component-toolbar label { display: grid; flex: 1 1 220px; gap: 5px; min-width: 0; color: var(--muted); font-size: 12px; }
 .component-toolbar button { min-width: 0; white-space: normal; }
 .tool-test-actions { display: flex; flex-wrap: wrap; gap: 6px; align-items: end; min-width: 0; }
 .advanced-json { width: 100%; min-width: 0; max-width: 100%; overflow: hidden; }
@@ -531,10 +532,8 @@
   display: grid;
   gap: 6px;
   min-width: 0;
-  padding: 10px;
-  border: 1px solid var(--line);
-  border-radius: var(--control-radius);
-  background: color-mix(in srgb, var(--bg) 96%, var(--accent) 4%);
+  padding: 0 0 14px;
+  border-bottom: 1px solid var(--line);
 }
 
 .tool-argument-head {
@@ -555,32 +554,28 @@
 }
 
 .tool-argument-requirement {
-  padding: 2px 6px;
-  border-radius: 999px;
-  background: var(--line);
+  padding: 2px 0;
   color: var(--muted);
   font-size: 10px;
   line-height: 1.3;
 }
 
-.tool-argument-requirement.is-required { background: rgba(220, 38, 38, .1); color: var(--danger); }
-.tool-argument-requirement.is-conditional { background: rgba(217, 119, 6, .12); color: #9a5b08; }
-
 .tool-argument-control-row {
-  display: grid;
-  grid-template-columns: minmax(118px, .34fr) minmax(0, 1fr);
+  display: flex;
+  flex-wrap: wrap;
   gap: 7px;
   align-items: start;
   min-width: 0;
 }
 
-.tool-argument-control-row > :only-child { grid-column: 1 / -1; }
+.tool-argument-control-row > :last-child { flex: 1 1 220px; }
+.tool-argument-control-row > .tool-argument-mode { flex: 0 1 145px; }
 .tool-argument-control-row input:not([type="checkbox"]),
 .tool-argument-control-row select,
 .tool-argument-control-row textarea { width: 100%; min-width: 0; max-width: 100%; }
-.tool-argument-control-row input[type="checkbox"] { width: 18px; height: 18px; margin: 8px 0; }
+.tool-argument-control-row input[type="checkbox"] { flex: 0 0 auto; width: 18px; height: 18px; margin: 8px 0; }
 .tool-argument-mode { font-size: 11px; }
-.tool-argument-json { resize: vertical; font-family: Consolas, "Cascadia Mono", "Courier New", monospace; font-size: 12px; }
+.tool-argument-control-row .tool-argument-json { resize: vertical; font-family: Consolas, "Cascadia Mono", "Courier New", monospace; font-size: 12px; }
 .tool-argument-description,
 .tool-argument-constraints,
 .tool-argument-error { min-width: 0; overflow-wrap: anywhere; white-space: normal; }
@@ -769,11 +764,33 @@
   .schema-property-row { grid-template-columns: minmax(80px,1fr) 88px 24px 30px; }
   .schema-property-row input:nth-of-type(3), .schema-property-row input:nth-of-type(4) { grid-column: 1 / -1; }
   .tool-editor-page.form-grid, .tool-editor-page .form-grid { grid-template-columns: 1fr; }
-  .component-toolbar { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-  .component-toolbar label { grid-column: 1 / -1; }
-  .component-toolbar button { width: 100%; }
-  .tool-argument-control-row { grid-template-columns: 1fr; }
-  .tool-argument-control-row > * { grid-column: 1; }
   .skill-editor-fields { grid-template-columns: minmax(0, 1fr) minmax(120px, .65fr); }
   .skill-enabled-field { grid-column: 1 / -1; }
 }
+
+/* Dynamic fields share one control surface in both themes. */
+.component-toolbar select,
+.tool-argument-control-row input:not([type="checkbox"]),
+.tool-argument-control-row select,
+.tool-argument-control-row textarea {
+  box-sizing: border-box;
+  min-height: 34px;
+  padding: 7px 9px;
+  border: 1px solid var(--line);
+  border-radius: var(--control-radius);
+  background: var(--panel, #fff);
+  color: var(--text);
+  font: inherit;
+  font-size: 12px;
+}
+.component-toolbar select:focus,
+.tool-argument-control-row > :focus {
+  border-color: var(--accent);
+  outline: 2px solid var(--focus-ring-tight);
+  outline-offset: 0;
+}
+.tool-argument-control-row > :disabled { opacity: .55; }
+.tool-editor-page[data-tool-page-view="test"] { max-width: 760px; gap: 14px; }
+#toolRunArgsVisual { gap: 14px; }
+#toolRunArgsError:empty,
+#toolRunOutput:empty { display: none; }

@@ -286,13 +286,7 @@ console.log("PASS Tool Library form: typed controls, omit/null, bounds and seman
   assert.match(String(outputs.at(-1)), /ToolRunResult v1/);
   console.log("PASS Tool Library actions: strict result v1 and cursor-free continuation");
 
-  const css = fs.readFileSync(path.join(root, "web/css/app-tools.css"), "utf8");
-  const responsive = fs.readFileSync(path.join(root, "web/css/app-responsive.css"), "utf8");
-  assert.match(css, /\.tool-argument-control-row\s*\{/);
-  assert.match(css, /\.component-toolbar\s*\{[^}]*display:\s*grid/s);
-  assert.match(css, /\.library-editor-pane\s*\{[^}]*overflow:\s*hidden/s);
-  assert.match(responsive, /#toolEditorPanel \.library-editor-scroll/);
-  console.log("PASS Tool Library layout: right pane owns responsive overflow");
+
 }()).catch(error => {
   console.error(error);
   process.exitCode = 1;
