@@ -77,3 +77,29 @@ sending = false; refresh();
 assert.equal(box.firstChild, grouped);
 assert.ok(titles(grouped).includes("Ответвить чат отсюда"));
 console.log("PASS message actions: send/edit/approval/reconnect transitions restore footers without remounting content");
+
+// A persisted mid-run snapshot and the live replay must produce one run unit.
+vm.runInContext(fs.readFileSync(path.join(__dirname, "../../web/js/app-agent-model.js"), "utf8"), ctx);
+const activity = (id, status) => ({ RunId: "r", StepId: "s", StepMessage: "One step",
+  Kind: "tool", ToolId: "common.resources_read", ToolCallId: id, Status: status });
+const persisted = { message: { RunId: "r", Id: "p" }, index: 0, activity: activity("a", "completed") };
+let snapshot = { items: [persisted], finalMessage: null, nextIndex: 1 };
+ctx.canCollectAgentRunAt = () => true; ctx.collectAgentRun = () => snapshot;
+ctx.state.liveAgentRun = [activity("a", "running"), activity("b", "running")];
+ctx.renderAgentRunArticle = value => { ctx.projected = value; return new Element(); };
+let units = ctx.buildMessageUnits();
+assert.equal(units.length, 1); assert.equal(units[0].key, "live:agent-run");
+units[0].render();
+assert.equal(ctx.projected.items.length, 2);
+assert.equal(ctx.projected.items[0].activity.Status, "completed", "persisted result wins over stale live progress");
+assert.equal(ctx.projected.items[0].message, persisted.message, "resource provenance is retained");
+ctx.agentRunUnitSignature = () => { throw new Error("stream must not serialize persisted history"); };
+ctx.buildLiveMessageUnits();
+ctx.agentRunUnitSignature = () => "snapshot";
+snapshot = { items: [persisted], finalMessage: { message: { RunId: "r", Id: "final" }, index: 1 }, nextIndex: 1 };
+units = ctx.buildMessageUnits();
+assert.equal(units.length, 1); assert.notEqual(units[0].key, "live:agent-run", "terminal snapshot removes live replay");
+ctx.state.liveAgentRun = [Object.assign(activity("a", "running"), { RunId: "other" })];
+units = ctx.buildMessageUnits();
+assert.equal(units.length, 2, "distinct runtime runs are not merged by matching prose or call names");
+console.log("PASS run overlap: persisted/live replay merges once by runtime identity and yields to the final snapshot");

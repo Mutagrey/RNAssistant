@@ -1,10 +1,16 @@
 var CHAT_BOTTOM_THRESHOLD = 64;
 var renderedMessagesChatId = null;
 var renderedMessageUnits = {};
+var renderedLiveRunBase = null;
+var renderedLiveRunSuppressed = false;
+var renderedLiveRunBaseSignature = null;
 
 function resetRenderedMessageUnits(box) {
   if (box && typeof clearMarkdownEnhancements === "function") clearMarkdownEnhancements(box);
   renderedMessageUnits = {};
+  renderedLiveRunBase = null;
+  renderedLiveRunBaseSignature = null;
+  renderedLiveRunSuppressed = false;
   if (box) box.textContent = "";
 }
 
@@ -406,18 +412,44 @@ function renderMessageArticle(message, index) {
   return node;
 }
 
+function liveAgentActivities() {
+  return state.liveAgentRun && state.liveAgentRun.length
+    ? state.liveAgentRun : (state.liveActivity ? [state.liveActivity] : []);
+}
+
+function liveAgentRunId() {
+  var activities = liveAgentActivities();
+  for (var i = activities.length - 1; i >= 0; i -= 1) {
+    var id = activities[i].RunId || activities[i].runId;
+    if (id) return id;
+  }
+  return "";
+}
+
 function renderLiveAgentRun() {
-  var activities = state.liveAgentRun && state.liveAgentRun.length
-    ? state.liveAgentRun
-    : (state.liveActivity ? [state.liveActivity] : []);
-  if (!activities.length) return null;
-  return renderAgentRunArticle({
-    live: true,
-    items: activities.map(function (activity) {
-      return { message: null, index: -1, activity: activity };
-    }),
-    finalMessage: null
+  var activities = liveAgentActivities();
+  if (!activities.length || renderedLiveRunSuppressed) return null;
+  var items = renderedLiveRunBase ? renderedLiveRunBase.items.slice() : [];
+  var byKey = Object.create(null);
+  items.forEach(function (item, index) { byKey[activityTimelineKey(item.activity)] = index; });
+  activities.forEach(function (activity) {
+    var key = activityTimelineKey(activity);
+    var index = byKey[key];
+    if (index !== undefined) {
+      // Durable terminal results win over a stale live running snapshot.
+      if (isActiveTimelineStatus(activityStatus(items[index].activity))) {
+        items[index] = Object.assign({}, items[index], { activity: activity });
+      }
+    } else {
+      byKey[key] = items.length;
+      items.push({ message: null, index: -1, activity: activity });
+    }
   });
+  var node = renderAgentRunArticle({ live: true, items: items, finalMessage: null });
+  if (renderedLiveRunBase && typeof appendAgentRunResourceCards === "function") {
+    appendAgentRunResourceCards(node.querySelector(".agent-run-wrap"), renderedLiveRunBase.items, null);
+  }
+  return node;
 }
 
 function renderLiveStreamMessage() {
@@ -510,12 +542,25 @@ function refreshMessageFooter(node, append) {
 function buildMessageUnits() {
   var units = [];
   var actionsSignature = messageActionsSignature();
+  var liveRunId = liveAgentRunId();
+  renderedLiveRunBase = null;
+  renderedLiveRunBaseSignature = null;
+  renderedLiveRunSuppressed = false;
   for (var index = 0; index < state.messages.length; index += 1) {
     if (messageProtocolMessage(state.messages[index])) {
       continue;
     }
     if (canCollectAgentRunAt(index)) {
       var run = collectAgentRun(index);
+      if (liveRunId && agentRunId(run.items, run.finalMessage) === liveRunId) {
+        if (!run.finalMessage) {
+          renderedLiveRunBase = run;
+          renderedLiveRunBaseSignature = agentRunUnitSignature(run);
+          index = run.nextIndex - 1;
+          continue;
+        }
+        renderedLiveRunSuppressed = true;
+      }
       appendMessageUnit(units, agentRunUnitKey(run), agentRunUnitSignature(run), (function (capturedRun) {
         return function () { return renderAgentRunArticle(capturedRun); };
       }(run)), actionsSignature, (function (capturedRun) {
@@ -549,9 +594,10 @@ function buildMessageUnits() {
 
 function buildLiveMessageUnits() {
   var units = [];
-  if ((state.liveAgentRun && state.liveAgentRun.length) || state.liveActivity) {
+  if (!renderedLiveRunSuppressed && liveAgentActivities().length) {
     appendMessageUnit(units, "live:agent-run",
-      JSON.stringify({ stream: "agent", value: state.liveAgentRun || state.liveActivity || null }),
+      JSON.stringify({ stream: "agent", value: liveAgentActivities(),
+        base: renderedLiveRunBaseSignature }),
       function () { return renderLiveAgentRun(); });
   }
 
