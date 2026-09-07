@@ -529,6 +529,14 @@ namespace RNAssistant.Harness
                 AssertEqual("vba_manifest_metadata_mismatch",
                     mismatch.ErrorCode,
                     "manifest id mismatch is not masked as an invalid custom host");
+                var mismatchRecovery =
+                    JObject.Parse(mismatch.DataJson)["recovery"];
+                AssertEqual("RejectedNoEffect",
+                    (string)mismatchRecovery?["failureKind"],
+                    "manifest validation certifies no package mutation");
+                AssertEqual("Replan",
+                    (string)mismatchRecovery?["retryPolicy"],
+                    "manifest validation asks the model for corrected arguments");
 
                 var missingManifest = new ToolInvocation
                 {

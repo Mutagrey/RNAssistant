@@ -25,7 +25,14 @@ default prompts, three prompt-review cases, exact empty text and on-demand rerea
 Only host-neutral harness execution; target-model quality and Windows delivery
 remain unqualified.
 
-Latest correction (2026-09-07, test-only): the Plan restore/removal fixture now
+Latest correction (2026-09-07): Tool authoring recovery is now owned by the typed
+outcome instead of inferred in the handler. Schema, manifest and package validation
+failures are `RejectedNoEffect/Replan`; unavailable authoring storage is
+`ToolDefect/None`; both preparation and execution preserve the contract. The exact
+authoring regression passes host-neutral. Windows/WebView2 qualification remains
+open.
+
+Previous correction (2026-09-07, test-only): the Plan restore/removal fixture now
 uses the current provenance-bearing structured compaction reply instead of the
 removed free-form `summary` response. The append-only Plan test passes again; no
 production behavior changed. A separate historical-attachment projection failure

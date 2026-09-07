@@ -584,6 +584,9 @@ pre-dispatch validation/state refusals as `RejectedNoEffect/Replan`; missing ses
 is non-retryable, while a successful mutation returned without its required dispatch
 boundary is a `ToolDefect`. Their legacy `retryable` field is not interpreted as a
 transient retry signal.
+Tool-authoring validation owns the same decision in `ToolAuthoringOutcome`: invalid
+schema/manifest/package input is `RejectedNoEffect/Replan`, unavailable authoring
+storage is `ToolDefect`, and preparation/execution projections preserve that contract.
 Only the kernel aggregates records. `ChatActivity.ExecutionEvidence`
 preserves compact native facts through existing event operations and clone; a
 present incomplete evidence/policy object fails deserialization.

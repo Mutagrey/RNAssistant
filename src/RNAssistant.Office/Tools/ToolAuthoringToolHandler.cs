@@ -49,7 +49,8 @@ namespace RNAssistant.Office.Tools
             return Task.FromResult(new ToolPreparationResult(
                 ToolAuthoringToolProjection.Result(preparation.Outcome),
                 preparation.Outcome.Status == ToolAuthoringOutcomeStatus.Ok
-                    ? preparation.PreparedStateJson : null));
+                    ? preparation.PreparedStateJson : null,
+                preparation.Outcome.Recovery));
         }
 
         public Task<ToolHandlerResult> ExecuteAsync(
@@ -71,7 +72,8 @@ namespace RNAssistant.Office.Tools
             ToolAuthoringOutcome outcome)
         {
             return new ToolHandlerResult(
-                Result(outcome), Effect(outcome.Effect));
+                Result(outcome), Effect(outcome.Effect),
+                recovery: outcome.Recovery);
         }
 
         internal static RuntimeResult Result(ToolAuthoringOutcome outcome)

@@ -26,6 +26,7 @@ namespace RNAssistant.Office.Tools
         internal string DataJson { get; private set; }
         internal string ErrorCode { get; private set; }
         internal bool Retryable { get; private set; }
+        internal ToolRecoveryContract Recovery { get; private set; }
         internal bool Success { get { return Status == ToolAuthoringOutcomeStatus.Ok; } }
 
         internal static ToolAuthoringOutcome Ok(
@@ -43,7 +44,8 @@ namespace RNAssistant.Office.Tools
 
         internal static ToolAuthoringOutcome Error(
             string message, string dataJson = null,
-            string errorCode = null, bool retryable = false)
+            string errorCode = null, bool retryable = false,
+            ToolRecoveryContract recovery = null)
         {
             return new ToolAuthoringOutcome
             {
@@ -53,7 +55,10 @@ namespace RNAssistant.Office.Tools
                 DataJson = dataJson,
                 ErrorCode = string.IsNullOrWhiteSpace(errorCode)
                     ? "tool_authoring_failed" : errorCode,
-                Retryable = retryable
+                Retryable = retryable,
+                Recovery = recovery ?? new ToolRecoveryContract(
+                    ToolFailureKind.RejectedNoEffect,
+                    ToolRetryPolicy.Replan)
             };
         }
 

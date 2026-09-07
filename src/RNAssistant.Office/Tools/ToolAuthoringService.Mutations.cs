@@ -20,7 +20,10 @@ namespace RNAssistant.Office.Tools
                 return new ToolAuthoringPreparation(
                     ToolAuthoringOutcome.Error(
                         "Tool authoring store is not available.", null,
-                        "tool_store_unavailable", false));
+                        "tool_store_unavailable", false,
+                        new ToolRecoveryContract(
+                            ToolFailureKind.ToolDefect,
+                            ToolRetryPolicy.None)));
             }
             ToolCatalogEntry current;
             ToolCatalogEntry intended;
@@ -94,7 +97,10 @@ namespace RNAssistant.Office.Tools
             {
                 return ToolAuthoringOutcome.Error(
                     "Tool authoring store is not available.", null,
-                    "tool_store_unavailable", false);
+                    "tool_store_unavailable", false,
+                    new ToolRecoveryContract(
+                        ToolFailureKind.ToolDefect,
+                        ToolRetryPolicy.None));
             }
             JObject prepared;
             try
