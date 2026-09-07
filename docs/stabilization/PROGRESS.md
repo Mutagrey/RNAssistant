@@ -15,7 +15,24 @@ Markdown tools (slices 1b–2); shared editing, working-set UI and bounded index
 discovery remain open. This is not the full cutover. Existing Resource MASTER
 invariants and Windows gates remain in force; Phase 12 is not started.
 
-Latest correction (2026-09-07): Prompt/Skill authoring, HTML workspace,
+Latest correction (2026-09-07): the integrated `ModelContextCompiler` again owns
+oversized exact-read admission. If a complete successful resource/capability read
+does not fit after correctness filtering, its detached request projection becomes
+the explicit `resource_evidence_context_too_large` or
+`capability_evidence_context_too_large` error instead of failing the whole model
+request or exposing a partial success. The append-only durable Tool Result remains
+`ok` and immutable. Normal and large in-budget VBA evidence, exact capability
+discovery, disabled-skill isolation and the oversized-capability boundary pass
+host-neutral; Windows/WQ gates remain open.
+
+Previous validation correction (2026-09-07, test-only): capability/skill fixtures now
+enter the same immutable catalog publication used in production before testing
+`common.capabilities_read`. Injecting a model-visible skill without an exact
+`Publication` had created an impossible split snapshot and correctly failed with
+`RESOURCE_SNAPSHOT_UNAVAILABLE`. No fallback or production path was added; exact
+publication remains mandatory.
+
+Previous correction (2026-09-07): Prompt/Skill authoring, HTML workspace,
 Capability and native Plan-question outcomes now own typed recovery instead of
 leaving the kernel to interpret legacy `retryable` booleans. Model-correctable
 validation, stale guards and semantic-target refusals are

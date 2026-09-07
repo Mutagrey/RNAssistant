@@ -1685,20 +1685,24 @@ namespace RNAssistant.Harness
 
                 var executor = new OfficeToolExecutor(adapter, new VbaJournalStore(paths), store, new ToolStore(paths));
                 var tools = OfficeToolCatalog.ForHost(adapter.HostName).Concat(executor.GetControllerTools()).ToList();
+                var runtimeSkills = executor.CaptureSkills().Skills;
                 var enabledRead = executor.ExecuteManual(
                     Command("common.capabilities_read", "id", "common.a.b"), tools, new AppSettings(), false, false,
-                    new ChatSession(), 40, loaded, CancellationToken.None);
-                AssertTrue(enabledRead.Success, "enabled runtime skill can be read");
+                    NewSession(adapter), 40, runtimeSkills, CancellationToken.None);
+                AssertTrue(enabledRead.Success,
+                    "enabled runtime skill can be read: " +
+                    enabledRead.ErrorCode + " " + enabledRead.Message + " " +
+                    enabledRead.DataJson);
 
                 var disabledRead = executor.ExecuteManual(
                     Command("common.capabilities_read", "id", "common.a_b"), tools, new AppSettings(), false, false,
-                    new ChatSession(), 40, loaded, CancellationToken.None);
+                    NewSession(adapter), 40, runtimeSkills, CancellationToken.None);
                 AssertTrue(!disabledRead.Success, "disabled runtime skill cannot be read by agent");
                 AssertTrue(disabledRead.DataJson == null || disabledRead.DataJson.IndexOf("DISABLED_SKILL", StringComparison.Ordinal) < 0,
                     "disabled skill body is not exposed");
                 var confirmedRuntimeRead = executor.ExecuteManual(
                     Command("common.capabilities_read", "id", "common.a_b"), tools, new AppSettings(), false, true,
-                    new ChatSession(), 40, loaded.Where(item => item.Enabled).ToList(), CancellationToken.None);
+                    NewSession(adapter), 40, runtimeSkills, CancellationToken.None);
                 AssertTrue(!confirmedRuntimeRead.Success, "confirmation bypass does not broaden the runtime skill catalog");
             });
         }

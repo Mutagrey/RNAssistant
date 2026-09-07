@@ -221,7 +221,8 @@ namespace RNAssistant.Office.Services
                     {
                         if (_payloads == null)
                         {
-                            MarkUnavailable(atom, "Exact payload reader is unavailable.");
+                            MarkUnavailable(atom,
+                                "Exact payload reader is unavailable.");
                             receipt.ExcludedUnavailable++;
                             break;
                         }
@@ -229,7 +230,9 @@ namespace RNAssistant.Office.Services
                         {
                             if (atom.ContextRole == ContextNoteRole.UserInstruction)
                                 throw new PromptBudgetExceededException("A selected user instruction exceeds this request budget. Shorten or remove the note explicitly.", true);
-                            MarkUnavailable(atom, "Selected payload exceeds this request budget; select a narrower view.");
+                            if (!ReplaceOversizedExactReadEvidence(atom))
+                                MarkUnavailable(atom,
+                                    "Selected payload exceeds this request budget; select a narrower view.");
                             break;
                         }
                         try
@@ -251,10 +254,119 @@ namespace RNAssistant.Office.Services
             }
             var messages = atoms.SelectMany(item => item.Messages).ToList();
             receipt.EstimatedTokens = ModelContextBudget.EstimateMessagesTokens(messages, settings);
+            if (enforceBudget && receipt.EstimatedTokens > budget)
+            {
+                foreach (var atom in atoms
+                    .Where(IsSuccessfulExactRead)
+                    .OrderByDescending(item => ModelContextBudget.EstimateMessagesTokens(
+                        item.Messages, settings)))
+                {
+                    ReplaceOversizedExactReadEvidence(atom);
+                    messages = atoms.SelectMany(item => item.Messages).ToList();
+                    receipt.EstimatedTokens = ModelContextBudget.EstimateMessagesTokens(
+                        messages, settings);
+                    if (receipt.EstimatedTokens <= budget) break;
+                }
+            }
             receipt.AtomCounts = atoms.GroupBy(item => item.Kind).ToDictionary(group => group.Key, group => group.Count());
             if (enforceBudget && receipt.EstimatedTokens > budget)
                 throw new PromptBudgetExceededException("Current evidence and causal frames exceed the request budget after correctness filtering. Compact context or select a narrower resource view.", true);
             return new ModelContextSnapshot(authority, messages, receipt);
+        }
+
+        private static bool IsSuccessfulExactRead(ContextAtom atom)
+        {
+            ToolResultWireReadResult wire;
+            return TryReadExactResult(atom, out wire) &&
+                wire.Result.Status ==
+                    RNAssistant.Core.Tools.Contracts.ToolResultStatus.Ok;
+        }
+
+        private static bool ReplaceOversizedExactReadEvidence(ContextAtom atom)
+        {
+            ToolResultWireReadResult wire;
+            if (!TryReadExactResult(atom, out wire) ||
+                wire.Result.Status !=
+                    RNAssistant.Core.Tools.Contracts.ToolResultStatus.Ok)
+            {
+                return false;
+            }
+
+            var call = atom.Messages[0];
+            var result = atom.Messages[1];
+            var capability = !ToolResultResourceService.IsResourceEvidence(
+                new ToolInvocation { ToolId = call.ToolName });
+            var original = ToolResultWire.ParseData(
+                wire.Result.DataJson) as JObject;
+            var data = new JObject
+            {
+                ["code"] = capability
+                    ? "capability_evidence_context_too_large"
+                    : "resource_evidence_context_too_large",
+                ["complete"] = false,
+                ["next_action"] = capability
+                    ? "Reduce context or use a larger-context model; do not retry unchanged."
+                    : "Choose a narrower semantic resource view or reduce context; do not retry unchanged."
+            };
+            if (capability)
+            {
+                data["kind"] = Copy(original, "kind");
+                data["id"] = Copy(original, "id");
+                data["loaded"] = false;
+                data["truncated"] = true;
+            }
+            else
+            {
+                data["target"] = Copy(original, "target");
+            }
+            var message = capability
+                ? "Capability evidence did not fit the reserved model context and was not loaded."
+                : "Resource evidence did not fit the reserved model context and was not loaded.";
+            var projected = RNAssistant.Core.Tools.Contracts.ToolResult.Error(
+                message, data.ToString(Formatting.None));
+            var json = ToolResultWire.WriteParsed(
+                wire.ToolCallId, wire.Name, projected, data, null);
+            result.Content = string.Equals(result.Role, "tool",
+                    StringComparison.Ordinal)
+                ? json
+                : "TOOL_RESULT:\n" + json;
+            result.ResultPayload = null;
+            result.ResourceRefs = new List<ResourceRef>();
+            result.ResourceEvidence = new List<ResourceEvidence>();
+            return true;
+        }
+
+        private static bool TryReadExactResult(
+            ContextAtom atom, out ToolResultWireReadResult wire)
+        {
+            wire = null;
+            if (atom == null || atom.Messages.Count != 2 ||
+                atom.CausalFrameId == null)
+            {
+                return false;
+            }
+            var call = atom.Messages[0];
+            var result = atom.Messages[1];
+            if (call == null || result == null ||
+                !ToolResultResourceService.IsExactReadEvidence(
+                    new ToolInvocation
+                    {
+                        ToolId = call.ToolName,
+                        ToolCallId = call.ToolCallId
+                    }))
+            {
+                return false;
+            }
+            string error;
+            return ToolResultHistoryReader.TryRead(
+                result, out wire, out error);
+        }
+
+        private static JToken Copy(JObject source, string name)
+        {
+            return source == null || source[name] == null
+                ? JValue.CreateNull()
+                : source[name].DeepClone();
         }
 
         private static ContextAtom Atom(string kind, ChatMessage message, bool mustKeep)

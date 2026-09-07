@@ -228,17 +228,18 @@ namespace RNAssistant.Harness
             {
                 var catalog = ConversationRunService.PrepareToolsForRun(
                     OfficeToolCatalog.ForHost(adapter.HostName).Concat(executor.GetControllerTools()));
-                var skills = new[]
+                var skill = new SkillDefinition
                 {
-                    new SkillDefinition
-                    {
-                        Id = "excel.review_workbook",
-                        Name = "Review workbook",
-                        Description = "Review workbook structure and formulas.",
-                        BodyMarkdown = "# Review\n\nInspect the workbook carefully.",
-                        Enabled = true
-                    }
+                    Id = "excel.review_workbook",
+                    Host = "Excel",
+                    Name = "Review workbook",
+                    Description = "Review workbook structure and formulas.",
+                    BodyMarkdown = "# Review\n\nInspect the workbook carefully.",
+                    Enabled = true
                 };
+                new SkillStore(FixturePaths.Value).SaveOne(skill);
+                var skills = executor.CaptureSkills().Skills
+                    .Where(item => item.Id == skill.Id).ToArray();
                 CapabilityCatalogService.BindReadSchema(catalog, skills);
 
                 var compact = CapabilityCatalogService.BuildPromptCatalog(catalog, skills, catalog);
@@ -544,17 +545,18 @@ namespace RNAssistant.Harness
             {
                 const string skillId = "common.oversized_evidence";
                 const string bodyMarker = "OVERSIZED_SKILL_BODY_MUST_NOT_BE_PARTIALLY_LOADED";
-                var skills = new[]
+                var skill = new SkillDefinition
                 {
-                    new SkillDefinition
-                    {
-                        Id = skillId,
-                        Name = "Oversized evidence",
-                        Description = "Budget boundary fixture.",
-                        BodyMarkdown = "# Fixture\n\n" + bodyMarker + "\n" + new string('x', 50000),
-                        Enabled = true
-                    }
+                    Id = skillId,
+                    Host = "Common",
+                    Name = "Oversized evidence",
+                    Description = "Budget boundary fixture.",
+                    BodyMarkdown = "# Fixture\n\n" + bodyMarker + "\n" + new string('x', 50000),
+                    Enabled = true
                 };
+                new SkillStore(FixturePaths.Value).SaveOne(skill);
+                var skills = executor.CaptureSkills().Skills
+                    .Where(item => item.Id == skillId).ToArray();
                 var catalog = ConversationRunService.PrepareToolsForRun(
                     executor.GetControllerTools().Where(tool =>
                         tool.Id == CapabilityToolCatalog.ReadToolId));
@@ -566,6 +568,11 @@ namespace RNAssistant.Harness
                     MaxTokens = 512
                 };
                 var session = NewSession(adapter);
+                session.LastRun = new ChatRunRecord
+                {
+                    RunId = "oversized-capability-run",
+                    TurnId = "oversized-capability-turn"
+                };
                 var store = new ChatStore(FixturePaths.Value);
                 store.Save(session);
                 using (var modelSession = ConversationModelSession.CreateAsync(
@@ -592,6 +599,8 @@ namespace RNAssistant.Harness
                         Name = CapabilityToolCatalog.ReadToolId,
                         Arguments = new Dictionary<string, object> { { "id", skillId } }
                     }, string.Empty, null, FixtureCallOrigin("oversized-capability-step"));
+                    session.Messages[session.Messages.Count - 1].RunId =
+                        session.LastRun.RunId;
                     var command = Command(CapabilityToolCatalog.ReadToolId, "id", skillId);
                     command.ToolCallId = callId;
                     var result = executor.ExecuteManual(
@@ -603,12 +612,25 @@ namespace RNAssistant.Harness
                         session,
                         AppSettings.DefaultMaxAgentToolSteps,
                         skills);
-                    AssertTrue(result.Success, "provider returns complete oversized skill evidence before projection");
+                    AssertTrue(result.Success,
+                        "provider returns complete oversized skill evidence before projection: " +
+                        result.ErrorCode + " " + result.Message + " " +
+                        result.DataJson);
                     modelSession.AppendToolResult(command, new ConversationModelSession.PreparedToolResult(
                         new ToolResultMaterialization(TerminalToolResult.Ok(
                             result.Message, result.DataJson,
                             result.ModelResourceRefs)), null));
 
+                    store.Save(session);
+                    modelSession.EndResponse("after-oversized-capability");
+                    var replay = PromptBudgetComposer.ConversationHistory(
+                        session, true, false);
+                    AssertTrue(replay.Any(item => item.Role == "assistant" &&
+                            item.ToolCallId == callId),
+                        "oversized capability keeps its accepted call");
+                    AssertTrue(replay.Any(item => item.Role != "assistant" &&
+                            item.ToolCallId == callId),
+                        "oversized capability keeps its terminal result");
                     var request = modelSession.CreateRequest("after-oversized-capability",
                         new ModelProtocolCallContext(new string[0]));
                     var wire = LastToolResult(request.AcceptedMessages, CapabilityToolCatalog.ReadToolId);
@@ -620,6 +642,17 @@ namespace RNAssistant.Harness
                         "oversized capability never claims loaded evidence");
                     AssertTrue(FlattenSimple(request.AcceptedMessages).IndexOf(bodyMarker, StringComparison.Ordinal) < 0,
                         "oversized body is not partially copied into model history");
+                    var durableMessage = session.Messages.Last(item =>
+                        item.ToolCallId == callId && item.Role != "assistant");
+                    ToolResultWireReadResult durable;
+                    string durableError;
+                    AssertTrue(ToolResultHistoryReader.TryRead(
+                            durableMessage, out durable, out durableError),
+                        "durable oversized result remains readable: " + durableError);
+                    AssertEqual(
+                        RNAssistant.Core.Tools.Contracts.ToolResultStatus.Ok,
+                        durable.Result.Status,
+                        "request-local admission failure does not rewrite durable evidence");
                     AssertTrue(ModelContextBudget.EstimateAdmittedRequestTokens(
                             request.AcceptedMessages,
                             request.Options,
