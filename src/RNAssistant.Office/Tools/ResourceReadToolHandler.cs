@@ -248,12 +248,17 @@ namespace RNAssistant.Office.Tools
 
         private static string Parameters()
         {
-            return "{\"type\":\"object\",\"properties\":{" +
-                "\"target\":{\"type\":\"string\",\"description\":\"Exact readable target supplied by RUNTIME_CONTEXT or returned by common.resources_find.\",\"minLength\":1,\"maxLength\":1000}," +
-                "\"representation\":{\"type\":\"string\",\"description\":\"Meaningful view; table/records return bounded rows with explicit coverage.\",\"enum\":[\"metadata\",\"text\",\"structure\",\"source\",\"media\",\"formulas\",\"table\",\"records\"]}," +
-                "\"limit\":{\"type\":\"integer\",\"description\":\"Maximum rows in a table/records batch.\",\"minimum\":1,\"maximum\":5000},\"offset\":{\"type\":\"integer\",\"description\":\"Zero-based table/records row offset.\",\"minimum\":0}," +
-                "\"path\":{\"type\":\"string\",\"description\":\"Explicit JSON property path for a record array, default $.\",\"maxLength\":256},\"fields\":{\"type\":\"array\",\"description\":\"Structural field keys to project.\",\"maxItems\":128,\"items\":{\"type\":\"string\",\"maxLength\":128}}" +
-                "},\"required\":[\"target\"],\"additionalProperties\":false}";
+            const string target = "\"target\":{\"type\":\"string\",\"description\":\"Exact readable target supplied by RUNTIME_CONTEXT or returned by common.resources_find.\",\"minLength\":1,\"maxLength\":1000}";
+            const string representation = "\"representation\":{\"type\":\"string\",\"description\":\"Representation to read. Complete views cannot be combined with table/records selectors.\",\"enum\":[\"metadata\",\"text\",\"structure\",\"source\",\"media\",\"formulas\",\"table\",\"records\"]}";
+            const string selectors = "\"limit\":{\"type\":\"integer\",\"description\":\"Maximum rows in this table/records batch.\",\"minimum\":1,\"maximum\":5000},\"offset\":{\"type\":\"integer\",\"description\":\"Zero-based table/records row offset.\",\"minimum\":0},\"path\":{\"type\":\"string\",\"description\":\"Explicit JSON property path for a record array, default $.\",\"maxLength\":256},\"fields\":{\"type\":\"array\",\"description\":\"Structural field keys to project.\",\"maxItems\":128,\"items\":{\"type\":\"string\",\"maxLength\":128}}";
+            return "{\"type\":\"object\",\"properties\":{" + target + "," + representation + "," + selectors +
+                "},\"required\":[\"target\"],\"additionalProperties\":false,\"anyOf\":[" +
+                "{\"type\":\"object\",\"description\":\"Read one complete metadata, text, structure, source, media, or formulas representation. Do not send limit, offset, path, or fields.\",\"properties\":{" + target + "," +
+                "\"representation\":{\"type\":\"string\",\"description\":\"Complete representation to read; omit for provider-selected auto.\",\"enum\":[\"metadata\",\"text\",\"structure\",\"source\",\"media\",\"formulas\"]}},\"required\":[\"target\"],\"additionalProperties\":false}," +
+                "{\"type\":\"object\",\"description\":\"Read bounded rows. Structural selectors are valid only in this table/records branch.\",\"properties\":{" + target + "," +
+                "\"representation\":{\"type\":\"string\",\"description\":\"Bounded structural representation to read.\",\"enum\":[\"table\",\"records\"]}," +
+                selectors +
+                "},\"required\":[\"target\",\"representation\"],\"additionalProperties\":false}]}";
         }
 
         private static List<string> Fields(IDictionary<string, object> arguments)

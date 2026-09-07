@@ -248,6 +248,20 @@ namespace RNAssistant.Harness
                     }));
                 AssertEqual(ToolExecutionOutcome.Ok, directModuleRead.Outcome,
                     "semantic module target remains readable immediately after structure read");
+                var invalidSourceSelector = execute(
+                    ResourceToolCatalog.ReadToolId,
+                    JsonConvert.SerializeObject(new
+                    {
+                        target = (string)directProjectStructure.SelectToken(
+                            "components[0].target"),
+                        representation = ResourceRepresentations.Source,
+                        limit = 500
+                    }));
+                AssertEqual(ToolExecutionOutcome.Error, invalidSourceSelector.Outcome,
+                    "source reads reject table-only selectors at the published schema boundary");
+                AssertEqual(ToolDispatchEvidence.NotDispatched,
+                    invalidSourceSelector.Evidence.Dispatch,
+                    "invalid source selectors never reach the resource provider");
 
                 var found = execute(ResourceToolCatalog.FindToolId, "{\"scope\":\"conversation\"}");
                 AssertEqual(ToolExecutionOutcome.Ok, found.Outcome, "semantic resource find succeeds in chat mode");
