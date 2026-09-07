@@ -25,7 +25,14 @@ default prompts, three prompt-review cases, exact empty text and on-demand rerea
 Only host-neutral harness execution; target-model quality and Windows delivery
 remain unqualified.
 
-Latest correction (2026-09-07): chat-local Task List and Plan handlers now separate
+Latest correction (2026-09-07, test-only): the Plan restore/removal fixture now
+uses the current provenance-bearing structured compaction reply instead of the
+removed free-form `summary` response. The append-only Plan test passes again; no
+production behavior changed. A separate historical-attachment projection failure
+found during this check is recorded in `BACKLOG.md` and was not folded into this
+slice.
+
+Previous correction (2026-09-07): chat-local Task List and Plan handlers now separate
 model correction from transient retry. Validation and state refusals before dispatch
 are `RejectedNoEffect/Replan`, missing session is non-retryable, and a missing
 required dispatch boundary is `ToolDefect`; after-boundary failures remain `Unknown`.

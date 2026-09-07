@@ -513,7 +513,8 @@ namespace RNAssistant.Harness
                 loaded.Messages.Add(new ChatMessage { Role = "assistant", Content = "Understood." });
                 loaded.Messages.Add(new ChatMessage { Role = "user", Content = "Continue without the removed Plan." });
                 LlmCompletionDelegate completion = (settings, messages, options, stream, cancellationToken) =>
-                    Task.FromResult(new LlmCompletionResult { Content = "{\"summary\":\"Plan removal retained.\"}" });
+                    Task.FromResult(CompactionReply(messages,
+                        "Plan removal retained."));
                 var checkpoint = new ContextCompactionService(completion).EnsureWithinBudgetAsync(
                     loaded, new AppSettings(), null, true, null, CancellationToken.None).GetAwaiter().GetResult();
                 AssertTrue(checkpoint != null, "compaction checkpoint is created after Plan removal");

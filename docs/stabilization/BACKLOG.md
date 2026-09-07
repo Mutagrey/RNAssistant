@@ -38,6 +38,13 @@ transport alone does not qualify source allocation.
 
 ## Existing defects outside the completed cutover
 
+- Host-neutral `artifacts: historical attachments stay reference-only` currently
+  fails before compaction because one historical attachment body is present in the
+  model replay where the contract expects zero. Its compaction stub also still uses
+  the removed free-form `summary` shape. Owner: artifact/model-context projection.
+  Reconcile the document-owned-original publication with reference-only historical
+  replay in a separate artifact slice; do not merely weaken the assertion.
+
 - Tool package README leading `U+FEFF`: `StorageFileSystem` writes a UTF-8 sidecar
   without a separate BOM, while `ToolStore.TryReadUtf8` strips its first BOM-shaped
   character. A literal leading `U+FEFF` therefore yields a different read-back and
