@@ -8,6 +8,28 @@ using System.Linq;
 
 namespace RNAssistant.Core.Tools
 {
+    public sealed class ToolRetryRequirement
+    {
+        public ResourceIdentity ResourceIdentity { get; private set; }
+        public string View { get; private set; }
+
+        [Newtonsoft.Json.JsonConstructor]
+        public ToolRetryRequirement(ResourceIdentity resourceIdentity, string view)
+        {
+            ResourceIdentity = resourceIdentity ?? throw new ArgumentNullException(nameof(resourceIdentity));
+            if (string.IsNullOrWhiteSpace(view)) throw new ArgumentException("Retry requirement view is required.", nameof(view));
+            View = view;
+        }
+
+        public bool IsSatisfiedBy(ResourceEvidence evidence)
+        {
+            return evidence != null && evidence.Complete &&
+                evidence.Coverage.Kind == ResourceCoverageKinds.Whole &&
+                string.Equals(evidence.View, View, StringComparison.Ordinal) &&
+                ResourceIdentity.Equals(evidence.Resource.Identity);
+        }
+    }
+
     public interface IToolHandler
     {
         Task<ToolHandlerResult> ExecuteAsync(ToolHandlerContext context, CancellationToken cancellationToken);
@@ -82,8 +104,10 @@ namespace RNAssistant.Core.Tools
 
         public ToolResult Result { get; private set; }
         public string PreparedStateJson { get; private set; }
+        public ToolRetryRequirement RetryRequirement { get; private set; }
 
-        public ToolPreparationResult(ToolResult result, string preparedStateJson = null)
+        public ToolPreparationResult(ToolResult result, string preparedStateJson = null,
+            ToolRetryRequirement retryRequirement = null)
         {
             Result = result ?? throw new ArgumentNullException(nameof(result));
             if (result.Status == ToolResultStatus.Ok && string.IsNullOrWhiteSpace(preparedStateJson))
@@ -92,10 +116,13 @@ namespace RNAssistant.Core.Tools
                 throw new ArgumentException("Failed preparation cannot authorize prepared state.", nameof(preparedStateJson));
             if (preparedStateJson != null && preparedStateJson.Length > MaxPreparedStateChars)
                 throw new ArgumentException("Prepared state exceeds the runtime bound.", nameof(preparedStateJson));
+            if (result.Status == ToolResultStatus.Ok && retryRequirement != null)
+                throw new ArgumentException("Successful preparation cannot require recovery.", nameof(retryRequirement));
             if (result.DataJson != null && result.DataJson.Length > MaxConfirmationDataChars)
                 throw new ArgumentException("Confirmation data exceeds the runtime bound.", nameof(result));
             Result = result;
             PreparedStateJson = preparedStateJson;
+            RetryRequirement = retryRequirement;
         }
     }
 
@@ -106,19 +133,24 @@ namespace RNAssistant.Core.Tools
         public bool AwaitingUser { get; private set; }
         public IReadOnlyList<ResourceEvidence> ResourceEvidence { get; private set; }
         public IReadOnlyList<ResourceMutationReadBack> ResourceReadBack { get; private set; }
+        public ToolRetryRequirement RetryRequirement { get; private set; }
 
         public ToolHandlerResult(ToolResult result, ToolEffectEvidence effect = ToolEffectEvidence.Unreported,
             bool awaitingUser = false, IEnumerable<ResourceEvidence> resourceEvidence = null,
-            IEnumerable<ResourceMutationReadBack> resourceReadBack = null)
+            IEnumerable<ResourceMutationReadBack> resourceReadBack = null,
+            ToolRetryRequirement retryRequirement = null)
         {
             Result = result ?? throw new ArgumentNullException(nameof(result));
             if (!Enum.IsDefined(typeof(ToolEffectEvidence), effect)) throw new ArgumentOutOfRangeException(nameof(effect));
             if (awaitingUser && result.Status != ToolResultStatus.Ok)
                 throw new ArgumentException("Only a successful interaction can await user input.", nameof(awaitingUser));
+            if (result.Status == ToolResultStatus.Ok && retryRequirement != null)
+                throw new ArgumentException("A successful result cannot require recovery.", nameof(retryRequirement));
             Effect = effect;
             AwaitingUser = awaitingUser;
             ResourceEvidence = Array.AsReadOnly((resourceEvidence ?? new ResourceEvidence[0]).ToArray());
             ResourceReadBack = Array.AsReadOnly((resourceReadBack ?? new ResourceMutationReadBack[0]).ToArray());
+            RetryRequirement = retryRequirement;
         }
     }
 }

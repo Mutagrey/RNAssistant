@@ -100,7 +100,8 @@ namespace RNAssistant.Office.Runtime
                         var failed = preparation.Result.Status == ToolResultStatus.Unknown
                             ? ToolResult.Error(preparation.Result.Message, preparation.Result.DataJson, preparation.Result.Resources)
                             : preparation.Result;
-                        return Record(context, ToolExecutionOutcome.Error, failed, false, ToolEffectEvidence.None);
+                        return Record(context, ToolExecutionOutcome.Error, failed, false, ToolEffectEvidence.None,
+                            retryRequirement: preparation.RetryRequirement);
                     }
                 }
                 catch (OperationCanceledException)
@@ -241,7 +242,8 @@ namespace RNAssistant.Office.Runtime
                 : result.Status == ToolResultStatus.Unknown ? ToolExecutionOutcome.Unknown : ToolExecutionOutcome.Error;
             return Record(context, outcome, result, dispatched, effect,
                 awaitingUser: completed.AwaitingUser && outcome == ToolExecutionOutcome.Ok,
-                resourceEvidence: completed.ResourceEvidence, resourceReadBack: completed.ResourceReadBack);
+                resourceEvidence: completed.ResourceEvidence, resourceReadBack: completed.ResourceReadBack,
+                retryRequirement: completed.RetryRequirement);
         }
 
         private static JObject ParseArguments(string json)
@@ -273,7 +275,8 @@ namespace RNAssistant.Office.Runtime
             ToolResult result, bool dispatched, ToolEffectEvidence effect, string pendingId = null, bool awaitingUser = false,
             string message = null, string preparedStateJson = null, string confirmationDataJson = null,
             IReadOnlyList<RNAssistant.Core.Models.ResourceEvidence> resourceEvidence = null,
-            IReadOnlyList<RNAssistant.Core.Models.ResourceMutationReadBack> resourceReadBack = null)
+            IReadOnlyList<RNAssistant.Core.Models.ResourceMutationReadBack> resourceReadBack = null,
+            ToolRetryRequirement retryRequirement = null)
         {
             var completed = DateTime.UtcNow;
             if (completed < context.StartedUtc) completed = context.StartedUtc;
@@ -281,7 +284,8 @@ namespace RNAssistant.Office.Runtime
                 mayHaveDispatched: dispatched, pendingId: pendingId, awaitingUser: awaitingUser,
                 evidence: new ToolExecutionEvidence(dispatched ? ToolDispatchEvidence.MayHaveDispatched : ToolDispatchEvidence.NotDispatched, effect),
                 result: result, preparedStateJson: preparedStateJson, confirmationDataJson: confirmationDataJson,
-                resourceEvidence: resourceEvidence, resourceReadBack: resourceReadBack);
+                resourceEvidence: resourceEvidence, resourceReadBack: resourceReadBack,
+                retryRequirement: retryRequirement);
         }
     }
 }

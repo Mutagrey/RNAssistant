@@ -1,5 +1,16 @@
 # Stabilization progress
 
+Latest correction (2026-09-07): the reported VBA refactoring stall exposed a
+contradiction between the mutation guard and the Agent repeat guard. A stale
+whole-module write correctly required a complete current `source` read, but the
+generic repeat guard still rejected the identical reconciled write after that
+read. Failed tool evidence now carries a typed exact resource/view recovery
+requirement; only matching complete whole-view evidence unlocks that call, while
+partial/unrelated reads and all `unknown` effects remain blocked. The VBA runtime
+publishes this requirement for stale whole writes and post-mutation source refresh.
+Host-neutral kernel and VBA runtime checks pass; target-model and Windows/VBE
+qualification remain open.
+
 Latest correction (2026-09-07): the reported `model_loop_stalled` did not mean that
 the provider omitted `final`; strict v5 parsing proves that the target model returned
 `final=false` with empty `tool_calls` three times, including for a complete

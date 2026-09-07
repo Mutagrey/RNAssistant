@@ -1367,10 +1367,15 @@ namespace RNAssistant.Harness
                 AssertEqual("awaiting_confirmation", waiting.Status, "create waits for confirmation");
 
                 adapter.SetVbaModule("CreatedDuringConfirmation", "Sub External()\nEnd Sub", "StdModule");
-                var stale = ToolRunResultFactory.Create(
-                    ConfirmVbaNative(pending));
+                var refused = ConfirmVbaNative(pending);
+                var stale = ToolRunResultFactory.Create(refused);
 
                 AssertEqual("stale_vba_module", stale.ErrorCode, "create detects a module added during confirmation");
+                AssertTrue(refused.RetryRequirement != null &&
+                    refused.RetryRequirement.ResourceIdentity.Equals(
+                        VbaResourceProvider.ComponentIdentity(session.DocumentAuthorityId, "CreatedDuringConfirmation")) &&
+                    refused.RetryRequirement.View == ResourceRepresentations.Source,
+                    "stale whole-module write requires a complete source refresh of the exact component");
                 AssertContains(adapter.GetVbaModuleCode("CreatedDuringConfirmation"), "External", "create race does not overwrite module");
             });
         }
@@ -2527,21 +2532,25 @@ namespace RNAssistant.Harness
                     session);
                 AssertTrue(first.Success, "first mutation succeeds and verifies read-back: " + first.Message);
 
-                var blocked = executor.ExecuteManual(
+                var blockedExecution = PrepareVbaNative(
+                    executor,
+                    session,
                     Command("common.vba_apply_patch",
                         "moduleName", "Module1",
                         "patch", new JArray(new JObject
                         {
                             ["find"] = "\"first\"",
                             ["text"] = "\"second\""
-                        })),
-                    tools,
-                    new AppSettings { AutoConfirmToolActions = true },
-                    false,
-                    false,
-                    session);
+                        }))).Record;
+                var blocked = ToolRunResultFactory.Create(blockedExecution);
                 AssertEqual("vba_snapshot_refresh_required", blocked.ErrorCode,
                     "internal write verification does not refresh the model snapshot");
+                AssertContains(blocked.DataJson, "\"retryAfterRefresh\":true",
+                    "refresh refusal tells the model that a reconciled retry is allowed");
+                AssertTrue(blockedExecution.RetryRequirement != null &&
+                    blockedExecution.RetryRequirement.ResourceIdentity.Equals(component.Reference.Identity) &&
+                    blockedExecution.RetryRequirement.View == ResourceRepresentations.Source,
+                    "refresh refusal identifies the exact complete source evidence required for retry");
 
                 var partial = ReadResource(
                     executor.ResourceGateway,

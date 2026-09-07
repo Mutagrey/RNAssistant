@@ -114,6 +114,7 @@ namespace RNAssistant.Core.Tools
         public RNAssistant.Core.Models.ResourceEffect ResourceEffect { get; private set; }
         public System.Collections.Generic.IReadOnlyList<RNAssistant.Core.Models.ResourceMutationReadBack> ResourceReadBack { get; private set; }
         public string AuthorityCommitId { get; private set; }
+        public ToolRetryRequirement RetryRequirement { get; private set; }
         [JsonIgnore]
         public Contracts.ToolResult Result { get; private set; }
 
@@ -124,7 +125,8 @@ namespace RNAssistant.Core.Tools
             string preparedStateJson = null, string confirmationDataJson = null,
             System.Collections.Generic.IReadOnlyList<RNAssistant.Core.Models.ResourceEvidence> resourceEvidence = null,
             RNAssistant.Core.Models.ResourceEffect resourceEffect = null, string authorityCommitId = null,
-            System.Collections.Generic.IReadOnlyList<RNAssistant.Core.Models.ResourceMutationReadBack> resourceReadBack = null)
+            System.Collections.Generic.IReadOnlyList<RNAssistant.Core.Models.ResourceMutationReadBack> resourceReadBack = null,
+            ToolRetryRequirement retryRequirement = null)
         {
             Context = context ?? throw new ArgumentNullException(nameof(context));
             if (!Enum.IsDefined(typeof(ToolExecutionOutcome), outcome)) throw new ArgumentOutOfRangeException(nameof(outcome));
@@ -147,6 +149,8 @@ namespace RNAssistant.Core.Tools
                 throw new ArgumentException("A non-dispatched call cannot have been dispatched.", nameof(mayHaveDispatched));
             if (awaitingUser && outcome != ToolExecutionOutcome.Ok)
                 throw new ArgumentException("Only a successful local interaction can await user input.", nameof(awaitingUser));
+            if (outcome != ToolExecutionOutcome.Error && retryRequirement != null)
+                throw new ArgumentException("Only a failed execution can require recovery.", nameof(retryRequirement));
             var dispatch = mayHaveDispatched ? ToolDispatchEvidence.MayHaveDispatched : ToolDispatchEvidence.NotDispatched;
             if (evidence != null && evidence.Dispatch != dispatch)
                 throw new ArgumentException("Dispatch evidence disagrees with the execution record.", nameof(evidence));
@@ -167,6 +171,7 @@ namespace RNAssistant.Core.Tools
             ResourceEffect = resourceEffect;
             AuthorityCommitId = authorityCommitId;
             ResourceReadBack = resourceReadBack ?? new RNAssistant.Core.Models.ResourceMutationReadBack[0];
+            RetryRequirement = retryRequirement;
         }
 
         public ToolExecutionRecord WithAuthorityCommit(RNAssistant.Core.Models.ResourceAuthorityCommit commit)
@@ -179,7 +184,8 @@ namespace RNAssistant.Core.Tools
                     .Select(group => group.First()));
             return new ToolExecutionRecord(Context, Outcome, CompletedUtc, Message, ModelResultJson,
                 MayHaveDispatched, PendingId, AwaitingUser, ToolStepsConsumed, DocumentRuntimeId, Evidence,
-                committedResult, PreparedStateJson, ConfirmationDataJson, ResourceEvidence, commit.Effect, commit.CommitId, ResourceReadBack);
+                committedResult, PreparedStateJson, ConfirmationDataJson, ResourceEvidence, commit.Effect, commit.CommitId,
+                ResourceReadBack, RetryRequirement);
         }
     }
 }

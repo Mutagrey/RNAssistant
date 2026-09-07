@@ -197,6 +197,7 @@ namespace RNAssistant.Core.Agent
             }
             var callSignature = call.Name + "\n" + call.ArgumentsJson;
             if (!confirmed && (state.ErrorCallSignatures.Contains(callSignature) ||
+                state.RefreshableErrorCallSignatures.ContainsKey(callSignature) ||
                 state.UnknownCallSignatures.Contains(callSignature)))
             {
                 await RecordNotDispatchedAsync(state, call, policy, stepId,
@@ -247,9 +248,23 @@ namespace RNAssistant.Core.Agent
             }
             if (record.ToolStepsConsumed > remaining) stop = RunLifecycle.Failed;
             if (record.Outcome == ToolExecutionOutcome.Error)
-                state.ErrorCallSignatures.Add(callSignature);
+            {
+                if (record.RetryRequirement == null)
+                    state.ErrorCallSignatures.Add(callSignature);
+                else
+                    state.RefreshableErrorCallSignatures[callSignature] = record.RetryRequirement;
+            }
             else if (record.Outcome == ToolExecutionOutcome.Ok && policy.MayHaveSideEffects)
+            {
                 state.ErrorCallSignatures.Clear();
+                state.RefreshableErrorCallSignatures.Clear();
+            }
+            else if (record.Outcome == ToolExecutionOutcome.Ok && record.ResourceEvidence.Count > 0)
+            {
+                var refreshed = state.RefreshableErrorCallSignatures.Where(item =>
+                    record.ResourceEvidence.Any(item.Value.IsSatisfiedBy)).Select(item => item.Key).ToArray();
+                foreach (var signature in refreshed) state.RefreshableErrorCallSignatures.Remove(signature);
+            }
             if (record.Outcome == ToolExecutionOutcome.Unknown)
                 state.UnknownCallSignatures.Add(callSignature);
             state.ToolSteps = (int)Math.Min(int.MaxValue, (long)state.ToolSteps + Math.Max(0, (long)record.ToolStepsConsumed - chargedSteps));
@@ -336,6 +351,8 @@ namespace RNAssistant.Core.Agent
             internal int NoToolCheckpoints;
             internal readonly HashSet<string> ErrorCallSignatures =
                 new HashSet<string>(StringComparer.Ordinal);
+            internal readonly Dictionary<string, ToolRetryRequirement> RefreshableErrorCallSignatures =
+                new Dictionary<string, ToolRetryRequirement>(StringComparer.Ordinal);
             internal readonly HashSet<string> UnknownCallSignatures =
                 new HashSet<string>(StringComparer.Ordinal);
 

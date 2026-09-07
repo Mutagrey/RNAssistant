@@ -6,6 +6,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using RNAssistant.Core.Agent;
 using RNAssistant.Core.ModelProtocol;
+using RNAssistant.Core.Models;
 using RNAssistant.Core.Persistence;
 using RNAssistant.Core.Tools;
 
@@ -24,12 +25,15 @@ namespace RNAssistant.Harness
         }
 
         private static ToolExecutionRecord KernelRecord(ToolExecutionContext context,
-            ToolExecutionOutcome outcome = ToolExecutionOutcome.Ok, bool awaitingUser = false)
+            ToolExecutionOutcome outcome = ToolExecutionOutcome.Ok, bool awaitingUser = false,
+            ToolRetryRequirement retryRequirement = null,
+            IReadOnlyList<ResourceEvidence> resourceEvidence = null)
         {
             var pending = outcome == ToolExecutionOutcome.AwaitingConfirmation;
             return new ToolExecutionRecord(context, outcome, context.StartedUtc.AddMilliseconds(1),
                 "Runtime evidence.", "{\"source\":\"runtime\"}", mayHaveDispatched: !pending,
-                pendingId: pending ? "pending-" + context.Call.Id : null, awaitingUser: awaitingUser);
+                pendingId: pending ? "pending-" + context.Call.Id : null, awaitingUser: awaitingUser,
+                retryRequirement: retryRequirement, resourceEvidence: resourceEvidence);
         }
 
         private static string KernelCounts(RunSummary summary)
@@ -205,6 +209,59 @@ namespace RNAssistant.Harness
                 "failed mutation remains bounded after a read");
             AssertEqual(2, f.Tools.Calls.Count,
                 "read-only success does not redispatch the failed mutation");
+
+            var identity = new ResourceIdentity("rna://vba/document/component/module1");
+            var requirement = new ToolRetryRequirement(identity, ResourceRepresentations.Source);
+            var matchingEvidence = new ResourceEvidence("evidence", new ResourceAuthorityScopeId("document", "document"),
+                new ResourceRef(identity.Uri, "revision"), ResourceRepresentations.Source, ResourceCoverage.Whole(),
+                true, 1);
+            var incompleteEvidence = new ResourceEvidence("partial", new ResourceAuthorityScopeId("document", "document"),
+                new ResourceRef(identity.Uri, "revision"), ResourceRepresentations.Source,
+                new ResourceCoverage(ResourceCoverageKinds.CharacterRange, start: 0, end: 10), false, 1);
+            var insufficient = new KernelFixture(
+                KernelResponse(KernelCall("write", failed)),
+                KernelResponse(KernelCall("read", "{\"target\":\"VBA module prefix\"}")),
+                KernelResponse(KernelCall("write", failed)));
+            var insufficientCall = 0;
+            insufficient.Tools.OnExecute = (context, token) =>
+            {
+                insufficientCall++;
+                return Task.FromResult(insufficientCall == 1
+                    ? KernelRecord(context, ToolExecutionOutcome.Error, retryRequirement: requirement)
+                    : KernelRecord(context, resourceEvidence: new[] { incompleteEvidence }));
+            };
+
+            var stillBlocked = await insufficient.RunAsync();
+
+            AssertEqual(RunLifecycle.Failed, stillBlocked.Summary.Lifecycle,
+                "partial source evidence cannot authorize the same operation again");
+            AssertEqual("repeated_failed_tool_call", stillBlocked.Summary.Reason,
+                "incomplete recovery evidence keeps the failed operation bounded");
+            AssertEqual(2, insufficient.Tools.Calls.Count,
+                "partial source read does not redispatch the failed write");
+
+            var recoverable = new KernelFixture(
+                KernelResponse(KernelCall("write", failed)),
+                KernelResponse(KernelCall("read", "{\"target\":\"VBA module: Module1 - Source\"}")),
+                KernelResponse(KernelCall("write", failed)),
+                KernelResponse());
+            var call = 0;
+            recoverable.Tools.OnExecute = (context, token) =>
+            {
+                call++;
+                if (call == 1) return Task.FromResult(KernelRecord(context,
+                    ToolExecutionOutcome.Error, retryRequirement: requirement));
+                if (call == 2) return Task.FromResult(KernelRecord(context,
+                    resourceEvidence: new[] { matchingEvidence }));
+                return Task.FromResult(KernelRecord(context));
+            };
+
+            var recovered = await recoverable.RunAsync();
+
+            AssertEqual(RunLifecycle.Completed, recovered.Summary.Lifecycle,
+                "matching complete resource refresh allows the same operation again");
+            AssertEqual(3, recoverable.Tools.Calls.Count,
+                "failed write, required source read and retried write each dispatch once");
         }
 
         private static async Task KernelNeverRepeatsUnknownCallAfterInterveningSuccess()

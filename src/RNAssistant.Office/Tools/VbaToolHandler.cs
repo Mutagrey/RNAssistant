@@ -68,7 +68,8 @@ namespace RNAssistant.Office.Tools
                     throw new InvalidOperationException(
                         "VBA preparation returned no outcome.");
                 return Task.FromResult(new ToolPreparationResult(
-                    Result(preparation.Outcome), preparation.StateJson));
+                    Result(preparation.Outcome), preparation.StateJson,
+                    preparation.Outcome.RetryRequirement));
             }
             catch (OfficeDocumentGuardException ex)
             {
@@ -126,7 +127,8 @@ namespace RNAssistant.Office.Tools
                 return new ToolHandlerResult(RuntimeResult.Unknown(outcome.Message, outcome.DataJson), ToolEffectEvidence.Unknown);
             return new ToolHandlerResult(Result(outcome), Effect(outcome, context.MayHaveDispatched),
                 resourceReadBack: outcome.Status == VbaNativeOutcomeStatus.Ok && context.MayHaveDispatched
-                    ? _executor.CaptureMutationReadBack(_session, context.PreparedStateJson) : null);
+                    ? _executor.CaptureMutationReadBack(_session, context.PreparedStateJson) : null,
+                retryRequirement: outcome.RetryRequirement);
         }
 
         private static RuntimeResult Result(VbaNativeOutcome outcome)

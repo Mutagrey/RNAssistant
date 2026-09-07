@@ -208,14 +208,16 @@ namespace RNAssistant.Office.Vba
         private static VbaMutationOutcome SnapshotRefreshRequired(string moduleName)
         {
             return VbaMutationOutcome.Error(
-                "The VBA module was changed by an earlier mutation and the model-visible source is now stale. Read the complete current module source before another mutation.",
+                "The VBA module was changed by an earlier mutation and the model-visible source is now stale. Read the complete current module source, reconcile the intended change, then retry the mutation.",
                 new JObject
                 {
                     ["moduleName"] = moduleName ?? string.Empty,
                     ["retrySameTool"] = false,
+                    ["retryAfterRefresh"] = true,
                     ["inspectTool"] = "common.resources_read",
                     ["discoveryScope"] = "vba",
-                    ["completeSourceRequired"] = true
+                    ["completeSourceRequired"] = true,
+                    ["requiredRepresentation"] = "source"
                 },
                 "vba_snapshot_refresh_required",
                 true);
@@ -245,11 +247,14 @@ namespace RNAssistant.Office.Vba
                     ["observedCodeSha256"] = string.IsNullOrWhiteSpace(observedHash) ? null : observedHash,
                     ["actualExists"] = actualExists,
                     ["actualCodeSha256"] = string.IsNullOrWhiteSpace(actualHash) ? null : actualHash,
-                    ["retrySameTool"] = !editor,
+                    ["retrySameTool"] = !editor && !wholeWrite,
+                    ["retryAfterRefresh"] = wholeWrite,
                     ["reloadEditor"] = editor,
                     ["reconcileBeforeOverwrite"] = wholeWrite,
                     ["inspectTool"] = "common.resources_read",
-                    ["discoveryScope"] = "vba"
+                    ["discoveryScope"] = "vba",
+                    ["completeSourceRequired"] = wholeWrite,
+                    ["requiredRepresentation"] = wholeWrite ? "source" : null
                 },
                 "stale_vba_module",
                 true);

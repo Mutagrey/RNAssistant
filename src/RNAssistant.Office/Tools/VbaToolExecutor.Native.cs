@@ -77,7 +77,7 @@ namespace RNAssistant.Office.Tools
                     });
                 if (!prepared.Success)
                     return VbaNativePreparation.Failed(
-                        VbaNativeOutcome.From(prepared.Error));
+                        MutationOutcome(prepared.Error, correlation, moduleName));
                 state.ModuleName = prepared.ResolvedModuleName;
                 state.Guard = prepared.Guard;
                 preview = ExecutePreparedMutation(
@@ -95,7 +95,7 @@ namespace RNAssistant.Office.Tools
                     });
                 if (!prepared.Success)
                     return VbaNativePreparation.Failed(
-                        VbaNativeOutcome.From(prepared.Error));
+                        MutationOutcome(prepared.Error, correlation, moduleName));
                 state.ModuleName = prepared.ResolvedModuleName;
                 state.Guard = prepared.Guard;
                 preview = ExecutePreparedMutation(
@@ -115,7 +115,7 @@ namespace RNAssistant.Office.Tools
                     });
                 if (!prepared.Success)
                     return VbaNativePreparation.Failed(
-                        VbaNativeOutcome.From(prepared.Error));
+                        MutationOutcome(prepared.Error, correlation, moduleName));
                 state.ModuleName = prepared.ResolvedModuleName;
                 state.TargetModuleName = prepared.ResolvedTargetModuleName;
                 state.Guard = prepared.Guard;
@@ -134,7 +134,7 @@ namespace RNAssistant.Office.Tools
                     });
                 if (!prepared.Success)
                     return VbaNativePreparation.Failed(
-                        VbaNativeOutcome.From(prepared.Error));
+                        MutationOutcome(prepared.Error, correlation, moduleName));
                 state.ModuleName = prepared.ResolvedModuleName;
                 state.Guard = prepared.Guard;
                 preview = ExecutePreparedMutation(
@@ -157,7 +157,7 @@ namespace RNAssistant.Office.Tools
                     });
                 if (!prepared.Success)
                     return VbaNativePreparation.Failed(
-                        VbaNativeOutcome.From(prepared.Error));
+                        MutationOutcome(prepared.Error, correlation, moduleName));
                 state.BackupId = prepared.BackupId;
                 state.ModuleName = prepared.ModuleName;
                 state.RestoreGuard = prepared.Guard;
@@ -166,7 +166,7 @@ namespace RNAssistant.Office.Tools
                     cancellationToken);
             }
 
-            var outcome = VbaNativeOutcome.From(preview);
+            var outcome = MutationOutcome(preview, correlation, state.ModuleName);
             if (toolId == VbaToolCatalog.RestoreBackup && outcome.Status == VbaNativeOutcomeStatus.Ok)
                 state.RestoredFrom = CaptureRestoreOrigin(session, state);
             return outcome.Status == VbaNativeOutcomeStatus.Ok
@@ -239,11 +239,32 @@ namespace RNAssistant.Office.Tools
                 return VbaNativeOutcome.From(reconciliation);
             using (_dispatchBoundary.Bind(markDispatchPossible))
             {
-                return VbaNativeOutcome.From(ExecutePreparedMutation(
-                    toolId, arguments, state,
-                    MutationCorrelation(execution, session),
-                    false, cancellationToken));
+                var correlation = MutationCorrelation(execution, session);
+                return MutationOutcome(ExecutePreparedMutation(
+                    toolId, arguments, state, correlation,
+                    false, cancellationToken), correlation, state.ModuleName);
             }
+        }
+
+        private static VbaNativeOutcome MutationOutcome(
+            VbaMutationOutcome mutation,
+            VbaMutationCorrelation correlation,
+            string fallbackModuleName)
+        {
+            var outcome = VbaNativeOutcome.From(mutation);
+            if (mutation == null || correlation == null ||
+                string.IsNullOrWhiteSpace(correlation.DocumentAuthorityId)) return outcome;
+            var data = mutation.Data;
+            var requiresCompleteSource = string.Equals(
+                    mutation.ErrorCode, "vba_snapshot_refresh_required", StringComparison.Ordinal) ||
+                string.Equals(mutation.ErrorCode, "stale_vba_module", StringComparison.Ordinal) &&
+                (bool?)data?["reconcileBeforeOverwrite"] == true;
+            if (!requiresCompleteSource) return outcome;
+            var moduleName = ((string)data?["moduleName"] ?? fallbackModuleName ?? string.Empty).Trim();
+            if (moduleName.Length == 0) return outcome;
+            return outcome.WithRetryRequirement(new ToolRetryRequirement(
+                VbaResourceProvider.ComponentIdentity(correlation.DocumentAuthorityId, moduleName),
+                ResourceRepresentations.Source));
         }
 
         private VbaMutationOutcome ExecutePreparedMutation(
@@ -448,6 +469,7 @@ namespace RNAssistant.Office.Tools
         internal VbaNativeOutcomeStatus Status { get; private set; }
         internal string Message { get; private set; }
         internal string DataJson { get; private set; }
+        internal ToolRetryRequirement RetryRequirement { get; private set; }
 
         private VbaNativeOutcome(VbaNativeOutcomeStatus status,
             string message, JObject data)
@@ -505,6 +527,12 @@ namespace RNAssistant.Office.Tools
                 outcome.Message,
                 ErrorData(outcome.Data, outcome.ErrorCode,
                     outcome.Retryable));
+        }
+
+        internal VbaNativeOutcome WithRetryRequirement(ToolRetryRequirement requirement)
+        {
+            RetryRequirement = requirement;
+            return this;
         }
 
         private static JObject ErrorData(JObject data, string code,
