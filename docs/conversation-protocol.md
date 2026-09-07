@@ -613,6 +613,9 @@ status appears between calls, without a separate count or duplicate running stat
 Waiting typed lifecycles keep the feed open. Only a terminal run folds the complete
 process into `Действия · N`. Changed live units retain explicit detail-disclosure
 state by identity.
+Message action footers refresh separately when send, edit, confirmation or bridge
+availability changes. Cached message bodies and embedded previews remain attached;
+edit and fork availability must not stay frozen at the time a message first rendered.
 Arrows follow their label and align with
 its first line. Reduced-motion disables shimmer; plain streaming text has no
 separate three-dot cursor.

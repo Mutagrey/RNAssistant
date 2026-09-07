@@ -484,12 +484,32 @@ function agentRunUnitSignature(run) {
   });
 }
 
-function appendMessageUnit(units, key, signature, render) {
-  units.push({ key: key, signature: signature, render: render });
+function appendMessageUnit(units, key, signature, render, actionsSignature, refreshActions) {
+  units.push({ key: key, signature: signature, render: render,
+    actionsSignature: actionsSignature, refreshActions: refreshActions });
+}
+
+function messageActionsSignature() {
+  return JSON.stringify({
+    sending: !!currentActiveSend(),
+    editing: hasActiveMessageEdit(),
+    approval: typeof pendingAgentApprovalActivity === "function" && !!pendingAgentApprovalActivity(),
+    bridgeUnavailable: !!state.bridgeUnavailable
+  });
+}
+
+function refreshMessageFooter(node, append) {
+  var footer = Array.prototype.find.call(node.children, function (child) {
+    return child.classList.contains("message-footer");
+  });
+  if (!footer) return;
+  node.removeChild(footer);
+  append(node);
 }
 
 function buildMessageUnits() {
   var units = [];
+  var actionsSignature = messageActionsSignature();
   for (var index = 0; index < state.messages.length; index += 1) {
     if (messageProtocolMessage(state.messages[index])) {
       continue;
@@ -498,12 +518,28 @@ function buildMessageUnits() {
       var run = collectAgentRun(index);
       appendMessageUnit(units, agentRunUnitKey(run), agentRunUnitSignature(run), (function (capturedRun) {
         return function () { return renderAgentRunArticle(capturedRun); };
+      }(run)), actionsSignature, (function (capturedRun) {
+        return function (node) {
+          refreshMessageFooter(node, function (target) {
+            if (!capturedRun.items.length && capturedRun.finalMessage) {
+              appendMessageFooter(target, capturedRun.finalMessage.message, capturedRun.finalMessage.index, null);
+            } else {
+              appendAgentRunFooter(target, capturedRun.items, capturedRun.finalMessage);
+            }
+          });
+        };
       }(run)));
       index = run.nextIndex - 1;
     } else {
       appendMessageUnit(units, "message:" + (messageId(state.messages[index]) || index),
         messageUnitSignature(state.messages[index]), (function (message, messageIndex) {
           return function () { return renderMessageArticle(message, messageIndex); };
+        }(state.messages[index], index)), actionsSignature + ":" + index, (function (message, messageIndex) {
+          return function (node) {
+            refreshMessageFooter(node, function (target) {
+              appendMessageFooter(target, message, messageIndex, messageActivity(message));
+            });
+          };
         }(state.messages[index], index)));
     }
   }
@@ -560,6 +596,9 @@ function reconcileMessageUnits(box, units, liveOnly) {
   units.forEach(function (unit) {
     var cached = renderedMessageUnits[unit.key];
     var node = cached && cached.signature === unit.signature ? cached.node : null;
+    if (node && cached.actionsSignature !== unit.actionsSignature && unit.refreshActions) {
+      unit.refreshActions(node);
+    }
     if (!node) {
       var disclosures = messageDisclosureSnapshot(cached && cached.node);
       if (cached && cached.node && typeof clearMarkdownEnhancements === "function") {
@@ -568,7 +607,7 @@ function reconcileMessageUnits(box, units, liveOnly) {
       node = unit.render();
       restoreMessageDisclosures(node, disclosures);
     }
-    nextCache[unit.key] = { signature: unit.signature, node: node };
+    nextCache[unit.key] = { signature: unit.signature, actionsSignature: unit.actionsSignature, node: node };
   });
   Object.keys(renderedMessageUnits).forEach(function (key) {
     if (!nextCache[key] && renderedMessageUnits[key].node) {
