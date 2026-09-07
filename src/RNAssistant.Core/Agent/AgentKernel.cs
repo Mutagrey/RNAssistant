@@ -196,7 +196,8 @@ namespace RNAssistant.Core.Agent
                 return state.Summary(RunLifecycle.Failed, "tool_step_limit", "Tool step limit reached.");
             }
             var callSignature = call.Name + "\n" + call.ArgumentsJson;
-            if (!confirmed && state.FailedCallSignatures.Contains(callSignature))
+            if (!confirmed && (state.ErrorCallSignatures.Contains(callSignature) ||
+                state.UnknownCallSignatures.Contains(callSignature)))
             {
                 await RecordNotDispatchedAsync(state, call, policy, stepId,
                     "An identical failed tool call was already attempted.").ConfigureAwait(false);
@@ -245,9 +246,12 @@ namespace RNAssistant.Core.Agent
                 stop = cancelled ? RunLifecycle.Cancelled : RunLifecycle.Failed;
             }
             if (record.ToolStepsConsumed > remaining) stop = RunLifecycle.Failed;
-            if (record.Outcome == ToolExecutionOutcome.Error ||
-                record.Outcome == ToolExecutionOutcome.Unknown)
-                state.FailedCallSignatures.Add(callSignature);
+            if (record.Outcome == ToolExecutionOutcome.Error)
+                state.ErrorCallSignatures.Add(callSignature);
+            else if (record.Outcome == ToolExecutionOutcome.Ok && policy.MayHaveSideEffects)
+                state.ErrorCallSignatures.Clear();
+            if (record.Outcome == ToolExecutionOutcome.Unknown)
+                state.UnknownCallSignatures.Add(callSignature);
             state.ToolSteps = (int)Math.Min(int.MaxValue, (long)state.ToolSteps + Math.Max(0, (long)record.ToolStepsConsumed - chargedSteps));
             state.Counts = state.Counts.Add(record);
             if (record.Outcome == ToolExecutionOutcome.AwaitingConfirmation)
@@ -330,7 +334,9 @@ namespace RNAssistant.Core.Agent
             internal long Revision;
             internal PendingConfirmation Pending;
             internal int NoToolCheckpoints;
-            internal readonly HashSet<string> FailedCallSignatures =
+            internal readonly HashSet<string> ErrorCallSignatures =
+                new HashSet<string>(StringComparer.Ordinal);
+            internal readonly HashSet<string> UnknownCallSignatures =
                 new HashSet<string>(StringComparer.Ordinal);
 
             internal State(AgentRunRequest request)

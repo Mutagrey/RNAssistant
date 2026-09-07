@@ -131,6 +131,105 @@ namespace RNAssistant.Harness
                 "repeated accepted call is closed without dispatch");
         }
 
+        private static async Task KernelAllowsFailedCallAfterInterveningSuccess()
+        {
+            const string close = "{\"action\":\"close\",\"outcome\":\"completed\"}";
+            const string save = "{\"action\":\"save\",\"steps\":[{\"text\":\"Draw\",\"status\":\"completed\"}]}";
+            var f = new KernelFixture(
+                KernelResponse(KernelCall("write", close)),
+                KernelResponse(KernelCall("write", save)),
+                KernelResponse(KernelCall("write", close)),
+                KernelResponse());
+            var outcomes = new Queue<ToolExecutionOutcome>(new[]
+            {
+                ToolExecutionOutcome.Error,
+                ToolExecutionOutcome.Ok,
+                ToolExecutionOutcome.Ok
+            });
+            f.Tools.OnExecute = (context, token) => Task.FromResult(
+                KernelRecord(context, outcomes.Dequeue()));
+
+            var result = await f.RunAsync();
+
+            AssertEqual(RunLifecycle.Completed, result.Summary.Lifecycle,
+                "corrected state allows the same operation again");
+            AssertEqual(3, f.Tools.Calls.Count,
+                "failed close, corrective save and valid close each dispatch once");
+            AssertEqual(4, f.Model.Requests.Count,
+                "kernel continues to the final answer after corrective execution");
+        }
+
+        private static async Task KernelDoesNotResetFailedCallsAfterAnotherFailure()
+        {
+            const string first = "{\"target\":\"first invalid target\"}";
+            const string second = "{\"target\":\"second invalid target\"}";
+            var f = new KernelFixture(
+                KernelResponse(KernelCall("read", first)),
+                KernelResponse(KernelCall("read", second)),
+                KernelResponse(KernelCall("read", first)));
+            f.Tools.OnExecute = (context, token) => Task.FromResult(
+                KernelRecord(context, ToolExecutionOutcome.Error));
+
+            var result = await f.RunAsync();
+
+            AssertEqual(RunLifecycle.Failed, result.Summary.Lifecycle,
+                "another failure does not authorize an earlier failed call");
+            AssertEqual("repeated_failed_tool_call", result.Summary.Reason,
+                "alternating failed calls remain bounded");
+            AssertEqual(2, f.Tools.Calls.Count,
+                "earlier failed call is not dispatched twice without a success");
+        }
+
+        private static async Task KernelDoesNotResetFailedCallsAfterSuccessfulRead()
+        {
+            const string failed = "{\"target\":\"invalid target\"}";
+            var f = new KernelFixture(
+                KernelResponse(KernelCall("write", failed)),
+                KernelResponse(KernelCall("read", "{\"target\":\"status\"}")),
+                KernelResponse(KernelCall("write", failed)));
+            var outcomes = new Queue<ToolExecutionOutcome>(new[]
+            {
+                ToolExecutionOutcome.Error,
+                ToolExecutionOutcome.Ok
+            });
+            f.Tools.OnExecute = (context, token) => Task.FromResult(
+                KernelRecord(context, outcomes.Dequeue()));
+
+            var result = await f.RunAsync();
+
+            AssertEqual(RunLifecycle.Failed, result.Summary.Lifecycle,
+                "read-only success cannot correct a failed mutation");
+            AssertEqual("repeated_failed_tool_call", result.Summary.Reason,
+                "failed mutation remains bounded after a read");
+            AssertEqual(2, f.Tools.Calls.Count,
+                "read-only success does not redispatch the failed mutation");
+        }
+
+        private static async Task KernelNeverRepeatsUnknownCallAfterInterveningSuccess()
+        {
+            const string uncertain = "{\"target\":\"same possible effect\"}";
+            var f = new KernelFixture(
+                KernelResponse(KernelCall("write", uncertain)),
+                KernelResponse(KernelCall("read", "{\"target\":\"status\"}")),
+                KernelResponse(KernelCall("write", uncertain)));
+            var outcomes = new Queue<ToolExecutionOutcome>(new[]
+            {
+                ToolExecutionOutcome.Unknown,
+                ToolExecutionOutcome.Ok
+            });
+            f.Tools.OnExecute = (context, token) => Task.FromResult(
+                KernelRecord(context, outcomes.Dequeue()));
+
+            var result = await f.RunAsync();
+
+            AssertEqual(RunLifecycle.Failed, result.Summary.Lifecycle,
+                "unknown possible effect is never repeated automatically");
+            AssertEqual("repeated_failed_tool_call", result.Summary.Reason,
+                "unknown repeat has the bounded terminal reason");
+            AssertEqual(2, f.Tools.Calls.Count,
+                "intervening success does not redispatch the unknown write");
+        }
+
         private static async Task KernelReadsAreSequentialAndBounded()
         {
             var f = new KernelFixture(KernelResponse(KernelCall("read"), KernelCall("read")), KernelResponse());
