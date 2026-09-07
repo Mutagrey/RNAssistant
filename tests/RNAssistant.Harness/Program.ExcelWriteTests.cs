@@ -150,8 +150,32 @@ namespace RNAssistant.Harness
                     "predispatch refusal has no effect boundary");
                 AssertEqual(ToolEffectEvidence.None, refused.Evidence.Effect,
                     "predispatch refusal does not invent effect evidence");
-                AssertEqual("excel_write_protected", (string)JObject.Parse(refused.Result.DataJson)["code"],
+                var refusedData = JObject.Parse(refused.Result.DataJson);
+                AssertEqual("excel_write_protected", (string)refusedData["code"],
                     "predispatch error code survives typed mapping");
+                AssertEqual("RejectedNoEffect",
+                    (string)refusedData["recovery"]?["failureKind"],
+                    "definite domain refusal exposes no-effect recovery");
+                AssertEqual("Replan",
+                    (string)refusedData["recovery"]?["retryPolicy"],
+                    "non-retryable domain refusal requires a changed plan");
+
+                adapter.QueueExcelWriteApplyFailure(
+                    "Excel is temporarily busy", "excel_write_busy", true);
+                var transientCall = new ToolCall("excel-write-busy",
+                    ExcelWriteToolIds.WriteRange,
+                    "{\"kind\":\"value\",\"sheet\":\"Data\",\"address\":\"N5\",\"value\":\"x\"}");
+                var transient = ExecuteNative(runtime, transientCall,
+                    runtime.Describe(transientCall));
+                var transientData = JObject.Parse(transient.Result.DataJson);
+                AssertEqual(ToolExecutionOutcome.Error, transient.Outcome,
+                    "retryable predispatch backend refusal remains a definite error");
+                AssertEqual("RejectedNoEffect",
+                    (string)transientData["recovery"]?["failureKind"],
+                    "transient refusal still certifies no effect");
+                AssertEqual("RetryLater",
+                    (string)transientData["recovery"]?["retryPolicy"],
+                    "transient refusal is deferred without automatic replay");
             });
 
             WithTempExecutor(FakeOfficeAdapter.ForHost("Excel"), delegate(OfficeToolExecutor executor, FakeOfficeAdapter adapter)

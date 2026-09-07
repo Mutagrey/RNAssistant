@@ -575,7 +575,11 @@ the matching class contract. Every dispatched `OpaqueAction` remains `unknown`
 even when its handler reports success; custom VBA and Office macros are the current
 opaque tools. Session absence, bound-document guards, document-gate contention and
 resource admission failures are classified once by the Office runtime and projected
-through the same typed recovery contract for every native Office handler.
+through the same typed recovery contract for every native Office handler. Typed
+Excel, Word, PowerPoint and Outlook domain errors already certify no effect; handlers
+preserve that fact as `RejectedNoEffect` and map their explicit retryability to
+`Replan` or `RetryLater` without parsing error text. Domain `Unknown` never acquires
+a recovery route.
 Only the kernel aggregates records. `ChatActivity.ExecutionEvidence`
 preserves compact native facts through existing event operations and clone; a
 present incomplete evidence/policy object fails deserialization.

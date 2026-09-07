@@ -101,7 +101,9 @@ namespace RNAssistant.Office.Tools
             else if (outcome.Status == OutlookOutcomeStatus.Unknown)
                 result = RuntimeResult.Unknown(outcome.Message, outcome.DataJson);
             else result = RuntimeResult.Error(outcome.Message, outcome.DataJson);
-            return new ToolHandlerResult(result, Effect(outcome.Effect));
+            return new ToolHandlerResult(result, Effect(outcome.Effect),
+                recovery: outcome.Status == OutlookOutcomeStatus.Error
+                    ? OfficeToolFailure.DefiniteDomain(outcome.Retryable) : null);
         }
 
         private static ToolEffectEvidence Effect(OutlookEffect effect)

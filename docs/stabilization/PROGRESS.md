@@ -25,7 +25,15 @@ default prompts, three prompt-review cases, exact empty text and on-demand rerea
 Only host-neutral harness execution; target-model quality and Windows delivery
 remain unqualified.
 
-Latest correction (2026-09-07): native Office handlers now share one runtime-owned
+Latest correction (2026-09-07): definite typed domain errors from Excel, Word,
+PowerPoint and Outlook now retain their existing no-effect guarantee through the
+tool boundary as `RejectedNoEffect`. Existing typed retryability maps to `Replan`
+or `RetryLater`; handlers do not inspect messages or error-code strings, and
+`Unknown` outcomes remain non-recoverable. Focused host-neutral verification covers
+both permanent and transient Excel refusal; Windows/Office qualification remains
+open.
+
+Previous correction (2026-09-07): native Office handlers now share one runtime-owned
 classification for session, document-guard, mutation-lock and resource-admission
 failures. Closed/mismatched targets are definite `RejectedNoEffect`, occupied gates
 are `BusyNoEffect/RetryLater`, infrastructure identity/lock failures remain

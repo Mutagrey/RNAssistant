@@ -74,7 +74,9 @@ namespace RNAssistant.Office.Tools
                     ? ToolEffectEvidence.VerifiedChange
                     : outcome.Effect == ExcelTableEffect.Unknown
                         ? ToolEffectEvidence.Unknown
-                        : ToolEffectEvidence.None);
+                        : ToolEffectEvidence.None,
+                recovery: outcome.Status == ExcelTableOutcomeStatus.Error
+                    ? OfficeToolFailure.DefiniteDomain(outcome.Retryable) : null);
         }
 
         private static OfficeDocumentExecutionExpectation Target(ChatSession session)

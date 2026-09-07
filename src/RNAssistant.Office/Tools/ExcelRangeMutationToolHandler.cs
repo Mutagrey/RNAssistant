@@ -95,7 +95,9 @@ namespace RNAssistant.Office.Tools
             else if (outcome.Status == ExcelRangeMutationOutcomeStatus.Unknown)
                 result = RuntimeResult.Unknown(outcome.Message, outcome.DataJson);
             else result = RuntimeResult.Error(outcome.Message, outcome.DataJson);
-            return new ToolHandlerResult(result, Effect(outcome.Effect));
+            return new ToolHandlerResult(result, Effect(outcome.Effect),
+                recovery: outcome.Status == ExcelRangeMutationOutcomeStatus.Error
+                    ? OfficeToolFailure.DefiniteDomain(outcome.Retryable) : null);
         }
 
         private static ToolEffectEvidence Effect(ExcelRangeMutationEffect effect)

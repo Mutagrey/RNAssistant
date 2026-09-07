@@ -45,6 +45,14 @@ namespace RNAssistant.Office.Runtime
                 ResourceRecovery(error.ErrorCode));
         }
 
+        internal static ToolRecoveryContract DefiniteDomain(bool retryable)
+        {
+            return new ToolRecoveryContract(
+                ToolFailureKind.RejectedNoEffect,
+                retryable ? ToolRetryPolicy.RetryLater :
+                    ToolRetryPolicy.Replan);
+        }
+
         internal static Task<ToolPreparationResult> GuardPreparation(
             OfficeDocumentGuardException error)
         {

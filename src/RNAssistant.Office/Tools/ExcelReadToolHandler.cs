@@ -3,6 +3,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using RNAssistant.Core.Models;
 using RNAssistant.Core.Tools;
+using RNAssistant.Office.Domains.Excel;
 using RNAssistant.Office.Runtime;
 using RuntimeResult = RNAssistant.Core.Tools.Contracts.ToolResult;
 
@@ -42,12 +43,10 @@ namespace RNAssistant.Office.Tools
                 var result = _runtime.ReadDocument(Target(_session), cancellationToken, delegate
                 {
                     context.MarkDispatchPossible();
-                    return _adapter.Execute(
-                        _toolId,
-                        context.Arguments,
-                        cancellationToken);
+                    return Result(_adapter.ExecuteOutcome(
+                        _toolId, context.Arguments));
                 });
-                return Task.FromResult(new ToolHandlerResult(result, ToolEffectEvidence.None));
+                return Task.FromResult(result);
             }
             catch (OfficeDocumentGuardException ex)
             {
@@ -57,6 +56,19 @@ namespace RNAssistant.Office.Tools
             {
                 return OfficeToolFailure.Lock(ex);
             }
+        }
+
+        private static ToolHandlerResult Result(ExcelReadOutcome outcome)
+        {
+            if (outcome == null)
+                throw new InvalidOperationException(
+                    "Excel read returned no outcome.");
+            var result = outcome.Success
+                ? RuntimeResult.Ok(outcome.Message, outcome.DataJson)
+                : RuntimeResult.Error(outcome.Message, outcome.DataJson);
+            return new ToolHandlerResult(result, ToolEffectEvidence.None,
+                recovery: outcome.Success ? null :
+                    OfficeToolFailure.DefiniteDomain(outcome.Retryable));
         }
 
         private static OfficeDocumentExecutionExpectation Target(ChatSession session)

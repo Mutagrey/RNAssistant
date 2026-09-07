@@ -1,8 +1,6 @@
 using System;
 using System.Collections.Generic;
-using System.Threading;
 using RNAssistant.Office.Domains.Excel;
-using RuntimeResult = RNAssistant.Core.Tools.Contracts.ToolResult;
 
 namespace RNAssistant.Office.Tools
 {
@@ -13,18 +11,6 @@ namespace RNAssistant.Office.Tools
         internal ExcelReadToolAdapter(IExcelReadBackend backend)
         {
             _backend = backend ?? throw new ArgumentNullException(nameof(backend));
-        }
-
-        internal RuntimeResult Execute(
-            string toolId,
-            IDictionary<string, object> arguments,
-            CancellationToken cancellationToken)
-        {
-            cancellationToken.ThrowIfCancellationRequested();
-            var outcome = ExecuteOutcome(toolId, arguments);
-            return outcome.Success
-                ? RuntimeResult.Ok(outcome.Message, outcome.DataJson)
-                : RuntimeResult.Error(outcome.Message, outcome.DataJson);
         }
 
         internal ExcelReadOutcome ExecuteOutcome(
