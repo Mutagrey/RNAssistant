@@ -23,6 +23,11 @@ namespace RNAssistant.Office.Runtime
             if (!ToolSchemaSupport.TryParse(new ToolCatalogEntry
                 { Id = registration.Descriptor.Id, ArgumentSchemaJson = registration.Descriptor.ParametersJson }, out schema, out error))
                 throw new ArgumentException("Invalid registered tool schema: " + error, nameof(registration));
+            if (!Supports(registration.Policy.ExecutionClass, handler))
+                throw new ArgumentException(
+                    "Handler does not implement the required " +
+                    registration.Policy.ExecutionClass + " execution contract: " +
+                    registration.Descriptor.Id, nameof(handler));
 
             lock (_gate)
             {
@@ -33,6 +38,21 @@ namespace RNAssistant.Office.Runtime
                     throw new InvalidOperationException("Handler identity is already bound: " + registration.Binding.HandlerId);
                 _handlers[registration.Binding.HandlerId] = handler;
                 _tools.Add(registration.Descriptor.Id, new RegisteredTool(registration, handler, schema));
+            }
+        }
+
+        private static bool Supports(ToolExecutionClass executionClass, IToolHandler handler)
+        {
+            switch (executionClass)
+            {
+                case ToolExecutionClass.ReadOnly:
+                    return handler is IReadOnlyToolHandler;
+                case ToolExecutionClass.ManagedMutation:
+                    return handler is IManagedMutationToolHandler;
+                case ToolExecutionClass.OpaqueAction:
+                    return handler is IOpaqueActionToolHandler;
+                default:
+                    return false;
             }
         }
 

@@ -10,7 +10,7 @@ using RuntimeResult = RNAssistant.Core.Tools.Contracts.ToolResult;
 
 namespace RNAssistant.Office.Tools
 {
-    internal sealed class ExcelChartToolHandler : IToolHandler
+    internal sealed class ExcelChartToolHandler : IManagedMutationToolHandler
     {
         private readonly string _toolId;
         private readonly ExcelChartToolAdapter _adapter;

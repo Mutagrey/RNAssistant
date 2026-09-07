@@ -8,7 +8,7 @@ using RuntimeResult = RNAssistant.Core.Tools.Contracts.ToolResult;
 
 namespace RNAssistant.Office.Tools
 {
-    internal sealed class UserQuestionToolHandler : IToolHandler
+    internal sealed class UserQuestionToolHandler : IReadOnlyToolHandler
     {
         internal static readonly ToolBinding Binding =
             new ToolBinding("conversation.questions.ask.intent.v2");

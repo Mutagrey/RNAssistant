@@ -10,7 +10,7 @@ using RuntimeResult = RNAssistant.Core.Tools.Contracts.ToolResult;
 
 namespace RNAssistant.Office.Tools
 {
-    internal sealed class VbaPackageToolHandler : IToolHandler
+    internal sealed class VbaPackageToolHandler : IOpaqueActionToolHandler
     {
         internal const string HandlerId = "vba.custom.package.execute.v1";
 
@@ -87,17 +87,19 @@ namespace RNAssistant.Office.Tools
                                 _source, arguments, false, context.Execution,
                                 _session, context.MarkDispatchPossible,
                                 cancellationToken);
-                        }, terminalOutcome => context.Complete(new ToolHandlerResult(Result(terminalOutcome), Effect(terminalOutcome))), context.CompleteFailure);
+                        }, terminalOutcome => context.Complete(
+                            ProjectResult(terminalOutcome)),
+                        context.CompleteFailure);
                 if (result == null)
                     throw new InvalidOperationException(
                         "VBA package handler returned no typed result.");
-                return Task.FromResult(new ToolHandlerResult(
-                    Result(result), Effect(result)));
+                return Task.FromResult(ProjectResult(result));
             }
             catch (OfficeDocumentGuardException ex)
                 when (!context.MayHaveDispatched)
             {
-                return Failure(ex.Message, ex.ErrorCode, ex.Retryable);
+                return Failure(ex.Message, ex.ErrorCode,
+                    GuardRecovery(ex.ErrorCode));
             }
             catch (HostRuntime.MutationLockException ex)
                 when (!context.MayHaveDispatched)
@@ -105,7 +107,7 @@ namespace RNAssistant.Office.Tools
                 return Failure(ex.Message,
                     ex.Retryable ? "tool_mutation_busy" :
                         "tool_mutation_lock_unavailable",
-                    ex.Retryable);
+                    LockRecovery(ex.Retryable));
             }
         }
 
@@ -129,6 +131,11 @@ namespace RNAssistant.Office.Tools
                         : ToolEffectEvidence.None;
         }
 
+        private static ToolHandlerResult ProjectResult(VbaPackageResult result)
+        {
+            return new ToolHandlerResult(Result(result), Effect(result));
+        }
+
         private static OfficeDocumentExecutionExpectation Target(
             ChatSession session)
         {
@@ -143,14 +150,31 @@ namespace RNAssistant.Office.Tools
         }
 
         private static Task<ToolHandlerResult> Failure(
-            string message, string code, bool retryable)
+            string message, string code, ToolRecoveryContract recovery)
         {
             return Task.FromResult(new ToolHandlerResult(
                 RuntimeResult.Error(message, new JObject
                 {
                     ["code"] = code,
-                    ["retryable"] = retryable
-                }.ToString()), ToolEffectEvidence.None));
+                    ["retryable"] = recovery.RetryPolicy == ToolRetryPolicy.RetryLater
+                }.ToString()), ToolEffectEvidence.None,
+                recovery: recovery));
+        }
+
+        private static ToolRecoveryContract GuardRecovery(string code)
+        {
+            var rejected = string.Equals(code, "active_document_changed", StringComparison.Ordinal) ||
+                string.Equals(code, "document_session_unavailable", StringComparison.Ordinal);
+            return new ToolRecoveryContract(
+                rejected ? ToolFailureKind.RejectedNoEffect : ToolFailureKind.ToolDefect,
+                ToolRetryPolicy.None);
+        }
+
+        private static ToolRecoveryContract LockRecovery(bool retryable)
+        {
+            return new ToolRecoveryContract(
+                retryable ? ToolFailureKind.BusyNoEffect : ToolFailureKind.ToolDefect,
+                retryable ? ToolRetryPolicy.RetryLater : ToolRetryPolicy.None);
         }
     }
 }

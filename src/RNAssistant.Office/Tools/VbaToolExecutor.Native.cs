@@ -1,10 +1,12 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Text;
 using System.Threading;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
 using RNAssistant.Core.Models;
+using RNAssistant.Office.Contracts;
 using RNAssistant.Office.Services;
 using RNAssistant.Core.Tools;
 using RNAssistant.Office.Domains.Vba;
@@ -246,7 +248,7 @@ namespace RNAssistant.Office.Tools
             }
         }
 
-        private static VbaNativeOutcome MutationOutcome(
+        private VbaNativeOutcome MutationOutcome(
             VbaMutationOutcome mutation,
             VbaMutationCorrelation correlation,
             string fallbackModuleName)
@@ -255,16 +257,131 @@ namespace RNAssistant.Office.Tools
             if (mutation == null || correlation == null ||
                 string.IsNullOrWhiteSpace(correlation.DocumentAuthorityId)) return outcome;
             var data = mutation.Data;
-            var requiresCompleteSource = string.Equals(
-                    mutation.ErrorCode, "vba_snapshot_refresh_required", StringComparison.Ordinal) ||
-                string.Equals(mutation.ErrorCode, "stale_vba_module", StringComparison.Ordinal) &&
-                (bool?)data?["reconcileBeforeOverwrite"] == true;
-            if (!requiresCompleteSource) return outcome;
+            var conflict = string.Equals(mutation.ErrorCode,
+                    "vba_snapshot_refresh_required", StringComparison.Ordinal) ||
+                string.Equals(mutation.ErrorCode,
+                    "stale_vba_module", StringComparison.Ordinal);
+            var rejected = string.Equals(mutation.ErrorCode,
+                    "vba_patch_stale_source", StringComparison.Ordinal) ||
+                string.Equals(mutation.ErrorCode,
+                    "vba_patch_ambiguous", StringComparison.Ordinal) ||
+                string.Equals(mutation.ErrorCode,
+                    "vba_patch_invalid", StringComparison.Ordinal);
+            if (!conflict && !rejected) return outcome;
             var moduleName = ((string)data?["moduleName"] ?? fallbackModuleName ?? string.Empty).Trim();
             if (moduleName.Length == 0) return outcome;
-            return outcome.WithRetryRequirement(new ToolRetryRequirement(
+            string currentSource;
+            bool currentSourceComplete;
+            ReadCurrentSource(moduleName, data, out currentSource, out currentSourceComplete);
+            var observedSource = ReadObservedSource(correlation, moduleName,
+                (string)data?["observedCodeSha256"]);
+            return outcome.WithRecovery(new ToolRecoveryContract(
+                conflict ? ToolFailureKind.ConflictNoEffect : ToolFailureKind.RejectedNoEffect,
+                currentSourceComplete ? ToolRetryPolicy.Replan : ToolRetryPolicy.RefreshRequired,
                 VbaResourceProvider.ComponentIdentity(correlation.DocumentAuthorityId, moduleName),
-                ResourceRepresentations.Source));
+                ResourceRepresentations.Source,
+                "VBA module: " + moduleName,
+                currentSource,
+                currentSourceComplete,
+                ChangedSpan(observedSource, currentSource)));
+        }
+
+        private void ReadCurrentSource(string moduleName, JObject data,
+            out string currentSource, out bool complete)
+        {
+            currentSource = null;
+            complete = false;
+            if ((bool?)data?["actualExists"] == false)
+            {
+                currentSource = string.Empty;
+                complete = true;
+                return;
+            }
+            VbaModuleState module;
+            ToolRunResult error;
+            if (_reader == null || !_reader.TryReadModule(
+                moduleName, 1000000, out module, out error) || module == null)
+                return;
+            var source = module.Code ?? string.Empty;
+            if (source.Length <= 16384)
+            {
+                currentSource = source;
+                complete = !module.Truncated;
+                return;
+            }
+            currentSource = source.Substring(0, 8000) +
+                "\n... current source omitted; use common.resources_read ...\n" +
+                source.Substring(source.Length - 8000);
+        }
+
+        private string ReadObservedSource(VbaMutationCorrelation correlation,
+            string moduleName, string observedHash)
+        {
+            if (_authority == null || _authority.Payloads == null ||
+                correlation == null) return null;
+            var identity = VbaResourceProvider.ComponentIdentity(
+                correlation.DocumentAuthorityId, moduleName);
+            var evidence = (correlation.Evidence ?? new ResourceEvidence[0])
+                .Where(item => item != null &&
+                    item.Resource.Identity.Equals(identity) && item.Complete &&
+                    item.Coverage.Kind == ResourceCoverageKinds.Whole &&
+                    item.View == ResourceRepresentations.Source &&
+                    (string.IsNullOrWhiteSpace(observedHash) ||
+                     string.Equals(item.ContentSha256, observedHash,
+                         StringComparison.OrdinalIgnoreCase)))
+                .LastOrDefault();
+            if (evidence == null) return null;
+            try
+            {
+                var view = _authority.Revisions.GetView(
+                    evidence.ScopeId, evidence.Resource, evidence.View);
+                var payload = view == null ? evidence.Payload :
+                    view.Payload ?? evidence.Payload;
+                return payload == null ? null :
+                    _authority.Payloads.ReadText(payload.ToBlobReference());
+            }
+            catch
+            {
+                return null;
+            }
+        }
+
+        private static string ChangedSpan(string before, string after)
+        {
+            if (before == null || after == null ||
+                string.Equals(before, after, StringComparison.Ordinal)) return null;
+            var oldLines = before.Replace("\r\n", "\n").Replace('\r', '\n').Split('\n');
+            var newLines = after.Replace("\r\n", "\n").Replace('\r', '\n').Split('\n');
+            var prefix = 0;
+            while (prefix < oldLines.Length && prefix < newLines.Length &&
+                oldLines[prefix] == newLines[prefix]) prefix++;
+            var suffix = 0;
+            while (suffix < oldLines.Length - prefix &&
+                suffix < newLines.Length - prefix &&
+                oldLines[oldLines.Length - 1 - suffix] ==
+                    newLines[newLines.Length - 1 - suffix]) suffix++;
+            var builder = new StringBuilder();
+            builder.Append("@@ old line ").Append(prefix + 1)
+                .Append(", current line ").Append(prefix + 1).AppendLine(" @@");
+            AppendChangedLines(builder, "- ", oldLines, prefix,
+                oldLines.Length - suffix);
+            AppendChangedLines(builder, "+ ", newLines, prefix,
+                newLines.Length - suffix);
+            var diff = builder.ToString();
+            return diff.Length <= 8192 ? diff :
+                diff.Substring(0, 8140) + "\n... diff omitted ...";
+        }
+
+        private static void AppendChangedLines(StringBuilder builder,
+            string prefix, string[] lines, int start, int end)
+        {
+            var count = Math.Max(0, end - start);
+            var limit = Math.Min(count, 80);
+            for (var index = 0; index < limit; index++)
+                builder.Append(prefix).AppendLine(lines[start + index]);
+            if (count > limit)
+                builder.Append(prefix).Append("... ")
+                    .Append(count - limit).AppendLine(" changed lines omitted ...");
         }
 
         private VbaMutationOutcome ExecutePreparedMutation(
@@ -469,7 +586,7 @@ namespace RNAssistant.Office.Tools
         internal VbaNativeOutcomeStatus Status { get; private set; }
         internal string Message { get; private set; }
         internal string DataJson { get; private set; }
-        internal ToolRetryRequirement RetryRequirement { get; private set; }
+        internal ToolRecoveryContract Recovery { get; private set; }
 
         private VbaNativeOutcome(VbaNativeOutcomeStatus status,
             string message, JObject data)
@@ -529,9 +646,9 @@ namespace RNAssistant.Office.Tools
                     outcome.Retryable));
         }
 
-        internal VbaNativeOutcome WithRetryRequirement(ToolRetryRequirement requirement)
+        internal VbaNativeOutcome WithRecovery(ToolRecoveryContract recovery)
         {
-            RetryRequirement = requirement;
+            Recovery = recovery;
             return this;
         }
 

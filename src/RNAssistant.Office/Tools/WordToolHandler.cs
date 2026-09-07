@@ -11,7 +11,7 @@ using RuntimeResult = RNAssistant.Core.Tools.Contracts.ToolResult;
 
 namespace RNAssistant.Office.Tools
 {
-    internal sealed class WordToolHandler : IToolHandler
+    internal sealed class WordToolHandler : IReadOnlyToolHandler, IManagedMutationToolHandler
     {
         private readonly string _toolId;
         private readonly WordToolAdapter _adapter;

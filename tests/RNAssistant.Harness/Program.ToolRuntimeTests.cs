@@ -77,6 +77,20 @@ namespace RNAssistant.Harness
             RuntimeThrows<ArgumentException>(() => Policy(confirmation: true, independent: true));
             RuntimeThrows<ArgumentException>(() => Policy(modes: new[] { "unknown" }));
             RuntimeThrows<ArgumentException>(() => new ToolDescriptor("not exact", "", RuntimeEmptySchema));
+            AssertEqual(ToolExecutionClass.ReadOnly, Policy().ExecutionClass,
+                "read policy derives the read-only execution contract");
+            AssertEqual(ToolExecutionClass.ManagedMutation,
+                Policy(ToolEffect.Write, ToolVerification.Tool).ExecutionClass,
+                "verified writes derive the managed mutation contract");
+            AssertEqual(ToolExecutionClass.OpaqueAction,
+                Policy(ToolEffect.Write).ExecutionClass,
+                "unverified writes derive the opaque action contract");
+            RuntimeThrows<ArgumentException>(() => registry.Register(
+                RuntimeRegistration("fixture.managed", Policy(
+                    ToolEffect.Write, ToolVerification.Tool)),
+                new ReadOnlyRuntimeHandler()));
+            AssertTrue(registry.Find("fixture.managed") == null,
+                "handler contract mismatch leaves no partial registration");
         }
 
         private static string RuntimeArgumentSchema()
@@ -140,6 +154,11 @@ namespace RNAssistant.Harness
                 AssertEqual(ToolExecutionOutcome.Error, result.Outcome, "invalid arguments reject");
                 AssertEqual(ToolDispatchEvidence.NotDispatched, result.Evidence.Dispatch, "validation precedes handler dispatch");
                 AssertContains(result.Result.DataJson, "invalid_arguments", "typed error data code");
+                AssertEqual(ToolFailureKind.RejectedNoEffect,
+                    result.Recovery.FailureKind,
+                    "invalid model arguments are a typed no-effect rejection");
+                AssertEqual(ToolRetryPolicy.Replan, result.Recovery.RetryPolicy,
+                    "invalid arguments require semantic replanning");
             }
             AssertEqual(0, f.Handler.Calls, "invalid arguments never invoke a handler");
         }
@@ -349,10 +368,9 @@ namespace RNAssistant.Harness
                 new { Effect = ToolEffectEvidence.None, Status = ToolResultStatus.Error, Dispatch = true, Expected = ToolExecutionOutcome.Error },
                 new { Effect = ToolEffectEvidence.Unreported, Status = ToolResultStatus.Error, Dispatch = true, Expected = ToolExecutionOutcome.Unknown }
             };
-            foreach (var effectKind in new[] { ToolEffect.Write, ToolEffect.External, ToolEffect.Unclassified })
             foreach (var item in cases)
             {
-                var f = new ToolRuntimeFixture(RuntimeRegistration(policy: Policy(effectKind, ToolVerification.Tool)));
+                var f = new ToolRuntimeFixture(RuntimeRegistration(policy: Policy(ToolEffect.Write, ToolVerification.Tool)));
                 f.Handler.Run = (context, token) =>
                 {
                     if (item.Dispatch) context.MarkDispatchPossible();
@@ -363,6 +381,26 @@ namespace RNAssistant.Harness
                 AssertEqual(item.Expected == ToolExecutionOutcome.Unknown ? ToolEffectEvidence.Unknown : item.Effect, result.Evidence.Effect, "no-op and known partial change remain distinct");
                 AssertEqual("{\"partial\":true}", result.Result.DataJson, "classification preserves domain data");
                 AssertEqual(1, f.Handler.Calls, "unknown/error effects are never retried");
+            }
+            foreach (var effectKind in new[] { ToolEffect.Write, ToolEffect.External, ToolEffect.Unclassified })
+            {
+                var f = new ToolRuntimeFixture(RuntimeRegistration(policy: Policy(effectKind)));
+                f.Handler.Run = (context, token) =>
+                {
+                    context.MarkDispatchPossible();
+                    return Task.FromResult(new ToolHandlerResult(
+                        RuntimeResult.Ok("Claimed success", "{\"returnValue\":true}"),
+                        ToolEffectEvidence.VerifiedChange));
+                };
+                var result = await f.Runtime.ExecuteAsync(f.Context(), CancellationToken.None);
+                AssertEqual(ToolExecutionOutcome.Unknown, result.Outcome,
+                    "opaque dispatch cannot certify its own effect");
+                AssertEqual(ToolEffectEvidence.Unknown, result.Evidence.Effect,
+                    "opaque dispatch retains unknown effect evidence");
+                AssertEqual("{\"returnValue\":true}", result.Result.DataJson,
+                    "opaque classification preserves domain diagnostics");
+                AssertEqual(1, f.Handler.Calls,
+                    "opaque actions are never retried automatically");
             }
             var missing = new ToolRuntimeFixture(RuntimeRegistration(policy: Policy(ToolEffect.Write, ToolVerification.Tool)));
             var noEvidence = await missing.Runtime.ExecuteAsync(missing.Context(), CancellationToken.None);
@@ -493,6 +531,26 @@ namespace RNAssistant.Harness
             var replay = JsonConvert.DeserializeObject<ToolExecutionRecord>(json);
             AssertEqual(ToolEffectEvidence.VerifiedNoChange, replay.Evidence.Effect, "compact no-op evidence round-trips");
             AssertTrue(replay.Context.Policy.Matches(snapshot), "nested execution policy round-trips");
+            var recoveryIdentity = new ResourceIdentity(
+                "rna://vba/document/component/module1");
+            var recovery = new ToolRecoveryContract(
+                ToolFailureKind.ConflictNoEffect,
+                ToolRetryPolicy.RefreshRequired,
+                recoveryIdentity,
+                ResourceRepresentations.Source,
+                "VBA module: Module1");
+            var failed = new ToolExecutionRecord(context,
+                ToolExecutionOutcome.Error, context.StartedUtc, "Conflict",
+                result: RuntimeResult.Error("Conflict"), recovery: recovery);
+            var failedReplay = JsonConvert.DeserializeObject<ToolExecutionRecord>(
+                JsonConvert.SerializeObject(failed));
+            AssertEqual(ToolFailureKind.ConflictNoEffect,
+                failedReplay.Recovery.FailureKind,
+                "typed recovery class survives durable replay");
+            AssertTrue(failedReplay.Recovery.ResourceIdentity.Equals(
+                    recoveryIdentity) &&
+                failedReplay.Recovery.View == ResourceRepresentations.Source,
+                "exact recovery evidence requirement survives durable replay");
             var legacyRecord = JObject.FromObject(record);
             legacyRecord.Remove("Evidence");
             var legacyReplay = JsonConvert.DeserializeObject<ToolExecutionRecord>(legacyRecord.ToString(Formatting.None));
@@ -642,7 +700,7 @@ namespace RNAssistant.Harness
             throw new InvalidOperationException("Expected " + typeof(TException).Name);
         }
 
-        private sealed class RuntimeTestHandler : IToolHandler
+        private sealed class RuntimeTestHandler : IReadOnlyToolHandler, IManagedMutationToolHandler, IOpaqueActionToolHandler
         {
             internal int Calls;
             internal Func<ToolHandlerContext, CancellationToken, Task<ToolHandlerResult>> Run;
@@ -653,7 +711,17 @@ namespace RNAssistant.Harness
             }
         }
 
-        private sealed class RuntimePreparableHandler : IPreparableToolHandler
+        private sealed class ReadOnlyRuntimeHandler : IReadOnlyToolHandler
+        {
+            public Task<ToolHandlerResult> ExecuteAsync(
+                ToolHandlerContext context, CancellationToken cancellationToken)
+            {
+                return Task.FromResult(new ToolHandlerResult(
+                    RuntimeResult.Ok("Read"), ToolEffectEvidence.None));
+            }
+        }
+
+        private sealed class RuntimePreparableHandler : IPreparableToolHandler, IManagedMutationToolHandler, IOpaqueActionToolHandler
         {
             internal int PrepareCalls;
             internal int ExecuteCalls;

@@ -9,7 +9,7 @@ using RuntimeResult = RNAssistant.Core.Tools.Contracts.ToolResult;
 
 namespace RNAssistant.Office.Tools
 {
-    internal sealed class ExcelReadToolHandler : IToolHandler
+    internal sealed class ExcelReadToolHandler : IReadOnlyToolHandler
     {
         internal static readonly ToolBinding InspectBinding = new ToolBinding("excel.read.inspect.v1");
 

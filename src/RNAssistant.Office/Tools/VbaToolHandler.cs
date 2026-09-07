@@ -9,7 +9,8 @@ using RuntimeResult = RNAssistant.Core.Tools.Contracts.ToolResult;
 
 namespace RNAssistant.Office.Tools
 {
-    internal sealed class VbaToolHandler : IPreparableToolHandler
+    internal sealed class VbaToolHandler : IPreparableToolHandler,
+        IManagedMutationToolHandler, IOpaqueActionToolHandler
     {
         private readonly string _toolId;
         private readonly VbaToolExecutor _executor;
@@ -69,18 +70,19 @@ namespace RNAssistant.Office.Tools
                         "VBA preparation returned no outcome.");
                 return Task.FromResult(new ToolPreparationResult(
                     Result(preparation.Outcome), preparation.StateJson,
-                    preparation.Outcome.RetryRequirement));
+                    preparation.Outcome.Recovery));
             }
             catch (OfficeDocumentGuardException ex)
             {
-                return PreparationFailure(ex.Message, ex.ErrorCode, ex.Retryable);
+                return PreparationFailure(ex.Message, ex.ErrorCode,
+                    GuardRecovery(ex.ErrorCode));
             }
             catch (HostRuntime.MutationLockException ex)
             {
                 return PreparationFailure(ex.Message,
                     ex.Retryable ? "tool_mutation_busy" :
                         "tool_mutation_lock_unavailable",
-                    ex.Retryable);
+                    LockRecovery(ex.Retryable));
             }
         }
 
@@ -108,7 +110,8 @@ namespace RNAssistant.Office.Tools
             catch (OfficeDocumentGuardException ex)
                 when (!context.MayHaveDispatched)
             {
-                return Failure(ex.Message, ex.ErrorCode, ex.Retryable);
+                return Failure(ex.Message, ex.ErrorCode,
+                    GuardRecovery(ex.ErrorCode));
             }
             catch (HostRuntime.MutationLockException ex)
                 when (!context.MayHaveDispatched)
@@ -116,19 +119,17 @@ namespace RNAssistant.Office.Tools
                 return Failure(ex.Message,
                     ex.Retryable ? "tool_mutation_busy" :
                         "tool_mutation_lock_unavailable",
-                    ex.Retryable);
+                    LockRecovery(ex.Retryable));
             }
         }
 
         private ToolHandlerResult ProjectOutcome(VbaNativeOutcome outcome, ToolHandlerContext context)
         {
             if (outcome == null) throw new InvalidOperationException("VBA execution returned no outcome.");
-            if (string.Equals(_toolId, VbaToolCatalog.RunMacro, StringComparison.Ordinal) && context.MayHaveDispatched)
-                return new ToolHandlerResult(RuntimeResult.Unknown(outcome.Message, outcome.DataJson), ToolEffectEvidence.Unknown);
             return new ToolHandlerResult(Result(outcome), Effect(outcome, context.MayHaveDispatched),
                 resourceReadBack: outcome.Status == VbaNativeOutcomeStatus.Ok && context.MayHaveDispatched
                     ? _executor.CaptureMutationReadBack(_session, context.PreparedStateJson) : null,
-                retryRequirement: outcome.RetryRequirement);
+                recovery: outcome.Recovery);
         }
 
         private static RuntimeResult Result(VbaNativeOutcome outcome)
@@ -166,20 +167,46 @@ namespace RNAssistant.Office.Tools
         }
 
         private static Task<ToolPreparationResult> PreparationFailure(
-            string message, string code, bool retryable)
+            string message, string code, ToolRecoveryContract recovery)
         {
             return Task.FromResult(new ToolPreparationResult(
                 RuntimeResult.Error(message,
-                    JsonConvert.SerializeObject(new { code, retryable }))));
+                    JsonConvert.SerializeObject(new
+                    {
+                        code,
+                        retryable = recovery.RetryPolicy == ToolRetryPolicy.RetryLater
+                    })),
+                recovery: recovery));
         }
 
         private static Task<ToolHandlerResult> Failure(
-            string message, string code, bool retryable)
+            string message, string code, ToolRecoveryContract recovery)
         {
             return Task.FromResult(new ToolHandlerResult(
                 RuntimeResult.Error(message,
-                    JsonConvert.SerializeObject(new { code, retryable })),
-                ToolEffectEvidence.None));
+                    JsonConvert.SerializeObject(new
+                    {
+                        code,
+                        retryable = recovery.RetryPolicy == ToolRetryPolicy.RetryLater
+                    })),
+                ToolEffectEvidence.None,
+                recovery: recovery));
+        }
+
+        private static ToolRecoveryContract GuardRecovery(string code)
+        {
+            var rejected = string.Equals(code, "active_document_changed", StringComparison.Ordinal) ||
+                string.Equals(code, "document_session_unavailable", StringComparison.Ordinal);
+            return new ToolRecoveryContract(
+                rejected ? ToolFailureKind.RejectedNoEffect : ToolFailureKind.ToolDefect,
+                ToolRetryPolicy.None);
+        }
+
+        private static ToolRecoveryContract LockRecovery(bool retryable)
+        {
+            return new ToolRecoveryContract(
+                retryable ? ToolFailureKind.BusyNoEffect : ToolFailureKind.ToolDefect,
+                retryable ? ToolRetryPolicy.RetryLater : ToolRetryPolicy.None);
         }
     }
 }

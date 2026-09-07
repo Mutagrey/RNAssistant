@@ -25,16 +25,19 @@ default prompts, three prompt-review cases, exact empty text and on-demand rerea
 Only host-neutral harness execution; target-model quality and Windows delivery
 remain unqualified.
 
-Latest correction (2026-09-07): the reported VBA refactoring stall exposed a
-contradiction between the mutation guard and the Agent repeat guard. A stale
-whole-module write correctly required a complete current `source` read, but the
-generic repeat guard still rejected the identical reconciled write after that
-read. Failed tool evidence now carries a typed exact resource/view recovery
-requirement; only matching complete whole-view evidence unlocks that call, while
-partial/unrelated reads and all `unknown` effects remain blocked. The VBA runtime
-publishes this requirement for stale whole writes and post-mutation source refresh.
-Host-neutral kernel and VBA runtime checks pass; target-model and Windows/VBE
-qualification remain open.
+Latest correction (2026-09-07): tool policy now derives `ReadOnly`,
+`ManagedMutation` or `OpaqueAction`, and registration fails closed on a handler
+contract mismatch. Failed execution carries typed failure/retry recovery. Exact VBA
+patch binds current live source under the document gate instead of forcing a full
+reread after every verified mutation; whole-module overwrite keeps the stricter
+model-observation guard and returns bounded current source plus changed-span diff on
+conflict. ToolRuntime forces every opaque dispatch, currently VBA macros/packages,
+to `unknown`, and any unknown effect
+blocks later mutations in the same run while allowing inspection reads. ToolRuntime,
+51 kernel, six patch, queued-guard, ten mutation and package-runtime checks pass
+host-neutral. The broader R61 descriptor inventory still reports its pre-existing
+golden-hash drift for several schemas not changed by this slice. Target-model and
+Windows/VBE qualification remain open.
 
 Latest correction (2026-09-07): the reported `model_loop_stalled` did not mean that
 the provider omitted `final`; strict v5 parsing proves that the target model returned

@@ -1371,10 +1371,10 @@ namespace RNAssistant.Harness
                 var stale = ToolRunResultFactory.Create(refused);
 
                 AssertEqual("stale_vba_module", stale.ErrorCode, "create detects a module added during confirmation");
-                AssertTrue(refused.RetryRequirement != null &&
-                    refused.RetryRequirement.ResourceIdentity.Equals(
+                AssertTrue(refused.Recovery != null &&
+                    refused.Recovery.ResourceIdentity.Equals(
                         VbaResourceProvider.ComponentIdentity(session.DocumentAuthorityId, "CreatedDuringConfirmation")) &&
-                    refused.RetryRequirement.View == ResourceRepresentations.Source,
+                    refused.Recovery.View == ResourceRepresentations.Source,
                     "stale whole-module write requires a complete source refresh of the exact component");
                 AssertContains(adapter.GetVbaModuleCode("CreatedDuringConfirmation"), "External", "create race does not overwrite module");
             });
@@ -2025,8 +2025,8 @@ namespace RNAssistant.Harness
                     false,
                     false,
                     session);
-                AssertEqual("vba_snapshot_refresh_required", rejected.ErrorCode,
-                    "a second mutation cannot use the model's stale pre-write source");
+                AssertEqual("vba_patch_stale_source", rejected.ErrorCode,
+                    "an exact patch is checked against current live source");
                 AssertEqual("A\nX\nB\nC", adapter.VbaModuleCode, "stale exact patch leaves current module intact");
                 AssertEqual(1, adapter.CountVbaCalls(FakeVbaOperation.ReplaceModule),
                     "stale exact hunk never reaches the backend writer");
@@ -2496,7 +2496,7 @@ namespace RNAssistant.Harness
             });
         }
 
-        private static void VbaMutationRequiresCompleteModelVisibleRefresh()
+        private static void VbaPatchUsesLiveStateAndWholeWriteReturnsRecovery()
         {
             WithTempExecutor(delegate(OfficeToolExecutor executor, FakeOfficeAdapter adapter)
             {
@@ -2532,7 +2532,7 @@ namespace RNAssistant.Harness
                     session);
                 AssertTrue(first.Success, "first mutation succeeds and verifies read-back: " + first.Message);
 
-                var blockedExecution = PrepareVbaNative(
+                var secondPending = PrepareVbaNative(
                     executor,
                     session,
                     Command("common.vba_apply_patch",
@@ -2541,40 +2541,37 @@ namespace RNAssistant.Harness
                         {
                             ["find"] = "\"first\"",
                             ["text"] = "\"second\""
-                        }))).Record;
+                        })));
+                AssertEqual(ToolExecutionOutcome.AwaitingConfirmation,
+                    secondPending.Record.Outcome,
+                    "exact patch binds current live source without a model-wide refresh");
+                var second = ConfirmVbaNative(secondPending);
+                AssertEqual(ToolExecutionOutcome.Ok, second.Outcome,
+                    "second exact patch succeeds against the bound current source");
+                AssertContains(adapter.VbaModuleCode, "\"second\"",
+                    "second mutation changes the intended live block");
+
+                var blockedExecution = PrepareVbaNative(
+                    executor,
+                    session,
+                    Command("common.vba_write_module",
+                        "moduleName", "Module1",
+                        "code", adapter.VbaModuleCode.Replace("\"second\"", "\"whole\""),
+                        "mode", "updateOnly")).Record;
                 var blocked = ToolRunResultFactory.Create(blockedExecution);
                 AssertEqual("vba_snapshot_refresh_required", blocked.ErrorCode,
-                    "internal write verification does not refresh the model snapshot");
-                AssertContains(blocked.DataJson, "\"retryAfterRefresh\":true",
-                    "refresh refusal tells the model that a reconciled retry is allowed");
-                AssertTrue(blockedExecution.RetryRequirement != null &&
-                    blockedExecution.RetryRequirement.ResourceIdentity.Equals(component.Reference.Identity) &&
-                    blockedExecution.RetryRequirement.View == ResourceRepresentations.Source,
-                    "refresh refusal identifies the exact complete source evidence required for retry");
-
-                var partial = ReadResource(
-                    executor.ResourceGateway,
-                    session,
-                    component.Reference.Uri,
-                    ResourceRepresentations.Source,
-                    null,
-                    128).Result;
-                AssertTrue(!partial.Complete, "first bounded chunk is incomplete");
-                var stillBlocked = executor.ExecuteManual(
-                    Command("common.vba_apply_patch",
-                        "moduleName", "Module1",
-                        "patch", new JArray(new JObject
-                        {
-                            ["find"] = "\"first\"",
-                            ["text"] = "\"second\""
-                        })),
-                    tools,
-                    new AppSettings { AutoConfirmToolActions = true },
-                    false,
-                    false,
-                    session);
-                AssertEqual("vba_snapshot_refresh_required", stillBlocked.ErrorCode,
-                    "a partial source read cannot authorize another mutation");
+                    "whole-module overwrite remains guarded by model-visible source authority");
+                AssertTrue(blockedExecution.Recovery != null &&
+                    blockedExecution.Recovery.FailureKind == ToolFailureKind.ConflictNoEffect &&
+                    blockedExecution.Recovery.RetryPolicy == ToolRetryPolicy.Replan &&
+                    blockedExecution.Recovery.ResourceIdentity.Equals(component.Reference.Identity) &&
+                    blockedExecution.Recovery.View == ResourceRepresentations.Source &&
+                    blockedExecution.Recovery.CurrentContentComplete,
+                    "conflict returns complete current source and requires semantic replanning");
+                AssertContains(blockedExecution.Recovery.CurrentContent, "\"second\"",
+                    "recovery carries the current live module source");
+                AssertTrue(!string.IsNullOrWhiteSpace(blockedExecution.Recovery.Diff),
+                    "recovery includes changes since the last model-visible snapshot");
 
                 var refreshed = ReadResource(
                     executor.ResourceGateway,
@@ -2584,22 +2581,19 @@ namespace RNAssistant.Harness
                     null,
                     32000).Result;
                 AssertTrue(refreshed.Complete, "complete current source refreshes model authority");
-                var second = executor.ExecuteManual(
-                    Command("common.vba_apply_patch",
+                var whole = executor.ExecuteManual(
+                    Command("common.vba_write_module",
                         "moduleName", "Module1",
-                        "patch", new JArray(new JObject
-                        {
-                            ["find"] = "\"first\"",
-                            ["text"] = "\"second\""
-                        })),
+                        "code", adapter.VbaModuleCode.Replace("\"second\"", "\"whole\""),
+                        "mode", "updateOnly"),
                     tools,
                     new AppSettings { AutoConfirmToolActions = true },
                     false,
                     false,
                     session);
-                AssertTrue(second.Success, "mutation succeeds after complete current source read");
-                AssertContains(adapter.VbaModuleCode, "\"second\"",
-                    "second mutation applies to the refreshed source");
+                AssertTrue(whole.Success, "whole write succeeds after complete current source read");
+                AssertContains(adapter.VbaModuleCode, "\"whole\"",
+                    "whole write applies to the explicitly refreshed source");
             });
         }
 
@@ -3470,8 +3464,8 @@ namespace RNAssistant.Harness
                     }
 
                     AssertTrue(writeTask.GetAwaiter().GetResult().Success, "first mutation succeeds");
-                    AssertEqual("vba_snapshot_refresh_required", queuedTask.GetAwaiter().GetResult().ErrorCode,
-                        "queued preparation checks the changed source after acquiring the gate");
+                    AssertEqual("vba_patch_stale_source", queuedTask.GetAwaiter().GetResult().ErrorCode,
+                        "queued patch validates its exact hunk after acquiring the gate");
                     AssertEqual(1, writeCalls, "stale queued mutation never dispatches a second write");
                     AssertEqual(after, adapter.VbaModuleCode, "first mutation source is preserved");
                     AssertEqual(1, journal.ListMutations(adapter.HostName, adapter.DocumentKey).Count,

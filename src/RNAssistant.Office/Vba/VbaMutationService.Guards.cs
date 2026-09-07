@@ -32,30 +32,6 @@ namespace RNAssistant.Office.Vba
 
             var correlation = request.Correlation ?? new VbaMutationCorrelation();
             var currentHash = CodeSha256(current.Code);
-            if (RequiresObservationRefresh(correlation, resolvedName))
-            {
-                return new VbaApplyPatchGuardPreparation
-                {
-                    Error = SnapshotRefreshRequired(resolvedName)
-                };
-            }
-            string observedHash;
-            if (TryGetObservation(correlation, resolvedName, out observedHash) &&
-                !string.Equals(observedHash, currentHash, StringComparison.OrdinalIgnoreCase))
-            {
-                correlation.ObserveExternalDrift?.Invoke(resolvedName);
-                return new VbaApplyPatchGuardPreparation
-                {
-                    Error = StaleSnapshot(
-                        resolvedName,
-                        true,
-                        observedHash,
-                        true,
-                        currentHash,
-                        "patch")
-                };
-            }
-
             return new VbaApplyPatchGuardPreparation
             {
                 ResolvedModuleName = resolvedName,

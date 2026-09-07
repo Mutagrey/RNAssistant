@@ -139,14 +139,16 @@ partially dispatched. This R33 correction does not change existing recovery or
 the journal protocol; Windows/VBE qualification remains open.
 
 A model-visible module observation is distinct from internal guard and verification
-reads. Only a complete `common.resources_read` source representation refreshes that
-observation; one bounded chunk does not. After a verified source mutation, the
-module is stale for model context even though runtime read it back. A second patch
-or whole-source write fails with `vba_snapshot_refresh_required` until the complete
-current source is read. Multiple edits derived from one snapshot belong in one
-ordered patch array: every hunk is validated in memory and dispatched as one write.
-The kernel rejects multiple mutation calls in one response; only independent local
-reads may be batched.
+reads. Whole-source overwrite still requires a complete current model observation;
+one bounded resource chunk does not satisfy it. Exact patch is different: runtime
+reads and binds current live source under the document gate, then validates every
+exact hunk before confirmation/dispatch. Sequential patches therefore do not need a
+redundant whole-source read, while stale or ambiguous hunks fail with no effect.
+A whole-write conflict returns bounded current source and a changed-span diff in
+typed recovery; oversized current source still requires a complete
+`common.resources_read`. Multiple edits derived from one snapshot should remain one
+ordered patch array. The kernel rejects multiple mutation calls in one response;
+only independent local reads may be batched.
 
 Live-source validation also rejects export-only headers, unclosed string literals,
 C/JSON-style backslash quote escaping, common C-style operators/braces and

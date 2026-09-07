@@ -11,7 +11,7 @@ using RuntimeResult = RNAssistant.Core.Tools.Contracts.ToolResult;
 
 namespace RNAssistant.Office.Tools
 {
-    internal sealed class PowerPointToolHandler : IToolHandler
+    internal sealed class PowerPointToolHandler : IReadOnlyToolHandler, IManagedMutationToolHandler
     {
         private readonly string _toolId;
         private readonly PowerPointToolAdapter _adapter;

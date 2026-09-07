@@ -12,7 +12,7 @@ using RuntimeResult = RNAssistant.Core.Tools.Contracts.ToolResult;
 
 namespace RNAssistant.Office.Tools
 {
-    internal sealed class HtmlWorkspaceToolHandler : IToolHandler
+    internal sealed class HtmlWorkspaceToolHandler : IManagedMutationToolHandler
     {
         private readonly string _toolId;
         private readonly ChatSession _session;

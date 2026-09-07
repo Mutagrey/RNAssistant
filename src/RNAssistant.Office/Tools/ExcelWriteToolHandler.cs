@@ -10,7 +10,7 @@ using RuntimeResult = RNAssistant.Core.Tools.Contracts.ToolResult;
 
 namespace RNAssistant.Office.Tools
 {
-    internal sealed class ExcelWriteToolHandler : IToolHandler
+    internal sealed class ExcelWriteToolHandler : IManagedMutationToolHandler
     {
         internal static readonly ToolBinding Binding = new ToolBinding("excel.write.range.v1");
 

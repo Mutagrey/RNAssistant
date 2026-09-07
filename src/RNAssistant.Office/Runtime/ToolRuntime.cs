@@ -101,7 +101,7 @@ namespace RNAssistant.Office.Runtime
                             ? ToolResult.Error(preparation.Result.Message, preparation.Result.DataJson, preparation.Result.Resources)
                             : preparation.Result;
                         return Record(context, ToolExecutionOutcome.Error, failed, false, ToolEffectEvidence.None,
-                            retryRequirement: preparation.RetryRequirement);
+                            recovery: preparation.Recovery);
                     }
                 }
                 catch (OperationCanceledException)
@@ -225,6 +225,11 @@ namespace RNAssistant.Office.Runtime
                     result = ToolResult.Error(result.Message, result.DataJson, result.Resources);
                 if (effect == ToolEffectEvidence.Unknown || effect == ToolEffectEvidence.VerifiedChange) effect = ToolEffectEvidence.Unreported;
             }
+            else if (policy.ExecutionClass == ToolExecutionClass.OpaqueAction && dispatched)
+            {
+                result = ToolResult.Unknown(result.Message, result.DataJson, result.Resources);
+                effect = ToolEffectEvidence.Unknown;
+            }
             else if (result.Status == ToolResultStatus.Unknown || effect == ToolEffectEvidence.Unknown ||
                 dispatched && (effect == ToolEffectEvidence.Unreported ||
                     result.Status == ToolResultStatus.Ok && effect != ToolEffectEvidence.VerifiedNoChange && effect != ToolEffectEvidence.VerifiedChange))
@@ -243,7 +248,7 @@ namespace RNAssistant.Office.Runtime
             return Record(context, outcome, result, dispatched, effect,
                 awaitingUser: completed.AwaitingUser && outcome == ToolExecutionOutcome.Ok,
                 resourceEvidence: completed.ResourceEvidence, resourceReadBack: completed.ResourceReadBack,
-                retryRequirement: completed.RetryRequirement);
+                recovery: completed.Recovery);
         }
 
         private static JObject ParseArguments(string json)
@@ -263,7 +268,24 @@ namespace RNAssistant.Office.Runtime
 
         private static ToolExecutionRecord Reject(ToolExecutionContext context, string code, string message)
         {
-            return Record(context, ToolExecutionOutcome.Error, ToolResult.Error(message, Code(code)), false, ToolEffectEvidence.None);
+            return Record(context, ToolExecutionOutcome.Error, ToolResult.Error(message, Code(code)), false,
+                ToolEffectEvidence.None, recovery: RejectionRecovery(code));
+        }
+
+        private static ToolRecoveryContract RejectionRecovery(string code)
+        {
+            switch (code)
+            {
+                case "invalid_arguments":
+                case "unknown_tool":
+                    return new ToolRecoveryContract(
+                        ToolFailureKind.RejectedNoEffect,
+                        ToolRetryPolicy.Replan);
+                default:
+                    return new ToolRecoveryContract(
+                        ToolFailureKind.ToolDefect,
+                        ToolRetryPolicy.None);
+            }
         }
 
         private static ToolExecutionRecord NotDispatched(ToolExecutionContext context, string message)
@@ -276,16 +298,35 @@ namespace RNAssistant.Office.Runtime
             string message = null, string preparedStateJson = null, string confirmationDataJson = null,
             IReadOnlyList<RNAssistant.Core.Models.ResourceEvidence> resourceEvidence = null,
             IReadOnlyList<RNAssistant.Core.Models.ResourceMutationReadBack> resourceReadBack = null,
-            ToolRetryRequirement retryRequirement = null)
+            ToolRecoveryContract recovery = null)
         {
             var completed = DateTime.UtcNow;
             if (completed < context.StartedUtc) completed = context.StartedUtc;
+            result = WithRecovery(result, recovery);
             return new ToolExecutionRecord(context, outcome, completed, message ?? (result == null ? string.Empty : result.Message),
                 mayHaveDispatched: dispatched, pendingId: pendingId, awaitingUser: awaitingUser,
                 evidence: new ToolExecutionEvidence(dispatched ? ToolDispatchEvidence.MayHaveDispatched : ToolDispatchEvidence.NotDispatched, effect),
                 result: result, preparedStateJson: preparedStateJson, confirmationDataJson: confirmationDataJson,
                 resourceEvidence: resourceEvidence, resourceReadBack: resourceReadBack,
-                retryRequirement: retryRequirement);
+                recovery: recovery);
+        }
+
+        private static ToolResult WithRecovery(ToolResult result, ToolRecoveryContract recovery)
+        {
+            if (result == null || recovery == null) return result;
+            JObject data;
+            try
+            {
+                data = string.IsNullOrWhiteSpace(result.DataJson)
+                    ? new JObject() : JObject.Parse(result.DataJson);
+            }
+            catch (JsonException)
+            {
+                data = new JObject { ["details"] = result.DataJson };
+            }
+            data["recovery"] = recovery.ModelProjection();
+            return new ToolResult(result.Status, result.Message,
+                data.ToString(Formatting.None), result.Resources);
         }
     }
 }

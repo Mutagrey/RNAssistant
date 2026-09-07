@@ -10,7 +10,7 @@ using RuntimeResult = RNAssistant.Core.Tools.Contracts.ToolResult;
 
 namespace RNAssistant.Office.Tools
 {
-    internal sealed class ExcelTableToolHandler : IToolHandler
+    internal sealed class ExcelTableToolHandler : IManagedMutationToolHandler
     {
         internal static readonly ToolBinding Binding =
             new ToolBinding("excel.table.add.v1");

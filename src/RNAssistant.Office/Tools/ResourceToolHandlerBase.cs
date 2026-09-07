@@ -14,7 +14,7 @@ namespace RNAssistant.Office.Tools
 {
     // One synchronous operation root covers provider routing and any nested live
     // document read. The gateway remains the data-plane owner.
-    internal abstract class ResourceToolHandlerBase : IToolHandler
+    internal abstract class ResourceToolHandlerBase : IReadOnlyToolHandler
     {
         protected ResourceGatewayService Gateway { get; private set; }
         protected ChatSession Session { get; private set; }

@@ -13,7 +13,7 @@ using RuntimeResult = RNAssistant.Core.Tools.Contracts.ToolResult;
 
 namespace RNAssistant.Office.Tools
 {
-    internal sealed class TaskListToolHandler : IToolHandler
+    internal sealed class TaskListToolHandler : IManagedMutationToolHandler
     {
         private readonly ChatSession _session;
         private readonly TaskListService _service;

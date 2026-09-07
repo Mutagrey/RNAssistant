@@ -8,7 +8,7 @@ using RuntimeResult = RNAssistant.Core.Tools.Contracts.ToolResult;
 
 namespace RNAssistant.Office.Tools
 {
-    internal sealed class PromptSaveToolHandler : IPreparableToolHandler
+    internal sealed class PromptSaveToolHandler : IPreparableToolHandler, IManagedMutationToolHandler
     {
         internal static readonly ToolBinding Binding =
             new ToolBinding("prompts.save.intent.v1");

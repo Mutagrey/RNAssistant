@@ -10,7 +10,7 @@ using RuntimeResult = RNAssistant.Core.Tools.Contracts.ToolResult;
 
 namespace RNAssistant.Office.Tools
 {
-    internal sealed class ExcelRangeMutationToolHandler : IToolHandler
+    internal sealed class ExcelRangeMutationToolHandler : IManagedMutationToolHandler
     {
         private static readonly ToolBinding FormatBinding =
             new ToolBinding("excel.range.format.v1");

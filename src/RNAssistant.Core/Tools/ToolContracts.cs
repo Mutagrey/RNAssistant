@@ -10,6 +10,8 @@ namespace RNAssistant.Core.Tools
     public enum ToolEffect { Read, Write, External, Unclassified }
     [JsonConverter(typeof(StringEnumConverter))]
     public enum ToolVerification { None, Tool }
+    [JsonConverter(typeof(StringEnumConverter))]
+    public enum ToolExecutionClass { ReadOnly, ManagedMutation, OpaqueAction }
 
     public sealed class ToolDescriptor
     {
@@ -44,6 +46,8 @@ namespace RNAssistant.Core.Tools
         public IReadOnlyList<string> AllowedModes { get; private set; }
         [JsonProperty(Required = Required.Always)]
         public int RiskLevel { get; private set; }
+        [JsonProperty(Required = Required.Always)]
+        public ToolExecutionClass ExecutionClass { get; private set; }
         [JsonIgnore]
         public bool MayHaveSideEffects { get { return Effect != ToolEffect.Read; } }
 
@@ -65,13 +69,23 @@ namespace RNAssistant.Core.Tools
             IndependentLocalRead = independentLocalRead;
             AllowedModes = Array.AsReadOnly(modes.Distinct(StringComparer.Ordinal).OrderBy(mode => mode, StringComparer.Ordinal).ToArray());
             RiskLevel = riskLevel;
+            ExecutionClass = Classify(effect, verification);
+        }
+
+        private static ToolExecutionClass Classify(ToolEffect effect, ToolVerification verification)
+        {
+            if (effect == ToolEffect.Read) return ToolExecutionClass.ReadOnly;
+            if (effect == ToolEffect.Write && verification == ToolVerification.Tool)
+                return ToolExecutionClass.ManagedMutation;
+            return ToolExecutionClass.OpaqueAction;
         }
 
         public bool Matches(ToolPolicy other)
         {
             return other != null && Effect == other.Effect && Verification == other.Verification &&
                 RequiresConfirmation == other.RequiresConfirmation && IndependentLocalRead == other.IndependentLocalRead &&
-                RiskLevel == other.RiskLevel && AllowedModes.SequenceEqual(other.AllowedModes, StringComparer.Ordinal);
+                RiskLevel == other.RiskLevel && ExecutionClass == other.ExecutionClass &&
+                AllowedModes.SequenceEqual(other.AllowedModes, StringComparer.Ordinal);
         }
     }
 

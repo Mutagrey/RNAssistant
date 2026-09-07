@@ -8,7 +8,7 @@ using RuntimeResult = RNAssistant.Core.Tools.Contracts.ToolResult;
 
 namespace RNAssistant.Office.Tools
 {
-    internal sealed class SkillAuthoringToolHandler : IPreparableToolHandler
+    internal sealed class SkillAuthoringToolHandler : IPreparableToolHandler, IManagedMutationToolHandler
     {
         private readonly string _toolId;
         private readonly SkillAuthoringService _service;

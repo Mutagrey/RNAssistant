@@ -26,14 +26,14 @@ namespace RNAssistant.Harness
 
         private static ToolExecutionRecord KernelRecord(ToolExecutionContext context,
             ToolExecutionOutcome outcome = ToolExecutionOutcome.Ok, bool awaitingUser = false,
-            ToolRetryRequirement retryRequirement = null,
+            ToolRecoveryContract recovery = null,
             IReadOnlyList<ResourceEvidence> resourceEvidence = null)
         {
             var pending = outcome == ToolExecutionOutcome.AwaitingConfirmation;
             return new ToolExecutionRecord(context, outcome, context.StartedUtc.AddMilliseconds(1),
                 "Runtime evidence.", "{\"source\":\"runtime\"}", mayHaveDispatched: !pending,
                 pendingId: pending ? "pending-" + context.Call.Id : null, awaitingUser: awaitingUser,
-                retryRequirement: retryRequirement, resourceEvidence: resourceEvidence);
+                recovery: recovery, resourceEvidence: resourceEvidence);
         }
 
         private static string KernelCounts(RunSummary summary)
@@ -211,7 +211,12 @@ namespace RNAssistant.Harness
                 "read-only success does not redispatch the failed mutation");
 
             var identity = new ResourceIdentity("rna://vba/document/component/module1");
-            var requirement = new ToolRetryRequirement(identity, ResourceRepresentations.Source);
+            var requirement = new ToolRecoveryContract(
+                ToolFailureKind.ConflictNoEffect,
+                ToolRetryPolicy.RefreshRequired,
+                identity,
+                ResourceRepresentations.Source,
+                "VBA module: Module1");
             var matchingEvidence = new ResourceEvidence("evidence", new ResourceAuthorityScopeId("document", "document"),
                 new ResourceRef(identity.Uri, "revision"), ResourceRepresentations.Source, ResourceCoverage.Whole(),
                 true, 1);
@@ -227,7 +232,7 @@ namespace RNAssistant.Harness
             {
                 insufficientCall++;
                 return Task.FromResult(insufficientCall == 1
-                    ? KernelRecord(context, ToolExecutionOutcome.Error, retryRequirement: requirement)
+                    ? KernelRecord(context, ToolExecutionOutcome.Error, recovery: requirement)
                     : KernelRecord(context, resourceEvidence: new[] { incompleteEvidence }));
             };
 
@@ -250,7 +255,7 @@ namespace RNAssistant.Harness
             {
                 call++;
                 if (call == 1) return Task.FromResult(KernelRecord(context,
-                    ToolExecutionOutcome.Error, retryRequirement: requirement));
+                    ToolExecutionOutcome.Error, recovery: requirement));
                 if (call == 2) return Task.FromResult(KernelRecord(context,
                     resourceEvidence: new[] { matchingEvidence }));
                 return Task.FromResult(KernelRecord(context));
@@ -282,11 +287,35 @@ namespace RNAssistant.Harness
             var result = await f.RunAsync();
 
             AssertEqual(RunLifecycle.Failed, result.Summary.Lifecycle,
-                "unknown possible effect is never repeated automatically");
-            AssertEqual("repeated_failed_tool_call", result.Summary.Reason,
-                "unknown repeat has the bounded terminal reason");
+                "a possible effect blocks later mutations in the same run");
+            AssertEqual("mutation_blocked_after_unknown_effect", result.Summary.Reason,
+                "unknown effect has a distinct terminal reason");
             AssertEqual(2, f.Tools.Calls.Count,
                 "intervening success does not redispatch the unknown write");
+        }
+
+        private static async Task KernelAllowsInspectionAfterUnknownEffect()
+        {
+            var f = new KernelFixture(
+                KernelResponse(KernelCall("write")),
+                KernelResponse(KernelCall("read")),
+                KernelResponse());
+            var outcomes = new Queue<ToolExecutionOutcome>(new[]
+            {
+                ToolExecutionOutcome.Unknown,
+                ToolExecutionOutcome.Ok
+            });
+            f.Tools.OnExecute = (context, token) => Task.FromResult(
+                KernelRecord(context, outcomes.Dequeue()));
+
+            var result = await f.RunAsync();
+
+            AssertEqual(RunLifecycle.Completed, result.Summary.Lifecycle,
+                "unknown effect still permits read-only inspection and a final response");
+            AssertEqual(ExecutionHealth.Unknown, result.Summary.ExecutionHealth,
+                "read evidence cannot erase the prior unknown effect");
+            AssertEqual("1,0,0,0,1", KernelCounts(result.Summary),
+                "inspection is accounted without another mutation");
         }
 
         private static async Task KernelReadsAreSequentialAndBounded()
@@ -561,6 +590,24 @@ namespace RNAssistant.Harness
             AssertEqual(pending.Call.Id, f.Tools.Calls.Last().Call.Id, "confirmation reuses the accepted call id");
             AssertEqual(2, f.AllocationCount, "confirmation and final response allocate no new ids");
             AssertEqual(RunLifecycle.AwaitingConfirmation, paused.Summary.Lifecycle, "pause snapshot immutable");
+        }
+
+        private static async Task KernelBlocksConfirmationAfterUnknownEffect()
+        {
+            var f = new KernelFixture(
+                KernelResponse(KernelCall()),
+                KernelResponse(KernelCall("confirm")));
+            f.Tools.OnExecute = (context, token) => Task.FromResult(
+                KernelRecord(context, ToolExecutionOutcome.Unknown));
+
+            var result = await f.RunAsync();
+
+            AssertEqual(RunLifecycle.Failed, result.Summary.Lifecycle,
+                "unknown effect prevents a later confirmation flow");
+            AssertEqual("mutation_blocked_after_unknown_effect", result.Summary.Reason,
+                "confirmation cannot bypass the unknown-effect mutation gate");
+            AssertEqual(1, f.Tools.Calls.Count,
+                "later confirmation-required mutation never enters runtime");
         }
 
         private static async Task KernelRejectsAllocationCollisionAfterConfirmation()

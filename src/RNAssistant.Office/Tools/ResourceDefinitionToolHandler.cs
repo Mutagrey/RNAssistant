@@ -15,7 +15,7 @@ using Result = RNAssistant.Core.Tools.Contracts.ToolResult;
 
 namespace RNAssistant.Office.Tools
 {
-    internal sealed class ResourceDefinitionToolHandler : IToolHandler
+    internal sealed class ResourceDefinitionToolHandler : IManagedMutationToolHandler
     {
         internal const string Draft = "common.resources_schema_draft";
         internal const string Publish = "common.resources_schema_publish";

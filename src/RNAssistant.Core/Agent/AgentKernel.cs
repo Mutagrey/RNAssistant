@@ -195,6 +195,15 @@ namespace RNAssistant.Core.Agent
                 await RecordNotDispatchedAsync(state, call, policy, stepId, "Tool step limit reached.", confirmed).ConfigureAwait(false);
                 return state.Summary(RunLifecycle.Failed, "tool_step_limit", "Tool step limit reached.");
             }
+            if (state.UnknownEffectObserved && policy.MayHaveSideEffects)
+            {
+                await RecordNotDispatchedAsync(state, call, policy, stepId,
+                    "A prior tool may have changed the document; another mutation is blocked in this run.",
+                    confirmed).ConfigureAwait(false);
+                return state.Summary(RunLifecycle.Failed,
+                    "mutation_blocked_after_unknown_effect",
+                    "A prior tool has an unknown effect. Inspect the current state before starting a new run.");
+            }
             var callSignature = call.Name + "\n" + call.ArgumentsJson;
             if (!confirmed && (state.ErrorCallSignatures.Contains(callSignature) ||
                 state.RefreshableErrorCallSignatures.ContainsKey(callSignature) ||
@@ -249,10 +258,11 @@ namespace RNAssistant.Core.Agent
             if (record.ToolStepsConsumed > remaining) stop = RunLifecycle.Failed;
             if (record.Outcome == ToolExecutionOutcome.Error)
             {
-                if (record.RetryRequirement == null)
+                if (record.Recovery == null ||
+                    record.Recovery.RetryPolicy != ToolRetryPolicy.RefreshRequired)
                     state.ErrorCallSignatures.Add(callSignature);
                 else
-                    state.RefreshableErrorCallSignatures[callSignature] = record.RetryRequirement;
+                    state.RefreshableErrorCallSignatures[callSignature] = record.Recovery;
             }
             else if (record.Outcome == ToolExecutionOutcome.Ok && policy.MayHaveSideEffects)
             {
@@ -266,7 +276,11 @@ namespace RNAssistant.Core.Agent
                 foreach (var signature in refreshed) state.RefreshableErrorCallSignatures.Remove(signature);
             }
             if (record.Outcome == ToolExecutionOutcome.Unknown)
+            {
                 state.UnknownCallSignatures.Add(callSignature);
+                state.UnknownEffectObserved = state.UnknownEffectObserved ||
+                    policy.MayHaveSideEffects;
+            }
             state.ToolSteps = (int)Math.Min(int.MaxValue, (long)state.ToolSteps + Math.Max(0, (long)record.ToolStepsConsumed - chargedSteps));
             state.Counts = state.Counts.Add(record);
             if (record.Outcome == ToolExecutionOutcome.AwaitingConfirmation)
@@ -349,10 +363,11 @@ namespace RNAssistant.Core.Agent
             internal long Revision;
             internal PendingConfirmation Pending;
             internal int NoToolCheckpoints;
+            internal bool UnknownEffectObserved;
             internal readonly HashSet<string> ErrorCallSignatures =
                 new HashSet<string>(StringComparer.Ordinal);
-            internal readonly Dictionary<string, ToolRetryRequirement> RefreshableErrorCallSignatures =
-                new Dictionary<string, ToolRetryRequirement>(StringComparer.Ordinal);
+            internal readonly Dictionary<string, ToolRecoveryContract> RefreshableErrorCallSignatures =
+                new Dictionary<string, ToolRecoveryContract>(StringComparer.Ordinal);
             internal readonly HashSet<string> UnknownCallSignatures =
                 new HashSet<string>(StringComparer.Ordinal);
 
@@ -374,6 +389,7 @@ namespace RNAssistant.Core.Agent
                 Messages = continuation.AcceptedMessages.ToList();
                 AcceptedIds = new HashSet<string>(continuation.AcceptedCallIds, StringComparer.OrdinalIgnoreCase);
                 Counts = continuation.Summary.ToolCounts;
+                UnknownEffectObserved = Counts.WriteUnknown > 0;
                 Iterations = continuation.Summary.IterationsUsed;
                 ToolSteps = continuation.Summary.ToolStepsUsed;
                 Revision = continuation.Revision;

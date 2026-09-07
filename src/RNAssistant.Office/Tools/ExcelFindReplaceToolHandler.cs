@@ -11,7 +11,7 @@ using RuntimeResult = RNAssistant.Core.Tools.Contracts.ToolResult;
 
 namespace RNAssistant.Office.Tools
 {
-    internal sealed class ExcelFindReplaceToolHandler : IToolHandler
+    internal sealed class ExcelFindReplaceToolHandler : IReadOnlyToolHandler, IManagedMutationToolHandler
     {
         internal static readonly ToolBinding FindBinding =
             new ToolBinding("excel.find.cells.resource.v1");
