@@ -1359,6 +1359,12 @@ namespace RNAssistant.Harness
                 AssertEqual(2, requests.Count, "non-final empty calls ask the model for one more response");
                 AssertContains(FlattenSimple(requests[1]), "Составляю итоговый отчет.",
                     "checkpoint is accepted into the next model request");
+                AssertContains(FlattenSimple(requests[1]), "RUNTIME_CONTINUE:",
+                    "checkpoint continuation gives the model an explicit next-turn instruction");
+                AssertContains(FlattenSimple(requests[1]), "return it with final=true",
+                    "checkpoint continuation explains how to finish a completed answer");
+                AssertTrue(!session.Messages.Any(message => (message.Content ?? string.Empty).Contains("RUNTIME_CONTINUE:")),
+                    "checkpoint continuation is transient rather than durable chat history");
                 var checkpoint = session.Messages.Single(message => message.ProtocolMessage &&
                     message.ResponseStatus == AgentResponseStatuses.InProgress &&
                     (message.Content ?? string.Empty).Contains("Составляю итоговый отчет."));

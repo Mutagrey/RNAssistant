@@ -518,7 +518,10 @@ its rename does not change the active v5 wire or retry behavior.
 `RunSummary` has independent lifecycle and execution health. Only `final=true`
 with empty calls ends the loop (`completed`), without certifying effects.
 `final=false` with empty calls is accepted as a bounded no-tool checkpoint; three
-consecutive checkpoints fail as `model_loop_stalled`. Health comes only from
+consecutive checkpoints fail as `model_loop_stalled`. The next request after a
+checkpoint carries a transient runtime continuation: finish an already complete
+answer or user-input request with `final=true`, otherwise emit the next tool calls;
+the continuation is not persisted as chat history. Health comes only from
 immutable execution records: unknown write/external effect dominates errors, then
 clean.
 Narrative is preserved but cannot set either axis. Typed model failures end the

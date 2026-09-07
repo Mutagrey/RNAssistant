@@ -105,6 +105,8 @@ namespace RNAssistant.Harness
             var result = await f.RunAsync();
             AssertEqual(RunLifecycle.Failed, result.Summary.Lifecycle, "repeated no-tool checkpoints fail closed");
             AssertEqual("model_loop_stalled", result.Summary.Reason, "stalled no-tool loop has explicit reason");
+            AssertContains(result.Summary.AssistantMessage, "final=false with empty tool_calls",
+                "stall diagnostic identifies the accepted model intent");
             AssertEqual(3, f.Model.Requests.Count, "stall is bounded");
             AssertEqual(0, f.Tools.Calls.Count, "stalled checkpoint loop dispatches no tools");
         }

@@ -50,7 +50,10 @@ Final answer:
   model loop. It is valid only with an empty `tool_calls` array.
 - `final=false` with one or more calls is a normal tool turn.
 - `final=false` with empty calls is an accepted no-tool checkpoint. The runtime
-  persists it and asks the model for the next response instead of completing.
+  persists it and asks the model for the next response instead of completing. That
+  next request includes a transient runtime continuation telling the model to emit
+  `final=true` when the checkpoint already contains the complete answer or asks for
+  user input, or to emit the next tool calls; the continuation is not chat history.
 - Message wording never proves execution success, failure, verification or
   refusal. Runtime lifecycle, execution health and effect evidence remain separate.
 - Each call contains exactly a nonblank string `name` and object `arguments`.
@@ -68,7 +71,8 @@ and `json_object` responses pass through the same local parser and safety checks
 
 `AgentKernel` completes a model loop only after an accepted response with
 `final=true` and no calls. An accepted `final=false` empty-call response increments
-a bounded no-tool checkpoint counter and continues. Three consecutive no-tool
+a bounded no-tool checkpoint counter and continues with the transient instruction
+above. Three consecutive no-tool
 checkpoints fail closed with `model_loop_stalled`, without dispatching tools or
 inventing effects.
 

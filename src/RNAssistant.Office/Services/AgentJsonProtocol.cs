@@ -170,6 +170,18 @@ namespace RNAssistant.Office.Services
             return protocolMessage;
         }
 
+        public static ChatMessage CreateNoToolCheckpointContinuationMessage()
+        {
+            return new ChatMessage
+            {
+                Role = "user",
+                ProtocolMessage = true,
+                Content = "RUNTIME_CONTINUE:\nThe preceding response was accepted with final=false and empty tool_calls, so the run is still open. " +
+                    "Continue the current request now. If that message was already the complete user-facing answer or asks the user for required input, return it with final=true and empty tool_calls. " +
+                    "Otherwise return the next required tool_calls. Do not repeat a no-tool checkpoint."
+            };
+        }
+
         private static JToken BoundData(JToken parsed, int maxDataTokens, AppSettings settings)
         {
             var compact = parsed.ToString(Formatting.None);

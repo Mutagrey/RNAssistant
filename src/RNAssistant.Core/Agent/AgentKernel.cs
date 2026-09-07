@@ -126,7 +126,7 @@ namespace RNAssistant.Core.Agent
                     state.NoToolCheckpoints++;
                     if (state.NoToolCheckpoints >= MaximumConsecutiveNoToolCheckpoints)
                         return await FinishAsync(state, RunLifecycle.Failed, "model_loop_stalled",
-                            "Model returned repeated non-final responses without tool calls.").ConfigureAwait(false);
+                            "Model returned final=false with empty tool_calls three consecutive times.").ConfigureAwait(false);
                     continue;
                 }
                 state.NoToolCheckpoints = 0;

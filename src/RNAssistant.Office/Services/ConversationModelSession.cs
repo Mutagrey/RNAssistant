@@ -41,6 +41,7 @@ namespace RNAssistant.Office.Services
         private IReadOnlyList<ChatAttachment> _currentAttachments;
         private string _currentUserId;
         private ChatMessage _packState;
+        private ChatMessage _noToolContinuation;
         private List<ResourceEvidence> _responseEvidence = new List<ResourceEvidence>();
         private CallableToolPack _toolPack;
         private LlmRunCache _runCache;
@@ -103,6 +104,7 @@ namespace RNAssistant.Office.Services
             var activeTools = _toolPack.Tools;
             _lastSnapshot = CompileCurrent(true);
             var snapshot = _lastSnapshot;
+            _noToolContinuation = null;
             _session.LastContextReceipt = snapshot.Receipt;
             _responseEvidence = snapshot.Messages.SelectMany(item => item.ResourceEvidence ?? new List<ResourceEvidence>())
                 .Where(item => new RNAssistant.Core.Services.EvidenceStateReducer().Reduce(item, snapshot.Authority.Resources).State == EvidenceState.Current)
@@ -157,6 +159,7 @@ namespace RNAssistant.Office.Services
             var accepted = AgentJsonProtocol.CreateNoToolCheckpointMessage(message, completion);
             AttachResponseEvidence(accepted);
             _session.Messages.Add(accepted);
+            _noToolContinuation = AgentJsonProtocol.CreateNoToolCheckpointContinuationMessage();
         }
 
         internal void AttachResponseEvidence(ChatMessage message)
@@ -366,6 +369,8 @@ namespace RNAssistant.Office.Services
                 facts.Add(current);
             }
             if (current != null && _currentAttachments != null) current.Attachments = _currentAttachments.ToList();
+            if (_noToolContinuation != null)
+                facts.Add(JsonConvert.DeserializeObject<ChatMessage>(JsonConvert.SerializeObject(_noToolContinuation)));
             var scopes = facts.SelectMany(item => item.ResourceEvidence ?? new List<ResourceEvidence>())
                 .Concat((_context?.Notes ?? new List<ContextNote>()).Where(item => item.Evidence != null).Select(item => item.Evidence))
                 .Select(item => item.ScopeId).ToList();

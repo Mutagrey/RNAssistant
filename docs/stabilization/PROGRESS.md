@@ -1,5 +1,17 @@
 # Stabilization progress
 
+Latest correction (2026-09-07): the reported `model_loop_stalled` did not mean that
+the provider omitted `final`; strict v5 parsing proves that the target model returned
+`final=false` with empty `tool_calls` three times, including for a complete
+user-input request. The causal gap was that a persisted assistant checkpoint was
+followed by another model dispatch without an explicit next-turn instruction. The
+next request now receives a transient runtime continuation directing the model to
+use `final=true` for an already complete answer/user-input request or emit actual
+tool calls. It never enters durable chat history; the three-checkpoint fail-closed
+guard remains. Fifty-one kernel checks, the production no-tool continuation check
+and 13 conversation-v5
+wire checks pass host-neutral. Windows/WebView2 and target-model retest remain open.
+
 Latest correction (2026-09-07): oversized Excel search-scope reads now expose the causal recovery route instead of only saying to choose a smaller scope. Resource discovery marks these targets as discovery-only and directs the model to `excel.find_cells` for queried discovery or Excel range/table/name targets for worksheet values; `common.resources_read` repeats this boundary. The identical-call and undispatched-tail events in the report remain correct bounded consequences. Focused Excel search and resource Gateway checks pass host-neutral; target-model and Windows/Excel qualification remain open.
 
 Latest correction (2026-09-07): the user-reported high Agent failure count is separated into expected guards and a model-facing HTML/Excel contract defect. `common.html_data_bind` now exposes disjoint complete/structural/page argument shapes, validates structural/page paths before execution, and refuses Excel search scopes as table sources with the exact range/table/name recovery route. `common.resources_read` publishes the same structural path grammar, while `excel.find_cells` is explicitly discovery-only. Focused HTML native ownership/schema and resource Gateway checks pass host-neutral; target-model and Windows/Excel/WebView2 qualification remain open.
