@@ -45,6 +45,11 @@ path/title, folder/mail id и selection reference. Долгоживущие COM-
   использует ROT fallback. Multi-instance enumeration остаётся best-effort;
   launcher/foreground `hwnd` является наиболее точным источником.
 - COM calls проходят через `DispatchedOfficeApplicationAdapter` и выделенный STA.
+- WebView bridge не выполняет полную загрузку/проекцию чата или agent/tool run в
+  Office UI callback. `listChats`, `getChatState`, `selectChat`, `sendChat`,
+  `confirmAgentTool` и `runTool` сначала переходят на cancellable worker boundary;
+  Office-owned действия внутри них по-прежнему маршалятся через bound dispatcher.
+  Поэтому долгий run не блокирует доставку cancel и chat-navigation команд.
 - Фоновая синхронизация чатов в WebView использует catalog-only projection
   `listChats`: summaries чатов/документов, active id и run view. Полный transcript,
   context, artifacts и HTML workspace загружаются только через `init`, явный выбор

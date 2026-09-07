@@ -78,14 +78,19 @@ namespace RNAssistant.Office.WebView
                         responsePayload = WithBridgeToken(_controller.Initialize());
                         break;
                     case "listChats":
-                        responsePayload = _controller.ListChats();
+                        responsePayload = await RunBridgeWorkAsync(
+                            () => _controller.ListChats(),
+                            cancellationToken).ConfigureAwait(false);
                         break;
                     case "getChatState":
-                        responsePayload = _controller.GetChatState(Payload<ChatPayload>(payload).ChatId);
+                        var getChat = Payload<ChatPayload>(payload);
+                        responsePayload = await RunBridgeWorkAsync(
+                            () => _controller.GetChatState(getChat.ChatId),
+                            cancellationToken).ConfigureAwait(false);
                         break;
                     case "getChatTrajectory":
                         var trajectoryRequest = Payload<ChatTrajectoryRequest>(payload);
-                        responsePayload = await RunBridgeReadAsync(
+                        responsePayload = await RunBridgeWorkAsync(
                             () => _controller.GetChatTrajectory(trajectoryRequest),
                             cancellationToken).ConfigureAwait(false);
                         break;
@@ -98,14 +103,14 @@ namespace RNAssistant.Office.WebView
                         break;
                     case "getQualificationCatalog":
                         var qualificationCatalog = Payload<QualificationCatalogPayload>(payload);
-                        responsePayload = await RunBridgeReadAsync(
+                        responsePayload = await RunBridgeWorkAsync(
                             () => _controller.GetQualificationCatalog(
                                 qualificationCatalog.ChatId, qualificationCatalog.Suite),
                             cancellationToken).ConfigureAwait(false);
                         break;
                     case "getQualificationRun":
                         var qualificationRun = Payload<QualificationRunPayload>(payload);
-                        responsePayload = await RunBridgeReadAsync(
+                        responsePayload = await RunBridgeWorkAsync(
                             () => _controller.GetQualificationRun(
                                 qualificationRun.ChatId, qualificationRun.RunId),
                             cancellationToken).ConfigureAwait(false);
@@ -143,7 +148,10 @@ namespace RNAssistant.Office.WebView
                             createDocumentChat.DocumentPath);
                         break;
                     case "selectChat":
-                        responsePayload = _controller.SelectChat(Payload<ChatPayload>(payload).ChatId);
+                        var selectChat = Payload<ChatPayload>(payload);
+                        responsePayload = await RunBridgeWorkAsync(
+                            () => _controller.SelectChat(selectChat.ChatId),
+                            cancellationToken).ConfigureAwait(false);
                         break;
                     case "openDocument":
                         responsePayload = _controller.OpenDocument(Payload<ChatPayload>(payload).ChatId);
@@ -193,14 +201,15 @@ namespace RNAssistant.Office.WebView
                     case "sendChat":
                         var sendChat = Payload<SendChatPayload>(payload);
                         var runId = Guid.NewGuid().ToString("N");
-                        responsePayload = await _controller.SendChatAsync(
-                            sendChat.Text,
-                            sendChat.ChatId,
-                            sendChat.ResourceDraftIds,
-                            (phase, message, activity) => ReportProgress(id, sendChat.ChatId, runId, phase, message, activity),
-                            ReportChatState,
-                            cancellationToken,
-                            runId);
+                        responsePayload = await Task.Run(() => _controller.SendChatAsync(
+                                sendChat.Text,
+                                sendChat.ChatId,
+                                sendChat.ResourceDraftIds,
+                                (phase, message, activity) => ReportProgress(id, sendChat.ChatId, runId, phase, message, activity),
+                                ReportChatState,
+                                cancellationToken,
+                                runId),
+                            cancellationToken).ConfigureAwait(false);
                         break;
                     case "beginChatResourceUpload":
                         responsePayload = _controller.BeginChatResourceUpload(Payload<ResourceUploadOpenRequest>(payload), cancellationToken);
@@ -331,23 +340,27 @@ namespace RNAssistant.Office.WebView
                         break;
                     case "runTool":
                         var runTool = Payload<RunToolPayload>(payload);
-                        responsePayload = _controller.RunTool(
-                            runTool.ToolId,
-                            ToArguments(runTool.Arguments),
-                            runTool.DryRun,
-                            (phase, message) => ReportProgress(id, phase, message),
-                            cancellationToken);
+                        var runArguments = ToArguments(runTool.Arguments);
+                        responsePayload = await RunBridgeWorkAsync(
+                            () => _controller.RunTool(
+                                runTool.ToolId,
+                                runArguments,
+                                runTool.DryRun,
+                                (phase, message) => ReportProgress(id, phase, message),
+                                cancellationToken),
+                            cancellationToken).ConfigureAwait(false);
                         break;
                     case "confirmAgentTool":
                         var confirmAgentTool = Payload<PendingAgentToolPayload>(payload);
                         var confirmRunId = Guid.NewGuid().ToString("N");
-                        responsePayload = await _controller.ConfirmAgentToolAsync(
-                            confirmAgentTool.PendingId,
-                            confirmAgentTool.ChatId,
-                            (phase, message, activity) => ReportProgress(id, confirmAgentTool.ChatId, confirmRunId, phase, message, activity),
-                            cancellationToken,
-                            confirmRunId,
-                            ReportChatState);
+                        responsePayload = await Task.Run(() => _controller.ConfirmAgentToolAsync(
+                                confirmAgentTool.PendingId,
+                                confirmAgentTool.ChatId,
+                                (phase, message, activity) => ReportProgress(id, confirmAgentTool.ChatId, confirmRunId, phase, message, activity),
+                                cancellationToken,
+                                confirmRunId,
+                                ReportChatState),
+                            cancellationToken).ConfigureAwait(false);
                         break;
                     case "cancelAgentTool":
                         var cancelAgentTool = Payload<PendingAgentToolPayload>(payload);
@@ -615,11 +628,11 @@ namespace RNAssistant.Office.WebView
             return JsonConvert.SerializeObject(response);
         }
 
-        private static Task<T> RunBridgeReadAsync<T>(Func<T> read, CancellationToken cancellationToken)
+        private static Task<T> RunBridgeWorkAsync<T>(Func<T> work, CancellationToken cancellationToken)
         {
-            if (read == null) throw new ArgumentNullException(nameof(read));
+            if (work == null) throw new ArgumentNullException(nameof(work));
             cancellationToken.ThrowIfCancellationRequested();
-            return Task.Run(read, cancellationToken);
+            return Task.Run(work, cancellationToken);
         }
 
         private void ReportProgress(string id, string phase, string message)

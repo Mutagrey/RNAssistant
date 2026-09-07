@@ -32,22 +32,27 @@ Mandatory runtime acceptance, execution and request/response storage still fail
 closed. Owner: ModelProtocol + ModelTracePersistenceService. This fixes optional
 parser-trace availability, not persistent storage corruption or queue contention.
 
-Chat navigation / persistence contention (2026-09-07, open): user reports freezes
+Chat navigation / persistence contention (2026-09-07, partially contained): user reports freezes
 while streaming, loading artifacts and switching chats. `ChatStore.PersistenceSync`
 is static across chats; `SaveInternalLocked` performs artifact externalization,
 projection/diff and durable append under it. `SelectChat`/`GetChatState` currently
-load and build the full projection synchronously, including Office document state.
-A cold validated replay or waiting for an append may therefore block bridge/UI
-navigation. LLM raw stream traces are already batched at 64 Ki characters or one
+load and build the full projection, including Office document state. Bridge
+dispatch now moves chat catalog/state/selection and complete agent/tool calls to
+cancellable worker boundaries; bound Office work still uses its existing STA
+dispatcher. This removes Office UI starvation and keeps cancel/navigation delivery
+reachable during a long run. A cold validated replay or waiting for an append may
+still delay completion of an individual navigation request. LLM raw stream traces
+are already batched at 64 Ki characters or one
 second of buffer age; this is not evidence of a durable save per token. Owners:
 ChatStore + ChatSessionService/controller projection + Web bridge dispatch. Next
 storage slice must separate host-neutral loading/projection from bound Office
-capture before async dispatch, preserving ordering and cancellation; do not move
-the complete controller call to Task.Run or weaken flush/commit barriers. Measure
+capture and make lock wait observable/cancellable without weakening flush/commit
+barriers. Measure
 lock wait, replay/CAS, projection and bridge/UI durations on the actual Windows
 candidate before assigning the dominant cause. The host-neutral stream UI fix
 removes repeated history serialization/DOM detachment and batches background
-sidebar paints; it does not close this storage/navigation gate.
+sidebar paints; bridge worker dispatch contains UI starvation but does not close
+this storage/navigation gate.
 
 Resource cutover / catalog freeze (2026-09-07, fixed host-neutral): the generation
 captured by `UseInput` is carried into the model session and compared against its

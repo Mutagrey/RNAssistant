@@ -734,6 +734,8 @@ namespace RNAssistant.Harness
                 Test("bridge: chat list is catalog-only", BridgeListChatsIsCatalogOnly),
                 Test("webview: restricts messages and navigation", WebViewSecurityRestrictsMessagesAndNavigation),
                 Test("bridge: rejects missing token", BridgeRejectsMissingToken),
+                Test("bridge: long tool keeps controls responsive", BridgeLongToolKeepsControlsResponsive),
+                Test("bridge: agent run keeps controls responsive", BridgeAgentRunKeepsControlsResponsive),
                 Test("bridge: typed runTool", BridgeUsesTypedRunToolPayload),
                 Test("bridge: typed sendChat", BridgeUsesTypedSendChatPayloadAndProgress),
                 Test("bridge: typed resource ingestion", BridgeUsesTypedResourceIngestionPayloads),

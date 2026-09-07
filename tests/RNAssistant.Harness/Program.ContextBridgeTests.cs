@@ -501,6 +501,98 @@ namespace RNAssistant.Harness
             AssertContains(response["error"].Value<string>(), "bridge token", "bridge token error");
         }
 
+        private static async Task BridgeLongToolKeepsControlsResponsive()
+        {
+            using (var entered = new ManualResetEventSlim())
+            using (var release = new ManualResetEventSlim())
+            using (var bridge = new AssistantWebBridge(new AssistantController
+            {
+                RunToolEntered = entered,
+                RunToolRelease = release
+            }, null))
+            {
+                var token = BridgeToken(bridge);
+                var running = bridge.HandleMessageAsync(
+                    "{\"id\":\"long-tool\",\"type\":\"runTool\",\"bridgeToken\":\"" + token +
+                    "\",\"payload\":{\"toolId\":\"fixture.read\",\"arguments\":{},\"dryRun\":true}}");
+                AssertTrue(entered.Wait(TimeSpan.FromSeconds(5)),
+                    "long tool entered background bridge work");
+                try
+                {
+                    var list = bridge.HandleMessageAsync(
+                        "{\"id\":\"responsive-list\",\"type\":\"listChats\",\"bridgeToken\":\"" + token +
+                        "\",\"payload\":{}}");
+                    var completed = await Task.WhenAny(list,
+                        Task.Delay(TimeSpan.FromSeconds(2)));
+                    AssertTrue(ReferenceEquals(completed, list),
+                        "chat controls are not serialized behind a long tool");
+                    AssertTrue(JObject.Parse(await list)["ok"].Value<bool>(),
+                        "chat catalog remains available during a tool run");
+
+                    var cancel = JObject.Parse(await bridge.HandleMessageAsync(
+                        "{\"id\":\"cancel-long-tool\",\"type\":\"cancelRequest\",\"bridgeToken\":\"" + token +
+                        "\",\"payload\":{\"requestId\":\"long-tool\"}}"));
+                    AssertTrue(cancel["ok"].Value<bool>() &&
+                            cancel["payload"]["cancelled"].Value<bool>(),
+                        "long tool cancellation remains reachable");
+                }
+                finally
+                {
+                    release.Set();
+                }
+                var terminal = JObject.Parse(await running);
+                AssertTrue(!terminal["ok"].Value<bool>() &&
+                        terminal["cancelled"].Value<bool>(),
+                    "cancelled long tool returns a terminal bridge response");
+            }
+        }
+
+        private static async Task BridgeAgentRunKeepsControlsResponsive()
+        {
+            using (var entered = new ManualResetEventSlim())
+            using (var release = new ManualResetEventSlim())
+            using (var bridge = new AssistantWebBridge(new AssistantController
+            {
+                SendChatEntered = entered,
+                SendChatRelease = release
+            }, null))
+            {
+                var token = BridgeToken(bridge);
+                var running = bridge.HandleMessageAsync(
+                    "{\"id\":\"long-agent\",\"type\":\"sendChat\",\"bridgeToken\":\"" + token +
+                    "\",\"payload\":{\"chatId\":\"chat-a\",\"text\":\"test\"}}");
+                AssertTrue(entered.Wait(TimeSpan.FromSeconds(5)),
+                    "agent run entered background bridge work");
+                try
+                {
+                    var select = bridge.HandleMessageAsync(
+                        "{\"id\":\"responsive-select\",\"type\":\"selectChat\",\"bridgeToken\":\"" + token +
+                        "\",\"payload\":{\"chatId\":\"chat-b\"}}");
+                    var completed = await Task.WhenAny(select,
+                        Task.Delay(TimeSpan.FromSeconds(2)));
+                    AssertTrue(ReferenceEquals(completed, select),
+                        "chat navigation is not serialized behind an agent run");
+                    AssertTrue(JObject.Parse(await select)["ok"].Value<bool>(),
+                        "chat selection remains available during an agent run");
+
+                    var cancel = JObject.Parse(await bridge.HandleMessageAsync(
+                        "{\"id\":\"cancel-long-agent\",\"type\":\"cancelRequest\",\"bridgeToken\":\"" + token +
+                        "\",\"payload\":{\"requestId\":\"long-agent\"}}"));
+                    AssertTrue(cancel["ok"].Value<bool>() &&
+                            cancel["payload"]["cancelled"].Value<bool>(),
+                        "agent cancellation remains reachable");
+                }
+                finally
+                {
+                    release.Set();
+                }
+                var terminal = JObject.Parse(await running);
+                AssertTrue(!terminal["ok"].Value<bool>() &&
+                        terminal["cancelled"].Value<bool>(),
+                    "cancelled agent run returns a terminal bridge response");
+            }
+        }
+
         private static void BridgeInitReturnsToken()
         {
             var controller = new AssistantController();

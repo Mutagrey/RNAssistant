@@ -70,6 +70,10 @@ namespace RNAssistant.Office
         public string LastQualificationSuite { get; private set; }
         public bool LastQualificationAcknowledged { get; private set; }
         public bool LastQualificationCancel { get; private set; }
+        internal ManualResetEventSlim RunToolEntered { get; set; }
+        internal ManualResetEventSlim RunToolRelease { get; set; }
+        internal ManualResetEventSlim SendChatEntered { get; set; }
+        internal ManualResetEventSlim SendChatRelease { get; set; }
 
         public InitResponse Initialize()
         {
@@ -828,6 +832,8 @@ namespace RNAssistant.Office
             string runId = null)
         {
             cancellationToken.ThrowIfCancellationRequested();
+            if (SendChatEntered != null) SendChatEntered.Set();
+            if (SendChatRelease != null) SendChatRelease.Wait(cancellationToken);
             LastChatText = text;
             LastChatId = chatId;
             LastResourceDraftIds = resourceDraftIds ?? new string[0];
@@ -931,6 +937,8 @@ namespace RNAssistant.Office
         public ToolRunResult RunTool(string toolId, IDictionary<string, object> arguments, bool dryRun, Action<string, string> progress = null, CancellationToken cancellationToken = default(CancellationToken))
         {
             cancellationToken.ThrowIfCancellationRequested();
+            if (RunToolEntered != null) RunToolEntered.Set();
+            if (RunToolRelease != null) RunToolRelease.Wait(cancellationToken);
             LastToolId = toolId;
             LastArgumentsJson = JsonConvert.SerializeObject(arguments ?? new Dictionary<string, object>());
             LastDryRun = dryRun;
