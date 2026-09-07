@@ -313,7 +313,46 @@ function inferredVbaComponentName(tool) {
   if (!/^[A-Za-z]/.test(raw)) {
     raw = "Tool_" + raw;
   }
-  return ("RNA_" + raw).slice(0, 40);
+  return ("RNA_" + raw).slice(0, 31);
+}
+
+function uniqueDraftToolId(base) {
+  var id = base, suffix = 2;
+  while (state.tools.some(function (tool) { return String(tool.Id || "").toLowerCase() === id.toLowerCase(); })) {
+    id = base + "_" + suffix++;
+  }
+  return id;
+}
+
+function newVbaToolSource(id, host) {
+  var manifest = {
+    protocolVersion: 1, id: id, host: host, name: id, description: "",
+    packageVersion: "1.0.0", entryPoint: "Run", components: ["RNA_NewTool"],
+    argumentOrder: [], parameters: JSON.parse(emptyToolSchema()),
+    mutatesDocument: true, agentCanRun: false, requiresConfirmation: true
+  };
+  return "Option Explicit\n' <RNAssistantTool>\n" +
+    JSON.stringify(manifest, null, 2).split("\n").map(function (line) { return "' " + line; }).join("\n") +
+    "\n' </RNAssistantTool>\nPublic Function Run() As String\n" +
+    '    Err.Raise vbObjectError + 1, "Run", "Tool implementation is not configured."\nEnd Function\n';
+}
+
+function cloneVbaToolComponents(source, id) {
+  var components = toolComponents(source).map(function (component) { return JSON.parse(JSON.stringify(component)); });
+  var entry = components[0];
+  if (!entry || entry.Type !== "StdModule") throw new Error("У пакета отсутствует входной StdModule.");
+  var code = entry.Code || "", open = "<RNAssistantTool>", close = "</RNAssistantTool>";
+  var start = code.indexOf(open), end = code.indexOf(close);
+  if (start < 0 || end < start || code.indexOf(open, start + open.length) >= 0)
+    throw new Error("Для клонирования нужен корректный manifest инструмента.");
+  var manifest = JSON.parse(code.slice(start + open.length, end).split(/\r\n|\n|\r/)
+    .map(function (line) { return line.replace(/^\s*' ?/, ""); }).join("\n"));
+  manifest.id = id;
+  var newline = code.indexOf("\r\n") >= 0 ? "\r\n" : code.indexOf("\r") >= 0 ? "\r" : "\n";
+  entry.Code = code.slice(0, start + open.length) + newline +
+    JSON.stringify(manifest, null, 2).split("\n").map(function (line) { return "' " + line; }).join(newline) +
+    newline + "' " + code.slice(end);
+  return components;
 }
 
 function writableToolLibraryItems(tools) {
@@ -866,15 +905,21 @@ function bindToolActions() {
   $("addToolButton").addEventListener("click", function () {
     if (typeof syncSelectedLibraryItem === "function") syncSelectedLibraryItem();
     else if (state.selectedInstructionKind === "tool") syncSelectedToolFromEditor();
+    if (["Excel", "Word", "PowerPoint"].indexOf(state.host) < 0) {
+      log("VBA tools поддерживаются в Excel, Word и PowerPoint.", "error");
+      return;
+    }
+    var id = uniqueDraftToolId(state.host.toLowerCase() + ".new_tool");
+    var code = newVbaToolSource(id, state.host);
     state.tools.push({
-      Id: (state.host || "common").toLowerCase() + ".new_tool",
-      Host: state.host || "Common",
+      Id: id,
+      Host: state.host,
       Name: "new_tool",
       Description: "",
       ArgumentSchemaJson: emptyToolSchema(),
       Executor: "vba",
       RequiresConfirmation: true,
-      Code: "",
+      Code: code,
       Readme: "",
       Enabled: true,
       BuiltIn: false,
@@ -884,7 +929,9 @@ function bindToolActions() {
       CapabilityStatus: "available",
       Scope: "global",
       PackageVersion: "1.0.0",
-      Components: [{ Name: "RNA_NewTool", Type: "StdModule", FileName: "RNA_NewTool.bas", Code: "Option Explicit\n" }],
+      EntryPoint: "Run",
+      ArgumentOrder: [],
+      Components: [{ Name: "RNA_NewTool", Type: "StdModule", FileName: "RNA_NewTool.bas", Code: code }],
       _baseId: "",
       _baseRevision: "",
       _sourceLoaded: true
@@ -902,7 +949,10 @@ function bindToolActions() {
       return;
     }
 
-    var id = (source.Id || "tool") + ".copy";
+    var id = uniqueDraftToolId((source.Id || "tool") + ".copy");
+    var components;
+    try { components = cloneVbaToolComponents(source, id); }
+    catch (error) { log(error.message, "error"); return; }
     state.tools.push({
       Id: id,
       Host: source.Host || state.host || "Common",
@@ -911,7 +961,7 @@ function bindToolActions() {
       ArgumentSchemaJson: source.ArgumentSchemaJson || emptyToolSchema(),
       Executor: source.BuiltIn ? "vba" : (source.Executor || "vba"),
       RequiresConfirmation: source.BuiltIn ? true : !!source.RequiresConfirmation,
-      Code: source.Code || "",
+      Code: components[0].Code,
       Readme: source.Readme || "",
       Enabled: true,
       BuiltIn: false,
@@ -926,7 +976,7 @@ function bindToolActions() {
       PackageVersion: source.PackageVersion || "1.0.0",
       EntryPoint: source.EntryPoint || "",
       ArgumentOrder: (source.ArgumentOrder || []).slice(),
-      Components: toolComponents(source).map(function (component) { return JSON.parse(JSON.stringify(component)); }),
+      Components: components,
       Scope: "global",
       InstallationStatus: "not_installed",
       _baseId: "",

@@ -840,8 +840,8 @@ namespace RNAssistant.Harness
                     .Single(tool => tool.Id == "excel.generated_report");
                 AssertContains(conservative.Code, "' <RNAssistantTool>",
                     "authoring stores a VBA-commented manifest marker");
-                AssertContains(conservative.Code, "' {\"protocolVersion\"",
-                    "authoring stores manifest JSON as VBA comments");
+                AssertTrue(new VbaToolManifestParser().Parse(conservative.Code).Success,
+                    "authoring stores a valid VBA-commented manifest independent of JSON formatting");
                 AssertTrue(conservative.RequiresConfirmation &&
                         conservative.MutatesDocument &&
                         conservative.MutatesLocalState &&

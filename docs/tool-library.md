@@ -139,6 +139,17 @@ normalized mutation guards and historical bytes; see
 [Resource Fabric](resource-fabric.md).
 Real Office/WebView2 qualification remains open.
 
+### Library VBA drafts
+
+The manual Add action creates a complete commented manifest and an argument-free
+`Run` entry function for Excel, Word or PowerPoint. The starter function raises an
+explicit unfinished-implementation error; saving a draft does not implement or run
+a task. Draft ids are unique within the current Library. Clone rewrites the copied
+manifest id and preserves the original package and implementation. Missing or
+malformed entry manifests stop cloning before adding a draft. Generated component
+names respect the 31-character VBE limit. These drafts use the existing validated,
+revision-guarded mutation upload and read-back path.
+
 ### Library mutation uploads
 
 Both Library Save and the save-before-VBA-install step use one bounded upload
