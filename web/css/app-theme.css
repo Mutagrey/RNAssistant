@@ -497,17 +497,12 @@ html[data-theme="dark"] .context-popover-preview {
 html[data-theme="dark"] .agent-diagnostic-message,
 html[data-theme="dark"] .agent-step-message,
 html[data-theme="dark"] .agent-run-history-summary:hover,
-html[data-theme="dark"] .agent-activity-row:hover,
-html[data-theme="dark"] .agent-activity.status-running .agent-activity-name,
-html[data-theme="dark"] .agent-activity.status-waiting .agent-activity-name,
-html[data-theme="dark"] .agent-activity.status-failed .agent-activity-name {
+html[data-theme="dark"] .agent-activity-row:hover {
   color: var(--text);
 }
 
 html[data-theme="dark"] .agent-run-history,
-html[data-theme="dark"] .agent-run-history-summary,
-html[data-theme="dark"] .agent-activity-row,
-html[data-theme="dark"] .agent-activity-name {
+html[data-theme="dark"] .agent-run-history-summary {
   color: #a9b2bf;
 }
 

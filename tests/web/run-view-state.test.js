@@ -125,7 +125,7 @@ function state(runId, lifecycle = "completed", health = "clean", pending = null)
   assert.equal(/agent-run-history-state\.status-(?:blocked|refused|awaiting_user|planned)/.test(agentCss), false);
   assert.equal(/message-outcome\.status-(?:blocked|refused|awaiting_user|planned)/.test(chatCss), false);
   ["app-utils.js", "app-run-view-state.js", "app-agent-model.js", "app-agent-approval.js"].forEach(asset => {
-    assert.ok(index.includes(asset + "?v=" + (["app-utils.js", "app-agent-approval.js"].includes(asset) ? "run-view-state-20260830-1" : asset === "app-agent.css" ? "live-feed-20260907-1" : "chat-projection-20260907-1")), asset + " uses the atomic cutover cache key");
+    assert.ok(index.includes(asset + "?v=" + (["app-utils.js", "app-agent-approval.js"].includes(asset) ? "run-view-state-20260830-1" : asset === "app-agent.css" ? "compact-actions-20260907-1" : "chat-projection-20260907-1")), asset + " uses the atomic cutover cache key");
   });
   assert.ok(index.includes("app-agent.js?v=live-feed-20260907-1"),
     "agent outcome uses the diagnostics cache key");
@@ -137,7 +137,7 @@ function state(runId, lifecycle = "completed", health = "clean", pending = null)
     "context meter does not scan and encode the whole transcript");
   assert.match(chatState, /localDeltaTokens/, "context meter exposes presentation-only local delta");
   ["app-chat.css", "app-agent.css"].forEach(asset => {
-    assert.ok(index.includes(asset + "?v=" + (["app-utils.js", "app-agent-approval.js"].includes(asset) ? "run-view-state-20260830-1" : asset === "app-agent.css" ? "live-feed-20260907-1" : "chat-projection-20260907-1")), asset + " uses the atomic cutover cache key");
+    assert.ok(index.includes(asset + "?v=" + (["app-utils.js", "app-agent-approval.js"].includes(asset) ? "run-view-state-20260830-1" : asset === "app-agent.css" ? "compact-actions-20260907-1" : "chat-projection-20260907-1")), asset + " uses the atomic cutover cache key");
   });
   assert.ok(index.indexOf("app-run-view-state.js") < index.indexOf("app-chat-state.js"));
   assert.ok(index.indexOf("app-run-view-state.js") < index.indexOf("app-agent-model.js"));

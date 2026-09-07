@@ -601,7 +601,9 @@ retain a visible verification warning outside collapsed history. A pre-dispatch
 the sheet satisfies the request or that a later call resolved the conflict.
 
 Activities show localized action labels, accepted semantic target/representation
-and a bounded result caption. `AgentTranscript` derives target captions from
+and a bounded result caption in one naturally wrapping, muted 12 px text flow.
+Action labels use regular weight, with a 6 px icon gap; narration remains distinct.
+`AgentTranscript` derives target captions from
 accepted scalar arguments without resource lookup or new authority. Exact tool
 ids and arguments remain in expandable details. Consecutive transcript groups
 require the same runtime `RunId`; confirmation segments keep their own grouping
@@ -616,8 +618,7 @@ state by identity.
 Message action footers refresh separately when send, edit, confirmation or bridge
 availability changes. Cached message bodies and embedded previews remain attached;
 edit and fork availability must not stay frozen at the time a message first rendered.
-Arrows follow their label and align with
-its first line. Reduced-motion disables shimmer; plain streaming text has no
+Arrows follow their label and align with its text line. Reduced-motion disables shimmer; plain streaming text has no
 separate three-dot cursor.
 
 If an application/controller exception escapes after the kernel has created current

@@ -201,6 +201,22 @@ tests.push(["live feed keeps previous steps and nested actions visible until the
   assert.match(overview.childNodes[0].childNodes[0].textContent, /Действия/);
 }]);
 
+tests.push(["one step narration groups all calls and completion replaces its running row", () => {
+  const call = (id, status) => ({ Kind: "tool", ToolId: "common.resources_read",
+    RunId: "run", StepId: "step", StepMessage: "Проверю три ресурса.",
+    ToolCallId: id, Subtitle: id, Status: status });
+  const items = [call("a", "running"), call("a", "completed"),
+    call("b", "completed"), call("c", "running")].map(activity => ({ activity }));
+  const timeline = context.collectVisibleAgentTimelineItems(items);
+  const steps = context.groupAgentRunSteps(timeline);
+  assert.equal(steps.length, 1);
+  assert.equal(steps[0].items.length, 3);
+  const node = context.renderAgentRunArticle({ live: true, items });
+  assert.equal(walk(node).filter(n => n.className === "agent-step-message markdown").length, 1);
+  assert.equal(walk(node).filter(n => /agent-activity kind-tool/.test(n.className)).length, 3);
+  assert.equal(walk(node).filter(n => /is-live-current/.test(n.className)).length, 1);
+}]);
+
 for (const [name, test] of tests) {
   test();
   process.stdout.write("PASS run view UI: " + name + "\n");
