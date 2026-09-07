@@ -235,7 +235,7 @@ namespace RNAssistant.Office.Services
             accepted.RunId = _session.LastRun == null
                 ? null
                 : _session.LastRun.RunId;
-            model.RunId = accepted.RunId;
+            if (model != null) model.RunId = accepted.RunId;
             AppendPairedResult(_session.Messages, accepted);
             _toolPack.StageReadResult(model);
             if (prepared.Media != null && result.Result.Status == RNAssistant.Core.Tools.Contracts.ToolResultStatus.Ok)
@@ -404,7 +404,10 @@ namespace RNAssistant.Office.Services
             // Admission validates runtime-owned descriptor/revision evidence before
             // archival externalization. Model projection deliberately strips these
             // fields and can never be callable authority.
-            modelMessage = HistoricalContextProjector.Project(message);
+            // Only capability admission consumes this pre-archival projection.
+            // Ordinary resource/tool results go directly to the durable CAS path.
+            modelMessage = string.Equals(command.ToolId, CapabilityToolCatalog.ReadToolId, StringComparison.Ordinal)
+                ? HistoricalContextProjector.Project(message) : null;
             if (_payloads != null && message.Content.Length > 8192)
             {
                 message.ResultPayload = PayloadRef.FromBlob(_payloads.StoreText(message.Content, "application/vnd.rnassistant.tool-result+json"));

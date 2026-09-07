@@ -117,7 +117,7 @@ namespace RNAssistant.Core.ModelProtocol
                     lastError = parsed.Error;
                     // Preserve the existing zero-based diagnostic index; the limit and
                     // repair instruction count total protocol responses, starting at one.
-                    TraceRejected(options, completion, lastError, attempt - 1);
+                    TraceRejected(options, completion, lastError, attempt - 1, progress);
                     cancellationToken.ThrowIfCancellationRequested();
                 }
                 return ModelProtocolResult.Failed(new ModelProtocolFailure(ModelProtocolFailureKind.ProtocolExhausted,
@@ -231,36 +231,40 @@ namespace RNAssistant.Core.ModelProtocol
                 CreateFormatRepairMessage(maximumError, attempts, attempts), settings);
         }
 
-        private static void TraceRejected(LlmRequestOptions options, LlmCompletionResult completion, string error, int attempt)
+        private static void TraceRejected(LlmRequestOptions options, LlmCompletionResult completion, string error, int attempt, ModelProtocolProgress progress)
         {
-            if (options.TraceSink == null) return;
-            options.TraceSink(new LlmTraceRecord
+            WriteOptionalTrace(options, new LlmTraceRecord
             {
                 Type = "rejected", RequestId = options.TraceRequestId, Purpose = options.TracePurpose,
                 Model = options.TraceSession == null ? null : options.TraceSession.Model,
                 ResponseFormat = options.ResponseFormat, Attempt = attempt, FailureKind = "invalid_model_response",
                 Error = error, PayloadJson = completion.Content, PayloadContentType = "application/json"
-            });
+            }, progress);
         }
 
         private static void TraceAccepted(LlmRequestOptions options, bool providerRefusal, ModelProtocolProgress progress)
         {
+            WriteOptionalTrace(options, new LlmTraceRecord
+            {
+                Type = "accepted", RequestId = options.TraceRequestId, Purpose = options.TracePurpose,
+                Model = options.TraceSession == null ? null : options.TraceSession.Model,
+                ResponseFormat = options.ResponseFormat, ResponseStatus = providerRefusal ? AgentResponseStatuses.Refused : null,
+                // Parser diagnostics precede durable runtime acceptance and ID allocation.
+                ToolCallIds = new string[0]
+            }, progress);
+        }
+
+        private static void WriteOptionalTrace(LlmRequestOptions options, LlmTraceRecord record, ModelProtocolProgress progress)
+        {
             if (options.TraceSink == null) return;
             try
             {
-                options.TraceSink(new LlmTraceRecord
-                {
-                    Type = "accepted", RequestId = options.TraceRequestId, Purpose = options.TracePurpose,
-                    Model = options.TraceSession == null ? null : options.TraceSession.Model,
-                    ResponseFormat = options.ResponseFormat, ResponseStatus = providerRefusal ? AgentResponseStatuses.Refused : null,
-                    // This marker precedes runtime acceptance and ID allocation.
-                    ToolCallIds = new string[0]
-                });
+                options.TraceSink(record);
             }
             catch (Exception)
             {
                 try { if (progress != null && progress.OptionalTraceFailed != null) progress.OptionalTraceFailed(); }
-                catch (Exception) { /* Optional diagnostic failure cannot change an accepted result. */ }
+                catch (Exception) { /* Parser diagnostic failure cannot change a verdict or consume repair budget. */ }
             }
         }
     }

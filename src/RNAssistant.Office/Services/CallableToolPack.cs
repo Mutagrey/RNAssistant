@@ -408,7 +408,8 @@ namespace RNAssistant.Office.Services
             id = null;
             RNAssistant.Core.ModelProtocol.ToolResultWireReadResult result;
             string error;
-            if (!ToolResultHistoryReader.TryRead(message, out result, out error) ||
+            if (!string.Equals(message.ToolName, CapabilityToolCatalog.ReadToolId, StringComparison.Ordinal) ||
+                !ToolResultHistoryReader.TryRead(message, out result, out error) ||
                 result.Result.Status != RNAssistant.Core.Tools.Contracts.ToolResultStatus.Ok ||
                 !string.Equals(result.Name, CapabilityToolCatalog.ReadToolId, StringComparison.Ordinal) ||
                 string.IsNullOrWhiteSpace(result.Result.DataJson)) return false;

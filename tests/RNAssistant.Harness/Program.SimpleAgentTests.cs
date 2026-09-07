@@ -800,6 +800,14 @@ namespace RNAssistant.Harness
         // Phase 1C: loop completion and the model's text cannot certify an external effect.
         private static void SimpleAgentCharacterizesCompletedAfterWriteError()
         {
+            var mixedCounts = new RNAssistant.Core.Agent.ToolCounts(writeOk: 1, writeError: 1);
+            var mixed = new RNAssistant.Core.Agent.RunSummary("run", "turn", RNAssistant.Core.Agent.RunLifecycle.Completed,
+                mixedCounts, 2, 2, "Результат исправлен.", "completed", null);
+            var warning = ConversationRunProjection.AssistantMessage(mixed);
+            AssertEqual(1, mixed.ToolCounts.WriteError, "successful later attempts do not erase historical errors");
+            AssertTrue(!warning.Contains("Успешное применение всех изменений не подтверждено"),
+                "error counts alone do not claim an unresolved final failure");
+            AssertContains(warning, "а не число нерешённых проблем", "mixed outcomes remain attempt history");
             WithTempExecutor(FakeOfficeAdapter.ForHost("Excel"), (executor, adapter) =>
             {
                 adapter.QueueExcelSheetApplyFailure(
@@ -836,8 +844,10 @@ namespace RNAssistant.Harness
                 AssertEqual(AgentResponseStatuses.Completed, result.ResponseStatus, "model completed is accepted after write error");
                 AssertContains(result.AssistantText, "операций записи завершились ошибкой",
                     "runtime annotates a false success claim with authoritative write failure evidence");
-                AssertContains(session.Messages.Last().Content, "Успешное применение всех изменений не подтверждено",
-                    "authoritative failure notice enters accepted history");
+                AssertContains(result.AssistantText, "История попыток:", "counts describe past attempts");
+                AssertContains(result.AssistantText, "а не число нерешённых проблем", "attempt counts cannot infer current task failure");
+                AssertContains(session.Messages.Last().Content, "последующее исправление конкретной операции ими не определяется",
+                    "historical errors do not assert that the final task is still unresolved");
                 AssertEqual(AgentResponseStatuses.Completed, session.Messages.Last().ResponseStatus, "false completion enters accepted history");
             });
         }
@@ -895,7 +905,8 @@ namespace RNAssistant.Harness
                     journal.ListMutations(adapter.HostName, adapter.DocumentKey).Single().Terminal.Status, "durable journal also records unknown");
                 AssertContains(adapter.VbaModuleCode, "\"diverged\"", "fake host state matches neither before nor intended");
                 AssertEqual(1, adapter.CountVbaCalls(FakeVbaOperation.ReplaceModule), "unknown write is dispatched once");
-                AssertContains(FlattenSimple(requests.Last()), "vba_mutation_unknown", "model receives unknown effect evidence");
+                AssertContains(FlattenSimple(requests.Last()), "\"outcome\":\"Unknown\"", "compiled causal frame preserves unknown outcome");
+                AssertContains(FlattenSimple(requests.Last()), "Final VBA state is unknown", "model receives the exact verification warning");
                 AssertEqual(RunViewLifecycles.Completed, result.RunViewState.Lifecycle, "loop completion is independent of execution health");
                 AssertRunViewState(result, session, "unknown", 0, 0, 1);
                 AssertEqual(AgentResponseStatuses.Completed, result.ResponseStatus, "model completed is accepted after unknown write");

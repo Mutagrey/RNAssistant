@@ -362,8 +362,12 @@ The loop owns step ids, tool execution, summaries and presentation timing.
 constructs visible activity, resource/chart provenance and HTML checkpoints. Core owns
 raw attempt ids, parsing, fixed repair instructions, format fallback and the
 accepted/rejected diagnostics sent through the existing configured trace sink.
-Rejected diagnostic append failure stops the step; optional accepted marker
-failure preserves acceptance. Transient streaming still uses the Office projector
+Both rejected and accepted parser diagnostics are best-effort. Sink failure is
+reported through `OptionalTraceFailed`; a rejected answer still consumes its normal
+attempt and repair continues, while cancellation and the attempt limit remain
+binding. Required runtime acceptance, tool execution/commit facts, and request /
+response persistence retain their existing failure behavior. Persistent storage
+failure can still stop those mandatory boundaries; this is not a bypass for them. Transient streaming still uses the Office projector
 and is not accepted history. No new store or model self-repair events are introduced.
 
 Hydrated media stays in the unchanged accepted prompt throughout all attempts of
@@ -620,3 +624,16 @@ See [event durability/recovery](session-events.md),
 - Provider reasoning is transport metadata, not part of the agent JSON or replay history.
 - Context compaction may replace a fully included replay prefix with a stored checkpoint and a bounded deterministic union of its exact resource references, but it does not split a tool exchange, delete the source transcript, partially mark an oversized message as summarized, change the agent protocol, or repeat Office tools.
 - A persisted `running` or `cancelling` run without a live cross-process owner is marked interrupted and is never resumed automatically. If it stopped while a tool may have been in flight, it is marked `interrupted_unknown` and that run's protocol remains visible but is excluded from replay. Protocol through a saved tool-result boundary remains replayable.
+
+### Attempt counters and final warning
+
+`ToolCounts` and `ExecutionHealth` describe execution history, not a reconciled
+current task outcome. Final warnings explicitly label write-error/unknown counts
+as past attempts. Write errors alone do not assert that later corrections failed;
+unknown effects retain the lack-of-confirmation warning. Counts are never reset by
+model narration or a subsequent unrelated successful write. Per-effect correction
+links and a verified current-goal outcome are not inferred from these counters.
+
+Capability admission is the only consumer of the pre-archival result-message copy.
+Ordinary resource/tool results skip that copy and the capability wire reader;
+exact result bodies still use `ResultPayload` and compiler-selected CAS hydration.

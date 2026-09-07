@@ -19,6 +19,19 @@ Phase 2C3B заменяет этот reset preservation/review flow; Core settin
 Phase 2C3C переключает actual wire/history на v3 и проверяет preflight, run IDs, singleton
 safety, refusal и review/reset на prompt schema 12. Windows/live-provider gates остаются.
 
+Screenshot corrections (2026-09-07, host-neutral): final warning now labels
+`WriteError`/`WriteUnknown` as attempt history. Write errors do not by themselves
+assert unresolved final failure; unknown effects retain a confirmation warning.
+Historical counters remain authoritative and unchanged. Per-effect reconciliation
+still requires explicit correction evidence and is not implemented by wording.
+Owner: kernel summary / run projection.
+
+Both accepted/rejected parser diagnostics now use the same best-effort helper.
+Failure is reported without stopping repair; cancellation/attempt limits remain.
+Mandatory runtime acceptance, execution and request/response storage still fail
+closed. Owner: ModelProtocol + ModelTracePersistenceService. This fixes optional
+parser-trace availability, not persistent storage corruption or queue contention.
+
 Chat navigation / persistence contention (2026-09-07, open): user reports freezes
 while streaming, loading artifacts and switching chats. `ChatStore.PersistenceSync`
 is static across chats; `SaveInternalLocked` performs artifact externalization,

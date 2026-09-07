@@ -25,7 +25,7 @@ namespace RNAssistant.Office.Services
                 {
                     if (progress != null) progress("thinking", "Endpoint не поддерживает json_schema; продолжаю с json_object.", null);
                 },
-                OptionalTraceFailed = () => Diagnostics.RuntimeLog.Error("Causal trace append failed at model.response.accepted.")
+                OptionalTraceFailed = () => Diagnostics.RuntimeLog.Error("Optional model parser diagnostic append failed.")
             };
         }
 

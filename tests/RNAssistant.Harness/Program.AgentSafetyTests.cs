@@ -1094,9 +1094,15 @@ namespace RNAssistant.Harness
                 calls++;
                 return Task.FromResult(calls == 1 ? new LlmCompletionResult { Content = "rejected response" } : refusal);
             });
-            var rejected = await protocol.GetResponseAsync(request, null, CancellationToken.None);
-            AssertEqual(ModelProtocolFailureKind.Infrastructure, rejected.Failure.Kind, "required rejected diagnostic failure stops execution");
-            AssertEqual(1, calls, "cannot repair past a failed diagnostic append");
+            var repaired = await protocol.GetResponseAsync(request, new ModelProtocolProgress
+            {
+                OptionalTraceFailed = () => { optionalFailures++; throw new IOException("optional logger unavailable"); }
+            }, CancellationToken.None);
+            AssertTrue(repaired.Failure == null, "rejected diagnostic failure does not prevent repair");
+            AssertEqual(2, calls, "invalid response still consumes one attempt and is repaired");
+            AssertEqual(2, optionalFailures, "both parser marker failures are reported without aborting repair");
+            AssertEqual(refusal.RefusalContent, repaired.ProviderRefusal, "repaired native refusal remains exact");
+            optionalFailures = 0;
             var accepted = await protocol.GetResponseAsync(request, new ModelProtocolProgress
             {
                 OptionalTraceFailed = () => { optionalFailures++; throw new IOException("optional logger unavailable"); }
@@ -1106,6 +1112,20 @@ namespace RNAssistant.Harness
             AssertEqual(refusal.RefusalContent, accepted.ProviderRefusal, "native refusal text is preserved verbatim");
             AssertTrue(ReferenceEquals(refusal, accepted.Completion), "accepted provider metadata is retained");
             AssertEqual(1, optionalFailures, "optional trace failure is reported once");
+            using (var cancelled = new CancellationTokenSource())
+            {
+                calls = 0;
+                request.Options.TraceSink = record => { cancelled.Cancel(); throw new IOException("trace unavailable"); };
+                protocol = new ModelProtocolClient((settings, messages, options, stream, token) =>
+                {
+                    calls++;
+                    return Task.FromResult(new LlmCompletionResult { Content = "invalid" });
+                });
+                var stopped = await protocol.GetResponseAsync(request, null, cancelled.Token);
+                AssertEqual(ModelProtocolFailureKind.Cancelled, stopped.Failure.Kind, "optional trace handling preserves cancellation");
+                AssertEqual(1, calls, "cancelled repair makes no next provider call");
+            }
+
         }
 
         private static async Task ModelProtocolStopsBeforeOversizedRequest()

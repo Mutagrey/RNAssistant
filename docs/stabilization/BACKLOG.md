@@ -80,3 +80,35 @@ prerequisites.
 Windows/Office/live-provider checks, включая R21/R24/R25, перечисляются только в
 `PROGRESS.md` и `RISK_REGISTER.md`, чтобы backlog не становился второй матрицей
 qualification.
+
+## Screenshot architecture review — 2026-09-07
+
+Read-only source review; these are bounded follow-ups, not a new cutover or a
+claim of measured UI cost. Current priority remains chat navigation/persistence.
+
+- **Result representations:** owner `ModelToolResultProjection` /
+  `ConversationModelSession`. Family-specific JSON cleanup and exact-read exclusion
+  from generic artifact wrapping still exist. Results above 8192 characters are
+  archived through `ResultPayload`, then selected compiler atoms hydrate CAS.
+  The 2026-09-07 correction removes the unused pre-archival model-message copy and
+  capability-admission wire parsing for ordinary results; capability reads retain
+  exact pre-archival descriptor checks. Before replacing a family cleanup path,
+  measure parse/clone/serialization cost;
+  preserve one execution result and exact evidence, and remove its old projection
+  branch with focused wire/provenance checks. Do not add a second durable store.
+- **Provider intent routing:** owner `ResourceGatewayService.Intent`. Explicit
+  Excel/Word/PowerPoint/Outlook type branches remain. A future approved provider
+  extension may introduce a narrow semantic-resolution capability and remove the
+  corresponding branch, with ambiguity/coverage/exact-binding tests. No generic
+  plugin platform or provider expansion is scheduled by this review.
+- **Tool definition duplication:** owner tool catalogs / `DirectToolBindingCatalog`.
+  `ToolCatalogEntry` already carries schema/policy/binding, but binding resolution
+  and model projection still use separate tool/family dispatch. Consolidate only a
+  named approved tool-family change; preserve separate human docs/model descriptions.
+
+The screenshot's free-form-only compaction claim is obsolete: compaction requires
+claims with valid sourceIds and attaches source messages/evidence/generations.
+`ModelContextCompiler.Compile` consumes atoms/evidence and bounded CAS payloads;
+no direct Excel/VBA/PDF/HTML execution was found. `BuildPreview` still accepts an
+Office adapter and delegates prompt composition; this is a boundary to watch, not
+proof of a domain-executing compiler monolith.

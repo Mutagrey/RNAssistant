@@ -241,10 +241,11 @@ namespace RNAssistant.Office.Services
             var unknown = summary.ToolCounts.WriteUnknown;
             if (errors <= 0 && unknown <= 0) return message;
             var notice = unknown > 0
-                ? "Проверка выполнения: состояние " + unknown +
+                ? "История попыток: состояние " + unknown +
                     " операций записи осталось неизвестным. Успешное применение всех изменений не подтверждено."
-                : "Проверка выполнения: " + errors +
-                    " операций записи завершились ошибкой. Успешное применение всех изменений не подтверждено.";
+                : "История попыток: " + errors + " операций записи завершились ошибкой.";
+            notice += " Это счётчики попыток, а не число нерешённых проблем; " +
+                "последующее исправление конкретной операции ими не определяется.";
             return string.IsNullOrWhiteSpace(message)
                 ? notice
                 : message.TrimEnd() + "\n\n" + notice;
