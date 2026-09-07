@@ -1,7 +1,6 @@
 using System;
 using System.Threading;
 using System.Threading.Tasks;
-using Newtonsoft.Json;
 using RNAssistant.Core.Models;
 using RNAssistant.Core.Tools;
 using RNAssistant.Office.Domains.PowerPoint;
@@ -51,9 +50,9 @@ namespace RNAssistant.Office.Tools
             CancellationToken cancellationToken)
         {
             if (_session == null)
-                return Failure(
+                return OfficeToolFailure.Rejected(
                     "PowerPoint operations require an active chat session.",
-                    "powerpoint_session_required", false);
+                    "powerpoint_session_required");
             try
             {
                 if (_toolId == PowerPointToolIds.SearchText)
@@ -83,16 +82,12 @@ namespace RNAssistant.Office.Tools
             catch (OfficeDocumentGuardException ex)
                 when (!context.MayHaveDispatched)
             {
-                return Failure(ex.Message, ex.ErrorCode, ex.Retryable);
+                return OfficeToolFailure.Guard(ex);
             }
             catch (HostRuntime.MutationLockException ex)
                 when (!context.MayHaveDispatched)
             {
-                return Failure(
-                    ex.Message,
-                    ex.Retryable ? "tool_mutation_busy" :
-                        "tool_mutation_lock_unavailable",
-                    ex.Retryable);
+                return OfficeToolFailure.Lock(ex);
             }
         }
 
@@ -137,13 +132,5 @@ namespace RNAssistant.Office.Tools
             };
         }
 
-        private static Task<ToolHandlerResult> Failure(
-            string message, string code, bool retryable)
-        {
-            return Task.FromResult(new ToolHandlerResult(
-                RuntimeResult.Error(message,
-                    JsonConvert.SerializeObject(new { code, retryable })),
-                ToolEffectEvidence.None));
-        }
     }
 }

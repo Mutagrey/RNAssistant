@@ -1,7 +1,6 @@
 using System;
 using System.Threading;
 using System.Threading.Tasks;
-using Newtonsoft.Json;
 using RNAssistant.Core.Models;
 using RNAssistant.Core.Tools;
 using RNAssistant.Office.Runtime;
@@ -35,7 +34,9 @@ namespace RNAssistant.Office.Tools
         public Task<ToolHandlerResult> ExecuteAsync(ToolHandlerContext context, CancellationToken cancellationToken)
         {
             if (_session == null)
-                return Failure("Excel reads require an active chat session.", "excel_read_session_required", false);
+                return OfficeToolFailure.Rejected(
+                    "Excel reads require an active chat session.",
+                    "excel_read_session_required");
             try
             {
                 var result = _runtime.ReadDocument(Target(_session), cancellationToken, delegate
@@ -50,11 +51,11 @@ namespace RNAssistant.Office.Tools
             }
             catch (OfficeDocumentGuardException ex)
             {
-                return Failure(ex.Message, ex.ErrorCode, ex.Retryable);
+                return OfficeToolFailure.Guard(ex);
             }
             catch (HostRuntime.MutationLockException ex)
             {
-                return Failure(ex.Message, ex.Retryable ? "tool_mutation_busy" : "tool_mutation_lock_unavailable", ex.Retryable);
+                return OfficeToolFailure.Lock(ex);
             }
         }
 
@@ -66,12 +67,6 @@ namespace RNAssistant.Office.Tools
                 DocumentKey = session.DocumentKey,
                 RuntimeDocumentKey = session.LastRun == null ? string.Empty : session.LastRun.DocumentRuntimeKey
             };
-        }
-
-        private static Task<ToolHandlerResult> Failure(string message, string code, bool retryable)
-        {
-            return Task.FromResult(new ToolHandlerResult(RuntimeResult.Error(message,
-                JsonConvert.SerializeObject(new { code, retryable })), ToolEffectEvidence.None));
         }
     }
 }

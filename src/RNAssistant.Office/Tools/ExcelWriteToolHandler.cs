@@ -1,7 +1,6 @@
 using System;
 using System.Threading;
 using System.Threading.Tasks;
-using Newtonsoft.Json;
 using RNAssistant.Core.Models;
 using RNAssistant.Core.Tools;
 using RNAssistant.Office.Domains.Excel;
@@ -28,7 +27,9 @@ namespace RNAssistant.Office.Tools
         public Task<ToolHandlerResult> ExecuteAsync(ToolHandlerContext context, CancellationToken cancellationToken)
         {
             if (_session == null)
-                return Failure("Excel writes require an active chat session.", "excel_write_session_required", false);
+                return OfficeToolFailure.Rejected(
+                    "Excel writes require an active chat session.",
+                    "excel_write_session_required");
             try
             {
                 var outcome = _runtime.ExecuteDocumentMutation(Target(_session), cancellationToken, delegate
@@ -40,12 +41,11 @@ namespace RNAssistant.Office.Tools
             }
             catch (OfficeDocumentGuardException ex) when (!context.MayHaveDispatched)
             {
-                return Failure(ex.Message, ex.ErrorCode, ex.Retryable);
+                return OfficeToolFailure.Guard(ex);
             }
             catch (HostRuntime.MutationLockException ex) when (!context.MayHaveDispatched)
             {
-                return Failure(ex.Message,
-                    ex.Retryable ? "tool_mutation_busy" : "tool_mutation_lock_unavailable", ex.Retryable);
+                return OfficeToolFailure.Lock(ex);
             }
         }
 
@@ -80,12 +80,6 @@ namespace RNAssistant.Office.Tools
                 DocumentKey = session.DocumentKey,
                 RuntimeDocumentKey = session.LastRun == null ? string.Empty : session.LastRun.DocumentRuntimeKey
             };
-        }
-
-        private static Task<ToolHandlerResult> Failure(string message, string code, bool retryable)
-        {
-            return Task.FromResult(new ToolHandlerResult(RuntimeResult.Error(message,
-                JsonConvert.SerializeObject(new { code, retryable })), ToolEffectEvidence.None));
         }
     }
 }

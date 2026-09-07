@@ -117,6 +117,7 @@
     <Compile Include="..\..\src\RNAssistant.Office\Runtime\DispatchedOfficeApplicationAdapter.cs" Link="Office\Runtime\DispatchedOfficeApplicationAdapter.cs" />
     <Compile Include="..\..\src\RNAssistant.OfficeHosts\Identity\DocumentIdentity.cs" Link="OfficeHosts\Identity\DocumentIdentity.cs" />
     <Compile Include="..\..\src\RNAssistant.Office\Runtime\OfficeDocumentExecutionGuard.cs" Link="Office\Runtime\OfficeDocumentExecutionGuard.cs" />
+    <Compile Include="..\..\src\RNAssistant.Office\Runtime\OfficeToolFailure.cs" Link="Office\Runtime\OfficeToolFailure.cs" />
     <Compile Include="..\..\src\RNAssistant.Office\Runtime\OfficeStaDispatcher.cs" Link="Office\Runtime\OfficeStaDispatcher.cs" />
     <Compile Include="..\..\src\RNAssistant.Office\Runtime\NativeToolRuntimeAdapter.cs" Link="Office\Runtime\NativeToolRuntimeAdapter.cs" />
     <Compile Include="..\..\src\RNAssistant.Office\Runtime\ToolHandlerRegistry.cs" Link="Office\Runtime\ToolHandlerRegistry.cs" />

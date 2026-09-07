@@ -29,7 +29,9 @@ namespace RNAssistant.Office.Tools
         {
             cancellationToken.ThrowIfCancellationRequested();
             if (Session == null)
-                return Failure("Resource tools require an active chat session.", "resource_session_required", false);
+                return OfficeToolFailure.Rejected(
+                    "Resource tools require an active chat session.",
+                    "resource_session_required");
             try
             {
                 using (DocumentAccessGate.BeginOperation())
@@ -38,9 +40,20 @@ namespace RNAssistant.Office.Tools
                     return Task.FromResult(Execute(context));
                 }
             }
-            catch (KeyNotFoundException ex) { return Failure(ex.Message, "resource_not_found", false); }
-            catch (ResourceRequestException ex) { return Failure(ex.Message, ex.ErrorCode, ex.Retryable); }
-            catch (InvalidOperationException ex) { return Failure(ex.Message, "resource_request_invalid", true); }
+            catch (KeyNotFoundException ex)
+            {
+                return OfficeToolFailure.Rejected(ex.Message,
+                    "resource_not_found", ToolRetryPolicy.Replan);
+            }
+            catch (ResourceRequestException ex)
+            {
+                return OfficeToolFailure.Resource(ex);
+            }
+            catch (InvalidOperationException ex)
+            {
+                return OfficeToolFailure.Rejected(ex.Message,
+                    "resource_request_invalid", ToolRetryPolicy.Replan, true);
+            }
         }
 
         protected abstract ToolHandlerResult Execute(ToolHandlerContext context);
@@ -64,12 +77,6 @@ namespace RNAssistant.Office.Tools
                     StringComparer.Ordinal)
                 .Select(group => group.First())
                 .ToArray();
-        }
-
-        private static Task<ToolHandlerResult> Failure(string message, string code, bool retryable)
-        {
-            return Task.FromResult(Completed(RuntimeResult.Error(message,
-                JsonConvert.SerializeObject(new { code, retryable }))));
         }
     }
 }

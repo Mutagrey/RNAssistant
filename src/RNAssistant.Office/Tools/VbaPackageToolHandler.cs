@@ -98,16 +98,12 @@ namespace RNAssistant.Office.Tools
             catch (OfficeDocumentGuardException ex)
                 when (!context.MayHaveDispatched)
             {
-                return Failure(ex.Message, ex.ErrorCode,
-                    GuardRecovery(ex.ErrorCode));
+                return OfficeToolFailure.Guard(ex);
             }
             catch (HostRuntime.MutationLockException ex)
                 when (!context.MayHaveDispatched)
             {
-                return Failure(ex.Message,
-                    ex.Retryable ? "tool_mutation_busy" :
-                        "tool_mutation_lock_unavailable",
-                    LockRecovery(ex.Retryable));
+                return OfficeToolFailure.Lock(ex);
             }
         }
 
@@ -149,32 +145,5 @@ namespace RNAssistant.Office.Tools
             };
         }
 
-        private static Task<ToolHandlerResult> Failure(
-            string message, string code, ToolRecoveryContract recovery)
-        {
-            return Task.FromResult(new ToolHandlerResult(
-                RuntimeResult.Error(message, new JObject
-                {
-                    ["code"] = code,
-                    ["retryable"] = recovery.RetryPolicy == ToolRetryPolicy.RetryLater
-                }.ToString()), ToolEffectEvidence.None,
-                recovery: recovery));
-        }
-
-        private static ToolRecoveryContract GuardRecovery(string code)
-        {
-            var rejected = string.Equals(code, "active_document_changed", StringComparison.Ordinal) ||
-                string.Equals(code, "document_session_unavailable", StringComparison.Ordinal);
-            return new ToolRecoveryContract(
-                rejected ? ToolFailureKind.RejectedNoEffect : ToolFailureKind.ToolDefect,
-                ToolRetryPolicy.None);
-        }
-
-        private static ToolRecoveryContract LockRecovery(bool retryable)
-        {
-            return new ToolRecoveryContract(
-                retryable ? ToolFailureKind.BusyNoEffect : ToolFailureKind.ToolDefect,
-                retryable ? ToolRetryPolicy.RetryLater : ToolRetryPolicy.None);
-        }
     }
 }

@@ -25,7 +25,17 @@ default prompts, three prompt-review cases, exact empty text and on-demand rerea
 Only host-neutral harness execution; target-model quality and Windows delivery
 remain unqualified.
 
-Latest correction (2026-09-07): tool policy now derives `ReadOnly`,
+Latest correction (2026-09-07): native Office handlers now share one runtime-owned
+classification for session, document-guard, mutation-lock and resource-admission
+failures. Closed/mismatched targets are definite `RejectedNoEffect`, occupied gates
+are `BusyNoEffect/RetryLater`, infrastructure identity/lock failures remain
+`ToolDefect`, and model-correctable resource requests are `Replan`; none are replayed
+automatically. The audit also corrected `excel.create_chat_chart` registration to
+the mixed read/mutation handler contract. ToolRuntime, all Excel native families,
+Word, PowerPoint, Outlook, VBA and focused resource checks pass host-neutral.
+Windows/Office/WebView2 qualification remains open.
+
+Previous correction (2026-09-07): tool policy now derives `ReadOnly`,
 `ManagedMutation` or `OpaqueAction`, and registration fails closed on a handler
 contract mismatch. Failed execution carries typed failure/retry recovery. Exact VBA
 patch binds current live source under the document gate instead of forcing a full

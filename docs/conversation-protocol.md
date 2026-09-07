@@ -573,7 +573,9 @@ Policy derives one runtime execution class: `ReadOnly`, `ManagedMutation` or
 `OpaqueAction`. Registration fails closed unless its handler explicitly implements
 the matching class contract. Every dispatched `OpaqueAction` remains `unknown`
 even when its handler reports success; custom VBA and Office macros are the current
-opaque tools.
+opaque tools. Session absence, bound-document guards, document-gate contention and
+resource admission failures are classified once by the Office runtime and projected
+through the same typed recovery contract for every native Office handler.
 Only the kernel aggregates records. `ChatActivity.ExecutionEvidence`
 preserves compact native facts through existing event operations and clone; a
 present incomplete evidence/policy object fails deserialization.

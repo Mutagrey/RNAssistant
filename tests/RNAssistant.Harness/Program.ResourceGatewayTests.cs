@@ -466,8 +466,15 @@ namespace RNAssistant.Harness
                         DateTime.UtcNow, false, 1), CancellationToken.None).GetAwaiter().GetResult();
                     AssertEqual(ToolExecutionOutcome.Error, blocked.Outcome,
                         "semantic find cannot borrow document access held on the same thread");
-                    AssertEqual("tool_mutation_busy", (string)JObject.Parse(blocked.Result.DataJson)["code"],
+                    var blockedData = JObject.Parse(blocked.Result.DataJson);
+                    AssertEqual("tool_mutation_busy", (string)blockedData["code"],
                         "native live find reports the occupied document gate");
+                    AssertEqual("BusyNoEffect",
+                        (string)blockedData["recovery"]?["failureKind"],
+                        "occupied document gate is a typed no-effect busy failure");
+                    AssertEqual("RetryLater",
+                        (string)blockedData["recovery"]?["retryPolicy"],
+                        "busy resource admission is deferred without automatic replay");
                     AssertEqual(backendCalls, adapter.TotalBackendCallCount, "blocked native live find never reaches Office backend");
                 }
 

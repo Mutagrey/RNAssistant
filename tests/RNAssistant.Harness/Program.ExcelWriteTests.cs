@@ -251,6 +251,11 @@ namespace RNAssistant.Harness
                         tools, new AppSettings(), false, false, chat);
                     AssertEqual("active_document_changed", closed.ErrorCode,
                         "closed bound workbook is rejected before write dispatch");
+                    var recovery = JObject.Parse(closed.DataJson)["recovery"];
+                    AssertEqual("RejectedNoEffect", (string)recovery?["failureKind"],
+                        "closed bound workbook exposes a typed no-effect rejection");
+                    AssertEqual("None", (string)recovery?["retryPolicy"],
+                        "closed document is not retried inside the model loop");
                     AssertEqual(dispatched, inner.ExcelBackendCalls.Count(operation =>
                         operation == FakeOfficeAdapter.ExcelWriteApplyOperation),
                         "closed workbook never reaches the write backend");

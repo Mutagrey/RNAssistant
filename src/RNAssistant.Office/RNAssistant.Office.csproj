@@ -171,6 +171,7 @@
     <Compile Include="Agent\AgentTranscript.cs" />
     <Compile Include="Runtime\OfficeStaDispatcher.cs" />
     <Compile Include="Runtime\OfficeDocumentExecutionGuard.cs" />
+    <Compile Include="Runtime\OfficeToolFailure.cs" />
     <Compile Include="Runtime\OfficeUiDispatcher.cs" />
     <Compile Include="Runtime\UiThreadOfficeApplicationAdapter.cs" />
     <Compile Include="Contracts\IOfficeApplicationAdapter.cs" />
