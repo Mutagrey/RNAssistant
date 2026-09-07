@@ -31,7 +31,7 @@ namespace RNAssistant.Office.Tools
                 ["components"] = new JObject
                 {
                     ["type"] = "array",
-                    ["description"] = "Complete ordered VBA package sources. Required for create and when implementation changes; the first component is the StdModule containing the manifest and entry function.",
+                    ["description"] = "Complete ordered VBA package sources. Required for create and when implementation changes; the first component is the StdModule containing the manifest and entry function. Do not duplicate this list inside the manifest: runtime derives and writes the manifest component-name list from this exact order.",
                     ["maxItems"] = 50,
                     ["items"] = new JObject
                     {

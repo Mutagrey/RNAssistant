@@ -112,8 +112,10 @@ namespace RNAssistant.Office.Tools
                 }
                 else
                 {
-                    entry.Code = VbaToolManifestParser.NormalizeManifestComments(
-                        entry.Code);
+                    entry.Code = VbaToolManifestParser.SetAuthoredComponentNames(
+                        entry.Code,
+                        tool.Components.Where(component => component != null)
+                            .Select(component => component.Name));
                     tool.Code = entry.Code ?? string.Empty;
                 }
             }

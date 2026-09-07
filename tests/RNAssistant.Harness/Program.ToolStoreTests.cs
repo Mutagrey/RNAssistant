@@ -571,8 +571,8 @@ namespace RNAssistant.Harness
                     new AppSettings { AutoConfirmToolActions = true },
                     false,
                     false);
-                AssertEqual("manifest_components", objectManifest.ErrorCode,
-                    "object-shaped inner manifest components return validation instead of throwing");
+                AssertEqual("ok", objectManifest.Status,
+                    "authoring derives inner component names from the native outer package");
 
                 var invocation = new ToolInvocation
                 {

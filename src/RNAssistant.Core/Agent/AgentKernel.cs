@@ -195,6 +195,15 @@ namespace RNAssistant.Core.Agent
                 await RecordNotDispatchedAsync(state, call, policy, stepId, "Tool step limit reached.", confirmed).ConfigureAwait(false);
                 return state.Summary(RunLifecycle.Failed, "tool_step_limit", "Tool step limit reached.");
             }
+            var callSignature = call.Name + "\n" + call.ArgumentsJson;
+            if (!confirmed && state.FailedCallSignatures.Contains(callSignature))
+            {
+                await RecordNotDispatchedAsync(state, call, policy, stepId,
+                    "An identical failed tool call was already attempted.").ConfigureAwait(false);
+                return state.Summary(RunLifecycle.Failed,
+                    "repeated_failed_tool_call",
+                    "Model repeated an identical failed tool call.");
+            }
             var context = new ToolExecutionContext(call, policy, state.RunId, state.TurnId, stepId,
                 _utcNow(), confirmed, remaining, preparedStateJson);
             await AppendAsync(state, new AgentRunEvent(AgentRunEventKind.ToolStarted, state.Summary(),
@@ -236,6 +245,9 @@ namespace RNAssistant.Core.Agent
                 stop = cancelled ? RunLifecycle.Cancelled : RunLifecycle.Failed;
             }
             if (record.ToolStepsConsumed > remaining) stop = RunLifecycle.Failed;
+            if (record.Outcome == ToolExecutionOutcome.Error ||
+                record.Outcome == ToolExecutionOutcome.Unknown)
+                state.FailedCallSignatures.Add(callSignature);
             state.ToolSteps = (int)Math.Min(int.MaxValue, (long)state.ToolSteps + Math.Max(0, (long)record.ToolStepsConsumed - chargedSteps));
             state.Counts = state.Counts.Add(record);
             if (record.Outcome == ToolExecutionOutcome.AwaitingConfirmation)
@@ -318,6 +330,8 @@ namespace RNAssistant.Core.Agent
             internal long Revision;
             internal PendingConfirmation Pending;
             internal int NoToolCheckpoints;
+            internal readonly HashSet<string> FailedCallSignatures =
+                new HashSet<string>(StringComparer.Ordinal);
 
             internal State(AgentRunRequest request)
             {

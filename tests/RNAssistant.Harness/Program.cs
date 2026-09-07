@@ -111,6 +111,7 @@ namespace RNAssistant.Harness
                 Test("kernel: narrative cannot claim effects", KernelNarrativeCannotClaimEffects),
                 Test("kernel: no-tool checkpoint continues", KernelContinuesAfterNoToolCheckpoint),
                 Test("kernel: repeated no-tool checkpoints fail", KernelFailsRepeatedNoToolCheckpoints),
+                Test("kernel: identical failed tool call stops", KernelStopsIdenticalFailedToolCall),
                 Test("kernel: independent reads execute in order", KernelReadsAreSequentialAndBounded),
                 Test("kernel: unsafe batches fail before dispatch", KernelRejectsUnsafeBatches),
                 Test("kernel: runtime id collision within batch", () => KernelRejectsAllocationCollisions(false)),

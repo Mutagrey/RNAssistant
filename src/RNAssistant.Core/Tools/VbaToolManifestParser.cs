@@ -227,6 +227,40 @@ namespace RNAssistant.Core.Tools
             return string.Join(newline, lines);
         }
 
+        public static string SetAuthoredComponentNames(string code,
+            IEnumerable<string> componentNames)
+        {
+            code = NormalizeManifestComments(code);
+            var start = code.IndexOf(OpenMarker, StringComparison.Ordinal);
+            var end = code.IndexOf(CloseMarker, StringComparison.Ordinal);
+            if (start < 0 || end < start) return code;
+            try
+            {
+                var manifest = JObject.Parse(StripCommentPrefixes(code.Substring(
+                    start + OpenMarker.Length,
+                    end - start - OpenMarker.Length)), new JsonLoadSettings
+                {
+                    DuplicatePropertyNameHandling = DuplicatePropertyNameHandling.Error
+                });
+                manifest["components"] = new JArray((componentNames ??
+                    Enumerable.Empty<string>()).Select(name => name ?? string.Empty));
+                var newline = code.IndexOf("\r\n", StringComparison.Ordinal) >= 0
+                    ? "\r\n" : code.IndexOf('\r') >= 0 ? "\r" : "\n";
+                var body = manifest.ToString(Formatting.Indented)
+                    .Replace("\r\n", "\n").Replace('\r', '\n')
+                    .Replace("\n", newline + "' ");
+                return code.Substring(0, start + OpenMarker.Length) +
+                    newline + "' " + body + newline + "' " +
+                    code.Substring(end);
+            }
+            catch (JsonException)
+            {
+                // Preserve malformed source so normal manifest validation reports
+                // the exact JSON error without inventing a second repair path.
+                return code;
+            }
+        }
+
         private static VbaSignatureResult ParseFunctionSignature(string trailingCode, string entryPoint)
         {
             var flattened = Regex.Replace(trailingCode ?? string.Empty, "_\\s*(?:\\r?\\n)", " ");

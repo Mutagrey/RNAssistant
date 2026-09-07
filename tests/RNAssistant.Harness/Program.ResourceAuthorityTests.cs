@@ -555,6 +555,53 @@ namespace RNAssistant.Harness
                 RuntimePayloadService.ExternalizeActivity(activity, payloads);
                 AssertTrue(activity.ArgumentsJson == null && activity.DataJson == null && activity.ResultPayload != null, "presentation history is reference first too");
                 AssertEqual(text, RuntimePayloadService.ReadArguments(activity, payloads), "pending UI command uses the same exact payload");
+
+                var chats = new ChatStore(paths);
+                var session = chats.Create("Excel", "large-tool-document", "Book1", "Large tool call");
+                var call = new RNAssistant.Core.Agent.ToolCall(
+                    "large_tool_call", "common.tools_upsert", text);
+                var policy = new ToolPolicySnapshot(call.Name, "catalog-r1",
+                    true, true);
+                var limits = new RNAssistant.Core.Agent.AgentRunLimits(8, 16);
+                var running = new RNAssistant.Core.Agent.RunSummary(
+                    "large-tool-run", "large-tool-turn",
+                    RNAssistant.Core.Agent.RunLifecycle.Running,
+                    new RNAssistant.Core.Agent.ToolCounts(), 1, 0,
+                    string.Empty, null, null);
+                var execution = new ToolExecutionContext(call, policy,
+                    running.RunId, running.TurnId, "large-tool-step",
+                    DateTime.UtcNow, false, 16);
+                session.LastRun = new ChatRunRecord
+                {
+                    RunId = running.RunId,
+                    TurnId = running.TurnId,
+                    Status = "running",
+                    KernelState = new RNAssistant.Core.Persistence.AgentRunState(
+                        running, limits, execution)
+                };
+                chats.Save(session);
+                AssertTrue(chats.ListHeaders().Any(header =>
+                        header.Id == session.Id && header.RunStatus == "running"),
+                    "header replay ignores externalized execution arguments");
+                var active = new ChatStore(paths).Load(
+                    session.Host, session.DocumentKey, session.Id);
+                AssertEqual(text,
+                    active.LastRun.KernelState.InFlightTool.Call.ArgumentsJson,
+                    "large active tool arguments survive durable hydration");
+
+                var failed = new RNAssistant.Core.Agent.RunSummary(
+                    running.RunId, running.TurnId,
+                    RNAssistant.Core.Agent.RunLifecycle.Failed,
+                    new RNAssistant.Core.Agent.ToolCounts(0, 1), 1, 1,
+                    "Validation failed.", "tool_error", null);
+                active.LastRun.Status = "failed";
+                active.LastRun.KernelState =
+                    new RNAssistant.Core.Persistence.AgentRunState(failed, limits);
+                new ChatStore(paths).Save(active);
+                var terminal = new ChatStore(paths).Load(
+                    active.Host, active.DocumentKey, active.Id);
+                AssertTrue(terminal.LastRun.KernelState.InFlightTool == null,
+                    "terminal save removes the large in-flight call cleanly");
             });
         }
 

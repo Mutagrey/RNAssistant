@@ -486,9 +486,22 @@ namespace RNAssistant.Core.Storage
 
         private static ChatRunRecord RunValue(JToken value)
         {
-            return value == null || value.Type == JTokenType.Null || value.Type == JTokenType.Undefined
-                ? null
-                : value.ToObject<ChatRunRecord>();
+            var run = value as JObject;
+            if (run == null) return null;
+            return new ChatRunRecord
+            {
+                RunId = StringValue(run["RunId"]),
+                TurnId = StringValue(run["TurnId"]),
+                RuntimeId = StringValue(run["RuntimeId"]),
+                ResponseProtocolVersion = IntegerValue(run["ResponseProtocolVersion"]),
+                Status = StringValue(run["Status"]),
+                Phase = StringValue(run["Phase"]),
+                CurrentAction = StringValue(run["CurrentAction"]),
+                DocumentRuntimeKey = StringValue(run["DocumentRuntimeKey"]),
+                IterationsUsed = IntegerValue(run["IterationsUsed"]),
+                ToolStepsUsed = IntegerValue(run["ToolStepsUsed"]),
+                StartedUtc = DateTimeValue(run["StartedUtc"])
+            };
         }
 
         private static ChatRunRecord CloneRun(ChatRunRecord value)
@@ -499,7 +512,6 @@ namespace RNAssistant.Core.Storage
                 TurnId = value.TurnId,
                 RuntimeId = value.RuntimeId,
                 ResponseProtocolVersion = value.ResponseProtocolVersion,
-                KernelState = value.KernelState,
                 Status = value.Status,
                 Phase = value.Phase,
                 CurrentAction = value.CurrentAction,
@@ -521,6 +533,12 @@ namespace RNAssistant.Core.Storage
         {
             return value != null && value.Type != JTokenType.Null && value.Type != JTokenType.Undefined &&
                 value.ToObject<bool>();
+        }
+
+        private static int IntegerValue(JToken value)
+        {
+            return value == null || value.Type == JTokenType.Null ||
+                value.Type == JTokenType.Undefined ? 0 : value.ToObject<int>();
         }
 
         private static DateTime DateTimeValue(JToken value)

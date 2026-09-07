@@ -59,7 +59,10 @@ dispatch and effect evidence; PascalCase/legacy result fallbacks are unsupported
 Model and Library upsert paths both carry `components` as one native `JArray` of
 component `JObject` values into `ToolAuthoringService`; they never serialize and
 reparse that argument. A quoted/stringified array is an `invalid_arguments` failure
-before preparation or storage.
+before preparation or storage. For model authoring, this outer ordered package is
+the sole component-list input: runtime writes the manifest's component-name array
+from that order before validation. The model does not duplicate the same list in a
+second, differently shaped manifest field.
 
 Tool, Skill and Prompt mutation guards use `ToolArgumentReader` as the single owner
 for recursive ordinal JSON-object canonicalization and SHA256. Each domain still

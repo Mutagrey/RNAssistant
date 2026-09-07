@@ -56,7 +56,9 @@ namespace RNAssistant.Harness
         private static async Task KernelPreservesCumulativeHealth(ToolExecutionOutcome first, ToolExecutionOutcome second,
             ExecutionHealth health, string counts)
         {
-            var f = new KernelFixture(KernelResponse(KernelCall()), KernelResponse(KernelCall()), KernelResponse());
+            var f = new KernelFixture(KernelResponse(KernelCall()),
+                KernelResponse(KernelCall(argumentsJson: "{\"attempt\":2}")),
+                KernelResponse());
             var outcomes = new Queue<ToolExecutionOutcome>(new[] { first, second });
             f.Tools.OnExecute = (context, token) => Task.FromResult(KernelRecord(context, outcomes.Dequeue()));
             var result = await f.RunAsync();
@@ -105,6 +107,28 @@ namespace RNAssistant.Harness
             AssertEqual("model_loop_stalled", result.Summary.Reason, "stalled no-tool loop has explicit reason");
             AssertEqual(3, f.Model.Requests.Count, "stall is bounded");
             AssertEqual(0, f.Tools.Calls.Count, "stalled checkpoint loop dispatches no tools");
+        }
+
+        private static async Task KernelStopsIdenticalFailedToolCall()
+        {
+            const string arguments = "{\"target\":\"same invalid target\"}";
+            var f = new KernelFixture(
+                KernelResponse(KernelCall("read", arguments)),
+                KernelResponse(KernelCall("read", arguments)));
+            f.Tools.OnExecute = (context, token) => Task.FromResult(
+                KernelRecord(context, ToolExecutionOutcome.Error));
+
+            var result = await f.RunAsync();
+
+            AssertEqual(RunLifecycle.Failed, result.Summary.Lifecycle,
+                "identical failed call stops the run");
+            AssertEqual("repeated_failed_tool_call", result.Summary.Reason,
+                "repeat has an explicit terminal reason");
+            AssertEqual(1, f.Tools.Calls.Count,
+                "identical failed call is dispatched only once");
+            AssertTrue(f.Store.Events.Any(item => item.Execution != null &&
+                    item.Execution.Outcome == ToolExecutionOutcome.NotDispatched),
+                "repeated accepted call is closed without dispatch");
         }
 
         private static async Task KernelReadsAreSequentialAndBounded()
