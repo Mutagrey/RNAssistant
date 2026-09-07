@@ -35,6 +35,19 @@ namespace RNAssistant.Harness
                     "case-insensitive input spelling shares one logical search scope");
                 var runtime = executor.CreateNativeRuntime(session, OfficeToolCatalog.ForHost("Excel").Concat(executor.GetControllerTools()).ToList(),
                     new AppSettings(), "agent", false);
+                ResourceEvidence metadataEvidence = null;
+                for (var read = 0; read < 2; read++)
+                {
+                    var metadata = ExecuteHtmlNative(runtime, ResourceToolCatalog.ReadToolId,
+                        new JObject { ["target"] = "Excel search scope: sheet 'Data'", ["representation"] = "metadata" });
+                    AssertEqual(ToolExecutionOutcome.Ok, metadata.Outcome, "body-free search metadata read succeeds");
+                    var observed = metadata.ResourceEvidence.Single();
+                    AssertTrue(observed.Payload == null && observed.Complete, "metadata evidence does not invent an empty text body");
+                    if (metadataEvidence != null)
+                        AssertEqual(metadataEvidence.Resource.Revision, observed.Resource.Revision, "unchanged metadata retains its revision");
+                    metadataEvidence = observed;
+                }
+                AssertEqual(0, adapter.ExcelSearchCellCaptureCount, "metadata reads do not capture cells");
                 var args = new JObject { ["sheet"] = "Data", ["address"] = "D1", ["query"] = "n(e{2})dle",
                     ["mode"] = "regex", ["wholeWord"] = true, ["maxResults"] = 1 };
                 var found = ExecuteHtmlNative(runtime, ExcelFindReplaceToolIds.FindCells, args);

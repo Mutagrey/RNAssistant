@@ -41,6 +41,9 @@ document/VBA, Excel ranges/formulas, conversation state/definitions, typed conte
 and catalogs. `ContextResourceProvider` discovers attached supplied data in the
 conversation scope and Office observations in the exact bound document scope.
 Instructions/untyped notes are not resources; display previews never supply bodies.
+Whole-read assembly preserves absent text for body-free metadata views. Retaining
+tool evidence must not replace a published null payload with an empty-text CAS
+payload for the same revision/view/coverage.
 `ResourceSnapshotReadService` reads state/context and retained Office views from
 whole captured views or the canonical revision payload. Partial views cannot substitute for whole bodies;
 continuations bind logical revision and URI/view, never an equal content hash.

@@ -1,5 +1,7 @@
 # Stabilization progress
 
+Latest correction (2026-09-07): user-reported Excel search-scope metadata reads no longer fail with `An immutable revision view was changed`. Whole-read assembly preserves absent text instead of inventing an empty CAS body during evidence retention. Repeated native metadata reads retain the same revision without cell capture; the extended Excel search snapshot test and existing Gateway read/search/page test pass host-neutral. Windows/Excel qualification remains open.
+
 Current target: 16.1.0
 Current phase: Milestone WQ — обязательный Phase 11 existing-tool migration route и final active-legacy cleanup через 11T10 завершены host-neutral; Phase 12 ещё не начат
 Current task: user-authorized unified Resource Architecture direct cutover is complete host-neutral on `stab/11-resource-direct-cutover`, including final consumer/legacy cleanup (2026-09-07). The user-requested post-cutover performance hardening and 11E chat/diagnostics presentation slices are limited to dependency-safe host-neutral changes that consume the completed Resource architecture and do not close Windows qualification. The dependency order remains [Resource MASTER](resource-cutover/MASTER.md): [URF](resource-cutover/UNIVERSAL_RESOURCE_FABRIC.md) → [Authority](resource-cutover/RESOURCE_AUTHORITY.md) → [Evidence/Compiler](resource-cutover/EVIDENCE_CONTEXT_COMPILER.md). This is one replacement workstream, not three parallel implementations. Explicitly deferred source allocation and all real Windows qualification remain open.

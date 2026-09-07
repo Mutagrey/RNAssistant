@@ -179,7 +179,9 @@ namespace RNAssistant.Office.Tools
                 {
                     Resource = first.Resource,
                     Representation = first.Representation,
-                    Text = text.ToString(),
+                    // Body-free metadata must not acquire an empty CAS text payload
+                    // when the completed view is retained again as tool evidence.
+                    Text = first.Text == null && text.Length == 0 ? null : text.ToString(),
                     ContentSha256 = last.ContentSha256,
                     AuthorityGeneration = first.AuthorityGeneration,
                     Offset = 0,
