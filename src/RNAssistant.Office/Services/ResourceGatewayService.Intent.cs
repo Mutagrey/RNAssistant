@@ -491,6 +491,7 @@ namespace RNAssistant.Office.Services
                 CreatedUtc = state.Descriptor.CreatedUtc,
                 Representations = (state.Descriptor.Representations ??
                     new List<string>()).ToList(),
+                Usage = IntentUsage(state.Type),
                 MatchRepresentation = match == null ? null : match.Representation,
                 Snippet = match == null ? null : match.Snippet,
                 Evidence = match == null ? null : match.Evidence,
@@ -498,6 +499,13 @@ namespace RNAssistant.Office.Services
                     state.Reference.Uri,
                     match == null ? state.Reference.Revision : match.Reference.Revision)
             };
+        }
+
+        private static string IntentUsage(string type)
+        {
+            if (type == "Excel search scope")
+                return "Discovery only: use excel.find_cells with a query. Do not read this target to enumerate worksheet data; read an Excel range, table, or name target instead.";
+            return null;
         }
 
         private static string IntentMetadata(ResourceIntentState state)
@@ -789,6 +797,8 @@ namespace RNAssistant.Office.Services
         public DateTime? CreatedUtc { get; set; }
         [Newtonsoft.Json.JsonProperty("representations")]
         public List<string> Representations { get; set; }
+        [Newtonsoft.Json.JsonProperty("usage", NullValueHandling = Newtonsoft.Json.NullValueHandling.Ignore)]
+        public string Usage { get; set; }
         [Newtonsoft.Json.JsonProperty("matchRepresentation")]
         public string MatchRepresentation { get; set; }
         [Newtonsoft.Json.JsonProperty("snippet")]

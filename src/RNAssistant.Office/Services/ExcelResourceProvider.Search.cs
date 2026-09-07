@@ -85,7 +85,8 @@ namespace RNAssistant.Office.Services
                 var snapshot = new ExcelFindReplaceService(_searchBackend).CaptureSearch(source, CancellationToken.None);
                 var text = JsonConvert.SerializeObject(snapshot);
                 if (text.Length > ExcelFindReplaceService.MaximumSearchCharacters)
-                    throw Error("RESOURCE_SNAPSHOT_TOO_LARGE", "Choose a smaller Excel search scope.");
+                    throw Error("RESOURCE_SNAPSHOT_TOO_LARGE",
+                        ExcelFindReplaceService.NarrowSearchScopeMessage);
                 return SelectCapture(request, descriptor, text, "text");
             }
             catch (ExcelFindReplaceBackendException error) { throw Error(error.ErrorCode, error.Message); }

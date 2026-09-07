@@ -30,7 +30,7 @@ namespace RNAssistant.Harness
             var scopes = ResolveFakeScope(request).ToList();
             if (request.MaxCells > 0 && scopes.Sum(scope =>
                 ((long)scope.Range.End.Row - scope.Range.Start.Row + 1) * (scope.Range.End.Column - scope.Range.Start.Column + 1)) > request.MaxCells)
-                throw FindReplaceFailure("Choose a smaller Excel search scope.", "RESOURCE_SNAPSHOT_TOO_LARGE");
+                throw FindReplaceFailure(ExcelFindReplaceService.NarrowSearchScopeMessage, "RESOURCE_SNAPSHOT_TOO_LARGE");
             foreach (var scope in scopes)
             {
                 for (var row = scope.Range.Start.Row; row <= scope.Range.End.Row; row++)

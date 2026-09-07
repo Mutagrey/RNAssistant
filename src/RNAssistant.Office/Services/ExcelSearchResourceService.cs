@@ -47,7 +47,7 @@ namespace RNAssistant.Office.Services
                 cancellationToken.ThrowIfCancellationRequested();
                 var json = ResourceSnapshotReadService.ReadPayload(_gateway.Authority.Payloads, payload);
                 if (json.Length > ExcelFindReplaceService.MaximumSearchCharacters)
-                    return Failure("Choose a smaller Excel search scope.", "RESOURCE_SNAPSHOT_TOO_LARGE");
+                    return Failure(ExcelFindReplaceService.NarrowSearchScopeMessage, "RESOURCE_SNAPSHOT_TOO_LARGE");
                 var outcome = ExcelFindReplaceService.Find(JsonConvert.DeserializeObject<ExcelSearchSnapshot>(json), request, cancellationToken);
                 cancellationToken.ThrowIfCancellationRequested();
                 if (!outcome.Success) return new ToolHandlerResult(RuntimeResult.Error(outcome.Message, outcome.DataJson), ToolEffectEvidence.None);

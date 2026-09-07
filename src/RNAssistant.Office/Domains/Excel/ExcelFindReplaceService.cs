@@ -16,6 +16,8 @@ namespace RNAssistant.Office.Domains.Excel
         public const int MaxReplacements = 10000;
         public const int MaximumSearchCharacters = 1000000;
         public const int MaximumSearchCells = 100000;
+        public const string NarrowSearchScopeMessage =
+            "Excel search scope is too large. Do not retry it unchanged. Use scope=range with sheet and address, or reduce the searched sheet/range.";
 
         private readonly IExcelFindReplaceBackend _backend;
 
@@ -39,7 +41,7 @@ namespace RNAssistant.Office.Domains.Excel
                     throw new ExcelFindReplaceBackendException("Invalid or duplicate search cell.", "excel_scope_snapshot_invalid", false);
                 characters += cell.Sheet.Length + cell.Address.Length + cell.Value.Length + cell.Formula.Length;
                 if (cells.Count >= MaximumSearchCells || characters > MaximumSearchCharacters)
-                    throw new ExcelFindReplaceBackendException("Choose a smaller Excel search scope.", "RESOURCE_SNAPSHOT_TOO_LARGE", false);
+                    throw new ExcelFindReplaceBackendException(NarrowSearchScopeMessage, "RESOURCE_SNAPSHOT_TOO_LARGE", false);
                 cells.Add(new ExcelCellSnapshot { Sheet = cell.Sheet, Address = cell.Address, Value = cell.Value,
                     Formula = cell.Formula, HasFormula = cell.HasFormula });
             });

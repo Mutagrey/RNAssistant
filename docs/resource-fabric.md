@@ -48,6 +48,9 @@ HTML data bindings expose disjoint complete, structural and page-view argument
 shapes. Structural paths are limited to `$` and explicit object properties; Excel
 search scopes remain discovery evidence and cannot substitute for range/table/name
 tabular sources.
+Model-facing discovery marks Excel search scopes as discovery-only and points value
+reads to range/table/name targets. Oversized search reads carry the same explicit
+recovery route and prohibit an unchanged retry.
 `ResourceSnapshotReadService` reads state/context and retained Office views from
 whole captured views or the canonical revision payload. Partial views cannot substitute for whole bodies;
 continuations bind logical revision and URI/view, never an equal content hash.

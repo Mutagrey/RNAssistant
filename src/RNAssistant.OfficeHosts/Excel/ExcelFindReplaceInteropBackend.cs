@@ -35,7 +35,7 @@ namespace RNAssistant.OfficeHosts
                 {
                     var size = Convert.ToInt64(range.Cells.CountLarge);
                     if (size < 0 || size > request.MaxCells - count)
-                        throw Failure("Choose a smaller Excel search scope.", "RESOURCE_SNAPSHOT_TOO_LARGE", false);
+                        throw Failure(ExcelFindReplaceService.NarrowSearchScopeMessage, "RESOURCE_SNAPSHOT_TOO_LARGE", false);
                     count += size;
                 }
             }
