@@ -696,6 +696,16 @@ namespace RNAssistant.Harness
                 ResourceReadToolHandler.Descriptor.ParametersJson.IndexOf(
                     "uri", StringComparison.OrdinalIgnoreCase) < 0,
                 "public resource schema hides provider paging and identity state");
+            var readSchema = JObject.Parse(ResourceReadToolHandler.Descriptor.ParametersJson);
+            string pathError;
+            AssertTrue(ToolSchemaSupport.ValidateArguments(new JObject {
+                ["target"] = "Excel range: DATA!A1:B10", ["representation"] = "records",
+                ["path"] = "$.records"
+            }, readSchema, false, out pathError), "resource read admits explicit object-property paths");
+            AssertTrue(!ToolSchemaSupport.ValidateArguments(new JObject {
+                ["target"] = "Excel range: DATA!A1:B10", ["representation"] = "records",
+                ["path"] = "$[*]"
+            }, readSchema, false, out pathError), "resource read rejects wildcard paths before execution");
 
             var resolved = gateway.Resolve(session, resourceUri);
             AssertEqual(resourceUri, resolved.Resource.Reference.Uri, "resource resolve is exact");

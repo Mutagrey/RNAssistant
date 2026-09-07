@@ -16,24 +16,52 @@ namespace RNAssistant.Office.Tools
         {
             return "Workspace: Bind a semantic target returned by common.resources_find. " +
                 "The workspace stores only a canonical resource reference, view and head/exact policy. " +
+                "For Excel chart/report data, bind an Excel range, table, or name target with table/records; an Excel search scope is discovery output, not a tabular data source. " +
                 "Page code opens RN.resources.open(name) and consumes bounded read/stream batches. " +
                 "head resolves current state on open; exact retains an immutable revision.";
         }
 
         internal static string BindSchema()
         {
-            return new JObject {
+            var schema = new JObject {
                 ["type"] = "object",
                 ["properties"] = new JObject {
                     ["name"] = new JObject { ["type"] = "string", ["description"] = "Stable binding name opened through RN.resources.", ["minLength"] = 1, ["maxLength"] = 128 },
                     ["target"] = new JObject { ["type"] = "string", ["minLength"] = 1, ["maxLength"] = 1024,
                         ["description"] = "Exact semantic target copied verbatim from common.resources_find. It never contains ://; do not construct it from a title." },
                     ["view"] = new JObject { ["type"] = "string", ["description"] = "Bounded resource view. raw returns exact original attachment bytes as inert binary (up to 20 MiB); text is extracted content. Page views use a zero-based page index in path.", ["enum"] = new JArray("text", "source", "table", "records", "raw", "image", "thumbnail", "render-page", "page-thumbnail"), ["default"] = "text" },
-                    ["path"] = new JObject { ["type"] = "string", ["description"] = "Explicit record-array path for a structural JSON view (for example $.records).", ["maxLength"] = 256 },
+                    ["path"] = new JObject { ["type"] = "string", ["description"] = "For table/records use $ or an object-property path such as $.records. Page views require a zero-based integer page index.", ["maxLength"] = 256 },
                     ["policy"] = new JObject { ["type"] = "string", ["description"] = "Resolve current head on open, or retain the exact observed revision.", ["enum"] = new JArray("head", "exact"), ["default"] = "exact" }
                 },
-                ["required"] = new JArray("name", "target"), ["additionalProperties"] = false
-            }.ToString(Formatting.None);
+                ["required"] = new JArray("name", "target"), ["additionalProperties"] = false,
+                ["anyOf"] = new JArray(
+                    BindBranch(new[] { "text", "source", "raw", "image", "thumbnail" }),
+                    BindBranch(new[] { "table", "records" },
+                        @"^\$(?:\.[A-Za-z_][A-Za-z0-9_]*)*$",
+                        "Root array $ or an explicit object-property path to a record array; brackets, indexes, and wildcards are unsupported.", false),
+                    BindBranch(new[] { "render-page", "page-thumbnail" },
+                        @"^(0|[1-9][0-9]{0,5})$", "Zero-based page index.", true))
+            };
+            return schema.ToString(Formatting.None);
+        }
+
+        private static JObject BindBranch(string[] views, string pathPattern = null,
+            string pathDescription = null, bool requirePath = false)
+        {
+            var properties = new JObject {
+                ["name"] = new JObject { ["type"] = "string", ["minLength"] = 1, ["maxLength"] = 128 },
+                ["target"] = new JObject { ["type"] = "string", ["minLength"] = 1, ["maxLength"] = 1024 },
+                ["view"] = new JObject { ["type"] = "string", ["enum"] = new JArray(views) },
+                ["policy"] = new JObject { ["type"] = "string", ["enum"] = new JArray("head", "exact"), ["default"] = "exact" }
+            };
+            if (pathPattern != null)
+                properties["path"] = new JObject { ["type"] = "string", ["description"] = pathDescription,
+                    ["pattern"] = pathPattern, ["maxLength"] = 256 };
+            var required = new JArray("name", "target");
+            if (pathPattern != null) required.Add("view");
+            if (requirePath) required.Add("path");
+            return new JObject { ["type"] = "object", ["properties"] = properties,
+                ["required"] = required, ["additionalProperties"] = false };
         }
 
         private HtmlWorkspaceToolOutcome BindDataSource(ChatSession session,
@@ -45,6 +73,10 @@ namespace RNAssistant.Office.Tools
             var view = ToolArgumentReader.String(arguments, "view", "text");
             var policy = ToolArgumentReader.String(arguments, "policy", "exact");
             if (policy != "head" && policy != "exact") throw new InvalidOperationException("Invalid binding policy.");
+            if (target.Type == "Excel search scope" && (view == "table" || view == "records"))
+                throw new ResourceRequestException(
+                    "Excel search scopes expose search evidence, not tabular source data. Bind an Excel range, table, or name target returned by common.resources_find.",
+                    "RESOURCE_VIEW_UNSUPPORTED", false);
             var binding = new HtmlWorkspaceDataBinding { Resource = target.Reference, Policy = "head", View = view,
                 ViewPath = ToolArgumentReader.String(arguments, "path", null) };
             var exact = ReadBinding(session, binding, cancellationToken).Resource.Reference;

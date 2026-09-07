@@ -44,6 +44,10 @@ Instructions/untyped notes are not resources; display previews never supply bodi
 Whole-read assembly preserves absent text for body-free metadata views. Retaining
 tool evidence must not replace a published null payload with an empty-text CAS
 payload for the same revision/view/coverage.
+HTML data bindings expose disjoint complete, structural and page-view argument
+shapes. Structural paths are limited to `$` and explicit object properties; Excel
+search scopes remain discovery evidence and cannot substitute for range/table/name
+tabular sources.
 `ResourceSnapshotReadService` reads state/context and retained Office views from
 whole captured views or the canonical revision payload. Partial views cannot substitute for whole bodies;
 continuations bind logical revision and URI/view, never an equal content hash.

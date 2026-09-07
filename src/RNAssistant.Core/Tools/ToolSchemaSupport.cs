@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
+using System.Text.RegularExpressions;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
 using RNAssistant.Core.Models;
@@ -14,7 +15,7 @@ namespace RNAssistant.Core.Tools
             new[]
             {
                 "type", "description", "properties", "required", "additionalProperties", "items", "anyOf",
-                "enum", "const", "default", "minimum", "maximum", "minLength", "maxLength", "minItems", "maxItems"
+                "enum", "const", "default", "minimum", "maximum", "minLength", "maxLength", "minItems", "maxItems", "pattern"
             },
             StringComparer.Ordinal);
 
@@ -279,7 +280,8 @@ namespace RNAssistant.Core.Tools
             {
                 return ValidateValue(arguments, schema, "$", applyDefaults, out error);
             }
-            catch (Exception ex) when (ex is FormatException || ex is OverflowException || ex is InvalidCastException)
+            catch (Exception ex) when (ex is FormatException || ex is OverflowException ||
+                ex is InvalidCastException || ex is RegexMatchTimeoutException)
             {
                 error = "Tool schema contains an invalid constraint: " + ex.Message;
                 return false;
@@ -393,6 +395,13 @@ namespace RNAssistant.Core.Tools
                 if (schema["maxLength"] != null && text.Length > schema["maxLength"].Value<int>())
                 {
                     error = path + " is longer than maxLength.";
+                    return false;
+                }
+                var pattern = (string)schema["pattern"];
+                if (pattern != null && !Regex.IsMatch(text, pattern,
+                    RegexOptions.CultureInvariant, TimeSpan.FromMilliseconds(100)))
+                {
+                    error = path + " does not match the required pattern.";
                     return false;
                 }
             }
@@ -760,6 +769,27 @@ namespace RNAssistant.Core.Tools
             {
                 error = path + ".minItems must not exceed maxItems.";
                 return false;
+            }
+
+            var patternToken = node["pattern"];
+            if (patternToken != null)
+            {
+                if (patternToken.Type != JTokenType.String || string.IsNullOrEmpty((string)patternToken) ||
+                    ((string)patternToken).Length > 512 || type != null && !ContainsType(type, "string"))
+                {
+                    error = path + ".pattern must be a non-empty bounded string constraint for a string type.";
+                    return false;
+                }
+                try
+                {
+                    new Regex((string)patternToken, RegexOptions.CultureInvariant,
+                        TimeSpan.FromMilliseconds(100));
+                }
+                catch (ArgumentException ex)
+                {
+                    error = path + ".pattern is invalid: " + ex.Message;
+                    return false;
+                }
             }
 
             var defaultValue = node["default"];

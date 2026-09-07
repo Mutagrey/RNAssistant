@@ -66,9 +66,37 @@ namespace RNAssistant.Harness
                     AssertContains(bindDefinition.Description,
                         "RN.resources.open(name)",
                         "HTML bind describes its bounded resource API");
-                    AssertTrue(JObject.Parse(bindDefinition.ArgumentSchemaJson)["properties"]["target"] != null &&
-                        JObject.Parse(bindDefinition.ArgumentSchemaJson)["properties"]["transform"] == null,
+                    var bindSchema = JObject.Parse(bindDefinition.ArgumentSchemaJson);
+                    AssertTrue(bindSchema["properties"]["target"] != null &&
+                        bindSchema["properties"]["transform"] == null,
                         "HTML binding selects a resource view, not a second transform pipeline");
+                    string bindError;
+                    AssertTrue(ToolSchemaSupport.ValidateArguments(new JObject {
+                        ["name"] = "sales", ["target"] = "Excel range: DATA!A1:B10",
+                        ["view"] = "records", ["path"] = "$.records"
+                    }, bindSchema, false, out bindError), "HTML binding admits an explicit structural path");
+                    AssertTrue(!ToolSchemaSupport.ValidateArguments(new JObject {
+                        ["name"] = "sales", ["target"] = "Excel range: DATA!A1:B10",
+                        ["view"] = "records", ["path"] = "$[*]"
+                    }, bindSchema, false, out bindError), "HTML binding rejects wildcard structural paths before execution");
+                    AssertTrue(!ToolSchemaSupport.ValidateArguments(new JObject {
+                        ["name"] = "sales", ["target"] = "Excel range: DATA!A1:B10",
+                        ["view"] = "text", ["path"] = "$.records"
+                    }, bindSchema, false, out bindError), "HTML binding rejects structural selectors on complete views");
+                    AssertTrue(ToolSchemaSupport.ValidateArguments(new JObject {
+                        ["name"] = "page", ["target"] = "File: report.pdf",
+                        ["view"] = "render-page", ["path"] = "0"
+                    }, bindSchema, false, out bindError), "HTML binding admits an explicit page index");
+                    AssertEqual(@"^\$(?:\.[A-Za-z_][A-Za-z0-9_]*)*$",
+                        (string)ToolSchemaSupport.ForStructuredOutput(bindSchema)
+                            .SelectToken("anyOf[1].properties.path.pattern"),
+                        "structured model schema retains the path constraint");
+                    var invalidPattern = (JObject)bindSchema.DeepClone();
+                    invalidPattern.SelectToken("anyOf[1].properties.path.pattern").Replace("[");
+                    JObject ignoredSchema;
+                    AssertTrue(!ToolSchemaSupport.TryParse(new ToolCatalogEntry {
+                        Id = "test.invalid_pattern", ArgumentSchemaJson = invalidPattern.ToString(Formatting.None)
+                    }, out ignoredSchema, out bindError), "invalid schema patterns fail catalog admission");
 
                     var allTools = OfficeToolCatalog.ForHost(adapter.HostName)
                         .Concat(executor.GetControllerTools()).ToList();
@@ -85,6 +113,15 @@ namespace RNAssistant.Harness
                                 definition.Id.ToUpperInvariant(), "{}")) == null,
                             definition.Id + " has no case alias");
                     }
+
+                    var searchBinding = ExecuteHtmlNative(runtime,
+                        HtmlWorkspaceToolCatalog.BindDataToolId,
+                        new JObject { ["name"] = "search", ["target"] = "Excel search scope: sheet 'Data'",
+                            ["view"] = "records", ["path"] = "$" });
+                    AssertEqual(ToolExecutionOutcome.Error, searchBinding.Outcome,
+                        "Excel search evidence is not accepted as tabular source data");
+                    AssertContains(searchBinding.Result.Message, "Excel range, table, or name",
+                        "search binding failure gives the exact recovery route");
 
                     var upsert = ExecuteHtmlNative(runtime,
                         HtmlWorkspaceToolCatalog.WriteFileToolId,

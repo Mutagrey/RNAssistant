@@ -1,5 +1,7 @@
 # Stabilization progress
 
+Latest correction (2026-09-07): the user-reported high Agent failure count is separated into expected guards and a model-facing HTML/Excel contract defect. `common.html_data_bind` now exposes disjoint complete/structural/page argument shapes, validates structural/page paths before execution, and refuses Excel search scopes as table sources with the exact range/table/name recovery route. `common.resources_read` publishes the same structural path grammar, while `excel.find_cells` is explicitly discovery-only. Focused HTML native ownership/schema and resource Gateway checks pass host-neutral; target-model and Windows/Excel/WebView2 qualification remain open.
+
 Latest correction (2026-09-07): user-reported Excel search-scope metadata reads no longer fail with `An immutable revision view was changed`. Whole-read assembly preserves absent text instead of inventing an empty CAS body during evidence retention. Repeated native metadata reads retain the same revision without cell capture; the extended Excel search snapshot test and existing Gateway read/search/page test pass host-neutral. Windows/Excel qualification remains open.
 
 Current target: 16.1.0
