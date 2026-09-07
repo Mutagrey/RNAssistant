@@ -579,7 +579,11 @@ through the same typed recovery contract for every native Office handler. Typed
 Excel, Word, PowerPoint and Outlook domain errors already certify no effect; handlers
 preserve that fact as `RejectedNoEffect` and map their explicit retryability to
 `Replan` or `RetryLater` without parsing error text. Domain `Unknown` never acquires
-a recovery route.
+a recovery route. Chat-local Task List and Plan mutations classify model-correctable
+pre-dispatch validation/state refusals as `RejectedNoEffect/Replan`; missing session
+is non-retryable, while a successful mutation returned without its required dispatch
+boundary is a `ToolDefect`. Their legacy `retryable` field is not interpreted as a
+transient retry signal.
 Only the kernel aggregates records. `ChatActivity.ExecutionEvidence`
 preserves compact native facts through existing event operations and clone; a
 present incomplete evidence/policy object fails deserialization.

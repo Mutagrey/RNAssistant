@@ -25,7 +25,15 @@ default prompts, three prompt-review cases, exact empty text and on-demand rerea
 Only host-neutral harness execution; target-model quality and Windows delivery
 remain unqualified.
 
-Latest correction (2026-09-07): definite typed domain errors from Excel, Word,
+Latest correction (2026-09-07): chat-local Task List and Plan handlers now separate
+model correction from transient retry. Validation and state refusals before dispatch
+are `RejectedNoEffect/Replan`, missing session is non-retryable, and a missing
+required dispatch boundary is `ToolDefect`; after-boundary failures remain `Unknown`.
+The ambiguous legacy `retryable` boolean is preserved for compatibility but no longer
+drives recovery for these tools. Focused native Task List/Plan checks pass
+host-neutral; Windows/WebView2 qualification remains open.
+
+Previous correction (2026-09-07): definite typed domain errors from Excel, Word,
 PowerPoint and Outlook now retain their existing no-effect guarantee through the
 tool boundary as `RejectedNoEffect`. Existing typed retryability maps to `Replan`
 or `RetryLater`; handlers do not inspect messages or error-code strings, and

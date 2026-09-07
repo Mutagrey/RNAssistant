@@ -269,6 +269,14 @@ namespace RNAssistant.Harness
                 AssertEqual(ToolDispatchEvidence.NotDispatched,
                     invalid.Evidence.Dispatch,
                     "semantic rejection occurs before the mutation boundary");
+                var invalidRecovery =
+                    JObject.Parse(invalid.Result.DataJson)["recovery"];
+                AssertEqual("RejectedNoEffect",
+                    (string)invalidRecovery?["failureKind"],
+                    "invalid Plan state certifies no chat-state effect");
+                AssertEqual("Replan",
+                    (string)invalidRecovery?["retryPolicy"],
+                    "invalid Plan state requires a changed model action");
                 session.ActivePlanDocumentArtifactId =
                     (string)JObject.Parse(created.Result.DataJson)["artifactId"];
 

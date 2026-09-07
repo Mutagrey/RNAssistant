@@ -40,8 +40,9 @@ namespace RNAssistant.Office.Tools
         {
             cancellationToken.ThrowIfCancellationRequested();
             if (_session == null)
-                return Failure("Task-list tools require an active chat session.",
-                    "task_list_session_required", false);
+                return OfficeToolFailure.Rejected(
+                    "Task-list tools require an active chat session.",
+                    "task_list_session_required");
             try
             {
                 using (DocumentAccessGate.BeginOperation())
@@ -51,12 +52,14 @@ namespace RNAssistant.Office.Tools
             }
             catch (JsonException ex) when (!context.MayHaveDispatched)
             {
-                return Failure("Task-list JSON is invalid: " + ex.Message,
-                    "invalid_task_list", true);
+                return OfficeToolFailure.Rejected(
+                    "Task-list JSON is invalid: " + ex.Message,
+                    "invalid_task_list", ToolRetryPolicy.Replan, true);
             }
             catch (InvalidOperationException ex) when (!context.MayHaveDispatched)
             {
-                return Failure(ex.Message, "invalid_task_list", true);
+                return OfficeToolFailure.Rejected(ex.Message,
+                    "invalid_task_list", ToolRetryPolicy.Replan, true);
             }
         }
 
@@ -89,13 +92,18 @@ namespace RNAssistant.Office.Tools
                     ? new ToolHandlerResult(RuntimeResult.Unknown(
                         mutation.Message, failed), ToolEffectEvidence.Unknown)
                     : new ToolHandlerResult(RuntimeResult.Error(
-                        mutation.Message, failed), ToolEffectEvidence.None);
+                        mutation.Message, failed), ToolEffectEvidence.None,
+                        recovery: new ToolRecoveryContract(
+                            ToolFailureKind.RejectedNoEffect,
+                            ToolRetryPolicy.Replan));
             }
             if (!context.MayHaveDispatched)
                 return new ToolHandlerResult(RuntimeResult.Error(
                     "Task List mutation returned without a dispatch boundary.",
                     ErrorData("task_list_dispatch_evidence_missing", false)),
-                    ToolEffectEvidence.None);
+                    ToolEffectEvidence.None,
+                    recovery: new ToolRecoveryContract(
+                        ToolFailureKind.ToolDefect, ToolRetryPolicy.None));
             if (!Verified(mutation))
                 return new ToolHandlerResult(RuntimeResult.Unknown(
                     "Task List state could not be verified after mutation.",
@@ -146,12 +154,5 @@ namespace RNAssistant.Office.Tools
             return JsonConvert.SerializeObject(new { code, retryable });
         }
 
-        private static Task<ToolHandlerResult> Failure(
-            string message, string code, bool retryable)
-        {
-            return Task.FromResult(new ToolHandlerResult(
-                RuntimeResult.Error(message, ErrorData(code, retryable)),
-                ToolEffectEvidence.None));
-        }
     }
 }

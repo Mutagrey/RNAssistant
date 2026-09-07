@@ -211,6 +211,14 @@ namespace RNAssistant.Harness
                 AssertEqual(ToolDispatchEvidence.NotDispatched,
                     invalidClose.Evidence.Dispatch,
                     "terminal-state rejection occurs before the mutation boundary");
+                var invalidCloseRecovery =
+                    JObject.Parse(invalidClose.Result.DataJson)["recovery"];
+                AssertEqual("RejectedNoEffect",
+                    (string)invalidCloseRecovery?["failureKind"],
+                    "invalid close certifies no chat-state effect");
+                AssertEqual("Replan",
+                    (string)invalidCloseRecovery?["retryPolicy"],
+                    "invalid close asks the model to correct the task state");
 
                 var artifactCount = session.Artifacts.Count;
                 var dryRun = executor.ExecuteManual(Command(
