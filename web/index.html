@@ -24,19 +24,19 @@
   <link rel="stylesheet" href="css/vendor/wunderbaum.css">
   <link rel="stylesheet" href="css/vendor/viewer.min.css">
   <link rel="stylesheet" href="css/app.css?v=json-surfaces-20260829-1">
-  <link rel="stylesheet" href="css/app-chat.css?v=run-view-state-20260830-1">
+  <link rel="stylesheet" href="css/app-chat.css?v=chat-projection-20260907-1">
   <link rel="stylesheet" href="css/app-markdown.css?v=json-viewer-20260829-1">
   <link rel="stylesheet" href="css/app-composer.css?v=composer-polish-20260826-1">
-  <link rel="stylesheet" href="css/app-reasoning.css?v=reasoning-20260722-1">
+  <link rel="stylesheet" href="css/app-reasoning.css?v=chat-projection-20260907-1">
   <link rel="stylesheet" href="css/app-context-chips.css?v=sidebar-polish-20260723-1">
   <link rel="stylesheet" href="css/app-models.css?v=model-capability-inline-20260826-1">
   <link rel="stylesheet" href="css/app-workspace.css?v=diagnostics-ui-20260825-1">
-  <link rel="stylesheet" href="css/app-json-viewer.css?v=json-viewer-20260829-2">
+  <link rel="stylesheet" href="css/app-json-viewer.css?v=chat-projection-20260907-1">
   <link rel="stylesheet" href="css/app-text-viewer.css?v=artifact-text-20260831-1">
   <link rel="stylesheet" href="css/app-sequence-viewer.css?v=artifact-gallery-20260902-1">
   <link rel="stylesheet" href="css/app-resource-viewer.css?v=artifact-gallery-20260902-1">
   <link rel="stylesheet" href="css/app-trajectory.css?v=run-journal-20260829-1">
-  <link rel="stylesheet" href="css/app-run-journal.css?v=runtime-diagnostics-20260901-1">
+  <link rel="stylesheet" href="css/app-run-journal.css?v=chat-projection-20260907-1">
   <link rel="stylesheet" href="css/app-qualification.css?v=qualification-center-20260831-1">
   <link rel="stylesheet" href="css/app-tools.css?v=library-ux-20260903-1">
   <link rel="stylesheet" href="css/app-vba.css?v=vba-completion-20260903-1">
@@ -47,7 +47,7 @@
   <link rel="stylesheet" href="css/app-tree-adapter.css?v=tree-adapter-20260829-1">
   <link rel="stylesheet" href="css/app-html-workspace.css?v=html-export-20260831-1">
   <link rel="stylesheet" href="css/app-responsive.css?v=composer-polish-20260826-1">
-  <link rel="stylesheet" href="css/app-agent.css?v=run-view-state-20260830-1">
+  <link rel="stylesheet" href="css/app-agent.css?v=chat-projection-20260907-1">
   <link rel="stylesheet" href="css/app-agent-data.css?v=json-viewer-20260829-1">
   <link rel="stylesheet" href="css/app-theme.css?v=json-surfaces-20260829-1">
 </head>
@@ -829,15 +829,15 @@
             <section class="settings-page" data-settings-page="service">
               <div class="settings-heading">
                 <h2>Диагностика</h2>
-                <p>Проверки runtime, канонические JSONL-журналы и производные представления.</p>
+                <p>Причины ошибок, ход работы агента и технические сведения.</p>
               </div>
               <input id="debugModelTrafficInput" type="checkbox" hidden>
               <div class="diagnostics-tabs" role="tablist" aria-label="Разделы диагностики">
                 <button class="diagnostics-tab-button active" type="button" role="tab" aria-selected="true" data-diagnostics-tab="overview">Проверки</button>
-                <button class="diagnostics-tab-button" type="button" role="tab" aria-selected="false" data-diagnostics-tab="events">События JSONL</button>
+                <button class="diagnostics-tab-button" type="button" role="tab" aria-selected="false" data-diagnostics-tab="events">Технические события</button>
                 <button class="diagnostics-tab-button" type="button" role="tab" aria-selected="false" data-diagnostics-tab="trajectory">Журнал запуска</button>
-                <button class="diagnostics-tab-button" type="button" role="tab" aria-selected="false" data-diagnostics-tab="vba-journal">VBA journal</button>
-                <button class="diagnostics-tab-button" type="button" role="tab" aria-selected="false" data-diagnostics-tab="runtime-log">Журнал UI</button>
+                <button class="diagnostics-tab-button" type="button" role="tab" aria-selected="false" data-diagnostics-tab="vba-journal">Изменения VBA</button>
+                <button class="diagnostics-tab-button" type="button" role="tab" aria-selected="false" data-diagnostics-tab="runtime-log">События интерфейса</button>
               </div>
 
               <div class="diagnostics-tab-panel diagnostics-overview active" data-diagnostics-panel="overview">
@@ -851,9 +851,9 @@
                   </div>
                 </section>
                 <div class="diagnostics-concepts" aria-label="Различие событий и траектории">
-                  <div><strong>События JSONL</strong><span>Неизменяемый источник истины: точные записи session stream с hash chain.</span></div>
-                  <div><strong>Журнал запуска</strong><span>Один причинный поток из проверенных событий: запрос, попытки модели, tools, эффекты и явные пробелы evidence.</span></div>
-                  <div><strong>VBA journal</strong><span>Отдельный document-scoped JSONL-журнал мутаций модулей и пакетов с before/intended source в CAS.</span></div>
+                  <div><strong>Технические события</strong><span>Исходные записи для подробного технического разбора.</span></div>
+                  <div><strong>Журнал запуска</strong><span>Начните здесь: причины, результаты действий и связанные события одного запуска.</span></div>
+                  <div><strong>Изменения VBA</strong><span>История изменений модулей в текущем документе, с исходным и полученным кодом.</span></div>
                 </div>
                 <section class="model-compatibility-panel diagnostics-model-panel" aria-labelledby="modelConnectionTitle">
                   <div class="model-compatibility-head">
@@ -890,12 +890,12 @@
               <section class="model-compatibility-panel trajectory-panel diagnostics-tab-panel" data-diagnostics-panel="records" aria-labelledby="trajectoryTitle">
                 <div class="model-compatibility-head">
                   <div>
-                    <h3 id="trajectoryTitle">События JSONL</h3>
+                    <h3 id="trajectoryTitle">Технические события</h3>
                     <p id="trajectoryDescription">Канонические записи активного chat stream. Event data показан сразу, большие payload читаются из CAS только по запросу.</p>
                   </div>
                 </div>
                 <div class="trajectory-querybar">
-                  <label class="trajectory-field" id="trajectoryViewField"><span>Представление</span><select id="trajectoryViewInput"><option value="raw" hidden>События JSONL</option><option value="run-causal">Журнал запуска</option><option value="model-replay">Только шаги модели</option><option value="tool-execution">Только вызовы tools</option><option value="artifact-lineage">Дерево артефактов</option><option value="confirmation-pauses">Подтверждения</option><option value="failure-retries">Ошибки и повторы</option><option value="turn-usage">Токены и стоимость</option><option value="vba-mutations" hidden>VBA mutations</option></select></label>
+                  <label class="trajectory-field" id="trajectoryViewField"><span>Представление</span><select id="trajectoryViewInput"><option value="raw" hidden>Технические события</option><option value="run-causal">Журнал запуска</option><option value="model-replay">Только шаги модели</option><option value="tool-execution">Только действия</option><option value="artifact-lineage">Дерево артефактов</option><option value="confirmation-pauses">Подтверждения</option><option value="failure-retries">Ошибки и повторы</option><option value="turn-usage">Токены и стоимость</option><option value="vba-mutations" hidden>VBA mutations</option></select></label>
                   <label class="trajectory-field trajectory-search-field"><span>Поиск</span><input id="trajectorySearchInput" maxlength="512" placeholder="Metadata и event data"></label>
                   <label class="trajectory-field" id="trajectoryTypeField"><span>Тип события</span><input id="trajectoryTypeInput" maxlength="256" placeholder="Типы через запятую"></label>
                   <label class="trajectory-field" id="trajectoryVisibilityField"><span>Состояние</span><select id="trajectoryVisibilityInput"><option value="">Все</option><option value="current">Текущее</option><option value="shadowed">Заменённое</option><option value="log-only">Только журнал</option></select></label>
@@ -1022,7 +1022,7 @@
   <script src="js/vendor/viewer.min.js"></script>
   <script src="js/app-core.js?v=stream-coalesce-20260907-1"></script>
   <script src="js/app-utils.js?v=run-view-state-20260830-1"></script>
-  <script src="js/app-run-view-state.js?v=run-view-state-20260830-1"></script>
+  <script src="js/app-run-view-state.js?v=chat-projection-20260907-1"></script>
   <script src="js/app-layout.js"></script>
   <script src="js/app-vba-completion.js?v=vba-completion-20260903-1"></script>
   <script src="js/app-editors.js?v=ui-lazy-20260903-1"></script>
@@ -1031,15 +1031,15 @@
   <script src="js/app-logs.js?v=log-filters-20260824-1"></script>
   <script src="js/app-diagnostics.js?v=diagnostics-ui-20260825-1"></script>
   <script src="js/app-viewer-registry.js?v=artifact-preview-20260902-2"></script>
-  <script src="js/app-json-viewer.js?v=json-viewer-20260829-1"></script>
+  <script src="js/app-json-viewer.js?v=chat-projection-20260907-1"></script>
   <script src="js/app-text-viewer.js?v=artifact-text-20260831-1"></script>
   <script src="js/app-sequence-viewer.js?v=artifact-gallery-20260902-1"></script>
   <script src="js/app-resource-viewer.js?v=binary-chunks-20260906-1"></script>
-  <script src="js/app-run-journal.js?v=trajectory-payload-20260906-1"></script>
+  <script src="js/app-run-journal.js?v=chat-projection-20260907-1"></script>
   <script src="js/app-resource-download.js?v=binary-chunks-20260906-1"></script>
   <script src="js/app-resource-upload.js?v=vba-upload-20260906-1"></script>
   <script src="js/app-trajectory-payload.js?v=trajectory-payload-20260906-1"></script>
-  <script src="js/app-trajectory.js?v=trajectory-payload-20260906-1"></script>
+  <script src="js/app-trajectory.js?v=chat-projection-20260907-1"></script>
   <script src="js/app-qualification.js?v=qualification-center-20260831-1"></script>
   <script src="js/app-prompts.js?v=prompt-source-20260906-1"></script>
   <script src="js/app-model-data.js?v=media-routing-20260824-1"></script>
@@ -1072,16 +1072,16 @@
   <script src="js/app-html-workspace.js?v=html-read-20260906-1"></script>
   <script src="js/app-context.js?v=ui-lazy-20260903-1"></script>
   <script src="js/app-context-inspector.js?v=context-download-20260906-1"></script>
-  <script src="js/app-agent-data.js?v=json-viewer-20260829-1"></script>
-  <script src="js/app-agent-model.js?v=run-view-state-20260830-1"></script>
+  <script src="js/app-agent-data.js?v=chat-projection-20260907-1"></script>
+  <script src="js/app-agent-model.js?v=chat-projection-20260907-1"></script>
   <script src="js/app-chart-artifacts.js?v=ui-lazy-20260903-1"></script>
   <script src="js/app-artifacts.js?v=resource-index-20260907-1"></script>
   <script src="js/app-task-list.js?v=planning-intents-20260902-1"></script>
-  <script src="js/app-agent-activity.js?v=planning-intents-20260902-1"></script>
+  <script src="js/app-agent-activity.js?v=chat-projection-20260907-1"></script>
   <script src="js/app-agent-approval.js?v=run-view-state-20260830-1"></script>
-  <script src="js/app-agent.js?v=runtime-diagnostics-20260831-1"></script>
-  <script src="js/app-messages.js?v=stream-tail-20260907-1"></script>
-  <script src="js/app-reasoning.js?v=reasoning-ui-20260819-1"></script>
+  <script src="js/app-agent.js?v=chat-projection-20260907-1"></script>
+  <script src="js/app-messages.js?v=chat-projection-20260907-1"></script>
+  <script src="js/app-reasoning.js?v=chat-projection-20260907-1"></script>
   <script src="js/app-attachments.js?v=vba-upload-20260906-1"></script>
   <script src="js/app-chat-session.js?v=startup-secondary-lazy-20260907-1"></script>
   <script src="js/app-chat-composer.js?v=multi-chat-20260902-1"></script>

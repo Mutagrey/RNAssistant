@@ -20,6 +20,10 @@ function reasoningBlock(text, tokens, live, truncated) {
   summary.textContent = "Ход рассуждения" +
     (tokens !== null && tokens !== undefined ? " · " + tokens + " токенов" : "") +
     (truncated ? " · обрезано" : "");
+  var caret = document.createElement("span");
+  caret.className = "reasoning-caret";
+  caret.setAttribute("aria-hidden", "true");
+  summary.appendChild(caret);
   details.appendChild(summary);
   if (text) {
     var body = document.createElement("pre");

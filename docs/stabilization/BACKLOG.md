@@ -46,6 +46,34 @@ transport alone does not qualify source allocation.
   authoring. Resolve exact sidecar text semantics in an explicitly scoped storage
   slice; verify ordinary/BOM-prefixed Unicode and preserve existing user files.
 
+## Chat / diagnostics UX follow-ups — 2026-09-07
+
+The user-authorized 11E presentation slice is implemented host-neutral on
+`stab/11-chat-projection-ux`. Lifecycle/history separation, RunId grouping,
+semantic targets, one current-action shimmer, disclosure retention and readable
+cause cards with lazy technical JSON replace the reviewed presentation paths.
+Canonical behavior: [conversation projection](../conversation-protocol.md#effect-mapping-and-ui-projection)
+and [Issue Center](../qualification.md#11-phase-11-issue-center).
+
+Remaining bounded follow-ups:
+
+- **Per-effect reconciliation:** “resolved/using an existing sheet” still requires
+  correlated target/inspection evidence. Do not infer resolution from model prose
+  or later unrelated success. Native counts/history and unknown-effect warnings
+  remain intact. Owner: kernel/evidence projection in a separately scoped slice.
+- **Richer family summaries:** target captions cover accepted scalar selectors;
+  structured result counts/coverage and custom-tool display metadata still need
+  source-owned presentation fields. UI must not parse arbitrary tool JSON or
+  manufacture “found N”/complete coverage. Exact executor messages remain available.
+- **Full Issue Center:** source/build/catalog/qualification aggregation and
+  redacted issue export remain the existing Phase 11 scope. The current journal
+  cause cards derive only from loaded correlated rows; no additional issue store
+  or implicit whole-history lookup is introduced.
+- **Delivery qualification:** local browser component scenarios cover narrow
+  320/400/600px layouts, themes and disclosure transitions; actual Office/WebView2,
+  DPI, keyboard focus during live replacement, multi-window replay/confirmation
+  and large live histories remain Windows gates. No real Office build was run.
+
 ## Deferred product decisions
 
 Эти пункты требуют отдельного решения после stable core; они не являются Phase 12

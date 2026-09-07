@@ -132,6 +132,10 @@ namespace RNAssistant.Core.Models
 
     public sealed class TrajectoryViewRow
     {
+        public string Summary { get; set; }
+        public string Target { get; set; }
+        public string ErrorCode { get; set; }
+        public RNAssistant.Core.Tools.ToolExecutionEvidence ExecutionEvidence { get; set; }
         public string Id { get; set; }
         public string View { get; set; }
         public string Kind { get; set; }

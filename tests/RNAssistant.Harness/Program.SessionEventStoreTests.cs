@@ -1597,6 +1597,15 @@ namespace RNAssistant.Harness
 
         private static void TrajectoryRunCausalProjectionCorrelatesExactEvidence()
         {
+            var displayCall = new ToolInvocation
+            {
+                ToolId = "common.resources_read",
+                Arguments = new Dictionary<string, object> { ["target"] = "Продажи!A1:D120", ["representation"] = "table" }
+            };
+            var displayActivity = RNAssistant.Office.AgentTranscript.CreateRunningToolActivity(displayCall, "step", "Inspect");
+            AssertEqual("Продажи!A1:D120 · Таблица", displayActivity.Subtitle, "activity displays accepted semantic target without resource lookup");
+            AssertEqual("running", displayActivity.Status, "display does not change lifecycle");
+            AssertTrue(displayActivity.ExecutionEvidence == null, "a target caption does not fabricate execution evidence");
             var started = new DateTime(2026, 8, 29, 8, 0, 0, DateTimeKind.Utc);
             var events = new List<SessionEvent>
             {
@@ -1670,7 +1679,7 @@ namespace RNAssistant.Harness
                                 ["RunId"] = "run-1", ["StepId"] = "logical-1", ["ToolCallId"] = "call-1",
                                 ["ToolId"] = "common.html_workspace_write_file", ["Status"] = "completed", ["ExecutionStatus"] = "completed",
                                 ["ArgumentsJson"] = "{\"path\":\"index.html\",\"content\":\"<main>ok</main>\"}",
-                                ["ResultMessage"] = "Workspace updated.", ["DataJson"] = "{\"changed\":true}",
+                                ["Subtitle"] = "index.html", ["ResultMessage"] = "Workspace updated.", ["DataJson"] = "{\"changed\":true}",
                                 ["ExecutionEvidence"] = new JObject { ["Dispatch"] = "MayHaveDispatched", ["Effect"] = "VerifiedChange" }
                             } } }
                         },
@@ -1756,11 +1765,15 @@ namespace RNAssistant.Harness
             AssertEqual("logical-1", accepted.StepId, "accepted call preserves logical step origin");
             AssertEqual(0, (int)accepted.Data["acceptedCallOrigin"]["CallIndex"], "accepted call preserves raw call position");
             AssertTrue((bool)accepted.Data["argumentsAvailable"], "accepted call points to persisted executor arguments");
-            AssertEqual("<main>ok</main>", (string)accepted.Data["arguments"]["html"],
+            AssertEqual("<main>ok</main>", (string)accepted.Data["arguments"]["content"],
                 "accepted call exposes exact executor arguments without opening raw storage JSON");
             AssertTrue(accepted.SourceEventSeqs.SequenceEqual(new long[] { 8 }), "accepted call retains exact source event");
 
             var finished = run.Single(item => item.Kind == SessionOperationTypes.ToolExecutionFinished);
+            var displayRow = TrajectoryViewRowDto.From(finished);
+            AssertEqual("Workspace updated.", displayRow.Summary, "cause/result is a typed field outside technical JSON");
+            AssertEqual("index.html", displayRow.Target, "target is retained in diagnostic projection");
+            AssertEqual(ToolEffectEvidence.VerifiedChange, displayRow.ExecutionEvidence.Effect, "typed effect matches exact source evidence");
             AssertEqual("Workspace updated.", (string)finished.Data["resultMessage"],
                 "tool completion exposes the executor result message");
             AssertEqual(true, (bool)finished.Data["resultData"]["changed"],

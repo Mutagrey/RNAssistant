@@ -125,7 +125,7 @@ function activityText(activity) {
 function activityTimelineKey(activity) {
   var stepId = activityStepId(activity);
   if (stepId && activityKind(activity) === "step") {
-    return "step:" + stepId;
+    return "step:" + activityValue(activity, "RunId", "runId", "") + ":" + stepId;
   }
   var pendingId = activityPendingId(activity);
   if (pendingId && !activityToolId(activity)) {
@@ -272,6 +272,7 @@ function agentRunViewState(items, finalMessage) {
 }
 
 function agentRunStats(items, finished, runViewState) {
+  runViewState = runViewState && typeof runViewState === "object" ? runViewState : null;
   var counts = { total: 0 };
   var activities = collectRunActivities(items || []);
   activities.forEach(function (activity) {
@@ -281,7 +282,7 @@ function agentRunStats(items, finished, runViewState) {
   var elapsed = agentRunElapsedText(items || []);
 
   var lifecycleStatus = runViewState ? runViewState.lifecycle :
-    (finished ? "unknown" : (current ? activityStatus(current) : "running"));
+    (current ? activityStatus(current) : (finished ? "completed" : "running"));
   var status = window.RNAssistantRunViewState.displayStatus(runViewState, lifecycleStatus);
   return {
     current: current,
@@ -333,6 +334,7 @@ function collectAgentRun(startIndex) {
     return { items: [], finalMessage: { message: state.messages[startIndex], index: startIndex }, nextIndex: startIndex + 1 };
   }
   var items = [{ message: state.messages[startIndex], index: startIndex, activity: messageActivity(state.messages[startIndex]) }];
+  var runId = messageRunId(state.messages[startIndex]);
   var index = startIndex + 1;
   while (index < state.messages.length) {
     var candidate = state.messages[index];
@@ -340,7 +342,7 @@ function collectAgentRun(startIndex) {
       index += 1;
       continue;
     }
-    if (!isAgentRunContinuation(candidate)) {
+    if (messageRunId(candidate) !== runId || !isAgentRunContinuation(candidate)) {
       break;
     }
     items.push({ message: candidate, index: index, activity: messageActivity(candidate) });
@@ -349,7 +351,7 @@ function collectAgentRun(startIndex) {
 
   var finalMessage = null;
   while (index < state.messages.length && messageProtocolMessage(state.messages[index])) index += 1;
-  if (index < state.messages.length && isAgentRunFinalMessage(state.messages[index])) {
+  if (index < state.messages.length && messageRunId(state.messages[index]) === runId && isAgentRunFinalMessage(state.messages[index])) {
     finalMessage = { message: state.messages[index], index: index };
     index += 1;
   }

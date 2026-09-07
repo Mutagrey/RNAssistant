@@ -135,7 +135,7 @@ function settle() { return new Promise(resolve => setImmediate(resolve)); }
   assert.equal(rawHost.firstElementChild.getAttribute("data-completeness"), "preview");
   assert.match(rawHost.textContent, /Позиция:/);
   assert.equal(rawButton.textContent, "JSON сокращён · скрыть");
-  button(rawHost, "Копировать preview").click();
+  button(rawHost, "Копировать фрагмент").click();
   await settle();
   assert.equal(copied.at(-1), raw, "materialized request preview copy stays exact");
   context.togglePromptContextRaw();

@@ -6,9 +6,10 @@
   var FILTERS = [
     { id: "all", label: "Все" },
     { id: "problems", label: "Проблемы" },
-    { id: "api", label: "API body" },
+    { id: "attempts", label: "Попытки и отмены" },
+    { id: "api", label: "Запросы и ответы" },
     { id: "model", label: "Модель" },
-    { id: "tools", label: "Tools" },
+    { id: "tools", label: "Действия" },
     { id: "effects", label: "Эффекты" }
   ];
 
@@ -53,6 +54,8 @@
 
   function isProblem(row) {
     var status = rowStatus(row);
+    if (hasUnknownEffect(row)) return true;
+    if (status === "cancelled" || status === "rejected") return false;
     return Number(value(row, "FailureCount", "failureCount", 0) || 0) > 0 ||
       ["failed", "error", "unknown", "rejected", "cancelled", "missing", "blocked", "refused",
         "partial", "partial_failure", "interrupted", "interrupted_unknown", "runtime_error",
@@ -83,6 +86,7 @@
 
   function matchesFilter(row, filter) {
     if (filter === "problems") return isProblem(row);
+    if (filter === "attempts") return ["cancelled", "rejected"].indexOf(rowStatus(row)) >= 0;
     if (filter === "api") {
       var payload = payloadAction(row);
       return !!(payload && payload.api);
@@ -145,7 +149,7 @@
       persisted: "Сохранено",
       recorded: "Записано",
       projected: "Спроецировано",
-      missing: "Нет evidence",
+      missing: "Нет подтверждения",
       failed: "Ошибка",
       error: "Ошибка",
       unknown: "Эффект неизвестен",
@@ -154,7 +158,7 @@
       partial_failure: "Частичная ошибка",
       interrupted: "Прервано",
       interrupted_unknown: "Прервано, эффект неизвестен",
-      runtime_error: "Ошибка runtime",
+      runtime_error: "Ошибка выполнения",
       invalid_model_response: "Некорректный ответ модели",
       compaction_failed: "Ошибка сжатия контекста",
       blocked: "Заблокировано",
@@ -174,39 +178,28 @@
       "model.request.prepared": "Запрос модели подготовлен",
       "llm.request": "Запрос отправлен модели",
       "llm.response": "Получен исходный ответ модели",
-      "assistant.chunk": "Получена часть stream",
+      "assistant.chunk": "Получена часть ответа",
       "llm.failure": "Запрос модели завершился ошибкой",
       "agent.response.rejected": "Ответ модели отклонён",
       "model.attempt.rejected": "Попытка модели отклонена",
       "model.response.accepted": "Ответ модели принят",
-      "tool.call.recorded": "Вызов tool принят",
-      "tool.execution.started": "Выполнение tool начато",
-      "tool.execution.completed": "Tool вернул результат",
-      "tool.execution.finished": "Выполнение tool завершено",
-      "tool.result.recorded": "Результат tool сохранён",
+      "tool.call.recorded": "Действие принято",
+      "tool.execution.started": "Действие начато",
+      "tool.execution.completed": "Получен результат действия",
+      "tool.execution.finished": "Действие завершено",
+      "tool.result.recorded": "Результат действия сохранён",
       "domain.effect.prepared": "Изменение подготовлено",
       "domain.effect.dispatched": "Изменение отправлено",
       "domain.effect.verified": "Фактический эффект проверен",
       "run.summary.created": "Сводка запуска создана",
       "ui.projected": "Ответ подготовлен для интерфейса",
-      "diagnostic.evidence.missing": "В журнале отсутствует обязательное evidence",
+      "diagnostic.evidence.missing": "Не хватает сведений о выполнении",
       "user.message.appended": "Запрос пользователя сохранён",
       "assistant.message.appended": "Ответ ассистента сохранён",
       "artifact.revision.created": "Создана версия артефакта",
       "artifact.remove": "Артефакт удалён"
     };
     return labels[rowKind(row)] || boundedText(value(row, "Title", "title", rowKind(row) || "Этап"), 512);
-  }
-
-  function layer(row) {
-    var kind = rowKind(row);
-    if (isModel(row)) return "Модель";
-    if (isTool(row)) return "Tool runtime";
-    if (/^domain\.effect\./.test(kind)) return "Фактический эффект";
-    if (/^artifact\./.test(kind)) return "Артефакт";
-    if (/^ui\./.test(kind)) return "UI projection";
-    if (/^user\./.test(kind)) return "Пользователь";
-    return "Run lifecycle";
   }
 
   function tone(row) {
@@ -221,7 +214,7 @@
     if (!input) return "";
     var date = new Date(input);
     if (isNaN(date.getTime())) return "";
-    return date.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", second: "2-digit" });
+    return date.toLocaleTimeString("ru-RU", { hour: "2-digit", minute: "2-digit", second: "2-digit", hour12: false });
   }
 
   function identityText(row) {
@@ -235,9 +228,9 @@
       return "Нужная граница не записана. Это не доказывает ни успех, ни ошибку выполнения.";
     }
     if (kind === "ui.projected") {
-      return "Это подтверждает построение UI projection, но не фактическую доставку или отрисовку WebView.";
+      return "Это подтверждает построение Интерфейс, но не фактическую доставку или отрисовку WebView.";
     }
-    if (isProblem(row) && rowStatus(row) === "rejected") {
+    if (rowStatus(row) === "rejected") {
       return "Эта попытка отклонена. Следующая попытка или repair показаны отдельными строками и не заменяют исходный ответ.";
     }
     if (kind === "domain.effect.verified") {
@@ -269,7 +262,7 @@
     registry.mount("json", host, {
       text: text === null || text === undefined ? "" : String(text),
       completeness: completeness || "full",
-      mode: "tree",
+      mode: "pretty",
       onCopy: window.copyTextResult
     });
   }
@@ -312,27 +305,24 @@
     if (kind === "model.request.prepared" || kind === "llm.request") {
       return {
         eventId: ids[0],
-        label: "Обновить API request body",
-        title: "API request body",
-        badge: "API request body",
+        label: "Показать запрос к модели",
+        title: "Запрос к модели",
         api: true
       };
     }
     if (kind === "llm.response") {
       return {
         eventId: ids[0],
-        label: "Обновить API response body",
-        title: "API response body",
-        badge: "API response body",
+        label: "Показать ответ модели",
+        title: "Ответ модели",
         api: true
       };
     }
     if (kind === "model.attempt.rejected" || kind === "agent.response.rejected") {
       return {
         eventId: ids[0],
-        label: "Обновить отклонённый body",
-        title: "Отклонённый body модели",
-        badge: "Отклонённый body",
+        label: "Показать отклонённый ответ",
+        title: "Отклонённый ответ модели",
         api: false
       };
     }
@@ -347,7 +337,7 @@
     appendText(section, "h4", "", definition.title);
     var host = document.createElement("div");
     host.className = "rn-run-journal-payload-host";
-    host.textContent = "Body загрузится автоматически при раскрытии строки.";
+    host.textContent = "Полное содержимое загружается по кнопке.";
     section.appendChild(host);
 
     var state = "idle";
@@ -358,7 +348,7 @@
       pending = null;
       state = "idle";
       unmountJson(host);
-      host.textContent = "Body загрузится автоматически при раскрытии строки.";
+      host.textContent = "Полное содержимое загружается по кнопке.";
       button.disabled = false;
       button.textContent = definition.label;
     }
@@ -371,7 +361,7 @@
       pending = operation;
       button.disabled = true;
       button.textContent = "Загружаю…";
-      host.textContent = "Загружаю body…";
+      host.textContent = "Загружаю содержимое…";
       return Promise.resolve().then(function () {
         if (pending !== operation) return;
         return options.onLoadPayload(definition.eventId, operation.signal);
@@ -390,7 +380,7 @@
       }).catch(function (error) {
         if (pending !== operation) return;
         state = "error";
-        host.textContent = "Не удалось загрузить payload: " + (error && error.message ? error.message : String(error));
+        host.textContent = "Не удалось загрузить содержимое: " + (error && error.message ? error.message : String(error));
         button.textContent = "Повторить";
       }).then(function () {
         if (pending !== operation) return;
@@ -433,7 +423,7 @@
     }
     var callId = value(row, "ToolCallId", "toolCallId", "");
     if (callId) {
-      root.appendChild(actionButton("Только этот tool call", function () {
+      root.appendChild(actionButton("Только этот вызов", function () {
         options.onNavigate("toolCallId", callId, "run-causal");
       }));
     }
@@ -443,6 +433,73 @@
         options.onNavigate("runId", runId, "run-causal");
       }));
     }
+  }
+
+  function displayCause(row) {
+    var evidence = value(row, "ExecutionEvidence", "executionEvidence", null);
+    if (value(evidence, "Dispatch", "dispatch", "") === "NotDispatched" &&
+        value(row, "ErrorCode", "errorCode", "") === "excel_sheet_already_exists") {
+      return "Лист уже существует. Создание не выполнено.";
+    }
+    return boundedText(value(row, "Summary", "summary", ""), 2000);
+  }
+
+  function hasUnknownEffect(row) {
+    var evidence = value(row, "ExecutionEvidence", "executionEvidence", null);
+    return value(evidence, "Effect", "effect", "") === "Unknown" ||
+      ["unknown", "interrupted_unknown"].indexOf(rowStatus(row)) >= 0;
+  }
+
+  function issuePriority(row) {
+    return (hasUnknownEffect(row) ? 4 : 0) + (displayCause(row) ? 1 : 0);
+  }
+
+  function effectExplanation(row) {
+    var evidence = value(row, "ExecutionEvidence", "executionEvidence", null);
+    var effect = value(evidence, "Effect", "effect", "");
+    if (hasUnknownEffect(row))
+      return "Результат не подтверждён. Проверьте фактическое состояние перед повторной записью.";
+    if (value(evidence, "Dispatch", "dispatch", "") === "NotDispatched") return "Действие не отправлено на выполнение.";
+    if (effect === "VerifiedNoChange") return "Проверка подтвердила отсутствие изменений.";
+    if (effect === "VerifiedChange") return "Изменение подтверждено проверкой результата.";
+    return "";
+  }
+
+  function renderIssues(root, rows, options) {
+    var groups = new Map();
+    rows.filter(isProblem).forEach(function (row) {
+      var call = value(row, "ToolCallId", "toolCallId", "");
+      var attempt = value(row, "ModelAttemptId", "modelAttemptId", "");
+      var key = JSON.stringify([value(row, "RunId", "runId", ""), call ? "call" : attempt ? "attempt" : "row", call || attempt || rowId(row)]);
+      var previous = groups.get(key);
+      if (!previous || issuePriority(row) > issuePriority(previous)) groups.set(key, row);
+    });
+    if (!groups.size) return;
+    var section = document.createElement("section");
+    section.className = "rn-run-journal-issues";
+    section.setAttribute("aria-label", "Причины и последствия");
+    appendText(section, "h3", "", "Причины и последствия");
+    Array.from(groups.values()).sort(function (a, b) { return issuePriority(b) - issuePriority(a); }).slice(0, 12).forEach(function (row) {
+      var card = document.createElement("div");
+      card.className = "rn-run-journal-issue";
+      var toolId = value(row, "ToolId", "toolId", "");
+      var title = typeof activityToolLabel === "function" ? activityToolLabel(toolId, false) : "";
+      appendText(card, "strong", "", title || titleLabel(row));
+      var target = value(row, "Target", "target", "");
+      if (target) appendText(card, "div", "rn-run-journal-target", target);
+      appendText(card, "p", "", displayCause(row) || rowNote(row) || statusLabel(rowStatus(row)));
+      var effect = effectExplanation(row);
+      if (effect) appendText(card, "p", "rn-run-journal-note", effect);
+      var code = value(row, "ErrorCode", "errorCode", "");
+      if (code) appendText(card, "small", "rn-run-journal-code", "Код: " + code);
+      var call = value(row, "ToolCallId", "toolCallId", "");
+      if (call && typeof options.onNavigate === "function") {
+        card.appendChild(actionButton("Связанные действия", function () { options.onNavigate("toolCallId", call, "run-causal"); }));
+      }
+      section.appendChild(card);
+    });
+    if (groups.size > 12) appendText(section, "p", "rn-run-journal-note", "Ещё причин: " + (groups.size - 12) + ". Они доступны в списке ниже.");
+    root.appendChild(section);
   }
 
   function renderRow(row, options) {
@@ -460,13 +517,9 @@
     main.className = "rn-run-journal-row-main";
     var head = document.createElement("span");
     head.className = "rn-run-journal-row-head";
-    appendText(head, "span", "rn-run-journal-layer", layer(row));
+
     appendText(head, "span", "rn-run-journal-title", titleLabel(row));
-    var payloadDefinition = payloadAction(row);
-    if (payloadDefinition) {
-      appendText(head, "span", "rn-run-journal-api-body", payloadDefinition.badge);
-    }
-    var status = appendText(head, "span", "rn-run-journal-status", statusLabel(rowStatus(row)));
+    var status = appendText(head, "span", "rn-run-journal-status", hasUnknownEffect(row) ? "Не подтверждено" : statusLabel(rowStatus(row)));
     status.setAttribute("data-status", rowStatus(row));
     main.appendChild(head);
     var meta = document.createElement("span");
@@ -481,6 +534,10 @@
       identityText(row)
     ].filter(Boolean).join(" · ");
     main.appendChild(meta);
+    var target = value(row, "Target", "target", "");
+    if (target) appendText(main, "span", "rn-run-journal-target", target);
+    var reason = displayCause(row);
+    if (reason) appendText(main, "span", "rn-run-journal-reason", reason);
     summary.appendChild(main);
     details.appendChild(summary);
 
@@ -491,9 +548,20 @@
     var actions = document.createElement("div");
     actions.className = "rn-run-journal-actions";
     appendNavigationActions(actions, row, options);
-    var payloadView = appendPayloadAction(actions, row, options);
     if (actions.childElementCount) body.appendChild(actions);
-    if (payloadView) body.appendChild(payloadView.section);
+    var technical = document.createElement("details");
+    technical.className = "rn-run-journal-technical";
+    technical.open = !!(options.expanded && options.expanded[id + ":technical"]);
+    appendText(technical, "summary", "", "Технические данные и исходные события");
+    var payloadActions = document.createElement("div");
+    payloadActions.className = "rn-run-journal-actions";
+    var payloadView = appendPayloadAction(payloadActions, row, options);
+    if (payloadView) {
+      technical.appendChild(payloadActions);
+      technical.appendChild(payloadView.section);
+    }
+    var effect = effectExplanation(row);
+    if (effect) appendText(body, "p", "rn-run-journal-note", effect);
 
     var dataSection = document.createElement("section");
     dataSection.className = "rn-run-journal-json-section";
@@ -501,11 +569,8 @@
     var dataHost = document.createElement("div");
     dataHost.className = "rn-run-journal-json rn-run-journal-data";
     dataSection.appendChild(dataHost);
-    body.appendChild(dataSection);
+    technical.appendChild(dataSection);
 
-    var technical = document.createElement("details");
-    technical.className = "rn-run-journal-technical";
-    appendText(technical, "summary", "", "Технические связи и ID");
     var evidenceSection = document.createElement("section");
     evidenceSection.className = "rn-run-journal-json-section";
     var evidenceHost = document.createElement("div");
@@ -515,22 +580,23 @@
     body.appendChild(technical);
     details.appendChild(body);
 
+    function syncTechnical() {
+      var mounted = details.open && technical.open;
+      setDetailsMounted(details, row, mounted);
+      if (!mounted) {
+        details.setAttribute("data-mounted", "false");
+        if (payloadView) payloadView.cancel();
+      }
+    }
     details.addEventListener("toggle", function () {
       if (typeof options.onExpandedChange === "function") options.onExpandedChange(id, details.open);
-      if (details.open) {
-        setDetailsMounted(details, row, true);
-        if (payloadView) payloadView.load();
-      }
-      else {
-        if (payloadView) payloadView.cancel();
-        setDetailsMounted(details, row, false);
-        details.setAttribute("data-mounted", "false");
-      }
+      syncTechnical();
     });
-    if (details.open) {
-      setDetailsMounted(details, row, true);
-      if (payloadView) payloadView.load();
-    }
+    technical.addEventListener("toggle", function () {
+      if (typeof options.onExpandedChange === "function") options.onExpandedChange(id + ":technical", technical.open);
+      syncTechnical();
+    });
+    if (details.open && technical.open) syncTechnical();
     return details;
   }
 
@@ -556,8 +622,6 @@
   function renderHeader(root, rows, filter, options) {
     var problems = rows.filter(isProblem).length;
     var tools = uniqueToolCallCount(rows);
-    var effects = rows.filter(function (row) { return rowKind(row) === "domain.effect.verified"; }).length;
-    var missing = rows.filter(function (row) { return rowKind(row) === "diagnostic.evidence.missing"; }).length;
     var terminal = rows.slice().reverse().filter(function (row) {
       return rowKind(row) === "turn.ended" || rowKind(row) === "run.ended";
     })[0];
@@ -566,12 +630,9 @@
     summary.className = "rn-run-journal-summary";
     var metrics = document.createElement("div");
     metrics.className = "rn-run-journal-metrics";
-    metric(metrics, "Загружено строк", rows.length, "neutral");
-    metric(metrics, "Проблемы", problems, problems ? "problem" : "neutral");
-    metric(metrics, "Уникальные tool calls", tools, "neutral");
-    metric(metrics, "Effect evidence", effects, effects ? "verified" : "neutral");
-    metric(metrics, "Пробелы evidence", missing, missing ? "problem" : "neutral");
     metric(metrics, "Итог", terminal ? statusLabel(rowStatus(terminal)) : "Не найден в выборке", terminal && isProblem(terminal) ? "problem" : "neutral");
+    metric(metrics, "Проблемы", problems, problems ? "problem" : "neutral");
+    metric(metrics, "Вызовы инструментов", tools, "neutral");
     summary.appendChild(metrics);
 
     var toolbar = document.createElement("div");
@@ -637,6 +698,7 @@
       var rows = normalized.rows;
       var filter = FILTERS.some(function (item) { return item.id === options.filter; }) ? options.filter : "all";
       renderHeader(root, rows, filter, options);
+      if (filter === "all" || filter === "problems") renderIssues(root, rows, options);
       if (normalized.truncated) {
         appendText(root, "div", "rn-run-journal-limit",
           "Достигнут UI-лимит " + MAX_RENDERED_ROWS + " строк. Используйте run/search filter или bounded export.");

@@ -406,7 +406,7 @@
     var payloadButton = $("loadTrajectoryPayloadButton");
     payloadButton.classList.toggle("hidden", payloadSize === null);
     payloadButton.disabled = false;
-    payloadButton.textContent = "Показать payload";
+    payloadButton.textContent = "Показать полное содержимое";
     renderCorrelationActions(item);
   }
 
@@ -529,7 +529,7 @@
       root.setAttribute("aria-label", "Дерево версий артефактов");
     } else {
       root.setAttribute("role", "listbox");
-      root.setAttribute("aria-label", activeView === "raw" ? "События JSONL" : "Строки траектории");
+      root.setAttribute("aria-label", activeView === "raw" ? "Технические события" : "Строки траектории");
     }
     var renderedEvents = activeView === "artifact-lineage" ? orderArtifactTree(events, artifactMap) : events;
     renderedEvents.forEach(function (item) {
@@ -878,7 +878,7 @@
     } catch (error) {
       if (!isCurrent()) return;
       unmountTrajectoryJson("trajectoryEventPayload");
-      showTextPayload(target, "Не удалось загрузить payload: " + error.message, "text/plain", false);
+      showTextPayload(target, "Не удалось загрузить содержимое: " + error.message, "text/plain", false);
       target.classList.remove("hidden");
       button.textContent = "Повторить";
     } finally {
@@ -1025,14 +1025,14 @@
     $("trajectoryVbaStatusField").classList.toggle("hidden", !vba);
     $("trajectoryVbaStatusInput").disabled = !vba;
     if (raw) {
-      $("trajectoryTitle").textContent = "События JSONL";
-      $("trajectoryDescription").textContent = "Канонические записи активного chat stream. Event data показан сразу, большие payload читаются из CAS только по запросу.";
+      $("trajectoryTitle").textContent = "Технические события";
+      $("trajectoryDescription").textContent = "Исходные события выбранного чата. Полное содержимое доступно по отдельному запросу.";
     } else if (vba) {
-      $("trajectoryTitle").textContent = "VBA mutation journal";
-      $("trajectoryDescription").textContent = "Document-scoped операции из mutations.events.jsonl. Before/after source загружается из CAS только по запросу.";
+      $("trajectoryTitle").textContent = "Изменения VBA";
+      $("trajectoryDescription").textContent = "Изменения VBA в текущем документе. Исходный и полученный код доступны в деталях операции.";
     } else if (journal) {
       $("trajectoryTitle").textContent = "Журнал запуска";
-      $("trajectoryDescription").textContent = "Один причинный поток: запрос, попытки модели и repair, accepted calls, dispatch, результат и фактический effect evidence. Строки раскрываются на месте.";
+      $("trajectoryDescription").textContent = "Причины и последствия показаны в начале. Ниже — действия и связанные события; исходные данные открываются отдельно.";
     } else {
       $("trajectoryTitle").textContent = "Специализированная проекция";
       $("trajectoryDescription").textContent = "Read-only проекция, которая каждый раз пересобирается из проверенного JSONL stream и связывает исходные event seq/id.";

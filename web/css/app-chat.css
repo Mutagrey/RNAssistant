@@ -534,14 +534,14 @@
 .messages {
   display: flex;
   flex-direction: column;
-  gap: 10px;
+  gap: 22px;
   flex: 1;
   width: 100%;
   height: 100%;
   min-height: 0;
   overflow-x: hidden;
   overflow-y: auto;
-  padding: 6px 6px 18px;
+  padding: 16px clamp(12px, 3vw, 24px) 24px;
 }
 
 .chatbar-icon-button {
@@ -654,45 +654,7 @@
   opacity: 0.78;
 }
 
-.streaming-cursor {
-  display: inline-flex;
-  gap: 3px;
-  align-items: center;
-  height: 1em;
-  margin-left: 4px;
-  vertical-align: -0.08em;
-}
 
-.streaming-cursor-dot {
-  width: 4px;
-  height: 4px;
-  flex: 0 0 4px;
-  border-radius: 50%;
-  background: currentColor;
-  opacity: 0.28;
-  animation: streaming-dot-pulse 1.2s ease-in-out infinite;
-  animation-delay: var(--streaming-dot-phase, 0ms);
-}
-
-.streaming-cursor-dot:nth-child(2) {
-  animation-delay: calc(var(--streaming-dot-phase, 0ms) - 200ms);
-}
-
-.streaming-cursor-dot:nth-child(3) {
-  animation-delay: calc(var(--streaming-dot-phase, 0ms) - 400ms);
-}
-
-@keyframes streaming-dot-pulse {
-  0%, 60%, 100% { opacity: 0.28; }
-  30% { opacity: 1; }
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .streaming-cursor-dot {
-    animation: none;
-    opacity: 0.55;
-  }
-}
 
 .message.failed .markdown {
   border-color: #f1b8b1;
@@ -758,16 +720,26 @@
 }
 
 .message-outcome {
-  font-weight: 600;
+  margin-top: 14px;
+  padding-left: 12px;
+  border-left: 2px solid var(--line);
+  font-size: .9286rem;
+  font-weight: 400;
+  line-height: 1.55;
+  overflow-wrap: anywhere;
 }
+
+.message-outcome.status-history { color: var(--muted); }
 
 .message-outcome.status-waiting {
   color: #b54708;
 }
 
-.message-outcome.status-failed,
+.message-outcome.status-failed { color: var(--danger); }
+
 .message-outcome.status-warning {
-  color: #b42318;
+  color: var(--text);
+  border-color: #b98630;
 }
 
 .message-outcome.status-cancelled {

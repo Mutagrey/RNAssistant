@@ -107,7 +107,7 @@ function render(item, actions) {
   const previewHost = truncated.querySelector(".artifact-json-viewer");
   assert.equal(previewHost.firstElementChild.getAttribute("data-completeness"), "preview");
   assert.match(previewHost.textContent, /Позиция:/);
-  button(previewHost, "Копировать preview").click();
+  button(previewHost, "Копировать фрагмент").click();
   await settle();
   assert.equal(copied.at(-1), preview);
   console.log("PASS artifact JSON viewer: bridge-truncated JSON stays an explicit exact preview");

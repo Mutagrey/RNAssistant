@@ -177,6 +177,11 @@ namespace RNAssistant.Office.Contracts
     {
         private const int MaxInlineDataChars = 65536;
 
+        [JsonProperty("summary")] public string Summary { get; set; }
+        [JsonProperty("target")] public string Target { get; set; }
+        [JsonProperty("errorCode")] public string ErrorCode { get; set; }
+        [JsonProperty("executionEvidence")] public RNAssistant.Core.Tools.ToolExecutionEvidence ExecutionEvidence { get; set; }
+
         [JsonProperty("id")] public string Id { get; set; }
         [JsonProperty("view")] public string View { get; set; }
         [JsonProperty("kind")] public string Kind { get; set; }
@@ -217,6 +222,8 @@ namespace RNAssistant.Office.Contracts
             var bounded = data.Length <= MaxInlineDataChars ? data : data.Substring(0, MaxInlineDataChars);
             return new TrajectoryViewRowDto
             {
+                Summary = row.Summary, Target = row.Target, ErrorCode = row.ErrorCode,
+                ExecutionEvidence = row.ExecutionEvidence,
                 Id = row.Id, View = row.View, Kind = row.Kind, Title = row.Title, Status = row.Status,
                 CreatedUtc = row.CreatedUtc, CompletedUtc = row.CompletedUtc, DurationMs = row.DurationMs,
                 FirstSequence = row.FirstSequence, LastSequence = row.LastSequence,

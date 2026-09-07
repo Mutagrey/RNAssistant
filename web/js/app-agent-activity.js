@@ -10,6 +10,7 @@ function renderActivityNode(activity, nested, current, context) {
   if (expandable) {
     var details = document.createElement("details");
     details.className = "agent-activity-toggle";
+    details.setAttribute("data-disclosure-key", "activity:" + activityTimelineKey(activity));
     details.open = false;
     details.appendChild(renderActivityRow(activity, current, true, context));
     appendActivityDetailsContent(details, activity, context);
@@ -102,28 +103,53 @@ function renderActivityRow(activity, current, expandable, context) {
   var title = activityPrimaryText(activity);
   var comment = activityCommentText(activity);
   var time = activityTimeText(context);
-  row.className = "agent-activity-row" + (comment ? " has-comment" : " has-no-comment");
+  var hideIcon = (context && context.hideIcon) ||
+    ["notice", "reasoning", "step", "compaction"].indexOf(activityKind(activity)) >= 0;
+  row.className = "agent-activity-row" + (comment ? " has-comment" : " has-no-comment") +
+    (hideIcon ? " is-status-label" : "");
   row.title = [title, comment, agentStatusLabel(status), time].filter(Boolean).join(" · ");
 
-  var mark = document.createElement("span");
-  mark.className = "agent-activity-mark operation-" + activityOperation(activity);
-  mark.setAttribute("aria-hidden", "true");
-  mark.innerHTML = activityOperationIcon(activity);
-  row.appendChild(mark);
+  if (!hideIcon) {
+    var mark = document.createElement("span");
+    mark.className = "agent-activity-mark operation-" + activityOperation(activity);
+    mark.setAttribute("aria-hidden", "true");
+    mark.innerHTML = activityOperationIcon(activity);
+    row.appendChild(mark);
+  }
 
   var copy = document.createElement("span");
   copy.className = "agent-activity-copy";
 
+  var heading = document.createElement("span");
+  heading.className = "agent-activity-heading";
   var name = document.createElement("span");
   name.className = "agent-activity-name";
+  if (current && context && context.hideIcon) name.setAttribute("aria-live", "polite");
   name.textContent = title;
-  copy.appendChild(name);
+  heading.appendChild(name);
+  copy.appendChild(heading);
+
+  if (comment) {
+    var target = document.createElement("span");
+    target.className = "agent-activity-target";
+    target.textContent = comment;
+    copy.appendChild(target);
+  }
+
+  var resultText = activityDisplayResult(activity);
+  if (resultText && resultText !== title && resultText !== comment) {
+    var resultLine = document.createElement("span");
+    resultLine.className = "agent-activity-caption";
+    resultLine.textContent = resultText.length > 240 ? resultText.slice(0, 239) + "…" : resultText;
+    copy.appendChild(resultLine);
+  }
 
   if (status === "failed" || status === "completed_with_errors" || status === "cancelled") {
     var state = document.createElement("span");
     state.className = "agent-activity-state status-" + status;
-    state.setAttribute("aria-hidden", "true");
-    state.textContent = status === "cancelled" ? "–" : "×";
+    var evidence = activity.ExecutionEvidence || activity.executionEvidence || {};
+    state.textContent = (evidence.Effect || evidence.effect) === "Unknown" ? "Не подтверждено" :
+      status === "cancelled" ? "Отменено" : "Не выполнено";
     copy.appendChild(state);
   }
   row.appendChild(copy);
@@ -132,8 +158,7 @@ function renderActivityRow(activity, current, expandable, context) {
     var caret = document.createElement("span");
     caret.className = "agent-activity-caret";
     caret.setAttribute("aria-hidden", "true");
-    caret.textContent = "›";
-    copy.appendChild(caret);
+    heading.appendChild(caret);
   }
   return row;
 }
@@ -167,8 +192,10 @@ function activityOperationIcon(activity) {
 }
 
 function activityPrimaryText(activity) {
+  var toolTitle = activityToolLabel(activityToolId(activity), activityStatus(activity) === "running");
+  if (toolTitle) return toolTitle;
   var progressTitle = typeof activityProgressTitle === "function" ? activityProgressTitle(activity) : "";
-  if (progressTitle) {
+  if (progressTitle && !activityToolId(activity)) {
     return progressTitle;
   }
 
@@ -198,6 +225,62 @@ function activityPrimaryText(activity) {
     diagnostic: "Ошибка ответа агента"
   };
   return labels[activityKind(activity)] || toolId || title || "Выполняю шаг";
+}
+
+function activityToolLabel(toolId, running) {
+  var labels = {
+    "common.resources_find": ["Поиск ресурсов", "Ищу ресурсы"],
+    "common.resources_read": ["Чтение ресурса", "Читаю ресурс"],
+    "common.capabilities_search": ["Поиск инструментов и навыков", "Ищу подходящие инструменты"],
+    "common.capabilities_read": ["Изучение инструмента или навыка", "Изучаю инструмент или навык"],
+    "common.questions_ask": ["Уточнение задачи", "Готовлю уточнение"],
+    "common.task_list_set": ["Обновление шагов задачи", "Обновляю шаги задачи"],
+    "common.plan_doc_save": ["Сохранение плана", "Сохраняю план"],
+    "common.plan_doc_restore": ["Восстановление плана", "Восстанавливаю план"],
+    "common.plan_doc_delete": ["Удаление плана", "Удаляю план"],
+    "common.vba_write": ["Запись VBA-модуля", "Записываю VBA-модуль"],
+    "common.vba_patch": ["Изменение VBA-модуля", "Изменяю VBA-модуль"],
+    "common.vba_rename": ["Переименование VBA-модуля", "Переименовываю VBA-модуль"],
+    "common.vba_delete": ["Удаление VBA-модуля", "Удаляю VBA-модуль"],
+    "common.vba_restore": ["Восстановление VBA-модуля", "Восстанавливаю VBA-модуль"],
+    "common.office_run_macro": ["Выполнение макроса", "Выполняю макрос"],
+    "common.html_workspace_write_file": ["Запись файла страницы", "Записываю файл страницы"],
+    "common.html_workspace_apply_patch": ["Изменение файла страницы", "Изменяю файл страницы"],
+    "common.html_workspace_delete": ["Удаление файла или данных страницы", "Удаляю файл или данные страницы"],
+    "common.html_data_write": ["Запись данных страницы", "Записываю данные страницы"],
+    "common.html_data_bind": ["Подключение данных к странице", "Подключаю данные к странице"],
+    "common.html_data_refresh": ["Обновление данных страницы", "Обновляю данные страницы"],
+    "common.html_data_freeze": ["Сохранение снимка данных", "Сохраняю снимок данных"],
+    "excel.inspect": ["Проверка структуры книги", "Проверяю структуру книги"],
+    "excel.add_sheet": ["Создание листа", "Создаю лист"],
+    "excel.rename_sheet": ["Переименование листа", "Переименовываю лист"],
+    "excel.write_range": ["Запись диапазона", "Записываю диапазон"],
+    "excel.format_range": ["Форматирование диапазона", "Оформляю диапазон"],
+    "excel.clear_range": ["Очистка диапазона", "Очищаю диапазон"],
+    "excel.sort_range": ["Сортировка диапазона", "Сортирую диапазон"],
+    "excel.filter_range": ["Фильтрация диапазона", "Фильтрую диапазон"],
+    "excel.add_table": ["Создание таблицы", "Создаю таблицу"],
+    "excel.upsert_chart": ["Обновление диаграммы", "Обновляю диаграмму"],
+    "excel.delete_chart": ["Удаление диаграммы", "Удаляю диаграмму"],
+    "excel.create_chat_chart": ["Создание диаграммы в чате", "Создаю диаграмму в чате"],
+    "excel.find_cells": ["Поиск ячеек", "Ищу ячейки"],
+    "excel.replace_cells": ["Замена содержимого ячеек", "Заменяю содержимое ячеек"]
+  };
+  var label = labels[toolId];
+  return label ? label[running ? 1 : 0] : "";
+}
+
+function activityDisplayResult(activity) {
+  var status = activityStatus(activity);
+  if (status === "running" || status === "pending") return "";
+  var evidence = activityValue(activity, "ExecutionEvidence", "executionEvidence", null);
+  var effect = activityValue(evidence, "Effect", "effect", "");
+  var dispatch = activityValue(evidence, "Dispatch", "dispatch", "");
+  if (effect === "Unknown") return "Результат действия не подтверждён. Нужна проверка.";
+  var code = activityValue(activity, "ErrorCode", "errorCode", "");
+  if (dispatch === "NotDispatched" && code === "excel_sheet_already_exists") return "Лист уже существует. Создание не выполнено.";
+  if (effect === "VerifiedNoChange") return "Проверка подтвердила отсутствие изменений.";
+  return activityResultMessage(activity);
 }
 
 function activityCommentText(activity) {
@@ -243,7 +326,7 @@ function appendActivityErrorPanel(node, activity, context) {
     return;
   }
 
-  var result = activityResultMessage(activity);
+  var result = activityDisplayResult(activity);
   var toolId = activityToolId(activity);
   var panel = document.createElement("div");
   panel.className = "agent-error-panel";
@@ -264,9 +347,9 @@ function appendActivityErrorPanel(node, activity, context) {
     "Title: " + activityTitle(activity),
     "Tool: " + toolId,
     "Status: " + activityStatus(activity),
-    "Reason: " + result
+    "Reason: " + activityResultMessage(activity)
   ].join("\n")));
-  actions.appendChild(createAgentTextButton("Открыть журнал запуска", "secondary", function () {
+  actions.appendChild(createAgentTextButton("Причина и детали", "secondary", function () {
     if (typeof window.openRunJournal !== "function") return;
     var message = context && context.message ? context.message : null;
     window.openRunJournal({

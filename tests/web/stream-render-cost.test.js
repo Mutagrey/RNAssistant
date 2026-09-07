@@ -49,6 +49,17 @@ let fullRenders = 0;
 context.state.activeChatId = "b"; context.renderMessages = () => fullRenders++;
 context.renderStreamingMessages(); assert.equal(fullRenders, 1, "chat change uses full current projection");
 console.log("PASS stream: coalesced tail rendering retains 1000 attached history nodes, orders/replaces/removes live nodes and handles navigation");
+const disclosure = (key, open) => ({ open, getAttribute: () => key });
+function withDetails(signature, details) {
+  const item = unit("live:agent", signature);
+  item.render = () => { const node = new Node(signature); node.querySelectorAll = () => details; return node; };
+  return item;
+}
+context.reconcileMessageUnits(box, [withDetails("run-first", [disclosure("step:a", true), disclosure("activity:call-a", false)])]);
+const changedDetails = [disclosure("step:new", false), disclosure("step:a", false), disclosure("activity:call-a", true)];
+context.reconcileMessageUnits(box, [withDetails("run-updated", changedDetails)]);
+assert.deepEqual(changedDetails.map(item => item.open), [false, true, false], "open and closed disclosures survive a live update by identity, despite insertion");
+console.log("PASS stream: live update preserves explicitly opened and closed action history");
 let listener, sidebarRenders = 0;
 const timers = [];
 const bridge = vm.createContext({ console }); bridge.window = bridge;

@@ -127,7 +127,7 @@ const component = viewer.create({
   onCopy(text, metadata) { copies.push({ text, metadata }); }
 });
 assert.equal(component.element.getAttribute("data-completeness"), "preview");
-assert.match(component.element.textContent, /Ограниченный preview/);
+assert.match(component.element.textContent, /Показан фрагмент/);
 assert.match(component.element.textContent, /повтор 1\/2/);
 assert.match(component.element.textContent, /<\/script><img src=x/);
 const rootDetails = component.element.querySelector("details");
@@ -142,20 +142,20 @@ assert.match(twoItemComponent.element.textContent, /2 элемента/);
 assert.doesNotMatch(twoItemComponent.element.textContent, /2 элементов/);
 const nodeCopyButtons = component.element.querySelectorAll("button").filter(node => node.textContent === "Узел");
 const pathCopyButtons = component.element.querySelectorAll("button").filter(node => node.textContent === "Путь");
-const valueCopyButton = findByText(component.element, "button", "Текст");
+const valueCopyButton = findByText(component.element, "button", "Текст строки");
 nodeCopyButtons[1].click();
 assert.equal(copies.at(-1).text, "9007199254740993123456789");
 pathCopyButtons[1].click();
 assert.equal(copies.at(-1).text, '$["dup"]#1');
 valueCopyButton.click();
 assert.equal(copies.at(-1).text, "line\nA");
-findByText(component.element, "button", "Копировать preview").click();
+findByText(component.element, "button", "Копировать фрагмент").click();
 assert.equal(copies.at(-1).text, exact);
 assert.equal(copies.at(-1).metadata.kind, "source");
 findByText(component.element, "button", "Исходный").click();
 const rawPre = component.element.querySelector("pre");
 assert.equal(rawPre.textContent, exact);
-findByText(component.element, "button", "Форматированный").click();
+findByText(component.element, "button", "Текст").click();
 assert.match(component.element.querySelector("pre").textContent, /9007199254740993123456789/);
 console.log("PASS json viewer: safe modes, completeness and owner-controlled exact copy");
 

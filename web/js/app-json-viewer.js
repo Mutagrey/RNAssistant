@@ -396,12 +396,12 @@
     toolbar.setAttribute("aria-label", "JSON viewer");
     var modes = element("div", "rn-json-modes");
     var treeButton = button("Дерево", "rn-json-mode", function () { setMode("tree"); });
-    var prettyButton = button("Форматированный", "rn-json-mode", function () { setMode("pretty"); });
+    var prettyButton = button("Текст", "rn-json-mode", function () { setMode("pretty"); });
     var rawButton = button("Исходный", "rn-json-mode", function () { setMode("raw"); });
     modes.appendChild(treeButton); modes.appendChild(prettyButton); modes.appendChild(rawButton);
     var actions = element("div", "rn-json-actions");
     var collapseButton = button("Свернуть", "rn-json-action", collapseAll);
-    var copyButton = button(state.completeness === "full" ? "Копировать всё" : "Копировать preview", "rn-json-action", function () {
+    var copyButton = button(state.completeness === "full" ? "Копировать всё" : "Копировать фрагмент", "rn-json-action", function () {
       requestCopy(state.source, "source", null);
     });
     actions.appendChild(collapseButton); actions.appendChild(copyButton);
@@ -413,8 +413,8 @@
 
     function completenessText() {
       var labels = {
-        full: "Полный payload",
-        preview: "Ограниченный preview",
+        full: "Полные данные",
+        preview: "Показан фрагмент",
         redacted: "Данные скрыты владельцем",
         loading: "Загрузка",
         unloaded: "Не загружено",
@@ -469,7 +469,7 @@
         if (state.mode === "pretty" && state.formatted && state.formatted.ok) {
           shown = state.formatted.text;
           pre.setAttribute("data-json-view", "pretty");
-          setStatus("Форматирование сохраняет исходные scalar tokens", "ok");
+          setStatus("Форматирование без изменения значений", "ok");
         } else {
           shown = state.source.slice(0, limits.maxRawRenderChars);
           pre.setAttribute("data-json-view", "raw");
@@ -526,7 +526,7 @@
       summary.appendChild(element("span", "rn-json-punctuation rn-json-container-close", close));
       appendNodeActions(summary, node);
       details.appendChild(summary);
-      var children = element("div", "rn-json-children");
+      var children = element("div", "rn-json-children" + (level >= 3 ? " rn-json-deep" : ""));
       details.appendChild(children);
       if (count > 0) details.appendChild(renderClosingRow(close));
       var loaded = 0;
@@ -599,11 +599,14 @@
     }
 
     function appendNodeActions(row, node) {
-      var actions = element("span", "rn-json-node-actions");
+      var actions = element("details", "rn-json-node-actions");
+      var menu = element("summary", "rn-json-copy-menu", "⋯");
+      menu.setAttribute("aria-label", "Копирование значения или пути");
+      actions.appendChild(menu);
       actions.appendChild(button("Узел", "rn-json-copy", function () { requestCopy(raw(state.document, node), "node", node); }));
       actions.appendChild(button("Путь", "rn-json-copy", function () { requestCopy(node.path, "path", node); }));
       if (node.type === "string") {
-        actions.appendChild(button("Текст", "rn-json-copy", function () { requestCopy(node.value, "string-value", node); }));
+        actions.appendChild(button("Текст строки", "rn-json-copy", function () { requestCopy(node.value, "string-value", node); }));
       }
       row.appendChild(actions);
     }
@@ -642,7 +645,7 @@
       state.source = text === null || text === undefined ? "" : String(text);
       state.completeness = metadata.completeness || state.completeness || "full";
       root.setAttribute("data-completeness", state.completeness);
-      copyButton.textContent = state.completeness === "full" ? "Копировать всё" : "Копировать preview";
+      copyButton.textContent = state.completeness === "full" ? "Копировать всё" : "Копировать фрагмент";
       parseCurrent();
       render();
     }

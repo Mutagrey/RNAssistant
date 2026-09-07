@@ -164,7 +164,7 @@ namespace RNAssistant.Office
             {
                 Kind = string.IsNullOrWhiteSpace(kind) ? "tool" : kind,
                 Title = title,
-                Subtitle = command == null ? string.Empty : command.ToolId,
+                Subtitle = ActivityTarget(command),
                 Status = ToActivityStatus(result),
                 ExecutionStatus = executionStatus,
                 ErrorCode = result == null ? null : result.ErrorCode,
@@ -186,6 +186,57 @@ namespace RNAssistant.Office
             };
 
             return activity;
+        }
+
+        // Display only: accepted semantic arguments, never live discovery or authority.
+        internal static string ActivityTarget(ToolInvocation command)
+        {
+            if (command == null || command.Arguments == null) return string.Empty;
+            Func<string, string> text = key =>
+            {
+                object value;
+                return command.Arguments.TryGetValue(key, out value) && value is string
+                    ? BoundText((string)value, 240).Replace("\r", " ").Replace("\n", " ") : string.Empty;
+            };
+            if (command.ToolId == "common.resources_find")
+                return string.Join(" · ", new[] { text("query"), ResourceCaption(text("scope")) }.Where(value => !string.IsNullOrWhiteSpace(value)));
+            if (command.ToolId == "common.resources_read")
+                return string.Join(" · ", new[] { text("target"), ResourceCaption(text("representation")) }.Where(value => !string.IsNullOrWhiteSpace(value)));
+            if (command.ToolId == "common.capabilities_read") return text("id");
+            if (command.ToolId == "common.capabilities_search") return text("query");
+            var sheet = text("sheet");
+            var address = text("address");
+            if (!string.IsNullOrWhiteSpace(sheet)) return sheet + (string.IsNullOrWhiteSpace(address) ? "" : "!" + address);
+            foreach (var key in new[] { "target", "moduleName", "path", "title", "name", "query" })
+            {
+                var value = text(key);
+                if (!string.IsNullOrWhiteSpace(value)) return value;
+            }
+            return string.Empty;
+        }
+
+        private static string ResourceCaption(string value)
+        {
+            switch (value)
+            {
+                case "all": return "Все ресурсы";
+                case "conversation": return "Чат";
+                case "document": return "Документ";
+                case "selection": return "Выделение";
+                case "html": return "Страница";
+                case "vba": return "VBA";
+                case "backups": return "Резервные копии";
+                case "catalogs": return "Каталоги";
+                case "metadata": return "Сведения";
+                case "text": return "Текст";
+                case "structure": return "Структура";
+                case "source": return "Исходный код";
+                case "media": return "Медиа";
+                case "formulas": return "Формулы";
+                case "table": return "Таблица";
+                case "records": return "Записи";
+                default: return value;
+            }
         }
 
         private static string BoundActivityData(ToolRunResult result, string dataJson)

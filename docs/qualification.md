@@ -355,6 +355,23 @@ UI не предлагает автоматический retry после `unkn
 «похоже, работает» в pass и не скрывает прежний failure после успешного повторного
 run. Новый attempt связан с предыдущим, но сохраняет собственный outcome.
 
+Implemented host-neutral chat/journal presentation (2026-09-07): the existing
+`TrajectoryViewRow`/bridge DTO exposes bounded `Summary`, `Target`, `ErrorCode`
+and typed `ExecutionEvidence` from the same source events. The run journal shows
+cause cards above chronological rows, grouped by exact run + call/attempt. Unknown
+effect evidence takes priority even when a correlated row says cancelled. Ordinary
+cancelled/rejected attempts have a separate filter and remain in chronology;
+missing evidence remains explicit. These are derived display fields, not a new
+store or a claim that previous failures have been resolved.
+
+Expanding a row first reveals explanation/navigation. A second technical section
+mounts exact JSON on demand; model request/response bodies require an explicit
+load action. Collapse/unmount cancels pending payload loads and suppresses late
+renders. JSON defaults to wrapped formatted text, bounds deep-tree indentation
+and puts node copy actions behind a compact menu. The UI-event journal and raw
+events remain named technical views; this slice does not implement the remaining
+full Issue Center catalog/build/qualification aggregation described above.
+
 Обязательные UI gates: empty/loading/stale/error states, фильтры по host/tool/status,
 поиск по exact id, keyboard/focus/DPI, reload/live append, bounded large histories и
 одинаковая causal навигация из Chat, Library, Diagnostics и Qualification Center.

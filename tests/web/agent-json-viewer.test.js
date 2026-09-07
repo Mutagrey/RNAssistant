@@ -72,6 +72,8 @@ function settle() { return new Promise(resolve => setImmediate(resolve)); }
   assert.equal(host.childNodes.length, 0, "collapsed details do not create viewer DOM");
   details.open = true; details.dispatch("toggle");
   assert.ok(host.firstElementChild.classList.contains("rn-json-viewer"));
+  assert.match(host.textContent, /"dup"/);
+  button(host, "Дерево").click();
   assert.match(host.textContent, /повтор 1\/2/);
   assert.match(host.textContent, /9007199254740993123456789/);
   assert.match(host.textContent, /<\/script><img onerror=1>/);
@@ -83,6 +85,7 @@ function settle() { return new Promise(resolve => setImmediate(resolve)); }
   details.open = false; details.dispatch("toggle");
   assert.equal(host.childNodes.length, 0, "collapse destroys mounted tree");
   details.open = true; details.dispatch("toggle");
+  button(host, "Дерево").click();
   assert.match(host.textContent, /повтор 2\/2/);
   console.log("PASS agent JSON viewer: collapsed activity data releases and remounts lazy DOM");
 

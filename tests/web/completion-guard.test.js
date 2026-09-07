@@ -78,30 +78,34 @@ function assertVisibleEvidence(node, health) {
 }
 
 const tests = [
-  ["failed calls override completed lifecycle", () => {
+  ["failed attempts remain visible without replacing completed lifecycle", () => {
     const node = renderFinal(view("errors", { verified: 1, failed: 1 }));
     const note = assertVisibleEvidence(node, "errors");
-    assert.equal(note.attributes.role, "alert");
-    assert.match(note.textContent, /ошибки вызовов — 1/);
-    assert.match(walk(node).find(item => item.className === "agent-run-history-title").textContent, /содержит ошибки/);
+    assert.equal(note.attributes.role, "status");
+    assert.match(note.textContent, /Неудачных попыток в ходе работы: 1/);
+    assert.match(node.className, /status-completed/);
+    assert.doesNotMatch(note.textContent, /устранен|устранён|применены/);
   }],
   ["historical unverified write is explained once without duplicate unknown count", () => {
     const node = renderFinal(view("unknown", { unverified: 1, failed: 1, unknown: 1 }));
     const text = assertVisibleEvidence(node, "unknown").textContent;
-    assert.match(text, /исторические изменения без read-back/);
-    assert.match(text, /исторические без read-back — 1/);
-    assert.match(text, /прочие неизвестные эффекты — 0/);
-    assert.match(walk(node).find(item => item.className === "agent-run-history-title").textContent, /не определён/);
+    assert.match(text, /неподтверждённым результатом: 1/);
+    assert.match(text, /перед повторной записью/);
+    assert.equal(assertVisibleEvidence(node, "unknown").attributes.role, "alert");
+
   }],
   ["no write is an ordinary response", () => {
     const node = renderFinal(view("clean", { reads: 1 }));
-    assert.match(assertVisibleEvidence(node, "clean").textContent, /Подтверждённых изменений нет/);
-    assert.equal(walk(node).find(item => item.className === "agent-run-history-title").textContent, "Ответ получен");
+    assert.equal(walk(node).some(item => item.attributes["data-runtime-health"]), false);
+    assert.equal(walk(node).find(item => item.className === "agent-final-step").textContent, "Все изменения применены.");
   }],
   ["verified and no-change writes remain distinct", () => {
-    const note = assertVisibleEvidence(renderFinal(view("clean", { verified: 1, noChange: 2 })), "clean");
-    assert.equal(note.attributes.role, "status");
-    assert.match(note.textContent, /изменения — 1, без изменения — 2/);
+    const source = view("clean", { verified: 1, noChange: 2 });
+    const normalized = context.RNAssistantRunViewState.normalize(source);
+    assert.equal(normalized.verifiedWrites, 1);
+    assert.equal(normalized.noChangeWrites, 2);
+    assert.equal(walk(renderFinal(source)).some(item => item.attributes["data-runtime-health"]), false);
+
   }],
   ["legacy flat or malformed projection is never promoted", () => {
     assert.equal(context.RNAssistantRunViewState.fromMessage({ ExecutionSummary: { ExecutionHealth: "clean", WriteOk: 9 } }), null);
@@ -115,7 +119,7 @@ const tests = [
     const runViewState = context.agentRunViewState(items, null);
     const stats = context.agentRunStats(items, false, runViewState);
     assert.equal(stats.lifecycleStatus, "cancelled");
-    assert.equal(stats.status, "unknown");
+    assert.equal(stats.status, "cancelled");
     assertVisibleEvidence(context.renderAgentRunArticle({ items }), "unknown");
   }],
   ["camelCase bridge shape projects the same state", () => {
@@ -126,7 +130,7 @@ const tests = [
     assert.equal(normalized.successfulReads, 2);
     const stats = context.agentRunStats([], true, normalized);
     assert.equal(stats.lifecycleStatus, "completed");
-    assert.equal(stats.status, "failed");
+    assert.equal(stats.status, "completed");
   }],
   ["recovery without typed state cannot inherit earlier clean state", () => {
     const items = [
@@ -136,6 +140,53 @@ const tests = [
     assert.equal(context.agentRunViewState(items, null), null);
   }]
 ];
+
+tests.push(["adjacent runs and confirmation segments retain their own results", () => {
+  const tool = run => ({ Role: "assistant", RunId: run, Activity: { Kind: "tool", Status: "completed", ToolCallId: run + "-call" } });
+  context.state.messages = [tool("a"), tool("b"), { Role: "assistant", RunId: "b", Content: "B final" }];
+  const first = context.collectAgentRun(0);
+  assert.equal(first.items.length, 1);
+  assert.equal(first.finalMessage, null);
+  assert.equal(first.nextIndex, 1);
+  assert.equal(context.collectAgentRun(1).finalMessage.message.Content, "B final");
+  assert.equal(context.agentRunStats([{ activity: { Status: "completed" } }], true, null).status, "completed");
+}]);
+tests.push(["waiting and running are not replaced by previous failed attempts", () => {
+  const rv = context.RNAssistantRunViewState;
+  assert.equal(rv.displayStatus(rv.normalize(view("errors", { lifecycle: "running", failed: 1 }))), "running");
+  const pending = { PendingId: "p", ToolCallId: "c", ToolName: "excel.write_range" };
+  assert.equal(rv.displayStatus(rv.normalize(view("errors", { lifecycle: "awaiting_confirmation", failed: 1, pending }))), "waiting");
+}]);
+vm.runInContext(fs.readFileSync(path.join(__dirname, "../../web/js/app-agent-activity.js"), "utf8"), context);
+tests.push(["semantic target is visible and unknown effect takes precedence over conflict wording", () => {
+  const activity = { Kind: "tool", ToolId: "common.resources_read", Title: "Resource read", ProgressTitle: "Working", Subtitle: "Продажи!A1:D120", Status: "running" };
+  const row = context.renderActivityRow(activity, true, false, null);
+  assert.match(row.textContent, /Читаю ресурс/);
+  assert.match(row.textContent, /Продажи!A1:D120/);
+  const conflict = { Status: "failed", ErrorCode: "excel_sheet_already_exists", ResultMessage: "raw", ExecutionEvidence: { Dispatch: "NotDispatched", Effect: "None" } };
+  assert.equal(context.activityDisplayResult(conflict), "Лист уже существует. Создание не выполнено.");
+  conflict.ExecutionEvidence = { Dispatch: "MayHaveDispatched", Effect: "Unknown" };
+  assert.match(context.activityDisplayResult(conflict), /не подтверждён/);
+}]);
+
+tests.push(["live step uses one status disclosure and shows its count only after completion", () => {
+  const step = { id: "s", items: [
+    { activity: { Kind: "tool", ToolId: "common.resources_find", Status: "completed", ToolCallId: "one" } },
+    { activity: { Kind: "tool", ToolId: "common.resources_read", Subtitle: "Продажи", Status: "running", ToolCallId: "two" } }
+  ] };
+  const live = new Element("div");
+  context.appendCollapsedAgentStep(live, step, true, false);
+  assert.equal(live.childNodes.length, 1, "the current status itself owns the disclosure");
+  const details = live.childNodes[0], summary = details.childNodes[0];
+  assert.match(details.className, /agent-live-action status-running/);
+  assert.match(summary.textContent, /Читаю ресурсПродажи/);
+  assert.doesNotMatch(summary.textContent, /Действия/);
+  assert.equal(walk(summary).some(node => /agent-activity-mark/.test(node.className)), false);
+  assert.equal(walk(details.childNodes[1]).filter(node => /agent-activity kind-tool/.test(node.className)).length, 2, "expansion retains all tool actions");
+  const done = new Element("div");
+  context.appendCollapsedAgentStep(done, step, false, true);
+  assert.equal(done.childNodes[0].childNodes[0].textContent, "Действия · 2");
+}]);
 
 for (const [name, test] of tests) {
   test();

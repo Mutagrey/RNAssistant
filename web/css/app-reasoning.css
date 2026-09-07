@@ -6,12 +6,19 @@
 }
 
 .reasoning-block summary {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
   padding: 7px 10px;
   color: var(--muted);
   cursor: pointer;
   font-size: 12px;
+  line-height: 1.5;
+  list-style: none;
   user-select: none;
 }
+
+.reasoning-block summary::-webkit-details-marker { display: none; }
 
 .reasoning-block pre {
   max-height: 320px;

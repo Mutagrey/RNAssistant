@@ -148,8 +148,6 @@
 
   function displayStatus(viewState, liveStatus) {
     if (!viewState) return liveStatus || "unknown";
-    if (viewState.executionHealth === "unknown") return "unknown";
-    if (viewState.executionHealth === "errors") return "failed";
     if (viewState.lifecycle === "awaiting_confirmation" || viewState.lifecycle === "awaiting_user") return "waiting";
     return viewState.lifecycle;
   }

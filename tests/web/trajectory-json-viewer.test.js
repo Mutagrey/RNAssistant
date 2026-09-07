@@ -147,7 +147,7 @@ function button(root, text) { return root.querySelectorAll("button").find(node =
   assert.match(dataHost.textContent, /9007199254740993123456789/);
   assert.match(dataHost.textContent, /<\/script><img onerror=1>/);
   assert.equal(get("trajectoryEvidenceDetails").classList.contains("hidden"), false);
-  button(get("trajectoryEvidenceData"), "Форматированный").click();
+  button(get("trajectoryEvidenceData"), "Текст").click();
   assert.match(get("trajectoryEvidenceData").textContent, /evt-31/);
   assert.match(get("trajectoryEvidenceData").textContent, /blob-1/);
   button(dataHost, "Копировать всё").click();
@@ -161,7 +161,7 @@ function button(root, text) { return root.querySelectorAll("button").find(node =
   const payloadHost = get("trajectoryEventPayload");
   assert.ok(payloadHost.firstElementChild.classList.contains("rn-json-viewer"));
   assert.equal(payloadHost.firstElementChild.getAttribute("data-completeness"), "preview");
-  assert.match(payloadHost.textContent, /ограниченный preview/i);
+  assert.match(payloadHost.textContent, /показан фрагмент/i);
   assert.match(payloadHost.textContent, /<div>unfinished/);
   console.log("PASS trajectory JSON viewer: truncated CAS JSON remains an explicit raw preview");
 
@@ -206,10 +206,14 @@ function button(root, text) { return root.querySelectorAll("button").find(node =
   assert.equal(lastQuery.runId, "run-1");
   assert.equal(panel.classList.contains("is-run-journal"), true);
   assert.equal(get("trajectoryEvents").querySelectorAll(".rn-run-journal-row").length, 3);
-  button(get("trajectoryEvents"), "Проблемы 2").click();
-  assert.equal(get("trajectoryEvents").querySelectorAll(".rn-run-journal-row").length, 2);
+  button(get("trajectoryEvents"), "Проблемы 1").click();
+  assert.equal(get("trajectoryEvents").querySelectorAll(".rn-run-journal-row").length, 1);
+  button(get("trajectoryEvents"), "Попытки и отмены 1").click();
   const rejected = get("trajectoryEvents").querySelectorAll(".rn-run-journal-row")[0];
   rejected.open = true; rejected.dispatch("toggle");
+  assert.doesNotMatch(rejected.textContent, /duplicate id/);
+  const technical = rejected.querySelector(".rn-run-journal-technical");
+  technical.open = true; technical.dispatch("toggle");
   assert.match(rejected.textContent, /duplicate id/);
   assert.match(rejected.textContent, /<\/script><img onerror=1>/);
   console.log("PASS run journal integration: latest persisted run opens bounded causal rows with lazy exact JSON");

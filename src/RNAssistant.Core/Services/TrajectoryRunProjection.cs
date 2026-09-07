@@ -78,6 +78,8 @@ namespace RNAssistant.Core.Services
                 View = TrajectoryViews.RunCausal,
                 Kind = stage,
                 Title = EventTitle(stage),
+                Summary = DisplayText(Text(Property(data, "Error")) ?? Text(Property(data, "Message")), 2000),
+                ErrorCode = DisplayText(Text(Property(data, "Code")) ?? Text(Property(data, "ErrorCode")), 240),
                 Status = status,
                 CreatedUtc = item.CreatedUtc,
                 FirstSequence = item.Sequence,
@@ -227,6 +229,10 @@ namespace RNAssistant.Core.Services
                 View = TrajectoryViews.RunCausal,
                 Kind = operationType,
                 Title = OperationTitle(operationType, toolId, artifactId),
+                Summary = DisplayText(Text(Property(activity, "ResultMessage")) ?? Text(Property(data["toolResult"], "message")), 2000),
+                Target = DisplayText(Text(Property(activity, "Subtitle")), 480),
+                ErrorCode = DisplayText(Text(Property(activity, "ErrorCode")), 240),
+                ExecutionEvidence = ReadDisplayEvidence(Property(activity, "ExecutionEvidence")),
                 Status = status,
                 CreatedUtc = item.CreatedUtc,
                 FirstSequence = item.Sequence,
@@ -247,6 +253,18 @@ namespace RNAssistant.Core.Services
             };
             ApplySource(row, new[] { item });
             return row;
+        }
+
+        private static string DisplayText(string text, int limit)
+        {
+            return text == null || text.Length <= limit ? text : text.Substring(0, limit) + "…";
+        }
+
+        private static RNAssistant.Core.Tools.ToolExecutionEvidence ReadDisplayEvidence(JToken token)
+        {
+            if (token == null || token.Type == JTokenType.Null) return null;
+            try { return token.ToObject<RNAssistant.Core.Tools.ToolExecutionEvidence>(); }
+            catch (JsonException) { return null; } // Missing display evidence never certifies an effect.
         }
 
         private static void AddMissingEvidence(

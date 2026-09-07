@@ -67,16 +67,6 @@
   content: "· ";
 }
 
-.context-compaction-caret {
-  font-size: 15px;
-  line-height: 1;
-  transition: transform 0.12s ease;
-}
-
-.context-compaction-divider[open] .context-compaction-caret {
-  transform: rotate(90deg);
-}
-
 .context-compaction-body {
   max-width: min(780px, calc(100% - 42px));
   margin: 7px auto 4px;
@@ -127,19 +117,19 @@
 
 .agent-model-step {
   display: grid;
-  gap: 4px;
+  gap: 10px;
   min-width: 0;
 }
 
 .agent-model-step + .agent-model-step,
 .agent-final-step {
-  margin-top: 18px;
+  margin-top: 22px;
 }
 
 .agent-step-message {
-  color: #344054;
-  font-size: 13px;
-  line-height: 1.55;
+  color: var(--text);
+  font-size: 1rem;
+  line-height: 1.65;
   overflow-wrap: anywhere;
 }
 
@@ -158,7 +148,7 @@
 .agent-run-transcript,
 .agent-run-process {
   display: grid;
-  gap: 5px;
+  gap: 10px;
   min-width: 0;
 }
 
@@ -196,7 +186,7 @@
 
 .agent-transcript-entry {
   display: grid;
-  gap: 2px;
+  gap: 6px;
   min-width: 0;
 }
 
@@ -208,7 +198,7 @@
 }
 
 .agent-step-actions {
-  max-width: 94%;
+  max-width: 100%;
 }
 
 .agent-run-overview {
@@ -238,15 +228,15 @@
 
 .agent-run-history-summary {
   display: inline-flex;
-  gap: 3px;
+  gap: 8px;
   align-items: center;
-  width: fit-content;
   max-width: 100%;
-  min-height: 25px;
-  padding: 1px 0;
+  min-height: 32px;
+  padding: 4px 0;
   cursor: pointer;
-  color: #667085;
-  font-size: 12px;
+  color: var(--muted);
+  font-size: .9286rem;
+  line-height: 1.5;
 }
 
 .agent-run-history-summary:hover {
@@ -265,6 +255,8 @@
   background: transparent;
   color: #98a2b3;
   text-align: left;
+  font-size: .8571rem;
+  line-height: 1.5;
 }
 
 .agent-run-outcome.status-cancelled {
@@ -287,7 +279,7 @@
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  font-size: 10.5px;
+  font-size: inherit;
   font-weight: 400;
 }
 
@@ -297,30 +289,12 @@
   line-height: 1;
 }
 
-.agent-run-outcome-caret {
-  display: grid;
-  width: 12px;
-  height: 16px;
-  place-items: center;
-  color: #98a2b3;
-  font-size: 0;
-}
-
 .agent-run-history-state {
   width: 10px;
   color: #98a2b3;
   font-size: 11px;
   font-weight: 700;
   text-align: center;
-}
-
-.agent-run-history-state.status-running {
-  width: 5px;
-  height: 5px;
-  margin: 0 1px;
-  border-radius: 50%;
-  background: #2563eb;
-  animation: agent-activity-pulse 1.35s ease-in-out infinite;
 }
 
 .agent-run-history-state.status-waiting {
@@ -343,34 +317,30 @@
   font-weight: var(--label-font-weight);
 }
 
-.agent-step-actions.status-running .agent-run-history-title {
-  background: linear-gradient(90deg, #98a2b3 4%, #475467 36%, #c7cdd6 50%, #475467 64%, #98a2b3 96%);
-  background-size: 260% 100%;
-  -webkit-background-clip: text;
-  background-clip: text;
-  color: transparent;
-  animation: agent-text-shimmer 1.7s linear infinite;
-}
-
 .agent-run-history-caret {
   flex: 0 0 auto;
 }
 
 .agent-run-outcome-caret,
 .agent-run-history-caret,
-.agent-activity-caret {
+.agent-activity-caret,
+.context-compaction-caret,
+.reasoning-caret {
   display: grid;
-  width: 12px;
-  height: 16px;
   place-items: center;
-  color: #98a2b3;
-  font-size: 0;
-  line-height: 1;
+  width: 10px;
+  height: 1.5em;
+  flex: 0 0 auto;
+  font-size: inherit;
+  line-height: 1.5;
 }
 
 .agent-run-outcome-caret::before,
 .agent-run-history-caret::before,
-.agent-activity-caret::before {
+.agent-activity-caret::before,
+.context-compaction-caret::before,
+.reasoning-caret::before {
+  display: block;
   width: 5px;
   height: 5px;
   border-right: 1.5px solid currentColor;
@@ -381,14 +351,16 @@
 }
 
 .agent-run-history[open] > summary .agent-run-history-caret::before,
-.agent-activity-toggle[open] > summary .agent-activity-caret::before {
+.agent-activity-toggle[open] > summary .agent-activity-caret::before,
+.context-compaction-divider[open] .context-compaction-caret::before,
+.reasoning-block[open] > summary .reasoning-caret::before {
   transform: rotate(45deg);
 }
 
 .agent-run-history-content {
-  margin: 3px 0 4px;
-  padding: 2px 0 2px 10px;
-  border-left: 1px solid #eaecf0;
+  margin: 8px 0 4px;
+  padding: 4px 0 4px 14px;
+  border-left: 1px solid var(--line);
 }
 
 .agent-activity {
@@ -403,12 +375,12 @@
 .agent-activity-row {
   display: grid;
   grid-template-columns: 18px minmax(0, 1fr);
-  gap: 6px;
-  align-items: center;
+  gap: 10px;
+  align-items: start;
   min-width: 0;
-  min-height: 25px;
-  padding: 1px 0;
-  color: #667085;
+  min-height: 32px;
+  padding: 5px 0;
+  color: var(--muted);
 }
 
 .agent-activity-toggle > .agent-activity-row {
@@ -424,8 +396,9 @@
   display: grid;
   width: 16px;
   height: 16px;
+  margin-top: 2px;
   place-items: center;
-  color: #98a2b3;
+  color: var(--muted);
 }
 
 .agent-activity-mark svg {
@@ -438,50 +411,33 @@
   stroke-width: 1.75;
 }
 
-.agent-activity.status-running .agent-activity-mark::after,
-.agent-activity.status-waiting .agent-activity-mark::after {
-  position: absolute;
-  right: -2px;
-  bottom: -2px;
-  width: 5px;
-  height: 5px;
-  border: 1.5px solid var(--bg);
-  border-radius: 50%;
-  background: #2563eb;
-  content: "";
-}
-
-.agent-activity.status-running .agent-activity-mark::after {
-  animation: agent-activity-pulse 1.35s ease-in-out infinite;
-}
-
-.agent-activity.status-waiting .agent-activity-mark::after {
-  background: #d97706;
-}
-
 .agent-activity-copy {
-  display: inline-flex;
-  gap: 3px;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  row-gap: 3px;
   align-items: baseline;
-  width: fit-content;
+  min-width: 0;
+}
+
+.agent-activity-heading {
+  display: flex;
+  justify-self: start;
+  align-items: flex-start;
+  gap: 8px;
+  min-width: 0;
   max-width: 100%;
-  min-width: 0;
+  font-size: .9286rem;
+  line-height: 1.5;
 }
 
 .agent-activity-name {
+  min-width: 0;
   flex: 0 1 auto;
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-
-.agent-activity-name {
-  color: #667085;
-  font-size: 12px;
+  color: var(--text);
+  font-size: .9286rem;
   font-weight: var(--label-font-weight);
-  line-height: 1.4;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  line-height: 1.5;
+  overflow-wrap: anywhere;
 }
 
 .agent-activity.status-running .agent-activity-name,
@@ -491,69 +447,37 @@
 }
 
 .agent-activity-state {
-  flex: 0 0 auto;
-  width: 10px;
-  color: #98a2b3;
-  font-size: 11px;
-  font-weight: 700;
-  line-height: 1;
-  text-align: center;
+  grid-column: 1 / -1;
+  color: var(--muted);
+  font-size: .8571rem;
+  line-height: 1.5;
 }
 
 .agent-activity-state.status-failed,
 .agent-activity-state.status-completed_with_errors {
-  color: #d92d20;
+  color: var(--muted);
 }
 
 .agent-activity-caret {
   flex: 0 0 auto;
 }
 
-.agent-activity.status-running.current .agent-activity-name,
-.agent-activity.kind-notice.status-running.current .agent-activity-name,
-.agent-activity.kind-reasoning.status-running.current .agent-activity-name {
-  background: linear-gradient(90deg, #98a2b3 4%, #475467 36%, #c7cdd6 50%, #475467 64%, #98a2b3 96%);
-  background-size: 260% 100%;
-  -webkit-background-clip: text;
-  background-clip: text;
-  color: transparent;
-  animation: agent-text-shimmer 1.7s linear infinite;
-}
-
-.agent-activity.kind-notice.status-running.current .agent-activity-row,
-.agent-activity.kind-reasoning.status-running.current .agent-activity-row {
-  display: block;
-  min-height: 24px;
-  padding: 2px 0;
-}
-
-.agent-activity.kind-notice.status-running.current .agent-activity-copy,
-.agent-activity.kind-reasoning.status-running.current .agent-activity-copy {
-  display: block;
-}
-
-.agent-activity.kind-notice.status-running.current .agent-activity-mark,
-.agent-activity.kind-notice.status-running.current .agent-activity-caret,
-.agent-activity.kind-reasoning.status-running.current .agent-activity-mark,
-.agent-activity.kind-reasoning.status-running.current .agent-activity-caret {
-  display: none;
-}
-
 .agent-activity-detail-body {
   display: grid;
-  gap: 5px;
-  margin: 3px 0 6px;
-  padding: 10px 11px;
-  border: 0;
-  border-radius: 10px;
-  background: #f3f4f6;
-  color: #475467;
+  gap: 12px;
+  margin: 8px 0 8px 28px;
+  padding: 12px 14px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--secondary-bg);
+  color: var(--text);
 }
 
 .agent-activity-result {
-  color: #475467;
-  font-size: 11px;
-  line-height: 1.45;
+  color: var(--text);
+  font-size: .9286rem;
+  line-height: 1.55;
+  overflow-wrap: anywhere;
 }
 
 .agent-activity-tool-id {
@@ -589,9 +513,10 @@
 }
 
 .agent-error-reason {
-  font-size: 11.5px;
+  font-size: .9286rem;
   font-weight: 400;
-  line-height: 1.4;
+  line-height: 1.55;
+  overflow-wrap: anywhere;
 }
 
 .agent-error-meta {
@@ -945,10 +870,7 @@
   to { background-position: -130% 0; }
 }
 
-@keyframes agent-activity-pulse {
-  0%, 100% { opacity: .35; transform: scale(.82); }
-  50% { opacity: 1; transform: scale(1); }
-}
+
 
 @media (max-width: 560px) {
   .agent-run-history-content {
@@ -965,16 +887,50 @@
   }
 }
 
+/* Only the visible current action owns motion, independent of disclosure state. */
+.agent-live-action { min-width: 0; }
+.agent-activity-row.is-status-label { grid-template-columns: minmax(0, 1fr); }
+.agent-activity-target,
+.agent-activity-caption {
+  grid-column: 1 / -1;
+  color: var(--muted);
+  font-size: .8571rem;
+  line-height: 1.5;
+  overflow-wrap: anywhere;
+}
+.agent-activity-target { color: var(--text); }
+.agent-live-action.status-running > summary .agent-activity-name {
+  background: linear-gradient(105deg, var(--muted) 30%, var(--text) 47%, var(--muted) 64%);
+  background-size: 250% 100%;
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+  animation: agent-text-shimmer 2.3s linear infinite;
+}
+.agent-details-link {
+  display: block;
+  margin-top: 6px;
+  padding: 3px 0;
+  border: 0;
+  background: transparent;
+  color: var(--accent-strong);
+  font-size: .8571rem;
+}
+.agent-details-link:hover { background: transparent; text-decoration: underline; }
 @media (prefers-reduced-motion: reduce) {
-  .agent-activity.status-running.current .agent-activity-name,
-  .agent-step-actions.status-running .agent-run-history-title,
-  .agent-run-history-state.status-running {
-    animation: none;
+  .agent-live-action .agent-activity-name {
+    animation: none !important;
+    -webkit-text-fill-color: currentColor !important;
+    background: none !important;
   }
-
-  .agent-activity.status-running .agent-activity-mark::after {
-    animation: none;
-  }
+}
+@media (max-width: 420px) {
+  .agent-activity-detail-body { margin-left: 0; padding: 10px; }
+}
+@media (pointer: coarse) {
+  .agent-run-history-summary,
+  .agent-activity-row,
+  .agent-action-button { min-height: 44px; }
 }
 
 .chat-run-spinner {

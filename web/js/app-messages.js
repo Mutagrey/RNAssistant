@@ -329,7 +329,6 @@ function renderCompactionArticle(message, activity) {
   var caret = document.createElement("span");
   caret.className = "context-compaction-caret";
   caret.setAttribute("aria-hidden", "true");
-  caret.textContent = "›";
   label.appendChild(icon);
   label.appendChild(title);
   label.appendChild(subtitle);
@@ -431,16 +430,6 @@ function renderLiveStreamMessage() {
   var body = document.createElement("div");
   body.className = "markdown";
   body.innerHTML = markdown(state.liveStreamContent);
-  var cursor = document.createElement("span");
-  cursor.className = "streaming-cursor";
-  cursor.setAttribute("aria-hidden", "true");
-  cursor.style.setProperty("--streaming-dot-phase", -(Date.now() % 1200) + "ms");
-  for (var dotIndex = 0; dotIndex < 3; dotIndex += 1) {
-    var dot = document.createElement("span");
-    dot.className = "streaming-cursor-dot";
-    cursor.appendChild(dot);
-  }
-  body.appendChild(cursor);
   live.appendChild(body);
   enhanceMarkdown(body, { enableJsonViewer: true, sourceText: state.liveStreamContent, streaming: true });
   return live;
@@ -545,6 +534,24 @@ function buildLiveMessageUnits() {
   return units;
 }
 
+function messageDisclosureSnapshot(node) {
+  var result = Object.create(null);
+  if (!node || !node.querySelectorAll) return result;
+  Array.prototype.forEach.call(node.querySelectorAll("details"), function (details, index) {
+    var key = details.getAttribute("data-disclosure-key") || details.className + ":" + index;
+    result[key] = details.open;
+  });
+  return result;
+}
+
+function restoreMessageDisclosures(node, snapshot) {
+  if (!node || !node.querySelectorAll) return;
+  Array.prototype.forEach.call(node.querySelectorAll("details"), function (details, index) {
+    var key = details.getAttribute("data-disclosure-key") || details.className + ":" + index;
+    if (Object.prototype.hasOwnProperty.call(snapshot, key)) details.open = snapshot[key];
+  });
+}
+
 function reconcileMessageUnits(box, units, liveOnly) {
   var nextCache = {};
   if (liveOnly) Object.keys(renderedMessageUnits).forEach(function (key) {
@@ -554,10 +561,12 @@ function reconcileMessageUnits(box, units, liveOnly) {
     var cached = renderedMessageUnits[unit.key];
     var node = cached && cached.signature === unit.signature ? cached.node : null;
     if (!node) {
+      var disclosures = messageDisclosureSnapshot(cached && cached.node);
       if (cached && cached.node && typeof clearMarkdownEnhancements === "function") {
         clearMarkdownEnhancements(cached.node);
       }
       node = unit.render();
+      restoreMessageDisclosures(node, disclosures);
     }
     nextCache[unit.key] = { signature: unit.signature, node: node };
   });

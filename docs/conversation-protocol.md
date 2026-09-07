@@ -593,6 +593,27 @@ JSON fields are ignored and grant no authority; a run without current
 narrative or retained `ResponseStatus`. Unknown/errors retain an independent
 warning, and a clean no-write answer does not certify applied changes.
 
+Chat presentation keeps lifecycle separate from execution health. Earlier failed
+calls remain in history and a neutral failure-count note; they do not turn a
+running, waiting or completed header into a failed run. Unknown possible effects
+retain a visible verification warning outside collapsed history. A pre-dispatch
+`excel_sheet_already_exists` is displayed as a quiet conflict, never as proof that
+the sheet satisfies the request or that a later call resolved the conflict.
+
+Activities show localized action labels, accepted semantic target/representation
+and a bounded result caption. `AgentTranscript` derives target captions from
+accepted scalar arguments without resource lookup or new authority. Exact tool
+ids and arguments remain in expandable details. Consecutive transcript groups
+require the same runtime `RunId`; confirmation segments keep their own grouping
+while their typed state retains the logical turn's counts. While a step is active,
+its latest status is the disclosure header and owns the
+text shimmer; no icon or separate action-count row accompanies that header. Opening
+it shows the step's tool actions. Once the step completes, the header becomes
+`Действия · N`. Changed live units retain explicit disclosure state by identity.
+Arrows follow their label and align with
+its first line. Reduced-motion disables shimmer; plain streaming text has no
+separate three-dot cursor.
+
 If an application/controller exception escapes after the kernel has created current
 run evidence, both new-run and confirmation paths interrupt that exact `KernelState`
 to `failed` or `cancelled` before persisting the diagnostic projection and rethrowing.

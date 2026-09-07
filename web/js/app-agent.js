@@ -125,7 +125,7 @@ async function deleteAgentRun(items, finalMessage) {
   if (finalMessage) {
     targets.push(finalMessage);
   }
-  if (!targets.length || !window.confirm("Delete this agent run?")) {
+  if (!targets.length || !window.confirm("Удалить сообщения этого запуска?")) {
     return;
   }
 
@@ -235,78 +235,55 @@ function appendAgentStepMessage(parent, text) {
 
 function appendCollapsedAgentStep(parent, step, isCurrent, finished) {
   var timeline = step.items || [];
-  var stats = agentRunStats(timeline, !!finished, finished ? "completed" : "");
+  var stats = agentRunStats(timeline, !!finished, null);
   var ambient = isCurrent && step.ambient ? step.ambient.activity : null;
   var active = ambient || (isCurrent && stats.current && isActiveTimelineStatus(activityStatus(stats.current))
-    ? stats.current
-    : null);
-  var effectiveStatus = active ? activityStatus(active) : stats.status;
-  var lastAction = null;
-  for (var actionIndex = timeline.length - 1; actionIndex >= 0; actionIndex -= 1) {
-    var actionKind = activityKind(timeline[actionIndex].activity);
-    if (actionKind === "tool" || actionKind === "control" || actionKind === "diagnostic") {
-      lastAction = timeline[actionIndex].activity;
-      break;
+    ? stats.current : null);
+  if (timeline.length || active) {
+    var details = document.createElement("details");
+    details.className = "agent-run-history agent-step-actions" +
+      (active ? " agent-live-action status-" + activityStatus(active) : "");
+    details.setAttribute("data-disclosure-key", "step:" + step.id);
+    var summary;
+    if (active) {
+      summary = renderActivityRow(active, true, true, { hideIcon: true });
+    } else {
+      summary = document.createElement("summary");
+      summary.className = "agent-run-history-summary";
+      var title = document.createElement("span");
+      title.className = "agent-run-history-title";
+      title.textContent = "Действия · " + agentToolCallCount(timeline);
+      summary.appendChild(title);
+      var caret = document.createElement("span");
+      caret.className = "agent-run-history-caret";
+      caret.setAttribute("aria-hidden", "true");
+      summary.appendChild(caret);
     }
+    details.appendChild(summary);
+    var content = document.createElement("div");
+    content.className = "agent-run-history-content";
+    var actions = timeline.filter(function (item) { return activityKind(item.activity) !== "notice"; });
+    if (actions.length) content.appendChild(buildAgentRunTranscript(actions, actions, stats));
+    else {
+      var empty = document.createElement("div");
+      empty.className = "agent-run-empty";
+      empty.textContent = "Действия пока не начались.";
+      content.appendChild(empty);
+    }
+    details.appendChild(content);
+    parent.appendChild(details);
   }
-  var transcript = buildAgentRunTranscript(step.items, timeline, stats);
-  var details = document.createElement("details");
-  details.className = "agent-run-history agent-step-actions status-" + effectiveStatus;
-
-  var summary = document.createElement("summary");
-  summary.className = "agent-run-history-summary";
-  var title = document.createElement("span");
-  title.className = "agent-run-history-title";
-  title.textContent = active
-    ? activityPrimaryText(active)
-    : (lastAction ? activityPrimaryText(lastAction) : (step.message || "Выполняю…"));
-  summary.appendChild(title);
-  appendAgentRunSummaryState(summary, effectiveStatus);
-  var caret = document.createElement("span");
-  caret.className = "agent-run-history-caret";
-  caret.setAttribute("aria-hidden", "true");
-  caret.textContent = "›";
-  summary.appendChild(caret);
-  details.appendChild(summary);
-
-  var content = document.createElement("div");
-  content.className = "agent-run-history-content";
-  if (timeline.length) {
-    content.appendChild(transcript);
-  } else {
-    var empty = document.createElement("div");
-    empty.className = "agent-run-empty";
-    empty.textContent = "Детали действия появятся после выполнения.";
-    content.appendChild(empty);
-  }
-  details.appendChild(content);
-  parent.appendChild(details);
 }
 
 function agentRunSummaryTitle(status, elapsed, runViewState) {
-  var title;
-  if (runViewState && runViewState.executionHealth === "unknown") {
-    title = "Результат изменений не определён";
-  } else if (runViewState && runViewState.executionHealth === "errors") {
-    title = "Выполнение содержит ошибки";
-  } else if (runViewState && runViewState.lifecycle === "awaiting_user") {
-    title = "Ожидает ответа";
-  } else if (runViewState && runViewState.lifecycle === "awaiting_confirmation") {
-    title = "Ожидает подтверждения";
-  } else if (status === "completed" && runViewState && !runViewState.verifiedWrites) {
-    title = "Ответ получен";
-  } else if (status === "failed") {
-    title = "Прервано";
-  } else if (status === "cancelled") {
-    title = "Отменено";
-  } else if (status === "waiting") {
-    title = "Ожидание";
-  } else if (status === "unknown") {
-    title = "Результат не подтверждён runtime";
-  } else {
-    title = "Готово";
+  var title = "Действия";
+  if (runViewState) {
+    if (runViewState.lifecycle === "failed") title = "Работа остановлена";
+    else if (runViewState.lifecycle === "cancelled") title = "Работа отменена";
+    else if (runViewState.lifecycle === "awaiting_user") title = "Ожидает ответа";
+    else if (runViewState.lifecycle === "awaiting_confirmation") title = "Ожидает подтверждения";
   }
-  return title + (elapsed ? " за " + elapsed : "");
+  return title + (elapsed ? " · " + elapsed : "");
 }
 
 function appendAgentRunSummaryState(summary, status) {
@@ -327,19 +304,19 @@ function appendAgentRunSummaryState(summary, status) {
 function appendAgentRunOverview(parent, steps, timeline, stats) {
   var details = document.createElement("details");
   details.className = "agent-run-history agent-run-overview status-" + stats.status;
+  details.setAttribute("data-disclosure-key", "overview");
 
   var summary = document.createElement("summary");
   summary.className = "agent-run-history-summary";
   var actionCount = agentToolCallCount(timeline);
   var title = document.createElement("span");
   title.className = "agent-run-history-title";
-  title.textContent = agentRunSummaryTitle(stats.status, stats.elapsed, stats.runViewState);
+  title.textContent = agentRunSummaryTitle(stats.status, stats.elapsed, stats.runViewState) + " · " + actionCount;
   summary.appendChild(title);
   appendAgentRunSummaryState(summary, stats.status);
   var caret = document.createElement("span");
   caret.className = "agent-run-history-caret";
   caret.setAttribute("aria-hidden", "true");
-  caret.textContent = "›";
   summary.appendChild(caret);
   summary.setAttribute("aria-label", title.textContent + ". " + agentActionCountText(actionCount));
   summary.title = agentActionCountText(actionCount);
@@ -355,7 +332,7 @@ function appendAgentRunOverview(parent, steps, timeline, stats) {
       section.appendChild(buildAgentRunTranscript(
         step.items,
         step.items,
-        agentRunStats(step.items, true, "completed")));
+        agentRunStats(step.items, true, null)));
     }
     content.appendChild(section);
   });
@@ -399,7 +376,6 @@ function appendAgentRunOutcome(parent, activity, overview) {
   var caret = document.createElement("span");
   caret.className = "agent-run-outcome-caret";
   caret.setAttribute("aria-hidden", "true");
-  caret.textContent = "›";
   outcome.appendChild(caret);
   outcome.title = copy.textContent + " · Показать ход выполнения";
   outcome.setAttribute("aria-label", outcome.title);
@@ -412,53 +388,34 @@ function appendAgentRunOutcome(parent, activity, overview) {
 
 function appendAgentRunViewState(parent, runViewState, runId) {
   var health = runViewState ? runViewState.executionHealth : "unknown";
-  var otherUnknownEffects = runViewState
-    ? Math.max(0, runViewState.unknownEffects - runViewState.unverifiedWrites)
-    : 0;
+  var uncertain = health === "unknown";
+  if (health === "clean" && runViewState && runViewState.lifecycle !== "failed") return;
   var note = document.createElement("div");
-  note.className = "message-outcome " + (health === "clean" ? "status-unknown" : "status-warning");
+  note.className = "message-outcome " + (uncertain ? "status-warning" : "status-history");
   note.setAttribute("data-runtime-health", health);
-  note.setAttribute("role", health === "clean" ? "status" : "alert");
+  note.setAttribute("role", uncertain ? "alert" : "status");
   if (!runViewState) {
-    note.textContent = "Для этого run нет typed runtime state. Результат изменений не подтверждён.";
-  } else if (health === "unknown" && runViewState.unverifiedWrites && !otherUnknownEffects) {
-    note.textContent = "Есть исторические изменения без read-back; runtime не может подтвердить их эффект.";
-  } else if (health === "unknown") {
-    note.textContent = "Результат изменений не определён. Требуется проверка фактического состояния.";
-  } else if (health === "errors") {
-    note.textContent = "Выполнение содержит ошибки. Нельзя считать все изменения применёнными.";
-  } else if (!runViewState.verifiedWrites) {
-    note.textContent = "Ответ модели. Подтверждённых изменений нет.";
+    note.textContent = "Сведения о выполнении недоступны. Результат изменений не подтверждён.";
+  } else if (uncertain) {
+    note.textContent = "Есть действия с неподтверждённым результатом: " + runViewState.unknownEffects +
+      ". Проверьте фактическое состояние перед повторной записью.";
+  } else if (runViewState.lifecycle === "failed") {
+    note.textContent = "Работа остановлена. Причина доступна в деталях выполнения.";
   } else {
-    note.textContent = "Runtime: ошибки выполнения не зарегистрированы.";
+    note.textContent = "Неудачных попыток в ходе работы: " + runViewState.failedCalls + ".";
   }
-  if (runViewState && (runViewState.verifiedWrites || runViewState.noChangeWrites ||
-      runViewState.unverifiedWrites || runViewState.failedCalls || runViewState.unknownEffects)) {
-    note.textContent += " Runtime evidence: изменения — " + runViewState.verifiedWrites +
-      ", без изменения — " + runViewState.noChangeWrites +
-      ", исторические без read-back — " + runViewState.unverifiedWrites +
-      ", ошибки вызовов — " + runViewState.failedCalls +
-      ", прочие неизвестные эффекты — " + otherUnknownEffects + ".";
-  }
-  parent.appendChild(note);
   if (runId) {
-    var actions = document.createElement("div");
-    actions.className = "agent-inline-actions agent-run-journal-actions";
     var openJournal = document.createElement("button");
     openJournal.type = "button";
-    openJournal.className = "agent-action-button secondary";
-    openJournal.textContent = "Открыть журнал запуска";
+    openJournal.className = "agent-action-button agent-details-link";
+    openJournal.textContent = uncertain ? "Что проверить" : "Причины и детали";
     openJournal.addEventListener("click", function () {
       if (typeof window.openRunJournal !== "function") return;
-      window.openRunJournal({
-        chatId: state.activeChatId,
-        runId: runId,
-        filter: health === "clean" ? "all" : "problems"
-      });
+      window.openRunJournal({ chatId: state.activeChatId, runId: runId, filter: "problems" });
     });
-    actions.appendChild(openJournal);
-    parent.appendChild(actions);
+    note.appendChild(openJournal);
   }
+  parent.appendChild(note);
 }
 
 function agentRunId(items, finalMessage) {
@@ -542,12 +499,12 @@ function appendAgentRunFooter(node, items, finalMessage) {
       forkChatAtMessage(last.message, last.index);
     }));
   }
-  actions.appendChild(smallIconButton(finalMessage ? "Копировать итоговый ответ" : "Копировать run", "copy", function () {
+  actions.appendChild(smallIconButton(finalMessage ? "Копировать итоговый ответ" : "Копировать ход работы", "copy", function () {
     copyText(finalMessage ? messageContent(finalMessage.message) : agentRunText(items));
-    log(finalMessage ? "Итоговый ответ скопирован." : "Agent run скопирован.");
+    log(finalMessage ? "Итоговый ответ скопирован." : "Ход работы скопирован.");
   }));
   if (!historyActionsBlocked) {
-    actions.appendChild(smallIconButton("Удалить run", "trash", function () {
+    actions.appendChild(smallIconButton("Удалить сообщения запуска", "trash", function () {
       deleteAgentRun(items, finalMessage);
     }));
   }
