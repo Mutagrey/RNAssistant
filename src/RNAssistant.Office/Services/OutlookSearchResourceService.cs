@@ -6,6 +6,7 @@ using Newtonsoft.Json;
 using RNAssistant.Core.Models;
 using RNAssistant.Core.Tools;
 using RNAssistant.Office.Domains.Outlook;
+using RNAssistant.Office.Runtime;
 using RNAssistant.Office.Tools;
 using RuntimeResult = RNAssistant.Core.Tools.Contracts.ToolResult;
 
@@ -34,7 +35,11 @@ namespace RNAssistant.Office.Services
                 if (string.IsNullOrWhiteSpace(request.Query)) return Failure("query is required.", "invalid_arguments");
                 HashSet<string> fields;
                 var validation = OutlookService.Fields(request.Fields, out fields);
-                if (validation != null) return new ToolHandlerResult(RuntimeResult.Error(validation.Message, validation.DataJson), ToolEffectEvidence.None);
+                if (validation != null) return new ToolHandlerResult(
+                    RuntimeResult.Error(validation.Message, validation.DataJson),
+                    ToolEffectEvidence.None,
+                    recovery: OfficeToolFailure.DefiniteDomain(
+                        validation.Retryable));
                 TextPatternEngine.Find(string.Empty, request.Query, new TextPatternOptions {
                     Mode = request.Mode, MatchCase = request.MatchCase, WholeWord = request.WholeWord }, 1, 0);
                 var target = _gateway.ResolveIntentTarget(session, "Outlook search scope: latest:" +
@@ -51,7 +56,11 @@ namespace RNAssistant.Office.Services
                 var outcome = OutlookService.SearchMail(JsonConvert.DeserializeObject<OutlookSearchSnapshot>(json), request, cancellationToken);
                 cancellationToken.ThrowIfCancellationRequested();
                 if (outcome.Status != OutlookOutcomeStatus.Ok)
-                    return new ToolHandlerResult(RuntimeResult.Error(outcome.Message, outcome.DataJson), ToolEffectEvidence.None);
+                    return new ToolHandlerResult(
+                        RuntimeResult.Error(outcome.Message, outcome.DataJson),
+                        ToolEffectEvidence.None,
+                        recovery: OfficeToolFailure.DefiniteDomain(
+                            outcome.Retryable));
                 read.Payload = payload; read.Coverage = ResourceCoverage.Whole(); read.Complete = true;
                 read.Truncated = false; read.Offset = 0; read.ReturnedCharacters = json.Length; read.NextCursor = null;
                 return new ToolHandlerResult(RuntimeResult.Ok(outcome.Message, outcome.DataJson, new[] { read.Resource.Reference }),
@@ -64,6 +73,8 @@ namespace RNAssistant.Office.Services
 
         private static ToolHandlerResult Failure(string message, string code)
         { return new ToolHandlerResult(RuntimeResult.Error(message, JsonConvert.SerializeObject(
-            new Dictionary<string, object> { { "code", code }, { "retryable", false } })), ToolEffectEvidence.None); }
+            new Dictionary<string, object> { { "code", code }, { "retryable", false } })),
+            ToolEffectEvidence.None,
+            recovery: OfficeToolFailure.ResourceRecovery(code)); }
     }
 }

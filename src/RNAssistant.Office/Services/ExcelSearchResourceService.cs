@@ -5,6 +5,7 @@ using Newtonsoft.Json;
 using RNAssistant.Core.Models;
 using RNAssistant.Core.Tools;
 using RNAssistant.Office.Domains.Excel;
+using RNAssistant.Office.Runtime;
 using RNAssistant.Office.Tools;
 using RuntimeResult = RNAssistant.Core.Tools.Contracts.ToolResult;
 
@@ -50,7 +51,11 @@ namespace RNAssistant.Office.Services
                     return Failure(ExcelFindReplaceService.NarrowSearchScopeMessage, "RESOURCE_SNAPSHOT_TOO_LARGE");
                 var outcome = ExcelFindReplaceService.Find(JsonConvert.DeserializeObject<ExcelSearchSnapshot>(json), request, cancellationToken);
                 cancellationToken.ThrowIfCancellationRequested();
-                if (!outcome.Success) return new ToolHandlerResult(RuntimeResult.Error(outcome.Message, outcome.DataJson), ToolEffectEvidence.None);
+                if (!outcome.Success) return new ToolHandlerResult(
+                    RuntimeResult.Error(outcome.Message, outcome.DataJson),
+                    ToolEffectEvidence.None,
+                    recovery: OfficeToolFailure.DefiniteDomain(
+                        outcome.Retryable));
                 read.Payload = payload; read.Coverage = ResourceCoverage.Whole(); read.Complete = true;
                 read.Truncated = false; read.Offset = 0; read.ReturnedCharacters = json.Length; read.NextCursor = null;
                 return new ToolHandlerResult(RuntimeResult.Ok(outcome.Message, outcome.DataJson, new[] { read.Resource.Reference }),
@@ -63,6 +68,8 @@ namespace RNAssistant.Office.Services
 
         private static ToolHandlerResult Failure(string message, string code)
         { return new ToolHandlerResult(RuntimeResult.Error(message, JsonConvert.SerializeObject(
-            new Dictionary<string, object> { { "code", code }, { "retryable", false } })), ToolEffectEvidence.None); }
+            new Dictionary<string, object> { { "code", code }, { "retryable", false } })),
+            ToolEffectEvidence.None,
+            recovery: OfficeToolFailure.ResourceRecovery(code)); }
     }
 }

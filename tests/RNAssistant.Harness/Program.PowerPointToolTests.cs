@@ -75,6 +75,9 @@ namespace RNAssistant.Harness
                 var runtime = PowerPointRuntime(executor, adapter);
                 var invalid = ExecuteHtmlNative(runtime, PowerPointToolIds.SearchText, new JObject { ["query"] = "(", ["mode"] = "regex" });
                 AssertEqual(ToolExecutionOutcome.Error, invalid.Outcome, "invalid regex rejected");
+                AssertEqual(ToolRetryPolicy.Replan,
+                    invalid.Recovery.RetryPolicy,
+                    "invalid PowerPoint search asks the model to correct its call");
                 AssertEqual(0, adapter.PowerPointSearchMaterializationCount, "invalid regex never captures Office text");
                 var target = new PowerPointTextTargetSnapshot { TargetId = "target", SlideIndex = 1, ShapeName = "Body", Kind = "shape", Text = "needle" };
                 adapter.PowerPointSearchFactory = request => new[] { target };

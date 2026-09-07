@@ -69,6 +69,9 @@ namespace RNAssistant.Harness
                 var runtime = OutlookRuntime(executor, adapter);
                 var invalid = ExecuteHtmlNative(runtime, OutlookToolIds.SearchMail, new JObject { ["query"] = "(", ["mode"] = "regex" });
                 AssertEqual(ToolExecutionOutcome.Error, invalid.Outcome, "invalid regex rejected");
+                AssertEqual(ToolRetryPolicy.Replan,
+                    invalid.Recovery.RetryPolicy,
+                    "invalid Outlook search asks the model to correct its call");
                 var removed = ExecuteHtmlNative(runtime, OutlookToolIds.SearchMail, new JObject { ["query"] = "x", ["maxBodyChars"] = 10 });
                 AssertEqual(ToolExecutionOutcome.Error, removed.Outcome, "old body-output argument has no compatibility fallback");
                 AssertEqual(0, adapter.OutlookBackendCalls.Count(op => op == FakeOfficeAdapter.OutlookReadFolderOperation), "invalid input never reads folder");

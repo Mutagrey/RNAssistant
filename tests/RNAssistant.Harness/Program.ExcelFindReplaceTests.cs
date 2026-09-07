@@ -88,6 +88,12 @@ namespace RNAssistant.Harness
                 var runtime = ExcelFindReplaceRuntime(executor, adapter);
                 var invalid = ExecuteHtmlNative(runtime, ExcelFindReplaceToolIds.FindCells, new JObject { ["query"] = "(", ["mode"] = "regex" });
                 AssertEqual(ToolExecutionOutcome.Error, invalid.Outcome, "invalid regex rejected before capture");
+                AssertEqual(ToolFailureKind.RejectedNoEffect,
+                    invalid.Recovery.FailureKind,
+                    "invalid search is a definite no-effect rejection");
+                AssertEqual(ToolRetryPolicy.Replan,
+                    invalid.Recovery.RetryPolicy,
+                    "invalid search asks the model to correct its call");
                 var oversized = ExecuteHtmlNative(runtime, ExcelFindReplaceToolIds.FindCells, new JObject { ["query"] = "x", ["sheet"] = "Data", ["address"] = "A1:Z10000" });
                 AssertEqual(ToolExecutionOutcome.Error, oversized.Outcome, "oversized range rejected");
                 AssertContains(oversized.Result.Message, "Do not retry it unchanged", "oversized search returns a bounded recovery route");

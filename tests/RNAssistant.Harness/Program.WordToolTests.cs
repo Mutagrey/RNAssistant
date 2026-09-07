@@ -214,9 +214,16 @@ namespace RNAssistant.Harness
             {
                 var session = NewSession(adapter);
                 var tools = OfficeToolCatalog.ForHost("Word").Concat(executor.GetControllerTools()).ToList();
-                var invalid = executor.ExecuteManual(Command(WordToolIds.FindText, "query", "[", "mode", "regex"),
-                    tools, new AppSettings(), false, false, session);
-                AssertTrue(!invalid.Success && adapter.WordStoryMaterializationCount == 0, "invalid regex is refused before source capture");
+                var runtime = executor.CreateNativeRuntime(
+                    session, tools, new AppSettings(), "agent", false);
+                var invalid = ExecuteHtmlNative(runtime, WordToolIds.FindText,
+                    new JObject { ["query"] = "[", ["mode"] = "regex" });
+                AssertTrue(invalid.Outcome == ToolExecutionOutcome.Error &&
+                    adapter.WordStoryMaterializationCount == 0,
+                    "invalid regex is refused before source capture");
+                AssertEqual(ToolRetryPolicy.Replan,
+                    invalid.Recovery.RetryPolicy,
+                    "invalid Word search asks the model to correct its call");
                 adapter.Write(new WordWriteRequest { Mode = "replaceselection", Text = new string('x', WordService.MaximumTextCharacters + 1) }, () => { });
                 var oversized = executor.ExecuteManual(Command(WordToolIds.FindText, "query", "x"), tools, new AppSettings(), false, false, session);
                 AssertEqual("RESOURCE_SNAPSHOT_TOO_LARGE", oversized.ErrorCode, "oversized search requires narrower scope");

@@ -15,7 +15,16 @@ Markdown tools (slices 1b–2); shared editing, working-set UI and bounded index
 discovery remain open. This is not the full cutover. Existing Resource MASTER
 invariants and Windows gates remain in force; Phase 12 is not started.
 
-Latest correction (2026-09-07): the integrated `ModelContextCompiler` again owns
+Latest correction (2026-09-07): the four read-only Office search owners now retain
+typed recovery for every rejected call. Invalid query/pattern/domain input is
+`RejectedNoEffect/Replan` (or `RetryLater` for an explicitly transient domain
+outcome); resource capture/admission errors reuse the shared Office resource
+classification. Existing error codes, payloads, capture bounds and legacy
+`retryable` fields are unchanged. Excel, Word, PowerPoint and Outlook invalid-input
+and incomplete-capture checks pass host-neutral; Windows/Office qualification
+remains open.
+
+Previous correction (2026-09-07): the integrated `ModelContextCompiler` again owns
 oversized exact-read admission. If a complete successful resource/capability read
 does not fit after correctness filtering, its detached request projection becomes
 the explicit `resource_evidence_context_too_large` or
