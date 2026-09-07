@@ -1045,11 +1045,20 @@ namespace RNAssistant.Harness
                 AssertTrue(call.Content.Length < 256 && call.ToolCalls.Count == 0, "durable accepted fact contains metadata only");
                 var result = AgentJsonProtocol.CreateToolResultMessage(invocation,
                     RNAssistant.Core.Tools.Contracts.ToolResult.Ok("saved"), "tool");
-                result.ResourceEffect = new ResourceEffect("effect", invocation.ToolId, ResourceEffectOutcome.VerifiedChanged, new ResourceImpact[0]);
+                var changedResource = new ResourceIdentity("rna://state/conversation/runtime-only");
+                result.ResourceRefs.Add(new ResourceRef(changedResource.Uri, "r1"));
+                result.ResourceEffect = new ResourceEffect("effect", invocation.ToolId,
+                    ResourceEffectOutcome.VerifiedChanged, new[] {
+                        new ResourceImpact(changedResource, ResourceImpactRelation.Exact,
+                            changeKind: "updated")
+                    });
                 var frozen = new ModelAuthoritySnapshot(new ResourceAuthoritySnapshotSet(new ResourceAuthoritySnapshot[0]), "tools", new SkillCatalogSnapshot(null), null, 3);
                 var compiled = new ModelContextCompiler().Compile(frozen, new ChatMessage[0], new[] { call, result }, null, new ToolCatalogEntry[0], new AppSettings(), 1024);
                 AssertEqual(0, compiled.Receipt.HydratedPayloads, "terminal frame compiles without even a payload reader");
                 AssertTrue(string.Join("", compiled.Messages.Select(item => item.Content)).Length < 4096, "completed large source is not reserialized into prompt");
+                AssertTrue(string.Join("", compiled.Messages.Select(item => item.Content)).IndexOf(
+                        changedResource.Uri, StringComparison.Ordinal) < 0,
+                    "terminal mutation projection hides runtime-owned resource identity");
             });
         }
 
@@ -1916,6 +1925,7 @@ namespace RNAssistant.Harness
                 null, new ToolCatalogEntry[0], new AppSettings(), 1024);
             var text = string.Join("\n", compiled.Messages.Select(item => item.Content));
             AssertTrue(!text.Contains("OBSOLETE_BODY"), "stale payload excluded before tight budget");
+            AssertTrue(!text.Contains(r1.Uri), "stale evidence marker hides runtime-owned resource identity");
             AssertEqual(2, compiled.Messages.Count, "causal call/result pair retained");
             AssertEqual(1, compiled.Receipt.ExcludedSuperseded, "receipt explains exclusion");
             var changed = compiled.Messages;

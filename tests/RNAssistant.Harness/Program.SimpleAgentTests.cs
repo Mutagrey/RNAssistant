@@ -2654,8 +2654,9 @@ namespace RNAssistant.Harness
                 "compaction deterministically carries exact resource references into the active window");
             AssertTrue(activeCheckpointMessage.ResourceRefs.Any(reference => reference.Uri == activityReference.Uri),
                 "compaction carries resources produced by excluded presentation activities");
-            AssertContains(HistoricalContextProjector.Project(activeCheckpointMessage).Content, compactedReference.Uri,
-                "compacted resource remains visible even when the model summary omits its URI");
+            AssertTrue(HistoricalContextProjector.Project(activeCheckpointMessage).Content.IndexOf(
+                    compactedReference.Uri, StringComparison.Ordinal) < 0,
+                "compacted resource identity remains runtime metadata, not model-facing text");
         }
 
         private static void CompactionPreservesToolProtocolPairs()

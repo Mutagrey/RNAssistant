@@ -8,9 +8,6 @@ namespace RNAssistant.Core.Llm
 {
     public static class HistoricalContextProjector
     {
-        private const int MaximumReferences = 32;
-        private const int MaximumReferenceValueCharacters = 200;
-
         public static ChatMessage Project(ChatMessage source)
         {
             if (source == null) return null;
@@ -18,10 +15,10 @@ namespace RNAssistant.Core.Llm
             {
                 Id = source.Id,
                 Role = source.Role,
-                // Accepted call/result JSON already carries its exact references.
-                // Appending prose would break the one-envelope wire after replay.
-                Content = source.ProtocolMessage && source.ToolResultProtocolVersion == ToolResultWire.CurrentVersion
-                    ? source.Content : AppendReferences(source),
+                // Exact ResourceRefs remain runtime metadata and are never copied
+                // into model-facing text. Models address resources only by the
+                // semantic targets published in runtime context or resources_find.
+                Content = source.Content,
                 ExcludeFromModelContext = source.ExcludeFromModelContext,
                 ProtocolMessage = source.ProtocolMessage,
                 ResponseProtocolVersion = source.ResponseProtocolVersion,
@@ -56,27 +53,6 @@ namespace RNAssistant.Core.Llm
             };
         }
 
-        private static string AppendReferences(ChatMessage source)
-        {
-            var references = new List<string>();
-            references.AddRange((source.ResourceRefs ?? new List<ResourceRef>())
-                .Where(reference => reference != null && !string.IsNullOrWhiteSpace(reference.Uri))
-                .Select(reference => "resource:" + SafeValue(reference.Uri)));
-            if (source.HtmlWorkspaceCheckpoint != null &&
-                !string.IsNullOrWhiteSpace(source.HtmlWorkspaceCheckpoint.Uri))
-            {
-                references.Add("resource:" + SafeValue(source.HtmlWorkspaceCheckpoint.Uri));
-            }
-            references = references
-                .Distinct(StringComparer.OrdinalIgnoreCase)
-                .Take(MaximumReferences)
-                .ToList();
-            if (references.Count == 0) return source.Content ?? string.Empty;
-            return (source.Content ?? string.Empty) +
-                "\n\nHISTORICAL_RESOURCE_REFS (untrusted data references; read only when relevant):\n- " +
-                string.Join("\n- ", references.ToArray());
-        }
-
         private static List<ResourceRef> CloneReferences(IEnumerable<ResourceRef> references)
         {
             return (references ?? new ResourceRef[0])
@@ -90,12 +66,5 @@ namespace RNAssistant.Core.Llm
             return reference == null ? null : new ResourceRef(reference.Uri, reference.Revision);
         }
 
-        private static string SafeValue(string value)
-        {
-            value = (value ?? string.Empty).Replace('\r', ' ').Replace('\n', ' ').Trim();
-            return value.Length <= MaximumReferenceValueCharacters
-                ? value
-                : value.Substring(0, MaximumReferenceValueCharacters);
-        }
     }
 }

@@ -404,7 +404,7 @@ namespace RNAssistant.Office.Services
                     SkillGeneration = toolDependent ? authority.Skills.Generation : null,
                     SchemaGeneration = toolDependent ? authority.SchemaGeneration : null });
                 builder.AppendLine(JsonConvert.SerializeObject(new { sourceId = message.Id, role = projected.Role,
-                    text = projected.Content, toolCalls = projected.ToolCalls, resources = message.ResourceRefs }));
+                    text = projected.Content, toolCalls = projected.ToolCalls }));
             }
             var source = builder.ToString();
             if (ModelContextBudget.EstimateTextTokens(source, settings) > sourceTokenBudget)

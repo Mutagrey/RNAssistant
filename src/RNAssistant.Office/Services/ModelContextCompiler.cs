@@ -148,7 +148,7 @@ namespace RNAssistant.Office.Services
                 if (invalid.Length > 0)
                 {
                     Mark(atom, string.Join("; ", invalid.Select(item =>
-                        item.Evidence.Resource.Uri + "@" + item.Evidence.Resource.Revision + " " + item.State + ": " + item.Reason)));
+                        item.State + ": " + item.Reason)));
                     continue;
                 }
                 foreach (var message in atom.Messages)
@@ -174,14 +174,22 @@ namespace RNAssistant.Office.Services
                 string error;
                 var result = atom.Messages[1];
                 if (!ToolResultHistoryReader.TryRead(result, out wire, out error)) continue;
+                var effect = result.ResourceEffect;
                 atom.Kind = "terminal-mutation";
                 atom.Messages = new List<ChatMessage> { new ChatMessage {
                     Id = result.Id, Role = "assistant", ProtocolMessage = true,
                     Content = "TOOL_INTERACTION (completed causal frame):\n" + JsonConvert.SerializeObject(new {
                         tool = wire.Name, outcome = wire.Result.Status.ToString(), message = wire.Result.Message,
-                        resources = result.ResourceRefs, effect = result.ResourceEffect,
-                        authorityCommitId = result.AuthorityCommitId,
-                        sourceArguments = call.ArgumentPayload, sourceResult = result.ResultPayload }) } };
+                        effect = effect == null ? null : new {
+                            operation = effect.Operation,
+                            outcome = effect.Outcome.ToString(),
+                            verification = effect.Verification,
+                            impacts = effect.Impacts.Select(impact => new {
+                                relation = impact.Relation.ToString(),
+                                coverage = impact.Coverage,
+                                changeKind = impact.ChangeKind
+                            })
+                        } }) } };
             }
 
             var observed = new HashSet<string>(StringComparer.Ordinal);
@@ -287,7 +295,7 @@ namespace RNAssistant.Office.Services
                 var data = new JObject { ["evidence_available"] = false, ["reason"] = reason,
                     ["next_action"] = "Read the required current resource explicitly." };
                 var result = new RNAssistant.Core.Tools.Contracts.ToolResult(wire.Result.Status,
-                    "Prior observation is not current evidence.", data.ToString(Formatting.None), wire.Result.Resources);
+                    "Prior observation is not current evidence.", data.ToString(Formatting.None), new ResourceRef[0]);
                 var json = ToolResultWire.WriteParsed(wire.ToolCallId, wire.Name, result, data, null);
                 message.Content = message.Role == "tool" ? json : "TOOL_RESULT:\n" + json;
             }
