@@ -209,6 +209,24 @@ namespace RNAssistant.Harness
             AssertTrue(!gateway.Find(session, "missing", "conversation").Empty, "zero observed matches are not proof of absence");
             empty = true;
             AssertTrue(!gateway.Find(session, null, "conversation").Empty, "an empty truncated capture is not an empty scope");
+            empty = false;
+            provider.SearchMatch = new ResourceSearchMatch
+            {
+                Reference = new ResourceRef(ResourceUri.Create("alpha", "hidden"), "7"),
+                Kind = "test",
+                Title = "Hidden",
+                Representation = ResourceRepresentations.Text,
+                Snippet = "needle"
+            };
+            var hidden = gateway.Find(session, "needle", "conversation");
+            AssertTrue(hidden.Items.Any(item => item.Target == "conversation resource: Hidden"),
+                "provider search result beyond the bounded listing remains discoverable");
+            AssertEqual("7", hidden.Items.Single(item => item.Target == "conversation resource: Hidden").Reference.Revision,
+                "search-discovered target carries the provider exact revision");
+            AssertEqual("rna://alpha/hidden",
+                gateway.ResolveIntentTarget(session, "conversation resource: Hidden").Reference.Uri,
+                "search-discovered target resolves directly even when listing remains incomplete");
+            provider.SearchMatch = null;
             empty = false; paged = true; incomplete = false;
             var calls = provider.ListCalls;
             var complete = gateway.Find(session, "Test", "conversation");
@@ -238,6 +256,7 @@ namespace RNAssistant.Harness
             public int ListCalls { get; private set; }
             internal Func<string, ResourceListPage> ListPage { get; set; }
             internal bool SearchTruncated { get; set; }
+            internal ResourceSearchMatch SearchMatch { get; set; }
 
             public ResourceListPage List(ChatSession session, string kind, string cursor, int limit)
             {
@@ -269,7 +288,17 @@ namespace RNAssistant.Harness
 
             public ResourceSearchResult Search(ChatSession session, string query, string kind, int limit, int maxCharsPerMatch)
             {
-                if (ListPage != null) return new ResourceSearchResult { Query = query, ScanTruncated = SearchTruncated };
+                var hasSearchMatch = SearchMatch != null &&
+                    ((SearchMatch.Title ?? string.Empty).IndexOf(query ?? string.Empty, StringComparison.OrdinalIgnoreCase) >= 0 ||
+                     (SearchMatch.Snippet ?? string.Empty).IndexOf(query ?? string.Empty, StringComparison.OrdinalIgnoreCase) >= 0);
+                if (ListPage != null) return new ResourceSearchResult
+                {
+                    Query = query,
+                    ScanTruncated = SearchTruncated,
+                    Matches = hasSearchMatch
+                        ? new System.Collections.Generic.List<ResourceSearchMatch> { SearchMatch }
+                        : new System.Collections.Generic.List<ResourceSearchMatch>()
+                };
                 throw new NotSupportedException();
             }
 

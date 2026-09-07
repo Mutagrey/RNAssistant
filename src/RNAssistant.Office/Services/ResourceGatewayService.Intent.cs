@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Globalization;
 using System.Linq;
 using RNAssistant.Core.Models;
+using RNAssistant.Core.Services;
 
 namespace RNAssistant.Office.Services
 {
@@ -60,14 +61,15 @@ namespace RNAssistant.Office.Services
                 var powerPoint = _registry.All().OfType<LiveDocumentResourceProvider>().SingleOrDefault();
                 if (powerPoint != null) AddIntentState(states, WithProvider(powerPoint, session, () => powerPoint.ResolvePowerPointSlide(session, query)));
             }
-            AssignIntentTargets(states);
-
             Dictionary<string, ResourceSearchMatch> matches = null;
             if (query.Length > 0)
             {
                 matches = SearchIntentResources(
                     session, query, scope, unavailable, ref sourceTruncated);
+                foreach (var match in matches.Values)
+                    AddIntentState(states, DescriptorFromSearchMatch(match));
             }
+            AssignIntentTargets(states);
 
             var selected = states
                 .Where(state => ScopeMatches(scope, state.Scope))
@@ -203,15 +205,31 @@ namespace RNAssistant.Office.Services
             var scope = IntentTargetScope(target);
             var states = EnumerateIntentResources(
                 session, IntentPlansForScope(scope), unavailable, failures, ref truncated);
+            var searchConfirmedTarget = false;
+            var searchIncomplete = false;
             if (truncated)
-                throw new ResourceRequestException(
-                    "The resource scope is incomplete; a unique semantic target cannot be established from the captured collection.",
-                    "resource_scope_incomplete", false);
+            {
+                var searchTruncated = false;
+                var searchMatches = SearchIntentResources(session, IntentTargetQuery(target), scope, unavailable, ref searchTruncated);
+                foreach (var foundMatch in searchMatches.Values)
+                {
+                    var descriptor = DescriptorFromSearchMatch(foundMatch);
+                    if (string.Equals(IntentTarget(descriptor), target, StringComparison.Ordinal))
+                        searchConfirmedTarget = true;
+                    AddIntentState(states, descriptor);
+                }
+                searchIncomplete = searchTruncated;
+            }
             AssignIntentTargets(states);
             var matches = states.Where(state => string.Equals(
                     state.Target, target, StringComparison.Ordinal))
                 .Take(2)
                 .ToList();
+            if ((truncated || searchIncomplete) &&
+                !(matches.Count == 1 && searchConfirmedTarget && !searchIncomplete))
+                throw new ResourceRequestException(
+                    "The resource scope is incomplete; a unique semantic target cannot be established from the captured collection.",
+                    "resource_scope_incomplete", false);
             if (matches.Count > 1)
             {
                 throw new ResourceRequestException(
@@ -514,6 +532,36 @@ namespace RNAssistant.Office.Services
             return matches != null && matches.TryGetValue(uri, out match)
                 ? match
                 : null;
+        }
+
+        private static ResourceDescriptor DescriptorFromSearchMatch(
+            ResourceSearchMatch match)
+        {
+            var descriptor = new ResourceDescriptor
+            {
+                Reference = match.Reference == null ? null : match.Reference.Copy(),
+                Kind = match.Kind,
+                Title = match.Title
+            };
+            ResourceAddress address;
+            if (match.Reference != null &&
+                ResourceUri.TryParse(match.Reference.Uri, out address))
+            {
+                descriptor.Provider = address.Provider;
+            }
+            if (!string.IsNullOrWhiteSpace(match.Representation))
+                descriptor.Representations.Add(match.Representation);
+            return descriptor;
+        }
+
+        private static string IntentTargetQuery(string target)
+        {
+            var value = (target ?? string.Empty).Trim();
+            var separator = value.IndexOf(": ", StringComparison.Ordinal);
+            if (separator >= 0) value = value.Substring(separator + 2);
+            var created = value.IndexOf(" [created ", StringComparison.Ordinal);
+            if (created >= 0) value = value.Substring(0, created);
+            return value.Trim();
         }
 
         private static string NormalizeIntentScope(string value)
