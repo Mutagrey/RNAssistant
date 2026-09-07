@@ -1,4 +1,5 @@
 using System;
+using RNAssistant.Core.Tools;
 
 namespace RNAssistant.Office.Tools
 {
@@ -25,6 +26,7 @@ namespace RNAssistant.Office.Tools
         internal string DataJson { get; private set; }
         internal string ErrorCode { get; private set; }
         internal bool Retryable { get; private set; }
+        internal ToolRecoveryContract Recovery { get; private set; }
 
         internal static HtmlWorkspaceToolOutcome Ok(
             string message, string dataJson, HtmlWorkspaceEffect effect)
@@ -39,7 +41,8 @@ namespace RNAssistant.Office.Tools
         }
 
         internal static HtmlWorkspaceToolOutcome Error(
-            string message, string dataJson, string errorCode, bool retryable)
+            string message, string dataJson, string errorCode, bool retryable,
+            ToolRecoveryContract recovery = null)
         {
             return new HtmlWorkspaceToolOutcome
             {
@@ -49,7 +52,10 @@ namespace RNAssistant.Office.Tools
                 DataJson = dataJson,
                 ErrorCode = string.IsNullOrWhiteSpace(errorCode)
                     ? "html_workspace_failed" : errorCode,
-                Retryable = retryable
+                Retryable = retryable,
+                Recovery = recovery ?? new ToolRecoveryContract(
+                    ToolFailureKind.RejectedNoEffect,
+                    ToolRetryPolicy.Replan)
             };
         }
 

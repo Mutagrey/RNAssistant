@@ -49,7 +49,7 @@ namespace RNAssistant.Office.Tools
             }
             return CapabilityToolOutcome.Error(
                 "Unknown capability tool: " + toolId, null,
-                "unknown_tool", false);
+                "unknown_tool", false, DefectRecovery());
         }
 
         internal static JObject Descriptor(ToolCatalogEntry tool)
@@ -224,7 +224,8 @@ namespace RNAssistant.Office.Tools
                     "Tool has no valid callable schema: " + tool.Id,
                     null,
                     "invalid_tool_schema",
-                    false);
+                    false,
+                    DefectRecovery());
             }
             var compact = descriptor.ToString(Formatting.None);
             if (compact.Length > MaximumDescriptorCharacters)
@@ -238,7 +239,8 @@ namespace RNAssistant.Office.Tools
                         maxDescriptorChars = MaximumDescriptorCharacters
                     }),
                     "tool_schema_too_large",
-                    false);
+                    false,
+                    DefectRecovery());
             }
             return CapabilityToolOutcome.Ok(
                 "Tool schema returned for callable-state evaluation: " + tool.Id,
@@ -484,7 +486,15 @@ namespace RNAssistant.Office.Tools
                 "Capability id is used by both a tool and a skill: " + id + ". Rename one definition.",
                 JsonConvert.SerializeObject(new { id }),
                 "capability_id_collision",
-                false);
+                false,
+                DefectRecovery());
+        }
+
+        private static ToolRecoveryContract DefectRecovery()
+        {
+            return new ToolRecoveryContract(
+                ToolFailureKind.ToolDefect,
+                ToolRetryPolicy.None);
         }
 
         private static string Bound(string value, int maxCharacters)

@@ -57,7 +57,8 @@ namespace RNAssistant.Office.Tools
                 Result(preparation.Outcome),
                 preparation.Outcome.Status ==
                     SkillAuthoringOutcomeStatus.Ok
-                        ? preparation.PreparedStateJson : null));
+                        ? preparation.PreparedStateJson : null,
+                preparation.Outcome.Recovery));
         }
 
         public Task<ToolHandlerResult> ExecuteAsync(
@@ -70,7 +71,8 @@ namespace RNAssistant.Office.Tools
                 context.PreparedStateJson,
                 context.MarkDispatchPossible);
             return Task.FromResult(context.Complete(new ToolHandlerResult(
-                Result(outcome), Effect(outcome.Effect))));
+                Result(outcome), Effect(outcome.Effect),
+                recovery: outcome.Recovery)));
         }
 
         private static RuntimeResult Result(SkillAuthoringOutcome outcome)

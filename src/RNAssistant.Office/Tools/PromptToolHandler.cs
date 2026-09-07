@@ -29,7 +29,8 @@ namespace RNAssistant.Office.Tools
             var result = PromptToolProjection.Result(preparation.Outcome);
             return Task.FromResult(new ToolPreparationResult(
                 result, preparation.Outcome.Status == PromptOutcomeStatus.Ok
-                    ? preparation.PreparedStateJson : null));
+                    ? preparation.PreparedStateJson : null,
+                preparation.Outcome.Recovery));
         }
 
         public Task<ToolHandlerResult> ExecuteAsync(
@@ -47,7 +48,8 @@ namespace RNAssistant.Office.Tools
     {
         internal static ToolHandlerResult Project(PromptToolOutcome outcome)
         {
-            return new ToolHandlerResult(Result(outcome), Effect(outcome.Effect));
+            return new ToolHandlerResult(Result(outcome), Effect(outcome.Effect),
+                recovery: outcome.Recovery);
         }
 
         internal static RuntimeResult Result(PromptToolOutcome outcome)

@@ -122,6 +122,12 @@ namespace RNAssistant.Harness
                         "Excel search evidence is not accepted as tabular source data");
                     AssertContains(searchBinding.Result.Message, "Excel range, table, or name",
                         "search binding failure gives the exact recovery route");
+                    AssertEqual(ToolFailureKind.RejectedNoEffect,
+                        searchBinding.Recovery.FailureKind,
+                        "invalid HTML binding certifies no workspace effect");
+                    AssertEqual(ToolRetryPolicy.Replan,
+                        searchBinding.Recovery.RetryPolicy,
+                        "invalid HTML binding requires a different semantic target");
 
                     var upsert = ExecuteHtmlNative(runtime,
                         HtmlWorkspaceToolCatalog.WriteFileToolId,

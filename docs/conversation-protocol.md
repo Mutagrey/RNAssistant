@@ -587,6 +587,12 @@ transient retry signal.
 Tool-authoring validation owns the same decision in `ToolAuthoringOutcome`: invalid
 schema/manifest/package input is `RejectedNoEffect/Replan`, unavailable authoring
 storage is `ToolDefect`, and preparation/execution projections preserve that contract.
+Prompt and Skill mutations, HTML workspace operations, capability reads and native
+Plan questions follow the same source-owned rule. Model-correctable validation,
+stale guards and semantic-target refusals are `RejectedNoEffect/Replan`; unavailable
+local stores are `ToolDefect/None`; resource exceptions retain the shared Office
+classification. Their handlers only transport recovery and never infer it from an
+error message or a legacy `retryable` flag.
 Only the kernel aggregates records. `ChatActivity.ExecutionEvidence`
 preserves compact native facts through existing event operations and clone; a
 present incomplete evidence/policy object fails deserialization.

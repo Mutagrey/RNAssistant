@@ -15,6 +15,15 @@ Markdown tools (slices 1b–2); shared editing, working-set UI and bounded index
 discovery remain open. This is not the full cutover. Existing Resource MASTER
 invariants and Windows gates remain in force; Phase 12 is not started.
 
+Latest correction (2026-09-07): Prompt/Skill authoring, HTML workspace,
+Capability and native Plan-question outcomes now own typed recovery instead of
+leaving the kernel to interpret legacy `retryable` booleans. Model-correctable
+validation, stale guards and semantic-target refusals are
+`RejectedNoEffect/Replan`; unavailable local stores are `ToolDefect/None`; resource
+exceptions preserve the shared Office classification. Handlers only transport the
+decision. Focused host-neutral checks cover stale Prompt/Skill preparation, invalid
+HTML binding and invalid questions; Windows/WebView2 qualification remains open.
+
 Previous prerequisite correction: whole-target prompt index admission, truthful
 artifact/member search bounds/unavailability, search-only target metadata, prompt
 schema 28 operational summaries and strict compaction claim-array extraction.
@@ -25,7 +34,7 @@ default prompts, three prompt-review cases, exact empty text and on-demand rerea
 Only host-neutral harness execution; target-model quality and Windows delivery
 remain unqualified.
 
-Latest correction (2026-09-07): Tool authoring recovery is now owned by the typed
+Previous correction (2026-09-07): Tool authoring recovery is now owned by the typed
 outcome instead of inferred in the handler. Schema, manifest and package validation
 failures are `RejectedNoEffect/Replan`; unavailable authoring storage is
 `ToolDefect/None`; both preparation and execution preserve the contract. The exact

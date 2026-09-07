@@ -138,6 +138,19 @@ namespace RNAssistant.Harness
                     !string.IsNullOrWhiteSpace((string)questionData["questions"][0]["id"]) &&
                     !string.IsNullOrWhiteSpace((string)questionData["questions"][0]["options"][0]["id"]),
                     "runtime assigns UI-only question and option identity");
+
+                var invalidQuestion = executor.ExecuteManual(
+                    Command(UserQuestionToolCatalog.AskToolId,
+                        "questions", new JArray()), tools,
+                    new AppSettings(), false, false, session);
+                var invalidQuestionRecovery = JObject.Parse(
+                    invalidQuestion.DataJson)["recovery"];
+                AssertEqual("RejectedNoEffect",
+                    (string)invalidQuestionRecovery?["failureKind"],
+                    "invalid questions certify no interaction effect");
+                AssertEqual("Replan",
+                    (string)invalidQuestionRecovery?["retryPolicy"],
+                    "invalid questions require a corrected question set");
             });
         }
 

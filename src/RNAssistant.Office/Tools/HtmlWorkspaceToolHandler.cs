@@ -80,7 +80,8 @@ namespace RNAssistant.Office.Tools
                     outcome.Message, data, resources);
             else result = RuntimeResult.Error(
                 outcome.Message, data, resources);
-            return new ToolHandlerResult(result, Effect(outcome.Effect));
+            return new ToolHandlerResult(result, Effect(outcome.Effect),
+                recovery: outcome.Recovery);
         }
 
         private static ToolEffectEvidence Effect(HtmlWorkspaceEffect effect)

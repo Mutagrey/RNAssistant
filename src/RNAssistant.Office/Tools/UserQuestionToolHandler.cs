@@ -50,7 +50,10 @@ namespace RNAssistant.Office.Tools
                         ["code"] = "invalid_questions",
                         ["retryable"] = true
                     }.ToString(Formatting.None)),
-                    ToolEffectEvidence.None));
+                    ToolEffectEvidence.None,
+                    recovery: new ToolRecoveryContract(
+                        ToolFailureKind.RejectedNoEffect,
+                        ToolRetryPolicy.Replan)));
             }
         }
 

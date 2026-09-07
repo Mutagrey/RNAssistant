@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
 using RNAssistant.Core.Models;
+using RNAssistant.Core.Tools;
 
 namespace RNAssistant.Office.Tools
 {
@@ -110,7 +111,10 @@ namespace RNAssistant.Office.Tools
             {
                 return PromptToolOutcome.Error(
                     "Prompt save preparation is invalid.", null,
-                    "prompt_preparation_invalid", false);
+                    "prompt_preparation_invalid", false,
+                    new ToolRecoveryContract(
+                        ToolFailureKind.ToolDefect,
+                        ToolRetryPolicy.None));
             }
             var fields = SuppliedFields(arguments);
             if (prepared.Value<int?>("version") != PreparedContractVersion ||
@@ -121,7 +125,10 @@ namespace RNAssistant.Office.Tools
             {
                 return PromptToolOutcome.Error(
                     "Prompt save preparation does not match the accepted call.",
-                    null, "prompt_preparation_mismatch", false);
+                    null, "prompt_preparation_mismatch", false,
+                    new ToolRecoveryContract(
+                        ToolFailureKind.ToolDefect,
+                        ToolRetryPolicy.None));
             }
 
             var source = _loadSettings() ?? new AppSettings();
@@ -183,13 +190,19 @@ namespace RNAssistant.Office.Tools
             {
                 return PromptToolOutcome.Error(
                     "Prompt settings store is not available.", null,
-                    "prompt_settings_unavailable", false);
+                    "prompt_settings_unavailable", false,
+                    new ToolRecoveryContract(
+                        ToolFailureKind.ToolDefect,
+                        ToolRetryPolicy.None));
             }
             if (_saveSettings == null)
             {
                 return PromptToolOutcome.Error(
                     "Prompt settings store is read-only.", null,
-                    "prompt_settings_read_only", false);
+                    "prompt_settings_read_only", false,
+                    new ToolRecoveryContract(
+                        ToolFailureKind.ToolDefect,
+                        ToolRetryPolicy.None));
             }
             var value = ToolArgumentReader.String(
                 arguments, "value", string.Empty);

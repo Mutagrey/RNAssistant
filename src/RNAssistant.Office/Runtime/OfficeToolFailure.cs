@@ -99,7 +99,7 @@ namespace RNAssistant.Office.Runtime
                 ToolRetryPolicy.None);
         }
 
-        private static ToolRecoveryContract ResourceRecovery(string code)
+        internal static ToolRecoveryContract ResourceRecovery(string code)
         {
             if (string.Equals(code, "tool_mutation_busy", StringComparison.Ordinal))
                 return LockRecovery(true);

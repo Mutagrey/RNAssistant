@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
 using RNAssistant.Core.Models;
+using RNAssistant.Core.Tools;
 
 namespace RNAssistant.Office.Tools
 {
@@ -18,7 +19,11 @@ namespace RNAssistant.Office.Tools
                 return new SkillAuthoringPreparation(
                     SkillAuthoringOutcome.Error(
                         "Skill authoring store is not available.", null,
-                        "skill_store_unavailable", false));
+                        "skill_store_unavailable", false,
+                        SkillAuthoringEffect.None,
+                        new ToolRecoveryContract(
+                            ToolFailureKind.ToolDefect,
+                            ToolRetryPolicy.None)));
             }
             SkillDefinition current;
             SkillDefinition intended;
@@ -67,7 +72,11 @@ namespace RNAssistant.Office.Tools
             {
                 return SkillAuthoringOutcome.Error(
                     "Skill authoring store is not available.", null,
-                    "skill_store_unavailable", false);
+                    "skill_store_unavailable", false,
+                    SkillAuthoringEffect.None,
+                    new ToolRecoveryContract(
+                        ToolFailureKind.ToolDefect,
+                        ToolRetryPolicy.None));
             }
             JObject prepared;
             try
@@ -78,7 +87,11 @@ namespace RNAssistant.Office.Tools
             {
                 return SkillAuthoringOutcome.Error(
                     "Skill authoring preparation is invalid.", null,
-                    "skill_preparation_invalid", false);
+                    "skill_preparation_invalid", false,
+                    SkillAuthoringEffect.None,
+                    new ToolRecoveryContract(
+                        ToolFailureKind.ToolDefect,
+                        ToolRetryPolicy.None));
             }
 
             var id = ToolArgumentReader.String(arguments, "id", string.Empty);
@@ -93,7 +106,11 @@ namespace RNAssistant.Office.Tools
             {
                 return SkillAuthoringOutcome.Error(
                     "Skill authoring preparation does not match the accepted call.",
-                    null, "skill_preparation_mismatch", false);
+                    null, "skill_preparation_mismatch", false,
+                    SkillAuthoringEffect.None,
+                    new ToolRecoveryContract(
+                        ToolFailureKind.ToolDefect,
+                        ToolRetryPolicy.None));
             }
 
             var liveBefore = FindStoredSkill(id);
@@ -176,7 +193,10 @@ namespace RNAssistant.Office.Tools
                         : mutationError,
                     data,
                     "skill_authoring_not_applied", false,
-                    SkillAuthoringEffect.VerifiedNoChange);
+                    SkillAuthoringEffect.VerifiedNoChange,
+                    new ToolRecoveryContract(
+                        ToolFailureKind.ToolDefect,
+                        ToolRetryPolicy.None));
             }
             return SkillAuthoringOutcome.Unknown(
                 "Custom skill did not verify after " +
@@ -235,7 +255,11 @@ namespace RNAssistant.Office.Tools
             referencePath = null;
             return SkillAuthoringOutcome.Error(
                 "Unknown skill authoring mutation: " + toolId,
-                null, "unknown_tool", false);
+                null, "unknown_tool", false,
+                SkillAuthoringEffect.None,
+                new ToolRecoveryContract(
+                    ToolFailureKind.ToolDefect,
+                    ToolRetryPolicy.None));
         }
 
         private string ApplyMutation(

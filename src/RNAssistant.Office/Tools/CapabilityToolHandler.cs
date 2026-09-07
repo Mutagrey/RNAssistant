@@ -7,6 +7,7 @@ using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
 using RNAssistant.Core.Models;
 using RNAssistant.Core.Tools;
+using RNAssistant.Office.Runtime;
 using RuntimeResult = RNAssistant.Core.Tools.Contracts.ToolResult;
 
 namespace RNAssistant.Office.Tools
@@ -58,7 +59,7 @@ namespace RNAssistant.Office.Tools
             CapabilityToolOutcome outcome;
             try { outcome = _service.Execute(_toolId, context.Arguments, _catalog, _skills, _session, _manualRun); }
             catch (RNAssistant.Office.Services.ResourceRequestException error)
-            { outcome = CapabilityToolOutcome.Error(error.Message, null, error.ErrorCode, error.Retryable); }
+            { return OfficeToolFailure.Resource(error); }
             if (outcome == null)
                 throw new InvalidOperationException(
                     "Capability service returned no outcome.");
@@ -66,7 +67,9 @@ namespace RNAssistant.Office.Tools
                 ? RuntimeResult.Ok(outcome.Message, outcome.DataJson, outcome.Evidence?.Select(item => item.Resource))
                 : RuntimeResult.Error(outcome.Message, ErrorData(outcome));
             return Task.FromResult(new ToolHandlerResult(
-                result, ToolEffectEvidence.None, resourceEvidence: outcome.Evidence));
+                result, ToolEffectEvidence.None,
+                resourceEvidence: outcome.Evidence,
+                recovery: outcome.Recovery));
         }
 
         private static string ErrorData(CapabilityToolOutcome outcome)

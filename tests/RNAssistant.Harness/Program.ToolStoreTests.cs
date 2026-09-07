@@ -1217,6 +1217,12 @@ namespace RNAssistant.Harness
                 AssertContains(stale.Result.DataJson,
                     "skill_package_changed",
                     "stale skill update exposes stable error code");
+                AssertEqual(ToolFailureKind.RejectedNoEffect,
+                    stale.Recovery.FailureKind,
+                    "stale skill preparation certifies no package effect");
+                AssertEqual(ToolRetryPolicy.Replan,
+                    stale.Recovery.RetryPolicy,
+                    "stale skill preparation requires refreshed intent");
 
                 var restore = Command("common.skills_upsert",
                     "id", "excel.review_style", "description",

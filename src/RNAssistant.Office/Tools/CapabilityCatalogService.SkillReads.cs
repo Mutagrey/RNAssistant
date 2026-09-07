@@ -30,7 +30,10 @@ namespace RNAssistant.Office.Tools
 
         private CapabilityToolOutcome ReadSkill(IDictionary<string, object> arguments, SkillDefinition skill, ChatSession session)
         {
-            if (skill == null) return CapabilityToolOutcome.Error("Skill reader is unavailable.", null, "capability_reader_unavailable", false);
+            if (skill == null) return CapabilityToolOutcome.Error(
+                "Skill reader is unavailable.", null,
+                "capability_reader_unavailable", false,
+                DefectRecovery());
             if (HasArgument(arguments, "referencePath")) return ReadSkillReference(arguments, skill, session);
             if (HasArgument(arguments, "offset") || HasArgument(arguments, "maxChars"))
                 return CapabilityToolOutcome.Error("Offsets and page sizes belong to resource continuation.", null, "capability_runtime_state_not_allowed", false);

@@ -6,6 +6,7 @@ using System.Threading;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
 using RNAssistant.Core.Models;
+using RNAssistant.Core.Tools;
 
 namespace RNAssistant.Office.Tools
 {
@@ -35,7 +36,10 @@ namespace RNAssistant.Office.Tools
             if (session == null)
                 return HtmlWorkspaceToolOutcome.Error(
                     "HTML workspace requires an active chat session.", null,
-                    "html_workspace_session_required", false);
+                    "html_workspace_session_required", false,
+                    new ToolRecoveryContract(
+                        ToolFailureKind.RejectedNoEffect,
+                        ToolRetryPolicy.None));
             return InspectWorkspace(session,
                 new Dictionary<string, object>(StringComparer.OrdinalIgnoreCase),
                 cancellationToken);

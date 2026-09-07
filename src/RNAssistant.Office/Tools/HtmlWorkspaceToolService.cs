@@ -7,6 +7,7 @@ using Newtonsoft.Json.Linq;
 using RNAssistant.Core.Models;
 using RNAssistant.Core.Services;
 using RNAssistant.Core.Tools;
+using RNAssistant.Office.Runtime;
 using RNAssistant.Office.Services;
 
 namespace RNAssistant.Office.Tools
@@ -46,7 +47,10 @@ namespace RNAssistant.Office.Tools
                 if (session == null)
                     return HtmlWorkspaceToolOutcome.Error(
                         "HTML workspace requires an active chat session.", null,
-                        "html_workspace_session_required", false);
+                        "html_workspace_session_required", false,
+                        new ToolRecoveryContract(
+                            ToolFailureKind.RejectedNoEffect,
+                            ToolRetryPolicy.None));
 
                 HtmlWorkspaceArtifactService.EnsureMutable(session);
                 if (string.Equals(toolId,
@@ -170,8 +174,12 @@ namespace RNAssistant.Office.Tools
             }
             catch (ResourceRequestException ex)
             {
-                return Failure(dispatched, ex.Message,
-                    ex.ErrorCode, false);
+                return dispatched
+                    ? HtmlWorkspaceToolOutcome.Unknown(ex.Message, null,
+                        "html_workspace_effect_unknown")
+                    : HtmlWorkspaceToolOutcome.Error(
+                        ex.Message, null, ex.ErrorCode, ex.Retryable,
+                        OfficeToolFailure.ResourceRecovery(ex.ErrorCode));
             }
             catch (InvalidOperationException ex)
             {
@@ -181,7 +189,10 @@ namespace RNAssistant.Office.Tools
 
             return HtmlWorkspaceToolOutcome.Error(
                 "Unknown HTML workspace tool: " + toolId, null,
-                "unknown_tool", false);
+                "unknown_tool", false,
+                new ToolRecoveryContract(
+                    ToolFailureKind.ToolDefect,
+                    ToolRetryPolicy.None));
         }
 
         private static HtmlWorkspaceToolOutcome Failure(

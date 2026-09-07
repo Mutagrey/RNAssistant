@@ -38,6 +38,7 @@ namespace RNAssistant.Office.Tools
         }
         internal string ErrorCode { get; private set; }
         internal bool Retryable { get; private set; }
+        internal ToolRecoveryContract Recovery { get; private set; }
 
         internal static SkillAuthoringOutcome Ok(
             string message, SkillAuthoringResultData data,
@@ -55,7 +56,8 @@ namespace RNAssistant.Office.Tools
         internal static SkillAuthoringOutcome Error(
             string message, SkillAuthoringResultData data = null,
             string errorCode = null, bool retryable = false,
-            SkillAuthoringEffect effect = SkillAuthoringEffect.None)
+            SkillAuthoringEffect effect = SkillAuthoringEffect.None,
+            ToolRecoveryContract recovery = null)
         {
             return new SkillAuthoringOutcome
             {
@@ -65,7 +67,10 @@ namespace RNAssistant.Office.Tools
                 Data = data,
                 ErrorCode = string.IsNullOrWhiteSpace(errorCode)
                     ? "skill_authoring_failed" : errorCode,
-                Retryable = retryable
+                Retryable = retryable,
+                Recovery = recovery ?? new ToolRecoveryContract(
+                    ToolFailureKind.RejectedNoEffect,
+                    ToolRetryPolicy.Replan)
             };
         }
 

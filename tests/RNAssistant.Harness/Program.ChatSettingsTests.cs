@@ -252,6 +252,12 @@ namespace RNAssistant.Harness
                 AssertContains(stale.Result.DataJson,
                     "prompt_settings_changed",
                     "stale prompt save exposes a stable error code");
+                AssertEqual(ToolFailureKind.RejectedNoEffect,
+                    stale.Recovery.FailureKind,
+                    "stale prompt preparation certifies no settings effect");
+                AssertEqual(ToolRetryPolicy.Replan,
+                    stale.Recovery.RetryPolicy,
+                    "stale prompt preparation requires refreshed intent");
 
                 var ignored = new AppSettings
                 {
