@@ -12,6 +12,12 @@ gates; active tool compatibility adapter отсутствует. Windows/Office 
 проверкой resource-consumer cleanup (2026-09-07). Порядок задаёт
 [Resource MASTER](resource-cutover/MASTER.md), владельцев — [Resource Fabric](../resource-fabric.md).
 
+## Document artifact ownership — active slices
+
+| Seam | Owner and consumers | Removal gate |
+|---|---|---|
+| Transient `ChatArtifact` projection over document-owned originals alongside chat-owned authored artifacts | `DocumentArtifactStore` owns new originals in existing authority/CAS; ingestion, Gateway/provider, viewers, chat projection and fork consume exact document refs. New original lookup no longer requires origin messages. No second store or document-ref fallback; old chat records are not migrated | Slices 1b–2 switch mutable HTML/Plan/Markdown identity, heads and tools; slices 3–4 switch working-set Library/lifecycle and remove chat-only artifact ownership. Incompatible stream handling remains explicit, without deleting user data. Windows delivery remains open |
+
 ## Unified resource cutover — completed host-neutral removal records
 
 Current closure scope is the [MASTER acceptance reconciliation](../resource-fabric.md#master-acceptance-reconciliation--2026-09-07).

@@ -85,7 +85,7 @@ namespace RNAssistant.Office
             _eventStore = new ChatEventStoreAdapter(_chatStore);
             _modelTracePersistence = new ModelTracePersistenceService(_eventStore);
             _attachmentStore = new AttachmentStore(_paths, () => _settingsService.LoadStorageProtector());
-            _chatResourceIngestion = new ChatResourceIngestionService(_attachmentStore);
+            _chatResourceIngestion = new ChatResourceIngestionService(_attachmentStore, _chatStore.DocumentArtifacts);
             _toolStore = new ToolStore(_paths);
             var skillStore = new SkillStore(_paths);
             _vbaJournalStore = new VbaJournalStore(_paths, () => _settingsService.LoadStorageProtector());

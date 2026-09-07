@@ -19,6 +19,16 @@ Domain owners retain typed guard/dispatch/read-back responsibilities.
 
 ## Domain model
 
+Sent originals now have `DocumentArtifactStore` as their immutable publication
+owner in the existing document authority journal and CAS (artifact slice 1a).
+The retained metadata view roots original/extraction payloads; chat projections
+hold links only. `ChatArtifactResourceProvider` projects these records for Gateway
+discovery and exact viewers independently of the origin chat. Historical `chat`
+in the URI provider namespace does not imply conversation ownership: these refs
+carry `DocumentAuthorityId` as owner, and descriptors expose document scope.
+Authored workspace/Plan ownership remains pending under
+[Artifact Library](artifact-library.md#authorized-document-ownership-cutover--2026-09-07).
+
 `ResourceIdentity` is logical identity; `ResourceRef` adds an exact revision.
 `DocumentAuthorityId`, runtime binding and physical locator are separate identities.
 A revision ID is not a content hash. Restoring equal bytes creates new lineage
@@ -99,6 +109,14 @@ even when a query leaves only one or zero matches. A later complete provider can
 erase that flag. `complete=false` and `refineQuery=true` report bounded coverage;
 `partial`/`unavailableScopes` retain their separate provider-availability meaning.
 `empty=true` requires complete enumeration/search, not just zero observed matches.
+Artifact search reports incomplete coverage for a bounded text prefix, truncated
+attachment extraction, unavailable expected source, or an unscanned remainder at
+the result limit. A missing attachment text read is not converted to empty text.
+Artifact/member search matches retain the creation timestamp needed to reconstruct
+the exact semantic target even when the item lies outside the bounded list.
+The prompt working set admits only complete, JSON-quoted semantic targets within
+the whole-index token budget; shown counts reflect admitted rows and omitted
+resources have a `common.resources_find` recovery route.
 The generic semantic-target resolver refuses incomplete enumeration with
 `resource_scope_incomplete` rather than assuming the observed name is unique.
 Explicit domain-owned target resolution and already pinned exact reads are unchanged.

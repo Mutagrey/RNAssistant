@@ -1086,6 +1086,10 @@ namespace RNAssistant.Harness
                 128);
             AssertEqual(currentScriptResource.Reference.Uri, htmlSearch.Matches.Single().Reference.Uri,
                 "HTML search returns the exact current member URI");
+            var limitedHtmlSearch = htmlGateway.Search(htmlSession, ChatArtifactResourceProvider.ProviderName,
+                ".", ChatHtmlResourceCatalog.FileKind, 1, 128);
+            AssertTrue(limitedHtmlSearch.ScanTruncated && limitedHtmlSearch.Matches.Count == 1,
+                "HTML member result limit reports remaining unsearched members");
 
             var activeHtmlArtifact = htmlSession.Artifacts.Single(item => item.Id == htmlSession.ActiveHtmlArtifactId);
             var activeHtmlUri = ArtifactUri(htmlSession, activeHtmlArtifact);
@@ -2109,6 +2113,74 @@ namespace RNAssistant.Harness
                 "artifact prompt does not expose local paths");
             AssertTrue(prompt.IndexOf("policy=", StringComparison.OrdinalIgnoreCase) < 0,
                 "artifact prompt has one reference-first rule instead of per-artifact legacy policies");
+
+            var oversized = new ChatSession();
+            oversized.Artifacts.Add(new ChatArtifact { Kind = ChatArtifactKinds.Markdown,
+                Title = new string('x', 12000), InlineText = "body" });
+            oversized.ActivePlanDocumentArtifactId = oversized.Artifacts[0].Id;
+            oversized.Artifacts.Add(new ChatArtifact { Kind = ChatArtifactKinds.Markdown,
+                Title = "Small", InlineText = "body" });
+            var bounded = ChatResourcePromptIndex.Build(oversized, 240, new AppSettings());
+            AssertTrue(ModelContextBudget.EstimateTextTokens(bounded, new AppSettings()) <= 240,
+                "whole index including active target and omission metadata respects token budget");
+            AssertTrue(!bounded.Contains(new string('x', 10)), "oversized target omitted whole, never advertised as a prefix");
+            AssertContains(bounded, "note: Small", "oversized preferred row does not starve later useful resources");
+            AssertContains(bounded, "showing=1/2", "count reflects rows actually admitted");
+            AssertContains(bounded, "common.resources_find", "omission includes discovery recovery");
+
+            var unusual = new ChatSession();
+            unusual.Artifacts.Add(new ChatArtifact { Kind = ChatArtifactKinds.Markdown,
+                Title = "First\nSecond \"quoted\"", InlineText = "body" });
+            var quoted = ChatResourcePromptIndex.Build(unusual, 1000);
+            var row = quoted.Split('\n').Single(line => line.StartsWith("- target=", StringComparison.Ordinal));
+            var encodedTarget = row.Substring(9, row.IndexOf(" | type=", StringComparison.Ordinal) - 9);
+            var exactTarget = JsonConvert.DeserializeObject<string>(encodedTarget);
+            var resolved = new ResourceGatewayService().ResolveIntentTarget(unusual, exactTarget);
+            AssertEqual(unusual.Artifacts[0].Id, ResourceUri.Parse(resolved.Reference.Uri).Segments[2],
+                "quoted prompt target round-trips through real resolver without changing title whitespace");
+        }
+
+        private static void ArtifactSearchReportsIncompleteScans()
+        {
+            var provider = new ChatArtifactResourceProvider();
+            var session = new ChatSession();
+            session.Artifacts.Add(new ChatArtifact { Kind = ChatArtifactKinds.Markdown,
+                Title = "Long document", InlineText = new string('x', 128000) + "needle" });
+            var prefix = provider.Search(session, "needle", ChatArtifactKinds.Markdown, 20, 128);
+            AssertEqual(0, prefix.Matches.Count, "needle outside scanned prefix is not fabricated");
+            AssertTrue(prefix.ScanTruncated, "prefix-only negative cannot claim whole-resource absence");
+            AssertEqual(128000, prefix.ScannedCharacters, "probe character is not included in scanned coverage");
+            session.Artifacts[0].InlineText = new string('x', 128000);
+            AssertTrue(!provider.Search(session, "needle", ChatArtifactKinds.Markdown, 20, 128).ScanTruncated,
+                "exact bound can be a complete negative");
+            session.Artifacts.Clear();
+            session.Artifacts.Add(new ChatArtifact { Kind = ChatArtifactKinds.Markdown, Title = "needle one", InlineText = "one" });
+            session.Artifacts.Add(new ChatArtifact { Kind = ChatArtifactKinds.Markdown, Title = "needle two", InlineText = "two" });
+            AssertTrue(provider.Search(session, "needle", ChatArtifactKinds.Markdown, 1, 128).ScanTruncated,
+                "result limit reports omitted candidate scan");
+            session.Artifacts.RemoveAt(1);
+            AssertTrue(!provider.Search(session, "needle", ChatArtifactKinds.Markdown, 1, 128).ScanTruncated,
+                "last candidate exactly filling result limit remains complete");
+            session.Artifacts[0].Title = "Unavailable";
+            session.Artifacts[0].InlineText = null;
+            session.Artifacts[0].ContentSha256 = new string('a', 64);
+            AssertTrue(provider.Search(session, "needle", ChatArtifactKinds.Markdown, 20, 128).ScanTruncated,
+                "unavailable advertised text cannot become a complete negative");
+            var attachment = new ChatAttachment { ExtractedCharCount = 12, ExtractedText = "visible text", TextTruncated = true };
+            var message = new ChatMessage { Role = "user", Attachments = new List<ChatAttachment> { attachment } };
+            session.Messages.Add(message);
+            session.Artifacts.Clear();
+            session.Artifacts.Add(new ChatArtifact { Kind = ChatArtifactKinds.Attachment, Title = "Original",
+                SourceMessageId = message.Id, MetadataJson = JsonConvert.SerializeObject(new { attachmentId = attachment.Id }) });
+            AssertTrue(provider.Search(session, "needle", ChatArtifactKinds.Attachment, 20, 128).ScanTruncated,
+                "partial extraction cannot prove absence from the original");
+            attachment.TextTruncated = false;
+            var missingBody = new ChatArtifactResourceProvider(readAttachmentText: (item, bound) => null);
+            AssertTrue(missingBody.Search(session, "needle", ChatArtifactKinds.Attachment, 20, 128).ScanTruncated,
+                "failed attachment load is not coerced to an empty successful scan");
+            session.Messages.Clear();
+            AssertTrue(provider.Search(session, "needle", ChatArtifactKinds.Attachment, 20, 128).ScanTruncated,
+                "missing original metadata remains an incomplete search");
         }
 
         private static void HistoricalAttachmentsStayReferenceOnly()

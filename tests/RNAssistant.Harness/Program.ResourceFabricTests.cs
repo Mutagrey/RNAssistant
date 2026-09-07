@@ -226,6 +226,12 @@ namespace RNAssistant.Harness
             AssertEqual("rna://alpha/hidden",
                 gateway.ResolveIntentTarget(session, "conversation resource: Hidden").Reference.Uri,
                 "search-discovered target resolves directly even when listing remains incomplete");
+            provider.SearchMatch.CreatedUtc = new DateTime(2026, 9, 7, 10, 0, 0, DateTimeKind.Utc);
+            var dated = gateway.Find(session, "needle", "conversation").Items.Single(item => item.Title == "Hidden");
+            AssertContains(dated.Target, "[created 2026-09-07T10:00:00.0000000Z]",
+                "search-only descriptor preserves semantic target disambiguation metadata");
+            AssertEqual("rna://alpha/hidden", gateway.ResolveIntentTarget(session, dated.Target).Reference.Uri,
+                "dated search-only target is resolvable without a different follow-up target");
             provider.SearchMatch = null;
             empty = false; paged = true; incomplete = false;
             var calls = provider.ListCalls;

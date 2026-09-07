@@ -163,6 +163,8 @@ namespace RNAssistant.Office.Services
                 document["vba_project_target"] =
                     VbaResourceProvider.ProjectSemanticTarget(adapterDocumentTitle);
             }
+            if (!string.IsNullOrWhiteSpace(session?.DocumentAuthorityId))
+                document["originals"] = "Sent original files are shared across this document's chats. Use common.resources_find with scope=document; an empty chat does not mean the library is empty.";
             var root = new JObject
             {
                 ["mode"] = mode,

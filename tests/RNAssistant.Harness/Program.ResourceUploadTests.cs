@@ -30,9 +30,9 @@ namespace RNAssistant.Harness
         {
             WithTempPaths(paths =>
             {
-                var session = new ChatSession();
+                var session = new ChatSession { DocumentAuthorityId = DocumentAuthorityId.Create().Id };
                 var store = new AttachmentStore(paths);
-                var ingestion = new ChatResourceIngestionService(store);
+                var ingestion = new ChatResourceIngestionService(store, new ChatStore(paths).DocumentArtifacts);
                 var bytes = Encoding.UTF8.GetBytes(new string('x', ResourceDataPlaneService.MaximumUploadChunkBytes + 17));
                 using (var data = new ResourceDataPlaneService(new ResourceGatewayService(), (chat, owner) => chat == session.Id && owner == ResourceDataPlaneService.UploadOwner))
                 {
@@ -79,7 +79,7 @@ namespace RNAssistant.Harness
             WithTempPaths(paths =>
             {
                 var session = new ChatSession();
-                var ingestion = new ChatResourceIngestionService(new AttachmentStore(paths));
+                var ingestion = new ChatResourceIngestionService(new AttachmentStore(paths), new ChatStore(paths).DocumentArtifacts);
                 using (var data = new ResourceDataPlaneService(new ResourceGatewayService()))
                 {
                     var router = new ResourceDataRouter(data);
@@ -180,7 +180,7 @@ namespace RNAssistant.Harness
             WithTempPaths(paths =>
             {
                 var session = new ChatSession();
-                var ingestion = new ChatResourceIngestionService(new AttachmentStore(paths));
+                var ingestion = new ChatResourceIngestionService(new AttachmentStore(paths), new ChatStore(paths).DocumentArtifacts);
                 var staging = Path.Combine(paths.AttachmentDirectory, "staging");
                 using (var data = new ResourceDataPlaneService(new ResourceGatewayService(), (_, __) =>
                     !Directory.Exists(staging) || !Directory.GetFiles(staging, "*.meta.json").Any()))

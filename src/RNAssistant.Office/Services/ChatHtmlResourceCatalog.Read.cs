@@ -25,6 +25,11 @@ namespace RNAssistant.Office.Services
             {
                 if (!string.IsNullOrWhiteSpace(kind) &&
                     !string.Equals(member.Kind, kind, StringComparison.OrdinalIgnoreCase)) continue;
+                if (result.Matches.Count >= limit)
+                {
+                    result.ScanTruncated = true;
+                    break;
+                }
                 var metadata = member.Title + " " + member.MemberType + " " + member.ContentType;
                 var index = metadata.IndexOf(query, StringComparison.OrdinalIgnoreCase);
                 var representation = ResourceRepresentations.Metadata;
@@ -52,6 +57,7 @@ namespace RNAssistant.Office.Services
                 result.Matches.Add(new ResourceSearchMatch
                 {
                     Reference = Reference(member),
+                    CreatedUtc = member.CreatedUtc,
                     Kind = member.Kind,
                     Title = member.Title,
                     Representation = representation,
@@ -60,7 +66,6 @@ namespace RNAssistant.Office.Services
                     SnippetOffset = start,
                     Snippet = source.Substring(start, Math.Min(maxCharsPerMatch, source.Length - start))
                 });
-                if (result.Matches.Count >= limit) break;
             }
             return result;
         }

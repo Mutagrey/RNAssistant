@@ -115,6 +115,7 @@ namespace RNAssistant.Office.Services
         {
             if (reference == null) return null;
             var address = ResourceUri.Parse(reference.Uri);
+            if (RNAssistant.Core.Storage.DocumentArtifactStore.Owns(session, reference)) return reference.Copy();
             if (address.Provider == "chat" && address.Segments[0] != session.Id)
             {
                 var copy = ChatResourceUri.RebaseArtifactRevision(reference, session.Id);

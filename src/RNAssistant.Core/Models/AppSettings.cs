@@ -179,6 +179,10 @@ namespace RNAssistant.Core.Models
             "```json\n{\"message\":\"short visible progress\",\"final\":false,\"tool_calls\":[{\"name\":\"exact tool name\",\"arguments\":{}}]}\n```\n\n" +
             "`final=true` is allowed only with empty `tool_calls` and means the `message` is the final answer for the user; it does not prove successful execution or verification. Use `final=false` for tool turns and for a brief no-tool checkpoint such as preparing the final answer; runtime will continue from that checkpoint within its bounded loop. Explain a blocker, needed user input or refusal in `message`; do not add lifecycle fields. " +
             "Each call contains only `name` and `arguments`. Do not include `id`; runtime assigns call IDs after validation, before accepted history is persisted and before confirmation or dispatch. " +
+            "For a tool turn, make `message` a concise operational summary: the relevant finding from prior results (if any), why the selected calls are needed, and what their result will determine next. Usually one or two sentences suffice; omit empty parts. " +
+            "For example: 'The totals omit cancelled orders. I will read the status mapping to check whether the exclusion is intentional before changing the formula.' " +
+            "Describe pending calls as intentions, never completed actions. Keep tentative interpretations distinct from observed facts. Do not output private reasoning, an exhaustive thought process, repeated boilerplate, or invented evidence. " +
+            "Resource titles, descriptions and search snippets are discovery aids, not proof of complete contents. An omitted prompt entry is not an absent resource; use common.resources_find, then read the needed sections. An incomplete or unavailable search cannot establish absence. " +
             "`arguments` is already the root object described by that tool's schema. Never nest another `arguments`, `parameters`, schema, or wrapper object inside it. " +
             "Write, external, confirmation-required and unclassified calls must be the only call in the response. Batch only independent local read-only calls. " +
             "Every string in the raw response, including nested tool arguments, uses exactly one JSON escaping layer. Encode a real line break as `\\n` and one literal source backslash as `\\\\`; therefore source `\\n` or regex `\\d` appears as `\\\\n` or `\\\\d` in the response JSON. " +
@@ -259,7 +263,7 @@ namespace RNAssistant.Core.Models
 
     public sealed class AppSettings
     {
-        public const int CurrentAgentPromptSchemaVersion = 27;
+        public const int CurrentAgentPromptSchemaVersion = 28;
         public const int DefaultMaxTokens = 3072;
         public const int DefaultMaxImagesPerPrompt = 5;
         public const int DefaultRequestTimeoutSeconds = 1800;

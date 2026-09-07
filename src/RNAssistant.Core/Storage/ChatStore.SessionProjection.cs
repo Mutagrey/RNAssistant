@@ -27,6 +27,10 @@ namespace RNAssistant.Core.Storage
         private JObject ToProjectionToken(ChatSession session)
         {
             var root = JObject.FromObject(session, JsonSerializer.Create(ProjectionJsonSettings));
+            // Committed document originals are reconstructed from their exact refs.
+            // The conversation never becomes a second owner of artifact metadata.
+            root["Artifacts"] = new JArray(((JArray)root["Artifacts"] ?? new JArray()).Where(item =>
+                string.IsNullOrWhiteSpace((string)item["DocumentAuthorityId"])));
             RuntimePayloadService.ExternalizeProjection(root, _blobs);
             return root;
         }
@@ -75,6 +79,15 @@ namespace RNAssistant.Core.Storage
             session.StorageTailByteOffset = tailByteOffset;
             session.StorageByteLength = byteLength;
             session.StorageLastWriteUtcTicks = lastWriteUtcTicks;
+            if (rebuildDerivedProjections && !string.IsNullOrWhiteSpace(session.DocumentAuthorityId))
+            {
+                var references = (session.Messages ?? new List<ChatMessage>()).Where(message => message != null)
+                    .SelectMany(message => message.ResourceRefs ?? new List<ResourceRef>())
+                    .Where(reference => DocumentArtifactStore.Owns(session, reference))
+                    .GroupBy(reference => reference.Uri, StringComparer.Ordinal).Select(group => group.First());
+                foreach (var reference in references)
+                    session.Artifacts.Add(DocumentArtifacts.Read(session, reference));
+            }
             if (rebuildDerivedProjections)
             {
                 RebuildHtmlWorkspaceProjection(session);

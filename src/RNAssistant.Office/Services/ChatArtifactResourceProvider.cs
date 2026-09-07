@@ -11,6 +11,7 @@ namespace RNAssistant.Office.Services
     internal sealed class ChatArtifactResourceProvider : IResourceProvider, IResourceMemberResolver, IResourceIdentityResolver, IResourceRawSource
     {
         public const string ProviderName = "chat";
+        internal const string DocumentOriginalKind = "document-original";
         private const int MaximumListItems = 50;
         private const int MaximumSearchResults = 20;
         private const int MaximumSearchCharacters = 1000000;
@@ -21,23 +22,27 @@ namespace RNAssistant.Office.Services
         private readonly ChatHtmlResourceCatalog _htmlResources;
         private readonly Func<ChatAttachment, byte[]> _readAttachmentBytes;
         private readonly RNAssistant.Core.Storage.ChatBlobStore _payloads;
+        private readonly RNAssistant.Core.Storage.DocumentArtifactStore _documentArtifacts;
 
         public ChatArtifactResourceProvider(
             Func<ChatSession, string, bool> loadArtifactBody = null,
             Func<ChatAttachment, int, string> readAttachmentText = null,
-            RNAssistant.Core.Storage.ChatBlobStore payloads = null, Func<ChatAttachment, byte[]> readAttachmentBytes = null)
+            RNAssistant.Core.Storage.ChatBlobStore payloads = null, Func<ChatAttachment, byte[]> readAttachmentBytes = null,
+            RNAssistant.Core.Storage.DocumentArtifactStore documentArtifacts = null)
         {
             _loadArtifactBody = loadArtifactBody;
             _readAttachmentText = readAttachmentText;
             _htmlResources = new ChatHtmlResourceCatalog(loadArtifactBody, payloads);
             _readAttachmentBytes = readAttachmentBytes;
             _payloads = payloads;
+            _documentArtifacts = documentArtifacts;
         }
 
         public string Id { get { return ProviderName; } }
 
         public byte[] ReadRawSource(ChatSession session, ResourceRef reference)
         {
+            session = ProjectSession(session, reference.Uri);
             var address = ParseAddress(session, reference.Uri);
             var artifact = FindExactArtifact(session, address.ArtifactId);
             EnsureRevision(artifact, address.Revision);
@@ -64,6 +69,7 @@ namespace RNAssistant.Office.Services
 
         public ResourceListPage List(ChatSession session, string kind, string cursor, int limit)
         {
+            session = ProjectSession(session);
             if (ChatHtmlResourceCatalog.SupportsKind(kind))
             {
                 return _htmlResources.List(session, kind, cursor, limit);
@@ -72,6 +78,7 @@ namespace RNAssistant.Office.Services
             var filtered = OrderedArtifacts(session)
                 .Where(item => _htmlResources.IsReadableRevision(session, item))
                 .Where(item => string.IsNullOrWhiteSpace(kind) ||
+                    kind == DocumentOriginalKind && !string.IsNullOrWhiteSpace(item.DocumentAuthorityId) ||
                     string.Equals(item.Kind, kind, StringComparison.OrdinalIgnoreCase))
                 .ToList();
             var descriptors = filtered.Select(item => Describe(session, item, true)).ToList();
@@ -97,6 +104,7 @@ namespace RNAssistant.Office.Services
 
         public ResourceDescriptor Resolve(ChatSession session, string resourceUri)
         {
+            session = ProjectSession(session, resourceUri);
             var address = ParseAddress(session, resourceUri);
             var artifact = FindExactArtifact(session, address.ArtifactId);
             EnsureRevision(artifact, address.Revision);
@@ -109,6 +117,7 @@ namespace RNAssistant.Office.Services
         public ResourceDescriptor ResolveMember(ChatSession session, string parentUri,
             string memberPath, string memberType)
         {
+            session = ProjectSession(session, parentUri);
             var address = ParseAddress(session, parentUri);
             if (address.IsMember)
             {
@@ -133,6 +142,7 @@ namespace RNAssistant.Office.Services
             int maxCharsPerMatch)
         {
             query = (query ?? string.Empty).Trim();
+            session = ProjectSession(session);
             if (query.Length == 0) throw new InvalidOperationException("Resource search query is required.");
             limit = Math.Max(1, Math.Min(MaximumSearchResults, limit <= 0 ? 10 : limit));
             maxCharsPerMatch = Math.Max(128, Math.Min(2000, maxCharsPerMatch <= 0 ? 600 : maxCharsPerMatch));
@@ -151,9 +161,14 @@ namespace RNAssistant.Office.Services
             foreach (var artifact in OrderedArtifacts(session).Where(item =>
                 _htmlResources.IsReadableRevision(session, item)))
             {
-                if (matches.Count >= limit) break;
                 if (!string.IsNullOrWhiteSpace(kind) &&
+                    !(kind == DocumentOriginalKind && !string.IsNullOrWhiteSpace(artifact.DocumentAuthorityId)) &&
                     !string.Equals(artifact.Kind, kind, StringComparison.OrdinalIgnoreCase)) continue;
+                if (matches.Count >= limit)
+                {
+                    scanTruncated = true;
+                    break;
+                }
 
                 var metadata = string.Join(" ", new[]
                 {
@@ -181,8 +196,23 @@ namespace RNAssistant.Office.Services
                         break;
                     }
                     var readLimit = Math.Min(MaximumSearchCharactersPerArtifact, remaining);
-                    var text = ReadText(session, artifact, readLimit);
-                    if (text == null) continue;
+                    // Probe one additional character: a bounded prefix is not a
+                    // complete negative search over the resource.
+                    var text = ReadText(session, artifact, readLimit + 1);
+                    if (text == null)
+                    {
+                        var source = FindExactAttachment(session, artifact);
+                        if (HasTextHint(artifact, source) || source == null && !string.IsNullOrWhiteSpace(AttachmentId(artifact)))
+                            scanTruncated = true;
+                        continue;
+                    }
+                    var attachment = FindExactAttachment(session, artifact);
+                    if (attachment != null && attachment.TextTruncated) scanTruncated = true;
+                    if (text.Length > readLimit)
+                    {
+                        scanTruncated = true;
+                        text = text.Substring(0, readLimit);
+                    }
                     scannedCharacters += text.Length;
                     var textIndex = text.IndexOf(query, StringComparison.OrdinalIgnoreCase);
                     if (textIndex >= 0)
@@ -203,6 +233,7 @@ namespace RNAssistant.Office.Services
 
         public ResourceReadSelection Read(ChatSession session, ResourceReadRequest request)
         {
+            session = ProjectSession(session, request?.Reference?.Uri);
             var resourceUri = request == null || request.Reference == null
                 ? string.Empty
                 : request.Reference.Uri;
@@ -329,6 +360,7 @@ namespace RNAssistant.Office.Services
                 Representations = representations,
                 CreatedUtc = artifact.CreatedUtc
             };
+            if (!string.IsNullOrWhiteSpace(artifact.DocumentAuthorityId)) result.Metadata["scope"] = "document";
             if (_payloads != null)
             {
                 result.ViewCapabilities.AddRange(ArtifactViewerService.BinaryViewCapabilities(artifact, attachment, _readAttachmentBytes != null));
@@ -394,9 +426,19 @@ namespace RNAssistant.Office.Services
                     !string.IsNullOrWhiteSpace(attachment.ExtractedTextSha256) &&
                     attachment.ExtractedTextByteLength.HasValue;
                 if (!hasExtractedText) return null;
+                if (!string.IsNullOrWhiteSpace(artifact.DocumentAuthorityId))
+                {
+                    if (_payloads == null || string.IsNullOrWhiteSpace(attachment.ExtractedTextSha256) ||
+                        !attachment.ExtractedTextByteLength.HasValue)
+                        throw new ResourceRequestException("The retained original text is unavailable.", "RESOURCE_SNAPSHOT_UNAVAILABLE", false);
+                    var exact = _payloads.ReadText(new ChatBlobReference { Sha256 = attachment.ExtractedTextSha256,
+                        ByteLength = attachment.ExtractedTextByteLength.Value, ContentType = "text/plain; charset=utf-8" });
+                    if (exact == null) throw new ResourceRequestException("The retained original text is unavailable.", "RESOURCE_SNAPSHOT_UNAVAILABLE", false);
+                    return exact.Length <= maxChars ? exact : exact.Substring(0, maxChars);
+                }
                 var text = _readAttachmentText == null
                     ? attachment.ExtractedText
-                    : _readAttachmentText(attachment, maxChars) ?? string.Empty;
+                    : _readAttachmentText(attachment, maxChars);
                 if (text == null) return null;
                 return text.Length <= maxChars ? text : text.Substring(0, maxChars);
             }
@@ -423,6 +465,8 @@ namespace RNAssistant.Office.Services
             return new ResourceSearchMatch
             {
                 Reference = ChatResourceUri.CreateArtifactRevision(session, artifact),
+                CreatedUtc = artifact.CreatedUtc,
+                DocumentScoped = !string.IsNullOrWhiteSpace(artifact.DocumentAuthorityId),
                 Kind = artifact.Kind ?? "artifact",
                 Title = artifact.Title ?? string.Empty,
                 Representation = representation,
@@ -472,6 +516,13 @@ namespace RNAssistant.Office.Services
         internal static ChatAttachment FindExactAttachment(ChatSession session, ChatArtifact artifact)
         {
             if (session == null || artifact == null) return null;
+            if (!string.IsNullOrWhiteSpace(artifact.DocumentAuthorityId))
+            {
+                var original = artifact.OriginalAttachment;
+                return artifact.DocumentAuthorityId == session.DocumentAuthorityId && original != null &&
+                    original.ContentSha256 == artifact.ContentSha256 && original.ContentByteLength == artifact.ContentByteLength
+                    ? original : null;
+            }
             var attachmentId = AttachmentId(artifact);
             if (string.IsNullOrWhiteSpace(attachmentId) || string.IsNullOrWhiteSpace(artifact.SourceMessageId)) return null;
             var messages = (session.Messages ?? new List<ChatMessage>())
@@ -563,27 +614,70 @@ namespace RNAssistant.Office.Services
                 MemberType = parsed.Segments.Count == 8 ? parsed.Segments[6] : null,
                 MemberKey = parsed.Segments.Count == 8 ? parsed.Segments[7] : null
             };
-            if (session == null || !string.Equals(actualSessionId, session.Id, StringComparison.Ordinal))
+            if (session == null || actualSessionId != session.Id && actualSessionId != session.DocumentAuthorityId)
             {
                 throw new ResourceRequestException(
                     "The resource belongs to a different chat. Switch to the owning chat or resolve a reference from the active chat.",
                     "active_chat_mismatch",
                     false);
             }
+            var candidate = (session.Artifacts ?? new List<ChatArtifact>()).FirstOrDefault(item => item?.Id == artifactId);
+            if (candidate != null && (candidate.DocumentAuthorityId ?? session.Id) != actualSessionId)
+                throw new ResourceRequestException("The artifact URI does not match its owner.", "RESOURCE_ACCESS_DENIED", false);
             return address;
         }
 
         public ResourceRef ResolveIdentity(ChatSession session, ResourceIdentity identity)
         {
+            session = ProjectSession(session);
             var address = ResourceUri.Parse(identity.Uri);
             if (address.Provider != ProviderName || session == null || address.Segments.Count != 3 && address.Segments.Count != 6 ||
-                address.Segments[0] != session.Id || address.Segments[1] != "artifact")
+                address.Segments[0] != session.Id && address.Segments[0] != session.DocumentAuthorityId || address.Segments[1] != "artifact")
                 throw new ResourceRequestException("The resource identity is outside this chat.", "RESOURCE_ACCESS_DENIED", false);
             var artifact = FindExactArtifact(session, address.Segments[2]);
             var exact = ChatResourceUri.CreateArtifactRevision(session, artifact);
+            if (ResourceUri.Parse(exact.Uri).Segments[0] != address.Segments[0])
+                throw new ResourceRequestException("The artifact identity does not match its owner.", "RESOURCE_ACCESS_DENIED", false);
             if (address.Segments.Count == 3) return exact;
             return new ResourceRef(ResourceUri.Create(ProviderName, session.Id, "artifact", artifact.Id, "revision",
                 exact.Revision, address.Segments[3], address.Segments[4], address.Segments[5]), exact.Revision);
+        }
+
+        internal ChatArtifact ResolveArtifact(ChatSession session, string resourceUri)
+        {
+            session = ProjectSession(session, resourceUri);
+            var address = ParseAddress(session, resourceUri);
+            if (address.IsMember) throw new ResourceRequestException("An artifact revision is required.", "invalid_resource_uri", false);
+            var artifact = FindExactArtifact(session, address.ArtifactId);
+            EnsureRevision(artifact, address.Revision);
+            if (ChatResourceUri.CreateArtifactRevisionUri(session, artifact) != resourceUri)
+                throw new ResourceRequestException("The artifact revision is not canonical.", "invalid_resource_uri", false);
+            return artifact;
+        }
+
+        private ChatSession ProjectSession(ChatSession session, string exactUri = null)
+        {
+            if (_documentArtifacts == null || string.IsNullOrWhiteSpace(session?.DocumentAuthorityId)) return session;
+            IEnumerable<ChatArtifact> originals;
+            if (exactUri == null) originals = _documentArtifacts.List(session);
+            else
+            {
+                string owner, id;
+                int revision;
+                originals = ChatResourceUri.TryParseArtifactRevision(new ResourceRef(exactUri), out owner, out id, out revision) &&
+                    owner == session.DocumentAuthorityId
+                    ? new[] { _documentArtifacts.Read(session, new ResourceRef(exactUri, revision.ToString(System.Globalization.CultureInfo.InvariantCulture))) }
+                    : new ChatArtifact[0];
+            }
+            return new ChatSession
+            {
+                Id = session.Id, DocumentAuthorityId = session.DocumentAuthorityId,
+                Artifacts = (session.Artifacts ?? new List<ChatArtifact>()).Where(item => item != null &&
+                    string.IsNullOrWhiteSpace(item.DocumentAuthorityId)).Concat(originals).ToList(),
+                Messages = session.Messages, HtmlWorkspace = session.HtmlWorkspace, HtmlWorkspaceRecovery = session.HtmlWorkspaceRecovery,
+                ActiveHtmlArtifactId = session.ActiveHtmlArtifactId, ActivePlanDocumentArtifactId = session.ActivePlanDocumentArtifactId,
+                ActiveTaskListArtifactId = session.ActiveTaskListArtifactId
+            };
         }
 
         private static ChatArtifact FindExactArtifact(

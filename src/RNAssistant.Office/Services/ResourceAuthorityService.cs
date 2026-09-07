@@ -26,6 +26,7 @@ namespace RNAssistant.Office.Services
         }
 
         internal IResourceAuthorityStore Store { get { return _authority; } }
+        internal IResourceRevisionStore Revisions { get { return _revisions; } }
         internal ChatBlobStore Payloads { get { return _payloads; } }
 
         internal long[] PublicationOrder(ResourceAuthoritySnapshot snapshot, ResourceRef exact, ChatSession session = null)
@@ -150,6 +151,9 @@ namespace RNAssistant.Office.Services
         {
             var address = reference == null ? null : ResourceUri.Parse(reference.Uri);
             if (address?.Provider == "catalog") return CatalogPublicationService.ScopeId;
+            if (address?.Provider == "chat" && address.Segments.Count >= 3 &&
+                address.Segments[0] == session?.DocumentAuthorityId)
+                return Scope(session, true);
             if (address?.Provider == "context" || address?.Provider == "state")
             {
                 if (address.Segments.Count != 3 || address.Segments[0] != "conversation" &&

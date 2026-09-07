@@ -358,6 +358,8 @@ namespace RNAssistant.Office.Services
                 Title = artifact.Title,
                 MimeType = artifact.MimeType,
                 SourceMessageId = artifact.SourceMessageId,
+                DocumentAuthorityId = artifact.DocumentAuthorityId,
+                OriginalAttachment = CloneAttachment(artifact.OriginalAttachment),
                 RunId = artifact.RunId,
                 Revision = artifact.Revision,
                 ParentArtifactId = artifact.ParentArtifactId,

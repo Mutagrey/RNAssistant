@@ -47,6 +47,7 @@ namespace RNAssistant.Core.Storage
 
         private readonly AppDataPaths _paths;
         private readonly ChatBlobStore _blobs;
+        internal DocumentArtifactStore DocumentArtifacts { get; private set; }
         private readonly Func<StorageProtector> _protectionProvider;
         private readonly BoundedLruCache<ProjectionCacheEntry> _projectionCache;
         private readonly BoundedLruCache<HeaderCacheEntry> _headerCache;
@@ -91,6 +92,8 @@ namespace RNAssistant.Core.Storage
             _paths = paths ?? throw new ArgumentNullException("paths");
             _protectionProvider = protectionProvider ?? (() => StorageProtector.None);
             _blobs = new ChatBlobStore(paths, _protectionProvider);
+            var authority = new ResourceAuthorityStore(paths);
+            DocumentArtifacts = new DocumentArtifactStore(authority, authority, _blobs);
             _projectionCache = new BoundedLruCache<ProjectionCacheEntry>(
                 MaxProjectionCacheEntries,
                 MaxProjectionCacheCharacters,

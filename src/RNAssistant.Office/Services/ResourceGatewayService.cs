@@ -61,7 +61,8 @@ namespace RNAssistant.Office.Services
             var providers = new List<IResourceProvider>
             {
                 new ChatArtifactResourceProvider(loadArtifactBody, readAttachmentText, authority?.Payloads,
-                    readAttachmentBytes)
+                    readAttachmentBytes, authority?.Payloads == null ? null :
+                        new DocumentArtifactStore(authority.Store, authority.Revisions, authority.Payloads))
             };
             if (authority?.Payloads != null)
             {
@@ -88,6 +89,13 @@ namespace RNAssistant.Office.Services
         internal ResourceGatewayService(IEnumerable<IResourceProvider> providers)
             : this(providers, null)
         {
+        }
+
+        internal ChatArtifact ResolveArtifact(ChatSession session, string resourceUri)
+        {
+            var provider = ProviderFor(resourceUri) as ChatArtifactResourceProvider;
+            if (provider == null) throw new ResourceRequestException("An artifact resource is required.", "invalid_resource_uri", false);
+            return provider.ResolveArtifact(session, resourceUri);
         }
 
         internal ResourceGatewayService(IEnumerable<IResourceProvider> providers,

@@ -112,6 +112,11 @@ namespace RNAssistant.Office.Services
                 if (reference == null) return null;
                 var original = reference;
                 var address = ResourceUri.Parse(reference.Uri);
+                if (DocumentArtifactStore.Owns(_source, reference))
+                {
+                    if (!DocumentArtifactStore.Owns(_target, reference)) throw Error("The original belongs to another document.");
+                    return reference.Copy();
+                }
                 if (address.Provider == "chat")
                 {
                     var owned = ChatResourceUri.RebaseArtifactRevision(reference, _source.Id);

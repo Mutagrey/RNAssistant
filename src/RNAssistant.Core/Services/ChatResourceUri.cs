@@ -19,7 +19,8 @@ namespace RNAssistant.Core.Services
             }
             var revision = Math.Max(1, artifact.Revision).ToString(CultureInfo.InvariantCulture);
             return new ResourceRef(
-                ResourceUri.Create(ProviderName, session.Id, "artifact", artifact.Id, "revision", revision),
+                ResourceUri.Create(ProviderName, string.IsNullOrWhiteSpace(artifact.DocumentAuthorityId)
+                    ? session.Id : artifact.DocumentAuthorityId, "artifact", artifact.Id, "revision", revision),
                 revision);
         }
 
@@ -105,13 +106,16 @@ namespace RNAssistant.Core.Services
         {
             artifactId = null;
             int revision;
-            if (session == null || !TryParseArtifactRevision(session.Id, reference, out artifactId, out revision))
+            string ownerId;
+            if (session == null || !TryParseArtifactRevision(reference, out ownerId, out artifactId, out revision) ||
+                ownerId != session.Id && ownerId != session.DocumentAuthorityId)
             {
                 return false;
             }
             var parsedArtifactId = artifactId;
             var artifact = FindUniqueArtifact(session, parsedArtifactId);
-            if (artifact != null && Math.Max(1, artifact.Revision) == revision) return true;
+            if (artifact != null && Math.Max(1, artifact.Revision) == revision &&
+                (string.IsNullOrWhiteSpace(artifact.DocumentAuthorityId) ? session.Id : artifact.DocumentAuthorityId) == ownerId) return true;
             artifactId = null;
             return false;
         }

@@ -9,10 +9,12 @@ namespace RNAssistant.Office.Services
     internal sealed class ChatResourceIngestionService
     {
         private readonly AttachmentStore _attachments;
+        private readonly DocumentArtifactStore _documentArtifacts;
 
-        public ChatResourceIngestionService(AttachmentStore attachments)
+        public ChatResourceIngestionService(AttachmentStore attachments, DocumentArtifactStore documentArtifacts)
         {
             _attachments = attachments ?? throw new ArgumentNullException("attachments");
+            _documentArtifacts = documentArtifacts ?? throw new ArgumentNullException(nameof(documentArtifacts));
         }
 
         public ChatAttachment Stage(
@@ -48,6 +50,8 @@ namespace RNAssistant.Office.Services
         {
             if (message == null) throw new ArgumentNullException("message");
             var chatId = RequireChatId(session);
+            if (string.IsNullOrWhiteSpace(session.DocumentAuthorityId))
+                throw new InvalidOperationException("A bound document identity is required before committing originals.");
             if (session.Messages == null || messageIndex < 0 || messageIndex >= session.Messages.Count ||
                 !object.ReferenceEquals(session.Messages[messageIndex], message))
             {
@@ -60,6 +64,16 @@ namespace RNAssistant.Office.Services
             }
             _attachments.CommitToCas(message);
             ChatResourceReferenceService.LinkMessageResources(session, messageIndex);
+            foreach (var original in message.Attachments)
+            {
+                var artifact = session.Artifacts.Single(item => item.Id == "attachment_" + original.Id);
+                var oldReference = RNAssistant.Core.Services.ChatResourceUri.CreateArtifactRevision(session, artifact);
+                var published = _documentArtifacts.PublishOriginal(session, artifact, original);
+                session.Artifacts[session.Artifacts.IndexOf(artifact)] = published;
+                message.ResourceRefs.RemoveAll(reference => reference.Uri == oldReference.Uri);
+                var exact = RNAssistant.Core.Services.ChatResourceUri.CreateArtifactRevision(session, published);
+                if (!message.ResourceRefs.Any(reference => reference.Uri == exact.Uri)) message.ResourceRefs.Add(exact);
+            }
         }
 
         public void DeleteDrafts(ChatMessage message)

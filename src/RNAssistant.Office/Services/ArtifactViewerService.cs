@@ -166,7 +166,7 @@ namespace RNAssistant.Office.Services
         public ArtifactViewerPageDto ReadPage(ChatSession session, string resourceUri, string cursor,
             ResourceDataPlaneService dataPlane, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken))
         {
-            var artifact = ResolveExactArtifact(session, resourceUri);
+            var artifact = _gateway.ResolveArtifact(session, resourceUri);
             var revision = Math.Max(1, artifact.Revision);
 
             var descriptor = _gateway.Resolve(session, resourceUri).Resource;
@@ -306,33 +306,6 @@ namespace RNAssistant.Office.Services
             return (value ?? string.Empty).Split(';')[0].Trim().ToLowerInvariant();
         }
 
-        internal static ChatArtifact ResolveExactArtifact(ChatSession session, string resourceUri)
-        {
-            if (session == null || string.IsNullOrWhiteSpace(session.Id))
-            {
-                throw new InvalidOperationException("A persisted chat is required for artifact viewing.");
-            }
-            var reference = new ResourceRef(resourceUri);
-            string artifactId;
-            int revision;
-            if (!ChatResourceUri.TryParseArtifactRevision(session.Id, reference, out artifactId, out revision))
-            {
-                throw new InvalidOperationException("An exact artifact revision URI from the active chat is required.");
-            }
-            var artifact = (session.Artifacts ?? new List<ChatArtifact>()).SingleOrDefault(item =>
-                item != null &&
-                string.Equals(item.Id, artifactId, StringComparison.OrdinalIgnoreCase) &&
-                Math.Max(1, item.Revision) == revision);
-            if (artifact == null || !string.Equals(
-                ChatResourceUri.CreateArtifactRevisionUri(session, artifact),
-                resourceUri,
-                StringComparison.Ordinal))
-            {
-                throw new InvalidOperationException("Artifact viewer URI is not the canonical exact revision.");
-            }
-            return artifact;
-        }
-
         private byte[] ReadExactImageBytes(
             ChatSession session,
             string resourceUri,
@@ -345,7 +318,7 @@ namespace RNAssistant.Office.Services
             {
                 throw new InvalidOperationException("Artifact image byte reader is unavailable.");
             }
-            artifact = ResolveExactArtifact(session, resourceUri);
+            artifact = _gateway.ResolveArtifact(session, resourceUri);
             descriptor = _gateway.Resolve(session, resourceUri).Resource;
             attachment = ChatArtifactResourceProvider.FindExactAttachment(session, artifact);
             mimeType = NormalizeMimeType(attachment == null ? null : attachment.ContentType);

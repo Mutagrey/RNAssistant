@@ -1,5 +1,30 @@
 # Stabilization progress
 
+User-authorized document artifact ownership work (2026-09-07): target behavior and
+ordered replacement/acceptance are recorded in [Artifact Library](../artifact-library.md#authorized-document-ownership-cutover--2026-09-07).
+Slice **1a, document-owned sent originals, is implemented host-neutral** using the
+existing authority journal/CAS. Another chat of the same document can discover and
+read uploaded MD/files/PDF/images without the origin message. Publication/link
+retry is idempotent, conflicting metadata is rejected, fork preserves the exact
+ref, and chat deletion/restart/GC retain original and extraction payloads.
+The two `document originals:` checks include concurrent store instances, failed
+chat-link retry, discovery/resolve/viewer round-trip, missing extraction and
+cross-document refusal. Attachment and existing viewer/Gateway/fork checks pass.
+Next: finish the mutable artifact identity/head owner and switch HTML/Plan/authored
+Markdown tools (slices 1b–2); shared editing, working-set UI and bounded indexed
+discovery remain open. This is not the full cutover. Existing Resource MASTER
+invariants and Windows gates remain in force; Phase 12 is not started.
+
+Previous prerequisite correction: whole-target prompt index admission, truthful
+artifact/member search bounds/unavailability, search-only target metadata, prompt
+schema 28 operational summaries and strict compaction claim-array extraction.
+No new shared store, adapter, wire root fields or cross-chat access is enabled by
+this correction. Eleven focused harness checks pass: resource Gateway, incomplete
+artifact search, discovery coverage, bounded prompt index, structured compaction,
+default prompts, three prompt-review cases, exact empty text and on-demand reread.
+Only host-neutral harness execution; target-model quality and Windows delivery
+remain unqualified.
+
 Latest correction (2026-09-07): the reported VBA refactoring stall exposed a
 contradiction between the mutation guard and the Agent repeat guard. A stale
 whole-module write correctly required a complete current `source` read, but the

@@ -68,7 +68,8 @@ namespace RNAssistant.Harness
             {
                 var adapter = FakeOfficeAdapter.ForHost("Excel");
                 var session = NewSession(adapter);
-                var ingestion = new ChatResourceIngestionService(new AttachmentStore(paths));
+                session.DocumentAuthorityId = DocumentAuthorityId.Create().Id;
+                var ingestion = new ChatResourceIngestionService(new AttachmentStore(paths), new ChatStore(paths).DocumentArtifacts);
                 var staged = ingestion.Stage(
                     session,
                     "notes.txt",
@@ -145,6 +146,125 @@ namespace RNAssistant.Harness
                 "attachment artifact keeps its original immutable body");
             AssertEqual(0, secondMessage.ResourceRefs.Count,
                 "conflicting attachment source receives no canonical reference");
+        }
+
+        private static void DocumentOriginalsSurviveChatDeletionAndRestart()
+        {
+            WithTempPaths(paths =>
+            {
+                var chats = new ChatStore(paths);
+                var source = NewSession(FakeOfficeAdapter.ForHost("Excel"));
+                source.DocumentAuthorityId = DocumentAuthorityId.Create().Id;
+                var attachments = new AttachmentStore(paths);
+                var ingestion = new ChatResourceIngestionService(attachments, chats.DocumentArtifacts);
+                var draft = ingestion.Stage(source, "specification.md", "text/markdown",
+                    System.Text.Encoding.UTF8.GetBytes("# Specification\nshared original needle"));
+                var message = new ChatMessage { Role = "user", Content = "Read the specification",
+                    Attachments = ingestion.LoadDrafts(source, new[] { draft.Id }).ToList() };
+                source.Messages.Add(message);
+                ingestion.CommitAndLink(source, message, 0);
+                var reference = message.ResourceRefs.Single();
+                var other = NewSession(FakeOfficeAdapter.ForHost("Excel"));
+                other.DocumentAuthorityId = source.DocumentAuthorityId;
+                var authorityStore = new ResourceAuthorityStore(paths);
+                var blobs = new ChatBlobStore(paths);
+                var authority = new ResourceAuthorityService(authorityStore, authorityStore, payloads: blobs);
+                var gateway = new ResourceGatewayService(null, null, null,
+                    readAttachmentText: attachments.ReadExtractedText, authority: authority,
+                    readAttachmentBytes: attachments.ReadBytes);
+                var found = gateway.Find(other, "specification", "document");
+                AssertTrue(found.Complete && found.Items.Count == 1, "another chat discovers an original even before its origin chat link saves");
+                AssertEqual(reference.Uri, found.Items[0].Reference.Uri, "cross-chat discovery preserves one exact document resource");
+                AssertEqual(reference.Uri, gateway.ResolveIntentTarget(other, found.Items[0].Target).Reference.Uri,
+                    "document original semantic target resolves from another chat");
+                var read = gateway.Read(other, new ResourceReadRequest { Reference = reference, Representation = "text", MaxChars = 1000 });
+                AssertContains(read.Result.Text, "shared original needle", "text read does not require source message in the reading chat");
+                AssertTrue(other.Artifacts.Count == 0 && other.Messages.Count == 0, "discovery does not mutate another chat or copy the original");
+                using (var data = new ResourceDataPlaneService(gateway, (chat, owner) => chat == other.Id))
+                {
+                    var page = new ArtifactViewerService(gateway, attachments.ReadBytes).ReadPage(other, reference.Uri, null, data);
+                    AssertEqual(message.Attachments[0].ExtractedTextSha256, page.ContentSha256,
+                        "shared text viewer resolves its exact source without local artifact metadata");
+                }
+                // Simulate a failed chat-link save: a new send uses the retained
+                // draft, while the already published original remains unchanged.
+                source.Messages.Clear();
+                message = new ChatMessage { Role = "user", Content = "Retry link",
+                    Attachments = ingestion.LoadDrafts(source, new[] { draft.Id }).ToList() };
+                source.Messages.Add(message);
+                ingestion.CommitAndLink(source, message, 0);
+                AssertEqual(reference.Uri, message.ResourceRefs.Single().Uri, "retry links the retained original instead of publishing a copy");
+                AssertEqual(1L, authorityStore.Capture(ResourceAuthorityScopeId.Document(new DocumentAuthorityId(source.DocumentAuthorityId))).Generation,
+                    "failed chat link recovery does not advance original authority");
+                chats.Save(source);
+                var reloaded = new ChatStore(paths).Load(source.Host, source.DocumentKey, source.Id);
+                AssertEqual(source.DocumentAuthorityId, reloaded.Artifacts.Single().DocumentAuthorityId, "exact refs rebuild document originals on replay");
+                AssertTrue(reloaded.Artifacts.Single().OriginalAttachment != null, "source metadata comes from document authority on replay");
+                var events = string.Join("\n", Directory.GetFiles(paths.ChatDirectory, "*.events.jsonl", SearchOption.AllDirectories).Select(File.ReadAllText));
+                AssertTrue(!events.Contains("\"Artifacts\":[{\"Id\":\"attachment_"), "chat events do not retain a second artifact record");
+                var clone = ChatCloneService.CloneSessionSnapshot(reloaded);
+                clone.Id = Guid.NewGuid().ToString("N");
+                clone.ParentSessionId = source.Id;
+                ChatResourceReferenceService.LinkMessageResources(clone, 0);
+                AssertEqual(reference.Uri, clone.Messages.Single().ResourceRefs.Single().Uri, "fork linking never rebases a shared original into the child chat");
+                AssertEqual(reference.Uri, HtmlWorkspaceArtifactService.ForkReference(clone, reference).Uri,
+                    "HTML bindings to a document original survive a chat fork");
+                ingestion.DeleteDrafts(message);
+                AssertTrue(chats.Delete(source.Host, source.DocumentKey, source.Id), "originating chat deleted");
+                var gc = CasService(paths, new ChatStore(paths), new VbaJournalStore(paths), () => StorageProtector.None).Collect();
+                AssertTrue(gc.Completed && gc.Health.MissingBlobCount == 0, "authority-owned original and extraction remain CAS roots after chat deletion");
+                var after = new ChatStore(paths).DocumentArtifacts.Read(other, reference);
+                AssertContains(attachments.ReadExtractedText(after.OriginalAttachment), "shared original needle", "original remains readable after restart and collection");
+                var foreign = new ChatSession { DocumentAuthorityId = DocumentAuthorityId.Create().Id };
+                RuntimeThrows<InvalidDataException>(() => chats.DocumentArtifacts.Read(foreign, reference));
+                RuntimeThrows<ResourceRequestException>(() => gateway.Resolve(foreign, reference.Uri));
+                File.Delete(blobs.PathFor(after.OriginalAttachment.ExtractedTextSha256));
+                AssertEqual("RESOURCE_SNAPSHOT_UNAVAILABLE", RuntimeThrows<ResourceRequestException>(() =>
+                    gateway.Read(other, new ResourceReadRequest { Reference = reference, Representation = "text", MaxChars = 1000 })).ErrorCode,
+                    "missing retained text is explicit, never an empty successful read");
+            });
+        }
+
+        private static void DocumentOriginalPublicationIsIdempotentAndConcurrent()
+        {
+            WithTempPaths(paths =>
+            {
+                var source = NewSession(FakeOfficeAdapter.ForHost("Excel"));
+                source.DocumentAuthorityId = DocumentAuthorityId.Create().Id;
+                var attachments = new AttachmentStore(paths);
+                var original = attachments.Import("original.txt", "text/plain", System.Text.Encoding.UTF8.GetBytes("original"), source.Id);
+                var message = new ChatMessage { Role = "user", Attachments = new List<ChatAttachment> { original } };
+                source.Messages.Add(message);
+                attachments.CommitToCas(message);
+                ChatResourceReferenceService.LinkMessageResources(source, 0);
+                var artifact = source.Artifacts.Single();
+                var stores = new[] { new ChatStore(paths).DocumentArtifacts, new ChatStore(paths).DocumentArtifacts };
+                var competing = ChatCloneService.CloneArtifact(artifact);
+                competing.SourceMessageId = "retry-message";
+                var results = Task.WhenAll(Task.Run(() => stores[0].PublishOriginal(source, artifact, original)),
+                    Task.Run(() => stores[1].PublishOriginal(source, competing, original))).GetAwaiter().GetResult();
+                var scope = ResourceAuthorityScopeId.Document(new DocumentAuthorityId(source.DocumentAuthorityId));
+                AssertEqual(1L, new ResourceAuthorityStore(paths).Capture(scope).Generation, "concurrent duplicate publication advances head once");
+                AssertEqual(results[0].SourceMessageId, results[1].SourceMessageId, "both publishers retain the winner's immutable provenance");
+                var changed = ChatCloneService.CloneArtifact(artifact);
+                changed.Title = "Different metadata";
+                RuntimeThrows<ResourceAuthorityConflictException>(() => stores[0].PublishOriginal(source, changed, original));
+                AssertEqual(1L, new ResourceAuthorityStore(paths).Capture(scope).Generation, "stale/conflicting original metadata cannot overwrite publication");
+                var pending = Enumerable.Range(0, 4).Select(index => Task.Run(() =>
+                {
+                    var owner = new ChatStore(paths).DocumentArtifacts;
+                    var session = new ChatSession { DocumentAuthorityId = source.DocumentAuthorityId };
+                    var originalStore = new AttachmentStore(paths);
+                    var next = originalStore.Import("parallel" + index + ".txt", "text/plain", System.Text.Encoding.UTF8.GetBytes("body" + index), session.Id);
+                    var nextMessage = new ChatMessage { Role = "user", Attachments = new List<ChatAttachment> { next } };
+                    session.Messages.Add(nextMessage);
+                    originalStore.CommitToCas(nextMessage);
+                    ChatResourceReferenceService.LinkMessageResources(session, 0);
+                    return owner.PublishOriginal(session, session.Artifacts.Single(), next);
+                })).ToArray();
+                Task.WhenAll(pending).GetAwaiter().GetResult();
+                AssertEqual(5, new ChatStore(paths).DocumentArtifacts.List(source).Count, "independent originals survive competing document-generation advances");
+            });
         }
 
         private static void AttachmentMultimodalApiPayload()

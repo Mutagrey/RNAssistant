@@ -2640,6 +2640,21 @@ namespace RNAssistant.Harness
             session.Messages.Add(new ChatMessage { Role = "user", Content = "Keep the original formatting." });
             session.Messages.Add(new ChatMessage { Role = "assistant", Content = "Understood." });
 
+            foreach (var invalid in new JToken[] { JValue.CreateNull(), new JValue("not a claim") })
+            {
+                var artifactCount = session.Artifacts.Count;
+                LlmCompletionDelegate malformed = (settings, messages, options, stream, cancellationToken) =>
+                {
+                    var response = JObject.Parse(CompactionReply(messages, "Valid claim alongside malformed entry.").Content);
+                    ((JArray)response["claims"]).Add(invalid.DeepClone());
+                    return Task.FromResult(new LlmCompletionResult { Content = response.ToString() });
+                };
+                RuntimeThrows<InvalidOperationException>(() => new ContextCompactionService(malformed).EnsureWithinBudgetAsync(
+                    session, new AppSettings(), null, true, null, CancellationToken.None).GetAwaiter().GetResult());
+                AssertEqual(artifactCount, session.Artifacts.Count, "malformed extraction does not publish a partial checkpoint");
+                AssertTrue(session.ContextCheckpoints.Count == 0, "invalid array entries are rejected rather than silently dropped");
+            }
+
             var checkpoint = new ContextCompactionService(completion).EnsureWithinBudgetAsync(
                 session, new AppSettings(), null, true, null, CancellationToken.None).GetAwaiter().GetResult();
 

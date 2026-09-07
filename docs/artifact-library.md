@@ -16,6 +16,166 @@ The existing Resource Fabric ingestion, CAS,
 document defines the user-visible lifecycle, viewers and mutation rules; it does not
 introduce another artifact transport or store.
 
+## Authorized document ownership cutover — 2026-09-07
+
+Status: slice **1a, sent originals, implemented host-neutral**. Newly sent files
+belong to the document and are discoverable/readable from its other chats.
+Authored HTML/Markdown/Plan still use the chat-owned lifecycle below; shared
+editing and the Library working-set UI are not implemented. This section owns
+the artifact-specific decision, not a second resource architecture.
+
+`DocumentArtifactStore` publishes immutable original metadata as a retained view
+in the existing authority journal/CAS. Raw and extracted payloads are retained
+parts, so deletion of the origin chat and CAS collection preserve the original.
+Chat events retain exact links and input observations; their `Artifacts`
+projection does not duplicate document-owned records. The first publication
+records origin-attempt provenance, even if saving its chat link subsequently fails.
+Retrying that link reuses the exact original; conflicting metadata is refused.
+Independent publications retry only the authority generation check.
+
+Gateway discovery (`scope=document`), text/raw reads and exact viewers use this
+owner without requiring the origin message. Fork preserves the original ref.
+Missing metadata/extraction fails explicitly, with no origin-chat/body fallback;
+foreign document references are refused. Existing chat-local records are not
+silently migrated. The remaining ownership seam and removal gate are tracked in
+[MIGRATION_MAP](stabilization/MIGRATION_MAP.md#document-artifact-ownership--active-slices).
+Exact reads load one metadata record; library enumeration still scans committed
+original metadata. Bounded indexed discovery remains slice 3.
+
+### Ownership and user behavior
+
+The durable owner is the existing `DocumentAuthorityId`, independent of a chat,
+window, current path or open runtime session. The library is a projection of that
+owner's committed resources. It does not become another writable inventory.
+
+| Object | Owner / behavior |
+|---|---|
+| Authored HTML workspace, Markdown documentation, report, specification, long-lived Plan | Document; independently named logical artifacts, each with immutable revisions |
+| Sent original files, PDF/image/audio and imported source | Document; exact immutable originals, with extraction/provenance relations |
+| Charts, CSV/JSON results, exports, OCR and converted representations | Document; explicit snapshot/derived-resource provenance and completeness |
+| Task List for one run, diagnostic/tool results, compaction checkpoint | Chat/run; do not advertise them as reusable document deliverables |
+| Unsent upload | Chat draft until Send commits it |
+| Tool/Skill packages | Existing catalog owner, independent of document/chat deletion |
+
+A request to create an MD document creates an authored Markdown resource. A normal
+Markdown-formatted reply remains a message. Multiple MD documents and multiple
+HTML workspaces must coexist; do not implement documentation by overwriting the
+single active Plan or adding MD text to the single active HTML workspace.
+
+A chat keeps its selected working-set links, not copies or private resource heads.
+`Attach from document library` and `Continue in new chat` retain the logical
+identity. `Create independent copy` explicitly creates a new logical identity and
+source relation. Forking/editing dialogue must neither clone the shared workspace
+nor rewind its head. A message always retains the exact revision it referenced.
+Sharing across *different* Office documents is outside this cutover: an explicit
+copy/import with dependencies is required, without granting access to another live
+Office target. Existing document identity rules own Save/Save As/reopen semantics.
+
+### Publication, races and retention
+
+Reuse the existing resource authority/revision journals and CAS. Add the missing
+domain publication semantics there; do not scan all chats into an authoritative
+library, keep a mutable library JSON file, or dual-write artifact bodies/heads to
+both the conversation and document owner. Chat events retain refs, origin and
+accepted operations; UI and working-set projections are disposable.
+
+Each logical artifact has its own current head and immutable parent lineage.
+Runtime binds a selected semantic target to the exact logical identity and observed
+revision. Under the document mutation gate, recheck that revision immediately
+before dispatch and publish the complete verified revision and head atomically.
+Do not hold the gate during model/user waits. An intervening write returns a
+conflict with the read/compare recovery route, never a silent overwrite or replay.
+Unrelated artifact edits should not conflict merely because the document generation
+advanced; per-artifact guards still publish against a coherent authority snapshot.
+
+HTML members and binding refs form one revision. Historical bindings stay exact;
+a new source head does not rewrite them. An unavailable source or changed binding
+must remain explicit. Switching a chat/resource cannot replace a dirty editor's
+base guard. Late reads/uploads must be rejected by the existing ownership leases.
+
+A resource commit can survive a failed subsequent chat-link save. It remains in
+the document library with the source attempt identity, and recovery can reconcile
+the reference without rerunning a mutation. Do not report the entire operation as
+completed before the required publication/link barriers are durable. Deterministic
+attempt identity prevents duplicate publication after an uncertain acknowledgement.
+
+Deleting a chat removes its links/history according to the chat operation, never
+its document's resources. Removing a resource is a separate explicit tombstone
+operation with incoming-reference checks. Authority revisions, original binary
+payloads, source dependencies, pinned message refs and unresolved attempts remain
+CAS roots. The current attachment-to-message lookup and chat-local GC roots must
+be replaced before deleting an originating chat can be declared safe.
+
+Existing incompatible streams remain preserved and explicitly reset/skip; no
+hidden rebase, fallback or migration. No old body is deleted by format rejection.
+Any explicit import is a separate operation with checked source provenance.
+
+### Discovery, descriptions and model context
+
+Use `common.resources_find/read` and existing Gateway/evidence/compiler owners.
+Discovery needs document artifacts, selected chat resources and explicitly queried
+history; it must not silently search another document. Search current artifacts by
+default. Historical versions/changes and origin messages are separate requested
+views so old versions do not crowd out the current deliverable.
+
+Three levels keep context useful without loading the library wholesale:
+
+1. A bounded current working set: complete semantic target, type, purpose and
+   revision/currentness metadata projected by runtime. Never truncate a target.
+2. Search over names, descriptions, section headings and indexed content, returning
+   relevant snippets and honest coverage/unavailability. Zero matches in a partial
+   search does not mean no resource exists. Index generation must be matched to
+   the frozen authority generation or explicitly marked incomplete.
+3. Exact reads of requested sections, history and changes. Search snippets and
+   descriptions never grant a whole-read mutation guard or claim full source
+   coverage. Rename/deletion/ambiguity returns an explicit rediscovery route.
+
+A resource's authored description records its purpose and scope; it is not a
+truncated body. A generated synopsis is a derived observation bound to the source
+revision, coverage and producer. Keep the complete submitted description durably;
+only its display/context projection is bounded and marks omissions. A stale or
+failed synopsis must not hide a valid artifact or masquerade as current content.
+Use small relevant descriptions and deterministic headings first; embeddings or
+an additional model call on every save are not prerequisites.
+
+`message` remains visible prose in conversation-response v5. For a tool turn it
+should briefly connect an observed finding, the purpose of the actual upcoming
+calls, and the question their result will resolve. Empty parts are omitted. It is
+not private reasoning, a fixed multi-section essay, proof of effect, or a source
+for parsing runtime lifecycle/guards. Runtime already owns accepted calls,
+dispatch/read-back evidence and exact source associations.
+
+Compaction retains supported findings, decisions, unresolved questions, constraints
+and next actions with source provenance. A valid `sourceIds` link checks provenance,
+not semantic entailment: model claims remain interpretations. Do not relabel a
+promise as completed work or promote resource instructions to user requirements.
+Typed findings/decisions, if added, belong to the existing claim/compiler contract,
+with source-role validation and stale-evidence exclusion; never extract them by
+parsing ad-hoc headings from `message`. Shared decision memory should be a
+versioned resource with source citations, not an untraceable global summary.
+
+### Required implementation slices and acceptance
+
+| Order | Owner and replacement | Required evidence |
+|---|---|---|
+| 1 | Core resource authority/revision storage + artifact domain owner: move durable artifact identity, original metadata and head publication out of `ChatSession` | Two chats and fresh store instances read one resource; concurrent stale write rejected; commit/link crash reconciliation; restart and CAS retention |
+| 2 | HTML/Plan/authored Markdown owners + tools: explicit selected artifact, multiple documents/workspaces; remove chat-only lineage, fork copy/rebase and active-head authority | A creates, B edits, A conflicts; old message remains exact; two MD/HTML artifacts stay independent; unrelated resource writes can both succeed |
+| 3 | Gateway/provider + discovery + frozen compiler: document library access, descriptions, working set, exact history and source search | Search result round-trips; duplicate names, rename, >page/scan bounds, missing synopsis/blob, source mutation between find/read/write, compaction and stale decision coverage |
+| 4 | Library/bridge/viewer/editor + chat lifecycle + GC: attach/continue/copy, revisioned notifications and protected drafts; remove old chat-owned consumers | Chat switch/upload/save race; lost notification recovery; deletion/fork/edit of origin chat preserves shared originals and dependencies; cross-document access refused |
+
+Each slice must switch its active consumers and remove the replaced path; no
+unused future contracts. Windows/Office/WebView2 delivery and target-model traces
+remain required. All four slices are required before claiming that MD/HTML can be
+continued across chats. None of the discovery corrections below closes that gate.
+
+Design rationale: lightweight discovery followed by selective reads, concise
+operational context, and provenance-aware compaction follow the primary guidance
+in [Anthropic context engineering](https://www.anthropic.com/engineering/effective-context-engineering-for-ai-agents)
+and [tool design](https://www.anthropic.com/engineering/writing-tools-for-agents).
+The document owner, publication barriers and guards are RNAssistant-specific
+choices derived from the existing resource architecture, not claims from those
+articles. No remote runtime or cross-document memory service is introduced.
+
 ## Principles
 
 - A staged file is a chat-scoped draft, not a durable artifact and not model

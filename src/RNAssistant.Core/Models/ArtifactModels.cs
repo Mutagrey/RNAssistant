@@ -70,6 +70,9 @@ namespace RNAssistant.Core.Models
         public string Title { get; set; }
         public string MimeType { get; set; }
         public string SourceMessageId { get; set; }
+        public string DocumentAuthorityId { get; set; }
+        [Newtonsoft.Json.JsonIgnore]
+        public ChatAttachment OriginalAttachment { get; set; }
         public string RunId { get; set; }
         public int Revision { get; set; }
         public string ParentArtifactId { get; set; }

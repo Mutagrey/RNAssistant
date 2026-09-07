@@ -240,6 +240,10 @@ namespace RNAssistant.Core.Models
     public sealed class ResourceSearchMatch
     {
         [Newtonsoft.Json.JsonIgnore]
+        public bool DocumentScoped { get; set; }
+        [Newtonsoft.Json.JsonProperty("createdUtc", NullValueHandling = Newtonsoft.Json.NullValueHandling.Ignore)]
+        public DateTime? CreatedUtc { get; set; }
+        [Newtonsoft.Json.JsonIgnore]
         public IReadOnlyList<ResourceEvidence> Evidence { get; set; }
         [Newtonsoft.Json.JsonProperty("reference")]
         public ResourceRef Reference { get; set; }

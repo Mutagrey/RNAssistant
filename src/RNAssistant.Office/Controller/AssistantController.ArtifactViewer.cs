@@ -56,7 +56,7 @@ namespace RNAssistant.Office
             CancellationToken cancellationToken = default(CancellationToken))
         {
             var session = LoadSession(chatId);
-            var artifact = ArtifactViewerService.ResolveExactArtifact(session, resourceUri);
+            var artifact = _toolExecutor.ResourceGateway.ResolveArtifact(session, resourceUri);
             return _resourceData.Open(session, "viewer", ChatResourceUri.CreateArtifactRevision(session, artifact), view, path, cancellationToken);
         }
 

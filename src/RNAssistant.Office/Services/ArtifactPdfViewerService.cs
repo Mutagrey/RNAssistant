@@ -47,7 +47,7 @@ namespace RNAssistant.Office.Services
 
         public ArtifactPdfViewerDto ReadInfo(ChatSession session, string resourceUri)
         {
-            var artifact = ArtifactViewerService.ResolveExactArtifact(session, resourceUri);
+            var artifact = _gateway.ResolveArtifact(session, resourceUri);
             var descriptor = _gateway.Resolve(session, resourceUri).Resource;
             var attachment = ResolveExactAttachment(session, artifact, descriptor);
             var pageCount = ValidPageCount(attachment);
@@ -107,7 +107,7 @@ namespace RNAssistant.Office.Services
             {
                 throw new InvalidOperationException("Artifact PDF renderer is unavailable.");
             }
-            var artifact = ArtifactViewerService.ResolveExactArtifact(session, resourceUri);
+            var artifact = _gateway.ResolveArtifact(session, resourceUri);
             var descriptor = _gateway.Resolve(session, resourceUri).Resource;
             var attachment = ResolveExactAttachment(session, artifact, descriptor);
             var pageCount = ValidPageCount(attachment);

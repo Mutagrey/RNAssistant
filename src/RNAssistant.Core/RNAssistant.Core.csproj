@@ -177,6 +177,7 @@
     <Compile Include="Storage\ChatEventStoreAdapter.cs" />
     <Compile Include="Storage\ChatConversationStoreAdapter.cs" />
     <Compile Include="Storage\ChatStore.Artifacts.cs" />
+    <Compile Include="Storage\DocumentArtifactStore.cs" />
     <Compile Include="Storage\ChatStore.Caching.cs" />
     <Compile Include="Storage\ChatStore.EventLog.cs" />
     <Compile Include="Storage\ChatStore.SessionProjection.cs" />

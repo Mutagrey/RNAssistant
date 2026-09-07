@@ -2232,6 +2232,13 @@ endpoint.
    Every slice keeps `ViewerRegistry` UI-only and has its own MIME/security/vendor/
    lifetime tests. The milestone ends with Windows WebView qualification of
    Artifacts, Plan and HTML together, including reload, history and large payloads.
+   User-authorized extension (2026-09-07): document-owned reusable artifacts and
+   cross-chat working sets follow the ordered owner/tools/discovery/UI cutover in
+   [Artifact Library](../artifact-library.md#authorized-document-ownership-cutover--2026-09-07).
+   This is a host-neutral Phase 11 extension, not Phase 12 or a completed shared
+   library. Origin-chat deletion, concurrent writes, exact history and CAS retention
+   must pass before claiming cross-chat editing. The initial discovery/context
+   correction does not move ownership or close Windows/target-model gates.
 5. **11T — typed Office tools и удаление legacy host dispatch — admitted:**
    - [x] 11T0/7D — done host-neutral: один атомарный production change связывает exact выбранный workbook с
      `ExcelDocumentSession`, переключает factories и typed Excel read/write на прямой

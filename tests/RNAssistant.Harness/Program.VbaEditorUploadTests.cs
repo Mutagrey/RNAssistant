@@ -56,7 +56,7 @@ namespace RNAssistant.Harness
                     AssertEqual("RESOURCE_ACCESS_DENIED", RuntimeThrows<ResourceRequestException>(() =>
                         data.CloseUpload(session.Id, request.UploadLeaseId)).ErrorCode, "attachment owner cannot close VBA upload");
                     AssertEqual("RESOURCE_ACCESS_DENIED", RuntimeThrows<ResourceRequestException>(() =>
-                        data.CompleteUpload(session, request.UploadLeaseId, new ChatResourceIngestionService(new AttachmentStore(paths)))).ErrorCode,
+                        data.CompleteUpload(session, request.UploadLeaseId, new ChatResourceIngestionService(new AttachmentStore(paths), new ChatStore(paths).DocumentArtifacts))).ErrorCode,
                         "attachment ingestion cannot consume a VBA upload");
                     AssertEqual("RESOURCE_ACCESS_DENIED", RuntimeThrows<ResourceRequestException>(() =>
                         editor.ReadUploadedSource(new ChatSession(), request, CancellationToken.None)).ErrorCode, "foreign chat cannot consume source");

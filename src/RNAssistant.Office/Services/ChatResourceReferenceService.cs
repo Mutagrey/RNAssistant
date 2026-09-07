@@ -221,7 +221,8 @@ namespace RNAssistant.Office.Services
                 else
                 {
                     if (!string.Equals(artifact.Kind, expectedKind, StringComparison.OrdinalIgnoreCase) ||
-                        !string.Equals(artifact.SourceMessageId, message.Id, StringComparison.OrdinalIgnoreCase) ||
+                        ((artifact.DocumentAuthorityId != session.DocumentAuthorityId || string.IsNullOrWhiteSpace(artifact.DocumentAuthorityId)) &&
+                            !string.Equals(artifact.SourceMessageId, message.Id, StringComparison.OrdinalIgnoreCase)) ||
                         !string.Equals(artifact.MimeType, attachment.ContentType, StringComparison.OrdinalIgnoreCase) ||
                         string.IsNullOrWhiteSpace(artifact.ContentSha256) ||
                         !string.Equals(artifact.ContentSha256, attachment.ContentSha256, StringComparison.OrdinalIgnoreCase) ||
@@ -401,6 +402,11 @@ namespace RNAssistant.Office.Services
             var rebased = new List<ResourceRef>();
             foreach (var reference in message.ResourceRefs ?? new List<ResourceRef>())
             {
+                if (RNAssistant.Core.Storage.DocumentArtifactStore.Owns(session, reference))
+                {
+                    rebased.Add(reference.Copy());
+                    continue;
+                }
                 string ignoredSessionId;
                 string artifactId;
                 int revision;
@@ -481,6 +487,7 @@ namespace RNAssistant.Office.Services
             if (value != null)
             {
                 if (value.Type != JTokenType.String) return false;
+                if (RNAssistant.Core.Storage.DocumentArtifactStore.Owns(session, new ResourceRef((string)value))) return false;
                 var reference = ChatResourceUri.RebaseArtifactRevision(
                     new ResourceRef((string)value), session == null ? null : session.Id);
                 string artifactId;

@@ -374,6 +374,7 @@ namespace RNAssistant.Office.Services
                     StringComparison.OrdinalIgnoreCase))
                 {
                     yield return new ResourceIntentPlan(provider, null, "conversation");
+                    yield return new ResourceIntentPlan(provider, ChatArtifactResourceProvider.DocumentOriginalKind, "document");
                     yield return new ResourceIntentPlan(provider, ChatHtmlResourceCatalog.FileKind, "html");
                     yield return new ResourceIntentPlan(provider, ChatHtmlResourceCatalog.DataKind, "html");
                 }
@@ -559,8 +560,10 @@ namespace RNAssistant.Office.Services
             {
                 Reference = match.Reference == null ? null : match.Reference.Copy(),
                 Kind = match.Kind,
+                CreatedUtc = match.CreatedUtc,
                 Title = match.Title
             };
+            if (match.DocumentScoped) descriptor.Metadata["scope"] = "document";
             ResourceAddress address;
             if (match.Reference != null &&
                 ResourceUri.TryParse(match.Reference.Uri, out address))
@@ -694,6 +697,8 @@ namespace RNAssistant.Office.Services
             ResourceDescriptor descriptor,
             string type)
         {
+            string scope;
+            if (descriptor.Metadata != null && descriptor.Metadata.TryGetValue("scope", out scope) && scope == "document") return scope;
             if (descriptor.Provider == "catalog") return "catalogs";
             if (type == "Excel search scope") return "document";
             if (type == "Excel table") return "document";
