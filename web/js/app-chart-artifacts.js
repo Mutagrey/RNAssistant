@@ -519,7 +519,13 @@
       chartType: configValue(artifactConfig(artifact), "ChartType", "chartType", "auto"),
       title: artifactValue(artifact, "Title", "title", "Excel chart")
     };
-    if (mode !== "selection") {
+    // Historical chart artifacts can be marked as selection while still
+    // retaining the exact sheet/range that produced the snapshot. Prefer
+    // that durable source over the user's current Excel selection.
+    if (artifactValue(source, "Sheet", "sheet", "") && artifactValue(source, "Address", "address", "")) {
+      args.sheet = artifactValue(source, "Sheet", "sheet", "");
+      args.address = artifactValue(source, "Address", "address", "");
+    } else if (mode !== "selection") {
       args.sheet = artifactValue(source, "Sheet", "sheet", "");
       args.address = artifactValue(source, "Address", "address", "");
     }

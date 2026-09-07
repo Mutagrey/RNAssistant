@@ -135,7 +135,8 @@ function createSyncContext() {
   }
 
   const index = fs.readFileSync(path.join(root, "web/index.html"), "utf8");
-  ["app-core.js", "app-chat-run.js", "app-chat-edit.js"].forEach(asset => {
+  assert.ok(index.includes("app-core.js?v=stream-coalesce-20260907-1"), "app-core.js cache key was bumped");
+  ["app-chat-run.js", "app-chat-edit.js"].forEach(asset => {
     assert.ok(index.includes(asset + "?v=chat-sync-20260903-1"), asset + " cache key was bumped");
   });
   assert.ok(index.includes("app-chat-session.js?v=startup-secondary-lazy-20260907-1"), "chat session startup lazy cache key was bumped");

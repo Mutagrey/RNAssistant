@@ -117,7 +117,7 @@ vm.runInContext(source, context, { filename: "app-artifacts.js" });
   assert.ok(index.includes("app-html-workspace-actions.js?v=html-read-20260906-1"), "artifact tool calls have the current resource cache key");
   assert.ok(index.includes("app-artifact-viewer-actions.js?v=binary-chunks-20260906-1"), "artifact paging owner has the current resource cache key");
   assert.ok(index.includes("app-html-workspace-artifacts.js?v=binary-chunks-20260906-1"), "artifact detail has the current resource cache key");
-  assert.ok(index.includes("app-chart-artifacts.js?v=ui-lazy-20260903-1"), "chart artifact renderer has the lazy UI cache key");
+  assert.ok(index.includes("app-chart-artifacts.js?v=ui-lazy-20260907-1"), "chart artifact renderer has the current UI cache key");
   assert.ok(index.includes("app-html-workspace-editor.js?v=preview-reuse-20260907-1"), "artifact action bridge has the lazy UI cache key");
   assert.match(source, /function artifactProjection\(\)/, "artifact UI builds a transient projection index");
   assert.doesNotMatch(source, /artifactLibraryHeads\(\)\.filter/, "head lookup does not scan all heads per card");
