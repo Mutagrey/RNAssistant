@@ -249,6 +249,16 @@ Current history encryption does not cover transient attachment staging, settings
 - CAS health scans every validated chat stream and VBA journal, then verifies referenced bodies and reports missing, corrupt, and orphaned blobs. Garbage collection rebuilds this reachability under the maintenance gate and deletes only exact canonical orphan files. Any invalid, unreadable, misplaced, or incomplete source blocks deletion; see [cas-maintenance.md](cas-maintenance.md).
 - VBA preparations left without a terminal record are compared with live module state on the next safe VBA access and closed as `committed`, `not_applied`, or `unknown`; recovery never replays an Office mutation.
 
+## Transient stream rendering
+
+Web stream/reasoning deltas update the transient run immediately and coalesce
+painting through one animation frame. Subsequent stream paints reconcile only
+live units; they do not serialize durable message bodies or rebuild the resource
+navigation. Full projection changes still reconcile the transcript, retaining
+unchanged attached DOM nodes. Background progress coalesces chat-list rendering
+at 100 ms without dropping deltas. A chat change uses the current full projection.
+This changes presentation cost only, not event/CAS persistence or commit barriers.
+
 ## Inspection
 
 Settings → Diagnostics → Trajectory queries the same stream through disposable `ITrajectoryQuery`. Raw results use exclusive sequence cursors, newest-first pages, tokenized text search and filters for sequence, event type, run/turn/step, tool call, artifact, status and reconstructed `current`/`shadowed`/`log-only` visibility. Retained `ResponseStatus` may be shown as raw accepted-history/provider diagnostic metadata, but it is not the lifecycle/effect source for `RunViewState`. Snapshot-paged derived views correlate model replay, tools, artifact lineage, confirmation pauses, failures/retries and per-turn timing/usage; every row carries its complete source event sequences and ids. Event metadata and state operations are inline; model payloads and streaming-frame batches are fetched lazily by event id and shown as a bounded preview. Selected chat rows can be exported as a bounded ZIP with metadata-only default, optional credential-field redaction, or explicit full decrypted data/CAS; protection keys never enter it. CAS storage audits all retained chat/VBA references and exposes an explicitly confirmed orphan cleanup. The bridge never includes API keys, history secrets or authorization headers. See [trajectory-query.md](trajectory-query.md) and [trajectory-export.md](trajectory-export.md).

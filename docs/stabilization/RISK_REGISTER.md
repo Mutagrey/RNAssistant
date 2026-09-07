@@ -19,6 +19,23 @@ Phase 2C3B заменяет этот reset preservation/review flow; Core settin
 Phase 2C3C переключает actual wire/history на v3 и проверяет preflight, run IDs, singleton
 safety, refusal и review/reset на prompt schema 12. Windows/live-provider gates остаются.
 
+Chat navigation / persistence contention (2026-09-07, open): user reports freezes
+while streaming, loading artifacts and switching chats. `ChatStore.PersistenceSync`
+is static across chats; `SaveInternalLocked` performs artifact externalization,
+projection/diff and durable append under it. `SelectChat`/`GetChatState` currently
+load and build the full projection synchronously, including Office document state.
+A cold validated replay or waiting for an append may therefore block bridge/UI
+navigation. LLM raw stream traces are already batched at 64 Ki characters or one
+second of buffer age; this is not evidence of a durable save per token. Owners:
+ChatStore + ChatSessionService/controller projection + Web bridge dispatch. Next
+storage slice must separate host-neutral loading/projection from bound Office
+capture before async dispatch, preserving ordering and cancellation; do not move
+the complete controller call to Task.Run or weaken flush/commit barriers. Measure
+lock wait, replay/CAS, projection and bridge/UI durations on the actual Windows
+candidate before assigning the dominant cause. The host-neutral stream UI fix
+removes repeated history serialization/DOM detachment and batches background
+sidebar paints; it does not close this storage/navigation gate.
+
 Resource cutover / catalog freeze (2026-09-07, fixed host-neutral): the generation
 captured by `UseInput` is carried into the model session and compared against its
 final frozen `CaptureMany` tuple. Intervening publication refuses with

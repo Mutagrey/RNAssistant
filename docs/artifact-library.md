@@ -108,6 +108,15 @@ chat deletion must not delete them and skill deletion must not rewrite chat hist
 Agent skill mutations may render a UI-only link to the Library item, not an artifact
 card or second model transport. See [Skill Library](skills.md).
 
+## Preview refresh cost
+
+HTML preview retains its iframe and open resource leases across repeated metadata
+renders and tab revisits when the exact source/binding inputs and chat/workspace
+owner are unchanged. Source or binding changes, owner changes, unavailable source
+and edit/detail transitions invalidate reuse; replacement closes the previous
+leases before installing the new document. The reuse key is transient UI state,
+not resource authority. Real Office/WebView2 responsiveness remains unqualified.
+
 ## Library and revision display
 
 The Artifact Library tree shows one row per immutable resource or logical document

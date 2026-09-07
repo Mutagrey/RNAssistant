@@ -10,6 +10,12 @@
     var renderedFile = null, renderedSourceKey = null;
     var workspaceArtifacts = options.artifacts;
     var htmlPreviewRefreshTimer = 0;
+    var renderedPreviewKey = null;
+
+    function invalidatePreview() {
+      renderedPreviewKey = null;
+      if (options.closeResources) options.closeResources();
+    }
     var workspace = model.workspace;
     var files = model.files;
     var dataSources = model.dataSources;
@@ -328,7 +334,6 @@
     }
 
     function renderHtmlWorkspacePreview() {
-      if (options.closeResources) options.closeResources();
       var frame = $("htmlWorkspacePreviewFrame");
       var detail = $("artifactDetailPreview");
       if (!frame || !detail) {
@@ -339,22 +344,26 @@
       frame.classList.toggle("hidden", !!special);
       detail.classList.toggle("hidden", !special);
       if (special) {
+        invalidatePreview();
         workspaceArtifacts.renderDetail(detail, selected, selectedEditorValue(selected), options.artifactActions);
         frame.removeAttribute("src");
         frame.srcdoc = "";
         return;
       }
       detail.replaceChildren();
-      frame.removeAttribute("src");
-      if (state.htmlWorkspaceMode === "edit") { frame.srcdoc = ""; return; }
+      if (state.htmlWorkspaceMode === "edit") { invalidatePreview(); frame.removeAttribute("src"); frame.srcdoc = ""; return; }
       var workspaceFiles = files();
       if (!source.current(workspace()) || !workspaceFiles.every(source.ready)) {
+        invalidatePreview();
+        frame.removeAttribute("src");
         frame.srcdoc = "";
         detail.classList.remove("hidden"); detail.textContent = source.message(); frame.classList.add("hidden");
         return;
       }
       if (typeof htmlPreview.usesECharts === "function" && htmlPreview.usesECharts(workspaceFiles) &&
           typeof htmlPreview.echartsReady === "function" && !htmlPreview.echartsReady()) {
+        invalidatePreview();
+        frame.removeAttribute("src");
         frame.srcdoc = "<!doctype html><html><body style=\"font-family:Segoe UI,Arial,sans-serif;padding:24px;color:#475467\">Загрузка диаграммы...</body></html>";
         htmlPreview.ensureECharts().then(function () {
           if (typeof window.renderHtmlWorkspace === "function") window.renderHtmlWorkspace();
@@ -367,11 +376,20 @@
         });
         return;
       }
-      frame.srcdoc = htmlPreview.build({
+      var previewInput = {
         activeFileId: workspace().activeFileId,
         dataSources: dataSources(),
         files: workspaceFiles
-      });
+      };
+      // Include exact binding/source metadata and owner, not just generated HTML:
+      // identical markup in another workspace must never retain the old leases.
+      var previewKey = JSON.stringify([state.activeChatId, state.activeHtmlArtifactId, previewInput]);
+      if (renderedPreviewKey === previewKey) return;
+      var previewHtml = htmlPreview.build(previewInput);
+      invalidatePreview();
+      frame.removeAttribute("src");
+      frame.srcdoc = previewHtml;
+      renderedPreviewKey = previewKey;
     }
 
     return {

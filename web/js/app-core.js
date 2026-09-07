@@ -1,3 +1,13 @@
+var chatProgressRenderPending = false;
+function scheduleChatProgressRender() {
+  if (chatProgressRenderPending) return;
+  chatProgressRenderPending = true;
+  window.setTimeout(function () {
+    chatProgressRenderPending = false;
+    renderChatSessions();
+  }, 100);
+}
+
 var state = {
   appVersion: "",
   host: "",
@@ -371,7 +381,7 @@ if (window.chrome && window.chrome.webview) {
             contentRun.reasoningResetPending = false;
           }
         }
-        if (progressChatId !== state.activeChatId) { renderChatSessions(); return; }
+        if (progressChatId !== state.activeChatId) { scheduleChatProgressRender(); return; }
         state.liveStreamContent = progressChatId
           ? contentRun.stream
           : (state.liveStreamContent || "") + contentDelta;
@@ -410,7 +420,7 @@ if (window.chrome && window.chrome.webview) {
           if (typeof scheduleLiveStreamRender === "function") scheduleLiveStreamRender();
           else renderMessages();
         } else {
-          renderChatSessions();
+          scheduleChatProgressRender();
         }
         return;
       }
@@ -429,7 +439,7 @@ if (window.chrome && window.chrome.webview) {
           state.liveAgentRun = state.chatRuns[progressChatId].activities;
         }
       }
-      if (progressChatId !== state.activeChatId) { renderChatSessions(); return; }
+      if (progressChatId !== state.activeChatId) { scheduleChatProgressRender(); return; }
       if (isChatProgress) {
         renderMessages();
       }

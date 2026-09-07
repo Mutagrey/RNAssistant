@@ -130,9 +130,9 @@ function state(runId, lifecycle = "completed", health = "clean", pending = null)
   assert.ok(index.includes("app-agent.js?v=runtime-diagnostics-20260831-1"),
     "agent outcome uses the diagnostics cache key");
   assert.ok(index.includes("app-chat-session.js?v=startup-secondary-lazy-20260907-1"), "chat session uses the current cache key");
-  assert.ok(index.includes("app-core.js?v=chat-sync-20260903-1"), "core uses the chat sync cache key");
+  assert.ok(index.includes("app-core.js?v=stream-coalesce-20260907-1"), "core uses the chat sync cache key");
   assert.ok(index.includes("app-chat-state.js?v=context-usage-display-20260907-1"), "chat state uses the current cache key");
-  assert.ok(index.includes("app-messages.js?v=transcript-incremental-20260907-2"), "messages uses the transcript incremental cache key");
+  assert.ok(index.includes("app-messages.js?v=stream-tail-20260907-1"), "messages uses the transcript incremental cache key");
   assert.equal(/function updateEstimatedContextUsage\(\)[\s\S]*?state\.messages\.forEach/.test(chatState), false,
     "context meter does not scan and encode the whole transcript");
   assert.match(chatState, /localDeltaTokens/, "context meter exposes presentation-only local delta");

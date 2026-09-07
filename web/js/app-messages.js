@@ -519,6 +519,11 @@ function buildMessageUnits() {
     }
   }
 
+  return units.concat(buildLiveMessageUnits());
+}
+
+function buildLiveMessageUnits() {
+  var units = [];
   if ((state.liveAgentRun && state.liveAgentRun.length) || state.liveActivity) {
     appendMessageUnit(units, "live:agent-run",
       JSON.stringify({ stream: "agent", value: state.liveAgentRun || state.liveActivity || null }),
@@ -540,8 +545,11 @@ function buildMessageUnits() {
   return units;
 }
 
-function reconcileMessageUnits(box, units) {
+function reconcileMessageUnits(box, units, liveOnly) {
   var nextCache = {};
+  if (liveOnly) Object.keys(renderedMessageUnits).forEach(function (key) {
+    if (key.indexOf("live:") !== 0) nextCache[key] = renderedMessageUnits[key];
+  });
   units.forEach(function (unit) {
     var cached = renderedMessageUnits[unit.key];
     var node = cached && cached.signature === unit.signature ? cached.node : null;
@@ -554,16 +562,36 @@ function reconcileMessageUnits(box, units) {
     nextCache[unit.key] = { signature: unit.signature, node: node };
   });
   Object.keys(renderedMessageUnits).forEach(function (key) {
-    if (!nextCache[key] && renderedMessageUnits[key].node && typeof clearMarkdownEnhancements === "function") {
-      clearMarkdownEnhancements(renderedMessageUnits[key].node);
+    if (!nextCache[key] && renderedMessageUnits[key].node) {
+      var removed = renderedMessageUnits[key].node;
+      if (typeof clearMarkdownEnhancements === "function") clearMarkdownEnhancements(removed);
+      if (removed.parentNode === box) box.removeChild(removed);
     }
   });
 
-  // Reattach the current cached nodes as one ordered set. Appending only the
-  // changed node leaves previous live-stream snapshots in the container.
-  box.textContent = "";
+  // Keep unchanged nodes attached: detaching the transcript restarts embedded
+  // viewers and invalidates layout/selection even when all signatures match.
+  var cursor = box.firstChild;
+  if (liveOnly) {
+    cursor = null;
+    Object.keys(renderedMessageUnits).some(function (key) {
+      var node = renderedMessageUnits[key].node;
+      if (key.indexOf("live:") === 0 && node && node.parentNode === box) {
+        cursor = node;
+        return true;
+      }
+      return false;
+    });
+  }
   units.forEach(function (unit) {
-    box.appendChild(nextCache[unit.key].node);
+    var node = nextCache[unit.key].node;
+    var previous = renderedMessageUnits[unit.key];
+    if (previous && previous.node !== node && previous.node.parentNode === box) {
+      if (cursor === previous.node) cursor = previous.node.nextSibling;
+      box.removeChild(previous.node);
+    }
+    if (node !== cursor) box.insertBefore(node, cursor);
+    else cursor = cursor.nextSibling;
   });
   renderedMessageUnits = nextCache;
 }
@@ -575,13 +603,25 @@ function scheduleLiveStreamRender() {
   state.liveStreamRenderPending = true;
   var render = function () {
     state.liveStreamRenderPending = false;
-    renderMessages();
+    renderStreamingMessages();
   };
   if (window.requestAnimationFrame) {
     window.requestAnimationFrame(render);
   } else {
     window.setTimeout(render, 16);
   }
+}
+
+function renderStreamingMessages() {
+  if (typeof isPanelActive === "function" && !isPanelActive("chat")) return;
+  if (renderedMessagesChatId !== state.activeChatId || !Object.keys(renderedMessageUnits).length) {
+    renderMessages();
+    return;
+  }
+  var box = $("messages");
+  var shouldScroll = isChatNearBottom(box);
+  reconcileMessageUnits(box, buildLiveMessageUnits(), true);
+  syncChatScroll(shouldScroll, false);
 }
 
 function renderMessages(options) {
@@ -605,6 +645,7 @@ function renderMessages(options) {
     return;
   }
 
+  if (!Object.keys(renderedMessageUnits).length) box.textContent = "";
   reconcileMessageUnits(box, buildMessageUnits());
 
   renderAgentPlanDock();
