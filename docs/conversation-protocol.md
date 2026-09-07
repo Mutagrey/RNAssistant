@@ -621,7 +621,12 @@ process into `Действия · N`. Changed live units retain explicit detail-
 state by identity. Persisted mid-run messages and live replay share one visible
 run matched by exact RunId and activity identity; durable terminal call results win
 over stale progress, while newly received calls remain visible. A final persisted
-answer retires its live replay. This merge is transient presentation only.
+answer retires its live activities, reasoning and text replay. Call identity is
+RunId + StepId + ToolCallId and excludes JSON formatting and CAS payload placement.
+Replayed step markers reuse their existing step even when delivered after saved
+calls. Repeated terminal materialization updates the same call row; stale running
+updates cannot reopen it. Separate transcript segments have separate DOM keys.
+This merge is transient presentation only.
 Message action footers refresh separately when send, edit, confirmation or bridge
 availability changes. Cached message bodies and embedded previews remain attached;
 edit and fork availability must not stay frozen at the time a message first rendered.

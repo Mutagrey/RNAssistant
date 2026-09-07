@@ -26,6 +26,7 @@ function normalizeProgressActivity(progress) {
   var activity = progress.activity || progress.Activity;
   if (activity) {
     var copy = cloneActivity(activity);
+    if (!activityValue(copy, "RunId", "runId", "")) copy.RunId = progress.runId || progress.RunId || "";
     var phase = (progress.phase || progress.Phase || "").toLowerCase();
     var message = progress.message || progress.Message || "";
     copy.__progressPhase = phase;
@@ -43,6 +44,7 @@ function normalizeProgressActivity(progress) {
   var phase = (progress.phase || progress.Phase || "").toLowerCase();
   return {
     kind: "notice",
+    RunId: progress.runId || progress.RunId || "",
     title: phase === "thinking" ? "Думаю…" : (progress.message || progress.Message || "Выполняю…"),
     subtitle: phase || "working",
     status: activityStatusFromPhase(phase)
@@ -127,6 +129,10 @@ function activityTimelineKey(activity) {
   if (stepId && activityKind(activity) === "step") {
     return "step:" + activityValue(activity, "RunId", "runId", "") + ":" + stepId;
   }
+  var callId = activityToolCallId(activity);
+  if (callId) {
+    return JSON.stringify(["call", activityValue(activity, "RunId", "runId", ""), stepId, callId]);
+  }
   var pendingId = activityPendingId(activity);
   if (pendingId && !activityToolId(activity)) {
     return "pending:" + pendingId;
@@ -164,7 +170,8 @@ function recordActivityTimeline(items, activity) {
     }
 
     var existingStatus = activityStatus(existing);
-    if (isActiveTimelineStatus(existingStatus) ||
+    if (activityToolCallId(copy) && !isActiveTimelineStatus(existingStatus) && isActiveTimelineStatus(nextStatus)) return existing;
+    if (activityToolCallId(copy) || activityKind(copy) === "step" || isActiveTimelineStatus(existingStatus) ||
         (existingStatus === nextStatus && activityResultMessage(existing) === activityResultMessage(copy))) {
       if (activityKind(copy) === "notice" && i < items.length - 1) {
         items.splice(i, 1);

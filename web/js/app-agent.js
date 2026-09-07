@@ -64,7 +64,8 @@ function collapseAgentTimelineItems(timeline) {
     if (existingIndex !== undefined) {
       var existingStatus = activityStatus(result[existingIndex].activity);
       var nextStatus = activityStatus(item.activity);
-      if (existingStatus === "running" || existingStatus === "waiting" ||
+      if (activityToolCallId(item.activity) && !isActiveTimelineStatus(existingStatus) && isActiveTimelineStatus(nextStatus)) return;
+      if (activityToolCallId(item.activity) || activityKind(item.activity) === "step" || existingStatus === "running" || existingStatus === "waiting" ||
           (existingStatus === "failed" && nextStatus === "completed")) {
         nextItem.reasoningMessage = nextItem.reasoningMessage || result[existingIndex].reasoningMessage;
         result[existingIndex] = nextItem;
@@ -174,8 +175,14 @@ function groupAgentRunSteps(timeline) {
   var steps = [];
   var current = null;
   var prelude = [];
+  var stepsById = Object.create(null);
 
   function startStep(stepId, message) {
+    if (stepId && stepsById[stepId]) {
+      current = stepsById[stepId];
+      if (!current.message && message) current.message = message;
+      return current;
+    }
     current = {
       id: stepId || ("unscoped-" + steps.length),
       message: message || "",
@@ -183,6 +190,7 @@ function groupAgentRunSteps(timeline) {
       ambient: null
     };
     steps.push(current);
+    if (stepId) stepsById[stepId] = current;
     return current;
   }
 

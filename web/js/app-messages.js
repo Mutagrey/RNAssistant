@@ -418,6 +418,8 @@ function liveAgentActivities() {
 }
 
 function liveAgentRunId() {
+  var tracked = state.chatRuns && state.chatRuns[state.activeChatId];
+  if (tracked && tracked.runId) return tracked.runId;
   var activities = liveAgentActivities();
   for (var i = activities.length - 1; i >= 0; i -= 1) {
     var id = activities[i].RunId || activities[i].runId;
@@ -498,8 +500,8 @@ function agentRunUnitKey(run) {
   var finalMessage = run.finalMessage || null;
   if (run.live) return "live:agent-run";
   var runId = typeof agentRunId === "function" ? agentRunId(items, finalMessage) : "";
-  if (runId) return "run:" + runId;
   var first = items[0] || finalMessage;
+  if (runId) return "run:" + runId + ":segment:" + (messageId(first && first.message) || (first ? first.index : 0));
   return "run:index:" + (first ? first.index : 0);
 }
 
@@ -601,13 +603,13 @@ function buildLiveMessageUnits() {
       function () { return renderLiveAgentRun(); });
   }
 
-  if (typeof renderLiveReasoningMessage === "function" && state.liveReasoning) {
+  if (!renderedLiveRunSuppressed && typeof renderLiveReasoningMessage === "function" && state.liveReasoning) {
     appendMessageUnit(units, "live:reasoning",
       JSON.stringify({ reasoning: state.liveReasoning || "", complete: !!state.liveReasoningComplete }),
       function () { return renderLiveReasoningMessage(); });
   }
 
-  if (state.liveStreamContent) {
+  if (!renderedLiveRunSuppressed && state.liveStreamContent) {
     appendMessageUnit(units, "live:stream",
       JSON.stringify({ content: state.liveStreamContent }),
       function () { return renderLiveStreamMessage(); });
