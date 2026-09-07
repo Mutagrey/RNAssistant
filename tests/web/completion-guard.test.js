@@ -169,23 +169,36 @@ tests.push(["semantic target is visible and unknown effect takes precedence over
   assert.match(context.activityDisplayResult(conflict), /не подтверждён/);
 }]);
 
-tests.push(["live step uses one status disclosure and shows its count only after completion", () => {
-  const step = { id: "s", items: [
-    { activity: { Kind: "tool", ToolId: "common.resources_find", Status: "completed", ToolCallId: "one" } },
-    { activity: { Kind: "tool", ToolId: "common.resources_read", Subtitle: "Продажи", Status: "running", ToolCallId: "two" } }
-  ] };
-  const live = new Element("div");
-  context.appendCollapsedAgentStep(live, step, true, false);
-  assert.equal(live.childNodes.length, 1, "the current status itself owns the disclosure");
-  const details = live.childNodes[0], summary = details.childNodes[0];
-  assert.match(details.className, /agent-live-action status-running/);
-  assert.match(summary.textContent, /Читаю ресурсПродажи/);
-  assert.doesNotMatch(summary.textContent, /Действия/);
-  assert.equal(walk(summary).some(node => /agent-activity-mark/.test(node.className)), false);
-  assert.equal(walk(details.childNodes[1]).filter(node => /agent-activity kind-tool/.test(node.className)).length, 2, "expansion retains all tool actions");
-  const done = new Element("div");
-  context.appendCollapsedAgentStep(done, step, false, true);
-  assert.equal(done.childNodes[0].childNodes[0].textContent, "Действия · 2");
+context.appendActivityArtifacts = () => {};
+context.appendQuestionCards = () => {};
+context.enhanceActivity = () => {};
+tests.push(["live feed keeps previous steps and nested actions visible until the run ends", () => {
+  const done = { Kind: "tool", ToolId: "common.resources_find", Status: "completed", ToolCallId: "one", StepId: "s1", StepMessage: "Ищу таблицу" };
+  const child = { Kind: "tool", ToolId: "common.resources_read", Subtitle: "Продажи", Status: "running", ToolCallId: "two" };
+  const parent = { Kind: "group", Status: "running", StepId: "s2", StepMessage: "Проверяю данные", Children: [child] };
+  const items = [done, parent].map(activity => ({ activity }));
+  const live = context.renderAgentRunArticle({ live: true, items });
+  assert.match(live.textContent, /Ищу таблицу/);
+  assert.match(live.textContent, /Проверяю данные/);
+  assert.match(live.textContent, /Продажи/);
+  assert.doesNotMatch(live.textContent, /Действия ·/);
+  assert.equal(walk(live).filter(node => /agent-activity kind-tool/.test(node.className)).length, 2);
+  assert.equal(walk(live).filter(node => /is-live-current/.test(node.className)).length, 1);
+  assert.equal(walk(live).some(node => node.tagName === "details"), false, "children do not hide behind a group disclosure");
+  const thinking = new Element("div");
+  const ambient = { activity: { Kind: "notice", Status: "running", Title: "Думаю" } };
+  context.appendLiveAgentStep(thinking, { items: [{ activity: done }], ambient }, true);
+  assert.match(thinking.textContent, /Думаю/);
+  assert.equal(walk(thinking).filter(node => /is-live-current/.test(node.className)).length, 1);
+  const busy = new Element("div");
+  context.appendLiveAgentStep(busy, { items: [{ activity: child }], ambient }, true);
+  assert.doesNotMatch(busy.textContent, /Думаю/);
+  const overview = new Element("div");
+  const stats = context.agentRunStats(items, true, null);
+  context.appendAgentRunOverview(overview, context.groupAgentRunSteps(items), items, stats);
+  assert.equal(overview.childNodes[0].tagName, "details");
+  assert.equal(overview.childNodes[0].open, false);
+  assert.match(overview.childNodes[0].childNodes[0].textContent, /Действия/);
 }]);
 
 for (const [name, test] of tests) {

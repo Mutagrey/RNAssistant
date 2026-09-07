@@ -197,10 +197,6 @@
   color: #667085;
 }
 
-.agent-step-actions {
-  max-width: 100%;
-}
-
 .agent-run-overview {
   max-width: 100%;
 }
@@ -888,7 +884,6 @@
 }
 
 /* Only the visible current action owns motion, independent of disclosure state. */
-.agent-live-action { min-width: 0; }
 .agent-activity-row.is-status-label { grid-template-columns: minmax(0, 1fr); }
 .agent-activity-target,
 .agent-activity-caption {
@@ -899,7 +894,7 @@
   overflow-wrap: anywhere;
 }
 .agent-activity-target { color: var(--text); }
-.agent-live-action.status-running > summary .agent-activity-name {
+.agent-activity-row.is-live-current .agent-activity-name {
   background: linear-gradient(105deg, var(--muted) 30%, var(--text) 47%, var(--muted) 64%);
   background-size: 250% 100%;
   -webkit-background-clip: text;
@@ -918,7 +913,7 @@
 }
 .agent-details-link:hover { background: transparent; text-decoration: underline; }
 @media (prefers-reduced-motion: reduce) {
-  .agent-live-action .agent-activity-name {
+  .agent-activity-row.is-live-current .agent-activity-name {
     animation: none !important;
     -webkit-text-fill-color: currentColor !important;
     background: none !important;

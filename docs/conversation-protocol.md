@@ -605,11 +605,14 @@ and a bounded result caption. `AgentTranscript` derives target captions from
 accepted scalar arguments without resource lookup or new authority. Exact tool
 ids and arguments remain in expandable details. Consecutive transcript groups
 require the same runtime `RunId`; confirmation segments keep their own grouping
-while their typed state retains the logical turn's counts. While a step is active,
-its latest status is the disclosure header and owns the
-text shimmer; no icon or separate action-count row accompanies that header. Opening
-it shows the step's tool actions. Once the step completes, the header becomes
-`Действия · N`. Changed live units retain explicit disclosure state by identity.
+while their typed state retains the logical turn's counts. Throughout a live run,
+step narration and all action rows stay visible in chronological order, including
+nested calls and completed earlier steps. Only technical details use individual
+disclosures. The current running action owns the text shimmer; an icon-free thinking
+status appears between calls, without a separate count or duplicate running status.
+Waiting typed lifecycles keep the feed open. Only a terminal run folds the complete
+process into `Действия · N`. Changed live units retain explicit detail-disclosure
+state by identity.
 Arrows follow their label and align with
 its first line. Reduced-motion disables shimmer; plain streaming text has no
 separate three-dot cursor.

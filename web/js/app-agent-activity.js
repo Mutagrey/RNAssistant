@@ -6,7 +6,7 @@ function renderActivityNode(activity, nested, current, context) {
   node.className = "agent-activity kind-" + kind + " operation-" + operation +
     (nested ? " nested" : "") + (current ? " current" : "") + " status-" + status;
 
-  var expandable = activityHasDetails(activity);
+  var expandable = activityHasDetails(activity, context);
   if (expandable) {
     var details = document.createElement("details");
     details.className = "agent-activity-toggle";
@@ -106,7 +106,8 @@ function renderActivityRow(activity, current, expandable, context) {
   var hideIcon = (context && context.hideIcon) ||
     ["notice", "reasoning", "step", "compaction"].indexOf(activityKind(activity)) >= 0;
   row.className = "agent-activity-row" + (comment ? " has-comment" : " has-no-comment") +
-    (hideIcon ? " is-status-label" : "");
+    (hideIcon ? " is-status-label" : "") +
+    (context && context.liveFeed && activity === context.currentActivity && status === "running" ? " is-live-current" : "");
   row.title = [title, comment, agentStatusLabel(status), time].filter(Boolean).join(" · ");
 
   if (!hideIcon) {
@@ -303,8 +304,8 @@ function activityTimeText(context) {
   return (hours < 10 ? "0" : "") + hours + ":" + (minutes < 10 ? "0" : "") + minutes;
 }
 
-function activityHasDetails(activity) {
-  return !!(activityChildren(activity).length ||
+function activityHasDetails(activity, context) {
+  return !!((!(context && context.liveFeed) && activityChildren(activity).length) ||
     activityArgumentsJson(activity) ||
     activityDataJson(activity) ||
     activityResultMessage(activity) ||
@@ -391,7 +392,7 @@ function appendActivityDetailsContent(node, activity, context) {
     body.appendChild(tool);
   }
 
-  if (children.length) {
+  if (children.length && !(context && context.liveFeed)) {
     var childList = document.createElement("div");
     childList.className = "agent-activity-children";
     children.forEach(function (child) {
