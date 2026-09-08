@@ -244,6 +244,7 @@ namespace RNAssistant.Harness
                 Test("causal trace: confirmation preserves correlation", CausalTraceConfirmationKeepsTurnAndJournalOrigin),
                 Test("causal trace: optional failure preserves execution", CausalTraceFailureDoesNotChangeExecution),
                 Test("agent: managed write batch executes sequentially", SimpleAgentExecutesMultipleToolsSequentially),
+                Test("agent: VBA batch read cannot authorize stale overwrite", SimpleAgentVbaBatchReadCannotAuthorizeStaleOverwrite),
                 Test("agent: prompt is request-local", SimpleAgentPromptIsRequestLocal),
                 Test("agent: invalid response gets bounded format repair", SimpleAgentRepairsInvalidResponse),
                 Test("agent: characterization repair succeeds on attempt twenty", SimpleAgentRepairsOnTwentiethAttempt),

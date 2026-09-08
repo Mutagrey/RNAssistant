@@ -152,6 +152,17 @@ mutations may also share a sequential model batch: each call rechecks its own li
 guard and commits separately, and an unknown result remains cumulative run
 evidence. Confirmation-required or opaque VBA actions remain singleton.
 
+Accepted model calls retain the resource evidence from the input snapshot that
+produced that exact call. VBA observation guards use that retained evidence against
+current authority, not all later tool results in the chat. A same-response sequence
+`patch → resources_read → write_module` cannot use the sibling read to authorize
+whole source already authored before that read completed. The stale write returns
+`vba_snapshot_refresh_required` before VBA journal preparation or dispatch; a new
+model response can use the delivered current source. Manual/editor writes retain
+their existing observation/explicit-hash guards. Each write's read-back proves its
+own intended source at that time, not preservation of all earlier user requirements
+after a subsequent, newly authorized whole-source replacement.
+
 Live-source validation also rejects export-only headers, unclosed string literals,
 C/JSON-style backslash quote escaping, common C-style operators/braces and
 unbalanced conditional-compilation blocks. JSON `\"` remains valid transport
