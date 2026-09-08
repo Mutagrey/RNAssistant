@@ -171,7 +171,7 @@ tests.push(["semantic target is visible and unknown effect takes precedence over
 
 tests.push(["tool rows preserve action target and result without rewriting model data", () => {
   const activity = { Kind: "tool", ToolId: "common.capabilities_read", Subtitle: "excel.write_range", Status: "completed",
-    ArgumentsJson: '{"id":"excel.write_range"}', DataJson: '{"catalogRevision":"private-revision","complete":true}',
+    ArgumentsJson: '{"id":"excel.write_range"}', DataJson: '{"kind":"tool-schema","catalogRevision":"private-revision","complete":true}',
     ResultMessage: "Capability loaded with catalogRevision=private-revision" };
   const before = JSON.stringify(activity);
   const row = context.renderActivityRow(activity, false, true, null);
@@ -195,18 +195,58 @@ tests.push(["tool rows preserve action target and result without rewriting model
 tests.push(["search and read captions distinguish complete empty and partial data", () => {
   const search = { Kind: "tool", ToolId: "common.resources_find", Status: "completed",
     DataJson: '{"items":[],"complete":false,"partial":true}' };
-  assert.equal(context.activityDisplayResult(search), "В просмотренной части совпадений нет · поиск неполный");
+  assert.equal(context.activityDisplayResult(search), "Получено элементов: 0 · неполный список");
   assert.equal(context.activityPresentationState(search), "partial");
   search.DataJson = '{"items":[{},{}],"complete":true}';
-  assert.equal(context.activityDisplayResult(search), "Найдено: 2", "cached caption follows replaced payload");
+  assert.equal(context.activityDisplayResult(search), "Получено элементов: 2", "cached caption follows replaced payload");
   assert.equal(context.activityPresentationState(search), "completed");
   search.DataJson = '{"items":[],"complete":true}';
-  assert.equal(context.activityDisplayResult(search), "Совпадений нет");
+  assert.equal(context.activityDisplayResult(search), "Получено элементов: 0");
   const read = { Kind: "tool", ToolId: "common.resources_read", Status: "completed",
     DataJson: '{"kind":"resource-read","table":{"rows":[{},{}]},"complete":false}' };
   assert.equal(context.activityDisplayResult(read), "Получено строк: 2 · часть данных");
   read.DataJson = '{"truncated":true,"preview":"not the model result"}';
-  assert.equal(context.activityDisplayResult(read), "Прочитано");
+  assert.equal(context.activityDisplayResult(read), "В журнале показана часть результата");
+}]);
+tests.push(["result representations work for new tools without identity-specific renderers", () => {
+  const activity = { Kind: "tool", ToolId: "custom.read_table", Title: "Пересчёт отчёта", Status: "completed", Subtitle: '`[Отчёт](https://example.com)` <b>Лист</b>' };
+  assert.equal(context.activityOperation(activity), "command", "custom name does not establish read-only behavior");
+  assert.equal(context.activityPrimaryText(activity), "Пересчёт отчёта");
+  for (const [data, expected] of [
+    [[1, 2], "Получен список · элементов: 2"], ["Готово", "Получен текстовый ответ"],
+    [{ answer: 42 }, "Получены данные JSON"], [null, "Получены данные JSON"],
+    [{ items: [], complete: false }, "Получены данные JSON"],
+    [{ kind: "resource-read", representation: "media", hydratedForNextModelStep: true }, "Получены данные JSON"],
+    [{ kind: "tool-schema", loaded: true, complete: true }, "Получены данные JSON"],
+    [{ externalized: true }, "Результат сохранён отдельно"]
+  ]) {
+    activity.DataJson = JSON.stringify(data);
+    const before = JSON.stringify(activity);
+    assert.equal(context.activityDisplayResult(activity), expected);
+    assert.equal(JSON.stringify(activity), before);
+  }
+  activity.ToolId = "common.resources_read";
+  for (const [data, expected] of [
+    [{ representation: "text", returnedCharacters: 125, complete: true }, "Получен текст · символов: 125"],
+    [{ representation: "media", hydratedForNextModelStep: true }, "Медиа подготовлено для следующего запроса модели"],
+    [{ representation: "media", hydratedForNextModelStep: false }, "Получены сведения о медиа"],
+    [{ representation: "metadata" }, "Получены сведения · содержимое не загружено"]
+  ]) {
+    activity.DataJson = JSON.stringify(Object.assign({ kind: "resource-read" }, data));
+    assert.equal(context.activityDisplayResult(activity), expected);
+  }
+  activity.ToolId = "common.capabilities_read";
+  activity.DataJson = '{"kind":"skill","complete":false,"truncated":true}';
+  assert.equal(context.activityDisplayResult(activity), "Загружена часть описания");
+  activity.ToolId = "custom.read_table";
+  const row = context.renderActivityRow(activity, false, true, null);
+  const target = walk(row).find(node => node.tagName === "code");
+  assert.equal(target.textContent, activity.Subtitle);
+  assert.equal(target.innerHTML, "", "targets are literal text, never Markdown or HTML");
+  activity.ExecutionEvidence = { Effect: "Unknown" };
+  assert.match(context.activityDisplayResult(activity), /не подтверждён/);
+  activity.ExecutionEvidence.Effect = "VerifiedChange";
+  assert.equal(context.activityDisplayResult(activity), "Изменения подтверждены");
 }]);
 tests.push(["localized failures and operation icons remain independent of model wording", () => {
   const failure = { Kind: "tool", ToolId: "common.capabilities_read", Status: "failed", ErrorCode: "capability_not_found",

@@ -23,7 +23,7 @@ const read = file => fs.readFileSync(path.join(root, file), "utf8");
       await page.addScriptTag({ content: read("js/" + file) });
     await page.evaluate(() => {
       const fixtures = [
-        { ToolId: "common.capabilities_read", Subtitle: "excel.write_range", ResultMessage: "Loaded catalogRevision=private-id", DataJson: '{"complete":true}' },
+        { ToolId: "common.capabilities_read", Subtitle: "excel.write_range", ResultMessage: "Loaded catalogRevision=private-id", DataJson: '{"kind":"tool-schema","complete":true}' },
         { ToolId: "common.resources_find", Subtitle: "Таблицы с продажами · Документ", DataJson: '{"items":[{},{},{},{}],"complete":true}' },
         { ToolId: "common.resources_read", Subtitle: "Продажи!A1:D120 · Таблица", DataJson: JSON.stringify({ kind: "resource-read", table: { rows: Array.from({ length: 120 }, () => ({})) }, complete: true }) },
         { ToolId: "excel.write_range", Subtitle: "Продажи!B2:D121", ExecutionEvidence: { Dispatch: "MayHaveDispatched", Effect: "VerifiedChange" } },
@@ -39,10 +39,16 @@ const read = file => fs.readFileSync(path.join(root, file), "utf8");
       await page.setViewportSize({ width, height: 920 });
       const bounds = await page.locator(".agent-activity-row").evaluateAll(rows => rows.map(row => ({
         width: row.clientWidth, scroll: row.scrollWidth, text: row.innerText,
-        targetOverflow: getComputedStyle(row.querySelector(".agent-activity-target")).textOverflow
+        targetOverflow: getComputedStyle(row.querySelector(".agent-activity-target")).textOverflow,
+        colors: [".agent-activity-name", ".agent-activity-target code", ".agent-activity-mark", ".agent-activity-caption"].map(selector => {
+          const element = row.querySelector(selector); return element ? getComputedStyle(element).color : null;
+        })
       })));
       assert.ok(bounds.every(row => row.scroll <= row.width + 1), "action rows fit the narrow chat");
       assert.ok(bounds.every(row => row.targetOverflow !== "ellipsis"), "semantic targets remain visible");
+      assert.equal(new Set(bounds[0].colors).size, 1, "action, target, icon and outcome use one muted color");
+      assert.notEqual(bounds[4].colors[3], bounds[4].colors[0], "error remains distinct");
+      assert.equal(new Set(bounds[5].colors).size, 1, "unknown uses a symbol and text with neutral color");
       assert.ok(bounds[0].text.includes("Загружено") && !bounds[0].text.includes("private-id"));
       assert.ok(bounds[2].text.includes("Получено строк: 120"));
       assert.ok(bounds[7].text.includes("квартал!A1:F180"));

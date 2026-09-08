@@ -1,5 +1,16 @@
 # Stabilization progress
 
+Latest result-presentation refinement (2026-09-08): action/icon/target/outcome use
+one muted color except failed outcomes; literal code-style targets wrap safely.
+All tools have a bounded outer JSON-type fallback without a custom renderer.
+Source-checked resource captions distinguish text/source/structure, tables, metadata
+without content and media prepared for the next model request. Custom result text
+remains in details; it cannot establish mutation effects or media delivery. Built-in
+action/target maps remain; catalog-owned typed display metadata is recorded as a
+bounded design follow-up in BACKLOG, with no new runtime/model contract. Focused Web
+and Chromium layout checks pass; Windows/Office/WebView2 gates remain open.
+
+
 Latest chat presentation correction (2026-09-08): tool rows keep action, full
 semantic target and a Russian result caption, with separate operation icons.
 Known resource/capability reads show counts and incomplete-search/read outcomes;

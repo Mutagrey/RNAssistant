@@ -659,7 +659,9 @@ retain a visible verification warning outside collapsed history. A pre-dispatch
 the sheet satisfies the request or that a later call resolved the conflict.
 
 Activities show **action → semantic target → result** in a naturally wrapping,
-muted 12 px flow. Targets remain readable without extra UI truncation; distinct
+muted 12 px flow. Action, icon, target and ordinary outcome share the muted color;
+only failed outcomes are red. Targets use literal inline-code styling (not Markdown
+or HTML interpretation) and remain readable without extra UI truncation; distinct
 icons identify search, read, write, capability study, delete, questions, plans,
 charts and other operations. The display classifies icons only, never tool effects.
 `AgentTranscript` derives target captions from accepted scalar arguments, including
@@ -668,9 +670,26 @@ subjects/recipients, without resource lookup or new authority.
 
 Short Russian result captions use typed status/error/effect evidence. Unknown effects
 win over success/error wording; failed no-ops remain failures. Bounded, cached reads
-of the documented resource/capability result fields may add match/row counts and
-explicit incompleteness. Empty partial searches never claim global absence.
-Raw errors and protocol metadata stay in the expandable diagnostic details.
+of the documented resource/capability result fields add returned element/row counts,
+text/source/structure and explicit incompleteness. Metadata says the body was not
+loaded; media says it is prepared for the next model request only when the resource
+owner reports hydration. This is not proof of delivery or model perception. A PDF
+text read and a media read therefore have different captions. Empty collections
+never claim global absence. Reserved resource/capability fields are interpreted only
+for their owning gateways; arbitrary custom JSON cannot claim media hydration or
+capability loading.
+
+Every tool also has a generic representation fallback: JSON object/scalar, JSON
+string, array with its actual length, separately retained result or bounded journal
+preview. This fallback does not inspect arbitrary business fields or infer effects.
+Large/invalid JSON is left to the existing details instead of eagerly parsing it.
+New custom tool names outside built-in namespaces receive a neutral operation icon;
+Russian descriptions take precedence over name-derived built-in labels. VBA package
+String output remains available as the tool message, with JSON in the same existing
+viewer. No custom renderer is required for a new result. Raw errors and protocol
+metadata stay in the expandable diagnostic details. Built-in action/target label
+maps still exist; catalog-owned localization/target metadata is a separately scoped
+follow-up, not an implemented universal descriptor contract.
 
 These captions are UI-only: they do not replace or rewrite tool arguments, durable
 results or the model-facing result projection. Details label their JSON as journal

@@ -135,7 +135,9 @@ function renderActivityRow(activity, current, expandable, context) {
   if (comment) {
     var target = document.createElement("span");
     target.className = "agent-activity-target";
-    target.textContent = comment;
+    var targetValue = document.createElement("code");
+    targetValue.textContent = comment;
+    target.appendChild(targetValue);
     copy.appendChild(target);
   }
 
@@ -171,6 +173,8 @@ function activityOperation(activity) {
   if (kind === "step" || kind === "notice" || kind === "compaction") return "status";
 
   var toolId = String(activityToolId(activity) || "").toLowerCase();
+  // Custom tool names are identities, not declarations of their behavior.
+  if (!/^(common|excel|word|powerpoint|outlook)\./.test(toolId)) return "command";
   var operationId = toolId.replace(/[.\-]/g, "_");
   if (toolId === "common.capabilities_read") return "learn";
   if (toolId === "common.questions_ask") return "question";
@@ -212,10 +216,10 @@ function activityPrimaryText(activity) {
   var toolTitle = activityToolLabel(activityToolId(activity), activityStatus(activity) === "running");
   if (toolTitle) return toolTitle;
   if (activityToolId(activity)) {
+    var description = activityTitle(activity);
+    if (description !== activityToolId(activity) && /[А-Яа-яЁё]/.test(description)) return description;
     var named = activityNamedToolLabel(activityToolId(activity), activityStatus(activity) === "running");
     if (named) return named;
-    var description = activityTitle(activity);
-    if (/[А-Яа-яЁё]/.test(description)) return description;
     var operationLabels = {
       search: ["Поиск", "Ищу"], read: ["Чтение", "Читаю"], write: ["Изменение", "Вношу изменения"],
       delete: ["Удаление", "Удаляю"], export: ["Экспорт", "Экспортирую"],
@@ -307,6 +311,7 @@ function activityToolLabel(toolId, running) {
 }
 
 function activityNamedToolLabel(toolId, running) {
+  if (!/^(excel|word|powerpoint|outlook)\./.test(String(toolId || ""))) return "";
   var parts = String(toolId || "").split(".").pop().split("_");
   var verbs = {
     add: ["Создание", "Создаю"], create: ["Создание", "Создаю"],
@@ -336,37 +341,45 @@ function activityNamedToolLabel(toolId, running) {
   return verbs[parts[0]][running ? 1 : 0] + " " + subjects[parts[1]][form];
 }
 
-function activityReadResultCaption(activity) {
+function activityResultCaption(activity) {
   var toolId = activityToolId(activity);
-  if (["common.resources_find", "common.resources_read", "common.capabilities_search", "common.capabilities_read"].indexOf(toolId) < 0) return "";
   var source = activityDataJson(activity);
   if (!source || source.length > 32768) return "";
   var cached = activityPresentationCache.get(activity);
-  if (cached && cached.source === source) return cached.caption;
+  if (cached && cached.source === source && cached.toolId === toolId) return cached.caption;
   var caption = "";
   var partial = false;
   try {
-    // Read only documented presentation fields. Never infer effects or construct model messages here.
+    // Generic JSON needs no tool-specific renderer. Reserved resource/capability
+    // claims require their source owner: arbitrary custom JSON cannot assert media
+    // hydration, capability admission or search coverage. Neither establishes effects.
     var data = JSON.parse(source);
-    if (data && !data.truncated && !data.externalized) {
-      if ((toolId === "common.resources_find" || toolId === "common.capabilities_search") &&
-          Array.isArray(data.items) && typeof data.complete === "boolean") {
-        var count = data.items.length;
-        var complete = data.complete && data.partial !== true;
-        partial = !complete;
-        caption = complete ? (count ? "Найдено: " + count : "Совпадений нет")
-          : (count ? "Показано: " + count : "В просмотренной части совпадений нет") + " · поиск неполный";
-      } else if (toolId === "common.resources_read" && data.kind === "resource-read") {
-        if (data.table && Array.isArray(data.table.rows)) caption = "Получено строк: " + data.table.rows.length;
-        else caption = data.representation === "metadata" ? "Получены сведения" : "Прочитано";
-        if (data.complete === false) { caption += " · часть данных"; partial = true; }
-      } else if (toolId === "common.capabilities_read" && data.complete === false) {
-        caption = "Загружена часть описания";
-        partial = true;
+    if (toolId === "common.capabilities_read" && data && (data.kind === "tool-schema" || data.kind === "skill" || data.kind === "reference") && typeof data.complete === "boolean") {
+      partial = !data.complete;
+      caption = partial ? "Загружена часть описания" : "Загружено";
+    } else if (data && typeof data === "object" && (data.truncated || data.externalized)) {
+      caption = data.externalized ? "Результат сохранён отдельно" : "В журнале показана часть результата";
+    } else if (toolId === "common.resources_read" && data && data.kind === "resource-read") {
+      if (data.table && Array.isArray(data.table.rows)) caption = "Получено строк: " + data.table.rows.length;
+      else if (data.representation === "media") caption = data.hydratedForNextModelStep === true
+        ? "Медиа подготовлено для следующего запроса модели" : "Получены сведения о медиа";
+      else if (data.representation === "metadata") caption = "Получены сведения · содержимое не загружено";
+      else {
+        caption = { text: "Получен текст", source: "Получен исходный код", structure: "Получена структура" }[data.representation] || "Прочитано";
+        if (Number.isSafeInteger(data.returnedCharacters) && data.returnedCharacters >= 0)
+          caption += " · символов: " + data.returnedCharacters;
       }
-    }
-  } catch (ignore) { /* Exact malformed/large results stay available in diagnostic details. */ }
-  activityPresentationCache.set(activity, { source: source, caption: caption, partial: partial });
+      if (data.complete === false) { caption += " · часть данных"; partial = true; }
+    } else if ((toolId === "common.resources_find" || toolId === "common.capabilities_search") && data && Array.isArray(data.items) && typeof data.complete === "boolean") {
+      var count = data.items.length;
+      partial = !data.complete || data.partial === true;
+      // An empty arbitrary collection is not evidence that a search found nothing.
+      caption = "Получено элементов: " + count + (partial ? " · неполный список" : "");
+    } else if (Array.isArray(data)) caption = "Получен список · элементов: " + data.length;
+    else if (typeof data === "string") caption = "Получен текстовый ответ";
+    else caption = "Получены данные JSON";
+  } catch (ignore) { /* Invalid/large data remains available in the existing details. */ }
+  activityPresentationCache.set(activity, { toolId: toolId, source: source, caption: caption, partial: partial });
   return caption;
 }
 
@@ -375,7 +388,7 @@ function activityPresentationState(activity) {
   if (activityValue(evidence, "Effect", "effect", "") === "Unknown") return "unknown";
   var status = activityStatus(activity);
   if (status === "completed") {
-    activityReadResultCaption(activity);
+    activityResultCaption(activity);
     var display = activityPresentationCache.get(activity);
     if (display && display.source === activityDataJson(activity) && display.partial) return "partial";
   }
@@ -432,9 +445,10 @@ function activityDisplayResult(activity) {
   if (effect === "VerifiedNoChange") return "Без изменений";
   if (effect === "VerifiedChange") return "Изменения подтверждены";
   if (status !== "completed") return "Статус пока неизвестен";
-  var readResult = activityReadResultCaption(activity);
-  if (readResult) return readResult;
-  return { learn: "Загружено", read: "Прочитано", search: "Поиск завершён", check: "Проверка завершена" }[activityOperation(activity)] || "Завершено";
+  var resultCaption = activityResultCaption(activity);
+  if (resultCaption) return resultCaption;
+  return { learn: "Загружено", read: "Прочитано", search: "Поиск завершён", check: "Проверка завершена" }[activityOperation(activity)] ||
+    (activityResultMessage(activity) ? "Получен текстовый ответ" : "Завершено");
 }
 
 function activityCommentText(activity) {
