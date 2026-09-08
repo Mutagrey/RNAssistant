@@ -1254,11 +1254,11 @@ namespace RNAssistant.Harness
             var bridge = new AssistantWebBridge(controller, null);
             var token = BridgeToken(bridge);
             var fileResponse = bridge.HandleMessageAsync(
-                "{\"id\":\"html1\",\"type\":\"deleteHtmlWorkspaceFile\",\"bridgeToken\":\"" + token + "\",\"payload\":{\"chatId\":\"chat-html\",\"path\":\"scripts/app.js\"}}")
+                "{\"id\":\"html1\",\"type\":\"deleteHtmlWorkspaceFile\",\"bridgeToken\":\"" + token + "\",\"payload\":{\"chatId\":\"chat-html\",\"path\":\"scripts/app.js\",\"expectedActiveHtmlArtifactId\":\"html-r3\",\"expectedSessionRevision\":7}}")
                 .GetAwaiter()
                 .GetResult();
             var dataResponse = bridge.HandleMessageAsync(
-                "{\"id\":\"html2\",\"type\":\"deleteHtmlWorkspaceData\",\"bridgeToken\":\"" + token + "\",\"payload\":{\"chatId\":\"chat-html\",\"name\":\"sales\"}}")
+                "{\"id\":\"html2\",\"type\":\"deleteHtmlWorkspaceData\",\"bridgeToken\":\"" + token + "\",\"payload\":{\"chatId\":\"chat-html\",\"name\":\"sales\",\"expectedActiveHtmlArtifactId\":\"html-r3\",\"expectedSessionRevision\":7}}")
                 .GetAwaiter()
                 .GetResult();
 
@@ -1287,7 +1287,7 @@ namespace RNAssistant.Harness
             var imported = bridge.HandleMessageAsync(
                 "{\"id\":\"html-import\",\"type\":\"importUploadedHtmlToWorkspace\",\"bridgeToken\":\"" + token +
                 "\",\"payload\":{\"chatId\":\"chat-html\",\"sourceResourceUri\":\"" + sourceUri +
-                "\",\"expectedActiveHtmlArtifactId\":\"html-r2\",\"targetPath\":\"pages/upload.html\"}}")
+                "\",\"expectedSessionRevision\":7,\"expectedActiveHtmlArtifactId\":\"html-r2\",\"targetPath\":\"pages/upload.html\"}}")
                 .GetAwaiter().GetResult();
             AssertTrue(JObject.Parse(imported)["ok"].Value<bool>(), "uploaded HTML import bridge response ok");
             AssertEqual("chat-html", controller.LastChatId, "HTML import targets the addressed chat");
@@ -1303,7 +1303,7 @@ namespace RNAssistant.Harness
             var token = BridgeToken(bridge);
             var response = bridge.HandleMessageAsync(
                 "{\"id\":\"html-export\",\"type\":\"prepareHtmlWorkspaceExport\",\"bridgeToken\":\"" + token +
-                "\",\"payload\":{\"chatId\":\"chat-html\",\"expectedActiveHtmlArtifactId\":\"html-r3\"}}")
+                "\",\"payload\":{\"chatId\":\"chat-html\",\"expectedSessionRevision\":7,\"expectedActiveHtmlArtifactId\":\"html-r3\"}}")
                 .GetAwaiter().GetResult();
             var envelope = JObject.Parse(response);
             AssertTrue(envelope["ok"].Value<bool>(), "HTML export bridge response ok");

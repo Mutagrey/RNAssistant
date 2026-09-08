@@ -39,6 +39,14 @@ version check still apply.
 
 ## Test map
 
+`html actions:` covers exact chat/snapshot/session controls, ABA revision drift,
+refusal before mutation dispatch, unchanged authority/no unresolved effect, fresh
+retry and all seven typed bridge routes. UI companion:
+`node tests/web/html-workspace-actions.test.js` (dialogs, duplicates, navigation,
+late edits and export lease cleanup). Use the existing HTML import/export/editor
+checks when changing their domain behavior. Live controller document switching
+remains a Windows qualification gate.
+
 `artifact recovery:` verifies per-resource metadata loss/corruption, unavailable
 Plan heads, healthy picker entries, strict reads, durable unlink, metadata return
 and fork. Run with the working-set tests when changing reference-only recovery.

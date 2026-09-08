@@ -721,6 +721,8 @@ namespace RNAssistant.Harness
                 Test("prompt editor: exact source transport", PromptEditorReadsExactSource),
                 Test("prompt editor: uploaded changes and guarded save", PromptEditorUploadAndGuardedSave),
                 Test("prompt editor: invalid uploads fail closed", PromptEditorRejectsInvalidUploads),
+                Test("html actions: stale guard before dispatch", HtmlActionsRejectStaleStateBeforeDispatch),
+                Test("html actions: typed bridge preserves guards", HtmlActionsBridgePreservesGuards),
                 Test("html editor: upload through existing commit owner", HtmlEditorUploadUsesExistingCommitOwner),
                 Test("html editor: invalid uploads and stale drafts", HtmlEditorRejectsInvalidUploadsAndStaleDrafts),
                 Test("html editor: typed bridge rejects inline bodies", HtmlEditorBridgeRejectsInlineBodies),

@@ -139,19 +139,13 @@ namespace RNAssistant.Office
             finally { _resourceData.CloseUpload(request.ChatId, request.UploadLeaseId, HtmlWorkspaceEditorResourceService.Owner); }
         }
 
-        public HtmlWorkspaceResponse ImportUploadedHtmlToWorkspace(
-            string chatId,
-            string sourceResourceUri,
-            string expectedActiveHtmlArtifactId,
-            string targetPath)
+        public HtmlWorkspaceResponse ImportUploadedHtmlToWorkspace(HtmlWorkspaceImportPayload request)
         {
-            if (string.IsNullOrWhiteSpace(chatId))
-                throw new InvalidOperationException("RESOURCE_ACCESS_DENIED: an explicit chat is required for HTML import.");
-            return WithReservedSession(LoadAddressedSession(chatId), session =>
+            return WithHtmlWorkspaceAction(request, session =>
             {
-                var imported = _toolExecutor.MutateLocalResources(session, "common.html_workspace_import",
-                    new Dictionary<string, object> { ["source"] = sourceResourceUri, ["expected"] = expectedActiveHtmlArtifactId, ["path"] = targetPath },
-                    () => _uploadedHtmlResources.Import(session, sourceResourceUri, expectedActiveHtmlArtifactId, targetPath));
+                var imported = MutateHtmlWorkspaceAction(session, request, "common.html_workspace_import",
+                    new Dictionary<string, object> { ["source"] = request.SourceResourceUri, ["expected"] = request.ExpectedActiveHtmlArtifactId, ["path"] = request.TargetPath },
+                    () => _uploadedHtmlResources.Import(session, request.SourceResourceUri, request.ExpectedActiveHtmlArtifactId, request.TargetPath));
                 SaveSessionChanges(session);
                 var response = HtmlWorkspaceState(session);
                 response.ImportedPath = imported.ImportedPath;
@@ -160,17 +154,15 @@ namespace RNAssistant.Office
             });
         }
 
-        public HtmlWorkspaceResponse PrepareHtmlWorkspaceExport(
-            string chatId,
-            string expectedActiveHtmlArtifactId,
+        public HtmlWorkspaceResponse PrepareHtmlWorkspaceExport(HtmlWorkspaceExportPayload request,
             CancellationToken cancellationToken = default(CancellationToken))
         {
-            return WithReservedSession(LoadAddressedSession(chatId), session =>
+            return WithHtmlWorkspaceAction(request, session =>
             {
                 var previousArtifactId = session.ActiveHtmlArtifactId;
-                var exportArtifactId = _toolExecutor.MutateLocalResources(session, "common.html_workspace_export",
-                    new Dictionary<string, object> { ["expected"] = expectedActiveHtmlArtifactId },
-                    () => HtmlWorkspaceArtifactService.PrepareExport(session, expectedActiveHtmlArtifactId));
+                var exportArtifactId = MutateHtmlWorkspaceAction(session, request, "common.html_workspace_export",
+                    new Dictionary<string, object> { ["expected"] = request.ExpectedActiveHtmlArtifactId },
+                    () => HtmlWorkspaceArtifactService.PrepareExport(session, request.ExpectedActiveHtmlArtifactId));
                 if (!string.Equals(previousArtifactId, exportArtifactId, System.StringComparison.OrdinalIgnoreCase))
                 {
                     _chatSessions.NotifySaved(session); // The mutation barrier already persisted the checkpoint.
@@ -189,63 +181,63 @@ namespace RNAssistant.Office
             });
         }
 
-        public HtmlWorkspaceResponse DeleteHtmlWorkspaceFile(string chatId, string path)
+        public HtmlWorkspaceResponse DeleteHtmlWorkspaceFile(HtmlWorkspaceDeleteFilePayload request)
         {
-            return WithReservedSession(LoadAddressedSession(chatId), session =>
+            return WithHtmlWorkspaceAction(request, session =>
             {
-                _toolExecutor.MutateLocalResources(session, "common.html_workspace_delete", new Dictionary<string, object> { ["target"] = path },
-                    () => HtmlWorkspaceToolService.DeleteFile(session, path));
+                MutateHtmlWorkspaceAction(session, request, "common.html_workspace_delete", new Dictionary<string, object> { ["target"] = request.Path },
+                    () => HtmlWorkspaceToolService.DeleteFile(session, request.Path));
                 SaveSessionChanges(session);
                 return HtmlWorkspaceState(session);
             });
         }
 
-        public HtmlWorkspaceResponse DeleteHtmlWorkspaceData(string chatId, string name)
+        public HtmlWorkspaceResponse DeleteHtmlWorkspaceData(HtmlWorkspaceDeleteDataPayload request)
         {
-            return WithReservedSession(LoadAddressedSession(chatId), session =>
+            return WithHtmlWorkspaceAction(request, session =>
             {
-                _toolExecutor.MutateLocalResources(session, "common.html_workspace_delete", new Dictionary<string, object> { ["target"] = name },
-                    () => HtmlWorkspaceToolService.DeleteDataSource(session, name));
+                MutateHtmlWorkspaceAction(session, request, "common.html_workspace_delete", new Dictionary<string, object> { ["target"] = request.Name },
+                    () => HtmlWorkspaceToolService.DeleteDataSource(session, request.Name));
                 SaveSessionChanges(session);
                 return HtmlWorkspaceState(session);
             });
         }
 
-        public HtmlWorkspaceResponse SetActiveHtmlWorkspaceFile(string chatId, string path)
+        public HtmlWorkspaceResponse SetActiveHtmlWorkspaceFile(HtmlWorkspaceActiveFilePayload request)
         {
-            return WithReservedSession(LoadAddressedSession(chatId), session =>
+            return WithHtmlWorkspaceAction(request, session =>
             {
-                _toolExecutor.MutateLocalResources(session, "common.html_workspace_select", new Dictionary<string, object> { ["path"] = path },
-                    () => HtmlWorkspaceToolService.SetActiveFile(session, path));
+                MutateHtmlWorkspaceAction(session, request, "common.html_workspace_select", new Dictionary<string, object> { ["path"] = request.Path },
+                    () => HtmlWorkspaceToolService.SetActiveFile(session, request.Path));
                 SaveSessionChanges(session);
                 return HtmlWorkspaceState(session);
             });
         }
 
-        public HtmlWorkspaceResponse RestoreHtmlWorkspaceSnapshot(string chatId, string snapshotId)
+        public HtmlWorkspaceResponse RestoreHtmlWorkspaceSnapshot(HtmlWorkspaceRestorePayload request)
         {
-            return WithReservedSession(LoadAddressedSession(chatId), session =>
+            return WithHtmlWorkspaceAction(request, session =>
             {
                 var recovery = session.HtmlWorkspaceRecovery ?? new HtmlWorkspaceRecoveryState();
                 var degraded = string.Equals(recovery.Status, HtmlWorkspaceRecoveryStatuses.Degraded, System.StringComparison.OrdinalIgnoreCase);
-                if (!recovery.CanMutate && string.IsNullOrWhiteSpace(snapshotId))
+                if (!recovery.CanMutate && string.IsNullOrWhiteSpace(request.SnapshotId))
                 {
                     throw new System.InvalidOperationException("Select an explicit healthy HTML workspace revision to recover editing.");
                 }
-                var targetId = degraded && !string.IsNullOrWhiteSpace(snapshotId)
-                    ? snapshotId
-                    : string.IsNullOrWhiteSpace(snapshotId)
+                var targetId = degraded && !string.IsNullOrWhiteSpace(request.SnapshotId)
+                    ? request.SnapshotId
+                    : string.IsNullOrWhiteSpace(request.SnapshotId)
                         ? session.HtmlWorkspace.History.Select(item => item == null ? null : item.Id)
                             .FirstOrDefault(id => !string.IsNullOrWhiteSpace(id))
                         : session.HtmlWorkspace.History
-                            .Where(item => item != null && string.Equals(item.Id, snapshotId, System.StringComparison.OrdinalIgnoreCase))
+                            .Where(item => item != null && string.Equals(item.Id, request.SnapshotId, System.StringComparison.OrdinalIgnoreCase))
                             .Select(item => item.Id)
                             .FirstOrDefault();
                 if (string.IsNullOrWhiteSpace(targetId))
                 {
                     throw new System.InvalidOperationException("HTML workspace snapshot was not found.");
                 }
-                _toolExecutor.MutateLocalResources(session, "common.html_workspace_restore",
+                MutateHtmlWorkspaceAction(session, request, "common.html_workspace_restore",
                     new Dictionary<string, object> { ["snapshotId"] = targetId }, () => {
                         string error;
                         if (!_chatStore.TryActivateHtmlWorkspaceRevision(session, targetId, out error))
@@ -257,24 +249,24 @@ namespace RNAssistant.Office
             });
         }
 
-        public HtmlWorkspaceResponse RedoHtmlWorkspaceSnapshot(string chatId, string snapshotId)
+        public HtmlWorkspaceResponse RedoHtmlWorkspaceSnapshot(HtmlWorkspaceRestorePayload request)
         {
-            return WithReservedSession(LoadAddressedSession(chatId), session =>
+            return WithHtmlWorkspaceAction(request, session =>
             {
                 var branches = HtmlWorkspaceNavigationService.GetRedoBranches(session);
-                if (string.IsNullOrWhiteSpace(snapshotId) && branches.Count > 1)
+                if (string.IsNullOrWhiteSpace(request.SnapshotId) && branches.Count > 1)
                 {
                     return HtmlWorkspaceState(session, true);
                 }
-                var branch = string.IsNullOrWhiteSpace(snapshotId)
+                var branch = string.IsNullOrWhiteSpace(request.SnapshotId)
                     ? branches.SingleOrDefault()
-                    : branches.FirstOrDefault(item => string.Equals(item.Id, snapshotId, System.StringComparison.OrdinalIgnoreCase));
+                    : branches.FirstOrDefault(item => string.Equals(item.Id, request.SnapshotId, System.StringComparison.OrdinalIgnoreCase));
                 if (branch == null)
                 {
                     throw new System.InvalidOperationException("HTML workspace redo target must be a direct child revision.");
                 }
                 var targetId = branch.Id;
-                _toolExecutor.MutateLocalResources(session, "common.html_workspace_restore",
+                MutateHtmlWorkspaceAction(session, request, "common.html_workspace_restore",
                     new Dictionary<string, object> { ["snapshotId"] = targetId }, () => {
                         string error;
                         if (!_chatStore.TryActivateHtmlWorkspaceRevision(session, targetId, out error))
@@ -284,6 +276,35 @@ namespace RNAssistant.Office
                 SaveSessionChanges(session);
                 return HtmlWorkspaceState(session);
             });
+        }
+
+        private T WithHtmlWorkspaceAction<T>(HtmlWorkspaceActionPayload request, Func<ChatSession, T> action)
+        {
+            if (request == null || string.IsNullOrWhiteSpace(request.ChatId))
+                throw new InvalidOperationException("RESOURCE_ACCESS_DENIED: an explicit HTML action chat is required.");
+            return WithReservedSession(LoadAddressedSession(request.ChatId), session =>
+            {
+                ValidateHtmlWorkspaceAction(session, request);
+                return action(session);
+            });
+        }
+
+        private void ValidateHtmlWorkspaceAction(ChatSession session, HtmlWorkspaceActionPayload request)
+        {
+            if (!_chatSessions.IsCurrentDocument(session))
+                throw new InvalidOperationException("RESOURCE_ACCESS_DENIED: open the document of this chat before editing HTML.");
+            HtmlWorkspaceActionGuard.Validate(session, request);
+        }
+
+        private T MutateHtmlWorkspaceAction<T>(ChatSession session, HtmlWorkspaceActionPayload request,
+            string operation, IDictionary<string, object> arguments, Func<T> action)
+        {
+            arguments = new Dictionary<string, object>(arguments) {
+                ["expectedActiveHtmlArtifactId"] = request.ExpectedActiveHtmlArtifactId,
+                ["expectedSessionRevision"] = request.ExpectedSessionRevision.Value
+            };
+            return _toolExecutor.MutateLocalResources(session, operation, arguments, action,
+                validateBeforeDispatch: () => ValidateHtmlWorkspaceAction(session, request));
         }
 
         private static HtmlWorkspaceResponse HtmlWorkspaceState(ChatSession session, bool redoChoiceRequired = false)

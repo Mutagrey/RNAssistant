@@ -749,61 +749,60 @@ namespace RNAssistant.Office
                 Data = new ResourceDataOpenResponse { LeaseId = new string('a', 64), Url = "https://rnassistant.local-resource/v1/" + new string('a', 64) }
             };
         }
-        public HtmlWorkspaceResponse ImportUploadedHtmlToWorkspace(
-            string chatId,
-            string sourceResourceUri,
-            string expectedActiveHtmlArtifactId,
-            string targetPath)
-        {
-            LastChatId = chatId;
-            LastHtmlSourceResourceUri = sourceResourceUri;
-            LastExpectedHtmlArtifactId = expectedActiveHtmlArtifactId;
-            LastHtmlPath = targetPath;
+        public HtmlWorkspaceActionPayload LastHtmlAction { get; private set; }
+        public HtmlWorkspaceResponse ImportUploadedHtmlToWorkspace(HtmlWorkspaceImportPayload request) {
+            LastHtmlAction = request;
+            LastChatId = request.ChatId;
+            LastHtmlSourceResourceUri = request.SourceResourceUri;
+            LastExpectedHtmlArtifactId = request.ExpectedActiveHtmlArtifactId;
+            LastHtmlPath = request.TargetPath;
             return new HtmlWorkspaceResponse
             {
-                ActiveChatId = chatId ?? string.Empty,
-                ImportedPath = targetPath,
-                ImportedFromResourceUri = sourceResourceUri,
+                ActiveChatId = request.ChatId ?? string.Empty,
+                ImportedPath = request.TargetPath,
+                ImportedFromResourceUri = request.SourceResourceUri,
                 Workspace = HtmlWorkspaceDto.From(null)
             };
         }
-        public HtmlWorkspaceResponse PrepareHtmlWorkspaceExport(string chatId, string expectedActiveHtmlArtifactId,
-            CancellationToken cancellationToken = default(CancellationToken))
-        {
-            LastChatId = chatId;
-            LastExpectedHtmlArtifactId = expectedActiveHtmlArtifactId;
+        public HtmlWorkspaceResponse PrepareHtmlWorkspaceExport(HtmlWorkspaceExportPayload request, CancellationToken cancellationToken = default(CancellationToken)) {
+            LastHtmlAction = request;
+            LastChatId = request.ChatId;
+            LastExpectedHtmlArtifactId = request.ExpectedActiveHtmlArtifactId;
             return new HtmlWorkspaceResponse
             {
-                ActiveChatId = chatId ?? string.Empty,
-                ActiveHtmlArtifactId = expectedActiveHtmlArtifactId,
-                ExportRevisionArtifactId = expectedActiveHtmlArtifactId,
-                ExportResourceUri = "rna://chat/" + chatId + "/artifact/" + expectedActiveHtmlArtifactId + "/revision/3",
+                ActiveChatId = request.ChatId ?? string.Empty,
+                ActiveHtmlArtifactId = request.ExpectedActiveHtmlArtifactId,
+                ExportRevisionArtifactId = request.ExpectedActiveHtmlArtifactId,
+                ExportResourceUri = "rna://chat/" + request.ChatId + "/artifact/" + request.ExpectedActiveHtmlArtifactId + "/revision/3",
                 ExportContentSha256 = new string('a', 64),
                 ResourceExport = new HtmlResourceExport {
-                    Generations = new Dictionary<string, long> { ["conversation:" + chatId] = 1 },
+                    Generations = new Dictionary<string, long> { ["conversation:" + request.ChatId] = 1 },
                     Bindings = new[] { new HtmlResourceExportBinding { Name = "data", Lease = new ResourceDataOpenResponse {
                         LeaseId = "export-lease", Url = "https://rnassistant.local-resource/v1/export-lease",
-                        Descriptor = new ResourceDescriptor { Reference = new ResourceRef("rna://state/conversation/" + chatId + "/data", "r1") },
+                        Descriptor = new ResourceDescriptor { Reference = new ResourceRef("rna://state/conversation/" + request.ChatId + "/data", "r1") },
                         View = "table", MaxBatchItems = 500, MaxBatchBytes = 8192 } } }
                 },
                 Workspace = HtmlWorkspaceDto.From(null)
             };
         }
-        public HtmlWorkspaceResponse DeleteHtmlWorkspaceFile(string chatId, string path)
-        {
-            LastChatId = chatId;
-            LastHtmlPath = path;
-            return new HtmlWorkspaceResponse { ActiveChatId = chatId ?? string.Empty, Workspace = HtmlWorkspaceDto.From(null) };
+        public HtmlWorkspaceResponse DeleteHtmlWorkspaceFile(HtmlWorkspaceDeleteFilePayload request) {
+            LastHtmlAction = request;
+            LastChatId = request.ChatId;
+            LastHtmlPath = request.Path;
+            return new HtmlWorkspaceResponse { ActiveChatId = request.ChatId ?? string.Empty, Workspace = HtmlWorkspaceDto.From(null) };
         }
-        public HtmlWorkspaceResponse DeleteHtmlWorkspaceData(string chatId, string name)
-        {
-            LastChatId = chatId;
-            LastHtmlDataName = name;
-            return new HtmlWorkspaceResponse { ActiveChatId = chatId ?? string.Empty, Workspace = HtmlWorkspaceDto.From(null) };
+        public HtmlWorkspaceResponse DeleteHtmlWorkspaceData(HtmlWorkspaceDeleteDataPayload request) {
+            LastHtmlAction = request;
+            LastChatId = request.ChatId;
+            LastHtmlDataName = request.Name;
+            return new HtmlWorkspaceResponse { ActiveChatId = request.ChatId ?? string.Empty, Workspace = HtmlWorkspaceDto.From(null) };
         }
-        public HtmlWorkspaceResponse SetActiveHtmlWorkspaceFile(string chatId, string path) { return new HtmlWorkspaceResponse { ActiveChatId = chatId ?? string.Empty, Workspace = HtmlWorkspaceDto.From(new HtmlWorkspace { ActiveFileId = path ?? string.Empty }) }; }
-        public HtmlWorkspaceResponse RestoreHtmlWorkspaceSnapshot(string chatId, string snapshotId) { return new HtmlWorkspaceResponse { ActiveChatId = chatId ?? string.Empty, Workspace = HtmlWorkspaceDto.From(null) }; }
-        public HtmlWorkspaceResponse RedoHtmlWorkspaceSnapshot(string chatId, string snapshotId) { return new HtmlWorkspaceResponse { ActiveChatId = chatId ?? string.Empty, Workspace = HtmlWorkspaceDto.From(null) }; }
+        public HtmlWorkspaceResponse SetActiveHtmlWorkspaceFile(HtmlWorkspaceActiveFilePayload request) {
+            LastHtmlAction = request; return new HtmlWorkspaceResponse { ActiveChatId = request.ChatId ?? string.Empty, Workspace = HtmlWorkspaceDto.From(new HtmlWorkspace { ActiveFileId = request.Path ?? string.Empty }) }; }
+        public HtmlWorkspaceResponse RestoreHtmlWorkspaceSnapshot(HtmlWorkspaceRestorePayload request) {
+            LastHtmlAction = request; return new HtmlWorkspaceResponse { ActiveChatId = request.ChatId ?? string.Empty, Workspace = HtmlWorkspaceDto.From(null) }; }
+        public HtmlWorkspaceResponse RedoHtmlWorkspaceSnapshot(HtmlWorkspaceRestorePayload request) {
+            LastHtmlAction = request; return new HtmlWorkspaceResponse { ActiveChatId = request.ChatId ?? string.Empty, Workspace = HtmlWorkspaceDto.From(null) }; }
         public object AllowHtmlNetworkOrigin(string origin) { return new { origin = origin, allowed = true }; }
         public Task<HtmlFetchResponse> HtmlFetchAsync(HtmlFetchRequest request, CancellationToken cancellationToken) { return Task.FromResult(new HtmlFetchResponse { Url = request == null ? "" : request.Url, Status = 200, Body = "ok", Headers = new Dictionary<string, string>() }); }
         public DocumentContext GetContext(string chatId = null) { return new DocumentContext { DocumentKey = chatId ?? string.Empty }; }

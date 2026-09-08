@@ -2245,8 +2245,11 @@ endpoint.
    explicit attach/select/unlink now uses chat events, exact snapshot guards and
    document leases. A following dependency-safe correction isolates individual
    metadata failures for chat/picker reconstruction and unlink; strict model
-   discovery completeness is unchanged. Shared HTML, independent Markdown and the remaining indexed
-   discovery/recovery work remain open. Windows/target-model gates are unchanged.
+   discovery completeness is unchanged. A further prerequisite replaces unversioned
+   HTML UI controls with captured chat/snapshot/session guards, checks the bound
+   document before dispatch and discards late UI responses while retaining drafts.
+   Shared HTML, independent Markdown and the remaining indexed discovery/recovery
+   work remain open. Windows/target-model gates are unchanged.
 5. **11T — typed Office tools и удаление legacy host dispatch — admitted:**
    - [x] 11T0/7D — done host-neutral: один атомарный production change связывает exact выбранный workbook с
      `ExcelDocumentSession`, переключает factories и typed Excel read/write на прямой

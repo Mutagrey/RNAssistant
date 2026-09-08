@@ -38,9 +38,41 @@
     var refreshPending = false;
     var planMutationPending = false;
     var planHandoffPending = false;
-    var htmlImportPending = false;
+    var htmlActionPending = false;
     var workspaceWrite = null;
     state.htmlWorkspaceExportPending = false;
+
+    function captureWorkspaceAction() {
+      var chatId = state.activeChatId;
+      var revision = (state.chatProjectionRevisions || {})[chatId];
+      if (!chatId || !Number.isSafeInteger(revision) || revision < 0 || typeof state.activeHtmlArtifactId !== "string")
+        throw new Error("Сначала обновите HTML workspace: версия чата недоступна.");
+      return { chatId: chatId, expectedSessionRevision: revision,
+        expectedActiveHtmlArtifactId: state.activeHtmlArtifactId,
+        navigationVersion: state.chatNavigationVersion, editVersion: state.htmlWorkspaceEditVersion || 0 };
+    }
+
+    function workspaceActionCurrent(action) {
+      return !state.bridgeUnavailable && state.activeChatId === action.chatId &&
+        state.chatNavigationVersion === action.navigationVersion &&
+        (state.htmlWorkspaceEditVersion || 0) === action.editVersion &&
+        state.activeHtmlArtifactId === action.expectedActiveHtmlArtifactId &&
+        (state.chatProjectionRevisions || {})[action.chatId] === action.expectedSessionRevision;
+    }
+
+    function sendWorkspaceAction(method, action, payload) {
+      if (!workspaceActionCurrent(action)) throw new Error("HTML или чат изменился. Повторите действие из актуального workspace.");
+      return options.send(method, Object.assign({}, payload, {
+        chatId: action.chatId, expectedActiveHtmlArtifactId: action.expectedActiveHtmlArtifactId,
+        expectedSessionRevision: action.expectedSessionRevision
+      }));
+    }
+
+    function acceptWorkspaceAction(action) {
+      if (workspaceActionCurrent(action)) return true;
+      options.log("Операция завершена, но состояние окна изменилось. Текущие правки сохранены в редакторе; обновите workspace.");
+      return false;
+    }
 
     async function closeWorkspaceUpload(operation) {
       if (!operation.closed && operation.lease && /^[a-f0-9]{64}$/.test(operation.lease.leaseId)) {
@@ -68,7 +100,7 @@
     }
 
     async function writeWorkspace(action, controls, content, creating) {
-      if (workspaceWrite || !state.activeChatId || state.bridgeUnavailable)
+      if (workspaceWrite || htmlActionPending || !state.activeChatId || state.bridgeUnavailable)
         throw new Error("Сохранение уже выполняется или чат недоступен.");
       if (creating && state.htmlWorkspaceDirty) throw new Error("Сначала сохраните изменения текущего артефакта.");
       if (typeof state.activeHtmlArtifactId !== "string") throw new Error("Сначала загрузите HTML workspace.");
@@ -221,19 +253,25 @@
         if (selected.type === "plan") {
           return await deletePlan(selected, chatId);
         }
+        if (htmlActionPending || workspaceWrite) return;
+        htmlActionPending = true;
+        var ownsAction = true;
+        var action = captureWorkspaceAction();
         var warning = "Удалить «" + selected.label + "» из HTML? Удаление можно отменить через Undo.";
         if (state.htmlWorkspaceDirty) warning = "Есть несохраненные изменения. " + warning;
         if (!window.confirm(warning)) return;
         var response = selected.type === "data"
-          ? await options.send("deleteHtmlWorkspaceData", { chatId: chatId, name: selected.name })
-          : await options.send("deleteHtmlWorkspaceFile", { chatId: chatId, path: selected.path });
-        if (state.activeChatId !== chatId) return;
+          ? await sendWorkspaceAction("deleteHtmlWorkspaceData", action, { name: selected.name })
+          : await sendWorkspaceAction("deleteHtmlWorkspaceFile", action, { path: selected.path });
+        if (!acceptWorkspaceAction(action) || !options.applyWorkspaceResponse(response, chatId)) return;
         state.htmlWorkspaceSelection = { type: "file", id: "" };
-        options.applyWorkspaceResponse(response, chatId);
+        if (options.render) options.render();
         options.log("Удалено из HTML: " + selected.label);
       } catch (error) {
         options.log(error.detail || error.message, "error");
         window.alert(error.message || (selected.type === "plan" ? "План не удалён." : "Элемент HTML workspace не удален."));
+      } finally {
+        if (ownsAction) htmlActionPending = false;
       }
     }
 
@@ -297,27 +335,26 @@
     async function importUploadedHtml(request) {
       request = request || {};
       var uri = request.sourceResourceUri || "";
-      if (state.bridgeUnavailable || htmlImportPending || !uri) return false;
-      var suggestedPath = request.targetPath || "index.html";
-      var targetPath = typeof window.prompt === "function"
-        ? window.prompt("Путь нового файла в HTML workspace", suggestedPath)
-        : suggestedPath;
-      if (targetPath === null || !String(targetPath).trim()) return false;
-      targetPath = String(targetPath).trim();
-      if (!window.confirm(
-        "Импортировать загруженный HTML как «" + targetPath + "»?\n\n" +
-        "Оригинал останется неизменным и инертным. Выполнение начнётся только в sandbox preview HTML workspace."
-      )) return false;
-      var chatId = state.activeChatId;
-      htmlImportPending = true;
+      if (state.bridgeUnavailable || htmlActionPending || workspaceWrite || !uri) return false;
+      htmlActionPending = true;
       try {
-        var response = await options.send("importUploadedHtmlToWorkspace", {
-          chatId: chatId,
+        var action = captureWorkspaceAction();
+        var chatId = action.chatId;
+        var suggestedPath = request.targetPath || "index.html";
+        var targetPath = typeof window.prompt === "function"
+          ? window.prompt("Путь нового файла в HTML workspace", suggestedPath)
+          : suggestedPath;
+        if (targetPath === null || !String(targetPath).trim()) return false;
+        targetPath = String(targetPath).trim();
+        if (!window.confirm(
+          "Импортировать загруженный HTML как «" + targetPath + "»?\n\n" +
+          "Оригинал останется неизменным и инертным. Выполнение начнётся только в sandbox preview HTML workspace."
+        )) return false;
+        var response = await sendWorkspaceAction("importUploadedHtmlToWorkspace", action, {
           sourceResourceUri: uri,
-          expectedActiveHtmlArtifactId: state.activeHtmlArtifactId || "",
           targetPath: targetPath
         });
-        if (state.activeChatId !== chatId) return false;
+        if (!acceptWorkspaceAction(action)) return false;
         var returnedUri = value(response, "ImportedFromResourceUri", "importedFromResourceUri", "") || "";
         var importedPath = value(response, "ImportedPath", "importedPath", "") || "";
         if (returnedUri !== uri || !importedPath) throw new Error("HTML import returned stale provenance.");
@@ -332,26 +369,24 @@
         window.alert(error.message || "HTML не импортирован.");
         return false;
       } finally {
-        htmlImportPending = false;
+        htmlActionPending = false;
       }
     }
 
     async function exportWorkspace() {
-      if (state.bridgeUnavailable || state.htmlWorkspaceDirty || state.htmlWorkspaceExportPending ||
+      if (state.bridgeUnavailable || state.htmlWorkspaceDirty || state.htmlWorkspaceExportPending || htmlActionPending || workspaceWrite ||
           !state.activeChatId || !state.activeHtmlArtifactId) return false;
       var chatId = state.activeChatId;
-      var expectedArtifactId = state.activeHtmlArtifactId;
+      htmlActionPending = true;
       state.htmlWorkspaceExportPending = true;
       var resourceExport = null, exportArtifactId = "";
       if (options.render) options.render();
       try {
-        var response = await options.send("prepareHtmlWorkspaceExport", {
-          chatId: chatId,
-          expectedActiveHtmlArtifactId: expectedArtifactId
-        });
+        var action = captureWorkspaceAction();
+        var response = await sendWorkspaceAction("prepareHtmlWorkspaceExport", action, {});
         exportArtifactId = value(response, "ExportRevisionArtifactId", "exportRevisionArtifactId", "") || "";
         resourceExport = value(response, "ResourceExport", "resourceExport", null);
-        if (state.activeChatId !== chatId || state.htmlWorkspaceDirty || state.activeHtmlArtifactId !== expectedArtifactId) return false;
+        if (!acceptWorkspaceAction(action) || state.htmlWorkspaceDirty) return false;
         var responseArtifactId = value(response, "ActiveHtmlArtifactId", "activeHtmlArtifactId", "") || "";
         var resourceUri = value(response, "ExportResourceUri", "exportResourceUri", "") || "";
         var contentSha256 = value(response, "ExportContentSha256", "exportContentSha256", "") || "";
@@ -384,6 +419,7 @@
           return options.send("resourceDataClose", { chatId: chatId, workspaceId: exportArtifactId,
             leaseId: binding.lease.leaseId }).catch(function () {});
         }));
+        htmlActionPending = false;
         state.htmlWorkspaceExportPending = false;
         if (options.render) options.render();
       }
@@ -392,19 +428,21 @@
     async function restore(direction) {
       var actionState = options.getActionState();
       var snapshotId = direction === "redo" ? actionState.redoSnapshotId : actionState.undoSnapshotId;
-      if (actionState.bridgeUnavailable || !snapshotId) return;
-      var confirmation = direction === "redo"
-        ? "Есть несохраненные изменения. Повторить отмененную версию?"
-        : "Есть несохраненные изменения. Вернуть предыдущую версию?";
-      if (actionState.dirty && !window.confirm(confirmation)) return;
-
-      var method = direction === "redo" ? "redoHtmlWorkspaceSnapshot" : "restoreHtmlWorkspaceSnapshot";
+      if (htmlActionPending || workspaceWrite || actionState.bridgeUnavailable || !snapshotId) return;
+      htmlActionPending = true;
       try {
-        var response = await options.send(method, {
-          chatId: actionState.chatId,
+        var action = captureWorkspaceAction();
+        if (action.chatId !== actionState.chatId) return;
+        var confirmation = direction === "redo"
+          ? "Есть несохраненные изменения. Повторить отмененную версию?"
+          : "Есть несохраненные изменения. Вернуть предыдущую версию?";
+        if (actionState.dirty && !window.confirm(confirmation)) return;
+
+        var method = direction === "redo" ? "redoHtmlWorkspaceSnapshot" : "restoreHtmlWorkspaceSnapshot";
+        var response = await sendWorkspaceAction(method, action, {
           snapshotId: snapshotId
         });
-        if (!options.applyWorkspaceResponse(response, actionState.chatId)) return;
+        if (!acceptWorkspaceAction(action) || !options.applyWorkspaceResponse(response, actionState.chatId)) return;
         if (direction === "redo" && (response.redoChoiceRequired || response.RedoChoiceRequired)) {
           options.log("Выберите ветку HTML redo.");
           return;
@@ -413,23 +451,29 @@
       } catch (error) {
         options.log(error.detail || error.message, "error");
         window.alert(error.message || (direction === "redo" ? "HTML workspace redo не выполнен." : "HTML workspace не восстановлен."));
+      } finally {
+        htmlActionPending = false;
       }
     }
 
     async function recoverRevision() {
       var actionState = options.getActionState();
-      if (actionState.bridgeUnavailable || !actionState.recoverySnapshotId) return;
-      if (actionState.dirty && !window.confirm("Восстановление отменит несохранённые изменения. Продолжить?")) return;
+      if (htmlActionPending || workspaceWrite || actionState.bridgeUnavailable || !actionState.recoverySnapshotId) return;
+      htmlActionPending = true;
       try {
-        var response = await options.send("restoreHtmlWorkspaceSnapshot", {
-          chatId: actionState.chatId,
+        var action = captureWorkspaceAction();
+        if (action.chatId !== actionState.chatId) return;
+        if (actionState.dirty && !window.confirm("Восстановление отменит несохранённые изменения. Продолжить?")) return;
+        var response = await sendWorkspaceAction("restoreHtmlWorkspaceSnapshot", action, {
           snapshotId: actionState.recoverySnapshotId
         });
-        if (!options.applyWorkspaceResponse(response, actionState.chatId)) return;
+        if (!acceptWorkspaceAction(action) || !options.applyWorkspaceResponse(response, actionState.chatId)) return;
         options.log("HTML workspace восстановлен на выбранную ревизию.");
       } catch (error) {
         options.log(error.detail || error.message, "error");
         window.alert(error.message || "Выбранная HTML-ревизия недоступна.");
+      } finally {
+        htmlActionPending = false;
       }
     }
 

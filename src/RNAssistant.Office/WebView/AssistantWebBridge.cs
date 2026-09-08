@@ -496,47 +496,31 @@ namespace RNAssistant.Office.WebView
                         break;
                     case "importUploadedHtmlToWorkspace":
                         var htmlImport = Payload<HtmlWorkspaceImportPayload>(payload);
-                        responsePayload = _controller.ImportUploadedHtmlToWorkspace(
-                            htmlImport.ChatId,
-                            htmlImport.SourceResourceUri,
-                            htmlImport.ExpectedActiveHtmlArtifactId,
-                            htmlImport.TargetPath);
+                        responsePayload = _controller.ImportUploadedHtmlToWorkspace(htmlImport);
                         break;
                     case "prepareHtmlWorkspaceExport":
                         var htmlExport = Payload<HtmlWorkspaceExportPayload>(payload);
-                        responsePayload = _controller.PrepareHtmlWorkspaceExport(
-                            htmlExport.ChatId,
-                            htmlExport.ExpectedActiveHtmlArtifactId, cancellationToken);
+                        responsePayload = _controller.PrepareHtmlWorkspaceExport(htmlExport, cancellationToken);
                         break;
                     case "deleteHtmlWorkspaceFile":
                         var deleteHtmlFile = Payload<HtmlWorkspaceDeleteFilePayload>(payload);
-                        responsePayload = _controller.DeleteHtmlWorkspaceFile(
-                            deleteHtmlFile.ChatId,
-                            deleteHtmlFile.Path);
+                        responsePayload = _controller.DeleteHtmlWorkspaceFile(deleteHtmlFile);
                         break;
                     case "deleteHtmlWorkspaceData":
                         var deleteHtmlData = Payload<HtmlWorkspaceDeleteDataPayload>(payload);
-                        responsePayload = _controller.DeleteHtmlWorkspaceData(
-                            deleteHtmlData.ChatId,
-                            deleteHtmlData.Name);
+                        responsePayload = _controller.DeleteHtmlWorkspaceData(deleteHtmlData);
                         break;
                     case "setActiveHtmlWorkspaceFile":
                         var htmlActive = Payload<HtmlWorkspaceActiveFilePayload>(payload);
-                        responsePayload = _controller.SetActiveHtmlWorkspaceFile(
-                            htmlActive.ChatId,
-                            htmlActive.Path);
+                        responsePayload = _controller.SetActiveHtmlWorkspaceFile(htmlActive);
                         break;
                     case "restoreHtmlWorkspaceSnapshot":
                         var htmlRestore = Payload<HtmlWorkspaceRestorePayload>(payload);
-                        responsePayload = _controller.RestoreHtmlWorkspaceSnapshot(
-                            htmlRestore.ChatId,
-                            htmlRestore.SnapshotId);
+                        responsePayload = _controller.RestoreHtmlWorkspaceSnapshot(htmlRestore);
                         break;
                     case "redoHtmlWorkspaceSnapshot":
                         var htmlRedo = Payload<HtmlWorkspaceRestorePayload>(payload);
-                        responsePayload = _controller.RedoHtmlWorkspaceSnapshot(
-                            htmlRedo.ChatId,
-                            htmlRedo.SnapshotId);
+                        responsePayload = _controller.RedoHtmlWorkspaceSnapshot(htmlRedo);
                         break;
                     case "getContext":
                         responsePayload = _controller.GetContext(Payload<ChatPayload>(payload).ChatId);

@@ -24,6 +24,7 @@ vm.runInContext(source, context, { filename: "app-html-workspace-actions.js" });
   const logs = [];
   const state = {
     activeChatId: "chat-c",
+    chatProjectionRevisions: { "chat-c": 7 },
     activeHtmlArtifactId: "html-r3",
     bridgeUnavailable: false,
     htmlWorkspaceDirty: false
@@ -117,6 +118,7 @@ vm.runInContext(source, context, { filename: "app-html-workspace-actions.js" });
       chatId: "chat-c",
       sourceResourceUri: uri,
       expectedActiveHtmlArtifactId: "html-r3",
+      expectedSessionRevision: 7,
       targetPath: "pages/imported.html"
     }
   });
@@ -129,7 +131,7 @@ vm.runInContext(source, context, { filename: "app-html-workspace-actions.js" });
 
   const index = fs.readFileSync(path.join(root, "web/index.html"), "utf8");
   assert.ok(index.includes("app-artifact-viewer-actions.js?v=binary-chunks-20260906-1"));
-  assert.ok(index.includes("app-html-workspace-actions.js?v=manual-tool-chat-20260908-1"));
+  assert.ok(index.includes("app-html-workspace-actions.js?v=html-action-guard-20260908-1"));
   assert.ok(index.includes("app-html-workspace-editor.js?v=preview-reuse-20260907-1"));
   assert.ok(index.includes(
     "app-html-workspace-artifacts.js?v=binary-chunks-20260906-1"));

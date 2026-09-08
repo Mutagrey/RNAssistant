@@ -18,6 +18,15 @@ gates; active tool compatibility adapter отсутствует. Windows/Office 
 |---|---|---|
 | Transient `ChatArtifact` projection over document-owned originals/Plans alongside chat-owned HTML/Markdown | `DocumentArtifactStore` owns new originals and Plan snapshots in existing authority/CAS; native Plan binding v3 and mutation observer publish per-Plan document heads. Ingestion, Gateway/provider, viewers, chat projection and fork consume document refs. Plan conversation-head publication and direct local-action mutation bypass are removed. No second store or document-ref fallback; old chat Plans are explicitly rejected for mutation | Remaining slices 1b–2 switch HTML/independent Markdown identity, heads and tools; slices 3–4 finish indexed discovery/recovery and remove remaining chat-only ownership. Individual metadata loss now uses transient unavailable projections; strict partial model discovery and authority-wide recovery remain open. Originals/Plan explicit selection/refresh/unlink now use `ArtifactWorkingSetService` and chat-event-backed `ArtifactLinks`; prompt/library/compaction, fork and clear consume these decisions. Incompatible stream handling stays explicit, without deleting user data. Windows delivery remains open |
 
+HTML UI action seam removed (2026-09-08): the typed bridge passes complete
+`HtmlWorkspaceActionPayload` guards to addressed/reserved controller actions.
+`HtmlWorkspaceActionGuard` validates snapshot/session revision after reload and
+under the existing mutation gate; scalar unversioned delete/select/restore/redo/
+import/export signatures are removed. The UI captures before dialogs and guards
+late responses against navigation/new edits. This adds no storage adapter and
+does not move HTML ownership; that remains the active removal gate above.
+Host-neutral guard/bridge/UI checks pass; bound-document delivery awaits Windows.
+
 ## Unified resource cutover — completed host-neutral removal records
 
 Current closure scope is the [MASTER acceptance reconciliation](../resource-fabric.md#master-acceptance-reconciliation--2026-09-07).

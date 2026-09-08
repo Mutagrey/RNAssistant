@@ -134,7 +134,7 @@ function fixture(texts = ["\ufeff<main>\r\n" + "я".repeat(140000) + "😀</main
   ["source", "model", "editor", "actions"].map(part => "app-html-workspace-" + part + ".js")
     .forEach(file => {
       const version = file === "app-html-workspace-editor.js" ? "preview-reuse-20260907-1" :
-        file === "app-html-workspace-actions.js" ? "manual-tool-chat-20260908-1" : "html-read-20260906-1";
+        file === "app-html-workspace-actions.js" ? "html-action-guard-20260908-1" : "html-read-20260906-1";
       assert.ok(index.includes(file + "?v=" + version), file);
     });
   assert.ok(index.includes("app-html-workspace-preview.js?v=binary-chunks-20260906-1"));

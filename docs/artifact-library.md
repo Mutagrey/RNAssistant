@@ -301,10 +301,34 @@ together with the domain owner, not ahead of it:
 - Extend `DocumentArtifactStore.Owns` to HTML/independent Markdown only when their
   document publication/read owners are active. Fork/history rebase consumes this
   predicate; verify that shared references survive without copying or rebasing.
-- Switch remaining activating HTML controller loads (Get, PrepareExport, Delete,
-  SetActive, Restore, Redo and OpenResourceData) to explicit addressed loads.
-  Verify the current bound document before mutation, and test delayed requests
-  across chat/document switches. No active-chat or chat-local-head fallback.
+- HTML controller loads now address an explicit chat without activating it.
+  The control-action correction below pins selection/version before dispatch;
+  document ownership must retain these guards and replace the chat-local head
+  with the new domain's exact head. Verify real document switches on Windows.
+
+HTML control-action correction (2026-09-08), before the ownership move:
+`HtmlWorkspaceActionPayload` carries `chatId`, `expectedActiveHtmlArtifactId` and
+`expectedSessionRevision` for delete file/data, entry selection, import, export,
+restore and redo. Missing guards fail explicitly; an empty snapshot string is
+accepted only for an actually empty workspace. The reserved addressed session
+must belong to the currently bound document. `HtmlWorkspaceActionGuard` checks
+both snapshot and chat revision after reload and again inside the existing
+mutation gate before dispatch. This detects returning to the same snapshot after
+an intervening chat change. Refusal abandons preparation without marking an effect
+unknown or publishing a new revision. Intent payloads retain both guards.
+
+The UI captures these controls before prompts/confirmation and checks navigation,
+local edit version and the accepted chat projection revision before send/apply.
+Duplicate controls and competing editor uploads are suppressed while pending.
+A late response never clears selection or new drafts; export capabilities are
+closed using their original chat/checkpoint even when its projection is discarded.
+No mutation is automatically retried. Existing binary-upload saves retain their
+exact snapshot/authority guards. Unversioned bridge/controller action signatures
+are removed. `html actions:` harness checks and
+`tests/web/html-workspace-actions.test.js` cover refusal before dispatch, typed
+transport, duplicate clicks, navigation ABA, local edits and stale export cleanup.
+Production controller/document switching and WebView layout still need Windows
+qualification. HTML remains chat-owned in this slice.
 
 | Order | Owner and replacement | Required evidence |
 |---|---|---|

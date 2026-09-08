@@ -1,15 +1,24 @@
 # Stabilization progress
 
-Current correction (2026-09-08), after working-set commit `5bf9aba1`: per-resource
-metadata loss no longer hides a chat or blocks healthy document-picker entries.
-Exact reference-only projections carry a transient availability issue; typed UI
-shows unavailable metadata/head and permits unlink without guessing a current
-version. Strict reads/selection still fail, model manifests omit guessed targets
-and explain recovery, restored metadata clears the issue without reattaching links.
-Focused recovery, working-set, Plan/original, bridge/projection and UI checks cover
-this slice. Shared HTML/Markdown remains the next ownership move; bounded/partial
-model discovery and authority-journal recovery are separate open work. Windows/
-Office/WebView2 and Playwright layout gates remain open.
+Current correction (2026-09-08), after metadata recovery commit `bd7a43b1`:
+HTML UI delete file/data, entry selection, import/export and undo/redo/recovery now
+require the captured chat, active snapshot and session revision. The addressed
+controller reserves/reloads the chat, checks the bound document and revalidates
+immediately before mutation dispatch. Old unversioned controller signatures are
+removed. UI captures before dialogs, suppresses duplicate/competing actions and
+preserves new local edits or navigation state when a response arrives late;
+stale export responses still release their exact leases. Focused guard/bridge,
+HTML editor/import/export/source and UI race checks pass host-neutral.
+Next ownership slice: shared HTML, then independent authored Markdown. Both remain
+chat-owned without cross-chat link controls; this correction is a prerequisite,
+not the ownership move. Partial model discovery and authority-journal recovery
+remain separate open work. Windows/Office/WebView2 and Playwright layout gates
+remain open; the production controller's live document switch needs Windows evidence.
+
+Previous correction (`bd7a43b1`): individual metadata loss no longer hides a chat
+or healthy document-picker entries. Exact unavailable projections permit unlink;
+strict reads/selection refuse guessing, model manifests explain recovery, and
+restored metadata clears the transient issue without reattaching links.
 
 Previous slice (2026-09-08): originals/Plan working-set links implemented in isolated
 `stab/11-artifact-working-set`. Typed document picker attaches originals and selects

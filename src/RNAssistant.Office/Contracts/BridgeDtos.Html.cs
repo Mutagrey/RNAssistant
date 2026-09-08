@@ -107,46 +107,50 @@ namespace RNAssistant.Office.Contracts
         public string Name { get; set; }
     }
 
-    public sealed class HtmlWorkspaceDeleteFilePayload : ChatPayload
+    public abstract class HtmlWorkspaceActionPayload : ChatPayload
+    {
+        [JsonProperty("expectedActiveHtmlArtifactId")]
+        public string ExpectedActiveHtmlArtifactId { get; set; }
+
+        [JsonProperty("expectedSessionRevision")]
+        public long? ExpectedSessionRevision { get; set; }
+    }
+
+    public sealed class HtmlWorkspaceDeleteFilePayload : HtmlWorkspaceActionPayload
     {
         [JsonProperty("path")]
         public string Path { get; set; }
     }
 
-    public sealed class HtmlWorkspaceDeleteDataPayload : ChatPayload
+    public sealed class HtmlWorkspaceDeleteDataPayload : HtmlWorkspaceActionPayload
     {
         [JsonProperty("name")]
         public string Name { get; set; }
     }
 
-    public sealed class HtmlWorkspaceActiveFilePayload : ChatPayload
+    public sealed class HtmlWorkspaceActiveFilePayload : HtmlWorkspaceActionPayload
     {
         [JsonProperty("path")]
         public string Path { get; set; }
     }
 
-    public sealed class HtmlWorkspaceRestorePayload : ChatPayload
+    public sealed class HtmlWorkspaceRestorePayload : HtmlWorkspaceActionPayload
     {
         [JsonProperty("snapshotId")]
         public string SnapshotId { get; set; }
     }
 
-    public sealed class HtmlWorkspaceImportPayload : ChatPayload
+    public sealed class HtmlWorkspaceImportPayload : HtmlWorkspaceActionPayload
     {
         [JsonProperty("sourceResourceUri")]
         public string SourceResourceUri { get; set; }
-
-        [JsonProperty("expectedActiveHtmlArtifactId")]
-        public string ExpectedActiveHtmlArtifactId { get; set; }
 
         [JsonProperty("targetPath")]
         public string TargetPath { get; set; }
     }
 
-    public sealed class HtmlWorkspaceExportPayload : ChatPayload
+    public sealed class HtmlWorkspaceExportPayload : HtmlWorkspaceActionPayload
     {
-        [JsonProperty("expectedActiveHtmlArtifactId")]
-        public string ExpectedActiveHtmlArtifactId { get; set; }
     }
 
     public sealed class HtmlWorkspaceResponse

@@ -171,6 +171,7 @@ vm.runInContext(fs.readFileSync(path.join(root, "web/js/app-html-workspace-actio
   let failDownload = false;
   const state = {
     activeChatId: "chat-export",
+    chatProjectionRevisions: { "chat-export": 7 },
     activeHtmlArtifactId: "html-r3",
     bridgeUnavailable: false,
     htmlWorkspaceDirty: false,
@@ -212,6 +213,7 @@ vm.runInContext(fs.readFileSync(path.join(root, "web/js/app-html-workspace-actio
   assert.equal(calls[0].method, "prepareHtmlWorkspaceExport");
   assert.equal(calls[0].payload.chatId, "chat-export");
   assert.equal(calls[0].payload.expectedActiveHtmlArtifactId, "html-r3");
+  assert.equal(calls[0].payload.expectedSessionRevision, 7);
   assert.equal(downloads[0].revisionArtifactId, "html-r4");
   assert.equal(downloads[0].workspace.dataSources[0].binding.resource.revision, "r1");
   assert.equal(downloads[0].workspace.dataSources[0].json, undefined);
@@ -244,6 +246,7 @@ vm.runInContext(fs.readFileSync(path.join(root, "web/js/app-html-workspace-actio
   const lateCloses = [];
   const lateActions = context.RNAssistantHtmlWorkspaceActions.create({
     state,
+    log: (message, level) => logs.push({ message, level }),
     send: async (method, payload) => {
       if (method === "resourceDataClose") { lateCloses.push(payload); return { closed: true }; }
       state.activeChatId = "another-chat";
@@ -289,7 +292,7 @@ vm.runInContext(fs.readFileSync(path.join(root, "web/js/app-html-workspace-actio
     .forEach(asset => assert.ok(index.includes(asset + "?v=binary-chunks-20260906-1"), asset));
   ["app-html-workspace-actions.js", "app-html-workspace.js"]
     .forEach(asset => assert.ok(index.includes(asset + "?v=" +
-      (asset === "app-html-workspace-actions.js" ? "manual-tool-chat-20260908-1" : "html-read-20260906-1")), asset));
+      (asset === "app-html-workspace-actions.js" ? "html-action-guard-20260908-1" : "html-read-20260906-1")), asset));
   assert.ok(index.indexOf("app-html-resource-export.js?v=") < index.indexOf("app-html-workspace-preview.js?v="));
   assert.ok(index.includes("app-html-workspace-editor.js?v=preview-reuse-20260907-1"));
   assert.ok(index.includes(

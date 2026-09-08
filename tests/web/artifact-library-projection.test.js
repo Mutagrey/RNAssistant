@@ -114,7 +114,7 @@ vm.runInContext(source, context, { filename: "app-artifacts.js" });
   assert.ok(index.includes("app-artifacts.js?v=artifact-recovery-20260908-1"), "artifact cards have the working-set cache key");
   assert.ok(index.includes("app-html-workspace-model.js?v=html-read-20260906-1"), "artifact selection model has the gallery cache key");
   assert.ok(index.includes("app-html-workspace.js?v=html-read-20260906-1"), "artifact actions have the current resource cache key");
-  assert.ok(index.includes("app-html-workspace-actions.js?v=manual-tool-chat-20260908-1"), "artifact tool calls have the current resource cache key");
+  assert.ok(index.includes("app-html-workspace-actions.js?v=html-action-guard-20260908-1"), "artifact tool calls have the current resource cache key");
   assert.ok(index.includes("app-artifact-viewer-actions.js?v=binary-chunks-20260906-1"), "artifact paging owner has the current resource cache key");
   assert.ok(index.includes("app-html-workspace-artifacts.js?v=binary-chunks-20260906-1"), "artifact detail has the current resource cache key");
   assert.ok(index.includes("app-chart-artifacts.js?v=chart-chat-scope-20260908-1"), "chart artifact renderer has the current UI cache key");
