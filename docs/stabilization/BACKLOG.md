@@ -38,12 +38,32 @@ transport alone does not qualify source allocation.
 
 ## Existing defects outside the completed cutover
 
-- Host-neutral `artifacts: historical attachments stay reference-only` currently
-  fails before compaction because one historical attachment body is present in the
-  model replay where the contract expects zero. Its compaction stub also still uses
-  the removed free-form `summary` shape. Owner: artifact/model-context projection.
-  Reconcile the document-owned-original publication with reference-only historical
-  replay in a separate artifact slice; do not merely weaken the assertion.
+- Bridge UI transport: define pending termination for a silent transport loss;
+  an operation-specific wait limit must not imply physical mutation cancellation
+  or trigger automatic replay. Explicit `postMessage` exceptions are now handled
+  by the shared send boundary; ready/queued/init regressions pass host-neutral.
+
+- Review verification (2026-09-08, base `c3273e4972fb357d153ac7e3cba545804977e2c2`):
+  `AgentKernel.ExecuteOneAsync` clears both failed
+  call collections after any `Ok` tool with `MayHaveSideEffects`, without proving a
+  relevant dependency changed. An unrelated successful mutation, including a no-op,
+  can therefore re-admit the unchanged failed call and bypass a `RefreshRequired`
+  dependency. Unknown-effect blocking is separate and remains intact. Owner:
+  kernel/domain recovery contract. Replace the blanket reset with domain-owned
+  correction evidence, preserve relevant correction/whole-view refresh behavior,
+  and align the canonical conversation contract. Existing corrective-success
+  coverage passes but does not cover unrelated/no-op mutation interleaving.
+
+- Host-neutral `artifacts: historical attachments stay reference-only` was rerun
+  without rebuilding on 2026-09-08 (same base; no newer Core/Office/harness C# sources).
+  The historical-attachment removal assertion now passes. The first failure is the
+  stale `target=attachment: Untitled` expectation: the actual index quotes the full
+  target and includes its creation discriminator. The later compaction stub still
+  uses the removed free-form `summary` shape and was not reached. Owner:
+  artifact/model-context regression fixture. Update target-format and structured
+  compaction setup, then rerun the complete case while retaining the body/analysis
+  exclusion and semantic discovery assertions; do not classify this failure as
+  evidence that historical attachment bodies still replay.
 
 - Tool package README leading `U+FEFF`: `StorageFileSystem` writes a UTF-8 sidecar
   without a separate BOM, while `ToolStore.TryReadUtf8` strips its first BOM-shaped

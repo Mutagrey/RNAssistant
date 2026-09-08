@@ -1,5 +1,13 @@
 # Stabilization progress
 
+Latest UI correction (2026-09-08): the shared `send` boundary now catches
+`postMessage` exceptions, removes the affected pending entry and rejects the
+original caller promise even when queued behind initialization. Other requests
+remain pending; no automatic operation replay is introduced. Bridge bootstrap
+checks pass 10/10, including ready/queued/init send failures, and multi-chat checks
+pass 3/3. No build or Office validation was run. Silent transport-loss termination
+and actual Windows/WebView2 navigation/streaming qualification remain open.
+
 Latest build correction (2026-09-08): the reported Windows solution failure was
 one production `RNAssistant.Office` compile break followed by cascading `CS0006`
 errors, plus stale source-linked MockDemo contracts. `ChatStore` now exposes its
