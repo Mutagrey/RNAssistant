@@ -234,6 +234,10 @@ namespace RNAssistant.Office.Services
             }
             var provider = ProviderFor(request.Reference.Uri);
             var live = provider is ILiveOfficeResourceProvider;
+            if (request.Section != null && (!(provider is ChatArtifactResourceProvider) ||
+                request.Representation != null && request.Representation != "auto" && request.Representation != "text" ||
+                !string.IsNullOrEmpty(request.Cursor) || request.ViewPath != null || request.Fields != null || request.RowOffset != 0 || request.MaxRows != 0))
+                throw new ResourceRequestException("Section reads support document Markdown text only, without row selectors or cursors.", "resource_section_unsupported", false);
             // Structural owners validate the caller's exact continuation before a
             // floating artifact identity can be resolved to its current revision.
             if (request.Representation == "table" || request.Representation == "records")
@@ -247,6 +251,7 @@ namespace RNAssistant.Office.Services
             if (identityResolver != null && !request.Reference.IsExact && request.Reference.Uri == request.Reference.Identity.Uri)
             {
                 request = new ResourceReadRequest { Reference = identityResolver.ResolveIdentity(session, request.Reference.Identity),
+                    Section = request.Section,
                     Representation = request.Representation, Cursor = request.Cursor, MaxChars = request.MaxChars,
                     MaxRows = request.MaxRows, RowOffset = request.RowOffset, ViewPath = request.ViewPath, Fields = request.Fields };
             }

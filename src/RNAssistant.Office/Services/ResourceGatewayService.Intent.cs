@@ -600,6 +600,8 @@ namespace RNAssistant.Office.Services
         {
             if (type == "Excel search scope")
                 return "Discovery only: use excel.find_cells with a query. Do not read this target to enumerate worksheet data; read an Excel range, table, or name target instead.";
+            if (descriptor.Metadata.ContainsKey("sectionRead"))
+                return "Use representation=text and section with an exact unique ATX heading title (without leading #) to read that section and nested subsections, up to 32000 characters. Omit section to read the whole text. Discovery descriptions/snippets are not whole-read evidence.";
             if (!string.IsNullOrWhiteSpace(IntentRecordsPath(descriptor)))
                 return "For table/records omit path; runtime applies this target's canonical record view.";
             return null;

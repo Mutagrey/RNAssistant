@@ -15,6 +15,106 @@ namespace RNAssistant.Harness
 {
     internal static partial class Program
     {
+        private static void MarkdownSectionsUseExactPartialEvidence()
+        {
+            WithTempExecutor(FakeOfficeAdapter.ForHost("Word"), (executor, adapter) =>
+            {
+                var a = NewSession(adapter);
+                var tools = executor.GetControllerTools().ToList();
+                var body = "# Intro\r\n" + new string('x', 145000) + "\r\n## Target\r\nchosen😀\n### Child\nnested\n```md\n## Fake\ncode\n```\n## End\nhidden\n## Repeat\nfirst\n## Repeat\nsecond";
+                var saved = executor.ExecuteManual(Command(MarkdownDocumentToolCatalog.SaveToolId, "title", "Sections.md", "description", "Section selection fixture", "markdown", body),
+                    tools, new AppSettings(), false, false, a);
+                AssertTrue(saved.Success, "section source published");
+                var b = NewSession(adapter); b.DocumentAuthorityId = a.DocumentAuthorityId;
+                var candidate = executor.ResourceGateway.Find(b, "Sections.md", "document").Items.Single();
+                AssertContains(candidate.Usage, "section", "discovery advertises the available next read action");
+                var tool = tools.Single(item => item.Id == ResourceToolCatalog.ReadToolId);
+                var runtime = executor.CreateNativeRuntime(b, new[] { tool }, new AppSettings(), ChatModes.Chat, false);
+                Func<string, ToolExecutionRecord> read = section =>
+                {
+                    var args = new Newtonsoft.Json.Linq.JObject { ["target"] = candidate.Target, ["representation"] = "text" };
+                    if (section != null) args["section"] = section;
+                    var call = new ToolCall(Guid.NewGuid().ToString("N"), tool.Id, args.ToString());
+                    return ExecuteNative(runtime, call, runtime.Describe(call));
+                };
+                var selected = read("Target");
+                AssertEqual(ToolExecutionOutcome.Ok, selected.Outcome, "native section selector is admitted");
+                var projection = Newtonsoft.Json.Linq.JObject.Parse(selected.Result.DataJson);
+                var start = body.IndexOf("## Target", StringComparison.Ordinal);
+                var end = body.IndexOf("## End", StringComparison.Ordinal);
+                AssertEqual(body.Substring(start, end - start), (string)projection["text"], "section includes nested headings and preserves CRLF/Unicode but excludes the next sibling");
+                AssertEqual("Target", (string)projection["section"], "model sees what the completed read covers");
+                var evidence = selected.ResourceEvidence.Single();
+                AssertTrue(evidence.Complete && evidence.Coverage.Kind == ResourceCoverageKinds.CharacterRange &&
+                    evidence.Coverage.Start == start && evidence.Coverage.End == end, "evidence covers only selected source characters");
+                var recovery = new ToolRecoveryContract(ToolFailureKind.ConflictNoEffect, ToolRetryPolicy.RefreshRequired,
+                    evidence.Resource.Identity, "text", candidate.Target);
+                AssertTrue(!recovery.IsSatisfiedBy(evidence), "section evidence cannot satisfy a whole-resource refresh requirement");
+                AssertEqual((string)projection["text"], executor.Payloads.ReadText(evidence.Payload.ToBlobReference()), "retained evidence contains only delivered section bytes");
+                foreach (var pair in new[] { new[] { "Repeat", "resource_section_ambiguous" }, new[] { "Fake", "resource_section_not_found" }, new[] { "Missing", "resource_section_not_found" }, new[] { "Intro", "resource_section_too_large" } })
+                {
+                    var failed = read(pair[0]);
+                    AssertTrue(failed.Outcome != ToolExecutionOutcome.Ok, "invalid section never silently reads the whole source");
+                    AssertContains(failed.Result.DataJson, pair[1], "section refusal remains explicit");
+                    AssertTrue(failed.ResourceEvidence == null || failed.ResourceEvidence.Count == 0, "failed selection returns no read evidence");
+                }
+                var whole = read(null);
+                AssertEqual(ToolExecutionOutcome.Ok, whole.Outcome, "whole reads remain available after section reads");
+                AssertEqual(body, (string)Newtonsoft.Json.Linq.JObject.Parse(whole.Result.DataJson)["text"], "section retention cannot replace a whole representation");
+                AssertTrue(recovery.IsSatisfiedBy(whole.ResourceEvidence.Single()), "a subsequent whole read satisfies the exact refresh requirement");
+                var schema = Newtonsoft.Json.Linq.JObject.Parse(RNAssistant.Core.ModelProtocol.ConversationResponseSchemaBuilder.Build(new[] { tool }));
+                AssertContains((string)schema.SelectToken("properties.message.description"), "actual upcoming calls", "wire schema conveys action-purpose guidance");
+            });
+        }
+
+        private static void MarkdownSectionsRespectSourceBounds()
+        {
+            WithTempExecutor(FakeOfficeAdapter.ForHost("Word"), (executor, adapter) =>
+            {
+                var session = NewSession(adapter); session.DocumentAuthorityId = DocumentAuthorityId.Create().Id;
+                var paths = FixturePaths.Value;
+                var chats = new ChatStore(paths);
+                var ingestion = new ChatResourceIngestionService(new AttachmentStore(paths), chats.DocumentArtifacts);
+                foreach (var name in new[] { "Complete.md", "Plain.txt", "Truncated.md" })
+                {
+                    var text = name == "Truncated.md" ? "# Small\nok\n# Large\n" + new string('x', 1000001) : "# Small\r\nok";
+                    var draft = ingestion.Stage(session, name, name.EndsWith(".md") ? "text/markdown" : "text/plain", Encoding.UTF8.GetBytes(text));
+                    var message = new ChatMessage { Role = "user", Attachments = ingestion.LoadDrafts(session, new[] { draft.Id }).ToList() };
+                    session.Messages.Add(message); ingestion.CommitAndLink(session, message, session.Messages.Count - 1);
+                }
+                var provider = new ChatArtifactResourceProvider(payloads: executor.Payloads, documentArtifacts: chats.DocumentArtifacts);
+                var items = provider.List(session, "document-artifact", null, 50).Items;
+                var complete = items.Single(item => item.Title == "Complete.md");
+                var selected = provider.Read(session, new ResourceReadRequest { Reference = complete.Reference, Representation = "text", Section = "Small" });
+                AssertTrue(selected.Result.Offset == 0 && selected.Result.Coverage.Kind == ResourceCoverageKinds.CharacterRange,
+                    "even a section spanning the whole small file retains explicit section coverage");
+                AssertEqual("# Small\r\nok", selected.Result.Text, "uploaded Markdown follows the same section grammar");
+                foreach (var name in new[] { "Plain.txt", "Truncated.md" })
+                    RuntimeThrows<ResourceRequestException>(() => provider.Read(session, new ResourceReadRequest {
+                        Reference = items.Single(item => item.Title == name).Reference, Representation = "text", Section = "Small" }));
+                RuntimeThrows<ResourceRequestException>(() => executor.ResourceGateway.Read(session, new ResourceReadRequest {
+                    Reference = complete.Reference, Representation = "table", Section = "Small" }));
+                var authority = new ResourceAuthorityStore(paths);
+                var counted = new DiscoveryPageStore(authority);
+                counted.HeadPageRead = () =>
+                {
+                    counted.HeadPageRead = null;
+                    var scope = ResourceAuthorityScopeId.Document(new DocumentAuthorityId(session.DocumentAuthorityId));
+                    var before = authority.Capture(scope);
+                    var identity = new ResourceIdentity(ResourceUri.Create("state", scope.Kind, scope.Id, "section-read-drift"));
+                    authority.Publish(ResourceAuthorityCommit.Create(scope, before.Generation, null,
+                        new[] { new ResourceHeadChange(identity, null, ResourceHeadState.Unknown(identity, before.Generation + 1, "test-drift")) }, AuthorityCommitReason.DerivedPublication));
+                };
+                var guarded = new ChatArtifactResourceProvider(payloads: executor.Payloads, documentArtifacts: new DocumentArtifactStore(counted, counted, executor.Payloads));
+                var drift = RuntimeThrows<ResourceRequestException>(() => guarded.Read(session, new ResourceReadRequest {
+                    Reference = complete.Reference, Representation = "text", Section = "Small" }));
+                AssertEqual("resource_revision_changed", drift.ErrorCode, "writer drift during section reading is refused");
+                var original = chats.DocumentArtifacts.Read(session, complete.Reference, false).OriginalAttachment;
+                File.Delete(executor.Payloads.PathFor(original.ExtractedTextSha256));
+                RuntimeThrows<ResourceRequestException>(() => provider.Read(session, new ResourceReadRequest { Reference = complete.Reference, Representation = "text", Section = "Small" }));
+            });
+        }
+
         private static void OriginalTextIndexSearch()
         {
             WithTempExecutor(FakeOfficeAdapter.ForHost("Word"), (executor, adapter) =>
@@ -264,13 +364,14 @@ namespace RNAssistant.Harness
             private readonly ResourceAuthorityStore _inner;
             internal int ViewReads; internal int HeadPages;
             internal Action<ResourceRevisionView> ViewRegistered;
+            internal Action HeadPageRead;
             internal DiscoveryPageStore(ResourceAuthorityStore inner) { _inner = inner; }
             public event EventHandler<ResourceAuthorityChangedEventArgs> Changed { add { _inner.Changed += value; } remove { _inner.Changed -= value; } }
             public ResourceAuthoritySnapshot Capture(ResourceAuthorityScopeId scope) { throw new InvalidOperationException("Discovery must not copy the full authority."); }
             public ResourceAuthoritySnapshotSet CaptureMany(IReadOnlyList<ResourceAuthorityScopeId> scopes) { throw new InvalidOperationException("Discovery must not copy the full authority."); }
             public ResourceHeadState GetHead(ResourceAuthorityScopeId scope, ResourceIdentity identity) { return _inner.GetHead(scope, identity); }
             public ResourceHeadPage ReadHeads(ResourceAuthorityScopeId scope, IReadOnlyList<ResourceHeadRange> ranges, int offset, int limit)
-            { HeadPages++; return _inner.ReadHeads(scope, ranges, offset, limit); }
+            { HeadPages++; var page = _inner.ReadHeads(scope, ranges, offset, limit); HeadPageRead?.Invoke(); return page; }
             public AuthorityCommitResult Publish(ResourceAuthorityCommit commit) { return _inner.Publish(commit); }
             public void RegisterRevision(ResourceAuthorityScopeId scope, ResourceRevisionMetadata revision) { _inner.RegisterRevision(scope, revision); }
             public ResourceRevisionMetadata GetRevision(ResourceAuthorityScopeId scope, ResourceRef reference) { return _inner.GetRevision(scope, reference); }

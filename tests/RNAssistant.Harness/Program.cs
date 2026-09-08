@@ -764,6 +764,8 @@ namespace RNAssistant.Harness
                 Test("resources: document text index rejects last-page drift", DocumentTextIndexRejectsLastPageDrift),
                 Test("resources: original text index searches retained extraction", OriginalTextIndexSearch),
                 Test("resources: original text index preserves extraction coverage", OriginalTextIndexPreservesCoverage),
+                Test("resources: Markdown sections preserve exact partial evidence", MarkdownSectionsUseExactPartialEvidence),
+                Test("resources: Markdown sections enforce source bounds", MarkdownSectionsRespectSourceBounds),
                 Test("resources: hard cutover artifact tools", ResourceToolsHardCutoverArtifactTools),
                 Test("chart: default config", ChartArtifactBuildsDefaultConfig),
                 Test("chart: requested type truncates", ChartArtifactHonorsRequestedTypeAndTruncates),

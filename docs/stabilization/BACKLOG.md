@@ -10,6 +10,16 @@
 Новые product features заморожены. Запись в этом файле не разрешает начать работу
 до её явного включения в текущую фазу.
 
+## Built-in inventory drift — 2026-09-08
+
+Owner: tool contracts / harness. During Markdown section-read verification against
+`22575b8c`, R61 inventory still differs for unchanged `common.resources_find`
+(schema fingerprint) and `common.tools_upsert` (fingerprint and property paths:
+runtime has `display.*`, baseline has `mode`). Review these inherited contracts
+in a separate approved slice before updating their baseline. The new
+`common.resources_read` section schema matches its reviewed inventory row.
+This gate remains failed; it is not Windows qualification.
+
 ## Resource prompt test expectation — 2026-09-08
 
 During the shared HTML slice, `artifacts: historical attachments stay reference-only`
@@ -76,7 +86,8 @@ transport alone does not qualify source allocation.
   ordered insertion and full-authority consumers still scale with journal size.
   Markdown/Plan and uploaded extracted-text section/chunk views now use existing
   revision/CAS retention. HTML member views now reuse the same engine beneath exact
-  parent revisions. Semantic section reads and allocation qualification remain open;
+  parent revisions. Unique ATX section reads now support document Markdown/Plans
+  and complete uploaded Markdown; allocation qualification remains open;
   HTML discovery still loads/parses its bounded aggregate even with a warm index.
   No parallel durable library/search store.
 - Partial model discovery is implemented host-neutral (2026-09-08): missing/corrupt

@@ -14,6 +14,15 @@ gates; active tool compatibility adapter отсутствует. Windows/Office 
 
 ## Document artifact ownership — active slices
 
+Markdown section selection (2026-09-08): the existing `common.resources_read` and
+typed `ResourceReadRequest.Section` carry a semantic heading selector. The chat
+provider and `DocumentArtifactStore.ReadMarkdownSection` resolve exact CAS text;
+normal authority/evidence retains only selected character coverage. The duplicated
+inline discovery heading parser is replaced by the shared Core scanner without
+changing v1 index bytes. Other providers reject this selector; no adapter, separate
+section store or mutation/evidence bypass is introduced. Whole reads remain a
+distinct request. See the canonical [section contract](../artifact-library.md#implemented-markdown-section-reads--2026-09-08).
+
 Exact text discovery (2026-09-08): `DocumentArtifactStore.SearchText` owns the
 deterministic Markdown/Plan text view over existing revision/CAS ports. The chat
 provider uses it instead of the old 128k prefix scan for these document resources;

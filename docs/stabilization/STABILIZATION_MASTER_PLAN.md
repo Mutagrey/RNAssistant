@@ -2266,7 +2266,8 @@ endpoint.
    validation. Uploaded text now reuses this owner with extraction-bound hashes and
    explicit partial/PDF-page coverage. HTML source/binding member views now share
    the same text engine under exact parents, with selection/generation validation;
-   section reads, picker/history paging, cold replay,
+   unique ATX section reads now retain exact partial coverage through the existing
+   read contract, with explicit ambiguity/bound/drift refusal. Picker/history paging, cold replay,
    authority recovery and Windows/target-model gates remain open.
 5. **11T — typed Office tools и удаление legacy host dispatch — admitted:**
    - [x] 11T0/7D — done host-neutral: один атомарный production change связывает exact выбранный workbook с
