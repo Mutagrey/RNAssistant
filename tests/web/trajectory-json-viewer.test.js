@@ -146,19 +146,19 @@ function button(root, text) { return root.querySelectorAll("button").find(node =
   assert.match(dataHost.textContent, /повтор 1\/2/);
   assert.match(dataHost.textContent, /9007199254740993123456789/);
   assert.match(dataHost.textContent, /<\/script><img onerror=1>/);
-  assert.equal(get("trajectoryEvidenceDetails").classList.contains("hidden"), false);
-  button(get("trajectoryEvidenceData"), "Текст").click();
-  assert.match(get("trajectoryEvidenceData").textContent, /evt-31/);
-  assert.match(get("trajectoryEvidenceData").textContent, /blob-1/);
+  button(dataHost, "Текст").click();
+  assert.match(dataHost.textContent, /evt-31/);
+  assert.match(dataHost.textContent, /blob-1/);
   button(dataHost, "Копировать всё").click();
   await settle();
-  assert.equal(clipboard.at(-1), rawResponse.Events[0].DataJson);
-  console.log("PASS trajectory JSON viewer: raw event keeps exact tokens and separate source evidence");
+  assert.ok(clipboard.at(-1).includes('"data":' + rawResponse.Events[0].DataJson));
+  assert.equal(dataHost.querySelectorAll(".rn-json-viewer").length, 1);
+  console.log("PASS trajectory JSON viewer: one tree preserves exact data tokens and source evidence");
 
   payloadResponse = preview('{"html":"<div>unfinished', "application/json", true);
   get("loadTrajectoryPayloadButton").click();
   await settle();
-  const payloadHost = get("trajectoryEventPayload");
+  const payloadHost = dataHost;
   assert.ok(payloadHost.firstElementChild.classList.contains("rn-json-viewer"));
   assert.equal(payloadHost.firstElementChild.getAttribute("data-completeness"), "preview");
   assert.match(payloadHost.textContent, /показан фрагмент/i);
@@ -168,13 +168,21 @@ function button(root, text) { return root.querySelectorAll("button").find(node =
   payloadResponse = preview("<main onclick=evil()>safe</main>", "text/html; charset=utf-8", false);
   get("loadTrajectoryPayloadButton").click();
   await settle();
-  assert.ok(payloadHost.firstElementChild.classList.contains("trajectory-text-viewer"));
-  assert.equal(payloadHost.querySelector("pre").textContent, payloadText);
+  assert.ok(payloadHost.firstElementChild.classList.contains("rn-json-viewer"));
+  assert.match(payloadHost.textContent, /<main onclick=evil\(\)>safe<\/main>/);
   button(payloadHost, "Копировать всё").click();
   await settle();
-  assert.equal(clipboard.at(-1), payloadText);
+  assert.equal(JSON.parse(clipboard.at(-1)).payload, payloadText);
   assert.equal(leaseCloses.at(-1).workspaceId, "trajectory-payload");
   console.log("PASS trajectory JSON viewer: non-JSON payload stays inert text with exact copy");
+
+  payloadResponse = null;
+  get("loadTrajectoryPayloadButton").click();
+  await settle();
+  assert.equal(dataHost.firstElementChild.getAttribute("data-completeness"), "unavailable");
+  assert.match(dataHost.textContent, /Не удалось загрузить содержимое/);
+  assert.equal(dataHost.querySelectorAll(".rn-json-viewer").length, 1);
+  assert.equal(get("loadTrajectoryPayloadButton").textContent, "Повторить");
 
   const trajectorySource = fs.readFileSync(path.join(__dirname, "../../web/js/app-trajectory.js"), "utf8");
   assert.equal(/function\s+prettyJson\b/.test(trajectorySource), false);
@@ -185,8 +193,8 @@ function button(root, text) { return root.querySelectorAll("button").find(node =
   get("refreshTrajectoryButton").click();
   await settle();
   assert.equal(dataHost.childNodes.length, 0);
-  assert.equal(get("trajectoryEvidenceDetails").classList.contains("hidden"), true);
-  assert.equal(payloadHost.classList.contains("hidden"), true);
+  assert.equal(page.includes('id="trajectoryEvidenceDetails"'), false);
+  assert.equal(page.includes('id="trajectoryEventPayload"'), false);
   console.log("PASS trajectory JSON viewer: refresh cleanup destroys stale detail viewers");
 
   context.state.messages = [{ Id: "assistant-1", RunId: "run-1", Local: false }];

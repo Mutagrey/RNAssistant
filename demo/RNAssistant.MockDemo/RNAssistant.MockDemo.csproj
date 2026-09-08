@@ -93,6 +93,7 @@
     <Compile Include="..\..\src\RNAssistant.Office\Controller\*.cs" Link="Office\Controller\%(Filename)%(Extension)" />
     <Compile Include="..\..\src\RNAssistant.Office\Diagnostics\*.cs" Link="Office\Diagnostics\%(Filename)%(Extension)" />
     <Compile Include="..\..\src\RNAssistant.Office\Runtime\OfficeDocumentExecutionGuard.cs" Link="Office\Runtime\OfficeDocumentExecutionGuard.cs" />
+    <Compile Include="..\..\src\RNAssistant.Office\Runtime\OfficeToolFailure.cs" Link="Office\Runtime\OfficeToolFailure.cs" />
     <Compile Include="..\..\src\RNAssistant.Office\Runtime\NativeToolRuntimeAdapter.cs" Link="Office\Runtime\NativeToolRuntimeAdapter.cs" />
     <Compile Include="..\..\src\RNAssistant.Office\Runtime\ToolHandlerRegistry.cs" Link="Office\Runtime\ToolHandlerRegistry.cs" />
     <Compile Include="..\..\src\RNAssistant.Office\Runtime\ToolRuntime.cs" Link="Office\Runtime\ToolRuntime.cs" />

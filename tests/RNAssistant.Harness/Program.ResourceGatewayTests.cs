@@ -704,11 +704,11 @@ namespace RNAssistant.Harness
             var readSchema = JObject.Parse(ResourceReadToolHandler.Descriptor.ParametersJson);
             string pathError;
             AssertTrue(ToolSchemaSupport.ValidateArguments(new JObject {
-                ["target"] = "Excel range: DATA!A1:B10", ["representation"] = "records",
+                ["target"] = "attachment: records.json", ["representation"] = "records",
                 ["path"] = "$.records"
             }, readSchema, false, out pathError), "resource read admits explicit object-property paths");
             AssertTrue(!ToolSchemaSupport.ValidateArguments(new JObject {
-                ["target"] = "Excel range: DATA!A1:B10", ["representation"] = "records",
+                ["target"] = "attachment: records.json", ["representation"] = "records",
                 ["path"] = "$[*]"
             }, readSchema, false, out pathError), "resource read rejects wildcard paths before execution");
 

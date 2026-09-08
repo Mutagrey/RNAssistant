@@ -24,7 +24,7 @@
   <link rel="stylesheet" href="css/vendor/wunderbaum.css">
   <link rel="stylesheet" href="css/vendor/viewer.min.css">
   <link rel="stylesheet" href="css/app.css?v=json-surfaces-20260829-1">
-  <link rel="stylesheet" href="css/app-chat.css?v=chat-projection-20260907-1">
+  <link rel="stylesheet" href="css/app-chat.css?v=catalog-display-chat-20260908-1">
   <link rel="stylesheet" href="css/app-markdown.css?v=json-viewer-20260829-1">
   <link rel="stylesheet" href="css/app-composer.css?v=composer-polish-20260826-1">
   <link rel="stylesheet" href="css/app-reasoning.css?v=chat-projection-20260907-1">
@@ -47,7 +47,7 @@
   <link rel="stylesheet" href="css/app-tree-adapter.css?v=tree-adapter-20260829-1">
   <link rel="stylesheet" href="css/app-html-workspace.css?v=html-export-20260831-1">
   <link rel="stylesheet" href="css/app-responsive.css?v=library-layout-20260907-1">
-  <link rel="stylesheet" href="css/app-agent.css?v=run-overlap-20260907-1">
+  <link rel="stylesheet" href="css/app-agent.css?v=catalog-display-chat-20260908-1">
   <link rel="stylesheet" href="css/app-agent-data.css?v=json-viewer-20260829-1">
   <link rel="stylesheet" href="css/app-theme.css?v=compact-actions-20260907-1">
 </head>
@@ -188,7 +188,7 @@
               <button type="button" class="composer-icon-button" id="addSelectionContextButton" title="Добавить выделение документа" aria-label="Добавить выделение документа">
                 <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="4" y="4" width="16" height="16" rx="2" stroke-dasharray="3 3"/><path d="m10 9 7 7"/><path d="M12 16h5v-5"/></svg>
               </button>
-              <button class="context-meter" id="contextMeter" type="button" title="Открыть состав контекста" aria-label="Открыть состав контекста" aria-expanded="false" aria-controls="promptContextInspector">
+              <button class="context-meter" id="contextMeter" type="button" title="Что увидит модель в следующем запросе" aria-label="Что увидит модель в следующем запросе" aria-expanded="false" aria-controls="promptContextInspector">
                 <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m12 3 8 4-8 4-8-4 8-4Z"/><path d="m20 12-8 4-8-4"/><path d="m20 17-8 4-8-4"/></svg>
                 <strong id="contextMeterValue">0%</strong>
                 <em id="contextMeterDetail">≈0 / 0</em>
@@ -239,8 +239,8 @@
         <aside class="prompt-context-inspector hidden" id="promptContextInspector" aria-hidden="true" aria-label="Состав контекста запроса">
           <div class="prompt-context-inspector-head">
             <div class="prompt-context-inspector-heading">
-              <strong>Контекст запроса</strong>
-              <span id="promptContextInspectorSubtitle">Снимок по запросу</span>
+              <strong>Что увидит модель</strong>
+              <span id="promptContextInspectorSubtitle">Состав следующего запроса</span>
             </div>
             <div class="prompt-context-inspector-head-actions">
               <button type="button" class="icon-button" id="refreshPromptContextInspectorButton" title="Обновить снимок" aria-label="Обновить снимок">
@@ -255,6 +255,7 @@
             <div class="prompt-context-inspector-state" id="promptContextInspectorLoading" role="status">Собираю снимок контекста…</div>
             <div class="prompt-context-inspector-state prompt-context-inspector-error hidden" id="promptContextInspectorError" role="alert"></div>
             <div class="prompt-context-inspector-body hidden" id="promptContextInspectorBody">
+              <p class="prompt-context-inspector-notice">Это снимок следующего запроса. Подписи действий в чате не заменяют результаты для модели; технические данные журнала могут отличаться от включённого контекста.</p>
               <div class="prompt-context-inspector-notice" id="promptContextInspectorNotice"></div>
               <section class="prompt-context-budget" aria-label="Лимит контекста">
                 <div class="prompt-context-budget-head">
@@ -914,8 +915,9 @@
                 </div>
                 <div class="trajectory-correlation-bar hidden" id="trajectoryCorrelationBar"><div class="trajectory-correlation-actions" id="trajectoryCorrelationActions"></div><button class="secondary hidden" id="clearTrajectoryCorrelationButton" type="button">Сбросить переход</button></div>
                 <div class="trajectory-status-row"><div class="trajectory-status" id="trajectoryStatus">Нажмите «Обновить», чтобы прочитать текущий event stream.</div><button class="secondary hidden" id="loadMoreTrajectoryButton" type="button">Старше</button></div>
-                <div class="trajectory-workspace hidden" id="trajectoryWorkspace">
+                <div class="trajectory-workspace split-layout hidden" id="trajectoryWorkspace" data-split-key="trajectory" data-default-ratio="0.32" data-min-left="160" data-max-ratio="0.6">
                   <div class="trajectory-events" id="trajectoryEvents" role="listbox" aria-label="События траектории"></div>
+                  <div class="splitter" role="separator" aria-label="Ширина списка событий" aria-orientation="vertical"></div>
                   <div class="trajectory-detail">
                     <div class="trajectory-detail-head">
                       <strong id="trajectoryEventTitle">Событие не выбрано</strong>
@@ -923,11 +925,6 @@
                     </div>
                     <div class="trajectory-meta" id="trajectoryEventMeta"></div>
                     <div class="trajectory-json-host" id="trajectoryEventData"></div>
-                    <details class="trajectory-evidence hidden" id="trajectoryEvidenceDetails">
-                      <summary>Источник и связи</summary>
-                      <div class="trajectory-json-host trajectory-evidence-json" id="trajectoryEvidenceData"></div>
-                    </details>
-                    <div class="trajectory-payload hidden" id="trajectoryEventPayload"></div>
                     <div class="trajectory-vba-diff hidden" id="trajectoryVbaDiff"></div>
                   </div>
                 </div>
@@ -1044,7 +1041,7 @@
   <script src="js/app-text-viewer.js?v=artifact-text-20260831-1"></script>
   <script src="js/app-sequence-viewer.js?v=artifact-gallery-20260902-1"></script>
   <script src="js/app-resource-viewer.js?v=binary-chunks-20260906-1"></script>
-  <script src="js/app-run-journal.js?v=chat-projection-20260907-1"></script>
+  <script src="js/app-run-journal.js?v=catalog-display-chat-20260908-1"></script>
   <script src="js/app-resource-download.js?v=binary-chunks-20260906-1"></script>
   <script src="js/app-resource-upload.js?v=vba-upload-20260906-1"></script>
   <script src="js/app-trajectory-payload.js?v=trajectory-payload-20260906-1"></script>
@@ -1057,12 +1054,12 @@
   <script src="js/app-model-render.js?v=ui-lazy-20260903-1"></script>
   <script src="js/app-models.js?v=ui-lazy-20260903-1"></script>
   <script src="js/app-context-data.js"></script>
-  <script src="js/app-chat-state.js?v=context-usage-display-20260907-1"></script>
+  <script src="js/app-chat-state.js?v=chat-activity-order-20260908-1"></script>
   <script src="js/app-resource-list.js?v=resource-navigation-20260826-1"></script>
   <script src="js/app-tools-structured.js?v=library-ux-20260903-1"></script>
   <script src="js/app-tools-actions.js?v=manual-tool-chat-20260908-1"></script>
   <script src="js/app-tools-documentation.js?v=tool-docs-20260906-1"></script>
-  <script src="js/app-tools.js?v=tool-drafts-20260907-1"></script>
+  <script src="js/app-tools.js?v=catalog-display-chat-20260908-1"></script>
   <script src="js/app-skills.js?v=skill-upload-20260906-1"></script>
   <script src="js/app-vba-diff.js?v=vba-modules-20260823-1"></script>
   <script src="js/app-vba-actions.js?v=vba-upload-20260906-1"></script>
@@ -1081,15 +1078,15 @@
   <script src="js/app-html-workspace.js?v=html-read-20260906-1"></script>
   <script src="js/app-context.js?v=ui-lazy-20260903-1"></script>
   <script src="js/app-context-inspector.js?v=context-download-20260906-1"></script>
-  <script src="js/app-agent-data.js?v=chat-projection-20260907-1"></script>
-  <script src="js/app-agent-model.js?v=run-replay-20260907-1"></script>
+  <script src="js/app-agent-data.js?v=result-representations-20260908-1"></script>
+  <script src="js/app-agent-model.js?v=catalog-display-chat-20260908-1"></script>
   <script src="js/app-chart-artifacts.js?v=chart-chat-scope-20260908-1"></script>
   <script src="js/app-artifacts.js?v=shared-markdown-20260908-1"></script>
   <script src="js/app-task-list.js?v=planning-intents-20260902-1"></script>
-  <script src="js/app-agent-activity.js?v=live-feed-20260907-1"></script>
+  <script src="js/app-agent-activity.js?v=catalog-display-chat-20260908-1"></script>
   <script src="js/app-agent-approval.js?v=run-view-state-20260830-1"></script>
-  <script src="js/app-agent.js?v=run-replay-20260907-1"></script>
-  <script src="js/app-messages.js?v=run-replay-20260907-1"></script>
+  <script src="js/app-agent.js?v=catalog-display-chat-20260908-1"></script>
+  <script src="js/app-messages.js?v=catalog-display-chat-20260908-1"></script>
   <script src="js/app-reasoning.js?v=chat-projection-20260907-1"></script>
   <script src="js/app-attachments.js?v=vba-upload-20260906-1"></script>
   <script src="js/app-chat-session.js?v=startup-secondary-lazy-20260907-1"></script>

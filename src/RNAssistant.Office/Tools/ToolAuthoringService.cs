@@ -48,6 +48,7 @@ namespace RNAssistant.Office.Tools
                 Host = ToolArgumentReader.String(arguments, "host", "Common"),
                 Name = ToolArgumentReader.String(arguments, "name", id),
                 Description = ToolArgumentReader.String(arguments, "description", string.Empty),
+                Display = ReadDisplay(arguments),
                 ArgumentSchemaJson = ToolArgumentReader.String(arguments,
                     "parameters", "{\"type\":\"object\",\"properties\":{},\"required\":[],\"additionalProperties\":false}"),
                 Executor = ToolArgumentReader.String(arguments, "executor", "vba"),
@@ -71,11 +72,21 @@ namespace RNAssistant.Office.Tools
             return tool;
         }
 
+        private static ToolDisplayMetadata ReadDisplay(IDictionary<string, object> arguments)
+        {
+            object value;
+            return arguments.TryGetValue("display", out value) && value != null
+                ? JsonConvert.DeserializeObject<ToolDisplayMetadata>(JsonConvert.SerializeObject(value),
+                    new JsonSerializerSettings { MissingMemberHandling = MissingMemberHandling.Error })
+                : null;
+        }
+
         private static ToolCatalogEntry UpdateToolDefinition(
             ToolCatalogEntry existing,
             IDictionary<string, object> arguments)
         {
             var tool = existing.Clone();
+            if (HasArgument(arguments, "display")) tool.Display = ReadDisplay(arguments);
             tool.StoragePath = existing.StoragePath;
             SetString(arguments, "host", value => tool.Host = value);
             SetString(arguments, "name", value => tool.Name = value);

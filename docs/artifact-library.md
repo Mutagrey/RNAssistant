@@ -597,6 +597,20 @@ not resource authority. Real Office/WebView2 responsiveness remains unqualified.
 
 ## Library and revision display
 
+The September 8 UI correction labels ownership from the typed
+`ChatArtifactDto.documentScoped` projection: `Общий для чатов документа` for
+published document resources and `Только этот чат` for chat-owned artifacts.
+This reflects implemented ownership (originals and Plans); it does not migrate HTML
+or old chat-local records. The tree uses one active selection and puts metadata
+below the title. Markdown has one source/document toggle inside the existing
+Preview/Details shell.
+
+A run's resource cards collapse revisions only by the Library's logical identity,
+showing the highest referenced revision in that run. Independent same-name files
+remain separate. Exact message refs and Library history remain unchanged; a card
+never silently advances to a newer revision from a later run.
+
+
 The Artifact Library tree shows one row per immutable resource or logical document
 head, grouped as authored documents, files/media, generated snapshots and system
 evidence. A group title is also a selectable collection: selecting it opens the

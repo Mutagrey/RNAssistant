@@ -295,19 +295,18 @@ The HTML tab is tied to the active chat session. Agent-created HTML pages are st
 There is no separate HTML mode: Agent chooses the workspace from the request and available tools when a visual artifact materially improves the result.
 Agent mode and document-independent local tools remain usable when that chat's Office document is closed. Office reads, writes, VBA actions, and Office-backed HTML bindings become available again only after the bound document is opened.
 
-- Use `common.html_workspace_upsert` with `resourceType:"file"` for `index.html`, CSS, and scripts; runtime infers file kind from the extension. Default `mode:"upsert"` creates or updates, while `createOnly` and `updateOnly` enforce strict existence.
-- Use the same tool with `resourceType:"data"` for JSON data sources exposed as `window.RNAssistantData`.
-- List `provider:"chat"` with exact kind `html-file` or `html-data`, then use `common.resources_search` for bounded literal discovery across current HTML members.
-- Use `common.html_workspace_inspect` after material edits for bounded static preflight checks across the selected entry, injected CSS/scripts, and data references. It reports CSP/assembly conflicts and likely missing references but does not execute JavaScript or render WebView.
-- Use `common.html_workspace_apply_patch` for atomic ordered edits to one current file. Exact replace/insert operations reject ambiguous anchors; line and bounded regex replacements are also supported.
-- Use `common.html_data_bind` to create a refreshable data source from an approved read-only Office tool. `sourceArguments` accepts only fields from the selected source schema; for `excel.read_range` those are `sheet`, `address`, and `content`—never `kind`. The binding stores exact source arguments and can keep raw JSON or normalize row arrays to `{columns, rows, rowCount}`.
-- Use `common.html_data_refresh` to update one or all bindings locally without another LLM request. `refreshPolicy:"on_preview"` is refreshed by the Artifacts UI; `common.html_data_freeze` keeps the current JSON and removes the binding.
-- Use `common.html_workspace_delete` with `resourceType` and `name` to remove an item. Deletions are recorded in workspace history and can be undone.
-- Read the `activeHtml` canonical URI with `representation:"structure"` for the compact manifest. Read an exact listed member URI with `source` or `text`; large bodies continue through `nextCursor`. Use `common.html_workspace_set_active` to choose the displayed HTML file.
+- Use `common.html_workspace_write_file` with `path` and complete `content` for HTML, CSS, and classic JavaScript files; runtime infers the kind and runs bounded static preflight automatically.
+- Use `common.html_data_write` with `name` and exact JSON text for static data sources opened by page code through `RN.resources.open(name)`.
+- Use `common.resources_find` and `common.resources_read` with their semantic targets to discover or inspect current HTML members; URIs, revisions, cursors, and guards remain runtime-owned.
+- Use `common.html_workspace_apply_patch` for atomic ordered exact replace/insert edits to one current file; ambiguous anchors are rejected.
+- Use `common.html_data_bind` with a semantic target returned by resource discovery. The runtime owns the canonical resource reference, view, and exact/head binding policy.
+- Use `common.html_data_refresh` to resolve current head-bound sources and `common.html_data_freeze` to pin one binding to an exact revision.
+- Use `common.html_workspace_delete` with the exact file path or data-source name. Deletions remain recoverable through workspace history.
+- The runtime selects the displayed HTML entry when files are written or restored; there is no model-facing set-active or inspect tool.
 - Every workspace mutation also records an immutable chat artifact revision. Full revision bodies are addressed by SHA-256 in the shared CAS; editing or forking from an older message activates the exact existing revision instead of duplicating it.
 - Undo/redo history is bounded by item count and stored content size. UI responses carry only snapshot ids/labels/timestamps; Agent reads return a manifest or one targeted current item, never history bodies.
-Workspace upsert/patch/delete resolve and validate current state internally; a separate read is needed only when the model must inspect existing content first.
-HTML preview and its scripts are always enabled inside a sandboxed iframe. Pages can use `window.RNAssistantData`, `window.RNAssistantDataMeta`, or `window.RNAssistant.data`. The UI can export the assembled page, current JSON, CSS, and JavaScript as one offline HTML file.
+Workspace write/patch/delete resolves and validates current state internally; a separate read is needed only when the model must inspect existing content first.
+HTML preview and its scripts are always enabled inside a sandboxed iframe. Pages consume exact named data handles through `RN.resources`; no eager data globals are exposed. The UI can export the assembled page, current JSON, CSS, and JavaScript as one offline HTML file.
 The active HTML file is the entry page. Preview injects all workspace CSS into its head and all classic JavaScript before its closing body in workspace order; local `link`/`script src` references and ES module imports are not the workspace composition mechanism.
 
 ## Tool Library

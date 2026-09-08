@@ -227,6 +227,10 @@ function appendMessageFooter(node, message, index, activity) {
   actions.className = "message-actions";
   var historyActionsBlocked = !!currentActiveSend() || hasActiveMessageEdit() ||
     (typeof pendingAgentApprovalActivity === "function" && !!pendingAgentApprovalActivity());
+  actions.appendChild(smallIconButton("Копировать сообщение", "copy", function () {
+    copyText(activity ? activityText(activity) : messageContent(message));
+    log("Сообщение скопировано.");
+  }));
   if (!historyActionsBlocked) {
     actions.appendChild(smallIconButton("Ответвить чат отсюда", "branch", function () {
       forkChatAtMessage(message, index);
@@ -237,20 +241,17 @@ function appendMessageFooter(node, message, index, activity) {
       startMessageEdit(message, index);
     }));
   }
-  actions.appendChild(smallIconButton("Копировать сообщение", "copy", function () {
-    copyText(activity ? activityText(activity) : messageContent(message));
-    log("Сообщение скопировано.");
-  }));
+
   if (!historyActionsBlocked) {
     actions.appendChild(smallIconButton("Удалить сообщение", "trash", function () {
       deleteMessage(message, index);
     }));
   }
 
-  if (meta.childNodes.length) {
-    footer.appendChild(meta);
-  }
-  footer.appendChild(actions);
+  var assistant = messageRole(message) === "assistant";
+  if (assistant) footer.appendChild(actions);
+  if (meta.childNodes.length) footer.appendChild(meta);
+  if (!assistant) footer.appendChild(actions);
   node.appendChild(footer);
 }
 

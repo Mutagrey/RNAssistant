@@ -139,6 +139,11 @@ reload and cannot undo the durable turn. Format-specific viewing,
 immutable/versioned classification and removal rules are defined in
 [Artifact Library and Viewers](artifact-library.md).
 
+If WebView `postMessage` throws, the shared UI send boundary removes that request's
+pending entry and rejects its original promise, including calls queued behind
+initialization. Other pending requests remain correlated. A send failure never
+triggers automatic replay or establishes a physical mutation outcome.
+
 A confirmed tool result always returns to the Agent loop, including `ok:false`, so the model can explain the failure, correct arguments, or choose another tool. Runtime failures carry a typed class (`RejectedNoEffect`, `ConflictNoEffect`, `BusyNoEffect` or `ToolDefect`) and retry policy (`None`, `Replan`, `RefreshRequired` or `RetryLater`); the model chooses the semantic next action, while runtime never automatically replays a tool. An immediate identical call after `error` is closed as not-dispatched and terminates the run with `repeated_failed_tool_call`; an intervening successful state-changing call permits the original operation again, while an ordinary read-only success does not. For `RefreshRequired`, only a successful complete whole-view read whose exact resource evidence satisfies the recovery contract permits the identical call again. Partial or unrelated reads leave it blocked. `Replan` requires a changed call. After a side-effecting call ends in `unknown`, all later mutations are blocked for that run; read-only inspection and the final response remain allowed. Chat tools never require confirmation. An explicit user cancellation is terminal for that run and does not invoke the model again. Fresh and confirmed controller invocations share one progress/checkpoint callback, success/failure finalizer and run-lease release path; targeted store recovery releases that ownership before canonical reload. The lease remains per chat. Global coordination and document-access gates are not held across model wait, and `ConversationRunService → AgentKernel` remains the single execution loop.
 
 The skill entries in the unified capability catalog are metadata only. When the user names a skill or a summary clearly matches, the model calls `common.capabilities_read` with that exact public id. Its model result contains `kind:"skill"`, id, readable metadata/version, complete `bodyMarkdown`, and explicit loaded/complete flags, but no package revision. Runtime validates the hidden exact revision before every projection and replaces stale evidence with `capability_evidence_stale`. Each tool named by the skill still needs its own schema read unless already callable. Oversized evidence becomes explicit `capability_evidence_context_too_large`; compaction or stale evidence requires another read.
@@ -153,19 +158,19 @@ catalog. Phase 11 package history, tombstone, restore/import and Library UX are
 defined in [Skill Library](skills.md) without changing the exact
 `common.capabilities_read` model transport.
 
-Tools use a native-like description:
+Tools use a native-like description (abbreviated discovery example):
 
 ```json
 {
   "type": "function",
   "function": {
-    "name": "excel.read_range",
-    "description": "Read a range from a worksheet.",
+    "name": "common.resources_find",
+    "description": "Find readable resources and return semantic targets for common.resources_read.",
     "parameters": {
       "type": "object",
       "properties": {
-        "sheet": { "type": "string", "description": "Worksheet name; omit to use the active sheet." },
-        "address": { "type": "string", "description": "A1 range to read; defaults to A1." }
+        "query": { "type": "string", "minLength": 1, "maxLength": 500 },
+        "scope": { "type": "string", "enum": ["all", "conversation", "document", "selection", "html", "vba", "backups", "catalogs"], "default": "all" }
       },
       "required": [],
       "additionalProperties": false
@@ -203,7 +208,7 @@ Strict response schemas require every object property to appear. Properties that
 
 When `FallbackToJsonObject` is enabled and the endpoint explicitly rejects `json_schema`, ModelProtocol retries once with `json_object`, including during format repair, and keeps that choice for the rest of the run. The exact current prompt is reused and the saved selection is unchanged. This compatibility fallback has its own limit and is not model routing.
 
-Tool call:
+Tool call (target copied from current runtime context or resource discovery):
 
 ```json
 {
@@ -211,8 +216,8 @@ Tool call:
   "final": false,
   "tool_calls": [
     {
-      "name": "excel.read_range",
-      "arguments": { "sheet": "Data", "address": "A1:D20" }
+      "name": "common.resources_read",
+      "arguments": { "target": "Excel range: Data!A1:B4", "representation": "text" }
     }
   ]
 }
@@ -453,10 +458,10 @@ See [ADR-0003](decisions/ADR-0003-tool-result-three-states.md#phase-4b-wire-gate
 
 ```text
 TOOL_RESULT:
-{"tool_call_id":"call_1","name":"excel.read_range","status":"ok","message":"Range read.","data":{"values":[[1,2]]},"resources":[{"uri":"rna://chat/s1/artifact/a1/revision/1","revision":"1","relation":"result"}]}
+{"tool_call_id":"call_1","name":"common.resources_read","status":"ok","message":"Complete resource representation read.","data":{"kind":"resource-read","target":"note: Example","type":"artifact","scope":"conversation","representation":"text","text":"Hello","coverage":{"kind":"whole","fields":[]},"returnedCharacters":5,"totalCharacters":5,"complete":true,"hydratedForNextModelStep":false,"rawContentIncluded":true}}
 ```
 
-All five root fields shown before `resources` are required. `data` may be any JSON
+All five root fields shown are required. `data` may be any JSON
 value, including null. The optional `resources` array contains exact `rna://`
 URI/revision references; at most one has `relation:"result"` for full externalized
 data. Neither a resource `kind` nor CAS hash/internal artifact ID is a second
@@ -473,6 +478,15 @@ it correlates the already accepted call and result. It is never present in tool
 arguments or generated by the model. Exact public tool/skill ids may remain only as
 stable semantic catalog identities; descriptor/package revisions and admission
 guards do not enter model context after their R61 family cutover.
+
+For `common.resources_read`, the root `data.table` is a `ResourceTableBatch`
+containing columns, rows and totalRows. Both `table` and `records` representations
+preserve that entire payload, including nested user keys such as `id`, `revision`,
+`hash` or `uri`; those names do not make user data runtime metadata. Runtime-field
+filtering applies outside this payload and does not mutate the durable result.
+The tool descriptor defines the input schema; Tool Result v1 defines the output
+envelope, while the owning domain defines `data`. There is no separate output
+JSON Schema advertised by `ToolDescriptor`.
 
 Accepted call and result records carry local `ToolResultProtocolVersion=1`
 metadata; it is not an extra JSON root field. Full-history preflight validates
@@ -502,7 +516,7 @@ optional projection; projection failure cannot erase a known effect or authorize
 R61/11O4 splits that family into exact core `common.skills_upsert/delete` and
 reference `common.skills_reference_upsert/delete` intents; mixed core/reference
 arguments are not replayable. Prompt schema 21 was that authoring boundary; current
-prompt schema is 27. Existing custom text and older markers are preserved until
+prompt schema is 29. Existing custom text and older markers are preserved until
 explicit review/reset. Built-in prompt authoring requires only model call
 name/arguments and assigns IDs to runtime (R31); matching `status=ok` alone does not
 prove that a document changed.
@@ -644,12 +658,45 @@ retain a visible verification warning outside collapsed history. A pre-dispatch
 `excel_sheet_already_exists` is displayed as a quiet conflict, never as proof that
 the sheet satisfies the request or that a later call resolved the conflict.
 
-Activities show localized action labels, accepted semantic target/representation
-and a bounded result caption in one naturally wrapping, muted 12 px text flow.
-Action labels use regular weight, with a 6 px icon gap; narration remains distinct.
-`AgentTranscript` derives target captions from
-accepted scalar arguments without resource lookup or new authority. Exact tool
-ids and arguments remain in expandable details. Consecutive transcript groups
+Activities show **action → semantic target → result** in a naturally wrapping,
+muted 12 px flow. Action, icon, target and ordinary outcome share the muted color;
+only failed outcomes are red. Targets use literal inline-code styling (not Markdown
+or HTML interpretation) and remain readable without extra UI truncation; distinct
+icons identify search, read, write, capability study, delete, questions, plans,
+charts and other operations. The display classifies icons only, never tool effects.
+`AgentTranscript` derives target captions from accepted scalar arguments, including
+Word insertion locations, PowerPoint slide/shape targets and Outlook draft
+subjects/recipients, without resource lookup or new authority.
+
+Short Russian result captions use typed status/error/effect evidence. Unknown effects
+win over success/error wording; failed no-ops remain failures. Bounded, cached reads
+of the documented resource/capability result fields add returned element/row counts,
+text/source/structure and explicit incompleteness. Metadata says the body was not
+loaded; media says it is prepared for the next model request only when the resource
+owner reports hydration. This is not proof of delivery or model perception. A PDF
+text read and a media read therefore have different captions. Empty collections
+never claim global absence. Reserved resource/capability fields are interpreted only
+for their owning gateways; arbitrary custom JSON cannot claim media hydration or
+capability loading.
+
+Every tool also has a generic representation fallback: JSON object/scalar, JSON
+string, array with its actual length, separately retained result or bounded journal
+preview. This fallback does not inspect arbitrary business fields or infer effects.
+Large/invalid JSON is left to the existing details instead of eagerly parsing it.
+Captured typed catalog `Display` metadata supplies action/running labels and icon
+category for every tool, including new custom ids. The renderer no longer translates
+ids or guesses an operation from English verbs. Missing metadata receives a neutral
+label/icon. Source-owned Office target formatters remain; optional catalog scalar
+selectors support custom targets without web changes. See [Tool Library](tool-library.md).
+VBA String output remains available as the tool message, with JSON in the existing
+viewer. Raw errors and protocol metadata stay in expandable diagnostic details.
+
+These captions are UI-only: they do not replace or rewrite tool arguments, durable
+results or the model-facing result projection. Details label their JSON as journal
+data and link to the existing next-request context inspector. That inspector shows
+a current preparation snapshot, not a claim that an old tool result or UI caption
+was sent unchanged to the model. Exact tool ids and arguments remain available.
+Consecutive transcript groups
 require the same runtime `RunId`; confirmation segments keep their own grouping
 while their typed state retains the logical turn's counts. Throughout a live run,
 step narration and all action rows stay visible in chronological order, including
@@ -657,7 +704,12 @@ nested calls and completed earlier steps. Only technical details use individual
 disclosures. The current running action owns the text shimmer; an icon-free thinking
 status appears between calls, without a separate count or duplicate running status.
 Waiting typed lifecycles keep the feed open. Only a terminal run folds the complete
-process into `Действия · N`. Changed live units retain explicit detail-disclosure
+process into `Действия · N`; a zero-call run emits no empty overview. Independent
+runtime warnings remain visible. Progress phase names (`thinking`, `working`) are
+not target captions. A nonempty action block ends with a thin divider and a 6 px
+gap before the answer. Assistant footer buttons start at the left, with copy first
+and message count/usage immediately after the buttons; user footer buttons stay
+on the right. DOM order matches the visual and keyboard order. Changed live units retain explicit detail-disclosure
 state by identity. Persisted mid-run messages and live replay share one visible
 run matched by exact RunId and activity identity; durable terminal call results win
 over stale progress, while newly received calls remain visible. A final persisted

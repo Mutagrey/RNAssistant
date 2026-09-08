@@ -6,6 +6,7 @@
   border-right: 0;
 }
 
+.trajectory-panel.is-run-journal .trajectory-workspace > .splitter,
 .trajectory-panel.is-run-journal .trajectory-detail {
   display: none;
 }

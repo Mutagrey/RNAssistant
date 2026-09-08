@@ -1,3 +1,5 @@
+using System;
+using System.Collections.Generic;
 using System.Linq;
 using RNAssistant.Core.Models;
 
@@ -5,6 +7,13 @@ namespace RNAssistant.Core.Services
 {
     public static class ChatSessionHeaderFactory
     {
+        internal static DateTime LastActivityUtc(DateTime createdUtc, ChatRunRecord run, IEnumerable<DateTime> messageTimes)
+        {
+            var latest = messageTimes.DefaultIfEmpty(createdUtc).Max();
+            if (latest < createdUtc) latest = createdUtc;
+            return run != null && run.StartedUtc > latest ? run.StartedUtc : latest;
+        }
+
         public static ChatSessionHeader Create(ChatSession session)
         {
             if (session == null) return null;
@@ -38,6 +47,9 @@ namespace RNAssistant.Core.Services
                 HtmlDataSourceCount = htmlDataSourceCount,
                 CreatedUtc = session.CreatedUtc,
                 UpdatedUtc = session.UpdatedUtc,
+                LastActivityUtc = LastActivityUtc(session.CreatedUtc, run,
+                    (session.Messages ?? new List<ChatMessage>()).Where(message => message != null)
+                        .Select(message => message.CreatedUtc)),
                 MessageCount = session.Messages == null
                     ? 0
                     : session.Messages.Count(message => message != null && !message.ProtocolMessage),

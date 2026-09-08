@@ -61,9 +61,9 @@ vm.runInContext(source, context, { filename: "app-artifacts.js" });
   assert.equal(context.RNAssistantArtifactVisuals.category(heads[0]), "authored");
   assert.equal(context.RNAssistantArtifactVisuals.category(heads[1]), "files");
   assert.equal(context.RNAssistantArtifactVisuals.category(heads[2]), "generated");
-  assert.equal(context.RNAssistantArtifactVisuals.meta(heads[0]), "Готов · v2");
-  assert.equal(context.RNAssistantArtifactVisuals.meta(heads[1]), "Файл · Оригинал");
-  assert.equal(context.RNAssistantArtifactVisuals.meta(heads[3]), "Диаграмма");
+  assert.equal(context.RNAssistantArtifactVisuals.meta(heads[0]), "Только этот чат · Готов · v2");
+  assert.equal(context.RNAssistantArtifactVisuals.meta(heads[1]), "Только этот чат · Файл · Оригинал");
+  assert.equal(context.RNAssistantArtifactVisuals.meta(heads[3]), "Только этот чат · Диаграмма");
   console.log("PASS artifact library: UI consumes server-owned classes, order and labels");
 }
 
@@ -109,7 +109,7 @@ vm.runInContext(source, context, { filename: "app-artifacts.js" });
   assert.match(htmlUi, /RNAssistantRunViewState\.accept/);
   const index = fs.readFileSync(path.join(root, "web/index.html"), "utf8");
   assert.ok(index.includes("app-core.js?v=bridge-transport-20260908-1"), "core has the bridge transport cache key");
-  assert.ok(index.includes("app-chat-state.js?v=context-usage-display-20260907-1"), "chat state has the context usage cache key");
+  assert.ok(index.includes("app-chat-state.js?v=chat-activity-order-20260908-1"), "chat state has the context usage cache key");
   assert.ok(index.includes("app-chat-session.js?v=startup-secondary-lazy-20260907-1"), "chat session has the startup lazy cache key");
   assert.ok(index.includes("app-artifacts.js?v=shared-markdown-20260908-1"), "artifact cards have the working-set cache key");
   assert.ok(index.includes("app-html-workspace-model.js?v=html-read-20260906-1"), "artifact selection model has the gallery cache key");

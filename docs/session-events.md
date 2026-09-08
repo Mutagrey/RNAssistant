@@ -251,6 +251,13 @@ Current history encryption does not cover transient attachment staging, settings
 
 ## Transient stream rendering
 
+Chat-tree siblings are ordered by `LastActivityUtc` descending, then chat id for
+equal timestamps. This disposable header/summary value is the latest retained
+message timestamp or run start, bounded below by chat creation. Navigation, title
+and settings changes, and diagnostic/storage timestamps do not count as activity.
+The UI sorts the latest accepted summaries on each render, including background
+updates, so selecting a chat does not trigger a delayed ordering change.
+
 Web stream/reasoning deltas update the transient run immediately and coalesce
 painting through one animation frame. Subsequent stream paints reconcile only
 live units; they do not serialize durable message bodies or rebuild the resource

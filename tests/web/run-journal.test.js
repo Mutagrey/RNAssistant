@@ -288,14 +288,14 @@ function findButton(root, prefix) {
   const agent = fs.readFileSync(path.join(__dirname, "../../web/js/app-agent.js"), "utf8");
   assert.ok(page.indexOf("app-run-journal.js") < page.indexOf("app-trajectory.js"));
   ["app-agent.js"].forEach(asset => {
-    assert.ok(page.includes(asset + "?v=run-replay-20260907-1"), asset + " uses the diagnostics cache key");
+    assert.ok(page.includes(asset + "?v=catalog-display-chat-20260908-1"), asset + " uses the diagnostics cache key");
   });
   ["app-run-journal.css"].forEach(asset => {
     assert.ok(page.includes(asset + "?v=chat-projection-20260907-1"),
       asset + " uses the fresh Запросы и ответы visibility cache key");
   });
   ["app-run-journal.js", "app-trajectory-payload.js", "app-trajectory.js"].forEach(asset => {
-    assert.ok(page.includes(asset + "?v=" + (asset === "app-trajectory-payload.js" ? "trajectory-payload-20260906-1" : "chat-projection-20260907-1")), "payload cutover refreshes " + asset);
+    assert.ok(page.includes(asset + "?v=" + (asset === "app-trajectory-payload.js" ? "trajectory-payload-20260906-1" : asset === "app-run-journal.js" ? "catalog-display-chat-20260908-1" : "chat-projection-20260907-1")), "payload cutover refreshes " + asset);
   });
   assert.match(page, /option value="run-causal">Журнал запуска/);
   assert.match(trajectory, /pageSize:\s*view === "run-causal" \? 200 : 100/);

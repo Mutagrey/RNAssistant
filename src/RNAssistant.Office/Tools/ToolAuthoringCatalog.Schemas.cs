@@ -46,6 +46,22 @@ namespace RNAssistant.Office.Tools
                         ["additionalProperties"] = false
                     }
                 },
+                ["display"] = new JObject
+                {
+                    ["type"] = "object",
+                    ["description"] = "Optional user-facing Russian action captions and semantic target selectors. UI only: never status, verification, runtime guards or model result text. Omit on update to preserve; use an empty targetArguments list to clear selectors.",
+                    ["properties"] = new JObject
+                    {
+                        ["action"] = BoundedStringProperty("Russian action label, e.g. Пересчёт отчёта.", 200),
+                        ["runningAction"] = BoundedStringProperty("Russian in-progress label, e.g. Пересчитываю отчёт.", 200),
+                        ["operation"] = EnumProperty("Icon category only; never execution policy.", "Command", "Read", "Search", "Write", "Delete", "Export", "Learn", "Question", "Plan", "Chart", "Package", "Check"),
+                        ["targetArguments"] = new JObject { ["type"] = "array", ["maxItems"] = 8,
+                            ["description"] = "Ordered exact top-level scalar argument names from this tool's schema. Select only the semantic target, not full content, secrets or protocol metadata.",
+                            ["items"] = BoundedStringProperty("Exact scalar argument name.", 64) }
+                    },
+                    ["required"] = new JArray("action"),
+                    ["additionalProperties"] = false
+                },
                 ["readme"] = BoundedStringProperty("Markdown documentation stored with the custom tool.", 500000),
                 ["useWhen"] = BoundedStringProperty("Positive selection guidance for the model.", 4000),
                 ["doNotUseWhen"] = BoundedStringProperty("Cases where the model should not select this tool.", 4000),

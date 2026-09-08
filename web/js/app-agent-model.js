@@ -46,7 +46,8 @@ function normalizeProgressActivity(progress) {
     kind: "notice",
     RunId: progress.runId || progress.RunId || "",
     title: phase === "thinking" ? "Думаю…" : (progress.message || progress.Message || "Выполняю…"),
-    subtitle: phase || "working",
+    subtitle: "",
+    __progressPhase: phase,
     status: activityStatusFromPhase(phase)
   };
 }

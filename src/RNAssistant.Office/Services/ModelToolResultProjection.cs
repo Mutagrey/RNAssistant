@@ -81,7 +81,8 @@ namespace RNAssistant.Office.Services
             }
             else if (IsResourceResult(name))
             {
-                RemoveResourceRuntimeState(data);
+                RemoveResourceRuntimeState(data, preserveTable:
+                    string.Equals(name, ResourceToolCatalog.ReadToolId, StringComparison.Ordinal));
             }
             else if (IsPlanningResult(name))
             {
@@ -372,7 +373,7 @@ namespace RNAssistant.Office.Services
             return VbaToolCatalog.Owns(name);
         }
 
-        private static void RemoveResourceRuntimeState(JToken token)
+        private static void RemoveResourceRuntimeState(JToken token, bool preserveTable = false)
         {
             var value = token as JObject;
             if (value != null)
@@ -380,7 +381,11 @@ namespace RNAssistant.Office.Services
                 foreach (var property in value.Properties().ToList())
                 {
                     if (IsResourceRuntimeField(property.Name)) property.Remove();
-                    else RemoveResourceRuntimeState(property.Value);
+                    // Only the resource-read root owns this ResourceTableBatch.
+                    // Its columns/rows are user data, including nested values whose
+                    // keys can coincide with runtime metadata names.
+                    else if (!preserveTable || property.Name != "table")
+                        RemoveResourceRuntimeState(property.Value);
                 }
                 return;
             }

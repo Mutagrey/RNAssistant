@@ -267,7 +267,7 @@
     var nodes = [];
     if (htmlChildren.length) {
       var htmlCount = htmlChildren.reduce(function (sum, node) { return sum + Number(node.meta || 0); }, 0);
-      nodes.push(groupNode("artifacts:html", "HTML workspace", htmlCount, htmlChildren, "html"));
+      nodes.push(groupNode("artifacts:html", "HTML · только этот чат", htmlCount, htmlChildren, "html"));
     }
 
     [

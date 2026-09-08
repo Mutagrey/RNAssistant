@@ -320,6 +320,7 @@ namespace RNAssistant.Office.Tools
                         component.Remove("fileName");
                 }
                 state["definition"] = payload;
+                state["display"] = tool.Display == null ? JValue.CreateNull() : JToken.FromObject(tool.Display);
             }
             return ToolArgumentReader.CanonicalSha256(state);
         }

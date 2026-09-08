@@ -9,6 +9,8 @@ namespace RNAssistant.Core.Tools
     {
         public string ToolId { get; set; }
         public string Description { get; set; }
+        [JsonIgnore]
+        public ToolDisplayMetadata Display { get; set; }
         public string ToolCallId { get; set; }
         public Dictionary<string, object> Arguments { get; set; }
 

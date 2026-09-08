@@ -51,6 +51,7 @@ namespace RNAssistant.Harness
 
                 var valid = CustomTool("Excel", "excel.safe_report", "Safe report");
                 valid.UseWhen = "Create a report.";
+                valid.Display = new ToolDisplayMetadata("Сбор отчёта", "Собираю отчёт", ToolDisplayOperation.Command);
 
                 AssertTrue(executor.ValidateToolDefinition(valid).Success, "valid tool accepted");
                 var invalidHost = valid.Clone();
@@ -73,6 +74,42 @@ namespace RNAssistant.Harness
                 AssertTrue(!loaded.AgentCanRun, "agent run metadata preserved");
                 AssertEqual(3, loaded.RiskLevel, "risk metadata preserved");
                 AssertEqual(valid.UseWhen, loaded.UseWhen, "useWhen preserved");
+                AssertEqual(valid.Display.Action, loaded.Display.Action, "catalog display survives disk reload");
+                var invocation = new ToolInvocation { ToolId = loaded.Id, Display = ToolDisplayCatalog.Resolve(loaded) };
+                var activity = AgentTranscript.CreateRunningToolActivity(invocation, "display-step", "Собрать отчёт");
+                AssertEqual("Собираю отчёт", activity.Display.RunningAction, "captured catalog supplies running caption");
+                var restored = JsonConvert.DeserializeObject<ChatActivity>(JsonConvert.SerializeObject(activity));
+                AssertEqual(activity.Display.Action, restored.Display.Action, "activity display survives event serialization");
+                var clone = ChatCloneService.CloneMessages(new[] { new ChatMessage { Role = "assistant", Activity = activity } }).Single();
+                AssertEqual(activity.Display.Action, clone.Activity.Display.Action, "fork preserves captured display");
+                AssertTrue(JObject.FromObject(invocation)["Display"] == null, "UI metadata is not serialized into invocation wire");
+                loaded.Binding = VbaPackageToolHandler.BindingFor(loaded);
+                loaded.Policy = VbaPackageToolHandler.PolicyFor(loaded);
+                var changed = loaded.Clone();
+                changed.Display = new ToolDisplayMetadata("Другая подпись");
+                AssertTrue(ToolAuthoringService.LibraryRevision(loaded) != ToolAuthoringService.LibraryRevision(changed),
+                    "Library revision protects display-only edits against stale writes");
+                var update = executor.ExecuteManual(Command(ToolAuthoringCatalog.UpsertToolId,
+                    "id", loaded.Id, "display", JObject.FromObject(changed.Display)),
+                    executor.GetControllerTools().ToList(), new AppSettings { AutoConfirmToolActions = true }, false, true);
+                AssertTrue(update.Success, "model authoring accepts typed display-only update: " + update.Message);
+                AssertEqual(changed.Display.Action, store.Load().Single(tool => tool.Id == loaded.Id).Display.Action,
+                    "display-only update writes and reads back metadata");
+                AssertEqual("Сбор отчёта", activity.Display.Action, "old activity retains captured caption after catalog edit");
+                AssertEqual(ToolPackSnapshotFactory.ExecutionFingerprint(new[] { loaded }, loaded.Id),
+                    ToolPackSnapshotFactory.ExecutionFingerprint(new[] { changed }, changed.Id), "UI captions do not change execution authority");
+
+                var targeted = CustomToolWithParameter("excel.custom_display", "report", "Report name.");
+                targeted.Display = new ToolDisplayMetadata("Пересчёт отчёта", "Пересчитываю отчёт", ToolDisplayOperation.Command, new[] { "report" });
+                AssertTrue(executor.ValidateToolDefinition(targeted).Success, "custom scalar target metadata admitted");
+                var targetCall = new ToolInvocation { ToolId = targeted.Id, Display = targeted.Display,
+                    Arguments = new Dictionary<string, object> { ["report"] = "Доходы", ["body"] = "not a target" } };
+                AssertEqual("Доходы", AgentTranscript.ActivityTarget(targetCall), "new target parameter needs no UI or name heuristic");
+                targetCall.Display = new ToolDisplayMetadata("Пересчёт", targetArguments: new string[0]);
+                AssertEqual(string.Empty, AgentTranscript.ActivityTarget(targetCall), "explicit empty selectors do not guess a target");
+                targeted.Display = new ToolDisplayMetadata("Пересчёт", targetArguments: new[] { "missing" });
+                AssertEqual("tool_display_invalid", executor.ValidateToolDefinition(targeted).ErrorCode, "unknown display selector rejected");
+
             });
         }
 

@@ -354,6 +354,7 @@ namespace RNAssistant.Office
             {
                 ToolId = command == null ? string.Empty : command.ToolId,
                 Description = command == null ? string.Empty : command.Description,
+                Display = command == null ? null : command.Display,
                 ToolCallId = command == null ? string.Empty : command.ToolCallId,
                 RuntimeGuardJson = command == null ? null : command.RuntimeGuardJson,
                 RuntimeStepId = command == null ? null : command.RuntimeStepId
@@ -536,6 +537,7 @@ namespace RNAssistant.Office
                 ToolId = activity.ToolId,
                 ToolCallId = activity.ToolCallId,
                 Description = activity.Title,
+                Display = activity.Display,
                 RuntimeGuardJson = activity.RuntimeGuardJson,
                 RuntimeStepId = activity.StepId
             };
@@ -645,6 +647,7 @@ namespace RNAssistant.Office
 
             target.Kind = source.Kind;
             target.Title = source.Title;
+            target.Display = source.Display;
             target.Subtitle = source.Subtitle;
             target.Status = source.Status;
             target.ExecutionStatus = source.ExecutionStatus;

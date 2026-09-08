@@ -517,6 +517,7 @@ namespace RNAssistant.Office.Contracts
         [JsonProperty("relatedArtifactIds")] public IReadOnlyList<string> RelatedArtifactIds { get; set; }
         [JsonProperty("createdUtc")] public System.DateTime CreatedUtc { get; set; }
         [JsonProperty("resourceUri")] public string ResourceUri { get; set; }
+        [JsonProperty("documentScoped")] public bool DocumentScoped { get; set; }
 
         public static IReadOnlyList<ChatArtifactDto> From(ChatSession session)
         {
@@ -552,6 +553,7 @@ namespace RNAssistant.Office.Contracts
                 {
                     AvailabilityIssue = artifact.AvailabilityIssue,
                     Id = artifact.Id,
+                    DocumentScoped = !string.IsNullOrWhiteSpace(artifact.DocumentAuthorityId),
                     Kind = artifact.Kind,
                     Title = artifact.Title,
                     MimeType = artifact.MimeType,

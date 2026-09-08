@@ -141,13 +141,13 @@
     options = options || {};
     var root = element("div", "rn-markdown-viewer");
     var tabs = element("div", "rn-markdown-viewer-tabs");
-    var renderedButton = element("button", "secondary compact", "Просмотр");
-    var sourceButton = element("button", "secondary compact", "Источник");
-    renderedButton.type = sourceButton.type = "button";
+    var sourceButton = element("button", "secondary compact", "Показать Markdown");
+    sourceButton.type = "button";
     var body = element("div", "rn-markdown-viewer-body");
     var child = null;
     var canRender = typeof options.fullText === "string" && options.complete === true;
-    renderedButton.disabled = !canRender;
+    var showingSource = false;
+    sourceButton.disabled = !canRender;
 
     function clear() {
       if (child && typeof child.destroy === "function") child.destroy();
@@ -158,8 +158,8 @@
 
     function showSource() {
       clear();
-      renderedButton.classList.remove("active");
-      sourceButton.classList.add("active");
+      showingSource = true;
+      sourceButton.textContent = "Показать документ";
       child = createText(options);
       body.appendChild(child.element);
     }
@@ -167,8 +167,8 @@
     function showRendered() {
       if (!canRender) return showSource();
       clear();
-      renderedButton.classList.add("active");
-      sourceButton.classList.remove("active");
+      showingSource = false;
+      sourceButton.textContent = "Показать Markdown";
       var rendered = element("div", "markdown rn-markdown-viewer-rendered");
       rendered.innerHTML = window.markdown(String(options.fullText));
       body.appendChild(rendered);
@@ -177,9 +177,9 @@
       }
     }
 
-    renderedButton.addEventListener("click", showRendered);
-    sourceButton.addEventListener("click", showSource);
-    tabs.appendChild(renderedButton);
+    sourceButton.addEventListener("click", function () {
+      if (showingSource) showRendered(); else showSource();
+    });
     tabs.appendChild(sourceButton);
     root.appendChild(tabs);
     if (!canRender) {

@@ -28,6 +28,20 @@ CAS payload bodies are intentionally excluded from full-text search and remain l
 
 Every returned raw-event row retains `sourceEventSeqs`, `sourceEventIds`, and deduplicated revision evidence in `resourceRefs`.
 
+## Diagnostic presentation
+
+Technical events use a resizable list/detail split and left-aligned rows. One JSON
+viewer contains `data`, collapsed `evidence`, and the explicitly loaded `payload`
+with its MIME/completeness metadata. Separate source and payload viewers are removed;
+CAS loading remains lazy and bound to the selected event/chat.
+
+The shared JSON tree keeps short string values beside their keys. Complete valid
+objects/arrays encoded inside strings expand as labelled `JSON в строке` nodes,
+within cumulative character/node and depth/DOM limits. Malformed strings and scalar
+strings remain strings. The lossless parser retains duplicate keys and numeric
+lexemes; raw/text modes and node/source copy preserve the original encoding.
+Nested decoded paths are marked `::<json>` and are display paths only.
+
 ## Payload preview delivery
 
 `TrajectoryPayloadService` resolves one exact event in the explicitly addressed

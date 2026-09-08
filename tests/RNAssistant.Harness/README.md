@@ -81,6 +81,16 @@ and `artifact library:` when changing shared ownership/projection. The UI compan
 is `node tests/web/artifact-working-set.test.js`; real WebView/layout remains a
 separate qualification gate.
 
+`tests/web/agent-activity-layout.test.js` checks action/target/result wrapping at
+wide and narrow chat widths, technical disclosure and the addressed context-inspector
+link. It uses the same bundled Playwright and optional browser/screenshot variables
+as the artifact/diagnostics layout check below.
+
+`tests/web/artifact-diagnostics-layout.test.js` checks actual Chromium geometry for
+artifact names/metadata, single selection, inline JSON values, left-aligned events
+and split dragging. Use the bundled Playwright through `NODE_PATH`; optionally set
+`BROWSER_EXECUTABLE` and `LAYOUT_SCREENSHOT`. This is not Office/WebView2 qualification.
+
 `resource cutover: two chat mutations` covers three outcomes through separate
 executors/shared document authority, native Excel read/write, persisted read facts
 and the next actual model request: no-op keeps evidence, verified change without

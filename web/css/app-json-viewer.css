@@ -136,8 +136,9 @@
   gap: 5px;
   align-items: baseline;
   line-height: 1.5;
-  flex-wrap: wrap;
-  padding: 6px 30px 6px 8px;
+  flex-wrap: nowrap;
+  text-align: left;
+  padding: 3px 30px 3px 8px;
   border-bottom: 1px solid color-mix(in srgb, var(--code-border) 55%, transparent);
   cursor: default;
 }
@@ -183,7 +184,8 @@
 
 .rn-json-key {
   min-width: 0;
-  max-width: calc(100% - 20px);
+  flex: 0 0 auto;
+  max-width: 50%;
   overflow-wrap: anywhere;
   color: #8250df;
 }
@@ -214,9 +216,6 @@
   white-space: pre-wrap;
 }
 
-.rn-json-scalar-row .rn-json-string {
-  flex-basis: 100%;
-}
 
 .rn-json-duplicate {
   padding: 1px 4px;
@@ -226,7 +225,6 @@
   font-size: .7857rem;
 }
 
-.rn-json-deep { margin-left: 0; }
 .rn-json-node-actions {
   position: absolute;
   top: 6px;

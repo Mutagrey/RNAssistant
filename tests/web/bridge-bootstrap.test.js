@@ -137,7 +137,40 @@ function createContext() {
     console.log("PASS bridge bootstrap: invalid JSON values cannot strand pending requests");
   }
 
-  console.log("OK 7/7");
+  for (const phase of ["ready", "initializing", "init"]) {
+    const { context, posted, deliver } = createContext();
+    context.state.bridgeToken = "token";
+    const other = context.send("getChatState", { chatId: "other-chat" });
+    let resolveInit;
+    if (phase === "initializing") {
+      context.state.bridgeToken = "";
+      context.state.initializePromise = new Promise(resolve => { resolveInit = resolve; });
+    }
+    const failure = new Error("Injected postMessage failure");
+    let attempts = 0;
+    context.chrome.webview.postMessage = () => { attempts++; throw failure; };
+    const promise = context.send(phase === "init" ? "init" : "runTool", { chatId: "source-chat" });
+    let outcome = "pending";
+    let rejection;
+    promise.then(() => { outcome = "resolved"; }, error => { outcome = "rejected"; rejection = error; });
+    if (resolveInit) {
+      assert.equal(attempts, 0);
+      context.state.bridgeToken = "token";
+      resolveInit();
+    }
+    await new Promise(resolve => setImmediate(resolve));
+    assert.equal(outcome, "rejected", "the caller's promise must settle");
+    assert.equal(rejection, failure, "the caller receives the original send error");
+    assert.equal(attempts, 1, "failed sends are never automatically replayed");
+    assert.equal(context.state.pending[promise.requestId], undefined);
+    assert.deepEqual(Object.keys(context.state.pending), [other.requestId], "other requests remain pending");
+    deliver({ id: posted[0].id, ok: true, payload: { chatId: "other-chat" } });
+    await other;
+    assert.equal(Object.keys(context.state.pending).length, 0);
+    console.log("PASS bridge bootstrap: post failure settles and cleans only its request (" + phase + ")");
+  }
+
+  console.log("OK 10/10");
 }()).catch(error => {
   console.error(error.stack || error);
   process.exitCode = 1;

@@ -48,6 +48,7 @@ function component() {
 function item(id, revision, description = "Description") {
   return {
     revision, id, host: "Excel", name: id, description,
+    display: { action: "Обновление отчёта", operation: "Command", targetArguments: [] },
     source: { sha256: "a".repeat(64), byteLength: 100 }, executor: "vba",
     requiresConfirmation: true, mutatesDocument: true,
     mutatesLocalState: false, canSourceHtmlData: false,
@@ -74,6 +75,10 @@ function library(tools) {
     item("excel.one", "1".repeat(64))
   ]));
   assert.equal(tools[0].Id, "excel.one");
+  assert.equal(tools[0].Display.action, "Обновление отчёта");
+  const snapshot = context.toolLibraryComparable(tools[0]);
+  tools[0].Display.action = "Новая подпись";
+  assert.equal(snapshot.Display.action, "Обновление отчёта", "display metadata is part of an independent edit baseline");
   assert.equal(tools[0]._baseRevision, "1".repeat(64));
   assert.throws(() => context.toolLibraryItemsFromContract([
     item("excel.legacy", "2".repeat(64))
@@ -106,6 +111,7 @@ function library(tools) {
   assert.deepEqual(Array.from(mutations, mutation => mutation.kind),
     ["upsert", "upsert", "delete"]);
   assert.equal(mutations[0].baseId, "excel.update");
+  assert.equal(mutations[0].display.action, "Обновление отчёта", "editing a tool preserves display metadata");
   assert.equal(mutations[0].expectedRevision, "3".repeat(64));
   assert.equal(mutations[1].baseId, "");
   assert.equal(mutations[1].expectedRevision, "");
@@ -158,8 +164,7 @@ function library(tools) {
 }
 
 {
-  assert.ok(index.includes(
-    "app-tools.js?v=tool-drafts-20260907-1"));
+  assert.match(index, /src="js\/app-tools\.js\?v=[^"]+"/);
   assert.equal(/StoragePath|storagePath/.test(source), false);
   assert.match(source, /expectedRevision/);
   assert.match(source, /toolLibraryMutationRequestType/);

@@ -1,8 +1,9 @@
 # Conversation Response v5
 
 Status: **active R72 response-intent contract**. Response protocol is `5`;
-prompt schema is `26`. Product version is independent and unchanged by this
-switch. The [v4 specification](CONVERSATION_RESPONSE_V4.md) is historical, not a
+current prompt schema is `29` (`AppSettings.CurrentAgentPromptSchemaVersion`).
+Product version is independent and unchanged by this switch. The
+[v4 specification](CONVERSATION_RESPONSE_V4.md) is historical, not a
 runtime compatibility path. This document records host-neutral behavior; Windows,
 Office and live-provider qualification remain separate gates.
 
@@ -10,14 +11,16 @@ Office and live-provider qualification remain separate gates.
 
 Tool turn:
 
+The example target is copied from current runtime context or resource discovery.
+
 ```json
 {
   "message": "Прочитаю диапазон.",
   "final": false,
   "tool_calls": [
     {
-      "name": "excel.read_range",
-      "arguments": { "address": "A1:D20" }
+      "name": "common.resources_read",
+      "arguments": { "target": "Excel range: Data!A1:B4", "representation": "text" }
     }
   ]
 }
@@ -98,7 +101,7 @@ responses, not a second model-facing response format. Unmarked, older or malform
 assistant history requires explicit reset/new chat; RNAssistant does not sniff,
 convert, dual-write or delete user data automatically.
 
-Agent, Chat and Plan defaults switch together to prompt schema `26`. Missing,
+Agent, Chat and Plan defaults use the same current prompt schema `29`. Missing,
 older or future stored markers require explicit review/reset before execution.
 Prompt guidance must describe `final` as response intent only; tool results and
 read-back evidence remain the authority for effects.

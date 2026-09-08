@@ -230,7 +230,12 @@ function send(type, payload) {
     var normalizedPayload = payload || {};
     var post = function () {
       state.pending[id] = { resolve: resolve, reject: reject, type: type, payload: normalizedPayload };
-      window.chrome.webview.postMessage({ id: id, type: type, bridgeToken: state.bridgeToken || null, payload: normalizedPayload });
+      try {
+        window.chrome.webview.postMessage({ id: id, type: type, bridgeToken: state.bridgeToken || null, payload: normalizedPayload });
+      } catch (error) {
+        delete state.pending[id];
+        reject(error);
+      }
     };
 
     if (type !== "init" && !state.bridgeToken) {

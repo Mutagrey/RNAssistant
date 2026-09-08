@@ -74,6 +74,7 @@ namespace RNAssistant.Office.Contracts
         [JsonProperty("host")] public string Host { get; set; }
         [JsonProperty("name")] public string Name { get; set; }
         [JsonProperty("description")] public string Description { get; set; }
+        [JsonProperty("display", NullValueHandling = NullValueHandling.Ignore)] public ToolDisplayMetadata Display { get; set; }
         [JsonProperty("argumentSchemaJson")] public string ArgumentSchemaJson { get; set; }
         [JsonProperty("executor")] public string Executor { get; set; }
         [JsonProperty("requiresConfirmation")] public bool RequiresConfirmation { get; set; }
@@ -101,6 +102,7 @@ namespace RNAssistant.Office.Contracts
                 Host = Host,
                 Name = Name,
                 Description = Description,
+                Display = Display,
                 ArgumentSchemaJson = ArgumentSchemaJson,
                 Executor = string.IsNullOrWhiteSpace(Executor)
                     ? "vba" : Executor,
@@ -161,6 +163,7 @@ namespace RNAssistant.Office.Contracts
         [JsonProperty("host")] public string Host { get; set; }
         [JsonProperty("name")] public string Name { get; set; }
         [JsonProperty("description")] public string Description { get; set; }
+        [JsonProperty("display", NullValueHandling = NullValueHandling.Ignore)] public ToolDisplayMetadata Display { get; set; }
         [JsonProperty("source")] public ToolSourceMetadataDto Source { get; set; }
         [JsonProperty("executor")] public string Executor { get; set; }
         [JsonProperty("requiresConfirmation")] public bool RequiresConfirmation { get; set; }
@@ -191,6 +194,7 @@ namespace RNAssistant.Office.Contracts
                 Host = tool.Host ?? string.Empty,
                 Name = tool.Name ?? string.Empty,
                 Description = tool.Description ?? string.Empty,
+                Display = tool.Display,
                 Source = ToolSourceMetadataDto.From(tool),
                 Executor = tool.Executor ?? string.Empty,
                 RequiresConfirmation = tool.RequiresConfirmation,

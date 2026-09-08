@@ -442,6 +442,7 @@ namespace RNAssistant.Office.Services
                 StepMessage = activity.StepMessage,
                 Kind = activity.Kind,
                 Title = activity.Title,
+                Display = activity.Display,
                 Subtitle = activity.Subtitle,
                 Status = activity.Status,
                 ExecutionStatus = activity.ExecutionStatus,

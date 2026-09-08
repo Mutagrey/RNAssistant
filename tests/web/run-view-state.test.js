@@ -131,7 +131,7 @@ function state(runId, lifecycle = "completed", health = "clean", pending = null)
     "agent outcome uses the diagnostics cache key");
   assert.ok(index.includes("app-chat-session.js?v=startup-secondary-lazy-20260907-1"), "chat session uses the current cache key");
   assert.ok(index.includes("app-core.js?v=bridge-transport-20260908-1"), "core uses the bridge transport cache key");
-  assert.ok(index.includes("app-chat-state.js?v=context-usage-display-20260907-1"), "chat state uses the current cache key");
+  assert.ok(index.includes("app-chat-state.js?v=chat-activity-order-20260908-1"), "chat state uses the current cache key");
   assert.ok(index.includes("app-messages.js?v=run-replay-20260907-1"), "messages uses the transcript incremental cache key");
   assert.equal(/function updateEstimatedContextUsage\(\)[\s\S]*?state\.messages\.forEach/.test(chatState), false,
     "context meter does not scan and encode the whole transcript");
@@ -144,4 +144,23 @@ function state(runId, lifecycle = "completed", health = "clean", pending = null)
   console.log("PASS run view state: bridge/UI consumers use the typed projection without model-status inference");
 }
 
-console.log("OK 5/5");
+
+{
+  const ui = vm.createContext({});
+  ui.chatId = chat => chat.Id || chat.id;
+  vm.runInContext(fs.readFileSync(path.join(__dirname, "../../web/js/app-chat-state.js"), "utf8"), ui);
+  const oldChat = { Id: "older", LastActivityUtc: "2026-09-01T10:00:00Z", UpdatedUtc: "2026-09-08T10:00:00Z" };
+  const newChat = { id: "newer", lastActivityUtc: "2026-09-02T10:00:00Z" };
+  const ids = chats => Array.from(ui.sortedChatSessions(chats), chat => ui.chatId(chat));
+  assert.deepEqual(ids([oldChat, newChat]), ["newer", "older"], "save time does not determine chat order");
+  assert.deepEqual(ids([newChat, oldChat]), ["newer", "older"], "navigation catalog order is irrelevant");
+  const next = Object.assign({}, oldChat, { Revision: 2, LastActivityUtc: "2026-09-03T10:00:00Z" });
+  const merged = runView.mergeCatalog([newChat, oldChat], [next], {}, true);
+  assert.deepEqual(ids(merged), ["older", "newer"], "background activity sorts before navigation/full refresh");
+  assert.deepEqual(Array.from(merged, chat => ui.chatId(chat)), ["newer", "older"], "render sorting does not mutate catalog");
+  const tied = Object.assign({}, next, { Id: "another" });
+  assert.deepEqual(ids([next, tied]), ids([tied, next]), "equal activity uses deterministic identity order");
+  console.log("PASS chat ordering: activity ignores navigation/save time and includes background updates");
+}
+
+console.log("OK 6/6");

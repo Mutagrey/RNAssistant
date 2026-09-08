@@ -83,10 +83,106 @@ clear consume it. Missing Plan bodies do not block unlink. Captured chat/revisio
 optimistic save and document mutation lease reject stale or competing changes;
 UI ignores late navigation responses. Host-neutral working-set, document Plan,
 bridge, projection and browser checks cover this slice.
-The later shared HTML slice above extends these controls; independent authored
-Markdown remains open. Full indexed/partial model enumeration and Windows/Office/
-WebView2 qualification stay open. Playwright layout is still unavailable locally.
+The later shared HTML/Markdown slices above extend these controls. Full indexed/
+partial model enumeration and Windows/Office/WebView2 qualification stay open.
+Playwright layout is still unavailable locally.
 See [canonical artifact contract](../artifact-library.md#implemented-working-set-links--2026-09-08).
+
+Latest catalog-display and compact-chat slice (2026-09-08): optional immutable
+ToolDisplayMetadata is retained by catalog storage, model/Library authoring,
+accepted invocation projection, confirmation replacement and chat forks. Shipped
+labels are catalog-owned; web id/verb dictionaries are removed. Custom scalar
+target selectors require no web changes. Display-only edits participate in Library
+revision/read-back but not execution authority or model invocation serialization.
+Chat progress hides raw phase names; zero-call overviews disappear while runtime
+warnings remain. Actions have a divider and 6 px answer gap; assistant controls are
+left-aligned before metadata, user controls right-aligned. Targeted metadata,
+replay, Web and Chromium layout checks pass; Windows/Office/WebView2 qualification
+remains open. Typed result summaries before budgeting remain the bounded follow-up.
+
+
+Latest result-presentation refinement (2026-09-08): action/icon/target/outcome use
+one muted color except failed outcomes; literal code-style targets wrap safely.
+All tools have a bounded outer JSON-type fallback without a custom renderer.
+Source-checked resource captions distinguish text/source/structure, tables, metadata
+without content and media prepared for the next model request. Custom result text
+remains in details; it cannot establish mutation effects or media delivery. Built-in
+action/target maps remain; catalog-owned typed display metadata is recorded as a
+bounded design follow-up in BACKLOG, with no new runtime/model contract. Focused Web
+and Chromium layout checks pass; Windows/Office/WebView2 gates remain open.
+
+
+Latest chat presentation correction (2026-09-08): tool rows keep action, full
+semantic target and a Russian result caption, with separate operation icons.
+Known resource/capability reads show counts and incomplete-search/read outcomes;
+unknown effects remain unverified and failed no-ops remain failures. Accepted
+Word/PowerPoint/Outlook arguments now supply useful target captions. Raw result
+messages, codes and JSON stay in labelled journal details; a guarded link opens
+the existing next-request context inspector. Display captions do not rewrite
+model-facing/durable results. Focused Web, narrow/desktop Chromium layout and
+host-neutral transcript/causal-projection checks pass. Windows/Office/WebView2
+and target-model gates remain open.
+
+Latest chat-order correction (2026-09-08): chat-tree siblings sort by a disposable
+`LastActivityUtc` header/summary projection from retained messages, run start and
+creation time. Opening, renaming or saving metadata does not promote a chat;
+background catalog updates sort immediately on render. Equal timestamps use chat
+id. Warm/cold storage and live-summary regression passes 1/1; focused Web checks
+and the version-format gate pass. No new durable state or migration is introduced.
+Windows/Office/WebView2 qualification remains open; Phase 12 is not started.
+
+Latest artifact/diagnostic UI correction (2026-09-08): run cards now collapse
+referenced revisions by Library logical identity without changing exact message
+refs or merging independent same-name files. Typed `documentScoped` labels expose
+implemented document/chat ownership; shared HTML and working-set selection remain
+open. Tree titles/metadata use separate lines and one active selection. Markdown
+has one source toggle; technical events use a draggable split and one JSON viewer
+for data/evidence/lazy payload. The shared viewer renders bounded embedded JSON
+strings as nested trees while retaining exact source/copy, duplicates and numbers.
+Focused Web regressions, a real Chromium layout/drag check and the host-neutral
+clone/DTO ownership check pass. Replaced diagnostic panels/styles are removed.
+Windows/Office/WebView2 and target-model gates remain open; Phase 12 is not started.
+
+Latest tool-result correction (2026-09-08): resource-read model projection now
+preserves the entire `ResourceTableBatch` payload, including user columns and
+nested keys named `id`, `customerId`, `revision`, `hash`, `uri` or `offset`.
+Runtime metadata outside that payload remains filtered and durable results remain
+unchanged. A focused regression failed before the fix and now passes for table
+and records in all three result roles; the existing runtime-evidence projection
+check also passes (2/2). Canonical protocol examples now use semantic resource
+reads and current prompt schema 29; the two completed audit backlog entries are
+removed. No Office/VSTO validation was run; Windows and target-model gates remain
+open.
+
+Latest resource-read correction (2026-09-08): exact Office target queries are now
+point lookups and no longer scan unrelated document catalogs, so an available Excel
+range cannot inherit their partial/unavailable result. Discovery publishes each
+provider-owned record-view usage; model and HTML table/records reads keep the path
+runtime-owned, while conflicting explicit paths fail before cell capture with typed
+`RejectedNoEffect/Replan` recovery. Partial broad discovery now tells the model to
+use returned usable targets instead of repeating the same find. Focused Excel
+read/table/name, resource-discovery and HTML binding checks pass host-neutral;
+Windows/Office/WebView2 and target-model qualification remain open.
+
+Latest UI correction (2026-09-08): the shared `send` boundary now catches
+`postMessage` exceptions, removes the affected pending entry and rejects the
+original caller promise even when queued behind initialization. Other requests
+remain pending; no automatic operation replay is introduced. Bridge bootstrap
+checks pass 10/10, including ready/queued/init send failures, and multi-chat checks
+pass 3/3. No build or Office validation was run. Silent transport-loss termination
+and actual Windows/WebView2 navigation/streaming qualification remain open.
+
+Latest build correction (2026-09-08): the reported Windows solution failure was
+one production `RNAssistant.Office` compile break followed by cascading `CS0006`
+errors, plus stale source-linked MockDemo contracts. `ChatStore` now exposes its
+typed `DocumentArtifactStore` owner across the Core/Office assembly boundary, the
+artifact viewer imports its exact `ChatSession` model, and MockDemo includes the
+shared `OfficeToolFailure`, stages attachments through the bounded upload data
+plane, emits conversation-response v5, consumes folded mutation frames, and uses
+the current semantic HTML tools/metadata-only projection. Core and Office Debug
+builds and the MockDemo build pass host-neutral; all four mock model profiles,
+failed-turn persistence and artifact-commit projection pass. Windows x64 solution,
+VSTO/Office/WebView2 validation remains open.
 
 Latest correction (2026-09-08): bridge аварийные ответы теперь используют один
 typed JSON contract, сохраняют request id и корректно экранируют exception text;

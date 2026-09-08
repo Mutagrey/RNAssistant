@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 using Newtonsoft.Json;
@@ -7,6 +8,7 @@ using Newtonsoft.Json.Linq;
 using RNAssistant.Core.Agent;
 using RNAssistant.Core.Models;
 using RNAssistant.Core.Tools;
+using RNAssistant.Office.Tools;
 
 namespace RNAssistant.Office.Services
 {
@@ -76,6 +78,8 @@ namespace RNAssistant.Office.Services
                 ToolId = call.Name, ToolCallId = call.Id,
                 Arguments = ReadArguments(call)
             };
+            if (command.Display == null)
+                command.Display = ToolDisplayCatalog.Resolve(_catalog.FirstOrDefault(tool => tool.Id == call.Name));
             command.RuntimeStepId = stepId;
             _commands.Add(call.Id, command);
             return command;

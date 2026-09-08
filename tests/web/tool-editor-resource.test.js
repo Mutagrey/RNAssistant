@@ -123,7 +123,7 @@ function fixture(readme = "# Справка\r\n" + "ж".repeat(140000) + "😀",
     for (const file of ["app-tools.js", "app-tools-actions.js", "app-prompts.js", "app-chat-state.js", "app-chat-session.js"])
       assert.ok(read("index.html").includes(file + "?v=" +
       (file === "app-tools.js" ? "tool-drafts-20260907-1" :
-       file === "app-chat-state.js" ? "context-usage-display-20260907-1" :
+       file === "app-chat-state.js" ? "chat-activity-order-20260908-1" :
        file === "app-chat-session.js" ? "startup-secondary-lazy-20260907-1" :
        file === "app-prompts.js" ? "prompt-source-20260906-1" : "manual-tool-chat-20260908-1")));
     console.log("PASS tool source: shared download/lifecycle cutover shipped without old whole-catalog serializer");

@@ -11,6 +11,26 @@ namespace RNAssistant.Office.Tools
 {
     internal sealed partial class ToolAuthoringService
     {
+        private sealed class DisplayArgumentSchema
+        {
+            [JsonProperty("properties")] public Dictionary<string, DisplayArgumentProperty> Properties { get; set; }
+        }
+        private sealed class DisplayArgumentProperty
+        {
+            [JsonProperty("type")] public JToken Type { get; set; }
+            [JsonIgnore] public bool IsScalar
+            {
+                get
+                {
+                    var values = Type is JArray ? ((JArray)Type).ToArray() : new[] { Type };
+                    var names = values.Select(value => value != null && value.Type == JTokenType.String
+                        ? ((string)value).ToLowerInvariant() : string.Empty).ToArray();
+                    var scalar = new[] { "string", "number", "integer", "boolean" };
+                    return names.Any(name => scalar.Contains(name)) && names.All(name => name == "null" || scalar.Contains(name));
+                }
+            }
+        }
+
         internal static ToolAuthoringOutcome ValidateToolDefinition(
             ToolCatalogEntry tool)
         {
@@ -108,6 +128,15 @@ namespace RNAssistant.Office.Tools
                 tool.PackageVersion = manifest.Tool.PackageVersion;
                 tool.ArgumentOrder = manifest.Tool.ArgumentOrder;
                 ApplyConservativeAuthoringPolicy(tool);
+                if (tool.Display != null && tool.Display.TargetArguments != null && tool.Display.TargetArguments.Count > 0)
+                {
+                    var parameters = JsonConvert.DeserializeObject<DisplayArgumentSchema>(tool.ArgumentSchemaJson);
+                    if (parameters == null || parameters.Properties == null || tool.Display.TargetArguments.Any(name =>
+                        !parameters.Properties.ContainsKey(name) || parameters.Properties[name] == null ||
+                        !parameters.Properties[name].IsScalar))
+                        return ToolAuthoringOutcome.Error("Display targetArguments must name scalar parameters in the tool schema.",
+                            null, "tool_display_invalid", false);
+                }
                 if ((tool.Name ?? string.Empty).Length > 200 ||
                     (tool.Description ?? string.Empty).Length > 8000 ||
                     (tool.ArgumentSchemaJson ?? string.Empty).Length > 64000)
