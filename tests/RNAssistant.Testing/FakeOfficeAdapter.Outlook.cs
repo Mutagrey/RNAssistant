@@ -101,6 +101,23 @@ namespace RNAssistant.Harness
             return OutlookReadSnapshotTransform == null ? snapshot : OutlookReadSnapshotTransform(snapshot);
         }
 
+        public byte[] OutlookAttachmentBytes { get; set; } = System.Text.Encoding.UTF8.GetBytes("attachment text");
+        public int OutlookAttachmentReadCount { get; private set; }
+        public Func<OutlookAttachmentContentSnapshot, OutlookAttachmentContentSnapshot> OutlookAttachmentTransform { get; set; }
+        public OutlookAttachmentContentSnapshot ReadAttachment(OutlookAttachmentReadRequest request)
+        {
+            BeginOutlookBackendCall("outlook.attachment.direct");
+            OutlookAttachmentReadCount++;
+            var mail = ReadMail(new OutlookReadMailRequest { EntryId = request.EntryId, BoundMailOnly = request.BoundMailOnly,
+                Content = "attachments", MaxChars = OutlookService.MaxBodyChars });
+            var attachment = mail.Attachments.SingleOrDefault(item => item.Index == request.Expected.Index);
+            if (!OutlookService.AttachmentMatches(request.Expected, attachment))
+                throw new OutlookBackendException("Attachment changed.", "outlook_attachment_changed", false);
+            var result = new OutlookAttachmentContentSnapshot { EntryId = mail.Mail.EntryId, Attachment = attachment,
+                Bytes = OutlookAttachmentBytes == null ? null : (byte[])OutlookAttachmentBytes.Clone() };
+            return OutlookAttachmentTransform == null ? result : OutlookAttachmentTransform(result);
+        }
+
         public OutlookFolderSnapshot ReadFolder(OutlookFolderReadRequest request)
         {
             BeginOutlookBackendCall(OutlookReadFolderOperation);

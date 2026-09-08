@@ -12,6 +12,23 @@
 
 ## Built-in inventory drift — 2026-09-08
 
+## Outlook attachment follow-ups — 2026-09-08
+
+Owner: Outlook domain / Resource Fabric. The authorized PDF/text/image slice does
+not include DOCX/XLSX/PPTX extraction, archives, embedded .msg/OLE items or mailbox-wide
+attachment search. Any extension requires a separate approved scope. Windows delivery
+and real model/COM checks remain open under the existing qualification gates.
+
+## Dependency-direction substring false positives — 2026-09-08
+
+Owner: architecture harness. `architecture: mandatory dependency direction` reports
+six Office files for `DocumentIdentity.` because the text scan also matches
+`MarkdownDocumentIdentity.`. All six matching lines exist unchanged in base HEAD
+`670301c9`; the Outlook attachment slice adds none. Correct identifier matching in a
+separate approved test correction; do not treat this failed gate as passed.
+
+## Resource prompt test expectation — 2026-09-08
+
 Owner: tool contracts / harness. During Markdown section-read verification against
 `22575b8c`, R61 inventory still differs for unchanged `common.resources_find`
 (schema fingerprint) and `common.tools_upsert` (fingerprint and property paths:

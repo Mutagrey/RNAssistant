@@ -23,6 +23,20 @@ Checks: focused run changes 3/3, integrated Chromium summary/narrow/wide checks,
 version-format and diff checks pass. Windows/Office/WebView2 qualification remains
 open. See [run text changes](../conversation-protocol.md#run-text-changes).
 
+Current slice (2026-09-08): user-authorized Outlook attachment reads are implemented
+on `stab/11-outlook-attachment-read` in a separate worktree. PDF/text/image files
+use semantic `common.resources_*` targets, typed bound capture, retained source CAS
+parts and existing text/media model routing. Limit: 20 MiB; selected-mail attachment
+discovery is explicitly partial in Explorer. Replaced runtime slots, historical
+missing bodies and out-of-scope targets fail without live fallback. No new store,
+compatibility path, model schema or UI; Office files/archives are deferred.
+Checks: Outlook 15/15, shared live/retained continuations 1/1, existing PDF extraction
+1/1 and project source includes 1/1 pass. Architecture dependency-direction check
+still fails on six unchanged `MarkdownDocumentIdentity.` substring matches present
+in base HEAD; tracked in BACKLOG. Real Windows build/COM/Outlook/vision delivery
+remains open; Phase 12/release gates are unchanged.
+See [attachment contract](../resource-fabric.md#outlook-attachment-content-user-authorized-2026-09-08).
+
 Current correction (2026-09-08): reproduced same-response VBA
 `patch → resources_read → stale write_module` incorrectly accepting the final
 overwrite. Accepted calls now retain their model-input resource evidence; VBA

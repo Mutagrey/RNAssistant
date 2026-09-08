@@ -243,6 +243,9 @@ namespace RNAssistant.Office.Services
                 request.Representation != null && request.Representation != "auto" && request.Representation != "text" ||
                 !string.IsNullOrEmpty(request.Cursor) || request.ViewPath != null || request.Fields != null || request.RowOffset != 0 || request.MaxRows != 0))
                 throw new ResourceRequestException("Section reads support document Markdown text only, without row selectors or cursors.", "resource_section_unsupported", false);
+            var outlook = provider as LiveDocumentResourceProvider;
+            if (outlook?.IsOutlookAttachment(request.Reference.Uri) == true)
+                return ReadOutlookAttachment(session, request, outlook);
             // Structural owners validate the caller's exact continuation before a
             // floating artifact identity can be resolved to its current revision.
             if (request.Representation == "table" || request.Representation == "records")

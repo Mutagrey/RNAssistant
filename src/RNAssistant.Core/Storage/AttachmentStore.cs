@@ -417,6 +417,37 @@ namespace RNAssistant.Core.Storage
                 : AbsolutePath(attachment.ExtractedTextPath);
         }
 
+        // Shared content inspection for local file ingestion and bound Office sources.
+        public static AttachmentContent ReadContent(string fileName, byte[] bytes)
+        {
+            if (bytes == null || bytes.LongLength < 1 || bytes.LongLength > MaxFileBytes)
+                throw new InvalidOperationException("Attachment must be between 1 byte and 20 MB.");
+            var kind = DetectKind(fileName, null, bytes);
+            if (kind != "text" && kind != "pdf" && kind != "image")
+                throw new InvalidOperationException("Only text, PDF and image attachments are supported.");
+            var result = new AttachmentContent { Kind = kind, ContentType = NormalizeContentType(kind, null, bytes) };
+            if (kind == "text")
+            {
+                string text;
+                if (!TryDecodeText(bytes, true, out text)) throw new InvalidOperationException("Unsupported text encoding.");
+                result.Text = text;
+            }
+            if (kind == "pdf")
+            {
+                var pdf = PdfAttachmentTextExtractor.Extract(bytes, MaxExtractedChars);
+                result.Text = pdf.Text;
+                result.PageCount = pdf.PageCount;
+                result.PageTextLengths = pdf.PageTextLengths;
+                if (pdf.PageTextLengths.Count != pdf.PageCount)
+                    throw new InvalidOperationException("Complete PDF text exceeds the extraction limit.");
+                if (pdf.PageTextLengths.Any(length => length < 20))
+                    result.Warning = "Some PDF pages have little or no text; use the media representation with a vision model to inspect them.";
+            }
+            if (result.Text != null && result.Text.Length > MaxExtractedChars)
+                throw new InvalidOperationException("Complete attachment text exceeds 1,000,000 characters.");
+            return result;
+        }
+
         private static string DetectKind(string name, string contentType, byte[] bytes)
         {
             var extension = Path.GetExtension(name).ToLowerInvariant();
@@ -617,4 +648,14 @@ namespace RNAssistant.Core.Storage
         private static bool IsSafeId(string id) { return !string.IsNullOrWhiteSpace(id) && id.Length <= 64 && id.All(char.IsLetterOrDigit); }
         private static void SafeDeleteFile(string path) { try { if (File.Exists(path)) File.Delete(path); } catch (IOException) { } catch (UnauthorizedAccessException) { } }
     }
+    public sealed class AttachmentContent
+    {
+        public string Kind { get; set; }
+        public string ContentType { get; set; }
+        public string Text { get; set; }
+        public string Warning { get; set; }
+        public int PageCount { get; set; }
+        public List<int> PageTextLengths { get; set; }
+    }
+
 }

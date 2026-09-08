@@ -82,6 +82,20 @@ namespace RNAssistant.Office.Domains.Outlook
         public string Type { get; set; }
     }
 
+    public sealed class OutlookAttachmentReadRequest
+    {
+        public string EntryId { get; set; }
+        public bool BoundMailOnly { get; set; }
+        public OutlookAttachmentSnapshot Expected { get; set; }
+    }
+
+    public sealed class OutlookAttachmentContentSnapshot
+    {
+        public string EntryId { get; set; }
+        public OutlookAttachmentSnapshot Attachment { get; set; }
+        public byte[] Bytes { get; set; }
+    }
+
     public sealed class OutlookMailSnapshot
     {
         public string EntryId { get; set; }
@@ -141,6 +155,7 @@ namespace RNAssistant.Office.Domains.Outlook
     {
         OutlookMailDiscoverySnapshot DiscoverMail(int maxItems);
         OutlookMailReadSnapshot ReadMail(OutlookReadMailRequest request);
+        OutlookAttachmentContentSnapshot ReadAttachment(OutlookAttachmentReadRequest request);
         OutlookFolderSnapshot ReadFolder(OutlookFolderReadRequest request);
         OutlookDraftBackendResult CreateDraft(
             OutlookCreateDraftRequest request, Action markDispatchPossible);

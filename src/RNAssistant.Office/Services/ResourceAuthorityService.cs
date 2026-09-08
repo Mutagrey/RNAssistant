@@ -358,11 +358,12 @@ namespace RNAssistant.Office.Services
             result.Coverage = result.Resource.Coverage;
             if (result.Text != null && _payloads != null)
                 result.Payload = PayloadRef.FromBlob(_payloads.StoreText(result.Text, result.Resource.MimeType ?? "text/plain; charset=utf-8"));
-            _revisions.RegisterView(scope, new ResourceRevisionView(exact, result.Representation,
-                contentSha256, result.Payload, result.Coverage));
-            if (result.CompleteViewPayload != null)
+            if (result.CompleteViewPayload == null)
                 _revisions.RegisterView(scope, new ResourceRevisionView(exact, result.Representation,
-                    contentSha256, result.CompleteViewPayload, ResourceCoverage.Whole()));
+                    contentSha256, result.Payload, result.Coverage));
+            else
+                _revisions.RegisterView(scope, new ResourceRevisionView(exact, result.Representation,
+                    contentSha256, result.CompleteViewPayload, ResourceCoverage.Whole(), result.CompleteViewParts));
             // Every referenced view is durable before the head becomes visible to another reader.
             if (publication != null) _authority.Publish(publication);
             result.AuthorityGeneration = _authority.Capture(scope).Generation;

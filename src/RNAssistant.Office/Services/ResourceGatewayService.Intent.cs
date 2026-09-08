@@ -114,6 +114,12 @@ namespace RNAssistant.Office.Services
                 scope != "all" && scope != "document") return null;
             var excel = _registry.All().OfType<ExcelResourceProvider>()
                 .SingleOrDefault();
+            if (query.StartsWith("Outlook attachment: ", StringComparison.Ordinal))
+            {
+                var outlook = _registry.All().OfType<LiveDocumentResourceProvider>().SingleOrDefault();
+                return outlook?.IsOutlook == true ? WithProvider(outlook, session,
+                    () => outlook.ResolveOutlookAttachmentTarget(session, query)) : null;
+            }
             if (query.StartsWith("Excel search scope: ", StringComparison.Ordinal))
                 return excel == null ? null : WithProvider(excel, session,
                     () => excel.ResolveSearch(session, query.Substring(20)));
@@ -209,6 +215,14 @@ namespace RNAssistant.Office.Services
                 if (provider == null) throw new ResourceRequestException("Excel resource provider is unavailable.", "RESOURCE_PROVIDER_UNAVAILABLE", false);
                 var descriptor = WithProvider(provider, session, () => provider.ResolveSearch(session, target.Substring(20)));
                 return new ResourceIntentTarget { Target = IntentTarget(descriptor), Type = "Excel search scope", Scope = "document",
+                    Descriptor = descriptor, Reference = descriptor.Reference };
+            }
+            if (target.StartsWith("Outlook attachment: ", StringComparison.Ordinal))
+            {
+                var provider = _registry.All().OfType<LiveDocumentResourceProvider>().SingleOrDefault();
+                if (provider?.IsOutlook != true) throw new ResourceRequestException("Outlook is unavailable.", "RESOURCE_PROVIDER_UNAVAILABLE", false);
+                var descriptor = WithProvider(provider, session, () => provider.ResolveOutlookAttachmentTarget(session, target));
+                return new ResourceIntentTarget { Target = IntentTarget(descriptor), Type = "Outlook attachment", Scope = "document",
                     Descriptor = descriptor, Reference = descriptor.Reference };
             }
             if (target.StartsWith("Outlook search scope: ", StringComparison.Ordinal))
@@ -469,6 +483,8 @@ namespace RNAssistant.Office.Services
                         yield return new ResourceIntentPlan(provider, LiveDocumentResourceProvider.OutlookSearchKind, "document");
                     if ((provider as LiveDocumentResourceProvider)?.IsOutlook == true)
                         yield return new ResourceIntentPlan(provider, LiveDocumentResourceProvider.OutlookMailKind, "document");
+                    if ((provider as LiveDocumentResourceProvider)?.IsOutlook == true)
+                        yield return new ResourceIntentPlan(provider, LiveDocumentResourceProvider.OutlookAttachmentKind, "document");
                     yield return new ResourceIntentPlan(provider, LiveDocumentResourceProvider.SelectionKind, "selection");
                 }
                 else if (string.Equals(provider.Id,
@@ -519,7 +535,8 @@ namespace RNAssistant.Office.Services
             if (target.StartsWith("document: ", StringComparison.Ordinal))
                 return _registry.All().OfType<LiveDocumentResourceProvider>()
                     .Select(provider => new ResourceIntentPlan(provider, LiveDocumentResourceProvider.DocumentKind, "document"));
-            return IntentPlansForScope(scope);
+            // Attachment targets resolve directly; selected-mail attachment coverage cannot qualify another resource family.
+            return IntentPlansForScope(scope).Where(plan => plan.Kind != LiveDocumentResourceProvider.OutlookAttachmentKind);
         }
 
         private IEnumerable<ResourceIntentPlan> IntentPlansForScope(string scope)
@@ -598,6 +615,10 @@ namespace RNAssistant.Office.Services
             string type,
             ResourceDescriptor descriptor)
         {
+            if (type == "Outlook mail")
+                return "Read structure for attachment metadata and targets without reading the mail body. Pass a copied attachment target to common.resources_find, then read its text or media.";
+            if (type == "Outlook attachment")
+                return "Read text for PDF/text files or media for images/scanned PDFs (vision model). Limit: 20 MiB. Filename discovery covers selected/open mail only; read another mail with structure for its attachment targets.";
             if (type == "Excel search scope")
                 return "Discovery only: use excel.find_cells with a query. Do not read this target to enumerate worksheet data; read an Excel range, table, or name target instead.";
             if (descriptor.Metadata.ContainsKey("sectionRead"))
@@ -755,6 +776,7 @@ namespace RNAssistant.Office.Services
                 case "Excel table": return "document";
                 case "Excel name": return "document";
                 case "Excel search scope": return "document";
+                case "Outlook attachment":
                 case "Outlook mail":
                 case "Outlook collection":
                 case "Outlook search scope":
@@ -799,6 +821,7 @@ namespace RNAssistant.Office.Services
                 case ExcelResourceProvider.TableKind: return "Excel table";
                 case ExcelResourceProvider.NameKind: return "Excel name";
                 case ExcelResourceProvider.SearchKind: return "Excel search scope";
+                case LiveDocumentResourceProvider.OutlookAttachmentKind: return "Outlook attachment";
                 case LiveDocumentResourceProvider.OutlookMailKind: return "Outlook mail";
                 case LiveDocumentResourceProvider.OutlookCollectionKind: return "Outlook collection";
                 case LiveDocumentResourceProvider.OutlookSearchKind: return "Outlook search scope";
@@ -835,7 +858,7 @@ namespace RNAssistant.Office.Services
             if (type == "Excel table") return "document";
             if (type == "Excel name") return "document";
             if (type == "Outlook search scope") return "document";
-            if (string.Equals(type, "document", StringComparison.Ordinal) || type == "Excel range" || type == "Word range" || type == "Word search scope" || type == "PowerPoint search scope" || type == "PowerPoint slide" || type == "Outlook mail" || type == "Outlook collection" || type == "Office observation") return "document";
+            if (string.Equals(type, "document", StringComparison.Ordinal) || type == "Excel range" || type == "Word range" || type == "Word search scope" || type == "PowerPoint search scope" || type == "PowerPoint slide" || type == "Outlook attachment" || type == "Outlook mail" || type == "Outlook collection" || type == "Office observation") return "document";
             if (string.Equals(type, "selection", StringComparison.Ordinal)) return "selection";
             if (string.Equals(type, "VBA backup", StringComparison.Ordinal)) return "backups";
             if (string.Equals(type, "VBA module", StringComparison.Ordinal) ||

@@ -45,6 +45,7 @@ namespace RNAssistant.Office.Services
             return _scope.Read(session, delegate
             {
                 limit = Math.Max(1, Math.Min(MaximumItems, limit <= 0 ? 20 : limit));
+                if (IsOutlook && kind == OutlookAttachmentKind) return ListOutlookAttachments(session, cursor, limit);
                 if (IsOutlook && kind == OutlookMailKind) return ListOutlookMail(session, cursor, limit);
                 var items = new List<ResourceDescriptor>();
                 if (IsPowerPoint && kind == PowerPointSearchKind)
@@ -100,6 +101,8 @@ namespace RNAssistant.Office.Services
 
         private ResourceDescriptor Describe(ChatSession session, string target)
         {
+            string attachmentMail; int attachmentIndex;
+            if (IsOutlook && TryAttachmentKey(target, out attachmentMail, out attachmentIndex)) return DescribeAttachment(session, target);
             if (IsOutlook && target == OutlookCollectionKey) return DescribeOutlookCollection(session);
             if (IsOutlook && IsOutlookSearch(target)) return DescribeOutlookSearch(session, target);
             if (IsPowerPoint && IsPowerPointSearch(target))
@@ -175,12 +178,14 @@ namespace RNAssistant.Office.Services
                 return false;
             }
             string outlookEntryId;
+            string attachmentMail; int attachmentIndex;
             if (!string.Equals(address.Segments[1], "root", StringComparison.Ordinal) &&
                 !string.Equals(address.Segments[1], "selection", StringComparison.Ordinal) &&
                 !(IsWord && IsWordRange(address.Segments[1])) &&
                 !(IsWord && IsWordSearch(address.Segments[1])) &&
                 !(IsPowerPoint && IsPowerPointSlide(address.Segments[1])) &&
                 !(IsPowerPoint && IsPowerPointSearch(address.Segments[1])) &&
+                !(IsOutlook && TryAttachmentKey(address.Segments[1], out attachmentMail, out attachmentIndex)) &&
                 !(IsOutlook && address.Segments[1] == OutlookCollectionKey) &&
                 !(IsOutlook && IsOutlookSearch(address.Segments[1])) &&
                 !(IsOutlook && TryOutlookMailKey(address.Segments[1], out outlookEntryId)))

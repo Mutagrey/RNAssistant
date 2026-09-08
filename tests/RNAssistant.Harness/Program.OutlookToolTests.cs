@@ -17,6 +17,147 @@ namespace RNAssistant.Harness
 {
     internal static partial class Program
     {
+        private static void OutlookAttachmentsRetainExactContent()
+        {
+            WithTempExecutor(FakeOfficeAdapter.ForHost("Outlook"), (executor, adapter) =>
+            {
+                var text = "Заголовок\r\n" + new string('a', 70000) + "\r\nКонец 😀";
+                adapter.OutlookAttachmentBytes = System.Text.Encoding.UTF8.GetBytes(text);
+                adapter.OutlookReadSnapshotTransform = snapshot => {
+                    foreach (var item in snapshot.Attachments) { item.FileName = "report.csv"; item.DisplayName = "report.csv"; }
+                    return snapshot;
+                };
+                var session = NewSession(adapter); executor.BindResourceAuthority(session);
+                var gateway = executor.ResourceGateway;
+                var descriptor = gateway.List(session, "document", LiveDocumentResourceProvider.OutlookAttachmentKind, null, 10).Items.Single();
+                var target = ResourceGatewayService.IntentTarget(descriptor);
+                AssertContains(target, "report.csv", "semantic attachment target");
+                AssertEqual(0, adapter.OutlookAttachmentReadCount, "discovery never obtains attachment bytes");
+                var found = gateway.Find(session, "report.csv", "document");
+                AssertTrue(found.Items.Any(item => item.Target == target), "selected attachment is discoverable by filename");
+                var bodiesBeforeRead = adapter.OutlookBodyMaterializationCount;
+                var tools = OfficeToolCatalog.ForHost("Outlook").Concat(executor.GetControllerTools()).ToList();
+                var runtime = executor.CreateNativeRuntime(session, tools, new AppSettings(), "agent", false);
+                var read = ExecuteHtmlNative(runtime, ResourceToolCatalog.ReadToolId, new JObject { ["target"] = target, ["representation"] = "text" });
+                AssertEqual(ToolExecutionOutcome.Ok, read.Outcome, "model can read attachment text");
+                AssertEqual(text, (string)JObject.Parse(read.Result.DataJson)["text"], "complete original text without manifest references");
+                AssertEqual(1, adapter.OutlookAttachmentReadCount, "whole model read captures one attachment");
+                AssertEqual(bodiesBeforeRead, adapter.OutlookBodyMaterializationCount, "attachment reads never obtain mail body");
+                var evidence = read.ResourceEvidence.Single();
+                var scope = executor.ResourceAuthority.Scope(session, true);
+                var revisions = (IResourceRevisionStore)executor.ResourceAuthority.Store;
+                var manifest = revisions.GetView(scope, evidence.Resource, LiveDocumentResourceProvider.OutlookAttachmentSourceView);
+                AssertEqual(2, manifest.Parts.Count, "raw and extracted bytes retained as canonical CAS roots");
+                var scan = new CasReachabilityScan(); ((ResourceAuthorityStore)executor.ResourceAuthority.Store).ScanCasReferences(scan);
+                AssertTrue(manifest.Parts.All(part => scan.References.Any(item => item.Reference.Sha256 == part.Sha256)), "source parts survive CAS reachability scan");
+                adapter.OutlookAttachmentBytes = System.Text.Encoding.UTF8.GetBytes("changed");
+                var fresh = gateway.Read(session, new ResourceReadRequest { Reference = new ResourceRef(evidence.Resource.Uri), Representation = "text" }).Result;
+                AssertTrue(fresh.Resource.Reference.Revision != evidence.Resource.Revision, "new bytes publish external drift");
+                AssertEqual(EvidenceState.Superseded, new EvidenceStateReducer().Reduce(evidence,
+                    executor.ResourceAuthority.CaptureMany(new[] { scope })).State, "old attachment evidence is superseded");
+                adapter.OutlookReadSnapshotTransform = snapshot => {
+                    foreach (var item in snapshot.Attachments) item.FileName = "replacement.csv";
+                    return snapshot;
+                };
+                var replaced = false;
+                try { gateway.Read(session, new ResourceReadRequest { Reference = descriptor.Reference, Representation = "text" }); }
+                catch (ResourceRequestException) { replaced = true; }
+                AssertTrue(replaced, "resolved runtime slot refuses renamed/replaced attachment before capture");
+                adapter.OutlookReadSnapshotTransform = snapshot => { snapshot.Attachments = new OutlookAttachmentSnapshot[0]; return snapshot; };
+                var captures = adapter.OutlookAttachmentReadCount;
+                var old = gateway.Read(session, new ResourceReadRequest { Reference = evidence.Resource, Representation = "text", MaxChars = 32000 }).Result;
+                var next = gateway.Read(session, new ResourceReadRequest { Reference = evidence.Resource, Representation = "text", Cursor = old.NextCursor, MaxChars = 32000 }).Result;
+                AssertEqual(text.Substring(32000, 32000), next.Text, "old revision remains exact after attachment removal");
+                AssertEqual(captures, adapter.OutlookAttachmentReadCount, "historical pages perform no Outlook attachment IO");
+                var refused = false;
+                try { gateway.ResolveIntentTarget(session, target); } catch (ResourceRequestException) { refused = true; }
+                AssertTrue(refused, "removed attachment cannot fall forward to selected mail");
+                System.IO.File.Delete(executor.Payloads.PathFor(manifest.Parts.Last().Sha256));
+                refused = false;
+                try { gateway.Read(session, new ResourceReadRequest { Reference = evidence.Resource, Representation = "text" }); }
+                catch (ResourceRequestException) { refused = true; }
+                AssertTrue(refused && captures == adapter.OutlookAttachmentReadCount, "missing historical text never recaptures live bytes");
+            });
+        }
+
+        private static void OutlookAttachmentCaptureGuards()
+        {
+            var adapter = FakeOfficeAdapter.ForHost("Outlook");
+            var service = new OutlookService(adapter);
+            var expected = service.CaptureMail(new OutlookReadMailRequest { EntryId = "mail-1", Content = "attachments", MaxChars = 100 }, CancellationToken.None).Attachments.Single();
+            var request = new OutlookAttachmentReadRequest { EntryId = "mail-1", Expected = expected };
+            var cancelled = false;
+            try { service.CaptureAttachment(request, new CancellationToken(true)); } catch (OperationCanceledException) { cancelled = true; }
+            AssertTrue(cancelled && adapter.OutlookAttachmentReadCount == 0, "cancel before backend read");
+            foreach (var invalid in new[] { "oversized", "embedded", "missing-target" })
+            {
+                expected.Size = invalid == "oversized" ? OutlookService.MaxAttachmentBytes + 1 : 2048;
+                expected.Type = invalid == "embedded" ? "olEmbeddeditem" : "olByValue";
+                request.EntryId = invalid == "missing-target" ? null : "mail-1";
+                var refused = false;
+                try { service.CaptureAttachment(request, CancellationToken.None); } catch (OutlookBackendException) { refused = true; }
+                AssertTrue(refused && adapter.OutlookAttachmentReadCount == 0, "unsupported capture refused before bytes: " + invalid);
+            }
+            request.EntryId = "mail-1";
+            adapter.OutlookAttachmentTransform = snapshot => { snapshot.EntryId = "mail-2"; return snapshot; };
+            var mismatch = false;
+            try { service.CaptureAttachment(request, CancellationToken.None); } catch (OutlookBackendException) { mismatch = true; }
+            AssertTrue(mismatch, "wrong mail capture rejected");
+            adapter.OutlookAttachmentTransform = snapshot => { snapshot.Bytes = null; return snapshot; };
+            mismatch = false;
+            try { service.CaptureAttachment(request, CancellationToken.None); } catch (OutlookBackendException) { mismatch = true; }
+            AssertTrue(mismatch, "incomplete binary capture rejected");
+        }
+
+        private static void OutlookAttachmentsSupportPdfAndImages()
+        {
+            WithTempExecutor(FakeOfficeAdapter.ForHost("Outlook"), (executor, adapter) =>
+            {
+                var builder = new UglyToad.PdfPig.Writer.PdfDocumentBuilder();
+                var font = builder.AddStandard14Font(UglyToad.PdfPig.Fonts.Standard14Fonts.Standard14Font.Helvetica);
+                builder.AddPage(300, 300).AddText("Hello readable Outlook attachment", 12, new UglyToad.PdfPig.Core.PdfPoint(20, 250), font);
+                adapter.OutlookAttachmentBytes = builder.Build();
+                var session = NewSession(adapter); executor.BindResourceAuthority(session);
+                var gateway = executor.ResourceGateway;
+                var descriptor = gateway.List(session, "document", LiveDocumentResourceProvider.OutlookAttachmentKind, null, 10).Items.Single();
+                var pdf = gateway.Read(session, new ResourceReadRequest { Reference = descriptor.Reference, Representation = "text" });
+                AssertContains(pdf.Result.Text, "Hello readable Outlook attachment", "PDF text uses shared extractor");
+                var media = gateway.Read(session, new ResourceReadRequest { Reference = pdf.Result.Resource.Reference, Representation = "media" });
+                AssertEqual("pdf", media.ModelAttachments.Single().Kind, "PDF media enters existing model routing");
+                AssertEqual(1, media.ModelAttachments.Single().PageCount, "PDF page extent retained");
+                AssertTrue(adapter.OutlookAttachmentBytes.SequenceEqual(executor.Payloads.ReadBytes(new ChatBlobReference {
+                    Sha256 = media.ModelAttachments.Single().ContentSha256, ByteLength = media.ModelAttachments.Single().ContentByteLength.Value })), "media references exact original CAS bytes");
+                adapter.OutlookAttachmentBytes = Convert.FromBase64String("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+aN1cAAAAASUVORK5CYII=");
+                var image = gateway.Read(session, new ResourceReadRequest { Reference = descriptor.Reference, Representation = "auto" });
+                AssertEqual("image", image.ModelAttachments.Single().Kind, "auto image hydrates model media");
+                AssertTrue(image.Result.HydratedForNextModelStep, "media hydration declared");
+                var tools = OfficeToolCatalog.ForHost("Outlook").Concat(executor.GetControllerTools()).ToList();
+                var runtime = executor.CreateNativeRuntime(session, tools, new AppSettings(), "agent", false);
+                var native = ExecuteHtmlNative(runtime, ResourceToolCatalog.ReadToolId, new JObject { ["target"] = ResourceGatewayService.IntentTarget(descriptor), ["representation"] = "media" });
+                AssertEqual(ToolExecutionOutcome.Ok, native.Outcome, "existing model-facing media representation succeeds");
+                AssertTrue((bool)JObject.Parse(native.Result.DataJson)["hydratedForNextModelStep"], "model result declares queued media without base64");
+                var originalImage = image.ModelAttachments.Single();
+                System.IO.File.Delete(executor.Payloads.PathFor(originalImage.ContentSha256));
+                var readsBeforeMissing = adapter.OutlookAttachmentReadCount;
+                var missing = false;
+                try { gateway.Read(session, new ResourceReadRequest { Reference = image.Result.Resource.Reference, Representation = "media" }); }
+                catch (ResourceRequestException) { missing = true; }
+                AssertTrue(missing && readsBeforeMissing == adapter.OutlookAttachmentReadCount, "missing exact media never falls back to Outlook");
+                var blankPdf = new UglyToad.PdfPig.Writer.PdfDocumentBuilder(); blankPdf.AddPage(200, 200);
+                adapter.OutlookAttachmentBytes = blankPdf.Build();
+                var scanned = gateway.Read(session, new ResourceReadRequest { Reference = descriptor.Reference, Representation = "auto" });
+                AssertEqual("media", scanned.Result.Representation, "PDF without text uses existing vision route");
+                var scannedText = gateway.Read(session, new ResourceReadRequest { Reference = scanned.Result.Resource.Reference, Representation = "text" });
+                AssertContains(scannedText.Result.Text, "PDF extraction warning", "explicit text request reports missing visual content");
+                adapter.OutlookAttachmentBytes = new byte[] { 0x50, 0x4b, 3, 4, 1, 2, 3, 4 };
+                var refused = false;
+                try { gateway.Read(session, new ResourceReadRequest { Reference = descriptor.Reference, Representation = "text" }); }
+                catch (ResourceRequestException) { refused = true; }
+                AssertTrue(refused, "Office ZIP/archive payloads fail explicitly");
+                AssertEqual(0, adapter.OutlookBodyMaterializationCount, "PDF/image capture remains body-free");
+            });
+        }
+
         private static void OutlookSearchRetainsExactSnapshots()
         {
             WithTempExecutor(FakeOfficeAdapter.ForHost("Outlook"), (executor, adapter) =>
@@ -564,8 +705,10 @@ namespace RNAssistant.Harness
                     var ownerSta = false;
                     var readOwnerSta = false;
                     var searchOwnerSta = false;
+                    var attachmentOwnerSta = false;
                     host.BeforeRead = operation =>
                     {
+                        if (operation == "outlook.attachment.direct") attachmentOwnerSta = dispatcher.CheckAccess;
                         if (operation == FakeOfficeAdapter.OutlookReadFolderOperation) searchOwnerSta = dispatcher.CheckAccess;
                         if (operation ==
                             FakeOfficeAdapter.OutlookCreateDraftOperation)
@@ -599,11 +742,20 @@ namespace RNAssistant.Harness
                     var search = executor.ExecuteManual(Command(OutlookToolIds.SearchMail, "query", "quarterly"), tools, new AppSettings(), false, false, chat);
                     AssertTrue(search.Success && searchOwnerSta, "search uses bound window STA");
                     var searchReads = inner.OutlookSearchBodyCaptureCount;
+                    var attachmentTarget = ResourceGatewayService.IntentTarget(executor.ResourceGateway.List(chat,
+                        "document", LiveDocumentResourceProvider.OutlookAttachmentKind, null, 10).Items.Single());
+                    var attachmentRead = executor.ExecuteManual(Command(ResourceToolCatalog.ReadToolId, "target", attachmentTarget, "representation", "text"),
+                        tools, new AppSettings(), false, false, chat);
+                    AssertTrue(attachmentRead.Success && attachmentOwnerSta, "attachment capture stays on bound owner STA");
+                    var attachmentReads = inner.OutlookAttachmentReadCount;
 
                     var dispatched = inner.OutlookBackendCalls.Count(
                         operation => operation ==
                             FakeOfficeAdapter.OutlookCreateDraftOperation);
                     dispatcher.Invoke(() => document.IsAlive = false);
+                    var closedAttachment = executor.ExecuteManual(Command(ResourceToolCatalog.ReadToolId, "target", attachmentTarget, "representation", "text"),
+                        tools, new AppSettings(), false, false, chat);
+                    AssertTrue(!closedAttachment.Success && inner.OutlookAttachmentReadCount == attachmentReads, "closed window never captures attachment bytes");
                     var closedSource = executor.ExecuteManual(Command(ResourceToolCatalog.ReadToolId, "target", "selection: Current Office selection"),
                         tools, new AppSettings(), false, false, chat);
                     AssertTrue(!closedSource.Success, "closed window cannot capture mail");

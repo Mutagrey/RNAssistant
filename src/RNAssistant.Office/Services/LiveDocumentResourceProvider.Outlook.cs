@@ -162,7 +162,8 @@ namespace RNAssistant.Office.Services
                 ["bodyCaptured"] = snapshot.BodyCaptured,
                 ["attachments"] = new JArray(snapshot.Attachments.Select(item => new JObject {
                     ["index"] = item.Index, ["fileName"] = item.FileName, ["displayName"] = item.DisplayName,
-                    ["size"] = item.Size, ["type"] = item.Type }))
+                    ["size"] = item.Size, ["type"] = item.Type,
+                    ["target"] = "Outlook attachment: " + AttachmentTitle(mail, item) }))
             }.ToString(Formatting.None);
             if (content.Length > MaximumMaterializedCharacters)
                 throw new ResourceRequestException("The complete mail view exceeds the capture limit.", "RESOURCE_SNAPSHOT_TOO_LARGE", false);
