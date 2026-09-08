@@ -83,7 +83,7 @@ namespace RNAssistant.Harness
 
         private static void SharedHtmlTextDiscoveryDrift()
         {
-            foreach (var selectionChange in new[] { true, false })
+            foreach (var scenario in new[] { "selection", "generation", "unavailable" })
             WithTempExecutor(FakeOfficeAdapter.ForHost("Word"), (executor, adapter) =>
             {
                 var session = NewSession(adapter);
@@ -97,7 +97,8 @@ namespace RNAssistant.Harness
                 {
                     if (!view.View.StartsWith("artifact-member-text-index-v1:")) return;
                     counted.ViewRegistered = null;
-                    if (selectionChange) { session.ActiveHtmlArtifactId = null; return; }
+                    if (scenario == "selection") { session.ActiveHtmlArtifactId = null; return; }
+                    if (scenario == "unavailable") throw new System.IO.IOException("Injected member index registration failure.");
                     var scope = ResourceAuthorityScopeId.Document(new DocumentAuthorityId(session.DocumentAuthorityId));
                     var before = authority.Capture(scope);
                     var identity = new ResourceIdentity(ResourceUri.Create("state", scope.Kind, scope.Id, "test-html-index-drift"));
@@ -106,8 +107,16 @@ namespace RNAssistant.Harness
                 };
                 var provider = new ChatArtifactResourceProvider(payloads: executor.Payloads,
                     documentArtifacts: new DocumentArtifactStore(counted, counted, executor.Payloads));
-                var error = RuntimeThrows<ResourceRequestException>(() => provider.Search(session, "needle", ChatHtmlResourceCatalog.FileKind, 20, 600));
-                AssertEqual("resource_revision_changed", error.ErrorCode, "selection and authority drift invalidate member-only search");
+                if (scenario == "unavailable")
+                {
+                    var partial = provider.Search(session, "needle", null, 20, 600);
+                    AssertTrue(partial.UnavailableResources == 1 && partial.Matches.Count == 0, "combined resource search preserves member index failure");
+                }
+                else
+                {
+                    var error = RuntimeThrows<ResourceRequestException>(() => provider.Search(session, "needle", ChatHtmlResourceCatalog.FileKind, 20, 600));
+                    AssertEqual("resource_revision_changed", error.ErrorCode, "selection and authority drift invalidate member-only search");
+                }
                 session.ActiveHtmlArtifactId = selected;
                 AssertEqual(1, provider.Search(session, "needle", ChatHtmlResourceCatalog.FileKind, 20, 600).Matches.Count, "fresh search succeeds after drift");
             });
