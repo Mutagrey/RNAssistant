@@ -149,6 +149,7 @@ namespace RNAssistant.Office.Services
             var matches = new List<ResourceSearchMatch>();
             var scannedCharacters = 0;
             var scanTruncated = false;
+            var unavailable = discovery.UnavailableResources;
             if (string.IsNullOrWhiteSpace(kind) || ChatHtmlResourceCatalog.SupportsKind(kind))
             {
                 var html = _htmlResources.Search(session, query, kind, limit, maxCharsPerMatch);
@@ -159,11 +160,11 @@ namespace RNAssistant.Office.Services
                     return html;
                 }
                 matches.AddRange(html.Matches);
+                unavailable += html.UnavailableResources;
                 scannedCharacters += html.ScannedCharacters;
                 scanTruncated = html.ScanTruncated;
             }
 
-            var unavailable = discovery.UnavailableResources;
             var sourceOffset = 0;
             for (var sourcePage = 0; sourcePage < 20; sourcePage++)
             {

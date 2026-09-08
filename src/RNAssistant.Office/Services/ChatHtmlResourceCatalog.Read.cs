@@ -72,7 +72,6 @@ namespace RNAssistant.Office.Services
                 result.Matches.Add(new ResourceSearchMatch
                 {
                     Reference = Reference(member),
-                    DocumentScoped = !string.IsNullOrWhiteSpace(member.Artifact.DocumentAuthorityId),
                     CreatedUtc = member.CreatedUtc,
                     Kind = member.Kind,
                     Title = member.Title,
