@@ -52,7 +52,23 @@ of enumerating unrelated Excel catalogs. Focused projection/budget, Excel read a
 resource-discovery checks pass host-neutral. Windows/Office/WebView2 and
 target-model qualification remain open.
 
-Current slice (2026-09-08), after `4729c101`: **uploaded text discovery views** are
+Current slice (2026-09-08), after `4d53d366`: **HTML member discovery views** are
+implemented host-neutral. Exact parent revision/CAS views reuse the shared text
+engine for source files and serialized data bindings, without fetching bound data
+or publishing authority heads. Model HTML scope and protected payload refs are
+preserved. Exact snippet reads, same-source repair, GC/restart and stale selection
+are covered.
+Member-only search checks selection/generation after scanning; combined search
+preserves member-index unavailability. The catalog still parses its bounded HTML
+aggregate; no metadata-only/cold-allocation qualification is claimed.
+Checks: HTML 35/35, resources 27/27 and document Plan 2/2 pass.
+Version-format validation and diff checks pass.
+Next: semantic section reads through the existing resource contract. Picker/history
+paging, richer compiler context, cold allocation, Windows/Office/WebView2/layout,
+target-model and reported upstream HTTP 502 qualification remain open.
+See [HTML discovery](../artifact-library.md#implemented-html-member-discovery-views--2026-09-08).
+
+Previous slice (2026-09-08), after `4729c101`: **uploaded text discovery views** are
 implemented host-neutral through the same revision/CAS text index owner. Original
 search binds the exact retained extraction hash, finds late content across chats,
 and preserves bounded extraction/PDF page coverage. Only Markdown gets heading

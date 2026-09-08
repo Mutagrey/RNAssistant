@@ -88,6 +88,13 @@ unlink with a missing body. Use `html`, `resource cutover: local restore`,
 `resource cutover: chat lifecycle` and `artifact working set:` for the ownership
 cutover; the same working-set browser test covers HTML selection and dirty drafts.
 
+`shared HTML: text discovery` checks late source matches after cross-chat selection,
+exact member snippet reads, HTML semantic scope, binding-versus-bound-data search,
+parent-scoped coverage, unchanged authority, derived-byte repair, GC/restart,
+historical reads and missing parent bytes. It injects selection/generation drift
+during indexing and member-index failure during combined resource search. Use
+`html`, `resources:` and `document Plan:` for affected consumers.
+
 `html actions:` covers exact chat/snapshot/session controls, ABA revision drift,
 refusal before mutation dispatch, unchanged authority/no unresolved effect, fresh
 retry and all seven typed bridge routes. UI companion:

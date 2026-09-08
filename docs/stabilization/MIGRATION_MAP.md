@@ -20,7 +20,10 @@ provider uses it instead of the old 128k prefix scan for these document resource
 Gateway projects heading context and preserves search-only authored descriptions.
 Original extracted text now uses the same owner with an extraction-bound revision
 view and explicit partial coverage; its 128k provider search prefix path is removed.
-Local artifacts and HTML members keep their existing source paths. No temporary adapter or new
+HTML member discovery now uses `ChatHtmlResourceCatalog` for exact member
+resolution/serialization and `DocumentArtifactStore.SearchMemberText` for a derived
+view under the published parent. Its document-member 128k search path is removed;
+local artifacts/members keep their existing source paths. No temporary adapter or new
 durable store; read guards still require the normal evidence path. Last-page
 generation validation closes the indexing/read race. See the canonical
 [text view contract](../artifact-library.md#implemented-exact-text-discovery-views--2026-09-08).
@@ -54,7 +57,7 @@ selected exact current workspace; the old standalone inline test fixture uses th
 production Gateway/owner. Source cursors bind generation and preserve unavailable
 slots; fresh scans recover earlier omissions. Gateway/search page ceilings avoid
 unbounded filtered scans. No temporary adapter or separate durable index;
-picker/history, remaining HTML indexing and cold replay/write allocation
+picker/history, semantic section reads and cold replay/write allocation
 remain open. Markdown/Plan retained text views are described above.
 
 HTML UI action seam removed (2026-09-08): the typed bridge passes complete
