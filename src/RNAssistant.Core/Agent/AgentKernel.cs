@@ -133,6 +133,7 @@ namespace RNAssistant.Core.Agent
 
                 for (var index = 0; index < response.ToolCalls.Count; index++)
                 {
+                    var unknownBefore = state.UnknownEffectObserved;
                     var result = await ExecuteOneAsync(state, response.ToolCalls[index], policies[index], stepId,
                         false, 0, null, cancellationToken).ConfigureAwait(false);
                     if (result != null)
@@ -143,6 +144,13 @@ namespace RNAssistant.Core.Agent
                             await RecordNotDispatchedAsync(state, response.ToolCalls[rest], policies[rest], stepId,
                                 "Run ended before dispatch.").ConfigureAwait(false);
                         return await FinishAsync(state, result.Lifecycle, result.Reason, result.AssistantMessage).ConfigureAwait(false);
+                    }
+                    if (!unknownBefore && state.UnknownEffectObserved && index + 1 < response.ToolCalls.Count)
+                    {
+                        for (var rest = index + 1; rest < response.ToolCalls.Count; rest++)
+                            await RecordNotDispatchedAsync(state, response.ToolCalls[rest], policies[rest], stepId,
+                                "A prior batch mutation has an unknown effect; the remaining batch was not dispatched.").ConfigureAwait(false);
+                        break;
                     }
                 }
             }
@@ -175,9 +183,16 @@ namespace RNAssistant.Core.Agent
                     throw new InvalidOperationException("Exact execution policy is unavailable: " + call.Name);
                 policies.Add(policy);
             }
-            if (policies.Count > 1 && policies.Any(policy => !policy.IndependentLocalRead))
-                throw new InvalidOperationException("Only independent local reads can be batched.");
+            if (policies.Count > 1 && policies.Any(policy => !CanRunInSequentialBatch(policy)))
+                throw new InvalidOperationException("Only independent local reads and runtime-verified managed mutations can be batched; confirmation-required and opaque calls are singleton.");
             return policies.ToArray();
+        }
+
+        private static bool CanRunInSequentialBatch(ToolPolicySnapshot policy)
+        {
+            return policy != null && !policy.RequiresConfirmation &&
+                (policy.IndependentLocalRead || policy.Policy != null &&
+                    policy.Policy.ExecutionClass == ToolExecutionClass.ManagedMutation);
         }
 
         private async Task<RunSummary> ExecuteOneAsync(State state, ToolCall call, ToolPolicySnapshot policy,

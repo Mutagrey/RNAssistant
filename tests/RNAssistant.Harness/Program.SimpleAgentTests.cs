@@ -353,9 +353,16 @@ namespace RNAssistant.Harness
                 tool.MutatesDocument = kind == "document";
                 tool.MutatesLocalState = kind == "local";
                 tool.RequiresConfirmation = kind == "confirmation";
-                // External/effect classification belongs to trusted execution authority,
-                // not the name or legacy booleans. Missing classification fails closed.
-                var batchSafe = kind == "external" || kind == "unclassified" ? new[] { read.Id } : new[] { read.Id, tool.Id };
+                tool.Policy = kind == "document" || kind == "local"
+                    ? new ToolPolicy(ToolEffect.Write, ToolVerification.Tool, false, false, new[] { "agent" })
+                    : kind == "confirmation"
+                        ? new ToolPolicy(ToolEffect.Write, ToolVerification.Tool, true, false, new[] { "agent" })
+                        : kind == "external"
+                            ? new ToolPolicy(ToolEffect.External, ToolVerification.None, false, false, new[] { "agent" })
+                            : new ToolPolicy(ToolEffect.Unclassified, ToolVerification.None, false, false, new[] { "agent" });
+                var batchSafe = kind == "document" || kind == "local"
+                    ? new[] { read.Id, tool.Id }
+                    : new[] { read.Id };
                 foreach (var batch in new[]
                 {
                     V4Envelope(V4Call(tool.Id), V4Call(read.Id)),
@@ -363,8 +370,13 @@ namespace RNAssistant.Harness
                 })
                 {
                     var result = parser.Parse(batch, new[] { read, tool }, new[] { read, tool }, new ModelProtocolCallContext(batchSafe));
-                    AssertTrue(!result.Success, kind + " cannot be batched, regardless of position");
-                    AssertContains(result.Error, "one at a time", "singleton diagnosis");
+                    if (kind == "document" || kind == "local")
+                        AssertTrue(result.Success, kind + " managed mutation may be batched in either position");
+                    else
+                    {
+                        AssertTrue(!result.Success, kind + " cannot be batched, regardless of position");
+                        AssertContains(result.Error, "one at a time", "singleton diagnosis");
+                    }
                 }
                 AssertTrue(parser.Parse(V4Envelope(V4Call(name: tool.Id)), new[] { tool }, new[] { tool }, new ModelProtocolCallContext(batchSafe)).Success,
                     kind + " singleton is valid protocol, not execution permission");
@@ -560,7 +572,7 @@ namespace RNAssistant.Harness
                     "first request contains only catalog");
                 AssertTrue(FlattenSimple(calls[0]).IndexOf(revision, StringComparison.Ordinal) < 0,
                     "catalog hides skill revision");
-                var replay = FlattenSimple(calls[1]);
+                var replay = FlattenSimple(calls.Last());
                 AssertContains(replay, "TEST_SKILL_SENTINEL", "full instructions returned by tool");
                 AssertContains(replay, "TEST_SKILL_END", "skill body is not cut by the generic tool-result limit");
                 AssertContains(replay, "\"format\":\"markdown\"", "loaded skill format");
@@ -837,7 +849,10 @@ namespace RNAssistant.Harness
                 AssertEqual("write_rejected", (string)write["errorCode"], "actual failure code is preserved");
                 AssertTrue(!adapter.HasSheet("Report"), "the claimed sheet was not created");
                 AssertEqual(1, adapter.ExcelSheetRequests.Count(command => command.ToolId == "excel.add_sheet"), "failed write is not retried");
-                AssertContains(FlattenSimple(requests.Last()), "\"status\":\"error\"", "the final model request saw the error");
+                AssertContains(FlattenSimple(requests.Last()), "\"outcome\":\"Error\"",
+                    "the final model request saw the folded error outcome");
+                AssertContains(FlattenSimple(requests.Last()), "Write rejected before the effect.",
+                    "the folded error retains its actionable message");
                 AssertContains(requests.Last().Last().Content, "unsupported root field: executionSummary", "model cannot inject runtime health into v5");
                 AssertEqual(RunViewLifecycles.Completed, result.RunViewState.Lifecycle, "loop completion is independent of execution health");
                 AssertRunViewState(result, session, "errors", 0, 1, 0);
@@ -1135,7 +1150,14 @@ namespace RNAssistant.Harness
 
         private static void SimpleAgentPromptIsRequestLocal()
         {
-            WithTempExecutor(FakeOfficeAdapter.ForHost("Excel"), delegate(OfficeToolExecutor executor, FakeOfficeAdapter adapter)
+            var publishedSettings = new AppSettings
+            {
+                SystemPrompt = "SYSTEM_PROMPT_SENTINEL",
+                AgentToolsPrompt = "TOOLS_PROMPT_SENTINEL",
+                AgentSkillsPrompt = "SKILLS_PROMPT_SENTINEL"
+            };
+            WithTempExecutor(FakeOfficeAdapter.ForHost("Excel"), publishedSettings,
+                delegate(OfficeToolExecutor executor, FakeOfficeAdapter adapter)
             {
                 var requests = new List<IReadOnlyList<ChatMessage>>();
                 var responses = new Queue<string>(new[]
@@ -1149,12 +1171,13 @@ namespace RNAssistant.Harness
                     return Task.FromResult(new LlmCompletionResult { Content = responses.Dequeue() });
                 };
                 var session = NewSession(adapter);
-                var settings = new AppSettings
+                session.LastRun = new ChatRunRecord
                 {
-                    SystemPrompt = "SYSTEM_PROMPT_SENTINEL",
-                    AgentToolsPrompt = "TOOLS_PROMPT_SENTINEL",
-                    AgentSkillsPrompt = "SKILLS_PROMPT_SENTINEL"
+                    RunId = Guid.NewGuid().ToString("N"),
+                    DocumentRuntimeKey = adapter.RuntimeDocumentKey,
+                    StartedUtc = DateTime.UtcNow
                 };
+                var settings = publishedSettings.Clone();
                 var result = CreateConversationRunService(adapter, executor, completion).ExecuteAsync(
                     ChatModes.Agent,
                     "List sheets.", session, NewContext(adapter), settings,
@@ -1635,9 +1658,9 @@ namespace RNAssistant.Harness
                     currentMessages, currentOptions, settings, repairReserve, continuationReserve);
                 var legacyTokens = ModelContextBudget.EstimateAdmittedRequestTokens(
                     legacyMessages, legacyOptions, settings, repairReserve, continuationReserve);
-                AssertEqual(21, currentPack.Tools.Count,
-                    "R61 Excel Agent core contains four bootstrap, fifteen Excel, and two VBA editing schemas");
-                AssertEqual(25, legacyCore.Length,
+                AssertEqual(20, currentPack.Tools.Count,
+                    "R61 Excel Agent core contains four bootstrap, fourteen Excel, and two VBA editing schemas");
+                AssertEqual(24, legacyCore.Length,
                     "counterfactual post-11O5 Excel Agent core contains all six VBA/macro schemas");
                 AssertTrue(currentTokens < legacyTokens,
                     "R61 core lowers deterministic initial input estimate; before=" +
@@ -1912,7 +1935,9 @@ namespace RNAssistant.Harness
                     "public native arguments are serialized only at the hidden backend boundary");
                 AssertContains(FlattenSimple(calls[1]), "\"kind\":\"tool-schema\"", "macro schema evidence reaches execution step");
                 AssertRunViewState(result, session, "unknown", 0, 0, 1);
-                AssertEqual("Макрос выполнен.", result.AssistantText, "macro result returns to the model");
+                AssertContains(result.AssistantText, "Макрос выполнен.", "macro result returns to the model");
+                AssertContains(result.AssistantText, "состояние 1 операций записи осталось неизвестным",
+                    "unknown macro effect remains explicit in the user-visible result");
             });
         }
 
@@ -1926,8 +1951,6 @@ namespace RNAssistant.Harness
                     "{\"message\":\"Создаю два независимых листа.\",\"final\":false,\"tool_calls\":[" +
                     "{\"name\":\"excel.add_sheet\",\"arguments\":{\"name\":\"First\"}}," +
                     "{\"name\":\"excel.add_sheet\",\"arguments\":{\"name\":\"Second\"}}]}",
-                    "{\"message\":\"Создаю первый лист.\",\"final\":false,\"tool_calls\":[{\"name\":\"excel.add_sheet\",\"arguments\":{\"name\":\"First\"}}]}",
-                    "{\"message\":\"Создаю второй лист.\",\"final\":false,\"tool_calls\":[{\"name\":\"excel.add_sheet\",\"arguments\":{\"name\":\"Second\"}}]}",
                     "{\"message\":\"Оба листа созданы.\",\"final\":true,\"tool_calls\":[]}"
                 });
                 IReadOnlyList<ChatMessage> secondTurn = null;
@@ -1936,12 +1959,7 @@ namespace RNAssistant.Harness
                 LlmCompletionDelegate completion = (completionSettings, messages, options, stream, cancellationToken) =>
                 {
                     callCount += 1;
-                    if (callCount == 3)
-                    {
-                        AssertContains(messages.Last().Content, "one at a time", "unsafe write batch is repaired");
-                        AssertTrue(!adapter.HasSheet("First") && !adapter.HasSheet("Second"), "rejected batch executes no partial tool calls");
-                    }
-                    if (callCount == 5) secondTurn = messages.ToList();
+                    if (callCount == 3) secondTurn = messages.ToList();
                     return Task.FromResult(new LlmCompletionResult { Content = responses.Dequeue() });
                 };
                 var session = NewSession(adapter);
@@ -1956,14 +1974,15 @@ namespace RNAssistant.Harness
 
                 AssertEqual("Оба листа созданы.", result.AssistantText, "multi-tool final response");
                 AssertTrue(adapter.HasSheet("First") && adapter.HasSheet("Second"), "both tools executed");
-                AssertEqual(5, callCount, "one rejected batch, schema read, two singleton writes and final response");
+                AssertEqual(3, callCount, "schema read, one sequential write batch and final response");
                 AssertEqual(2, adapter.ExcelSheetRequests.Count(command => command.ToolId == "excel.add_sheet"), "each accepted write executes once");
                 AssertEqual("excel.add_sheet", adapter.ExcelSheetRequests[adapter.ExcelSheetRequests.Count - 2].ToolId, "first execution recorded");
                 AssertEqual("First", Convert.ToString(adapter.ExcelSheetRequests[adapter.ExcelSheetRequests.Count - 2].Arguments["name"]), "first call order");
                 AssertEqual("Second", Convert.ToString(adapter.ExcelSheetRequests[adapter.ExcelSheetRequests.Count - 1].Arguments["name"]), "second call order");
                 var replay = FlattenSimple(secondTurn);
-                AssertEqual(3, replay.Split(new[] { "TOOL_RESULT:" }, StringSplitOptions.None).Length - 1,
-                    "schema result and two execution results replayed");
+                AssertEqual(2, replay.Split(new[] { "TOOL_INTERACTION (completed causal frame):" },
+                    StringSplitOptions.None).Length - 1,
+                    "both execution results are folded after schema admission");
                 var activities = session.Messages
                     .Where(message => message != null && message.Activity != null && message.Activity.Kind == "tool" &&
                         string.Equals(message.Activity.ToolId, "excel.add_sheet", StringComparison.OrdinalIgnoreCase))
@@ -1971,13 +1990,14 @@ namespace RNAssistant.Harness
                     .ToList();
                 AssertEqual(2, activities.Count, "two visible tool activities");
                 var executedIds = activities.Select(activity => activity.ToolCallId).ToArray();
-                AssertEqual(2, executedIds.Distinct().Count(), "singleton writes receive different runtime IDs");
-                foreach (var id in executedIds) AssertContains(replay, id, "executed call ID is replayed");
+                AssertEqual(2, executedIds.Distinct().Count(), "batched writes receive different runtime IDs");
+                AssertContains(replay, "Added sheet: First", "first committed mutation is folded into model history");
+                AssertContains(replay, "Added sheet: Second", "second committed mutation is folded into model history");
                 AssertTrue(!string.IsNullOrWhiteSpace(activities[0].StepId), "model step id stored");
-                AssertTrue(activities[0].StepId != activities[1].StepId, "singleton writes belong to separate model steps");
-                AssertEqual("Создаю первый лист.", activities[0].StepMessage, "only accepted step message is stored");
+                AssertEqual(activities[0].StepId, activities[1].StepId, "batched writes belong to one accepted model step");
+                AssertEqual("Создаю два независимых листа.", activities[0].StepMessage, "accepted batch message is stored");
                 var marker = progressActivities.First(activity => activity.Kind == "step" &&
-                    string.Equals(activity.Title, "Создаю первый лист.", StringComparison.Ordinal));
+                    string.Equals(activity.Title, "Создаю два независимых листа.", StringComparison.Ordinal));
                 var running = progressActivities.First(activity => activity.Kind == "tool" && activity.Status == "running" &&
                     string.Equals(activity.ToolId, "excel.add_sheet", StringComparison.OrdinalIgnoreCase));
                 AssertEqual(marker.StepId, running.StepId, "live tool belongs to visible model step");
@@ -2096,11 +2116,13 @@ namespace RNAssistant.Harness
                 AssertEqual(2, session.LastRun.ToolStepsUsed, "confirmed result replaces reserved logical tool step");
                 var replay = FlattenSimple(calls[2]);
                 AssertContains(replay, "RUNTIME_CONTEXT", "user-role continuation keeps runtime context");
-                AssertEqual(2, calls[2].Count(message =>
+                AssertEqual(1, calls[2].Count(message =>
                     message.ToolResultProtocolVersion == ToolResultWire.CurrentVersion &&
                     !string.Equals(message.Role, "assistant", StringComparison.Ordinal)),
-                    "schema evidence and confirmed result replay as two typed result messages");
-                AssertContains(replay, "\"status\":\"ok\"", "confirmed result replayed");
+                    "schema evidence remains typed while the completed mutation is folded");
+                AssertContains(replay, "TOOL_INTERACTION (completed causal frame)",
+                    "confirmed result is retained as a completed causal frame");
+                AssertContains(replay, "common.skills_upsert", "folded confirmation keeps its tool identity");
                 const string runtimeMarker = "RUNTIME_CONTEXT:\n";
                 var runtimeMessage = calls[2].First(message => (message.Content ?? string.Empty)
                     .IndexOf(runtimeMarker, StringComparison.Ordinal) >= 0);
@@ -2109,16 +2131,21 @@ namespace RNAssistant.Harness
                 AssertTrue(((JArray)runtimeContext["capabilities"]["items"])
                         .OfType<JObject>().Any(item =>
                             (string)item["id"] == "common.skills_upsert" &&
-                            (bool?)item["schemaLoaded"] == true),
-                    "confirmation rematerializes the durable optional schema");
+                            (bool?)item["schemaLoaded"] == false),
+                    "catalog-changing confirmation invalidates the prior optional pack");
+                AssertEqual("invalidated_to_core", (string)runtimeContext["capabilities"]["reconstructionStatus"],
+                    "continuation exposes exact callable-pack reconstruction status");
+                AssertTrue(calls[2].Any(message => (message.Content ?? string.Empty)
+                    .Contains("\"code\":\"tool_pack_chain_broken\"")),
+                    "continuation explains why the changed catalog requires explicit readmission");
                 AssertTrue(replay.IndexOf("waiting_confirmation", StringComparison.OrdinalIgnoreCase) < 0, "no stale waiting result");
                 var replayMessages = calls[2].ToList();
                 var userIndex = replayMessages.FindIndex(message => message.Role == "user" && !message.ProtocolMessage &&
                     (message.Content ?? string.Empty).Contains("Create a test skill."));
-                var callIndex = replayMessages.FindIndex(message => message.Role == "assistant" && message.ToolCallId == skillCallId);
-                var resultIndex = replayMessages.FindIndex(message => message.Role != "assistant" && message.ToolCallId == skillCallId);
-                AssertTrue(userIndex >= 0 && userIndex < callIndex && callIndex < resultIndex,
-                    "user request, accepted call and matching result keep their order in replay");
+                var resultIndex = replayMessages.FindIndex(message => (message.Content ?? string.Empty)
+                    .Contains("TOOL_INTERACTION (completed causal frame)"));
+                AssertTrue(userIndex >= 0 && userIndex < resultIndex,
+                    "user request precedes the folded completed interaction in replay");
             });
         }
 
@@ -2201,12 +2228,15 @@ namespace RNAssistant.Harness
                         settings, NewContext(adapter), tools),
                     null).GetAwaiter().GetResult();
 
-                AssertEqual("Изменение отклонено как устаревшее.",
-                    final.AssistantText,
+                AssertContains(final.AssistantText,
+                    "Изменение отклонено как устаревшее.",
                     "model receives the terminal stale result after confirmation");
+                AssertContains(final.AssistantText,
+                    "1 операций записи завершились ошибкой",
+                    "failed confirmed write remains explicit in the user-visible result");
                 AssertContains(FlattenSimple(calls.Last()),
-                    "stale_vba_module",
-                    "confirmed execution consumes the original prepared guard");
+                    "The VBA module changed after this action was prepared",
+                    "confirmed execution exposes the guarded stale-state outcome without runtime internals");
                 AssertContains(adapter.VbaModuleCode, "external",
                     "stale confirmed call does not overwrite live VBA");
                 AssertEqual(0, adapter.CountVbaCalls(FakeVbaOperation.ReplaceModule),
@@ -2220,9 +2250,8 @@ namespace RNAssistant.Harness
             {
                 var responses = new Queue<string>(new[]
                 {
-                    LoadToolSchemaResponse("common.skills_upsert"),
-                    "{\"message\":\"Создаю skill.\",\"final\":false,\"tool_calls\":[{\"name\":\"common.skills_upsert\",\"arguments\":{\"id\":\"common.failure_test\",\"description\":\"Test\",\"bodyMarkdown\":\"# Test\"}}]}",
-                    "{\"message\":\"Skill уже существует; выберу другой id.\",\"final\":true,\"tool_calls\":[]}"
+                    "{\"message\":\"Очищаю ячейку.\",\"final\":false,\"tool_calls\":[{\"name\":\"excel.clear_range\",\"arguments\":{\"address\":\"A1\",\"clearWhat\":\"values\"}}]}",
+                    "{\"message\":\"Определение инструмента изменилось; действие не выполнено.\",\"final\":true,\"tool_calls\":[]}"
                 });
                 var calls = new List<IReadOnlyList<ChatMessage>>();
                 LlmCompletionDelegate completion = (completionSettings, messages, options, stream, cancellationToken) =>
@@ -2235,28 +2264,32 @@ namespace RNAssistant.Harness
                 session.LastRun = new ChatRunRecord { Status = "running", ResponseProtocolVersion = AgentResponseProtocol.CurrentVersion };
                 var settings = new AppSettings { AutoConfirmToolActions = false };
                 var tools = OfficeToolCatalog.ForHost(adapter.HostName).Concat(executor.GetControllerTools()).ToList();
+                tools.Single(tool => tool.Id == "excel.clear_range").Scope = "document";
                 service.ExecuteAsync(
                     ChatModes.Agent,
-                    "Create a test skill.", session, NewContext(adapter), settings, tools,
+                    "Очисти A1.", session, NewContext(adapter), settings, tools,
                     (Action<string, string, ChatActivity>)null,
                     (pendingSession, pendingCommand, result) => "pending_failure").GetAwaiter().GetResult();
 
                 var command = PendingCommand(session);
+                var callsBeforeConfirmation = adapter.TotalBackendCallCount;
                 var changed = tools.Select(tool => tool.Clone()).ToList();
-                changed.Single(tool => tool.Id == "common.skills_upsert").Description += " revised";
-                changed.Single(tool => tool.Id == "common.skills_upsert").RequiresConfirmation = false;
+                changed.Single(tool => tool.Id == "excel.clear_range").Description += " revised";
                 var final = service.ConfirmAsync("pending_failure", command, session,
                     new ConversationRunInput(settings, NewContext(adapter), changed), null).GetAwaiter().GetResult();
 
-                AssertEqual("Skill уже существует; выберу другой id.", final.AssistantText, "agent continues after confirmed failure");
-                AssertEqual(3, calls.Count, "schema discovery and confirmed failure trigger the next model turn");
-                var replay = FlattenSimple(calls[2]);
-                AssertContains(replay, "\"status\":\"error\"", "confirmed failure replayed");
-                AssertContains(replay, "pending_tool_catalog_changed", "fingerprint failure is replayed without dispatch");
-                AssertContains(replay, "TOOL_PACK_RESTORE_STATE",
-                    "changed admitted schema fails closed visibly without hiding the terminal result");
-                AssertContains(replay, "tool_pack_schema_changed", "restore diagnostic identifies descriptor drift");
+                AssertContains(final.AssistantText,
+                    "Определение инструмента изменилось; действие не выполнено.",
+                    "agent continues after confirmed policy drift");
+                AssertEqual(2, calls.Count, "confirmed policy drift triggers the next model turn");
+                var replay = FlattenSimple(calls[1]);
+                AssertContains(replay, "TOOL_INTERACTION (completed causal frame)",
+                    "confirmed policy drift is retained in model context");
+                AssertContains(replay, "Tool policy changed; request a new call.",
+                    "fingerprint failure is replayed without dispatch");
                 AssertTrue(replay.IndexOf("waiting_confirmation", StringComparison.OrdinalIgnoreCase) < 0, "waiting result is not replayed after failure");
+                AssertEqual(callsBeforeConfirmation, adapter.TotalBackendCallCount,
+                    "changed policy blocks confirmed dispatch");
             });
         }
 
@@ -2349,7 +2382,10 @@ namespace RNAssistant.Harness
                 AssertEqual(2, accepted.Select(message => message.ToolCallId).Distinct().Count(), "repeated writes have distinct runtime IDs");
                 foreach (var message in accepted)
                 {
-                    var parsed = ConversationResponseHistoryReader.Read(message);
+                    AssertTrue(AcceptedCallPayloadService.IsExternalizedCall(message),
+                        "large HTML arguments use the reference-first accepted-call contract");
+                    var parsed = ConversationResponseHistoryReader.Read(
+                        AcceptedCallPayloadService.Hydrate(message, executor.Payloads));
                     AssertTrue(parsed.Success, "accepted HTML history is valid");
                     AssertEqual(html, (string)JObject.Parse(parsed.Response.ToolCalls.Single().ArgumentsJson)["content"],
                         "ID assignment preserves every HTML character in history");

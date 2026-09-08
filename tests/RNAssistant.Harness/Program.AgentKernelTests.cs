@@ -4,6 +4,7 @@ using System.IO;
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
+using Newtonsoft.Json.Linq;
 using RNAssistant.Core.Agent;
 using RNAssistant.Core.ModelProtocol;
 using RNAssistant.Core.Models;
@@ -330,9 +331,20 @@ namespace RNAssistant.Harness
                 .Select(call => call.Id)), "accepted history retains the runtime correlation ids");
         }
 
-        private static async Task KernelRejectsUnsafeBatches()
+        private static async Task KernelAllowsManagedMutationBatches()
         {
-            foreach (var tool in new[] { "write", "external", "confirm", "unclassified" })
+            var allowed = new KernelFixture(KernelResponse(KernelCall("write", "{\"order\":1}"),
+                KernelCall("write", "{\"order\":2}")), KernelResponse());
+            var completed = await allowed.RunAsync();
+            AssertEqual(RunLifecycle.Completed, completed.Summary.Lifecycle,
+                "managed mutations complete as one ordered accepted batch");
+            AssertEqual("1,2", string.Join(",", allowed.Tools.Calls.Select(call =>
+                JObject.Parse(call.Call.ArgumentsJson).Value<int>("order"))),
+                "managed mutations dispatch sequentially in array order");
+            AssertEqual("0,0,2,0,0", KernelCounts(completed.Summary),
+                "each managed mutation retains individual accounting");
+
+            foreach (var tool in new[] { "external", "confirm", "unclassified" })
             {
                 var f = new KernelFixture(KernelResponse(KernelCall("read"), KernelCall(tool)));
                 var result = await f.RunAsync();
@@ -341,6 +353,33 @@ namespace RNAssistant.Harness
                 AssertEqual(1, result.AcceptedMessages.Count, "rejected response absent from history");
                 AssertTrue(!f.Store.Events.Any(e => e.Kind == AgentRunEventKind.ResponseAccepted), "no rejected durable response");
             }
+        }
+
+        private static async Task KernelUnknownBatchMutationClosesTail()
+        {
+            var f = new KernelFixture(
+                KernelResponse(KernelCall("write", "{\"order\":1}"), KernelCall("write", "{\"order\":2}")),
+                KernelResponse(KernelCall("read")), KernelResponse());
+            var outcomes = new Queue<ToolExecutionOutcome>(new[]
+            {
+                ToolExecutionOutcome.Unknown,
+                ToolExecutionOutcome.Ok
+            });
+            f.Tools.OnExecute = (context, token) => Task.FromResult(KernelRecord(context, outcomes.Dequeue()));
+
+            var result = await f.RunAsync();
+
+            AssertEqual(RunLifecycle.Completed, result.Summary.Lifecycle,
+                "model may inspect after the unknown batch member");
+            AssertEqual(2, f.Tools.Calls.Count, "unknown write stops its batch tail but permits a later read step");
+            AssertEqual("write,read", string.Join(",", f.Tools.Calls.Select(call => call.Call.Name)),
+                "second accepted write was not dispatched");
+            AssertTrue(result.AcceptedMessages.Any(message => message.Kind == AgentMessageKind.ToolResult &&
+                    message.Execution.Outcome == ToolExecutionOutcome.NotDispatched &&
+                    message.ToolCallId == "call_2"),
+                "undispatched tail remains explicitly closed in accepted history");
+            AssertEqual(ExecutionHealth.Unknown, result.Summary.ExecutionHealth,
+                "later inspection does not erase unknown mutation evidence");
         }
 
         private static async Task KernelRejectsAllocationCollisions(bool acrossSteps)
@@ -846,11 +885,16 @@ namespace RNAssistant.Harness
             internal readonly List<ToolExecutionContext> Calls = new List<ToolExecutionContext>();
             internal readonly Dictionary<string, ToolPolicySnapshot> Policies = new Dictionary<string, ToolPolicySnapshot>
             {
-                ["read"] = new ToolPolicySnapshot("read", "r1", false, independentLocalRead: true),
-                ["write"] = new ToolPolicySnapshot("write", "r1", true),
-                ["external"] = new ToolPolicySnapshot("external", "r1", true),
-                ["confirm"] = new ToolPolicySnapshot("confirm", "r1", true, true),
-                ["unclassified"] = new ToolPolicySnapshot("unclassified", "r1", false)
+                ["read"] = new ToolPolicySnapshot("read", "r1", new ToolPolicy(
+                    ToolEffect.Read, ToolVerification.None, false, true, new[] { "agent" })),
+                ["write"] = new ToolPolicySnapshot("write", "r1", new ToolPolicy(
+                    ToolEffect.Write, ToolVerification.Tool, false, false, new[] { "agent" })),
+                ["external"] = new ToolPolicySnapshot("external", "r1", new ToolPolicy(
+                    ToolEffect.External, ToolVerification.None, false, false, new[] { "agent" })),
+                ["confirm"] = new ToolPolicySnapshot("confirm", "r1", new ToolPolicy(
+                    ToolEffect.Write, ToolVerification.Tool, true, false, new[] { "agent" })),
+                ["unclassified"] = new ToolPolicySnapshot("unclassified", "r1", new ToolPolicy(
+                    ToolEffect.Unclassified, ToolVerification.None, false, false, new[] { "agent" }))
             };
             internal Func<ToolExecutionContext, CancellationToken, Task<ToolExecutionRecord>> OnExecute;
             internal Action BeforeDescribe;

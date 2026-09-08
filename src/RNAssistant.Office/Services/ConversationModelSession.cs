@@ -101,8 +101,23 @@ namespace RNAssistant.Office.Services
 
         internal ModelProtocolRequest CreateRequest(string stepId, ModelProtocolCallContext callContext)
         {
-            var activeTools = _toolPack.Tools;
             _lastSnapshot = CompileCurrent(true);
+            return CreateRequestFromSnapshot(stepId, callContext);
+        }
+
+        internal async Task<ModelProtocolRequest> PrepareRequestAsync(
+            string stepId, ModelProtocolCallContext callContext, CancellationToken cancellationToken)
+        {
+            await PrepareCurrentSnapshotAsync(cancellationToken).ConfigureAwait(false);
+            if (EndResponse(stepId))
+                await PrepareCurrentSnapshotAsync(cancellationToken).ConfigureAwait(false);
+            return CreateRequestFromSnapshot(stepId, callContext);
+        }
+
+        private ModelProtocolRequest CreateRequestFromSnapshot(
+            string stepId, ModelProtocolCallContext callContext)
+        {
+            var activeTools = _toolPack.Tools;
             var snapshot = _lastSnapshot;
             _noToolContinuation = null;
             _session.LastContextReceipt = snapshot.Receipt;
@@ -111,16 +126,12 @@ namespace RNAssistant.Office.Services
                 .GroupBy(item => item.EvidenceId, StringComparer.Ordinal).Select(group => group.First()).ToList();
             var options = BuildRequestOptions(_mode, _settings.AgentResponseMode, activeTools, _session, _runCache);
             options.TraceStepId = stepId;
-            var settings = _settings;
-            var catalog = _runnableCatalog;
-            var budget = RequestMessageBudget(activeTools);
             return new ModelProtocolRequest
             {
                 Settings = _settings,
                 AcceptedMessages = _lastSnapshot.Messages,
                 ContextSnapshot = snapshot,
-                CompileRepair = notice => _compiler.Compile(snapshot.Authority, snapshot.Messages, new[] { notice },
-                    null, catalog, settings, budget).Messages,
+                CompileRepair = notice => _compiler.CompileRepair(snapshot, notice),
                 CallableTools = activeTools,
                 RunnableCatalog = _runnableCatalog,
                 CallContext = callContext,
@@ -243,6 +254,7 @@ namespace RNAssistant.Office.Services
             _toolPack.StageReadResult(model);
             if (prepared.Media != null && result.Result.Status == RNAssistant.Core.Tools.Contracts.ToolResultStatus.Ok)
             {
+                prepared.Media.RunId = accepted.RunId;
                 _session.Messages.Add(prepared.Media);
             }
         }
@@ -257,15 +269,16 @@ namespace RNAssistant.Office.Services
             else messages.Insert(callIndex + 1, result);
         }
 
-        internal void EndResponse(string nextStepId)
+        internal bool EndResponse(string nextStepId)
         {
             var admission = _toolPack.PreparePending(CanPublishToolPack);
-            if (admission == null) return;
+            if (admission == null) return false;
             // Persistence is the publication barrier. An append failure leaves the
             // live pack unchanged and prevents the next request from being sent.
             _toolPackJournal.Append(admission, nextStepId);
             _toolPack.Publish(admission);
             _packState = admission.StateMessage;
+            return true;
         }
 
         internal static void ReleasePreviousMedia(ChatSession session)
@@ -337,16 +350,22 @@ namespace RNAssistant.Office.Services
                 session == null || session.LastRun == null ? null : session.LastRun.RunId,
                 runnableCatalog,
                 restoredAdmissions);
+            await PrepareCurrentSnapshotAsync(cancellationToken).ConfigureAwait(false);
+        }
+
+        private async Task PrepareCurrentSnapshotAsync(CancellationToken cancellationToken)
+        {
             try
             {
                 _lastSnapshot = CompileCurrent(true);
                 EnsureToolPackFits(_lastSnapshot.Messages, _toolPack, true);
             }
             catch (PromptBudgetExceededException ex) when (
-                ex.CanCompact && settings.AutoCompressContext && _contextCompactionService != null)
+                ex.CanCompact && _settings.AutoCompressContext && _contextCompactionService != null)
             {
                 var checkpoint = await _contextCompactionService.EnsureWithinBudgetAsync(
-                    session, settings, string.Empty, true, progress, cancellationToken, _currentAuthority, _runnableCatalog).ConfigureAwait(false);
+                    _session, _settings, string.Empty, true, _progress, cancellationToken,
+                    _currentAuthority, _runnableCatalog).ConfigureAwait(false);
                 if (checkpoint == null) throw;
                 _lastSnapshot = CompileCurrent(true);
                 EnsureToolPackFits(_lastSnapshot.Messages, _toolPack, false);
@@ -357,9 +376,23 @@ namespace RNAssistant.Office.Services
 
         private ModelContextSnapshot CompileCurrent(bool enforceBudget = false)
         {
-            var tools = _toolPack.Tools;
+            return CompileCurrent(
+                _toolPack.Tools,
+                _toolPack.Revision,
+                _packState ?? _toolPack.RestorationStateMessage,
+                enforceBudget,
+                true);
+        }
+
+        private ModelContextSnapshot CompileCurrent(
+            IReadOnlyList<ToolCatalogEntry> tools,
+            string toolGeneration,
+            ChatMessage packState,
+            bool enforceBudget,
+            bool retainAuthority)
+        {
             var skills = _skillSnapshot;
-            _skills = skills.Skills;
+            if (retainAuthority) _skills = skills.Skills;
             var facts = PromptBudgetComposer.ConversationHistory(_session, true, false);
             facts = JsonConvert.DeserializeObject<List<ChatMessage>>(JsonConvert.SerializeObject(facts));
             var current = facts.FirstOrDefault(item => item.Id == _currentUserId);
@@ -382,21 +415,21 @@ namespace RNAssistant.Office.Services
                 new ResourceAuthoritySnapshot(scope, 0, null, 0, new ResourceHeadState[0]))) : _authority.CaptureMany(scopes);
             // Compare against this same frozen tuple, not a second current-head read.
             // A later publication may affect the next request, never this one.
-            if (_catalogGeneration.HasValue && resources.Get(CatalogPublicationService.ScopeId).Generation != _catalogGeneration.Value)
-                throw new ResourceRequestException("Published catalogs changed before the model snapshot was frozen. Capture fresh catalogs before retrying the request.",
+            var resourceCatalogGeneration = resources.Get(CatalogPublicationService.ScopeId).Generation;
+            if (_catalogGeneration.HasValue && resourceCatalogGeneration != _catalogGeneration.Value)
+                throw new ResourceRequestException("Published catalogs changed before the model snapshot was frozen (expected generation " +
+                    _catalogGeneration.Value + ", actual " + resourceCatalogGeneration + "). Capture fresh catalogs before retrying the request.",
                     "RESOURCE_CATALOG_CHANGED", true);
-            var frozen = new ModelAuthoritySnapshot(resources, _toolPack.Revision, skills, ResourceStateProvider.CaptureSchemas(resources),
+            var frozen = new ModelAuthoritySnapshot(resources, toolGeneration, skills, ResourceStateProvider.CaptureSchemas(resources),
                 _session.Revision);
-            _currentAuthority = frozen;
+            if (retainAuthority) _currentAuthority = frozen;
             var required = new ConversationPromptComposer().BuildRequiredMessages(_mode, _userText, null,
-                tools, skills.Skills, null, _settings, _session, null, true, 0, _toolPack.CapabilityContext(skills.Skills));
-            var state = _packState ?? _toolPack.RestorationStateMessage;
-            if (state != null) required.Add(state);
+                tools, skills.Skills, null, _settings, _session, null, true, 0,
+                _toolPack.CapabilityContext(skills.Skills, tools));
+            if (packState != null) required.Add(packState);
             return _compiler.Compile(frozen, required, facts, _context?.Notes, _runnableCatalog,
                 _settings, RequestMessageBudget(tools), enforceBudget);
         }
-
-        private IReadOnlyList<ChatMessage> CurrentMessages { get { return CompileCurrent().Messages; } }
 
         private ChatMessage MaterializeToolResultMessage(
             ToolInvocation command, ToolResultMaterialization result, out ChatMessage modelMessage)
@@ -432,10 +465,21 @@ namespace RNAssistant.Office.Services
 
         private bool CanPublishToolPack(IReadOnlyList<ToolCatalogEntry> candidateTools, ChatMessage stateMessage)
         {
-            var candidateMessages = new List<ChatMessage>(CurrentMessages);
-            if (stateMessage != null) candidateMessages.Add(stateMessage);
-            return EstimatedAdmittedRequestTokens(candidateMessages, candidateTools) <=
-                ModelContextBudget.InputBudgetTokens(_settings);
+            try
+            {
+                var candidate = CompileCurrent(
+                    candidateTools,
+                    _toolPack.RevisionFor(candidateTools),
+                    stateMessage,
+                    true,
+                    false);
+                return EstimatedAdmittedRequestTokens(candidate.Messages, candidateTools) <=
+                    ModelContextBudget.InputBudgetTokens(_settings);
+            }
+            catch (PromptBudgetExceededException)
+            {
+                return false;
+            }
         }
 
         private void EnsureToolPackFits(
@@ -512,6 +556,7 @@ namespace RNAssistant.Office.Services
                 routing,
                 progress,
                 cancellationToken).ConfigureAwait(false);
+            message.Attachments = (routing.PrimaryAttachments ?? new ChatAttachment[0]).ToList();
             return message;
         }
 

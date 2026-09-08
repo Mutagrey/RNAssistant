@@ -127,9 +127,10 @@ namespace RNAssistant.Office.Tools
                         : ToolEffectEvidence.None;
         }
 
-        private static ToolHandlerResult ProjectResult(VbaPackageResult result)
+        internal static ToolHandlerResult ProjectResult(VbaPackageResult result)
         {
-            return new ToolHandlerResult(Result(result), Effect(result));
+            return new ToolHandlerResult(Result(result), Effect(result),
+                recovery: result.Recovery);
         }
 
         private static OfficeDocumentExecutionExpectation Target(

@@ -1200,7 +1200,7 @@ namespace RNAssistant.Harness
                 {
                     AssertEqual("context_compaction", options.TracePurpose, "materialization calls only the compactor");
                     compactions++;
-                    return Task.FromResult(CompactionReply(messages, "Earlier work summarized."));
+                    return Task.FromResult(CompactionReply(messages, "Compaction " + compactions + "."));
                 };
                 using (var modelSession = ConversationModelSession.CreateAsync(adapter, new ContextCompactionService(completion),
                     new AttachmentAnalysisService(completion), EventStore(store), ChatModes.Agent, "Continue.", session, NewContext(adapter),
@@ -1212,7 +1212,7 @@ namespace RNAssistant.Harness
                     AssertTrue(request.RunnableCatalog.Any(tool => tool.Id == optional.Id), "local execution catalog is preserved");
                     AssertTrue(request.CallableTools.Any(tool => tool.Id == optional.Id),
                         "compaction rematerializes the exact durable optional schema");
-                    AssertContains(FlattenSimple(request.AcceptedMessages), "Earlier work summarized.", "request uses the new checkpoint");
+                    AssertContains(FlattenSimple(request.AcceptedMessages), "Compaction 1.", "request uses the new checkpoint");
                     AssertTrue(!request.AcceptedMessages.Any(message => message.Id == evidence.Id), "old schema evidence is absent from the request");
                     AssertTrue(ModelContextBudget.EstimateAdmittedRequestTokens(
                             request.AcceptedMessages,
@@ -1223,6 +1223,23 @@ namespace RNAssistant.Harness
                         ModelContextBudget.InputBudgetTokens(settings),
                         "recomposed request fits the input budget with all reserves");
                     AssertTrue(originalMessages.SequenceEqual(session.Messages.Take(originalMessages.Length)), "compaction keeps the original transcript");
+
+                    var nextPreview = new ModelContextCompiler().BuildPreview(
+                        ChatModes.Agent, "Continue.", adapter, loaded.Tools, null, NewContext(adapter), settings,
+                        session, null, true, 100000, loaded.CapabilityContext(null));
+                    while (ModelContextBudget.EstimateMessagesTokens(nextPreview, settings) <=
+                        ModelContextBudget.InputBudgetTokens(settings) + 256)
+                    {
+                        var message = new ChatMessage { Role = "user", Content = string.Concat(Enumerable.Repeat("Later operation. ", 40)) };
+                        session.Messages.Add(message);
+                        nextPreview.Add(message);
+                    }
+                    var nextRequest = modelSession.PrepareRequestAsync("later_step",
+                        new RNAssistant.Core.ModelProtocol.ModelProtocolCallContext(new string[0]),
+                        CancellationToken.None).GetAwaiter().GetResult();
+                    AssertEqual(2, compactions, "a later over-budget model step runs the same automatic preparation");
+                    AssertContains(FlattenSimple(nextRequest.AcceptedMessages), "Compaction 2.",
+                        "later step uses its incremental checkpoint instead of failing the run");
                 }
             });
         }

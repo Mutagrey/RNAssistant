@@ -28,6 +28,7 @@ namespace RNAssistant.Office.Services
             var projected = HistoricalContextProjector.Project(source);
             if (projected == null) return null;
             projected.ResourceRefs = new List<ResourceRef>();
+            projected.ResultPayload = null;
             projected.HtmlWorkspaceCheckpoint = null;
             if (!IsSwitchedResult(source))
             {

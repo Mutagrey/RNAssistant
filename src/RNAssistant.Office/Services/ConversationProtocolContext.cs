@@ -6,6 +6,7 @@ using Newtonsoft.Json;
 using RNAssistant.Core.Agent;
 using RNAssistant.Core.ModelProtocol;
 using RNAssistant.Core.Models;
+using RNAssistant.Core.Storage;
 using RNAssistant.Office.Runtime;
 
 namespace RNAssistant.Office.Services
@@ -14,13 +15,15 @@ namespace RNAssistant.Office.Services
     // are owned by AgentKernel; this adapter only reconstructs a validated continuation.
     internal static class ConversationProtocolContext
     {
-        internal static string[] BatchSafeReadIds(IEnumerable<ToolCatalogEntry> catalog)
+        internal static string[] SequentialBatchIds(IEnumerable<ToolCatalogEntry> catalog, bool autoConfirm)
         {
             return (catalog ?? new ToolCatalogEntry[0])
                 .Where(tool => tool != null &&
                     !string.IsNullOrWhiteSpace(tool.Id) &&
                     tool.Policy != null &&
-                    tool.Policy.IndependentLocalRead)
+                    (tool.Policy.IndependentLocalRead ||
+                        tool.Policy.ExecutionClass == ToolExecutionClass.ManagedMutation &&
+                        (!tool.Policy.RequiresConfirmation || autoConfirm)))
                 .Select(tool => tool.Id).Distinct(StringComparer.Ordinal).ToArray();
         }
 
@@ -67,12 +70,8 @@ namespace RNAssistant.Office.Services
                     throw HistoryFailure("История содержит ответ другой или неизвестной версии протокола.");
                 if (message.AcceptedCallPayload != null)
                 {
-                    if (!message.ProtocolMessage || message.ArgumentPayload == null || message.AcceptedCallOrigin == null ||
-                        string.IsNullOrWhiteSpace(message.ToolCallId) || string.IsNullOrWhiteSpace(message.ToolName) ||
-                        message.ToolResultProtocolVersion != ToolResultWire.CurrentVersion ||
-                        message.ToolResultRole != ToolResultRoles.User && message.ToolResultRole != ToolResultRoles.Developer &&
-                        message.ToolResultRole != ToolResultRoles.Tool || message.ToolCalls == null || message.ToolCalls.Count != 0 ||
-                        calls.ContainsKey(message.ToolCallId) || message.AcceptedCallPayload.ContentType != "application/vnd.rnassistant.accepted-call+json")
+                    if (!AcceptedCallPayloadService.IsExternalizedCall(message) ||
+                        calls.ContainsKey(message.ToolCallId))
                         throw HistoryFailure("Неполная reference-first запись принятого вызова.");
                     calls.Add(message.ToolCallId, message);
                     var archivedOrigin = message.AcceptedCallOrigin;

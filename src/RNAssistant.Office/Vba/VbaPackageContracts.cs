@@ -42,6 +42,7 @@ namespace RNAssistant.Office.Vba
         internal string Message { get; private set; }
         internal string ErrorCode { get; private set; }
         internal bool? Retryable { get; private set; }
+        internal ToolRecoveryContract Recovery { get; private set; }
         internal bool MayHaveDispatched { get; private set; }
         internal VbaPackageEffectEvidence Effect { get; private set; }
         internal JObject Data
@@ -69,9 +70,36 @@ namespace RNAssistant.Office.Vba
             ErrorCode = errorCode;
             Retryable = status == VbaMutationOutcomeStatus.Unknown
                 ? false : retryable;
+            Recovery = RecoveryFor(status, errorCode, retryable);
             MayHaveDispatched = dispatched;
             Effect = effect;
             _data = data == null ? null : (JObject)data.DeepClone();
+        }
+
+        private static ToolRecoveryContract RecoveryFor(
+            VbaMutationOutcomeStatus status, string code, bool? retryable)
+        {
+            if (status != VbaMutationOutcomeStatus.Error) return null;
+            if (string.Equals(code, "vba_package_missing_outcome", StringComparison.Ordinal) ||
+                string.Equals(code, "vba_package_operation_failed", StringComparison.Ordinal) ||
+                string.Equals(code, "vba_package_journal_prepare_failed", StringComparison.Ordinal) ||
+                string.Equals(code, "vba_journal_unavailable", StringComparison.Ordinal) ||
+                string.Equals(code, "tool_mutation_lock_unavailable", StringComparison.Ordinal))
+            {
+                return new ToolRecoveryContract(
+                    ToolFailureKind.ToolDefect, ToolRetryPolicy.None);
+            }
+            if (string.Equals(code, "tool_mutation_busy", StringComparison.Ordinal) ||
+                string.Equals(code, "vba_package_probe_failed", StringComparison.Ordinal))
+            {
+                return new ToolRecoveryContract(
+                    ToolFailureKind.BusyNoEffect, ToolRetryPolicy.RetryLater);
+            }
+            return new ToolRecoveryContract(
+                ToolFailureKind.RejectedNoEffect,
+                retryable == true && !string.Equals(code, "vba_arguments_invalid", StringComparison.Ordinal)
+                    ? ToolRetryPolicy.RetryLater
+                    : ToolRetryPolicy.Replan);
         }
 
         internal static VbaPackageResult Lifecycle(

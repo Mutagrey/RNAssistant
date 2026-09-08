@@ -130,7 +130,7 @@ See [ADR-0001](decisions/ADR-0001-model-does-not-own-completion.md),
 [ADR-0008](decisions/ADR-0008-unknown-effects-are-not-retried.md) and
 [cutover evidence](stabilization/PHASE_3B2_KERNEL_CUTOVER.md).
 
-R29 activates the ID-less v4 `ConversationResponse` through the single
+R29 introduced runtime-owned IDs; the current ID-less v5 `ConversationResponse` runs through the single
 `Core/ModelProtocol/ModelProtocolWire` owner: schema, local validation and canonical
 JSON writing are shared by the client, loop, transcript and compatibility probes.
 The old model-ID wire/context path is removed. The kernel converts validated
@@ -140,11 +140,14 @@ a separate result; it cannot schedule tool calls.
 
 Accepted runtime IDs and raw `StepId/ModelAttemptId/CallIndex` origins are durable
 in the same accepted-message commit. Raw payloads are unchanged; results and
-confirmation/replay retain IDs. ModelProtocol receives only the conservative
-batch-safety context, not a model-ID registry. Full-history and confirmation preflight precede
+confirmation/replay retain IDs. ModelProtocol receives only the runtime-owned
+sequential-batch context, not a model-ID registry. It permits independent local
+reads and managed mutations whose confirmation is already satisfied; every
+mutation retains its own guard, verification and commit, and an unknown effect
+closes the undispatched tail. Full-history and confirmation preflight precede
 controller preparation, manual compaction and pending consumption; incomplete
 CallContext cannot trigger a raw request or format repair. Saved prompts retain
-their text, while schema marker 26 requires explicit review of prior instructions.
+their text, while schema marker 29 requires explicit review of prior instructions.
 No old chat is converted/truncated automatically. See the [v5 contract and
 qualification gates](protocols/CONVERSATION_RESPONSE_V5.md#remaining-gates).
 

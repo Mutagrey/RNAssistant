@@ -82,6 +82,14 @@ validation and before accepted persistence, confirmation or dispatch. Rejected
 responses execute nothing. Runtime ID allocation failures are infrastructure
 failures and are never repaired by regenerating model content.
 
+More than one call is accepted only when every member belongs to the current
+runtime-owned sequential-batch set: independent local reads or managed mutations
+whose confirmation is already satisfied. Calls execute in array order and every
+mutation has its own fresh guard, dispatch, verification and commit; the batch has
+no atomicity promise. An unknown mutation effect closes the remaining undispatched
+members. Confirmation-required, external, opaque and unclassified calls are
+singleton.
+
 ## History And Prompts
 
 Accepted assistant records are explicitly marked `ResponseProtocolVersion=5`.

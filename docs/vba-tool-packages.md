@@ -118,6 +118,10 @@ effect. Обычная строка из arbitrary VBA macro не доказыв
 dispatch execution остаётся `unknown`; install/remove получают verified
 change/no-change только из journal/read-back. Старые package/result projections и
 PascalCase UI fallback удалены. Immutable history и Host Fabric этим не заявляются.
+Definite package errors до возможного эффекта несут typed recovery: неверные
+arguments требуют `Replan`, временно недоступный probe — `RetryLater`, внутренний
+missing outcome — `ToolDefect/None`. Handler только переносит это решение; outcome
+`unknown` recovery не получает и автоматически не повторяется.
 
 ## Жизненный цикл
 

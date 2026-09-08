@@ -14,10 +14,10 @@ namespace RNAssistant.Core.ModelProtocol
             IEnumerable<ToolCatalogEntry> runnableCatalog, ModelProtocolCallContext context)
         {
             if (context == null || !context.IsComplete)
-                return ConversationResponseParseResult.Fail("v5 requires a complete local batch-safety context: " +
+                return ConversationResponseParseResult.Fail("v5 requires a complete local sequential-batch context: " +
                     (context == null ? "missing context" : context.Error));
             if (callableTools == null || runnableCatalog == null)
-                return ConversationResponseParseResult.Fail("v5 parsing requires explicit callable/catalog and batch-safe read-only context.");
+                return ConversationResponseParseResult.Fail("v5 parsing requires explicit callable/catalog and sequential-batch context.");
             var parsed = ConversationResponseJson.Read(content);
             if (!parsed.Success) return parsed;
 
@@ -27,7 +27,7 @@ namespace RNAssistant.Core.ModelProtocol
             var catalogIds = new HashSet<string>(runnableCatalog.Where(tool => tool != null).Select(tool => tool.Id), StringComparer.Ordinal);
             // Batching is opt-in from local authority. External or unresolved
             // effects must not be in this set; call identity belongs to runtime.
-            var batchSafeIds = new HashSet<string>(context.BatchSafeReadOnlyToolIds, StringComparer.Ordinal);
+            var batchSafeIds = new HashSet<string>(context.SequentialBatchToolIds, StringComparer.Ordinal);
             foreach (var call in parsed.Response.ToolCalls)
             {
                 ToolCatalogEntry tool;
@@ -38,10 +38,9 @@ namespace RNAssistant.Core.ModelProtocol
                             new JObject { ["id"] = call.Name }.ToString(Formatting.None) + ", wait for its complete TOOL_RESULT, then call the tool in a later response."
                         : "Unknown tool: " + call.Name + ". Use an exact name from the current callable tools.");
                 }
-                if (parsed.Response.ToolCalls.Count > 1 && (tool.MutatesDocument || tool.MutatesLocalState ||
-                    tool.RequiresConfirmation || !batchSafeIds.Contains(tool.Id)))
-                    return ConversationResponseParseResult.Fail("Write, external, confirmation-required or unclassified calls must be returned one at a time. " +
-                        "Return exactly one call and wait for its TOOL_RESULT.");
+                if (parsed.Response.ToolCalls.Count > 1 && !CanRunInSequentialBatch(tool, batchSafeIds))
+                    return ConversationResponseParseResult.Fail("Only independent local reads and runtime-verified managed mutations may be returned in a sequential batch. " +
+                        "Confirmation-required, external, opaque or unclassified calls must be returned one at a time.");
 
                 JObject schema;
                 string error;
@@ -53,6 +52,14 @@ namespace RNAssistant.Core.ModelProtocol
                     return ConversationResponseParseResult.Fail("Invalid arguments for " + tool.Id + ": " + error);
             }
             return parsed;
+        }
+
+        private static bool CanRunInSequentialBatch(ToolCatalogEntry tool, ISet<string> batchSafeIds)
+        {
+            if (tool == null || !batchSafeIds.Contains(tool.Id)) return false;
+            if (tool.Policy != null && tool.Policy.ExecutionClass == ToolExecutionClass.ManagedMutation)
+                return true;
+            return !tool.MutatesDocument && !tool.MutatesLocalState;
         }
     }
 }

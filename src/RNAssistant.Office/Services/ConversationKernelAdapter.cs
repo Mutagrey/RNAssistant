@@ -105,7 +105,6 @@ namespace RNAssistant.Office.Services
         {
             if (input == null) throw new ArgumentNullException(nameof(input));
             var publication = _executor.CaptureCatalogs();
-            _catalogGeneration = publication.Authority.Generation;
             _input = new ConversationRunInput(PromptSettingsService.ApplyPublishedTemplates(input.Settings, publication.PromptsJson),
                 input.Context, input.Tools, input.Skills, input.Attachments);
             // Host/document registrations are provided by their bound owner. Global packages
@@ -123,6 +122,11 @@ namespace RNAssistant.Office.Services
             _nativeTools = _executor.CreateNativeRuntime(
                 _session, _toolPack, _input.Settings, _policy.Mode,
                 true, RegisterNativePending, _catalog, _skills, false);
+            // Tool/skill projection may materialize an already registered catalog
+            // resource. Pin the stable generation after all local publication reads.
+            _catalogGeneration = _executor.ResourceAuthority
+                .CaptureMany(new[] { CatalogPublicationService.ScopeId })
+                .Get(CatalogPublicationService.ScopeId).Generation;
         }
 
         internal ChatTurnResult Result(RunSummary summary)

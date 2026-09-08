@@ -40,7 +40,7 @@ namespace RNAssistant.Office.Runtime
         public ToolPolicySnapshot Describe(ToolCall call)
         {
             var tool = call == null ? null : _registry.Lookup(call.Name);
-            return tool == null ? null : tool.Policy();
+            return tool == null ? null : EffectivePolicy(tool);
         }
 
         public async Task<ToolExecutionRecord> ExecuteAsync(ToolExecutionContext context, CancellationToken cancellationToken)
@@ -49,7 +49,7 @@ namespace RNAssistant.Office.Runtime
             if (cancellationToken.IsCancellationRequested) return NotDispatched(context, "Cancelled before handler dispatch.");
             var tool = _registry.Lookup(context.Call.Name);
             if (tool == null) return Reject(context, "unknown_tool", "No handler is registered for this exact tool id.");
-            if (!context.Policy.Matches(tool.Policy())) return Reject(context, "tool_policy_changed", "The captured tool policy or revision changed.");
+            if (!context.Policy.Matches(EffectivePolicy(tool))) return Reject(context, "tool_policy_changed", "The captured tool policy or revision changed.");
             var policy = tool.Registration.Policy;
             if (!policy.AllowedModes.Contains(_mode, StringComparer.Ordinal))
                 return Reject(context, "tool_mode_denied", "The tool is not allowed in this conversation mode.");
@@ -150,7 +150,14 @@ namespace RNAssistant.Office.Runtime
 
             string mutationAttemptId = null;
             if (policy.MayHaveSideEffects && _mutationObserver != null)
-                mutationAttemptId = _mutationObserver.Prepare(context, arguments);
+            {
+                try { mutationAttemptId = _mutationObserver.Prepare(context, arguments); }
+                catch (ToolMutationPreparationException ex)
+                {
+                    return Record(context, ToolExecutionOutcome.Error, ToolResult.Error(ex.Message, Code(ex.Code)), false,
+                        ToolEffectEvidence.None, recovery: new ToolRecoveryContract(ToolFailureKind.RejectedNoEffect, ToolRetryPolicy.Replan));
+                }
+            }
             ToolExecutionRecord publishedTerminal = null;
             var publicationAttempted = false;
             ToolHandlerContext handlerContext = null;
@@ -193,6 +200,16 @@ namespace RNAssistant.Office.Runtime
                 }
             }
             return publishedTerminal ?? CompleteMutation(mutationAttemptId, terminal);
+        }
+
+        private ToolPolicySnapshot EffectivePolicy(ToolHandlerRegistry.RegisteredTool tool)
+        {
+            var captured = tool.Policy();
+            var policy = tool.Registration.Policy;
+            if (!_autoConfirm || !policy.RequiresConfirmation) return captured;
+            return new ToolPolicySnapshot(captured.ToolId, captured.Revision,
+                new ToolPolicy(policy.Effect, policy.Verification, false,
+                    policy.IndependentLocalRead, policy.AllowedModes, policy.RiskLevel));
         }
 
         private ToolExecutionRecord CompleteMutation(string attemptId, ToolExecutionRecord record)

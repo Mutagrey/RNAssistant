@@ -43,7 +43,7 @@ namespace RNAssistant.Core.ModelProtocol
             {
                 cancellationToken.ThrowIfCancellationRequested();
                 if (request.CallContext == null || !request.CallContext.IsComplete)
-                    throw new InvalidOperationException("Model protocol requires a complete local batch-safety context: " +
+                    throw new InvalidOperationException("Model protocol requires a complete local sequential-batch context: " +
                         (request.CallContext == null ? "missing context" : request.CallContext.Error));
                 var budget = new ModelProtocolRetryBudget(settings);
                 var fallbackUsed = false;
@@ -209,7 +209,7 @@ namespace RNAssistant.Core.ModelProtocol
                     "Every call contains only an exact name and object arguments. Do not include id; runtime assigns call IDs. " +
                     "Inside a call, arguments is already the root object described by the tool schema; never nest another arguments, parameters, schema, or wrapper inside it. If the error says $ contains unsupported property arguments, remove that undeclared property; only when declared fields exist inside it, move those fields up one level first. For any unsupported property, remove it instead of repeating the rejected object unchanged. " +
                     "Every string, including nested arguments, uses one JSON escaping layer: use \\n for a real line break and \\\\ for one literal source backslash; never drop or pre-decode a backslash. " +
-                    "Write, external, confirmation-required and unclassified calls must be singleton; batch only independent local reads. " +
+                    "Batch independent local reads or runtime-verified managed mutations only; calls execute sequentially and stop after an unknown mutation effect. Confirmation-required, external, opaque and unclassified calls must be singleton. " +
                     "Follow the error action exactly. " +
                     "If a known tool schema is not loaded, replace the rejected call with common.capabilities_read for that exact id. " +
                     "Wait for its successful complete tool-schema result and TOOL_PACK_STATE with admitted=true, then call the tool only in a later response."

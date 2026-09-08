@@ -239,7 +239,8 @@ Correct behavior:
 
 ```text
 compiler excludes/demotes superseded evidence
-model sees compact stale marker/changed resource fact when useful
+model sees a compact `status=error` stale/unavailable marker with no old body or
+runtime identity when useful
 model decides whether task requires re-read
 resource tool reads current/exact revision through URF
 new ResourceEvidence is appended

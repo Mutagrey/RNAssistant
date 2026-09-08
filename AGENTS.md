@@ -16,8 +16,7 @@ RNAssistant — локальный Office/WebView2 assistant без server-side 
 - Новые product features заморожены. Работай только в текущей фазе/подэтапе и не
   начинай следующую фазу тем же изменением. Не вводи целевой контракт или migration
   будущей фазы заранее.
-- 11T0–11T10 и WQ-A1–A5 завершены host-neutral. R61/11O all-tool
-  contract/Library UX cutover уже начат host-neutral; накопленный Windows
+- 11T0–11T10, WQ-A1–A5 и R61/11O0–11O7 завершены host-neutral; накопленный Windows
   rebuild/R62 retest и post-cutover qualification обязательны до Phase 12.
 - При недоступной Windows выполняй только dependency-safe host-neutral slices.
   Windows gates накапливаются и остаются открыты. WQ0 проверяет принятое lifetime
@@ -55,11 +54,11 @@ RNAssistant — локальный Office/WebView2 assistant без server-side 
 - `web`: static UI без npm/bundler; feature logic — в тематических `app-*.js`,
   `app.js` — boot/shared rendering.
 - Все modes идут через `ConversationRunService` → `AgentKernel`; только kernel
-  считает lifecycle/outcomes. Model wire — conversation-response v4
-  `message + tool_calls`; IDs, guards, URI/revision/cursor и authority принадлежат
+  считает lifecycle/outcomes. Model wire — conversation-response v5
+  `message + final + tool_calls`; IDs, guards, URI/revision/cursor и authority принадлежат
   runtime, а не модели/UI.
-- Model-facing reads используют только `common.resources_*`, revision-pinned
-  `rna://` и durable `ResourceRef`. Chat events — append-only source of truth;
+- Model-facing reads используют только `common.resources_*` и semantic target;
+  revision-pinned `rna://`/durable `ResourceRef` остаются runtime-only evidence. Chat events — append-only source of truth;
   immutable bodies — CAS; projections не становятся вторым durable store.
 - ToolRuntime исполняет exact descriptor/policy/binding. `ok` не доказывает effect;
   possible effect без read-back — `unknown` и автоматически не повторяется.

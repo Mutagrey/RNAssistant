@@ -124,11 +124,23 @@ namespace RNAssistant.Office.Services
 
         public JObject CapabilityContext(IEnumerable<SkillDefinition> skills)
         {
+            return CapabilityContext(skills, Tools);
+        }
+
+        internal JObject CapabilityContext(
+            IEnumerable<SkillDefinition> skills,
+            IReadOnlyList<ToolCatalogEntry> callableTools)
+        {
             if (string.Equals(_mode, ChatModes.Chat, StringComparison.Ordinal)) return null;
-            var result = CapabilityCatalogService.BuildPromptCatalog(_catalog, skills, Tools);
+            var result = CapabilityCatalogService.BuildPromptCatalog(_catalog, skills, callableTools);
             if (!string.IsNullOrWhiteSpace(_restorationFailureCode))
                 result["reconstructionStatus"] = "invalidated_to_core";
             return result;
+        }
+
+        internal string RevisionFor(IReadOnlyList<ToolCatalogEntry> tools)
+        {
+            return SnapshotRevision(tools);
         }
 
         public bool StageReadResult(ChatMessage message)

@@ -356,8 +356,8 @@ namespace RNAssistant.Harness
             var context = new ModelProtocolCallContext(safe);
             safe.Clear();
             AssertTrue(context.IsComplete, "explicit complete context");
-            AssertTrue(context.BatchSafeReadOnlyToolIds.SequenceEqual(new[] { "test.read" }), "safety projection copied per step");
-            AssertTrue(((IList<string>)context.BatchSafeReadOnlyToolIds).IsReadOnly, "snapshot does not expose a mutable safety array");
+            AssertTrue(context.SequentialBatchToolIds.SequenceEqual(new[] { "test.read" }), "safety projection copied per step");
+            AssertTrue(((IList<string>)context.SequentialBatchToolIds).IsReadOnly, "snapshot does not expose a mutable safety array");
             AssertTrue(new ConversationResponseParser().Parse(V4Envelope(), new ToolCatalogEntry[0], new ToolCatalogEntry[0], context).Success,
                 "v5 accepts a final response with complete local safety context");
             foreach (var incomplete in new[]
@@ -461,21 +461,24 @@ namespace RNAssistant.Harness
             var write = OfficeToolCatalog.ForHost("Excel").Single(tool => tool.Id == "excel.add_sheet");
             var external = new ToolCatalogEntry { Id = "external.lookup", BuiltIn = true };
             var pipeline = new ToolCatalogEntry { Id = "pipeline.read", Executor = "pipeline" };
-            var scope = ConversationProtocolContext.BatchSafeReadIds(new[] { read, write, external, pipeline });
-            AssertTrue(scope.SequenceEqual(new[] { "excel.inspect" }),
-                "only audited local reads with safe metadata can batch; external/unclassified/pipelines stay singleton");
+            var scope = ConversationProtocolContext.SequentialBatchIds(new[] { read, write, external, pipeline }, false);
+            AssertTrue(scope.SequenceEqual(new[] { "excel.inspect", "excel.add_sheet" }),
+                "audited local reads and non-confirming managed mutations can batch; external/unclassified/pipelines stay singleton");
+            AssertTrue(ConversationProtocolContext.SequentialBatchIds(new[] { read, write, external, pipeline }, true)
+                    .SequenceEqual(new[] { "excel.inspect", "excel.add_sheet" }),
+                "auto-confirmed managed mutations join the ordered batch authority");
             var renamedRead = read.Clone();
             renamedRead.Id = "fixture.explicit_read";
-            AssertTrue(ConversationProtocolContext.BatchSafeReadIds(new[] { renamedRead }).SequenceEqual(new[] { renamedRead.Id }),
+            AssertTrue(ConversationProtocolContext.SequentialBatchIds(new[] { renamedRead }, false).SequenceEqual(new[] { renamedRead.Id }),
                 "declared policy, not a central name list, grants independent read batching");
             var untyped = new ToolCatalogEntry { Id = read.Id, BuiltIn = true };
-            AssertEqual(0, ConversationProtocolContext.BatchSafeReadIds(new[] { untyped }).Length,
+            AssertEqual(0, ConversationProtocolContext.SequentialBatchIds(new[] { untyped }, false).Length,
                 "a known read name without source-owned policy is unclassified");
             var serialized = JsonConvert.SerializeObject(read);
             AssertTrue(serialized.IndexOf("Policy", StringComparison.Ordinal) < 0,
                 "source-owned authority is not a custom tool JSON field");
             var forged = JsonConvert.DeserializeObject<ToolCatalogEntry>("{\"Id\":\"external.fake\",\"BuiltIn\":true,\"Policy\":{\"Effect\":\"Read\",\"IndependentLocalRead\":true}}");
-            AssertEqual(0, ConversationProtocolContext.BatchSafeReadIds(new[] { forged }).Length,
+            AssertEqual(0, ConversationProtocolContext.SequentialBatchIds(new[] { forged }, false).Length,
                 "serialized authority cannot forge independent local read permission");
             var originalFingerprint = ToolPackSnapshotFactory.ExecutionFingerprint(new[] { read }, read.Id);
             var changedPolicy = read.Clone();
@@ -489,8 +492,8 @@ namespace RNAssistant.Harness
                 changed.MutatesLocalState = kind == "local";
                 changed.RequiresConfirmation = kind == "confirmation";
                 changed.RiskLevel = kind == "risk" ? 3 : changed.RiskLevel;
-                var context = ConversationProtocolContext.BatchSafeReadIds(new[] { changed, write });
-                AssertTrue(context.SequenceEqual(new[] { changed.Id }),
+                var context = ConversationProtocolContext.SequentialBatchIds(new[] { changed, write }, false);
+                AssertTrue(context.SequenceEqual(new[] { changed.Id, write.Id }),
                     "catalog projection cannot override source-owned policy: " + kind);
             }
             read.RequiresConfirmation = true;
@@ -498,7 +501,7 @@ namespace RNAssistant.Harness
             read.Policy = new ToolPolicy(ToolEffect.Read,
                 ToolVerification.None, false, false,
                 new[] { "agent" });
-            AssertTrue(!ConversationProtocolContext.BatchSafeReadIds(new[] { read }).Contains("excel.inspect"),
+            AssertTrue(!ConversationProtocolContext.SequentialBatchIds(new[] { read }, false).Contains("excel.inspect"),
                 "new run/confirmation rebuilds batching from the current source-owned policy");
         }
 
@@ -567,15 +570,15 @@ namespace RNAssistant.Harness
                 AssertEqual(2, adapter.ExcelBackendCalls.Count(operation =>
                     operation == FakeOfficeAdapter.ExcelInspectOperation),
                     "independent native reads dispatch once each through the direct typed backend");
-                AssertTrue(requests[0].CallContext.BatchSafeReadOnlyToolIds.Contains("common.resources_read") &&
-                    requests[0].CallContext.BatchSafeReadOnlyToolIds.Contains("excel.inspect"), "runtime metadata feeds the batch-safe projection");
+                AssertTrue(requests[0].CallContext.SequentialBatchToolIds.Contains("common.resources_read") &&
+                    requests[0].CallContext.SequentialBatchToolIds.Contains("excel.inspect"), "runtime metadata feeds the batch-safe projection");
                 AssertEqual(AgentResponseProtocol.CurrentVersion, result.ResponseProtocolVersion, "accepted writes use v5");
                 var acceptedBeforeNextRun = JsonConvert.SerializeObject(acceptedCalls);
-                var safetyBeforeNextRun = requests[0].CallContext.BatchSafeReadOnlyToolIds.ToArray();
+                var safetyBeforeNextRun = requests[0].CallContext.SequentialBatchToolIds.ToArray();
                 service.ExecuteAsync(ChatModes.Agent, "New request", session, NewContext(adapter), settingsForRun, tools, null).GetAwaiter().GetResult();
                 AssertEqual(4, requests.Count, "next user run obtains a fresh model boundary request");
                 AssertEqual(acceptedBeforeNextRun, JsonConvert.SerializeObject(acceptedCalls), "later run does not rewrite accepted IDs or origins");
-                AssertTrue(requests[0].CallContext.BatchSafeReadOnlyToolIds.SequenceEqual(safetyBeforeNextRun),
+                AssertTrue(requests[0].CallContext.SequentialBatchToolIds.SequenceEqual(safetyBeforeNextRun),
                     "older safety snapshot was not mutated by later accepted calls");
             });
         }
@@ -639,6 +642,8 @@ namespace RNAssistant.Harness
                     "confirmed native skill write keeps read-back verification");
                 AssertEqual(0, last.RunViewState.UnverifiedWrites,
                     "native skill authoring does not create an unverified write");
+                AssertEqual(RunViewLifecycles.Completed, last.RunViewState.Lifecycle,
+                    "confirmed write continues through the final model response: " + last.RunViewState.Reason + " / " + last.RunViewState.Narrative);
                 AssertEqual(3, requests.Count, "one model step after confirmation");
                 var continuation = requests[2];
                 AssertTrue(continuation.CallContext.IsComplete, "confirmation context is complete");
@@ -649,7 +654,7 @@ namespace RNAssistant.Harness
                     "confirmation preserves accepted raw-attempt provenance");
                 AssertEqual(1, session.Messages.Count(message => message.ProtocolMessage && message.Role != "assistant" && message.ToolCallId == skillId),
                     "confirmed result references the same runtime call exactly once");
-                AssertTrue(!continuation.CallContext.BatchSafeReadOnlyToolIds.Contains("common.skills_upsert"), "confirmation tool is never batch-safe");
+                AssertTrue(!continuation.CallContext.SequentialBatchToolIds.Contains("common.skills_upsert"), "confirmation tool is never batch-safe");
                 AssertEqual(AgentResponseProtocol.CurrentVersion, last.ResponseProtocolVersion, "confirmation writes the active v5 protocol: " + role);
             });
         }
@@ -721,7 +726,7 @@ namespace RNAssistant.Harness
                 AssertEqual(5, calls, "both response formats enforce context on every attempt");
                 AssertTrue(result.Response.ToolCalls.Select(call => (string)call.Arguments["query"]).SequenceEqual(new[] { "first", "second" }),
                     "validated call order and arguments are retained without model IDs");
-                AssertTrue(request.CallContext.BatchSafeReadOnlyToolIds.SequenceEqual(new[] { read.Id, write.Id }), "parser does not mutate local safety authority");
+                AssertTrue(request.CallContext.SequentialBatchToolIds.SequenceEqual(new[] { read.Id, write.Id }), "parser does not mutate local safety authority");
                 AssertEqual(4, trace.Count(record => record.Type == "rejected"), "rejected attempts remain diagnostic only");
                 AssertContains(trace[0].Error, "unsupported root field: status", "no v2 fallback");
                 AssertContains(trace[1].Error, "only name and arguments", "model-owned id is rejected rather than stripped");
@@ -1485,8 +1490,8 @@ namespace RNAssistant.Harness
             var call = new AgentToolCall
             {
                 Id = "call_1",
-                Name = "excel.read_range",
-                Arguments = new Dictionary<string, object> { ["range"] = "A1" }
+                Name = "excel.inspect",
+                Arguments = new Dictionary<string, object> { ["kind"] = "sheets" }
             };
             var command = new ToolInvocation { ToolId = call.Name, ToolCallId = call.Id };
             var result = TerminalToolResult.Ok("read", "{\"value\":1}");
@@ -1521,10 +1526,10 @@ namespace RNAssistant.Harness
             AssertEqual(AgentResponseStatuses.InProgress, nativeCall.ResponseStatus,
                 "native call stores response status");
             AssertEqual("call_1", (string)assistant.SelectToken("tool_calls[0].id"), "native call id");
-            AssertEqual("excel.read_range", (string)assistant.SelectToken("tool_calls[0].function.name"),
+            AssertEqual("excel.inspect", (string)assistant.SelectToken("tool_calls[0].function.name"),
                 "native replay keeps the exact public tool id");
-            AssertEqual("A1", (string)JObject.Parse(
-                (string)assistant.SelectToken("tool_calls[0].function.arguments"))["range"],
+            AssertEqual("sheets", (string)JObject.Parse(
+                (string)assistant.SelectToken("tool_calls[0].function.arguments"))["kind"],
                 "native replay keeps only accepted schema arguments");
             AssertTrue(api.Messages.ToString().IndexOf("rna_", StringComparison.Ordinal) < 0,
                 "native replay never invents an rna-prefixed function name");
@@ -1532,7 +1537,7 @@ namespace RNAssistant.Harness
             AssertEqual("call_1", (string)toolMessage["tool_call_id"], "native result matches call");
             AssertTrue(toolMessage["name"] == null, "native result omits unsupported message-level name");
             AssertEqual(3, toolMessage.Properties().Count(), "native result uses exact Chat Completions tool-message fields");
-            AssertEqual("excel.read_range", (string)JObject.Parse((string)toolMessage["content"])["name"],
+            AssertEqual("excel.inspect", (string)JObject.Parse((string)toolMessage["content"])["name"],
                 "canonical tool name remains inside Tool Result v1 content");
 
             foreach (var role in new[] { ToolResultRoles.User, ToolResultRoles.Developer, ToolResultRoles.Tool })
@@ -1829,7 +1834,7 @@ namespace RNAssistant.Harness
                 };
                 var settings = new AppSettings
                 {
-                    ContextWindowOverrideTokens = 14000,
+                    ContextWindowOverrideTokens = 24000,
                     MaxTokens = 512
                 };
                 var tools = OfficeToolCatalog.ForHost(adapter.HostName).Where(tool => tool.Id == "excel.inspect")
@@ -1844,7 +1849,8 @@ namespace RNAssistant.Harness
                 AssertEqual("Диапазон результата нужно сузить.", turn.AssistantText, "agent continues after bounded result");
                 AssertEqual(3, calls.Count, "schema read, data read, and final model calls");
                 var replay = FlattenSimple(calls[2].Item1);
-                AssertTrue(replay.IndexOf("\"externalized\":true", StringComparison.Ordinal) >= 0 ||
+                AssertTrue(replay.IndexOf("\"payload_externalized\":true", StringComparison.Ordinal) >= 0 ||
+                    replay.IndexOf("\"externalized\":true", StringComparison.Ordinal) >= 0 ||
                     replay.IndexOf("\"truncated\":true", StringComparison.Ordinal) >= 0,
                     "bounded inline projection reaches the model");
                 AssertContains(replay, "\"relation\":\"result\"", "full result stays available by exact resource reference");

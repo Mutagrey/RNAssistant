@@ -147,8 +147,10 @@ redundant whole-source read, while stale or ambiguous hunks fail with no effect.
 A whole-write conflict returns bounded current source and a changed-span diff in
 typed recovery; oversized current source still requires a complete
 `common.resources_read`. Multiple edits derived from one snapshot should remain one
-ordered patch array. The kernel rejects multiple mutation calls in one response;
-only independent local reads may be batched.
+ordered patch array when that is the natural single mutation. Distinct managed
+mutations may also share a sequential model batch: each call rechecks its own live
+guard and commits separately, and an unknown result prevents dispatch of the
+remaining batch. Confirmation-required or opaque VBA actions remain singleton.
 
 Live-source validation also rejects export-only headers, unclosed string literals,
 C/JSON-style backslash quote escaping, common C-style operators/braces and

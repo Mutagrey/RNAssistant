@@ -126,7 +126,8 @@ namespace RNAssistant.Office.Services
 
         internal PublishedCatalogSnapshot Capture()
         {
-            Current("tools"); Current("skills"); Current("prompts"); Current(BuiltInKind);
+            Current("tools"); Current("skills"); Current("prompts"); Current(PromptDefaultsKind); Current(BuiltInKind);
+            if (HasBuiltInTools) Current(BuiltInToolsKind);
             var frozen = _authority.CaptureMany(new[] { ScopeId }).Get(ScopeId);
             return new PublishedCatalogSnapshot(frozen, CaptureSkills(frozen),
                 JsonConvert.DeserializeObject<RNAssistant.Core.Tools.ToolCatalogEntry[]>(Read(Known(frozen, "tools"))),
@@ -173,7 +174,8 @@ namespace RNAssistant.Office.Services
 
         internal long CaptureGeneration()
         {
-            Current("tools"); Current("skills"); Current("prompts"); Current(BuiltInKind);
+            Current("tools"); Current("skills"); Current("prompts"); Current(PromptDefaultsKind); Current(BuiltInKind);
+            if (HasBuiltInTools) Current(BuiltInToolsKind);
             return _authority.CaptureMany(new[] { ScopeId }).Get(ScopeId).Generation;
         }
 

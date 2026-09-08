@@ -31,9 +31,14 @@ namespace RNAssistant.Harness
 
         private static void WithTempExecutor(FakeOfficeAdapter adapter, Action<OfficeToolExecutor, FakeOfficeAdapter> action)
         {
+            WithTempExecutor(adapter, new AppSettings(), action);
+        }
+
+        private static void WithTempExecutor(FakeOfficeAdapter adapter, AppSettings settings,
+            Action<OfficeToolExecutor, FakeOfficeAdapter> action)
+        {
             WithTempPaths(delegate(AppDataPaths paths)
             {
-                var settings = new AppSettings();
                 var executor = new OfficeToolExecutor(
                     adapter,
                     new VbaJournalStore(paths),

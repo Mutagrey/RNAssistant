@@ -227,7 +227,7 @@ timestamps и file hashes. Он остаётся sidecar: встраивание
 - Никакого автоматического backup/rollback как доказательства безопасности. Runner
   проверяет final state и закрывает созданный документ без сохранения либо удаляет
   только файл с собственным ownership token.
-- Confirmation, document gate, singleton-call policy, effect read-back и unknown
+- Confirmation, document gate, sequential managed-mutation batch policy, effect read-back и unknown
   semantics остаются production-owned.
 - Fault hooks доступны только qualification build/flag, перечислены в allowlist,
   имеют одну boundary и не принимают произвольный payload/code/path.
@@ -269,7 +269,7 @@ switch. Он проверяет bound-lifetime допущение перед rel
 | Pack family | Что проверяет |
 |---|---|
 | `common.quick` | новый chat, режимы, live model, resources, tool discovery, confirmation/cancel, run journal |
-| `provider.live` | strict response, refusal, streaming, repair/reset, long payload, runtime call IDs, batch safety |
+| `provider.live` | strict response, refusal, streaming, repair/reset, long payload, runtime call IDs, sequential managed-mutation batch safety |
 | `storage.recovery` | mandatory append barriers, CAS, restart/replay, multi-window revision, export |
 | `excel.wq0.identity` | post-cutover проверка принятого live workbook identity/lifetime допущения до release |
 | `excel.read-write` | inspect/read, scalar/formula/table write, no-op/error/unknown и exact read-back |

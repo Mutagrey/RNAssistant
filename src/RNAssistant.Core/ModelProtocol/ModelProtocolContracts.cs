@@ -28,22 +28,22 @@ namespace RNAssistant.Core.ModelProtocol
         public IReadOnlyList<ToolCatalogEntry> CallableTools { get; set; }
         public IReadOnlyList<ToolCatalogEntry> RunnableCatalog { get; set; }
         // Required before raw dispatch, supplied by local execution authority.
-        // ModelProtocol validates batching; runtime alone owns accepted call IDs.
+        // ModelProtocol validates sequential batch membership; runtime alone owns accepted call IDs.
         public ModelProtocolCallContext CallContext { get; set; }
         public LlmRequestOptions Options { get; set; }
     }
 
     public sealed class ModelProtocolCallContext
     {
-        public IReadOnlyList<string> BatchSafeReadOnlyToolIds { get; private set; }
+        public IReadOnlyList<string> SequentialBatchToolIds { get; private set; }
         public string Error { get; private set; }
         public bool IsComplete { get { return string.IsNullOrEmpty(Error); } }
 
-        public ModelProtocolCallContext(IEnumerable<string> batchSafeIds, string error = null)
+        public ModelProtocolCallContext(IEnumerable<string> sequentialBatchToolIds, string error = null)
         {
             Error = !string.IsNullOrWhiteSpace(error) ? error
-                : batchSafeIds == null ? "Model protocol batch-safety context is incomplete." : null;
-            BatchSafeReadOnlyToolIds = batchSafeIds == null ? null : Snapshot(batchSafeIds);
+                : sequentialBatchToolIds == null ? "Model protocol sequential-batch context is incomplete." : null;
+            SequentialBatchToolIds = sequentialBatchToolIds == null ? null : Snapshot(sequentialBatchToolIds);
         }
 
         private static IReadOnlyList<string> Snapshot(IEnumerable<string> values)

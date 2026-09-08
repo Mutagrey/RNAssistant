@@ -39,6 +39,16 @@ namespace RNAssistant.Office.Services
         private readonly ChatBlobStore _payloads;
         internal ModelContextCompiler(ChatBlobStore payloads = null) { _payloads = payloads; }
 
+        internal IReadOnlyList<ChatMessage> CompileRepair(
+            ModelContextSnapshot snapshot, ChatMessage notice)
+        {
+            if (snapshot == null) throw new ArgumentNullException(nameof(snapshot));
+            if (notice == null) throw new ArgumentNullException(nameof(notice));
+            var messages = snapshot.Messages.Select(Clone).ToList();
+            messages.Add(Clone(notice));
+            return messages;
+        }
+
         internal List<ChatMessage> BuildPreview(string mode, string userText, IOfficeApplicationAdapter adapter,
             IReadOnlyList<ToolCatalogEntry> tools, IReadOnlyList<SkillDefinition> skills, DocumentContext context,
             AppSettings settings, ChatSession session, IReadOnlyList<ChatAttachment> attachments,
@@ -105,6 +115,11 @@ namespace RNAssistant.Office.Services
             }
             var frozenFacts = (facts ?? new ChatMessage[0]).Where(item => item != null && !item.ExcludeFromModelContext)
                 .Select(Clone).ToList();
+            var currentUser = frozenFacts.LastOrDefault(item => !item.ProtocolMessage &&
+                string.Equals(item.Role, "user", StringComparison.OrdinalIgnoreCase));
+            foreach (var fact in frozenFacts.Where(item => item != currentUser &&
+                !(item.Content ?? string.Empty).StartsWith("RESOURCE_MEDIA_INPUT", StringComparison.Ordinal)))
+                fact.Attachments = new List<ChatAttachment>();
             var results = frozenFacts.Where(item => item.ToolResultProtocolVersion == ToolResultWire.CurrentVersion &&
                 !string.IsNullOrWhiteSpace(item.ToolCallId)).GroupBy(item => item.ToolCallId, StringComparer.Ordinal)
                 .ToDictionary(group => group.Key, group => group.Last(), StringComparer.Ordinal);
@@ -133,7 +148,8 @@ namespace RNAssistant.Office.Services
                 if (atom.Evidence.Count == 0 && atom.Messages.Any(message =>
                     message.ToolName == "common.resources_read" && message.ToolResultProtocolVersion == ToolResultWire.CurrentVersion))
                 {
-                    Mark(atom, "This historical read has no canonical observation metadata; read the resource again.");
+                    Mark(atom, "This historical read has no canonical observation metadata; read the resource again.",
+                        "resource_evidence_unavailable");
                     receipt.ExcludedUnavailable++;
                     continue;
                 }
@@ -148,7 +164,10 @@ namespace RNAssistant.Office.Services
                 if (invalid.Length > 0)
                 {
                     Mark(atom, string.Join("; ", invalid.Select(item =>
-                        item.State + ": " + item.Reason)));
+                        item.State + ": " + item.Reason)),
+                        invalid.All(item => item.State == EvidenceState.Superseded)
+                            ? "resource_evidence_stale"
+                            : "resource_evidence_unavailable");
                     continue;
                 }
                 foreach (var message in atom.Messages)
@@ -199,7 +218,12 @@ namespace RNAssistant.Office.Services
                     atom.CausalFrameId == null && atom.Kind != "resource-evidence") continue;
                 var key = string.Join("\n", atom.Evidence.Select(e => e.Resource.Uri + "@" + e.Resource.Revision +
                     ":" + e.View + ":" + JsonConvert.SerializeObject(e.Coverage)).OrderBy(value => value, StringComparer.Ordinal));
-                if (!observed.Add(key)) { Mark(atom, "Exact observation already represented by a later causal frame."); receipt.Deduplicated++; }
+                if (!observed.Add(key))
+                {
+                    Mark(atom, "Exact observation already represented by a later causal frame.",
+                        "resource_evidence_stale");
+                    receipt.Deduplicated++;
+                }
             }
 
             // All remaining current evidence is relevant to the active window. Hydrate
@@ -217,7 +241,7 @@ namespace RNAssistant.Office.Services
                         receipt.HydratedPayloads++;
                         receipt.HydratedBytes += message.AcceptedCallPayload.ByteLength;
                     }
-                    if (message.ResultPayload != null)
+                    if (message.ResultPayload != null && RequiresExactPayload(message))
                     {
                         if (_payloads == null)
                         {
@@ -248,8 +272,16 @@ namespace RNAssistant.Office.Services
                         catch (Exception ex) when (ex is System.IO.IOException || ex is System.IO.InvalidDataException || ex is System.Security.Cryptography.CryptographicException)
                         { MarkUnavailable(atom, "Exact payload is unavailable; no newer revision was substituted."); receipt.ExcludedUnavailable++; break; }
                     }
-                    if (message.ToolResultProtocolVersion == ToolResultWire.CurrentVersion)
+                    if (message.ToolResultProtocolVersion == ToolResultWire.CurrentVersion &&
+                        !string.Equals(message.Role, "assistant", StringComparison.OrdinalIgnoreCase))
                         atom.Messages[index] = ModelToolResultProjection.Project(message, tools, authority.Skills.Skills);
+                    else if ((message.Content ?? string.Empty).StartsWith("RESOURCE_MEDIA_INPUT", StringComparison.Ordinal))
+                    {
+                        // The durable media fact keeps exact provenance. The detached
+                        // model request receives only the semantic target and bytes.
+                        message.ResourceRefs = new List<ResourceRef>();
+                        message.HtmlWorkspaceCheckpoint = null;
+                    }
                 }
             }
             var messages = atoms.SelectMany(item => item.Messages).ToList();
@@ -270,8 +302,21 @@ namespace RNAssistant.Office.Services
             }
             receipt.AtomCounts = atoms.GroupBy(item => item.Kind).ToDictionary(group => group.Key, group => group.Count());
             if (enforceBudget && receipt.EstimatedTokens > budget)
-                throw new PromptBudgetExceededException("Current evidence and causal frames exceed the request budget after correctness filtering. Compact context or select a narrower resource view.", true);
+                throw new PromptBudgetExceededException("Current evidence and causal frames use approximately " +
+                    receipt.EstimatedTokens + " tokens at a message budget of " + budget +
+                    " after correctness filtering. Compact context or select a narrower resource view.", true);
             return new ModelContextSnapshot(authority, messages, receipt);
+        }
+
+        private static bool RequiresExactPayload(ChatMessage message)
+        {
+            if (message.ToolResultProtocolVersion != ToolResultWire.CurrentVersion)
+                return true;
+            return ToolResultResourceService.IsExactReadEvidence(new ToolInvocation
+            {
+                ToolId = message.ToolName,
+                ToolCallId = message.ToolCallId
+            });
         }
 
         private static bool IsSuccessfulExactRead(ContextAtom atom)
@@ -381,7 +426,7 @@ namespace RNAssistant.Office.Services
         private static void MarkUnavailable(ContextAtom atom, string reason)
         {
             if (atom.ContextRole != ContextNoteRole.Unspecified) MarkContextUnavailable(atom, reason);
-            else Mark(atom, reason);
+            else Mark(atom, reason, "resource_evidence_unavailable");
         }
 
         private static void MarkContextUnavailable(ContextAtom atom, string reason)
@@ -393,7 +438,8 @@ namespace RNAssistant.Office.Services
                 title = atom.ContextTitle, reason, next_action = "Ask the user to add the required typed context again." });
         }
 
-        private static void Mark(ContextAtom atom, string reason)
+        private static void Mark(ContextAtom atom, string reason,
+            string code = "resource_evidence_stale")
         {
             atom.Kind = "resource-change";
             var message = atom.Messages.Last();
@@ -404,10 +450,11 @@ namespace RNAssistant.Office.Services
             if (message.ToolResultProtocolVersion == ToolResultWire.CurrentVersion &&
                 ToolResultHistoryReader.TryRead(message, out wire, out error))
             {
-                var data = new JObject { ["evidence_available"] = false, ["reason"] = reason,
+                var data = new JObject { ["code"] = code, ["evidence_available"] = false,
+                    ["complete"] = false, ["reason"] = reason,
                     ["next_action"] = "Read the required current resource explicitly." };
-                var result = new RNAssistant.Core.Tools.Contracts.ToolResult(wire.Result.Status,
-                    "Prior observation is not current evidence.", data.ToString(Formatting.None), new ResourceRef[0]);
+                var result = RNAssistant.Core.Tools.Contracts.ToolResult.Error(
+                    "Prior observation is not current evidence.", data.ToString(Formatting.None));
                 var json = ToolResultWire.WriteParsed(wire.ToolCallId, wire.Name, result, data, null);
                 message.Content = message.Role == "tool" ? json : "TOOL_RESULT:\n" + json;
             }

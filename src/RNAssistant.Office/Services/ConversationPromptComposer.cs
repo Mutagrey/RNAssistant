@@ -164,7 +164,7 @@ namespace RNAssistant.Office.Services
                     VbaResourceProvider.ProjectSemanticTarget(adapterDocumentTitle);
             }
             if (!string.IsNullOrWhiteSpace(session?.DocumentAuthorityId))
-                document["originals"] = "Sent original files are shared across this document's chats. Use common.resources_find with scope=document; an empty chat does not mean the library is empty.";
+                document["artifacts"] = "Sent original files and committed Plans are shared across this document's chats. Use common.resources_find with scope=document; an empty chat does not mean the library is empty. Plan writes use the selected exact revision and reject a newer head from another chat.";
             var root = new JObject
             {
                 ["mode"] = mode,

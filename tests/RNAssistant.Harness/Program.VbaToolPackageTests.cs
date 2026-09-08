@@ -261,6 +261,47 @@ namespace RNAssistant.Harness
             });
         }
 
+        private static void VbaPackageRecoveryIsTyped()
+        {
+            var source = ToolPackageSource.Capture(BuildVbaPackageToolForTest());
+            var invalidArguments = VbaPackageToolHandler.ProjectResult(
+                VbaPackageResult.Execution(source,
+                    VbaMutationOutcome.Error("Invalid arguments.", null,
+                        "vba_arguments_invalid", true), false));
+            AssertEqual(ToolFailureKind.RejectedNoEffect,
+                invalidArguments.Recovery.FailureKind,
+                "package validation certifies no document effect");
+            AssertEqual(ToolRetryPolicy.Replan,
+                invalidArguments.Recovery.RetryPolicy,
+                "package validation requires corrected arguments, not a timed retry");
+
+            var unavailable = VbaPackageToolHandler.ProjectResult(
+                VbaPackageResult.Execution(source,
+                    VbaMutationOutcome.Error("Probe unavailable.", null,
+                        "vba_package_probe_failed", true), false));
+            AssertEqual(ToolFailureKind.BusyNoEffect,
+                unavailable.Recovery.FailureKind,
+                "transient package probe failure remains definite no-effect");
+            AssertEqual(ToolRetryPolicy.RetryLater,
+                unavailable.Recovery.RetryPolicy,
+                "transient package probe failure is not retried immediately");
+
+            var defect = VbaPackageToolHandler.ProjectResult(
+                VbaPackageResult.Execution(source, null, false));
+            AssertEqual(ToolFailureKind.ToolDefect,
+                defect.Recovery.FailureKind,
+                "missing package outcome is a runtime defect");
+            AssertEqual(ToolRetryPolicy.None,
+                defect.Recovery.RetryPolicy,
+                "missing package outcome cannot be repaired by the model");
+
+            var unknown = VbaPackageToolHandler.ProjectResult(
+                VbaPackageResult.Execution(source,
+                    VbaMutationOutcome.Ok("Macro returned."), true));
+            AssertEqual(null, unknown.Recovery,
+                "possible package effect never advertises automatic recovery");
+        }
+
         private static void VbaToolPersistentInstallRequiresMacroDocumentAndTracksOwnership()
         {
             WithTempExecutor(FakeOfficeAdapter.ForHost("Excel"), delegate(OfficeToolExecutor executor, FakeOfficeAdapter adapter)
