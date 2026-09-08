@@ -109,7 +109,7 @@ vm.runInContext(source, context, { filename: "app-artifacts.js" });
   assert.match(htmlUi, /RNAssistantRunViewState\.accept/);
   const index = fs.readFileSync(path.join(root, "web/index.html"), "utf8");
   assert.ok(index.includes("app-core.js?v=bridge-transport-20260908-1"), "core has the bridge transport cache key");
-  assert.ok(index.includes("app-chat-state.js?v=context-usage-display-20260907-1"), "chat state has the context usage cache key");
+  assert.ok(index.includes("app-chat-state.js?v=chat-activity-order-20260908-1"), "chat state has the context usage cache key");
   assert.ok(index.includes("app-chat-session.js?v=startup-secondary-lazy-20260907-1"), "chat session has the startup lazy cache key");
   assert.ok(index.includes("app-artifacts.js?v=resource-index-20260907-1"), "artifact cards have the resource index cache key");
   assert.ok(index.includes("app-html-workspace-model.js?v=html-read-20260906-1"), "artifact selection model has the gallery cache key");

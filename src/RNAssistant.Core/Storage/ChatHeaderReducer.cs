@@ -195,6 +195,8 @@ namespace RNAssistant.Core.Storage
                 HtmlDataSourceCount = dataSourceCount,
                 CreatedUtc = createdUtc,
                 UpdatedUtc = updatedUtc,
+                LastActivityUtc = ChatSessionHeaderFactory.LastActivityUtc(createdUtc, run,
+                    _messages.Items.Where(item => item.Active).Select(item => item.CreatedUtc)),
                 MessageCount = _messages.Items.Count(item => item.Active && !item.ProtocolMessage),
                 RunId = run == null ? null : run.RunId,
                 RunRuntimeId = run == null ? null : run.RuntimeId,
@@ -574,6 +576,7 @@ namespace RNAssistant.Core.Storage
 
         private sealed class HeaderMessage : HeaderReplayItem
         {
+            public DateTime CreatedUtc { get; set; }
             public bool ProtocolMessage { get; set; }
             public string RunId { get; set; }
             public RunViewState RunViewState { get; set; }
@@ -583,6 +586,7 @@ namespace RNAssistant.Core.Storage
                 return new HeaderMessage
                 {
                     Id = StringValue(value == null ? null : value["Id"]),
+                    CreatedUtc = DateTimeValue(value == null ? null : value["CreatedUtc"]),
                     ProtocolMessage = value != null && BooleanValue(value["ProtocolMessage"]),
                     RunId = StringValue(value == null ? null : value["RunId"]),
                     RunViewState = value == null || value["RunViewState"] == null ||
@@ -609,6 +613,7 @@ namespace RNAssistant.Core.Storage
                 return new HeaderMessage
                 {
                     Id = Id,
+                    CreatedUtc = CreatedUtc,
                     ProtocolMessage = ProtocolMessage,
                     RunId = RunId,
                     RunViewState = RunViewState,

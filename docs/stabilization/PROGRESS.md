@@ -1,5 +1,13 @@
 # Stabilization progress
 
+Latest chat-order correction (2026-09-08): chat-tree siblings sort by a disposable
+`LastActivityUtc` header/summary projection from retained messages, run start and
+creation time. Opening, renaming or saving metadata does not promote a chat;
+background catalog updates sort immediately on render. Equal timestamps use chat
+id. Warm/cold storage and live-summary regression passes 1/1; focused Web checks
+and the version-format gate pass. No new durable state or migration is introduced.
+Windows/Office/WebView2 qualification remains open; Phase 12 is not started.
+
 Latest artifact/diagnostic UI correction (2026-09-08): run cards now collapse
 referenced revisions by Library logical identity without changing exact message
 refs or merging independent same-name files. Typed `documentScoped` labels expose

@@ -139,7 +139,7 @@ function fixture(texts = ["\ufeff<main>\r\n" + "я".repeat(140000) + "😀</main
     });
   assert.ok(index.includes("app-html-workspace-preview.js?v=binary-chunks-20260906-1"));
   assert.ok(index.includes("app-html-workspace.js?v=html-read-20260906-1"));
-  assert.ok(index.includes("app-chat-state.js?v=context-usage-display-20260907-1"));
+  assert.ok(index.includes("app-chat-state.js?v=chat-activity-order-20260908-1"));
   assert.ok(index.includes("app-chat-session.js?v=startup-secondary-lazy-20260907-1"));
   assert.ok(index.includes('id="reloadHtmlWorkspaceSourceButton"'));
   assert.ok(index.indexOf("app-resource-download.js?v=") < index.indexOf("app-html-workspace-source.js?v="));

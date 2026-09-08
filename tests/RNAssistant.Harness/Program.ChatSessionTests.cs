@@ -90,6 +90,44 @@ namespace RNAssistant.Harness
             });
         }
 
+        private static void ChatActivityIgnoresNavigationAndMetadata()
+        {
+            WithTempPaths(delegate(AppDataPaths paths)
+            {
+                var adapter = new FakeOfficeAdapter();
+                var store = new ChatStore(paths);
+                var service = new ChatSessionService(adapter, ConversationStore(store));
+                var session = store.Create(adapter.HostName, adapter.DocumentKey, adapter.DocumentTitle, "Older");
+                var created = new DateTime(2026, 9, 1, 10, 0, 0, DateTimeKind.Utc);
+                session.CreatedUtc = created;
+                store.Save(session);
+                AssertEqual(created, store.ListHeaders().Single().LastActivityUtc, "empty chat uses creation");
+                session.Messages.Add(new ChatMessage { Role = "user", Content = "Hello", CreatedUtc = created.AddHours(1) });
+                store.Save(session);
+                AssertEqual(created.AddHours(1), store.ListHeaders().Single().LastActivityUtc, "message advances warm header");
+                session = service.LoadSession(session.Id);
+                service.SetActiveSession(session);
+                session.Title = "Renamed";
+                session.Model = "changed-model";
+                store.Save(session);
+                service.NotifySaved(session);
+                AssertEqual(created.AddHours(1), service.GetChatSummaries(session.Id).Single().LastActivityUtc,
+                    "navigation and metadata save preserve activity summary");
+                AssertEqual(created.AddHours(1), new ChatStore(paths).ListHeaders().Single().LastActivityUtc,
+                    "cold replay preserves activity independently of save time");
+                session.LastRun = new ChatRunRecord { RunId = "activity-run", Status = "running", StartedUtc = created.AddHours(2) };
+                store.Save(session);
+                AssertEqual(created.AddHours(2), store.ListHeaders().Single().LastActivityUtc, "new request advances activity");
+                session.Messages.Add(new ChatMessage { Role = "assistant", Content = "Done", CreatedUtc = created.AddHours(3) });
+                session.LastRun.Status = "completed";
+                store.Save(session);
+                var header = new ChatStore(paths).ListHeaders().Single();
+                AssertEqual(created.AddHours(3), header.LastActivityUtc, "response advances activity after request");
+                AssertEqual(header.LastActivityUtc, ChatSessionHeaderFactory.Create(session).LastActivityUtc,
+                    "live and cold header activity agree");
+            });
+        }
+
         private static void StaleChatRevisionIsRejected()
         {
             WithTempPaths(delegate(AppDataPaths paths)

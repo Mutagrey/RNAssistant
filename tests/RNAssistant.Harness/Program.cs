@@ -325,6 +325,7 @@ namespace RNAssistant.Harness
                 Test("documents: saved identity uses full path or legacy id", SavedDocumentIdentityUsesFullPathOrLegacyId),
 
                 Test("storage: chat roundtrip", CreatesAndListsChatsInTempRoot),
+                Test("chat sessions: activity ignores navigation and metadata", ChatActivityIgnoresNavigationAndMetadata),
                 Test("storage: json save remains atomic", JsonFileStoreWritesAtomicUtf8),
                 Test("storage: jsonl byte offsets are exact", JsonlByteOffsetsAreExact),
                 Test("storage: bounded cache honors LRU and weights", BoundedCacheHonorsLruAndWeights),

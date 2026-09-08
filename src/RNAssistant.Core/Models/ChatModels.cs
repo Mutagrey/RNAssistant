@@ -352,6 +352,7 @@ namespace RNAssistant.Core.Models
         public int HtmlDataSourceCount { get; set; }
         public DateTime CreatedUtc { get; set; }
         public DateTime UpdatedUtc { get; set; }
+        public DateTime LastActivityUtc { get; set; }
         public int MessageCount { get; set; }
         public string RunId { get; set; }
         public string RunRuntimeId { get; set; }
@@ -385,6 +386,7 @@ namespace RNAssistant.Core.Models
         public int HtmlDataSourceCount { get; set; }
         public DateTime CreatedUtc { get; set; }
         public DateTime UpdatedUtc { get; set; }
+        public DateTime LastActivityUtc { get; set; }
         public int MessageCount { get; set; }
         public bool IsCurrentDocument { get; set; }
         public RunViewState RunViewState { get; set; }

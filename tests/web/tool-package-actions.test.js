@@ -194,7 +194,7 @@ function fixture(hooks = {}) {
     for (const file of ["app-tools.js", "app-tools-actions.js", "app-chat-state.js", "app-chat-session.js"])
       assert.ok(read("index.html").includes(file + "?v=" +
         (file === "app-tools.js" ? "tool-drafts-20260907-1" :
-       file === "app-chat-state.js" ? "context-usage-display-20260907-1" :
+       file === "app-chat-state.js" ? "chat-activity-order-20260908-1" :
          file === "app-chat-session.js" ? "startup-secondary-lazy-20260907-1" : "manual-tool-chat-20260908-1")));
     assert.ok(!read("js/app-tools-actions.js").includes('"saveTools", options.mutationRequest()'));
     console.log("PASS tool package actions: both inline save consumers are removed and lifecycle cancellation is wired");

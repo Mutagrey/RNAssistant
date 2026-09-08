@@ -687,6 +687,7 @@ namespace RNAssistant.Office.Services
                 HtmlDataSourceCount = header.HtmlDataSourceCount,
                 CreatedUtc = header.CreatedUtc,
                 UpdatedUtc = header.UpdatedUtc,
+                LastActivityUtc = header.LastActivityUtc,
                 MessageCount = header.MessageCount,
                 IsCurrentDocument = IsCurrentDocument(header.Host, header.DocumentKey),
                 RunViewState = header.RunViewState,

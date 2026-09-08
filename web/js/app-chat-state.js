@@ -1,3 +1,14 @@
+function sortedChatSessions(chats) {
+  return (chats || []).slice().sort(function (left, right) {
+    var leftTime = Date.parse(left.LastActivityUtc || left.lastActivityUtc) || 0;
+    var rightTime = Date.parse(right.LastActivityUtc || right.lastActivityUtc) || 0;
+    if (leftTime !== rightTime) return rightTime - leftTime;
+    var leftId = chatId(left);
+    var rightId = chatId(right);
+    return leftId < rightId ? -1 : (leftId > rightId ? 1 : 0);
+  });
+}
+
 function renderChatSessions() {
   if (typeof isPanelActive === "function" && !isPanelActive("chat")) return;
   var select = $("chatSessionSelect");
@@ -6,7 +17,7 @@ function renderChatSessions() {
   }
 
   select.innerHTML = "";
-  var chats = state.chats || [];
+  var chats = sortedChatSessions(state.chats);
   if (!chats.length) {
     var empty = document.createElement("option");
     empty.value = "";
@@ -681,7 +692,7 @@ function renderContextMeter() {
   meter.style.setProperty("--context-meter-color", level === "danger" ? "var(--danger)" : (level === "warn" ? "#b7791f" : "var(--success)"));
   value.textContent = percent + "%";
   detail.textContent = compactDetail;
-  meter.title = "Контекст: " + percent + "%\n" + detailText + "\nНажмите, чтобы увидеть состав.";
+  meter.title = "Контекст модели: " + percent + "%\n" + detailText + "\nНажмите, чтобы увидеть состав следующего запроса модели.";
   meter.setAttribute("aria-label", meter.title);
 }
 
