@@ -277,15 +277,8 @@ html[data-theme="dark"] .message.failed .markdown {
   background: #2d1d20;
 }
 
-html[data-theme="dark"] .agent-error-panel {
-  border-color: #63383a;
-  background: transparent;
-  color: #a9b2bf;
-}
-
 html[data-theme="dark"] .danger-zone-title,
-html[data-theme="dark"] .danger-zone-text,
-html[data-theme="dark"] .agent-error-meta {
+html[data-theme="dark"] .danger-zone-text {
   color: #a9b2bf;
 }
 

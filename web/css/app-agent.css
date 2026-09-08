@@ -174,26 +174,6 @@
   box-shadow: none;
 }
 
-.agent-diagnostic-message {
-  max-width: 920px;
-  color: #202936;
-  font-size: 13px;
-  line-height: 1.55;
-  overflow-wrap: anywhere;
-}
-
-.message.assistant .agent-diagnostic-message.markdown {
-  max-width: none;
-}
-
-.agent-diagnostic-message.markdown > :first-child {
-  margin-top: 0;
-}
-
-.agent-diagnostic-message.markdown > :last-child {
-  margin-bottom: 0;
-}
-
 .agent-transcript-entry {
   display: grid;
   gap: 6px;
@@ -249,47 +229,6 @@
   color: #344054;
 }
 
-.agent-run-outcome {
-  display: inline-flex;
-  gap: 3px;
-  align-items: center;
-  width: fit-content;
-  max-width: 96%;
-  margin: 1px 0 0;
-  padding: 1px 0;
-  border: 0;
-  background: transparent;
-  color: #98a2b3;
-  text-align: left;
-  font-size: .8571rem;
-  line-height: 1.5;
-}
-
-.agent-run-outcome.status-cancelled {
-  color: #98a2b3;
-}
-
-.agent-run-outcome:hover,
-.agent-run-outcome:focus-visible {
-  background: transparent;
-  color: #667085;
-}
-
-.agent-run-outcome:focus-visible {
-  outline: 2px solid var(--focus-ring-tight);
-  outline-offset: 1px;
-}
-
-.agent-run-outcome-copy {
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  font-size: inherit;
-  font-weight: 400;
-}
-
-.agent-run-outcome-caret,
 .agent-run-history-state {
   flex: 0 0 auto;
   line-height: 1;
@@ -327,7 +266,6 @@
   flex: 0 0 auto;
 }
 
-.agent-run-outcome-caret,
 .agent-run-history-caret,
 .agent-activity-caret,
 .context-compaction-caret,
@@ -341,7 +279,6 @@
   line-height: 1.5;
 }
 
-.agent-run-outcome-caret::before,
 .agent-run-history-caret::before,
 .agent-activity-caret::before,
 .context-compaction-caret::before,
@@ -458,6 +395,7 @@
 }
 
 .agent-activity-result {
+  white-space: pre-wrap;
   color: var(--muted);
   font-size: .9286rem;
   line-height: 1.55;
@@ -485,28 +423,6 @@
   padding-left: 0;
   color: #98a2b3;
   font-size: 11px;
-}
-
-.agent-error-panel {
-  display: grid;
-  gap: 4px;
-  padding: 3px 0 3px 8px;
-  border-left: 1px solid color-mix(in srgb, var(--danger) 38%, var(--line));
-  background: transparent;
-  color: var(--muted);
-}
-
-.agent-error-reason {
-  font-size: .9286rem;
-  font-weight: 400;
-  line-height: 1.55;
-  overflow-wrap: anywhere;
-}
-
-.agent-error-meta {
-  color: var(--muted);
-  font-size: 10.5px;
-  opacity: .82;
 }
 
 .agent-inline-actions {

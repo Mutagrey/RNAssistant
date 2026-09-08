@@ -21,10 +21,6 @@ function appendAgentRunProcess(parent, timeline, stats) {
     var entry = document.createElement("div");
     entry.className = "agent-transcript-entry";
     if (item.includeReasoning !== false && typeof appendMessageReasoning === "function") appendMessageReasoning(entry, item.reasoningMessage || item.message);
-    var itemKind = activityKind(item.activity);
-    if (itemKind === "diagnostic") {
-      appendAgentDiagnosticMessage(entry, agentDiagnosticText(item));
-    }
     var isCurrent = stats.current && activityContains(item.activity, stats.current);
     var activityContext = {
       messageId: messageId(item.message),
@@ -346,51 +342,12 @@ function appendAgentRunOverview(parent, steps, timeline, stats) {
   return details;
 }
 
-function agentRunOutcomeReason(activity) {
-  var reason = String(activityResultMessage(activity) || "").trim();
-  if (reason === "Execution was cancelled before a result was recorded.") {
-    return "Выполнение отменено до получения результата.";
-  }
-  if (reason === "Execution stopped before a result was recorded.") {
-    return "Выполнение остановлено до получения результата.";
-  }
-  return reason;
-}
-
-function appendAgentRunOutcome(parent, activity, overview) {
-  if (!activity || !overview) return;
-  var status = activityStatus(activity);
-  var outcome = document.createElement("button");
-  outcome.type = "button";
-  outcome.className = "agent-run-outcome status-" + status;
-  outcome.title = "Показать ход выполнения";
-
-  var copy = document.createElement("span");
-  copy.className = "agent-run-outcome-copy";
-  var reasonText = agentRunOutcomeReason(activity);
-  copy.textContent = reasonText || (status === "cancelled"
-    ? "Выполнение отменено"
-    : "Не удалось: " + activityPrimaryText(activity));
-  outcome.appendChild(copy);
-  var caret = document.createElement("span");
-  caret.className = "agent-run-outcome-caret";
-  caret.setAttribute("aria-hidden", "true");
-  outcome.appendChild(caret);
-  outcome.title = copy.textContent + " · Показать ход выполнения";
-  outcome.setAttribute("aria-label", outcome.title);
-  outcome.addEventListener("click", function () {
-    overview.open = true;
-    overview.scrollIntoView({ block: "nearest" });
-  });
-  parent.appendChild(outcome);
-}
-
 function appendAgentRunViewState(parent, runViewState, runId) {
   var health = runViewState ? runViewState.executionHealth : "unknown";
   var uncertain = health === "unknown";
-  if (health === "clean" && runViewState && runViewState.lifecycle !== "failed") return;
+  if (health === "clean" && runViewState && ["failed", "cancelled"].indexOf(runViewState.lifecycle) < 0) return;
   var note = document.createElement("div");
-  note.className = "message-outcome " + (uncertain ? "status-warning" : "status-history");
+  note.className = "message-outcome " + (uncertain ? "status-warning" : runViewState && runViewState.lifecycle === "failed" ? "status-failed" : "status-history");
   note.setAttribute("data-runtime-health", health);
   note.setAttribute("role", uncertain ? "alert" : "status");
   if (!runViewState) {
@@ -399,7 +356,9 @@ function appendAgentRunViewState(parent, runViewState, runId) {
     note.textContent = "Есть действия с неподтверждённым результатом: " + runViewState.unknownEffects +
       ". Проверьте фактическое состояние перед повторной записью.";
   } else if (runViewState.lifecycle === "failed") {
-    note.textContent = "Работа остановлена. Причина доступна в деталях выполнения.";
+    note.textContent = window.RNAssistantRunViewState.failureReasonLabel(runViewState.reason);
+  } else if (runViewState.lifecycle === "cancelled") {
+    note.textContent = "Выполнение отменено.";
   } else {
     note.textContent = "Неудачных попыток в ходе работы: " + runViewState.failedCalls + ".";
   }
@@ -408,9 +367,10 @@ function appendAgentRunViewState(parent, runViewState, runId) {
     openJournal.type = "button";
     openJournal.className = "agent-action-button agent-details-link";
     openJournal.textContent = uncertain ? "Что проверить" : "Причины и детали";
+    var sourceChatId = state.activeChatId;
     openJournal.addEventListener("click", function () {
-      if (typeof window.openRunJournal !== "function") return;
-      window.openRunJournal({ chatId: state.activeChatId, runId: runId, filter: "problems" });
+      if (state.activeChatId !== sourceChatId || typeof window.openRunJournal !== "function") return;
+      window.openRunJournal({ chatId: sourceChatId, runId: runId, filter: "problems" });
     });
     note.appendChild(openJournal);
   }
@@ -451,11 +411,7 @@ function renderAgentRunArticle(run) {
       process.appendChild(section);
     });
   } else {
-    var overview = appendAgentRunOverview(process, steps, timeline, stats);
-    var currentStatus = stats.current ? activityStatus(stats.current) : "";
-    if (!finalMessage && (currentStatus === "failed" || currentStatus === "cancelled")) {
-      appendAgentRunOutcome(process, stats.current, overview);
-    }
+    appendAgentRunOverview(process, steps, timeline, stats);
   }
   if (process.childNodes.length) body.appendChild(process);
   // This warning is outside collapsed trace and never derived from the model's prose.

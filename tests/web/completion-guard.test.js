@@ -29,8 +29,6 @@ const context = vm.createContext({
   markdown: text => text,
   enhanceMarkdown: () => {},
   appendAgentRunArtifacts: () => {},
-  appendAgentDiagnosticMessage: () => {},
-  agentDiagnosticText: item => item.message.Content || "",
   renderActivityNode: () => new Element("div"),
   activityPrimaryText: activity => activity.Title || "Tool"
 });

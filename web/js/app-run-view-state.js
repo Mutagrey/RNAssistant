@@ -152,6 +152,29 @@
     return viewState.lifecycle;
   }
 
+  // Kernel reasons only: never infer a timeout/effect from arbitrary diagnostic text.
+  function failureReasonLabel(reason) {
+    var labels = {
+      interrupted: "Предыдущий запуск прерван. Сохранённые результаты доступны в истории.",
+      interrupted_unknown: "Запуск прерван. Результат действия неизвестен — проверьте документ.",
+      provider: "Не удалось получить ответ от сервиса модели.",
+      model_infrastructure: "Не удалось выполнить запрос к модели.",
+      infrastructure: "Не удалось выполнить запрос к модели.",
+      provider_refused: "Сервис модели отклонил запрос.",
+      missing_model_result: "Модель не вернула ответ.",
+      protocolexhausted: "Модель не вернула ответ в нужном формате.",
+      invalid_model_response: "Модель не вернула ответ в нужном формате.",
+      invalid_accepted_response: "Модель не вернула ответ в нужном формате.",
+      promptbudgetexceeded: "Контекст превышает допустимый размер запроса.",
+      prompt_budget_exceeded: "Контекст превышает допустимый размер запроса.",
+      iteration_limit: "Достигнут лимит шагов выполнения.",
+      tool_step_limit: "Достигнут лимит действий.",
+      step_limit_reached: "Достигнут лимит шагов выполнения.",
+      repeated_failed_tool_call: "Остановлено повторение неудачного действия."
+    };
+    return labels[String(reason || "").toLowerCase()] || "Выполнение остановлено из-за ошибки. Подробности — в диагностике.";
+  }
+
   function outcomeLabel(viewState) {
     if (!viewState) return "Статус неизвестен";
     if (viewState.lifecycle === "awaiting_confirmation") return "Нужно подтверждение";
@@ -171,6 +194,7 @@
     accept: accept,
     mergeCatalog: mergeCatalog,
     displayStatus: displayStatus,
+    failureReasonLabel: failureReasonLabel,
     outcomeLabel: outcomeLabel
   });
 }());

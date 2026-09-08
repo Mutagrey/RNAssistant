@@ -404,7 +404,7 @@ function renderMessageArticle(message, index) {
   var body = document.createElement("div");
   body.className = "markdown";
   var content = messageContent(message);
-  body.innerHTML = markdown(content);
+  body.innerHTML = markdown(content, { preserveLineBreaks: messageRole(message) === "user" });
   node.appendChild(body);
   appendMessageFooter(node, message, index, null);
 

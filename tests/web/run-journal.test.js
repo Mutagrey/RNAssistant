@@ -288,7 +288,7 @@ function findButton(root, prefix) {
   const agent = fs.readFileSync(path.join(__dirname, "../../web/js/app-agent.js"), "utf8");
   assert.ok(page.indexOf("app-run-journal.js") < page.indexOf("app-trajectory.js"));
   ["app-agent.js"].forEach(asset => {
-    assert.ok(page.includes(asset + "?v=catalog-display-chat-20260908-1"), asset + " uses the diagnostics cache key");
+    assert.ok(page.includes(asset + "?v=" + (asset === "app-agent.js" ? "chat-message-cleanup-20260908-1" : "catalog-display-chat-20260908-1")), asset + " uses the diagnostics cache key");
   });
   ["app-run-journal.css"].forEach(asset => {
     assert.ok(page.includes(asset + "?v=chat-projection-20260907-1"),

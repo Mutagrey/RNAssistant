@@ -691,6 +691,22 @@ selectors support custom targets without web changes. See [Tool Library](tool-li
 VBA String output remains available as the tool message, with JSON in the existing
 viewer. Raw errors and protocol metadata stay in expandable diagnostic details.
 
+Chat keeps a single run-level cause outside collapsed history. Kernel reason codes
+supply short Russian labels; generic provider/infrastructure reasons do not claim a
+specific timeout based on exception text. Per-action diagnostic rows remain in the
+history, but raw error text is rendered only in their details, never again as model
+narration or a separate outcome row. Identical `Content`/`ResultMessage` within one
+diagnostic is shown once; distinct bodies and independent calls remain intact.
+A body-only diagnostic is still expandable. Unknown-effect warnings retain priority,
+and failed/cancelled zero-call runs keep their explanation without an empty action
+card. Diagnostic links retain the originating chat.
+
+User Markdown preserves entered single line breaks, including CRLF; model Markdown
+keeps normal paragraph/soft-break semantics. Lists and code fences use the same
+sanitized renderer. Plain diagnostic/tool text preserves newlines and wraps long
+lines. UI rendering does not rewrite stored content, copying or model context.
+Similar narration in separate model steps is not deduplicated by text heuristics.
+
 These captions are UI-only: they do not replace or rewrite tool arguments, durable
 results or the model-facing result projection. Details label their JSON as journal
 data and link to the existing next-request context inspector. That inspector shows

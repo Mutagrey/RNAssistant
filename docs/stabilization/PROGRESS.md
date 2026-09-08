@@ -88,6 +88,14 @@ partial model enumeration and Windows/Office/WebView2 qualification stay open.
 Playwright layout is still unavailable locally.
 See [canonical artifact contract](../artifact-library.md#implemented-working-set-links--2026-09-08).
 
+Latest chat message-cleanup slice (2026-09-08): user Markdown preserves single
+line breaks; raw diagnostics retain newlines in details. Duplicate diagnostic
+narration/outcome rows and repeated error-panel labels are removed. One Russian
+run cause uses existing kernel reasons; unknown effects and zero-call failures
+remain visible. Distinct calls, model narration and stored/model data are retained.
+Focused Web and real Chromium Markdown/narrow-layout checks pass. Windows/Office/
+WebView2 qualification remains open; no runtime/model contract changed.
+
 Latest catalog-display and compact-chat slice (2026-09-08): optional immutable
 ToolDisplayMetadata is retained by catalog storage, model/Library authoring,
 accepted invocation projection, confirmation replacement and chat forks. Shipped

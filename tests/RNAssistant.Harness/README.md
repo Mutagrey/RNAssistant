@@ -82,7 +82,8 @@ is `node tests/web/artifact-working-set.test.js`; real WebView/layout remains a
 separate qualification gate.
 
 `tests/web/agent-activity-layout.test.js` checks action/target/result wrapping at
-wide and narrow chat widths, technical disclosure and the addressed context-inspector
+wide and narrow chat widths, shipped Markdown line breaks/lists/code/sanitization,
+single diagnostic bodies, zero-action failures and the addressed context-inspector
 link. It uses the same bundled Playwright and optional browser/screenshot variables
 as the artifact/diagnostics layout check below.
 

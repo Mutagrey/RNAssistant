@@ -27,11 +27,11 @@ const read = file => fs.readFileSync(path.join(root, file), "utf8");
         button.addEventListener("click", handler); return button;
       };
       window.enhanceActivity = () => {};
-      window.enhanceMarkdown = () => {};
-      window.markdown = text => text;
+      window.logOnce = () => {};
+      window.appendMessageArtifactCards = () => {};
       window.setPromptContextInspectorOpen = open => { window.inspectorOpened = open; };
     });
-    for (const file of ["app-utils.js", "app-run-view-state.js", "app-agent-model.js", "app-agent.js", "app-messages.js", "app-viewer-registry.js", "app-json-viewer.js", "app-agent-data.js", "app-agent-activity.js"])
+    for (const file of ["vendor/purify.min.js", "vendor/marked.min.js", "vendor/highlight.min.js", "app-utils.js", "app-markdown.js", "app-run-view-state.js", "app-agent-model.js", "app-agent.js", "app-messages.js", "app-viewer-registry.js", "app-json-viewer.js", "app-agent-data.js", "app-agent-activity.js"])
       await page.addScriptTag({ content: read("js/" + file) });
     await page.evaluate(() => {
       const fixtures = [
@@ -105,9 +105,68 @@ const read = file => fs.readFileSync(path.join(root, file), "utf8");
       assert.ok(layout.copyFirst && !layout.overflow);
       assert.ok(layout.gap >= 0 && layout.gap <= 8 && layout.divider === "1px");
     }
+    // Exercise the shipped Markdown renderer, not an identity-string mock.
+    await page.evaluate(() => {
+      const content = "создай план: Пример плана\r\nсоздай лист\r\nсгенерируй данные\r\nпострой график\n\n- пункт один\n- пункт два\n\n```text\nстрока 1\nстрока 2\n```\n\n<img src=x onerror=alert(1)>";
+      const user = renderMessageArticle({ Role: "user", Content: content, Local: true }, 0);
+      user.id = "multiline-user"; document.querySelector("main").appendChild(user);
+      const assistant = renderMessageArticle({ Role: "assistant", Content: "Первая строка\nпродолжение абзаца\n\nСледующий абзац", Local: true }, 1);
+      assistant.id = "markdown-assistant"; document.querySelector("main").appendChild(assistant);
+      const raw = "LLM request timed out after 300 seconds.\nEndpoint: https://example.invalid/" + "x".repeat(400) + "\nModel: test; MaxTokens: 32000";
+      const view = { RunId: "failed-run", TurnId: "failed-run", Lifecycle: "failed", ExecutionHealth: "errors",
+        Reason: "Provider", SuccessfulReads: 1, VerifiedWrites: 0, NoChangeWrites: 0, UnverifiedWrites: 0, FailedCalls: 1, UnknownEffects: 0 };
+      const activities = [
+        { Kind: "step", StepId: "s1", StepMessage: "Создаю план и начинаю выполнение.", Status: "completed" },
+        { Kind: "tool", ToolId: "custom.read", ToolCallId: "read-1", StepId: "s1", Status: "completed", Subtitle: "Отчёт", Display: { action: "Чтение", operation: "Read" }, ResultMessage: "Первая строка\nВторая строка" },
+        { Kind: "tool", ToolId: "custom.read", ToolCallId: "read-2", StepId: "s1", Status: "completed", Subtitle: "Отчёт", Display: { action: "Чтение", operation: "Read" } },
+        { Kind: "diagnostic", Status: "failed", ExecutionStatus: "Provider", ResultMessage: raw }
+      ];
+      const items = activities.map((activity, index) => ({ activity, index, message: {
+        Role: "assistant", Id: "failed-" + index, RunId: "failed-run", RunViewState: view,
+        Activity: activity, Content: activity.Kind === "diagnostic" ? raw : "" } }));
+      const run = renderAgentRunArticle({ items }); run.id = "failed-run";
+      document.querySelector("main").appendChild(run);
+      const noCalls = renderAgentRunArticle({ items: [items[3]] }); noCalls.id = "failed-no-calls";
+      document.querySelector("main").appendChild(noCalls);
+      const bodyOnly = renderActivityNode({ Kind: "diagnostic", Status: "failed" }, false, false,
+        { message: { Content: "Сохранено только в теле\nВторая строка" } });
+      bodyOnly.id = "body-diagnostic"; document.querySelector("main").appendChild(bodyOnly);
+      window.failedFixtures = { raw, items };
+    });
+    for (const width of [740, 360]) {
+      await page.setViewportSize({ width, height: 1400 });
+      assert.equal(await page.locator("#multiline-user .markdown p").first().locator("br").count(), 3);
+      assert.equal(await page.locator("#multiline-user .markdown li").count(), 2);
+      assert.equal(await page.locator("#multiline-user pre code").textContent(), "строка 1\nстрока 2\n");
+      assert.equal(await page.locator("#multiline-user [onerror]").count(), 0, "Markdown remains sanitized");
+      assert.equal(await page.locator("#markdown-assistant .markdown br").count(), 0, "model Markdown keeps normal soft breaks");
+      assert.equal(await page.locator("#markdown-assistant .markdown p").count(), 2);
+      assert.equal(await page.locator("#failed-run .agent-run-outcome, #failed-run .agent-diagnostic-message").count(), 0);
+      assert.equal(await page.locator("#failed-no-calls .agent-run-overview").count(), 0);
+      assert.equal(await page.locator("#failed-no-calls [data-runtime-health]").count(), 1, "zero actions still explains failure");
+      assert.match(await page.locator("#failed-no-calls").innerText(), /Не удалось получить ответ/);
+      await page.locator("#failed-run .agent-run-overview").evaluate(node => { node.open = true; });
+      const visible = await page.locator("#failed-run").innerText();
+      assert.ok(!visible.includes("Endpoint:") && !visible.includes("MaxTokens:"), "raw diagnostics stay out of the main transcript");
+      assert.equal(await page.locator("#failed-run .kind-tool").count(), 2, "different call ids remain separate even with identical action/target");
+      assert.equal(await page.locator("#failed-run .agent-step-message").count(), 1);
+      const diagnostic = page.locator("#failed-run .kind-diagnostic details");
+      await diagnostic.evaluate(node => { node.open = true; });
+      assert.equal(await diagnostic.locator(".agent-activity-result").count(), 1, "same result/body is shown once");
+      assert.equal(await diagnostic.locator(".agent-activity-result").textContent(), "Диагностика:\n" + await page.evaluate(() => failedFixtures.raw));
+      assert.equal(await diagnostic.locator(".agent-activity-result").evaluate(node => getComputedStyle(node).whiteSpace), "pre-wrap");
+      assert.ok(await diagnostic.evaluate(node => node.scrollWidth <= node.clientWidth + 1), "long diagnostic wraps in the narrow chat");
+      await diagnostic.evaluate(node => { node.open = false; });
+    }
+    assert.equal(await page.locator("#body-diagnostic .agent-activity-result").count(), 1, "message-only diagnostic is retained in details");
+    assert.deepEqual(await page.evaluate(() => activityDetailTexts({ Kind: "diagnostic", ResultMessage: "Причина" }, { message: { Content: "Пояснение" } })), ["Причина", "Пояснение"]);
+    assert.equal(await page.evaluate(() => failedFixtures.items[3].message.Content === failedFixtures.raw && failedFixtures.items[3].activity.ResultMessage === failedFixtures.raw), true, "display never rewrites retained diagnostics");
+    assert.match(await page.evaluate(() => RNAssistantRunViewState.failureReasonLabel("PromptBudgetExceeded")), /Контекст/);
+    assert.ok(!(await page.evaluate(() => RNAssistantRunViewState.failureReasonLabel("Endpoint: private detail"))).includes("Endpoint:"));
+    await page.locator("#failed-run .agent-run-overview").evaluate(node => { node.open = false; });
     await page.setViewportSize({ width: 740, height: 920 });
     await page.locator("#full-run").hover();
-    if (process.env.LAYOUT_SCREENSHOT) await page.screenshot({ path: process.env.LAYOUT_SCREENSHOT });
+    if (process.env.LAYOUT_SCREENSHOT) await page.screenshot({ path: process.env.LAYOUT_SCREENSHOT, fullPage: true });
     await page.locator(".agent-activity-row").first().click();
     await page.getByText("Что войдёт в следующий запрос модели", { exact: true }).first().click();
     assert.equal(await page.evaluate(() => window.inspectorOpened), true);
@@ -115,6 +174,6 @@ const read = file => fs.readFileSync(path.join(root, file), "utf8");
     await page.evaluate(() => { window.inspectorOpened = false; state.activeChatId = "chat-b"; });
     await page.getByText("Что войдёт в следующий запрос модели", { exact: true }).first().click();
     assert.equal(await page.evaluate(() => window.inspectorOpened), false, "stale detail cannot open another chat's context");
-    console.log("PASS activity layout: action/target/result, narrow wrapping, exact technical disclosure and addressed context link");
+    console.log("PASS activity layout: action/target/result, Markdown line breaks, deduplicated diagnostics, narrow wrapping and addressed context link");
   } finally { await browser.close(); }
 })().catch(error => { console.error(error); process.exitCode = 1; });

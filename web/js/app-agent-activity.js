@@ -199,6 +199,7 @@ function activityOperationIcon(activity) {
 }
 
 function activityPrimaryText(activity) {
+  if (activityKind(activity) === "diagnostic") return "Выполнение";
   if (activityToolId(activity)) {
     var display = activityValue(activity, "Display", "display", null);
     var action = activityStatus(activity) === "running"
@@ -306,6 +307,8 @@ function activityDisplayResult(activity) {
   if (status === "waiting") return activityValue(activity, "ExecutionStatus", "executionStatus", "") === "awaiting_user"
     ? "Жду ответа" : "Жду подтверждения";
   if (status === "cancelled") return "Отменено";
+  if (activityKind(activity) === "diagnostic" && status === "failed") return window.RNAssistantRunViewState.failureReasonLabel(
+    activityValue(activity, "ExecutionStatus", "executionStatus", ""));
   var code = String(activityValue(activity, "ErrorCode", "errorCode", "") || "").toLowerCase();
   if (dispatch === "NotDispatched" && code === "excel_sheet_already_exists") return "Лист уже существует. Создание не выполнено.";
   if (status === "failed" || status === "completed_with_errors") {
@@ -353,7 +356,7 @@ function activityDisplayResult(activity) {
 }
 
 function activityCommentText(activity) {
-  if (activityKind(activity) === "notice" && !activityToolId(activity)) return "";
+  if (["notice", "diagnostic"].indexOf(activityKind(activity)) >= 0 && !activityToolId(activity)) return "";
   var toolId = activityToolId(activity);
   var subtitle = activityValue(activity, "Subtitle", "subtitle", "");
   if (!subtitle || subtitle === toolId) {
@@ -382,7 +385,7 @@ function activityHasDetails(activity, context) {
   return !!((!(context && context.liveFeed) && activityChildren(activity).length) ||
     activityArgumentsJson(activity) ||
     activityDataJson(activity) ||
-    activityResultMessage(activity) ||
+    activityDetailTexts(activity, context).length ||
     activityStatus(activity) === "failed" ||
     (activityPendingId(activity) && activityStatus(activity) === "waiting"));
 }
@@ -396,47 +399,33 @@ function createAgentTextButton(label, className, onClick) {
   return button;
 }
 
-function appendActivityErrorPanel(node, activity, context) {
+function appendActivityErrorActions(node, activity, context) {
   if (activityStatus(activity) !== "failed") {
     return;
   }
 
-  var result = activityDisplayResult(activity);
   var toolId = activityToolId(activity);
-  var panel = document.createElement("div");
-  panel.className = "agent-error-panel";
-
-  var reason = document.createElement("div");
-  reason.className = "agent-error-reason";
-  reason.textContent = result || "Шаг завершился ошибкой.";
-  panel.appendChild(reason);
-
-  var meta = document.createElement("div");
-  meta.className = "agent-error-meta";
-  meta.textContent = toolId ? ("Инструмент: " + toolId) : "Шаг инструмента";
-  panel.appendChild(meta);
-
+  var sourceChatId = state.activeChatId;
   var actions = document.createElement("div");
   actions.className = "agent-inline-actions";
   actions.appendChild(createAgentCopyButton("Копировать диагностику", [
     "Title: " + activityTitle(activity),
     "Tool: " + toolId,
     "Status: " + activityStatus(activity),
-    "Reason: " + activityResultMessage(activity)
+    "Reason: " + activityDetailTexts(activity, context).join("\n\n")
   ].join("\n")));
   actions.appendChild(createAgentTextButton("Причина и детали", "secondary", function () {
-    if (typeof window.openRunJournal !== "function") return;
+    if (state.activeChatId !== sourceChatId || typeof window.openRunJournal !== "function") return;
     var message = context && context.message ? context.message : null;
     window.openRunJournal({
-      chatId: state.activeChatId,
+      chatId: sourceChatId,
       runId: activityValue(activity, "RunId", "runId", "") || (message ? messageRunId(message) : ""),
       stepId: activityStepId(activity),
       toolCallId: activityToolCallId(activity),
       filter: "problems"
     });
   }));
-  panel.appendChild(actions);
-  node.appendChild(panel);
+  node.appendChild(actions);
 }
 
 function createAgentCopyButton(label, text) {
@@ -494,14 +483,14 @@ function appendActivityDetailsContent(node, activity, context) {
     body.appendChild(childList);
   }
 
-  appendActivityErrorPanel(body, activity, context);
+  appendActivityErrorActions(body, activity, context);
 
-  if (activityResultMessage(activity)) {
+  activityDetailTexts(activity, context).forEach(function (text) {
     var result = document.createElement("div");
     result.className = "agent-activity-result";
-    result.textContent = "Сообщение инструмента: " + activityResultMessage(activity);
+    result.textContent = (activityToolId(activity) ? "Сообщение инструмента:\n" : "Диагностика:\n") + text;
     body.appendChild(result);
-  }
+  });
   if (typeof appendArgumentsData === "function") {
     appendArgumentsData(body, activityArgumentsJson(activity));
   }
@@ -559,17 +548,14 @@ function appendActivityTreeArtifacts(parent, activity, context) {
   });
 }
 
-function agentDiagnosticText(item) {
-  if (!item) return "";
-  return item.message ? messageContent(item.message).trim() : "";
-}
-
-function appendAgentDiagnosticMessage(parent, text) {
-  text = String(text || "").trim();
-  if (!text) return;
-  var message = document.createElement("div");
-  message.className = "agent-diagnostic-message markdown";
-  message.innerHTML = markdown(text);
-  parent.appendChild(message);
-  enhanceMarkdown(message, { enableJsonViewer: true, sourceText: text });
+// Some diagnostic events retain the body only in Content. Keep both sources
+// when different, once when equal; do not merge separate calls or model messages.
+function activityDetailTexts(activity, context) {
+  var texts = [];
+  function append(text) {
+    if (text && String(text).trim() && !texts.some(function (existing) { return existing.trim() === String(text).trim(); })) texts.push(String(text));
+  }
+  append(activityResultMessage(activity));
+  if (activityKind(activity) === "diagnostic" && context && context.message) append(messageContent(context.message));
+  return texts;
 }

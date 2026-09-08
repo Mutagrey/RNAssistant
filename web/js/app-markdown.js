@@ -1,6 +1,6 @@
 (function () {
-  window.markdown = function (text) {
-    return DOMPurify.sanitize(marked.parse(text || ""));
+  window.markdown = function (text, options) {
+    return DOMPurify.sanitize(marked.parse(text || "", { breaks: !!(options && options.preserveLineBreaks) }));
   };
 
   function renderLatex(root) {
