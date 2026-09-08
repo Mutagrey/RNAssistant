@@ -2,8 +2,10 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
+using System.Text;
 using Newtonsoft.Json;
 using RNAssistant.Core.Models;
+using RNAssistant.Core.Tools;
 
 namespace RNAssistant.Core.Storage
 {
@@ -46,10 +48,52 @@ namespace RNAssistant.Core.Storage
             var markdown = original == null || string.Equals(original.ContentType, "text/markdown", StringComparison.OrdinalIgnoreCase) ||
                 string.Equals(Path.GetExtension(original.FileName), ".md", StringComparison.OrdinalIgnoreCase) ||
                 string.Equals(Path.GetExtension(original.FileName), ".markdown", StringComparison.OrdinalIgnoreCase);
+            var result = SearchTextView(scope, reference, artifact, body, view, coverage, markdown, original?.ExtractedCharCount,
+                query, characterBudget, snippetCharacters);
+            result.ScanTruncated |= sourceIncomplete;
+            return result;
+        }
+
+        // The HTML catalog owns member resolution/serialization. Retain its derived
+        // view beneath the exact published parent; do not invent member heads.
+        public ResourceSearchResult SearchMemberText(ChatSession session, ResourceDescriptor member, string text,
+            string query, int characterBudget, int snippetCharacters)
+        {
+            if (member?.Reference == null || member.Parent == null || text == null || string.IsNullOrEmpty(query) ||
+                characterBudget < 1 || characterBudget > 1000000 || snippetCharacters < 1 || snippetCharacters > 2000)
+                throw new ArgumentException("An exact member and bounded search are required.");
+            var artifact = Read(session, member.Parent, false);
+            var parent = ResourceUri.Parse(member.Parent.Uri);
+            var address = ResourceUri.Parse(member.Reference.Uri);
+            if (artifact.Kind != ChatArtifactKinds.HtmlWorkspace || parent.Segments.Count != 5 || address.Provider != parent.Provider ||
+                address.Segments.Count != 8 || !address.Segments.Take(5).SequenceEqual(parent.Segments) ||
+                address.Segments[5] != "member" || address.Segments[6] != "file" && address.Segments[6] != "data" ||
+                member.Reference.Revision != member.Parent.Revision || text.Length > MaximumIndexedCharacters)
+                throw new InvalidDataException("The text member does not belong to this bounded HTML snapshot.");
+            if (!_payloads.HasStoredReference(new ChatBlobReference { Sha256 = artifact.ContentSha256, ByteLength = artifact.ContentByteLength.Value }))
+                throw new InvalidDataException("The exact HTML source is unavailable.");
+            var body = new PayloadRef(TextPatternEngine.Sha256(text), Encoding.UTF8.GetByteCount(text), member.MimeType);
+            var path = "member/" + address.Segments[6] + "/" + address.Segments[7];
+            var result = SearchTextView(Scope(session), member.Parent, artifact, body, "artifact-member-text-index-v1:" + path,
+                new ResourceCoverage(ResourceCoverageKinds.CharacterRange, start: 0, end: text.Length, path: path), false, text.Length,
+                query, characterBudget, snippetCharacters, text);
+            foreach (var match in result.Matches)
+            {
+                match.Reference = member.Reference.Copy(); match.Kind = member.Kind; match.Title = member.Title;
+                match.CreatedUtc = member.CreatedUtc;
+                match.Representation = address.Segments[6] == "file" ? ResourceRepresentations.Source : ResourceRepresentations.Text;
+            }
+            return result;
+        }
+
+        private ResourceSearchResult SearchTextView(ResourceAuthorityScopeId scope, ResourceRef reference, ChatArtifact artifact,
+            PayloadRef body, string view, ResourceCoverage coverage, bool markdown, int? expectedCharacters,
+            string query, int characterBudget, int snippetCharacters, string derivedText = null)
+        {
             var captured = _revisions.GetView(scope, reference, view);
             if (captured != null && (captured.ContentSha256 != body.Sha256 || JsonConvert.SerializeObject(captured.Coverage) != JsonConvert.SerializeObject(coverage)))
                 throw new InvalidDataException("The text index does not match its exact source.");
-            if (captured == null) captured = MaterializeTextIndex(scope, reference, body, view, coverage, markdown, original?.ExtractedCharCount);
+            if (captured == null) captured = MaterializeTextIndex(scope, reference, body, view, coverage, markdown, expectedCharacters, derivedText);
             ResourceSearchResult result;
             try { result = SearchTextIndex(captured, artifact, query, characterBudget, snippetCharacters); }
             catch (Exception ex) when (ex is IOException || ex is InvalidDataException || ex is JsonException)
@@ -57,23 +101,23 @@ namespace RNAssistant.Core.Storage
                 // Recreate only this deterministic view from the SAME exact body.
                 // Missing derived bytes must not hide a healthy document. Immutable
                 // view registration rejects any conflicting derivation.
-                captured = MaterializeTextIndex(scope, reference, body, view, coverage, markdown, original?.ExtractedCharCount);
+                captured = MaterializeTextIndex(scope, reference, body, view, coverage, markdown, expectedCharacters, derivedText);
                 result = SearchTextIndex(captured, artifact, query, characterBudget, snippetCharacters);
             }
-            result.ScanTruncated |= sourceIncomplete;
             return result;
         }
 
         private ResourceRevisionView MaterializeTextIndex(ResourceAuthorityScopeId scope, ResourceRef reference, PayloadRef body,
-            string view, ResourceCoverage coverage, bool markdown, int? expectedCharacters)
+            string view, ResourceCoverage coverage, bool markdown, int? expectedCharacters, string derivedText)
         {
             if (body.ByteLength > MaximumIndexedCharacters * 4L)
                 throw new InvalidDataException("The text source exceeds the bounded index size.");
-            var text = _payloads.ReadText(body.ToBlobReference());
+            var text = derivedText ?? _payloads.ReadText(body.ToBlobReference());
             if (text == null || text.Length > MaximumIndexedCharacters)
                 throw new InvalidDataException("The exact text source is unavailable or exceeds the bounded index size.");
             if (expectedCharacters.HasValue && expectedCharacters.Value != text.Length)
                 throw new InvalidDataException("The retained extraction length does not match its exact text.");
+            if (derivedText != null) _payloads.StoreText(derivedText, body.ContentType);
             var index = new TextIndex { Length = text.Length, SectionsThrough = text.Length };
             for (var start = 0; start < text.Length;)
             {

@@ -21,11 +21,14 @@ namespace RNAssistant.Office.Services
 
         private readonly Func<ChatSession, string, bool> _loadArtifactBody;
         private readonly ChatBlobStore _payloads;
+        private readonly DocumentArtifactStore _documentArtifacts;
 
-        public ChatHtmlResourceCatalog(Func<ChatSession, string, bool> loadArtifactBody, ChatBlobStore payloads = null)
+        public ChatHtmlResourceCatalog(Func<ChatSession, string, bool> loadArtifactBody, ChatBlobStore payloads = null,
+            DocumentArtifactStore documentArtifacts = null)
         {
             _loadArtifactBody = loadArtifactBody;
             _payloads = payloads;
+            _documentArtifacts = documentArtifacts;
         }
 
         public static bool SupportsKind(string kind)

@@ -34,7 +34,7 @@ namespace RNAssistant.Office.Services
         {
             _loadArtifactBody = loadArtifactBody;
             _readAttachmentText = readAttachmentText;
-            _htmlResources = new ChatHtmlResourceCatalog(LoadWorkspaceBody, payloads);
+            _htmlResources = new ChatHtmlResourceCatalog(LoadWorkspaceBody, payloads, documentArtifacts);
             _readAttachmentBytes = readAttachmentBytes;
             _payloads = payloads;
             _documentArtifacts = documentArtifacts;
@@ -138,7 +138,10 @@ namespace RNAssistant.Office.Services
         {
             query = (query ?? string.Empty).Trim();
             var sourceSession = session;
+            var membersOnly = ChatHtmlResourceCatalog.SupportsKind(kind);
+            string sourceRevision = membersOnly ? null : ProjectDiscovery(sourceSession, 0, 0).SourceRevision;
             var discovery = ProjectHtmlDiscovery(session);
+            var htmlDiscovery = discovery;
             session = discovery.Session;
             if (query.Length == 0) throw new InvalidOperationException("Resource search query is required.");
             limit = Math.Max(1, Math.Min(MaximumSearchResults, limit <= 0 ? 10 : limit));
@@ -149,6 +152,7 @@ namespace RNAssistant.Office.Services
             if (string.IsNullOrWhiteSpace(kind) || ChatHtmlResourceCatalog.SupportsKind(kind))
             {
                 var html = _htmlResources.Search(session, query, kind, limit, maxCharsPerMatch);
+                ValidateHtmlSearchDiscovery(sourceSession, htmlDiscovery);
                 if (ChatHtmlResourceCatalog.SupportsKind(kind))
                 {
                     html.UnavailableResources += discovery.UnavailableResources;
@@ -161,7 +165,6 @@ namespace RNAssistant.Office.Services
 
             var unavailable = discovery.UnavailableResources;
             var sourceOffset = 0;
-            string sourceRevision = null;
             for (var sourcePage = 0; sourcePage < 20; sourcePage++)
             {
                 discovery = ProjectDiscovery(sourceSession, sourceOffset, 50);
@@ -259,6 +262,7 @@ namespace RNAssistant.Office.Services
             // page-to-page check alone cannot detect that race.
             if (sourceRevision != ProjectDiscovery(sourceSession, 0, 0).SourceRevision)
                 throw new ResourceRequestException("The document changed during search; rediscover the source.", "resource_revision_changed", true);
+            if (string.IsNullOrWhiteSpace(kind)) ValidateHtmlSearchDiscovery(sourceSession, htmlDiscovery);
             return new ResourceSearchResult
             {
                 Query = query,
@@ -781,6 +785,14 @@ namespace RNAssistant.Office.Services
             }
             catch (Exception ex) when (IsDiscoveryUnavailable(ex)) { result.UnavailableResources++; }
             return result;
+        }
+
+        private void ValidateHtmlSearchDiscovery(ChatSession session, ArtifactDiscoveryProjection before)
+        {
+            var after = ProjectHtmlDiscovery(session);
+            if (before.SourceRevision != after.SourceRevision || before.UnavailableResources != after.UnavailableResources ||
+                before.Session.ActiveHtmlArtifactId != after.Session.ActiveHtmlArtifactId)
+                throw new ResourceRequestException("The selected HTML workspace changed during search; refresh and rediscover it.", "resource_revision_changed", true);
         }
 
         private static ChatSession CopyDiscoverySession(ChatSession session, List<ChatArtifact> artifacts)

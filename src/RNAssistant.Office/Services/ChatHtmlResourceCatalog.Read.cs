@@ -42,6 +42,21 @@ namespace RNAssistant.Office.Services
                         result.ScanTruncated = true;
                         break;
                     }
+                    if (!string.IsNullOrWhiteSpace(member.Artifact.DocumentAuthorityId))
+                    {
+                        try
+                        {
+                            if (_documentArtifacts == null) throw new System.IO.InvalidDataException("The document artifact owner is unavailable.");
+                            var indexed = _documentArtifacts.SearchMemberText(session, Describe(member), member.Content, query, remaining, maxCharsPerMatch);
+                            result.Matches.AddRange(indexed.Matches);
+                            result.ScannedCharacters += indexed.ScannedCharacters;
+                            result.ScanTruncated |= indexed.ScanTruncated;
+                        }
+                        catch (Exception ex) when (ex is System.IO.InvalidDataException || ex is System.IO.IOException ||
+                            ex is JsonException || ex is UnauthorizedAccessException || ex is ResourceRequestException)
+                        { result.UnavailableResources++; }
+                        continue;
+                    }
                     var scanLength = Math.Min(member.Content.Length,
                         Math.Min(MaximumSearchCharactersPerMember, remaining));
                     source = member.Content.Substring(0, scanLength);
@@ -57,6 +72,7 @@ namespace RNAssistant.Office.Services
                 result.Matches.Add(new ResourceSearchMatch
                 {
                     Reference = Reference(member),
+                    DocumentScoped = !string.IsNullOrWhiteSpace(member.Artifact.DocumentAuthorityId),
                     CreatedUtc = member.CreatedUtc,
                     Kind = member.Kind,
                     Title = member.Title,
