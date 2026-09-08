@@ -64,6 +64,7 @@
     <Compile Include="Contracts\ArtifactWorkingSetDtos.cs" />
     <Compile Include="Services\ArtifactWorkingSetService.cs" />
     <Compile Include="Contracts\BridgeDtos.RunChanges.cs" />
+    <Compile Include="Contracts\BridgeDtos.ToolResultPresentation.cs" />
     <Compile Include="Contracts\BridgeDtos.ArtifactViewer.cs" />
     <Compile Include="Contracts\BridgeDtos.cs" />
     <Compile Include="Contracts\BridgeDtos.Diagnostics.cs" />
@@ -206,6 +207,7 @@
     <Compile Include="Ribbon\AssistantRibbonXml.cs" />
     <Compile Include="Services\ArtifactLibraryProjectionService.cs" />
     <Compile Include="Services\RunChangesService.cs" />
+    <Compile Include="Services\ToolResultPresentationService.cs" />
     <Compile Include="Services\ArtifactPdfViewerService.cs" />
     <Compile Include="Services\ArtifactViewerService.cs" />
     <Compile Include="Services\PlanDocumentService.cs" />

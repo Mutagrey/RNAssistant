@@ -20,7 +20,7 @@ function appendAgentJsonViewer(parent, label, text, className, open) {
     controller = window.RNAssistantViewerRegistry.mount("json", host, {
       text: String(text),
       completeness: "full",
-      mode: "pretty",
+      mode: "tree",
       onCopy: window.copyTextResult
     });
   }

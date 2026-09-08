@@ -204,7 +204,7 @@ function activityPrimaryText(activity) {
     var display = activityValue(activity, "Display", "display", null);
     var action = activityStatus(activity) === "running"
       ? activityValue(display, "RunningAction", "runningAction", "") : activityValue(display, "Action", "action", "");
-    if (action) return String(action);
+    if (action) return String(action).replace(/^(Поиск|Чтение) ресурс(?:а|ов)?$/, "$1").replace(/^Ищу ресурсы$/, "Ищу").replace(/^Читаю ресурс$/, "Читаю");
     var title = activityTitle(activity);
     if (title !== activityToolId(activity) && /[А-Яа-яЁё]/.test(title)) return title;
     return activityStatus(activity) === "running" ? "Вызываю инструмент" : "Вызов инструмента";
@@ -453,20 +453,8 @@ function appendActivityDetailsContent(node, activity, context) {
   if (activityToolId(activity)) {
     var tool = document.createElement("div");
     tool.className = "agent-activity-tool-id";
-    tool.textContent = "Инструмент: " + activityToolId(activity);
+    tool.textContent = activityToolId(activity);
     body.appendChild(tool);
-    var distinction = document.createElement("div");
-    distinction.className = "agent-activity-context-note";
-    distinction.textContent = "Ниже — данные журнала. Короткий статус предназначен для вас. Модель получает отдельный результат с данными и пояснениями после обработки контекста.";
-    body.appendChild(distinction);
-    if (typeof setPromptContextInspectorOpen === "function") {
-      var sourceChatId = state.activeChatId;
-      body.appendChild(createAgentTextButton("Что войдёт в следующий запрос модели", "secondary", function () {
-        var trigger = $("contextMeter");
-        if (state.activeChatId !== sourceChatId || !trigger || trigger.disabled) return;
-        setPromptContextInspectorOpen(true);
-      }));
-    }
     var code = activityValue(activity, "ErrorCode", "errorCode", "");
     if (code) {
       var errorCode = document.createElement("div");
@@ -485,21 +473,21 @@ function appendActivityDetailsContent(node, activity, context) {
     body.appendChild(childList);
   }
 
-  appendActivityErrorActions(body, activity, context);
-
   activityDetailTexts(activity, context).forEach(function (text) {
     var result = document.createElement("div");
     result.className = "agent-activity-result";
-    result.textContent = (activityToolId(activity) ? "Сообщение инструмента:\n" : "Диагностика:\n") + text;
+    result.textContent = (activityToolId(activity) ? "" : "Диагностика:\n") + text;
     body.appendChild(result);
   });
+  if (typeof appendToolResultPreview === "function") appendToolResultPreview(body, activity, context, node);
   if (typeof appendArgumentsData === "function") {
     appendArgumentsData(body, activityArgumentsJson(activity));
   }
   if (typeof appendActivityData === "function") {
-    appendActivityData(body, "Результат инструмента в журнале", activityDataJson(activity));
+    appendActivityData(body, "Результат", activityDataJson(activity));
   }
 
+  appendActivityErrorActions(body, activity, context);
   node.appendChild(body);
 }
 

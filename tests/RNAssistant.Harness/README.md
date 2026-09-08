@@ -134,10 +134,16 @@ counts against an independent LCS oracle; `run-changes-layout.test.js` exercises
 the completed-run renderer, narrow/wide Chromium layout and stale chat delivery
 with the same Playwright environment variables as the checks below.
 
+`tool presentation:` covers exact call/confirmation attribution, sibling changes,
+no-op versus missing/unverified evidence, artifact parent boundaries and typed bounded
+content blocks with exact numeric cells. `tests/web/tool-result-presentation.test.js`
+covers lazy requests, collapse/removal cancellation, retry, wrong-source delivery,
+in-flight revision changes and unknown block kinds using the Playwright setup below.
+
 `tests/web/agent-activity-layout.test.js` checks action/target/result wrapping at
 wide and narrow chat widths, shipped Markdown line breaks/lists/code/sanitization,
-single diagnostic bodies, zero-action failures and the addressed context-inspector
-link. It uses the same bundled Playwright and optional browser/screenshot variables
+single diagnostic bodies, zero-action failures, concise step details and bounded
+typed result previews in light/dark narrow layouts. It uses the same bundled Playwright and optional browser/screenshot variables
 as the artifact/diagnostics layout check below.
 
 `tests/web/artifact-diagnostics-layout.test.js` checks actual Chromium geometry for

@@ -385,6 +385,7 @@
 
 .agent-activity-detail-body {
   display: grid;
+  min-width: 0;
   gap: 12px;
   margin: 8px 0 8px 22px;
   padding: 12px 14px;
@@ -403,9 +404,9 @@
 }
 
 .agent-activity-tool-id {
-  color: #667085;
+  color: var(--muted);
   font-family: Consolas, "Cascadia Mono", "Courier New", monospace;
-  font-size: 10px;
+  font-size: 12px;
   line-height: 1.4;
   overflow-wrap: anywhere;
 }
@@ -862,16 +863,9 @@
 .agent-activity-status-symbol { margin-right: 4px; font-weight: 600; }
 .agent-activity-caption.status-failed { color: var(--danger); }
 
-.agent-activity-context-note {
-  margin: 6px 0;
-  color: var(--muted);
-  font-size: .8571rem;
-  line-height: 1.5;
-}
-
 /* Retained text changes, shared source formatter with VBA previews/journal. */
 .run-changes-slot { min-width: 0; }
-.run-changes { margin: 12px 0 4px; border: 1px solid var(--line); border-radius: 12px; overflow: hidden; background: var(--panel); }
+.run-changes { margin: 12px 0 4px; border: 1px solid var(--line); border-radius: 12px; overflow: hidden; background: var(--secondary-bg); }
 .run-changes-summary, .run-change-file-summary { cursor: pointer; padding: 10px 12px; display: flex; align-items: center; gap: 10px; min-width: 0; }
 .run-changes-summary { font-size: 13px; font-weight: 600; }
 .run-changes-summary::before, .run-change-file-summary::before { content: "›"; color: var(--muted); flex: 0 0 8px; }
@@ -894,3 +888,17 @@
 .text-diff-newline { color: var(--muted); font-size: 10px; }
 html[data-theme="dark"] .run-change-added { color: #72cb8f; }
 html[data-theme="dark"] .run-change-removed { color: #f0828d; }
+
+.run-changes-summary, .run-change-file-summary { background: rgba(127, 127, 127, .10); }
+.run-change-diff { background: var(--code); color: var(--code-text); max-height: 65vh; }
+.tool-result-slot { min-width: 0; }
+.tool-result-preview { min-width: 0; color: var(--text); }
+.tool-result-preview > summary { cursor: pointer; font-weight: 600; }
+.tool-result-preview-body { max-height: 60vh; overflow: auto; margin-top: 8px; }
+.tool-result-preview pre { white-space: pre-wrap; overflow-wrap: anywhere; font: inherit; }
+.tool-result-preview table { border-collapse: collapse; width: 100%; font-size: 12px; }
+.tool-result-preview th, .tool-result-preview td { border: 1px solid var(--line); padding: 6px 8px; text-align: left; min-width: 90px; max-width: 300px; overflow-wrap: anywhere; }
+.tool-result-preview th { background: var(--secondary-bg); position: sticky; top: 0; }
+.tool-result-item { padding: 8px 0; border-bottom: 1px solid var(--line); overflow-wrap: anywhere; }
+.tool-result-item > summary { cursor: pointer; }
+.tool-result-note { color: var(--muted); font-size: 12px; margin: 6px 0; }

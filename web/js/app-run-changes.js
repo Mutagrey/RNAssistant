@@ -97,6 +97,7 @@
     if (!result.complete) card.appendChild(element("p", "run-changes-caption", "Список неполный: достигнут лимит или часть журнала недоступна."));
     parent.appendChild(card);
   }
+  window.RNAssistantRunChanges = { render: render };
   window.appendRunChanges = function (parent, chatId, runId) {
     if (!chatId || !runId) return;
     // Session revision invalidates cached unknown/missing data after reconciliation.

@@ -577,6 +577,9 @@ namespace RNAssistant.Office
             LastVbaMutationCursor = request == null ? null : request.Cursor;
             return new VbaMutationQueryResponse { View = "vba-mutations", Rows = new VbaMutationRowDto[0] };
         }
+        public ToolResultPresentationDto ReadToolResultPresentation(ToolResultPresentationRequest request)
+        { return new ToolResultPresentationDto { ChatId = request.ChatId, RunId = request.RunId, ToolCallId = request.ToolCallId }; }
+
         public RunChangesDto ReadRunChanges(RunChangesRequest request)
         {
             return new RunChangesDto { ChatId = request.ChatId, RunId = request.RunId };

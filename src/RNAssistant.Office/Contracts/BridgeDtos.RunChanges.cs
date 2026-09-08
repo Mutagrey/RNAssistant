@@ -6,12 +6,15 @@ namespace RNAssistant.Office.Contracts
     public sealed class RunChangesRequest : ChatPayload
     {
         [JsonProperty("runId")] public string RunId { get; set; }
+        [JsonProperty("toolCallId")] public string ToolCallId { get; set; }
     }
 
     public sealed class RunChangesDto
     {
         [JsonProperty("chatId")] public string ChatId { get; set; }
         [JsonProperty("runId")] public string RunId { get; set; }
+        [JsonProperty("toolCallId")] public string ToolCallId { get; set; }
+        [JsonProperty("evidenceFound")] public bool EvidenceFound { get; set; }
         [JsonProperty("complete")] public bool Complete { get; set; } = true;
         [JsonProperty("items")] public List<RunTextChangeDto> Items { get; set; } = new List<RunTextChangeDto>();
     }

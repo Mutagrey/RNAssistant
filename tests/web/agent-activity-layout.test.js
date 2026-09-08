@@ -31,7 +31,7 @@ const read = file => fs.readFileSync(path.join(root, file), "utf8");
       window.appendMessageArtifactCards = () => {};
       window.setPromptContextInspectorOpen = open => { window.inspectorOpened = open; };
     });
-    for (const file of ["vendor/purify.min.js", "vendor/marked.min.js", "vendor/highlight.min.js", "app-utils.js", "app-markdown.js", "app-run-view-state.js", "app-agent-model.js", "app-agent.js", "app-messages.js", "app-viewer-registry.js", "app-json-viewer.js", "app-agent-data.js", "app-agent-activity.js"])
+    for (const file of ["vendor/purify.min.js", "vendor/marked.min.js", "vendor/highlight.min.js", "app-utils.js", "app-markdown.js", "app-run-view-state.js", "app-agent-model.js", "app-agent.js", "app-messages.js", "app-viewer-registry.js", "app-json-viewer.js", "app-agent-data.js", "app-text-diff.js", "app-run-changes.js", "app-tool-result-preview.js", "app-agent-activity.js"])
       await page.addScriptTag({ content: read("js/" + file) });
     await page.evaluate(() => {
       const fixtures = [
@@ -82,7 +82,7 @@ const read = file => fs.readFileSync(path.join(root, file), "utf8");
       assert.ok(bounds.every(row => row.targetOverflow !== "ellipsis"), "semantic targets remain visible");
       assert.equal(new Set(bounds[0].colors).size, 1, "action, target, icon and outcome use one muted color");
       assert.notEqual(bounds[4].colors[3], bounds[4].colors[0], "error remains distinct");
-      assert.ok(bounds[4].text.includes("excel_sheet_already_exists"), "failed action shows its stable error code inline");
+      assert.ok(bounds[4].text.includes("Лист уже существует"), "failed action shows its readable outcome");
       assert.equal(new Set(bounds[5].colors).size, 1, "unknown uses a symbol and text with neutral color");
       assert.ok(bounds[0].text.includes("Загружено") && !bounds[0].text.includes("private-id"));
       assert.ok(bounds[2].text.includes("Получено строк: 120"));
@@ -169,12 +169,36 @@ const read = file => fs.readFileSync(path.join(root, file), "utf8");
     await page.locator("#full-run").hover();
     if (process.env.LAYOUT_SCREENSHOT) await page.screenshot({ path: process.env.LAYOUT_SCREENSHOT, fullPage: true });
     await page.locator(".agent-activity-row").first().click();
-    await page.getByText("Что войдёт в следующий запрос модели", { exact: true }).first().click();
-    assert.equal(await page.evaluate(() => window.inspectorOpened), true);
-    assert.ok(await page.locator(".agent-activity-context-note").first().isVisible());
-    await page.evaluate(() => { window.inspectorOpened = false; state.activeChatId = "chat-b"; });
-    await page.getByText("Что войдёт в следующий запрос модели", { exact: true }).first().click();
-    assert.equal(await page.evaluate(() => window.inspectorOpened), false, "stale detail cannot open another chat's context");
-    console.log("PASS activity layout: action/target/result, Markdown line breaks, deduplicated diagnostics, narrow wrapping and addressed context link");
+    assert.equal(await page.getByText("Что войдёт в следующий запрос модели", { exact: true }).count(), 0);
+    assert.equal(await page.locator(".agent-activity-context-note").count(), 0);
+    assert.equal(await page.locator("#actions .agent-activity-tool-id").first().textContent(), "common.capabilities_read");
+    assert.match(await page.locator("#actions").textContent(), /Код ошибки: excel_sheet_already_exists/);
+    assert.equal(await page.locator("#actions .agent-activity-result").first().textContent(), "Loaded catalogRevision=private-id");
+    await page.evaluate(() => {
+      const host = document.createElement("div"); host.id = "previews"; document.querySelector("main").appendChild(host);
+      RNAssistantToolResultPresentation.render(host, { blocks: [
+        { kind: "list", title: "Список", complete: false, items: Array.from({ length: 45 }, (_, i) => ({ title: "Запись " + i, detail: "<img src=x onerror=alert(1)>" })) },
+        { kind: "table", title: "Таблица", complete: true, columns: ["Значение"], rows: [["ДлинноеЗначение".repeat(60)]] },
+        { kind: "text_changes", title: "Изменения этого шага", complete: true, changes: { toolCallId: "call", complete: true, evidenceFound: true, items: [
+          { title: "Module1", before: "old\n", after: "new\n", beforeExists: true, afterExists: true, availability: "available" }
+        ] } }
+      ] });
+    });
+    assert.equal(await page.locator("#previews > details").count(), 3, "typed blocks select independent renderers");
+    assert.equal(await page.locator("#previews .tool-result-item").count(), 20);
+    await page.locator("#previews button").first().click();
+    assert.equal(await page.locator("#previews .tool-result-item").count(), 40);
+    await page.locator("#previews .tool-result-item summary").first().click();
+    assert.equal(await page.locator("#previews img").count(), 0, "preview strings remain inert");
+    assert.match(await page.locator("#previews").innerText(), /Показана доступная часть/);
+    await page.locator("#previews .run-change-file-summary").click();
+    await page.locator("#previews .vba-diff-line.add").waitFor();
+    assert.equal(await page.locator("#previews .vba-diff-line.add").count(), 1);
+    for (const theme of ["light", "dark"]) {
+      await page.evaluate(theme => document.documentElement.dataset.theme = theme, theme);
+      await page.setViewportSize({ width: 360, height: 920 });
+      assert.ok(await page.locator("#previews").evaluate(el => el.scrollWidth <= el.clientWidth + 1), "previews fit narrow " + theme + " theme");
+    }
+    console.log("PASS activity layout: action/target/result, Markdown line breaks, deduplicated diagnostics, narrow wrapping and concise step details");
   } finally { await browser.close(); }
 })().catch(error => { console.error(error); process.exitCode = 1; });

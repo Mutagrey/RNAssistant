@@ -42,6 +42,40 @@ strings remain strings. The lossless parser retains duplicate keys and numeric
 lexemes; raw/text modes and node/source copy preserve the original encoding.
 Nested decoded paths are marked `::<json>` and are display paths only.
 
+### Expanded chat steps
+
+Step details show the tool id, optional error code and original result message,
+followed by a bounded, disposable preview and collapsed arguments/result JSON.
+The shared lossless JSON viewer opens in tree mode, with a taller resizable area.
+The context inspector remains available through the context meter.
+
+`getToolResultPresentation` takes exact `chatId`, `runId` and `toolCallId` and
+returns typed `text`, `list`, `table` and `text_changes` blocks. The local
+`ToolResultPresentationService` reads the retained activity projection; it rejects
+missing/ambiguous calls and mismatched runs. The content adapter recognizes existing
+list/table/text shapes through typed inputs. Unknown shapes keep raw JSON;
+malformed/oversized inputs show an unavailable notice. Content preview is bounded to
+512K UTF-16 source characters, 200 rows, 12 columns and 12,000 text characters;
+clipped fields/incomplete pages are labelled. Numeric table cells are formatted on
+the host as strings, preserving integers beyond JavaScript's safe range.
+
+Only `RunChangesService` produces text-change blocks. Its optional exact call filter
+selects VBA journal rows before chain folding, including confirmation correlation;
+artifact revisions require a matching `SourceMessageId` belonging to that call.
+A run id, title, time or read reference alone cannot attribute a revision. Unlinked
+sources remain unavailable at step level. `evidenceFound` distinguishes a verified
+empty comparison from absent evidence. Reads with no effect do not load the mutation
+journal. The shared run/step diff renderer keeps confirmed and planned/unverified
+comparisons separate; raw result fields named `before`/`after` have no special power.
+
+The UI has one renderer per block kind, independent of tool names. A new view adds a
+typed block, its local projection and a renderer without altering tool schemas,
+model results or storage. Views load only on step expansion, cancel on collapse or
+removal/chat switch, discard late/mismatched delivery and reload across an in-flight
+chat revision change. Unknown block kinds retain the raw JSON route. The replaced
+browser payload-shape/diff inference path is removed; no adapter or second store is
+introduced. Windows/Office/WebView2 delivery qualification remains open.
+
 ## Payload preview delivery
 
 `TrajectoryPayloadService` resolves one exact event in the explicitly addressed

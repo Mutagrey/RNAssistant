@@ -77,7 +77,7 @@ function settle() { return new Promise(resolve => setImmediate(resolve)); }
   assert.equal(host.childNodes.length, 0, "collapsed details do not create viewer DOM");
   details.open = true; details.dispatch("toggle");
   assert.ok(host.firstElementChild.classList.contains("rn-json-viewer"));
-  assert.match(host.textContent, /"dup"/);
+  assert.match(host.textContent, /повтор 1\/2/, "tree is the default");
   button(host, "Дерево").click();
   assert.match(host.textContent, /повтор 1\/2/);
   assert.match(host.textContent, /9007199254740993123456789/);

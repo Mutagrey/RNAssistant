@@ -38,7 +38,19 @@ namespace RNAssistant.Office
                     _chatStore.LoadArtifactBody, _toolExecutor.ResourceGateway),
                 query => _vbaJournalStore.QueryMutations(session.Host, session.DocumentKey, query),
                 id => _vbaJournalStore.GetMutationDetail(session.Host, session.DocumentKey, id,
-                    RunChangesService.MaximumSourceCharacters)).Read(session, request.RunId);
+                    RunChangesService.MaximumSourceCharacters)).Read(session, request.RunId, request.ToolCallId);
+        }
+
+        public ToolResultPresentationDto ReadToolResultPresentation(ToolResultPresentationRequest request)
+        {
+            if (request == null) throw new ArgumentNullException(nameof(request));
+            var session = LoadArtifactViewerSession(request.ChatId);
+            var changes = new RunChangesService(
+                artifact => RunChangesService.ReadRetainedSource(session, artifact, _chatStore.LoadArtifactBody, _toolExecutor.ResourceGateway),
+                query => _vbaJournalStore.QueryMutations(session.Host, session.DocumentKey, query),
+                id => _vbaJournalStore.GetMutationDetail(session.Host, session.DocumentKey, id, RunChangesService.MaximumSourceCharacters));
+            return new ToolResultPresentationService(call => changes.Read(session, request.RunId, call))
+                .Read(session, request.RunId, request.ToolCallId);
         }
 
         public ArtifactViewerPageDto ReadArtifactViewerPage(

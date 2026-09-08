@@ -1,5 +1,18 @@
 # Stabilization progress
 
+Current tool-result presentation slice (2026-09-08): local typed text/list/table/change
+blocks replace browser payload guessing. Exact chat/run/call requests lazily project
+retained results; VBA changes filter calls before folding, and artifact comparisons
+require exact source-message attribution. Missing evidence differs from no change;
+unverified plans use the shared explicitly labelled diff renderer. Expanded cards
+show tool id/error/message, followed by previews and raw JSON. JSON defaults to a
+taller resizable tree; diff surfaces support both themes and search/read labels are
+shorter. No new durable store/model schema or Windows gate closure.
+Checks: typed presentation 3/3, run changes 3/3 and agent JSON viewer 5/5 pass;
+Chromium layout and lazy delivery/cancellation checks pass. Version-format and diff
+checks pass. HTML/Plan tool-to-card integration and Windows/Office/WebView2
+qualification remain open. See [step presentation](../trajectory-query.md#expanded-chat-steps).
+
 Current user-requested diff correction (2026-09-08): unverified VBA results now
 expose retained original → intended source with an explicit planned/unverified
 label, per-entry counts and an overall header total including planned lines.
