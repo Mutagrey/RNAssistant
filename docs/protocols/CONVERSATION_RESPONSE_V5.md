@@ -89,9 +89,9 @@ More than one call is accepted only when every member belongs to the current
 runtime-owned sequential-batch set: independent local reads or managed mutations
 whose confirmation is already satisfied. Calls execute in array order and every
 mutation has its own fresh guard, dispatch, verification and commit; the batch has
-no atomicity promise. An unknown mutation effect closes the remaining undispatched
-members. Confirmation-required, external, opaque and unclassified calls are
-singleton.
+no atomicity promise. An unknown mutation effect remains cumulative run evidence,
+but does not close the remaining accepted members by itself. Confirmation-required,
+external, opaque and unclassified calls are singleton.
 
 ## History And Prompts
 

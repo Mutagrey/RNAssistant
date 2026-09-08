@@ -203,6 +203,7 @@
       var degraded = current.status === "degraded";
       panel.classList.toggle("hidden", !degraded);
       if (!degraded) return;
+      panel.classList.toggle("is-blocked", current.canMutate === false);
       if ($("htmlWorkspaceRecoveryMessage")) {
         $("htmlWorkspaceRecoveryMessage").textContent = current.message || "Цепочка HTML-ревизий повреждена. Выберите доступную ревизию.";
       }

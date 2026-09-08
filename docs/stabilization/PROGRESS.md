@@ -1,5 +1,13 @@
 # Stabilization progress
 
+Current correction (2026-09-08): unknown side-effecting tool results no longer
+stop the current Agent run or close the remaining managed-mutation batch members.
+The uncertainty is still retained in cumulative execution health, final status and
+duplicate-call protection for the exact same unknown call. HTML ancestor recovery
+now renders as a warning while the active revision remains mutable, and uses the
+red blocked state only when recovery disables mutation. Focused kernel and HTML
+harness checks pass host-neutral; Windows/Office/WebView2 qualification remains open.
+
 Current correction (2026-09-08): model-facing `common.tools_upsert` is now a true
 create-or-update operation without model-selected existence modes. Tool-manifest
 schema failures name the authored `parameters` field, authoring guidance includes

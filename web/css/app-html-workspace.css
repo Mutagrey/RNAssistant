@@ -140,10 +140,16 @@
   gap: 8px;
   align-items: center;
   padding: 8px 10px;
-  border-bottom: 1px solid #efc4c0;
+  border-bottom: 1px solid #f2d28a;
+  background: #fff9e8;
+  color: #7a4b00;
+  font-size: 11px;
+}
+
+.html-workspace-recovery.is-blocked {
+  border-bottom-color: #efc4c0;
   background: #fff6f4;
   color: var(--danger);
-  font-size: 11px;
 }
 
 .html-workspace-recovery-copy {
