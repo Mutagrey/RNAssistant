@@ -31,6 +31,15 @@ namespace RNAssistant.Office.Services
 
         public string Id { get { return ProviderName; } }
 
+        internal ResourceDescriptor ResolveSingleton(
+            ChatSession session,
+            string target)
+        {
+            if (target != "root" && target != "selection")
+                throw new ArgumentOutOfRangeException(nameof(target));
+            return _scope.Read(session, () => Describe(session, target));
+        }
+
         public ResourceListPage List(ChatSession session, string kind, string cursor, int limit)
         {
             return _scope.Read(session, delegate

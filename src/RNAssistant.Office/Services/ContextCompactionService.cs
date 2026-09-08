@@ -386,6 +386,7 @@ namespace RNAssistant.Office.Services
         {
             var builder = new StringBuilder();
             sources = new Dictionary<string, StructuredContextClaim>(StringComparer.Ordinal);
+            var sourceNumber = 0;
             var prefixMessages = (prefix ?? new ChatMessage[0]).Where(message => message != null).ToList();
             var active = ActiveCheckpoint(session);
             if (active != null)
@@ -393,8 +394,14 @@ namespace RNAssistant.Office.Services
                 builder.AppendLine("PRIOR_CURRENT_CLAIMS:");
                 foreach (var claim in active.Claims.Where(item => CurrentClaim(item, authority)))
                 {
-                    sources.Add(claim.ClaimId, claim);
-                    builder.AppendLine(JsonConvert.SerializeObject(new { sourceId = claim.ClaimId, text = claim.Text }));
+                    var sourceId = "source-" + (++sourceNumber);
+                    sources.Add(sourceId, claim);
+                    builder.AppendLine(JsonConvert.SerializeObject(new
+                    {
+                        sourceId,
+                        text = ModelToolResultProjection.SanitizeRuntimeText(
+                            claim.Text)
+                    }));
                 }
             }
             builder.AppendLine("TRANSCRIPT:");
@@ -402,18 +409,47 @@ namespace RNAssistant.Office.Services
             {
                 var projected = ProjectMessage(session, message);
                 var toolDependent = !string.IsNullOrEmpty(message.ToolName) || (message.ToolCalls?.Count ?? 0) > 0 || message.ResourceEffect != null;
-                sources.Add(message.Id, new StructuredContextClaim { ClaimId = message.Id, Text = projected.Content,
+                var sourceId = "source-" + (++sourceNumber);
+                sources.Add(sourceId, new StructuredContextClaim { ClaimId = message.Id, Text = projected.Content,
                     SourceMessageIds = new List<string> { message.Id }, Evidence = message.ResourceEvidence ?? new List<ResourceEvidence>(),
                     ToolGeneration = toolDependent ? authority.ToolGeneration : null,
                     SkillGeneration = toolDependent ? authority.Skills.Generation : null,
                     SchemaGeneration = toolDependent ? authority.SchemaGeneration : null });
-                builder.AppendLine(JsonConvert.SerializeObject(new { sourceId = message.Id, role = projected.Role,
-                    text = projected.Content, toolCalls = projected.ToolCalls }));
+                builder.AppendLine(JsonConvert.SerializeObject(new { sourceId, role = projected.Role,
+                    text = CompactionText(projected), toolCalls = CompactionToolCalls(projected.ToolCalls) }));
             }
             var source = builder.ToString();
             if (ModelContextBudget.EstimateTextTokens(source, settings) > sourceTokenBudget)
                 throw new InvalidOperationException("The fully included compaction sources exceed their budget. No partial source or checkpoint was published.");
             return source;
+        }
+
+        private static string CompactionText(ChatMessage message)
+        {
+            ToolResultWireReadResult wire;
+            string error;
+            if (!ToolResultHistoryReader.TryRead(message, out wire, out error))
+                return message == null ? string.Empty : message.Content;
+            var value = JObject.Parse(string.Equals(message.Role, ToolResultRoles.Tool,
+                    StringComparison.Ordinal)
+                ? message.Content
+                : message.Content.Substring("TOOL_RESULT:\n".Length));
+            value.Property("tool_call_id")?.Remove();
+            return "TOOL_RESULT_SUMMARY:\n" + value.ToString(Formatting.None);
+        }
+
+        private static object[] CompactionToolCalls(
+            IEnumerable<LlmToolCall> calls)
+        {
+            return (calls ?? new LlmToolCall[0])
+                .Where(call => call != null)
+                .Select(call => (object)new
+                {
+                    type = call.Type,
+                    name = call.Name,
+                    arguments = call.ArgumentsJson
+                })
+                .ToArray();
         }
 
         private static List<ChatMessage> TakeFullyIncludedPrefix(

@@ -1562,7 +1562,8 @@ namespace RNAssistant.Harness
                 AssertEqual(call.Id, read.ToolCallId, "reader retains accepted identity");
                 AssertEqual(call.Name, read.Name, "reader retains canonical name for " + role);
                 ConversationProtocolContext.EnsureCurrentHistory(session);
-                var projected = session.Messages.Select(HistoricalContextProjector.Project).ToList();
+                var projected = session.Messages.Select(message =>
+                    ModelToolResultProjection.Project(message)).ToList();
                 var authority = new ModelAuthoritySnapshot(new ResourceAuthoritySnapshotSet(new ResourceAuthoritySnapshot[0]),
                     "test-tools", new SkillCatalogSnapshot(new SkillDefinition[0]), null, session.Messages.Count);
                 var prompt = new ModelContextCompiler().Compile(authority, new ChatMessage[0],
@@ -1573,7 +1574,8 @@ namespace RNAssistant.Harness
                     AssertEqual(2, projection.Count, role + " projection retains the call/result pair");
                     for (var index = 0; index < session.Messages.Count; index++)
                     {
-                        AssertEqual(session.Messages[index].Content, projection[index].Content, role + " projection preserves exact protocol content");
+                        if (index == 0)
+                            AssertEqual(session.Messages[index].Content, projection[index].Content, role + " projection preserves accepted protocol content");
                         AssertEqual(session.Messages[index].ResponseProtocolVersion, projection[index].ResponseProtocolVersion,
                             role + " projection preserves the response marker");
                         AssertEqual(session.Messages[index].ToolResultProtocolVersion, projection[index].ToolResultProtocolVersion,
@@ -1582,8 +1584,9 @@ namespace RNAssistant.Harness
                             role + " projection does not append reference prose to protocol content");
                     }
                     AssertTrue(ToolResultHistoryReader.TryRead(projection[1], out read, out error), role + " projected result remains strict: " + error);
-                    AssertEqual(reference.Uri, read.Result.Resources.Single().Uri, role + " projected result retains the exact resource URI");
-                    AssertEqual(reference.Revision, read.Result.Resources.Single().Revision, role + " projected result retains its revision");
+                    AssertEqual(0, read.Result.Resources.Count, role + " projected result omits exact resource references");
+                    AssertTrue(projection[1].Content.IndexOf(reference.Uri, StringComparison.Ordinal) < 0,
+                        role + " projected result contains no exact resource URI");
                     ConversationProtocolContext.EnsureCurrentHistory(new ChatSession { Messages = projection });
                 }
                 var clone = ChatCloneService.CloneSessionSnapshot(session);
@@ -1672,6 +1675,15 @@ namespace RNAssistant.Harness
                 "bounded envelope names semantic discovery for the externalized result");
             AssertContains((string)resourceEnvelope.SelectToken("data.hint"), "read that target",
                 "bounded envelope tells the model to read the discovered semantic target");
+            var durableMessage = AgentJsonProtocol.CreateToolResultMessage(
+                command, toolResult, 256, ToolResultRoles.User, new AppSettings());
+            var modelMessage = ModelToolResultProjection.Project(durableMessage);
+            AssertTrue(modelMessage.Content.IndexOf(resourceUri,
+                    StringComparison.Ordinal) < 0,
+                "model projection hides the externalized full-result URI");
+            AssertTrue(durableMessage.Content.IndexOf(resourceUri,
+                    StringComparison.Ordinal) >= 0,
+                "durable result retains the exact externalized result reference");
             var firstPage = ReadResource(
                 new ResourceGatewayService(), resourceSession, resourceUri, ResourceRepresentations.Text, null, 32000).Result;
             var secondPage = ReadResource(
@@ -1716,6 +1728,211 @@ namespace RNAssistant.Harness
                 resourceSession, command, resultWithProducedResource, 256, new AppSettings());
             AssertTrue(externalizedAlongsideProduced != null && resultWithProducedResource.Result.Resources.Count == 2,
                 "a produced-resource reference does not suppress externalization of an independent oversized result");
+            var producedMessage = AgentJsonProtocol.CreateToolResultMessage(
+                command, resultWithProducedResource, 256,
+                ToolResultRoles.User, new AppSettings());
+            var producedProjection = ModelToolResultProjection.Project(producedMessage);
+            AssertTrue(producedProjection.Content.IndexOf(
+                    ArtifactUri(resourceSession, producedArtifact),
+                    StringComparison.Ordinal) < 0,
+                "model projection hides a distinct produced resource reference");
+            AssertTrue(producedProjection.Content.IndexOf(
+                    ArtifactUri(resourceSession, externalizedAlongsideProduced),
+                    StringComparison.Ordinal) < 0,
+                "model projection hides the externalized full-result reference");
+
+            var genericReference = ArtifactReference(resourceSession,
+                producedArtifact);
+            var genericMessage = AgentJsonProtocol.CreateToolResultMessage(
+                new ToolInvocation
+                {
+                    ToolCallId = "generic_projection",
+                    ToolId = "excel.inspect"
+                },
+                TerminalToolResult.Ok(
+                    "Stored " + genericReference.Uri + ".",
+                    new JObject
+                    {
+                        ["businessId"] = "customer-7",
+                        ["revision"] = "edition-2",
+                        ["hash"] = "business-hash",
+                        ["uri"] = "https://example.test/item",
+                        ["runtime"] = genericReference.Uri
+                    }.ToString(Formatting.None),
+                    new[] { genericReference }));
+            var genericProjection = ModelToolResultProjection.Project(
+                genericMessage);
+            AssertTrue(genericProjection.Content.IndexOf(
+                    genericReference.Uri, StringComparison.Ordinal) < 0,
+                "generic projection removes exact references from message, data and resources");
+            AssertContains(genericProjection.Content, "customer-7",
+                "generic projection preserves business identifiers");
+            AssertContains(genericProjection.Content, "edition-2",
+                "generic projection preserves business revisions");
+            AssertContains(genericProjection.Content, "business-hash",
+                "generic projection preserves business hashes");
+            AssertContains(genericProjection.Content,
+                "https://example.test/item",
+                "generic projection preserves non-runtime URIs");
+            ToolResultWireReadResult genericWire;
+            string genericError;
+            AssertTrue(ToolResultHistoryReader.TryRead(
+                    genericProjection, out genericWire, out genericError) &&
+                genericWire.Result.Resources.Count == 0,
+                "generic model result remains strict and contains no exact resources");
+            AssertContains(genericMessage.Content, genericReference.Uri,
+                "generic durable result retains exact resource evidence");
+
+            var resourceProjection = ModelToolResultProjection.Project(
+                AgentJsonProtocol.CreateToolResultMessage(
+                    new ToolInvocation
+                    {
+                        ToolCallId = "resource_message_projection",
+                        ToolId = ResourceToolCatalog.FindToolId
+                    },
+                    TerminalToolResult.Ok(
+                        "Located " + genericReference.Uri + ".",
+                        new JObject { ["items"] = new JArray() }
+                            .ToString(Formatting.None),
+                        new[] { genericReference })));
+            AssertTrue(resourceProjection.Content.IndexOf(
+                    genericReference.Uri, StringComparison.Ordinal) < 0,
+                "switched result prose cannot leak an exact resource reference");
+            var acceptedProjection = ModelToolResultProjection.Project(
+                AgentJsonProtocol.CreateToolCallMessage(
+                    new AgentToolCall
+                    {
+                        Id = "accepted_message_projection",
+                        Name = ResourceToolCatalog.FindToolId,
+                        Arguments = new Dictionary<string, object>()
+                    },
+                    "Inspecting " + genericReference.Uri + ".",
+                    null,
+                    ToolResultRoles.User,
+                    FixtureCallOrigin()));
+            AssertTrue(acceptedProjection.Content.IndexOf(
+                    genericReference.Uri, StringComparison.Ordinal) < 0,
+                "accepted assistant prose cannot replay an exact resource reference");
+
+            var malformedGeneric = AgentJsonProtocol.CreateToolResultMessage(
+                new ToolInvocation
+                {
+                    ToolCallId = "generic_invalid",
+                    ToolId = "excel.inspect"
+                }, TerminalToolResult.Ok("Read.", "{}"));
+            malformedGeneric.Content = "TOOL_RESULT:\n{\"uri\":\"rna://runtime/leak\"";
+            var malformedProjection = ModelToolResultProjection.Project(
+                malformedGeneric);
+            ToolResultWireReadResult malformedWire;
+            AssertTrue(ToolResultHistoryReader.TryRead(
+                    malformedProjection, out malformedWire,
+                    out genericError) &&
+                malformedWire.Result.Status == ToolResultStatus.Error,
+                "malformed generic result fails closed as strict model evidence");
+            AssertTrue(malformedProjection.Content.IndexOf(
+                    "rna://", StringComparison.OrdinalIgnoreCase) < 0,
+                "malformed generic result cannot leak raw runtime content");
+
+            var mutationCall = AgentJsonProtocol.CreateToolCallMessage(
+                new AgentToolCall
+                {
+                    Id = "mutation_projection",
+                    Name = "excel.add_sheet",
+                    Arguments = new Dictionary<string, object>
+                    {
+                        ["name"] = "Report"
+                    }
+                }, "Adding sheet.", null, ToolResultRoles.User,
+                FixtureCallOrigin());
+            var mutationResult = AgentJsonProtocol.CreateToolResultMessage(
+                new ToolInvocation
+                {
+                    ToolCallId = "mutation_projection",
+                    ToolId = "excel.add_sheet"
+                }, TerminalToolResult.Ok(
+                    "Changed " + genericReference.Uri + ".", "{}",
+                    new[] { genericReference }));
+            mutationResult.ResourceEffect = new ResourceEffect(
+                "effect-projection",
+                "excel.add_sheet",
+                ResourceEffectOutcome.VerifiedChanged,
+                new[]
+                {
+                    new ResourceImpact(
+                        new ResourceIdentity(genericReference.Uri),
+                        ResourceImpactRelation.Exact,
+                        changeKind: "changed " + genericReference.Uri)
+                },
+                "verified " + genericReference.Uri);
+            var mutationTool = new ToolCatalogEntry
+            {
+                Id = "excel.add_sheet",
+                Policy = new ToolPolicy(
+                    ToolEffect.Write,
+                    ToolVerification.Tool,
+                    false,
+                    false,
+                    new[] { ChatModes.Agent })
+            };
+            var folded = new ModelContextCompiler().Compile(
+                new ModelAuthoritySnapshot(
+                    new ResourceAuthoritySnapshotSet(
+                        new ResourceAuthoritySnapshot[0]),
+                    "projection-tools",
+                    new SkillCatalogSnapshot(new SkillDefinition[0]),
+                    null,
+                    2),
+                new ChatMessage[0],
+                new[] { mutationCall, mutationResult },
+                null,
+                new[] { mutationTool },
+                new AppSettings(),
+                4096,
+                false);
+            var foldedText = string.Join("\n", folded.Messages.Select(
+                item => item.Content));
+            AssertContains(foldedText,
+                "TOOL_INTERACTION (completed causal frame)",
+                "completed mutation remains represented to the model");
+            AssertTrue(foldedText.IndexOf(
+                    genericReference.Uri,
+                    StringComparison.Ordinal) < 0,
+                "completed mutation folding cannot bypass result/effect sanitization");
+
+            var claimMessage = new ChatMessage
+            {
+                Role = "assistant",
+                ProtocolMessage = true,
+                Content = "Old compacted context.",
+                ContextClaims = new List<StructuredContextClaim>
+                {
+                    new StructuredContextClaim
+                    {
+                        ClaimId = "claim-runtime-reference",
+                        Text = "Prior resource was " + genericReference.Uri + "."
+                    }
+                }
+            };
+            var claimProjection = new ModelContextCompiler().Compile(
+                new ModelAuthoritySnapshot(
+                    new ResourceAuthoritySnapshotSet(
+                        new ResourceAuthoritySnapshot[0]),
+                    "projection-tools",
+                    new SkillCatalogSnapshot(new SkillDefinition[0]),
+                    null,
+                    1),
+                new ChatMessage[0],
+                new[] { claimMessage },
+                null,
+                new ToolCatalogEntry[0],
+                new AppSettings(),
+                4096,
+                false);
+            AssertTrue(string.Join("\n", claimProjection.Messages.Select(
+                    item => item.Content)).IndexOf(
+                    genericReference.Uri,
+                    StringComparison.Ordinal) < 0,
+                "retained compacted claims cannot replay a runtime resource URI");
 
             var chartSession = new ChatSession
             {
@@ -1748,6 +1965,20 @@ namespace RNAssistant.Harness
                 "chart result body is reference-only in model history");
             AssertTrue(chartEnvelope.ToString(Formatting.None).IndexOf("\"month\":\"Jan\"", StringComparison.Ordinal) < 0,
                 "chart body is absent from the model tool-result envelope");
+            var chartResultMessage = AgentJsonProtocol.CreateToolResultMessage(
+                command, chartResult, 10000,
+                ToolResultRoles.User, new AppSettings());
+            var chartProjection = ModelToolResultProjection.Project(
+                chartResultMessage);
+            AssertTrue(chartProjection.Content.IndexOf(
+                    ArtifactUri(chartSession, chartArtifact),
+                    StringComparison.Ordinal) < 0,
+                "model chart projection hides the exact result resource");
+            AssertContains((string)JObject.Parse(
+                    chartProjection.Content.Substring("TOOL_RESULT:\n".Length))
+                    .SelectToken("data.hint"),
+                "common.resources_find",
+                "model chart projection directs semantic discovery");
             AssertEqual(chartArtifact.Id, ToolResultResourceService.ExternalizeIfNeeded(
                 chartSession, command, chartResult, 10000, new AppSettings()).Id,
                 "chart result externalization is idempotent for an existing exact reference");
@@ -1853,7 +2084,22 @@ namespace RNAssistant.Harness
                     replay.IndexOf("\"externalized\":true", StringComparison.Ordinal) >= 0 ||
                     replay.IndexOf("\"truncated\":true", StringComparison.Ordinal) >= 0,
                     "bounded inline projection reaches the model");
-                AssertContains(replay, "\"relation\":\"result\"", "full result stays available by exact resource reference");
+                var projectedResult = calls[2].Item1.Single(message =>
+                    string.Equals(message.ToolName, "excel.inspect",
+                        StringComparison.Ordinal) &&
+                    !string.Equals(message.Role, "assistant",
+                        StringComparison.Ordinal));
+                AssertTrue(projectedResult.Content.IndexOf(
+                        "\"relation\":\"result\"", StringComparison.Ordinal) < 0 &&
+                    projectedResult.Content.IndexOf(
+                        "rna://", StringComparison.OrdinalIgnoreCase) < 0,
+                    "externalized result identity remains runtime-only");
+                AssertContains(projectedResult.Content,
+                    "common.resources_find",
+                    "bounded result directs semantic discovery");
+                AssertContains(replay,
+                    "conversation resource: Tool result · excel.inspect",
+                    "the resource index exposes a readable semantic target");
                 foreach (var request in calls)
                 {
                     var estimated = ModelContextBudget.EstimateAdmittedRequestTokens(

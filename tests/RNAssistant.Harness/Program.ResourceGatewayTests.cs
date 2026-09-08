@@ -2098,6 +2098,16 @@ namespace RNAssistant.Harness
                     CreatedUtc = DateTime.UtcNow.AddMinutes(index)
                 });
             }
+            var checkpoint = new ChatArtifact
+            {
+                Kind = ChatArtifactKinds.Compaction,
+                Title = "Internal checkpoint marker",
+                InlineText = "internal checkpoint body"
+            };
+            session.Artifacts.Add(checkpoint);
+            session.ActiveContextCheckpointId = checkpoint.Id;
+            session.Artifacts[0].MetadataJson =
+                "{\"attachmentId\":\"runtime-secret-id\"}";
             session.ActivePlanDocumentArtifactId = "artifact_0";
             var latestMessage = new ChatMessage
             {
@@ -2118,6 +2128,17 @@ namespace RNAssistant.Harness
                 "artifact prompt does not expose local paths");
             AssertTrue(prompt.IndexOf("policy=", StringComparison.OrdinalIgnoreCase) < 0,
                 "artifact prompt has one reference-first rule instead of per-artifact legacy policies");
+            AssertTrue(prompt.IndexOf("Internal checkpoint", StringComparison.OrdinalIgnoreCase) < 0,
+                "runtime compaction checkpoint is absent from the model resource index");
+            var provider = new ChatArtifactResourceProvider();
+            AssertEqual(20, provider.List(session, null, null, 50).Items.Count,
+                "runtime compaction checkpoint is absent from resource discovery");
+            AssertEqual(0, provider.Search(session, "checkpoint body", null, 20, 128).Matches.Count,
+                "runtime compaction checkpoint body cannot enter semantic search results");
+            AssertEqual(0, provider.Search(session, "runtime-secret-id", null, 20, 128).Matches.Count,
+                "raw artifact metadata cannot enter semantic search snippets");
+            AssertTrue(provider.Search(session, "Artifact 0", null, 20, 128).Matches.Count > 0,
+                "public artifact metadata remains searchable");
 
             var oversized = new ChatSession();
             oversized.Artifacts.Add(new ChatArtifact { Kind = ChatArtifactKinds.Markdown,

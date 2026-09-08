@@ -2703,6 +2703,12 @@ namespace RNAssistant.Harness
             AssertTrue(checkpoint.Claims.Count == 1 && checkpoint.Claims[0].SourceMessageIds.Count > 0, "claim carries runtime-owned provenance");
             AssertContains(request, "COMPACTION_TOOL_ARGUMENT", "native tool arguments preserved for compaction");
             AssertContains(request, "COMPACTION_TOOL_ARGUMENT_2", "all native tool calls preserved for compaction");
+            AssertTrue(request.IndexOf("call_1", StringComparison.Ordinal) < 0 &&
+                request.IndexOf("call_2", StringComparison.Ordinal) < 0 &&
+                request.IndexOf(session.Messages[0].Id, StringComparison.Ordinal) < 0,
+                "compaction uses request-local source aliases and omits runtime call/message ids");
+            AssertContains(request, "source-1",
+                "compaction retains request-local provenance aliases");
             AssertTrue(request.IndexOf("\"goals\"", StringComparison.Ordinal) < 0, "no fixed summary sections");
             AssertContains(
                 ContextCompactionService.BuildActiveWindow(session)[0].Content,

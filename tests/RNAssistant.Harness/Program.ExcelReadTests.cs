@@ -54,6 +54,25 @@ namespace RNAssistant.Harness
                     operation == FakeOfficeAdapter.ExcelRangeReadOperation),
                     "range reaches one direct typed backend");
 
+                adapter.ExcelNamesForTest.Clear();
+                for (var index = 0; index <= ExcelReadService.MaxInspectItems; index++)
+                    adapter.ExcelNamesForTest.Add(new ExcelNameSnapshot
+                    {
+                        Name = "Name" + index,
+                        RefersTo = "=42"
+                    });
+                adapter.ExcelBackendCalls.Clear();
+                var document = executor.ExecuteManual(Command(
+                        ResourceToolCatalog.ReadToolId,
+                        "target", "document: " + session.DocumentTitle,
+                        "representation", "text"),
+                    tools, new AppSettings(), false, false, session);
+                AssertTrue(document.Success,
+                    "the current document target resolves without unrelated Excel catalogs");
+                AssertEqual(0, adapter.ExcelBackendCalls.Count(operation =>
+                        operation == FakeOfficeAdapter.ExcelInspectOperation),
+                    "document target resolution does not enumerate defined names");
+
             });
 
             WithTempPaths(paths =>
