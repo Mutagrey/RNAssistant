@@ -1,5 +1,47 @@
 # Stabilization progress
 
+Latest correction (2026-09-08): bridge аварийные ответы теперь используют один
+typed JSON contract, сохраняют request id и корректно экранируют exception text;
+неразбираемый/некоррелируемый transport failure завершает все pending UI promises
+без автоматического повтора mutation. Перед каждым model step актуальный context
+снова проходит authority filtering, folding, budget и при необходимости
+incremental compaction. Conversation-response v5 допускает только runtime-owned
+последовательные batches независимых reads и managed mutations с индивидуальными
+guards/verification/commit; unknown закрывает undispatched tail. Prompt schema 29
+и корневой `AGENTS.md` выровнены с v5 и semantic model targets. Focused bridge,
+context, protocol, kernel, ToolRuntime и managed-write checks проходят
+host-neutral. RuntimeLog/UI parse hot path уже был исправлен предыдущим slice;
+его вклад в реальные freezes не измерен. Windows/Office/WebView2 и target-model
+qualification остаются открыты.
+
+Follow-up audit (2026-09-08): JSON `null`/primitive from the WebView host now
+terminates every pending bridge request as an explicit transport failure instead
+of throwing inside the UI listener and leaving controls stuck. The stale HTML
+workspace delivery-graph expectation was updated to the already shipped cache
+key. Rebuilt bridge checks pass 31/31, changed Web tests pass 14/14, and the
+production-project source-inclusion check passes. The Playwright-only layout test
+was not run because that dependency is unavailable locally; Windows/Office/WebView2
+qualification remains open.
+
+Latest correction (2026-09-08): three residual contract gaps are closed
+host-neutral. Message-backed ECharts controls pin their source chat/message before
+delayed save or Excel refresh; addressed persistence neither mutates a newly active
+chat nor changes the backend selection. Superseded or
+unavailable exact resource reads now enter only the detached model request as an
+explicit `status=error` reread marker; durable successful history stays immutable,
+and oversized resource evidence has direct regression coverage. Custom VBA package
+results own and transport typed `Replan`, `RetryLater` or `ToolDefect` recovery;
+possible effects remain `unknown` without recovery. Every manual `runTool` request
+now carries the exact source chat through the typed bridge; missing identity is
+rejected, addressed loading does not change the active backend session, and a later
+chat switch cannot retarget execution. Addressed loading also preserves a foreign
+document's authority/locator, while manual tools reject a chat outside the current
+bound document before dispatch. History/settings mutations, pending confirmations,
+HTML workspace operations and artifact viewers now also load their captured chat
+without changing the backend selection; only explicit navigation owns selection.
+Focused browser/bridge/resource/VBA checks pass; Windows/Office/WebView2 and target-model
+qualification remain open.
+
 User-authorized document artifact ownership work (2026-09-07): target behavior and
 ordered replacement/acceptance are recorded in [Artifact Library](../artifact-library.md#authorized-document-ownership-cutover--2026-09-07).
 Slice **1a, document-owned sent originals, is implemented host-neutral** using the
@@ -10,10 +52,22 @@ ref, and chat deletion/restart/GC retain original and extraction payloads.
 The two `document originals:` checks include concurrent store instances, failed
 chat-link retry, discovery/resolve/viewer round-trip, missing extraction and
 cross-document refusal. Attachment and existing viewer/Gateway/fork checks pass.
-Next: finish the mutable artifact identity/head owner and switch HTML/Plan/authored
-Markdown tools (slices 1b–2); shared editing, working-set UI and bounded indexed
-discovery remain open. This is not the full cutover. Existing Resource MASTER
-invariants and Windows gates remain in force; Phase 12 is not started.
+Slice **1b, document Plan publication (2026-09-08)** now switches the native Plan
+tools to per-Plan document heads and retained snapshots. The observer verifies
+the selected base before dispatch and publishes snapshot/head/operation receipt atomically; chat
+projections carry selection/links. Fork preserves that selection, history edits
+cannot undo a document tombstone, and discovery shows current Plans across chats.
+Targeted checks cover competing writers, independent Plans, restart, missing body,
+foreign scope, origin deletion/GC, failed chat-link save and runtime-operation reuse;
+Eighteen focused host-neutral checks pass, including the existing
+Plan/restore/lifecycle/Gateway/viewer and bounded-prompt regressions. Windows and
+target-model qualification remain open.
+Next: shared HTML and independent authored Markdown owners/tools, plus explicit
+working-set selection/current-version refresh. The current Plan tools can edit an
+inherited selection; selecting an arbitrary existing Plan in another chat is not
+implemented. Bounded indexed discovery remains open. This is not the full cutover.
+Existing Resource MASTER invariants and Windows gates remain in force; Phase 12 is
+not started.
 
 Latest correction (2026-09-07): the four read-only Office search owners now retain
 typed recovery for every rejected call. Invalid query/pattern/domain input is

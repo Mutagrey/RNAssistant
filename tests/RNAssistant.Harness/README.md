@@ -148,6 +148,7 @@ old argument. Existing Outlook tool cases also check bound-STA/closed-window sea
 | History/context preflight | `Program.AgentSafetyTests.cs` | `preflight`, `protocol context:`, `model protocol:` |
 | Resources and attachments | `Program.ResourceFabricTests.cs`, `Program.ResourceGatewayTests.cs`, `Program.AttachmentTests.cs`; UI pre-dispatch ordering in `tests/web/attachment-ingestion-order.test.js` | `resources:`, `attachments:` |
 | Document-owned sent originals: two-chat discovery/read/viewer, link retry, concurrent publication, fork, restart/deletion/GC, missing extraction and foreign-owner refusal | `Program.AttachmentTests.cs`; host-neutral only, real Office/WebView2 qualification remains open | `document originals:` |
+| Document Plan publication: two-chat reads/writes, stale and concurrent writers, independent Plans, selected fork, restart/GC, failed chat link, missing body and exact restore authority | `Program.PlanModeTests.cs`; chat ownership cleanup in `Program.ResourceAuthorityTests.cs`. Arbitrary-chat Plan selection UI and Windows qualification remain open | `document Plan:`, `plan document:`, `plan mode:`, `resource cutover: chat lifecycle atomic publication` |
 | Bounded attachment upload / capability lifetime / metadata-only bridge | `Program.ResourceUploadTests.cs`, `Program.ContextBridgeTests.cs`, `Program.WebViewSecurityTests.cs`; UI transport/cancellation in `tests/web/resource-upload.test.js` and pre-send barrier above | `attachments: upload`, `bridge: typed resource ingestion`, `webview:` |
 | Disposable trajectory ZIP / bounded download and shared transfer lifetime | `Program.SessionEventStoreTests.cs`, `Program.ResourceDownloadTests.cs`, `Program.ContextBridgeTests.cs`; UI checks in `tests/web/resource-download.test.js` and `tests/web/trajectory-json-viewer.test.js` | `trajectory export`, `bridge: typed trajectory query` |
 | Diagnostic event payload / fully verified bounded CAS prefix | `Program.TrajectoryPayloadTests.cs`, `Program.ContextBridgeTests.cs`; shared browser reader and lifecycle in `tests/web/trajectory-payload.test.js`, `tests/web/trajectory-json-viewer.test.js`, `tests/web/run-journal.test.js` | `trajectory payload:`, `verified CAS prefix`, `bridge: typed trajectory query` |
@@ -469,8 +470,8 @@ do not prove production bridge delivery or WebView rendering. See
 
 ## Stabilization v5 contract / runtime IDs
 
-`conversation v5:` covers strict ID-less parser/schema/arguments, singleton
-safety, schema transport and the separate accepted-history reader. Model-owned
+`conversation v5:` covers strict ID-less parser/schema/arguments, runtime-owned
+sequential batch safety, schema transport and the separate accepted-history reader. Model-owned
 IDs are rejected; identical calls remain distinct ordered positions. `kernel:`
 checks runtime allocation, collisions/invalid allocator output before acceptance,
 and reuse of pending IDs without allocation. No tool retry or deduplication is added.
