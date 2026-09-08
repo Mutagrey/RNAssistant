@@ -5,6 +5,7 @@ using System.Linq;
 using System.Text;
 using Newtonsoft.Json;
 using RNAssistant.Core.Models;
+using RNAssistant.Core.Services;
 using RNAssistant.Core.Tools;
 
 namespace RNAssistant.Core.Storage
@@ -70,7 +71,7 @@ namespace RNAssistant.Core.Storage
                 address.Segments[5] != "member" || address.Segments[6] != "file" && address.Segments[6] != "data" ||
                 member.Reference.Revision != member.Parent.Revision || text.Length > MaximumIndexedCharacters)
                 throw new InvalidDataException("The text member does not belong to this bounded HTML snapshot.");
-            if (!_payloads.HasStoredReference(new ChatBlobReference { Sha256 = artifact.ContentSha256, ByteLength = artifact.ContentByteLength.Value }))
+            if (!_payloads.HasStoredReference(_revisions.GetRevision(Scope(session), member.Parent).Payload.ToBlobReference()))
                 throw new InvalidDataException("The exact HTML source is unavailable.");
             var body = new PayloadRef(TextPatternEngine.Sha256(text), Encoding.UTF8.GetByteCount(text), member.MimeType);
             var path = "member/" + address.Segments[6] + "/" + address.Segments[7];
@@ -81,6 +82,8 @@ namespace RNAssistant.Core.Storage
             {
                 match.Reference = member.Reference.Copy(); match.Kind = member.Kind; match.Title = member.Title;
                 match.CreatedUtc = member.CreatedUtc;
+                // Model semantic scope remains HTML, regardless of document ownership.
+                match.DocumentScoped = false;
                 match.Representation = address.Segments[6] == "file" ? ResourceRepresentations.Source : ResourceRepresentations.Text;
             }
             return result;
@@ -117,7 +120,7 @@ namespace RNAssistant.Core.Storage
                 throw new InvalidDataException("The exact text source is unavailable or exceeds the bounded index size.");
             if (expectedCharacters.HasValue && expectedCharacters.Value != text.Length)
                 throw new InvalidDataException("The retained extraction length does not match its exact text.");
-            if (derivedText != null) _payloads.StoreText(derivedText, body.ContentType);
+            if (derivedText != null) body = PayloadRef.FromBlob(_payloads.StoreText(derivedText, body.ContentType));
             var index = new TextIndex { Length = text.Length, SectionsThrough = text.Length };
             for (var start = 0; start < text.Length;)
             {

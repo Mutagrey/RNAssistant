@@ -14,6 +14,105 @@ namespace RNAssistant.Harness
 {
     internal static partial class Program
     {
+        private static void SharedHtmlTextDiscoveryViews()
+        {
+            WithTempExecutor(FakeOfficeAdapter.ForHost("Word"), (executor, adapter) =>
+            {
+                var paths = FixturePaths.Value;
+                var chats = new ChatStore(paths);
+                var links = new ArtifactWorkingSetService(chats.DocumentArtifacts, new ResourceMutationJournal(paths));
+                var catalog = OfficeToolCatalog.ForHost(adapter.HostName).Concat(executor.GetControllerTools()).ToList();
+                var a = NewSession(adapter);
+                var html = "<!--" + new string('x', 145000) + "--><main>late-html-marker</main>";
+                AssertTrue(executor.ExecuteManual(Command(HtmlWorkspaceToolCatalog.WriteFileToolId, "path", "index.html", "content", html),
+                    catalog, new AppSettings(), false, false, a).Success, "long HTML published");
+                AssertTrue(executor.ExecuteManual(Command(HtmlWorkspaceToolCatalog.WriteDataToolId, "name", "sales", "json", "{\"secret\":\"bound-value-only\"}"),
+                    catalog, new AppSettings(), false, false, a).Success, "bound JSON published");
+                var parent = ChatResourceUri.CreateArtifactRevision(a, a.Artifacts.Single(item => item.Id == a.ActiveHtmlArtifactId));
+                var b = NewSession(adapter); b.DocumentAuthorityId = a.DocumentAuthorityId;
+                links.Change(b, LinkRequest(b, parent.Uri, false), chats.Save);
+                var provider = new ChatArtifactResourceProvider(payloads: executor.Payloads, documentArtifacts: chats.DocumentArtifacts);
+                var authority = new ResourceAuthorityStore(paths);
+                var scope = ResourceAuthorityScopeId.Document(new DocumentAuthorityId(b.DocumentAuthorityId));
+                var memberDescriptor = provider.List(b, ChatHtmlResourceCatalog.FileKind, null, 20).Items.Single();
+                var beforeHead = Newtonsoft.Json.JsonConvert.SerializeObject(authority.GetHead(scope, memberDescriptor.Reference.Identity));
+                var beforeGeneration = authority.Capture(scope).Generation;
+                var found = provider.Search(b, "late-html-marker", ChatHtmlResourceCatalog.FileKind, 20, 600);
+                AssertEqual(beforeGeneration, authority.Capture(scope).Generation, "text search does not publish authority changes");
+                var match = found.Matches.Single();
+                AssertTrue(match.MatchOffset > 128000 && !found.ScanTruncated && found.UnavailableResources == 0, "shared HTML search reaches late source content");
+                AssertEqual(ResourceRepresentations.Source, match.Representation, "file search remains source-code search");
+                AssertEqual(null, match.SectionTitle, "HTML source is not parsed as Markdown or executed");
+                var read = provider.Read(b, new ResourceReadRequest { Reference = match.Reference, Representation = ResourceRepresentations.Source,
+                    Cursor = ResourceReadCursor.CreateImmutable(match.SnippetOffset, ResourceReadCursor.ReadBinding(match.Reference.Uri, ResourceRepresentations.Source)), MaxChars = match.Snippet.Length });
+                AssertEqual(match.Snippet, read.Result.Text, "member snippet round-trips to exact source read");
+                var gateway = new ResourceGatewayService(new[] { provider });
+                AssertEqual("html", gateway.Find(b, "late-html-marker", "html").Items.Single().Scope, "document-owned member remains in model HTML scope");
+                var data = provider.List(b, ChatHtmlResourceCatalog.DataKind, null, 20).Items.Single();
+                var binding = provider.Read(b, new ResourceReadRequest { Reference = data.Reference, MaxChars = 2000 }).Result.Text;
+                var bindingMatch = provider.Search(b, "view", ChatHtmlResourceCatalog.DataKind, 20, 600).Matches.Single();
+                AssertEqual(binding.Substring(bindingMatch.SnippetOffset, bindingMatch.Snippet.Length), bindingMatch.Snippet, "data member search indexes the binding JSON");
+                AssertEqual(0, provider.Search(b, "bound-value-only", ChatHtmlResourceCatalog.DataKind, 20, 600).Matches.Count, "search never dereferences bound data as member content");
+                var memberKey = ResourceUri.Parse(match.Reference.Uri).Segments[7];
+                var view = authority.GetView(scope, parent, "artifact-member-text-index-v1:member/file/" + memberKey);
+                AssertEqual(parent.Uri, view.Reference.Uri, "member index is retained under its published parent");
+                AssertTrue(view.Coverage.Kind == ResourceCoverageKinds.CharacterRange && view.Coverage.Path == "member/file/" + memberKey,
+                    "member index cannot claim whole-parent coverage");
+                AssertEqual(beforeHead, Newtonsoft.Json.JsonConvert.SerializeObject(authority.GetHead(scope, match.Reference.Identity)), "search leaves the existing authority head unchanged");
+                System.IO.File.Delete(executor.Payloads.PathFor(view.Payload.Sha256));
+                AssertEqual(1, provider.Search(b, "late-html-marker", ChatHtmlResourceCatalog.FileKind, 20, 600).Matches.Count, "missing member manifest is regenerated from exact aggregate");
+                System.IO.File.WriteAllText(executor.Payloads.PathFor(view.Parts[0].Sha256), "corrupt member part");
+                AssertEqual(1, provider.Search(b, "late-html-marker", ChatHtmlResourceCatalog.FileKind, 20, 600).Matches.Count, "corrupt member part is repaired from exact aggregate");
+                var gc = CasService(paths, chats, new VbaJournalStore(paths), () => StorageProtector.None).Collect();
+                AssertTrue(gc.Completed && gc.Health.MissingBlobCount == 0, "parent retains derived member bytes through GC");
+                provider = new ChatArtifactResourceProvider(payloads: executor.Payloads, documentArtifacts: new ChatStore(paths).DocumentArtifacts);
+                AssertEqual(1, provider.Search(b, "late-html-marker", ChatHtmlResourceCatalog.FileKind, 20, 600).Matches.Count, "member index survives owner restart");
+                AssertTrue(executor.ExecuteManual(Command(HtmlWorkspaceToolCatalog.WriteFileToolId, "path", "index.html", "content", "<main>replacement</main>"),
+                    catalog, new AppSettings(), false, false, b).Success, "new HTML revision published");
+                AssertEqual(0, provider.Search(b, "late-html-marker", ChatHtmlResourceCatalog.FileKind, 20, 600).Matches.Count, "current member search excludes the old index");
+                var stale = provider.Search(a, "late-html-marker", ChatHtmlResourceCatalog.FileKind, 20, 600);
+                AssertTrue(stale.UnavailableResources == 1 && stale.Matches.Count == 0, "stale chat selection requires refresh");
+                AssertEqual(html.Substring(0, 1000), provider.Read(a, new ResourceReadRequest { Reference = match.Reference, MaxChars = 1000 }).Result.Text,
+                    "historical member reads stay exact");
+                var current = b.Artifacts.Single(item => item.Id == b.ActiveHtmlArtifactId);
+                System.IO.File.Delete(executor.Payloads.PathFor(current.ContentSha256));
+                found = provider.Search(b, "replacement", ChatHtmlResourceCatalog.FileKind, 20, 600);
+                AssertTrue(found.UnavailableResources == 1 && found.Matches.Count == 0, "member search cannot conceal missing parent bytes");
+            });
+        }
+
+        private static void SharedHtmlTextDiscoveryDrift()
+        {
+            foreach (var selectionChange in new[] { true, false })
+            WithTempExecutor(FakeOfficeAdapter.ForHost("Word"), (executor, adapter) =>
+            {
+                var session = NewSession(adapter);
+                var catalog = OfficeToolCatalog.ForHost(adapter.HostName).Concat(executor.GetControllerTools()).ToList();
+                AssertTrue(executor.ExecuteManual(Command(HtmlWorkspaceToolCatalog.WriteFileToolId, "path", "index.html", "content", "<main>needle</main>"),
+                    catalog, new AppSettings(), false, false, session).Success, "HTML race fixture published");
+                var selected = session.ActiveHtmlArtifactId;
+                var authority = new ResourceAuthorityStore(FixturePaths.Value);
+                var counted = new DiscoveryPageStore(authority);
+                counted.ViewRegistered = view =>
+                {
+                    if (!view.View.StartsWith("artifact-member-text-index-v1:")) return;
+                    counted.ViewRegistered = null;
+                    if (selectionChange) { session.ActiveHtmlArtifactId = null; return; }
+                    var scope = ResourceAuthorityScopeId.Document(new DocumentAuthorityId(session.DocumentAuthorityId));
+                    var before = authority.Capture(scope);
+                    var identity = new ResourceIdentity(ResourceUri.Create("state", scope.Kind, scope.Id, "test-html-index-drift"));
+                    authority.Publish(ResourceAuthorityCommit.Create(scope, before.Generation, null,
+                        new[] { new ResourceHeadChange(identity, null, ResourceHeadState.Unknown(identity, before.Generation + 1, "test-drift")) }, AuthorityCommitReason.DerivedPublication));
+                };
+                var provider = new ChatArtifactResourceProvider(payloads: executor.Payloads,
+                    documentArtifacts: new DocumentArtifactStore(counted, counted, executor.Payloads));
+                var error = RuntimeThrows<ResourceRequestException>(() => provider.Search(session, "needle", ChatHtmlResourceCatalog.FileKind, 20, 600));
+                AssertEqual("resource_revision_changed", error.ErrorCode, "selection and authority drift invalidate member-only search");
+                session.ActiveHtmlArtifactId = selected;
+                AssertEqual(1, provider.Search(session, "needle", ChatHtmlResourceCatalog.FileKind, 20, 600).Matches.Count, "fresh search succeeds after drift");
+            });
+        }
+
         private static void SharedHtmlFailedLinkDoesNotReplay()
         {
             WithTempPaths(paths =>

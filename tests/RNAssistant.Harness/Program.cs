@@ -732,6 +732,8 @@ namespace RNAssistant.Harness
                 Test("shared Markdown: publication survives failed chat link", SharedMarkdownFailedLink),
                 Test("shared HTML: publication survives failed chat link", SharedHtmlFailedLinkDoesNotReplay),
                 Test("shared HTML: publication selection and competing chats", SharedHtmlPublicationAndSelection),
+                Test("shared HTML: text discovery views preserve exact members", SharedHtmlTextDiscoveryViews),
+                Test("shared HTML: text discovery rejects selection and authority drift", SharedHtmlTextDiscoveryDrift),
                 Test("html actions: stale guard before dispatch", HtmlActionsRejectStaleStateBeforeDispatch),
                 Test("html actions: typed bridge preserves guards", HtmlActionsBridgePreservesGuards),
                 Test("html editor: upload through existing commit owner", HtmlEditorUploadUsesExistingCommitOwner),
