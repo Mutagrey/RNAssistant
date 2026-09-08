@@ -70,6 +70,7 @@ namespace RNAssistant.Core.Models
         public string ClaimId { get; set; }
         public string Kind { get; set; }
         public List<string> SourceRoles { get; set; } = new List<string>();
+        public List<ContextClaimSource> SourceSnapshots { get; set; } = new List<ContextClaimSource>();
         public string Text { get; set; }
         public List<ResourceEvidence> Evidence { get; set; } = new List<ResourceEvidence>();
         public List<string> SourceMessageIds { get; set; } = new List<string>();
@@ -93,5 +94,13 @@ namespace RNAssistant.Core.Models
                 ((Kind != "constraint" && Kind != "decision") || SourceRoles.All(role => role == "user")) &&
                 (Kind != "observation" || SourceRoles.All(role => role == "tool") && Evidence.Count > 0);
         }
+    }
+
+    public sealed class ContextClaimSource
+    {
+        public string MessageId { get; set; }
+        public string Role { get; set; }
+        public string Text { get; set; }
+        public string Preview { get; set; }
     }
 }

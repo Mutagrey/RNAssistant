@@ -163,6 +163,7 @@ namespace RNAssistant.Office.Services
         private static bool HasTextRepresentation(ChatArtifact artifact)
         {
             if (artifact == null) return false;
+            if (artifact.Kind == RNAssistant.Core.Storage.DocumentArtifactStore.SharedContextKind) return true;
             if (!string.IsNullOrWhiteSpace(artifact.InlineText) || StartsWith(artifact.MimeType, "text/")) return true;
             if (!string.IsNullOrWhiteSpace(artifact.MimeType) &&
                 (artifact.MimeType.IndexOf("json", StringComparison.OrdinalIgnoreCase) >= 0 ||

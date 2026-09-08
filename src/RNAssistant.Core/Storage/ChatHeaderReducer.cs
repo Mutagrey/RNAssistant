@@ -233,7 +233,8 @@ namespace RNAssistant.Core.Storage
             {
                 CaptureCasPair(value, "Sha256", "ByteLength");
                 CaptureCasPair(value, "sha256", "byteLength");
-                CaptureCasPair(value, "ContentSha256", "ContentByteLength");
+                if (!CasReachabilityScan.IsEvidenceContentHash(value))
+                    CaptureCasPair(value, "ContentSha256", "ContentByteLength");
                 CaptureCasPair(value, "ExtractedTextSha256", "ExtractedTextByteLength");
             }
             foreach (var child in token.Children()) CaptureTokenReferences(child);

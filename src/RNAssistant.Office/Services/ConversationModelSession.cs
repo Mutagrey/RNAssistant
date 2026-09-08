@@ -453,6 +453,9 @@ namespace RNAssistant.Office.Services
                     ["payload_externalized"] = true,
                     ["complete"] = result.ResourceEvidence.All(item => item.Complete),
                     ["characters"] = message.Content.Length };
+                var readData = ToolResultWire.ParseData(result.Result.DataJson) as JObject;
+                if (command.ToolId == ResourceToolCatalog.ReadToolId && (string)readData?["type"] == "shared context")
+                    compact["type"] = "shared context";
                 var envelope = new RNAssistant.Core.Tools.Contracts.ToolResult(result.Result.Status,
                     result.Result.Message, compact.ToString(Formatting.None), result.Result.Resources);
                 var json = ToolResultWire.WriteParsed(command.ToolCallId, command.ToolId, envelope, compact, result.ResultResource);

@@ -149,6 +149,14 @@ namespace RNAssistant.Office.Services
             }
             else if (IsResourceResult(name))
             {
+                var resourceData = data as JObject;
+                if ((string)resourceData?["type"] == "shared context" && resourceData["text"]?.Type == JTokenType.String)
+                {
+                    resourceData.Remove("text");
+                    resourceData.Remove("json");
+                    resourceData["claimsUnavailable"] = true;
+                    resourceData["usage"] = "Shared claims require the authority-filtered model context compiler; raw archives are never model context.";
+                }
                 RemoveResourceRuntimeState(data, preserveTable:
                     string.Equals(name, ResourceToolCatalog.ReadToolId, StringComparison.Ordinal));
             }

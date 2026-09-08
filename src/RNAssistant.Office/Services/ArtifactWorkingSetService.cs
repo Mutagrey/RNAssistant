@@ -74,7 +74,7 @@ namespace RNAssistant.Office.Services
                 .GroupBy(item => ArtifactWorkingSet.Identity(session, item)))
             {
                 var first = group.First();
-                if (first.Kind != ChatArtifactKinds.PlanDocument && first.Kind != ChatArtifactKinds.HtmlWorkspace && MarkdownDocumentIdentity.LogicalId(first.Id) == null) { yield return group.Single(); continue; }
+                if (first.Kind != ChatArtifactKinds.PlanDocument && first.Kind != ChatArtifactKinds.HtmlWorkspace && MarkdownDocumentIdentity.LogicalId(first.Id) == null && DocumentArtifactStore.ContextLogicalId(first.Id) == null) { yield return group.Single(); continue; }
                 ResourceRef current = null;
                 var unavailableHead = false;
                 try { current = first.Kind == ChatArtifactKinds.PlanDocument

@@ -1,5 +1,23 @@
 # Stabilization progress
 
+Current slice (2026-09-08), after `66da27f5`: **document-owned shared context**
+is implemented through existing DocumentArtifactStore/authority/CAS. Successful
+compaction publishes a separate versioned lineage per origin chat; another chat
+explicitly discovers and reads it. Frozen authority filters claims individually;
+source roles, safe citations and inherited provenance survive recompaction.
+Writer drift preserves the old shared head and records a local publication issue.
+Origin deletion/CAS retention pass, including externalized paged archives in a
+native run with a deterministic model stub. The CAS scanner and header accounting
+now distinguish evidence checksums from actual payload references.
+Checks: shared context 2/2, compaction 4/4 (one shared-context overlap), resources
+29/29, CAS 7/7 and storage headers 1/1 pass. `ValidateVersionFormat` and diff
+checks pass.
+No separate store, automatic cross-chat instructions or protocol/schema change.
+Next: explicit pre-compaction publication/claim-text search require a bounded
+follow-up; performance measurement remains deferred. Windows/Office/WebView2,
+target-model, layout and previously recorded inventory/search gaps remain open.
+Version remains `16.1.0-dev`.
+
 Current slice (2026-09-08), after `b01babf2`: **typed claim provenance prerequisite**
 is implemented in existing compaction/compiler. `context-claims-v4` preserves
 constraint/decision/observation/interpretation/question/next_action and attaches

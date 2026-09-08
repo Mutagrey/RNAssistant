@@ -2267,7 +2267,10 @@ endpoint.
    explicit partial/PDF-page coverage. HTML source/binding member views now share
    the same text engine under exact parents, with selection/generation validation;
    unique ATX section reads now retain exact partial coverage through the existing
-   read contract, with explicit ambiguity/bound/drift refusal. Picker/history paging, cold replay,
+   read contract, with explicit ambiguity/bound/drift refusal. Typed compaction now
+   publishes source-retaining shared context through existing document authority/CAS;
+   explicit second-chat reads use frozen per-claim filtering. Concurrent publication,
+   origin deletion and CAS checks pass host-neutral. Picker/history paging, cold replay,
    authority recovery and Windows/target-model gates remain open.
 5. **11T — typed Office tools и удаление legacy host dispatch — admitted:**
    - [x] 11T0/7D — done host-neutral: один атомарный production change связывает exact выбранный workbook с

@@ -31,6 +31,7 @@ namespace RNAssistant.Office.Services
         private readonly ModelContextCompiler _compiler;
         private readonly Func<ChatSession, CallableToolPack> _captureTools;
         private readonly Func<SkillCatalogSnapshot> _captureSkills;
+        private readonly DocumentArtifactStore _sharedArtifacts;
 
         public ContextCompactionService(LlmCompletionDelegate completeAsync,
             ResourceAuthorityService authority = null, ChatBlobStore payloads = null,
@@ -40,6 +41,7 @@ namespace RNAssistant.Office.Services
             _authority = authority;
             _compiler = new ModelContextCompiler(payloads);
             _captureTools = captureTools; _captureSkills = captureSkills;
+            if (authority != null && payloads != null) _sharedArtifacts = new DocumentArtifactStore(authority.Store, authority.Revisions, payloads);
         }
 
         public async Task<ContextCheckpoint> EnsureWithinBudgetAsync(
@@ -186,6 +188,19 @@ namespace RNAssistant.Office.Services
                 Revision = previousArtifact == null ? 1 : Math.Max(1, previousArtifact.Revision + 1)
             };
             checkpoint.Id = artifact.Id;
+            if (_sharedArtifacts != null && !string.IsNullOrWhiteSpace(session.DocumentAuthorityId))
+            {
+                try
+                {
+                    var documentSnapshot = frozen.Resources.Get(ResourceAuthorityScopeId.Document(new DocumentAuthorityId(session.DocumentAuthorityId)))
+                        ?? throw new InvalidOperationException("Document authority was not captured for shared publication.");
+                    var shared = _sharedArtifacts.PublishContext(session, checkpoint, documentSnapshot.Generation);
+                    checkpoint.SharedResource = ChatResourceUri.CreateArtifactRevision(session, shared);
+                    session.Artifacts.Add(shared);
+                }
+                catch (Exception error) when (error is System.IO.IOException || error is System.IO.InvalidDataException || error is InvalidOperationException || error is ArgumentException)
+                { checkpoint.SharedPublicationIssue = error.Message; }
+            }
             artifact.InlineText = JsonConvert.SerializeObject(checkpoint, Formatting.None);
             artifact.MetadataJson = JsonConvert.SerializeObject(new
             {
@@ -210,7 +225,7 @@ namespace RNAssistant.Office.Services
                 {
                     Kind = "compaction",
                     Title = "Контекст сжат",
-                    Subtitle = prefix.Count + " сообщений",
+                    Subtitle = prefix.Count + " сообщений" + (checkpoint.SharedPublicationIssue == null ? "" : "; общий контекст не опубликован"),
                     Status = "completed",
                     ResultMessage = summaryMarkdown,
                     DataJson = artifact.MetadataJson
@@ -219,7 +234,8 @@ namespace RNAssistant.Office.Services
             };
             artifact.SourceMessageId = eventMessage.Id;
             session.Messages.Add(eventMessage);
-            Report(progress, "compacted", "Контекст сжат; исходная история сохранена.", eventMessage.Activity);
+            Report(progress, "compacted", checkpoint.SharedPublicationIssue == null ? "Контекст сжат; исходная история сохранена." :
+                "Контекст сжат локально; общий ресурс не опубликован: " + checkpoint.SharedPublicationIssue, eventMessage.Activity);
             return checkpoint;
         }
 
@@ -317,6 +333,7 @@ namespace RNAssistant.Office.Services
             };
 
             if (session == null) return result;
+            add(checkpoint?.SharedResource);
             add(ChatResourceUri.ResolveArtifactRevision(session, session.ActiveHtmlArtifactId));
             add(ChatResourceUri.ResolveArtifactRevision(session, session.ActiveTaskListArtifactId));
             add(ChatResourceUri.ResolveArtifactRevision(session, session.ActivePlanDocumentArtifactId));
@@ -411,6 +428,17 @@ namespace RNAssistant.Office.Services
             builder.AppendLine("TRANSCRIPT:");
             foreach (var message in prefixMessages)
             {
+                if (message.ContextClaims?.Count > 0)
+                {
+                    foreach (var claim in message.ContextClaims.Where(item => CurrentClaim(item, authority)))
+                    {
+                        var claimSourceId = "source-" + (++sourceNumber);
+                        sources.Add(claimSourceId, claim);
+                        builder.AppendLine(JsonConvert.SerializeObject(new { sourceId = claimSourceId, kind = claim.Kind,
+                            sourceRoles = claim.SourceRoles, text = ModelToolResultProjection.SanitizeRuntimeText(claim.Text) }));
+                    }
+                    continue;
+                }
                 var projected = ProjectMessage(session, message);
                 var toolDependent = !string.IsNullOrEmpty(message.ToolName) || (message.ToolCalls?.Count ?? 0) > 0 || message.ResourceEffect != null;
                 var sourceId = "source-" + (++sourceNumber);
@@ -423,6 +451,9 @@ namespace RNAssistant.Office.Services
                 sources.Add(sourceId, new StructuredContextClaim { ClaimId = message.Id, Text = projected.Content,
                     Kind = observed ? "observation_source" : userSource ? "user_source" : "interpretation_source",
                     SourceRoles = new List<string> { sourceRole },
+                    SourceSnapshots = new List<ContextClaimSource> { new ContextClaimSource { MessageId = message.Id,
+                        Role = sourceRole, Text = session.Messages.FirstOrDefault(item => item.Id == message.Id)?.Content ?? message.Content ?? "",
+                        Preview = CompactionText(projected) } },
                     SourceMessageIds = new List<string> { message.Id }, Evidence = message.ResourceEvidence ?? new List<ResourceEvidence>(),
                     ToolGeneration = toolDependent ? authority.ToolGeneration : null,
                     SkillGeneration = toolDependent ? authority.Skills.Generation : null,
@@ -530,6 +561,8 @@ namespace RNAssistant.Office.Services
                     throw new InvalidOperationException("Claim kind is not supported by its source roles; keep assistant conclusions as interpretations.");
                 var claim = new StructuredContextClaim { ClaimId = "claim_" + Guid.NewGuid().ToString("N"), Kind = kind, Text = ((string)draft["text"]).Trim(),
                     SourceRoles = provenance.SelectMany(item => item.SourceRoles).Distinct(StringComparer.Ordinal).ToList(),
+                    SourceSnapshots = provenance.SelectMany(item => item.SourceSnapshots ?? new List<ContextClaimSource>())
+                        .GroupBy(item => JsonConvert.SerializeObject(item)).Select(group => group.First()).ToList(),
                     SourceMessageIds = provenance.SelectMany(item => item.SourceMessageIds).Distinct(StringComparer.Ordinal).ToList(),
                     Evidence = provenance.SelectMany(item => item.Evidence).GroupBy(item => item.EvidenceId, StringComparer.Ordinal).Select(group => group.First()).ToList(),
                     ToolGeneration = provenance.Select(item => item.ToolGeneration).FirstOrDefault(item => item != null),

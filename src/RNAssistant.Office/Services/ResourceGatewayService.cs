@@ -234,6 +234,11 @@ namespace RNAssistant.Office.Services
             }
             var provider = ProviderFor(request.Reference.Uri);
             var live = provider is ILiveOfficeResourceProvider;
+            var address = ResourceUri.Parse(request.Reference.Uri);
+            if (address.Provider == "chat" && address.Segments.Count >= 3 &&
+                RNAssistant.Core.Storage.DocumentArtifactStore.ContextLogicalId(address.Segments[2]) != null &&
+                request.Representation != null && request.Representation != "auto" && request.Representation != "text" && request.Representation != "metadata")
+                throw new ResourceRequestException("Shared context supports metadata or complete text reads; row and source views cannot bypass claim filtering.", "RESOURCE_VIEW_UNSUPPORTED", false);
             if (request.Section != null && (!(provider is ChatArtifactResourceProvider) ||
                 request.Representation != null && request.Representation != "auto" && request.Representation != "text" ||
                 !string.IsNullOrEmpty(request.Cursor) || request.ViewPath != null || request.Fields != null || request.RowOffset != 0 || request.MaxRows != 0))

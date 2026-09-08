@@ -284,6 +284,8 @@ namespace RNAssistant.Harness
                 Test("settings: invalid numeric values are normalized", SettingsNormalizeInvalidNumericValues),
                 Test("context: compaction uses structured source claims", CompactionUsesStructuredSourceClaims),
                 Test("context: compaction preserves claim kinds and roles", CompactionPreservesClaimKindsAndRoles),
+                Test("shared context: publication and authority-filtered reads", SharedContextPublicationAndReads),
+                Test("shared context: compaction publication and writer drift", CompactionPublishesSharedContext),
                 Test("context: compaction preserves tool protocol pairs", CompactionPreservesToolProtocolPairs),
                 Test("context inspector: builds agent snapshot", PromptContextInspectorBuildsAgentSnapshot),
                 Test("context inspector: raw JSON is opt-in", PromptContextInspectorRawJsonIsOptIn),

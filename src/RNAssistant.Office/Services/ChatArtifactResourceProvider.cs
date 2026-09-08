@@ -178,6 +178,15 @@ namespace RNAssistant.Office.Services
                     if (!string.IsNullOrWhiteSpace(kind) &&
                         !(kind == DocumentArtifactKind && !string.IsNullOrWhiteSpace(artifact.DocumentAuthorityId)) &&
                         !string.Equals(artifact.Kind, kind, StringComparison.OrdinalIgnoreCase)) continue;
+                    // Claims and retained source transcripts are authority-filtered by
+                    // the compiler after an explicit read, never raw search snippets.
+                    if (artifact.Kind == DocumentArtifactStore.SharedContextKind)
+                    {
+                        if (matches.Count >= limit) { scanTruncated = true; break; }
+                        if ((artifact.Title ?? "").IndexOf(query, StringComparison.OrdinalIgnoreCase) >= 0)
+                            matches.Add(SearchMatch(session, artifact, "metadata", artifact.Title, artifact.Title.IndexOf(query, StringComparison.OrdinalIgnoreCase), query.Length, maxCharsPerMatch));
+                        continue;
+                    }
                     if (matches.Count >= limit)
                     {
                         scanTruncated = true;
@@ -560,6 +569,7 @@ namespace RNAssistant.Office.Services
 
         private static bool HasTextHint(ChatArtifact artifact, ChatAttachment attachment)
         {
+            if (artifact?.Kind == DocumentArtifactStore.SharedContextKind) return true;
             if (attachment != null)
             {
                 return attachment.ExtractedCharCount > 0 ||

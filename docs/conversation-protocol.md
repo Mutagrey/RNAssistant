@@ -498,8 +498,12 @@ them. The compiler preserves claim kind/roles and rejects untyped claims. User
 constraints/decisions, supported tool observations and assistant interpretations
 remain distinct; proposed work is `next_action`. Recompaction cannot upgrade an
 interpretation to a decision or observation. Older checkpoints are preserved but
-skipped. This changes compaction only, not conversation-response v5 or runtime
-lifecycle; see [claim semantics](artifact-library.md#discovery-descriptions-and-model-context).
+skipped. Successful compaction also publishes document-owned versioned context through
+existing Resource Fabric/CAS. Cross-chat reads explicitly select it; the compiler
+filters current claims and projects safe source excerpts, retaining raw source
+snapshots only as runtime provenance. Oversized archives may be hydrated within a
+fixed bound before model budget selection; direct result projections mask raw
+archives. This preserves conversation-response v5 and runtime lifecycle; see [claim semantics](artifact-library.md#discovery-descriptions-and-model-context).
 Semantic artifact search indexes public title/type/MIME/description only; raw
 artifact metadata, storage ids and provenance cannot become a returned snippet.
 

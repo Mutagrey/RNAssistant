@@ -140,7 +140,7 @@ namespace RNAssistant.Core.Storage
                 Id = id, DocumentAuthorityId = owner, Revision = revision,
                 Kind = IsPlan(session, reference) ? ChatArtifactKinds.PlanDocument :
                     HtmlWorkspaceIdentity.LogicalId(id) != null ? ChatArtifactKinds.HtmlWorkspace :
-                    MarkdownDocumentIdentity.LogicalId(id) != null ? ChatArtifactKinds.Markdown : ChatArtifactKinds.File,
+                    MarkdownDocumentIdentity.LogicalId(id) != null ? ChatArtifactKinds.Markdown : ContextLogicalId(id) != null ? SharedContextKind : ChatArtifactKinds.File,
                 CreatedUtc = default(DateTime), AvailabilityIssue = "metadata_unavailable"
             };
         }
@@ -154,7 +154,7 @@ namespace RNAssistant.Core.Storage
                 ChatResourceUri.TryParseArtifactRevision(reference, out owner, out id, out version);
                 return ReadRecordSnapshot(session, reference, AuthoredRecordView,
                     HtmlWorkspaceIdentity.LogicalId(id) != null ? ChatArtifactKinds.HtmlWorkspace :
-                    MarkdownDocumentIdentity.LogicalId(id) != null ? ChatArtifactKinds.Markdown : ChatArtifactKinds.File, includeBody);
+                    MarkdownDocumentIdentity.LogicalId(id) != null ? ChatArtifactKinds.Markdown : ContextLogicalId(id) != null ? SharedContextKind : ChatArtifactKinds.File, includeBody);
             }
             var scope = Scope(session);
             if (!Owns(session, reference)) throw new InvalidDataException("The artifact belongs to another document.");
