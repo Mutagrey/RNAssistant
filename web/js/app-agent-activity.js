@@ -329,6 +329,7 @@ function activityDisplayResult(activity) {
       resource_view_invalid: "Этот формат чтения не поддерживается",
       capability_not_found: "Инструмент или навык не найден",
       invalid_arguments: "Нужно уточнить параметры действия",
+      parameters_schema: "Некорректная схема параметров",
       tool_display_invalid: "Поля цели не соответствуют параметрам инструмента",
       resource_target_required: "Нужно указать ресурс",
       resource_target_runtime_owned: "Нужно указать понятное имя ресурса",
@@ -343,7 +344,8 @@ function activityDisplayResult(activity) {
       document_session_unavailable: "Документ недоступен",
       tool_effect_uncertain: "Результат не подтверждён — нужна проверка"
     };
-    return errors[code] || (dispatch === "NotDispatched" ? "Не удалось начать действие" : "Действие завершилось с ошибкой");
+    var failure = errors[code] || (dispatch === "NotDispatched" ? "Не удалось начать действие" : "Действие завершилось с ошибкой");
+    return code ? failure + " · " + code : failure;
   }
   if (!activityToolId(activity)) return activityResultMessage(activity);
   if (effect === "VerifiedNoChange") return "Без изменений";

@@ -21,17 +21,10 @@ namespace RNAssistant.Office.Tools
                     ["minLength"] = 1,
                     ["maxLength"] = 128
                 },
-                ["mode"] = new JObject
-                {
-                    ["type"] = "string",
-                    ["description"] = "Existence policy; upsert is normally sufficient.",
-                    ["enum"] = new JArray("upsert", "createOnly", "updateOnly"),
-                    ["default"] = "upsert"
-                },
                 ["components"] = new JObject
                 {
                     ["type"] = "array",
-                    ["description"] = "Complete ordered VBA package sources. Required for create and when implementation changes; the first component is the StdModule containing the manifest and entry function. Do not duplicate this list inside the manifest: runtime derives and writes the manifest component-name list from this exact order.",
+                    ["description"] = "Complete ordered VBA package sources. Required for create and when implementation changes; the first component is the StdModule containing the manifest and entry function. Manifest parameters must be a JSON Schema object shaped as {type:'object',properties:{...},required:[...],additionalProperties:false}. Do not duplicate the component list inside the manifest: runtime derives it from this exact order.",
                     ["maxItems"] = 50,
                     ["items"] = new JObject
                     {

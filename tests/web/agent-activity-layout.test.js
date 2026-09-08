@@ -82,6 +82,7 @@ const read = file => fs.readFileSync(path.join(root, file), "utf8");
       assert.ok(bounds.every(row => row.targetOverflow !== "ellipsis"), "semantic targets remain visible");
       assert.equal(new Set(bounds[0].colors).size, 1, "action, target, icon and outcome use one muted color");
       assert.notEqual(bounds[4].colors[3], bounds[4].colors[0], "error remains distinct");
+      assert.ok(bounds[4].text.includes("excel_sheet_already_exists"), "failed action shows its stable error code inline");
       assert.equal(new Set(bounds[5].colors).size, 1, "unknown uses a symbol and text with neutral color");
       assert.ok(bounds[0].text.includes("Загружено") && !bounds[0].text.includes("private-id"));
       assert.ok(bounds[2].text.includes("Получено строк: 120"));

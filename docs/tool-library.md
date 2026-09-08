@@ -88,6 +88,10 @@ before preparation or storage. For model authoring, this outer ordered package i
 the sole component-list input: runtime writes the manifest's component-name array
 from that order before validation. The model does not duplicate the same list in a
 second, differently shaped manifest field.
+Model-facing upsert has no create/update existence mode: it resolves current
+existence atomically and creates or updates accordingly. Internal revision-guarded
+Library mutations retain explicit create/update intent. Manifest schema errors name
+the authored `parameters` field rather than the stored `argumentSchemaJson` field.
 
 Tool, Skill and Prompt mutation guards use `ToolArgumentReader` as the single owner
 for recursive ordinal JSON-object canonicalization and SHA256. Each domain still

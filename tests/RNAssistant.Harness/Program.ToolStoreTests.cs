@@ -811,6 +811,10 @@ namespace RNAssistant.Harness
                     "tool upsert requires handler verification");
                 AssertTrue(upsertDefinition.Policy.RequiresConfirmation,
                     "tool upsert requires confirmation");
+                var upsertSchema = JObject.Parse(
+                    upsertDefinition.ArgumentSchemaJson);
+                AssertTrue(upsertSchema["properties"]["mode"] == null,
+                    "model-facing upsert cannot confuse create/update existence modes");
                 var session = NewSession(adapter);
                 var native = executor.CreateNativeRuntime(
                     session, definitions,

@@ -266,9 +266,11 @@ tests.push(["catalog display works for arbitrary ids while zero-action history s
 tests.push(["localized failures and operation icons remain independent of model wording", () => {
   const failure = { Kind: "tool", ToolId: "common.capabilities_read", Status: "failed", ErrorCode: "capability_not_found",
     ResultMessage: "Missing tool. RUNTIME_CONTEXT.capabilities catalogRevision=abc" };
-  assert.equal(context.activityDisplayResult(failure), "Инструмент или навык не найден");
+  assert.equal(context.activityDisplayResult(failure), "Инструмент или навык не найден · capability_not_found");
+  failure.ErrorCode = "parameters_schema";
+  assert.equal(context.activityDisplayResult(failure), "Некорректная схема параметров · parameters_schema");
   failure.ErrorCode = "unexpected_vendor_failure";
-  assert.equal(context.activityDisplayResult(failure), "Действие завершилось с ошибкой");
+  assert.equal(context.activityDisplayResult(failure), "Действие завершилось с ошибкой · unexpected_vendor_failure");
   failure.ExecutionEvidence = { Effect: "Unknown", Dispatch: "MayHaveDispatched" };
   assert.match(context.activityDisplayResult(failure), /не подтверждён/);
   assert.equal(context.activityPresentationState(failure), "unknown");

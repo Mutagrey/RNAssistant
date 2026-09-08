@@ -1,5 +1,13 @@
 # Stabilization progress
 
+Current correction (2026-09-08): model-facing `common.tools_upsert` is now a true
+create-or-update operation without model-selected existence modes. Tool-manifest
+schema failures name the authored `parameters` field, authoring guidance includes
+its exact strict outer shape and forbids replacing a failed executable tool with a
+skill. Failed action rows expose the stable error code beside the localized status.
+Focused authoring/parser and web activity checks pass host-neutral;
+Windows/Office/WebView2 and target-model qualification remain open.
+
 Current correction (2026-09-08): HTML authored workspace operation receipts are
 now keyed by exact tool call id in addition to chat/run/step. Multiple HTML/CSS/JS
 writes emitted in one model batch no longer collide after the first publication

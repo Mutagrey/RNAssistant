@@ -337,7 +337,7 @@ The exact Agent-only `common.tools_upsert` and `common.tools_delete` authoring
 operations execute through native ToolRuntime handlers. Existing implementation is
 inspected through [published tool-source resources](tool-library.md#model-source-reads),
 not a separate file reader. Upsert accepts only the semantic tool id,
-existence policy, complete ordered VBA components and human documentation; the VBA
+complete ordered VBA components and human documentation; the VBA
 manifest owns callable metadata/schema while runtime assigns conservative authority
 and validates the complete effective definition before any write. Separate
 model-facing `common.tools_validate`, list mode, executor, storage names and
@@ -347,6 +347,8 @@ rejects drift before dispatch. Storage writes are marked before the possible eff
 and verified by exact effective-definition/absence read-back. A matching upsert is
 verified no-change and does not dispatch. Authoring never changes the immutable
 catalog already captured for the accepted run.
+The model-facing operation always resolves create versus update from current state;
+existence policy remains internal to revision-guarded Library mutations.
 
 ## ModelProtocol boundary (Phase 2)
 
