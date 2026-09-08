@@ -273,6 +273,7 @@ namespace RNAssistant.Core.Models
         public List<ContextCheckpoint> ContextCheckpoints { get; set; }
         public string ActiveContextCheckpointId { get; set; }
         public List<ChatArtifact> Artifacts { get; set; }
+        public List<ChatArtifactLink> ArtifactLinks { get; set; }
         public string ActiveHtmlArtifactId { get; set; }
         public string ActiveTaskListArtifactId { get; set; }
         public string ActivePlanDocumentArtifactId { get; set; }
@@ -289,6 +290,7 @@ namespace RNAssistant.Core.Models
             Messages = new List<ChatMessage>();
             ContextCheckpoints = new List<ContextCheckpoint>();
             Artifacts = new List<ChatArtifact>();
+            ArtifactLinks = new List<ChatArtifactLink>();
             PreviousDocumentKeys = new List<string>();
             Mode = ChatModes.Agent;
         }

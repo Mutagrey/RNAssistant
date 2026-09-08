@@ -1338,6 +1338,20 @@ namespace RNAssistant.Harness
             AssertTrue(envelope["payload"]["text"] == null && envelope["payload"]["data"]["url"] != null,
                 "text pages use the data plane, never bridge body transport");
 
+            response = bridge.HandleMessageAsync(JsonConvert.SerializeObject(new {
+                id = "artifact-link", type = "changeArtifactLink", bridgeToken = token,
+                payload = new ArtifactLinkChangeRequest { ChatId = "chat-view", ResourceUri = uri,
+                    ExpectedSessionRevision = 4, Detached = true }
+            })).GetAwaiter().GetResult();
+            AssertTrue(JObject.Parse(response)["ok"].Value<bool>(), "typed artifact link route");
+            AssertEqual("chat-view", controller.LastChatId, "link action preserves exact addressed chat");
+            AssertEqual(uri, controller.LastArtifactViewerResourceUri, "link action preserves the displayed exact snapshot");
+            response = bridge.HandleMessageAsync(JsonConvert.SerializeObject(new {
+                id = "document-list", type = "listDocumentArtifacts", bridgeToken = token,
+                payload = new DocumentArtifactListRequest { ChatId = "chat-view", Query = "Plan" }
+            })).GetAwaiter().GetResult();
+            AssertEqual("chat-view", (string)JObject.Parse(response)["payload"]["chatId"], "typed document picker carries its source chat");
+
             const string imageUri = "rna://chat/chat-view/artifact/image-r1/revision/1";
             response = bridge.HandleMessageAsync(
                 "{\"id\":\"artifact-image\",\"type\":\"readArtifactImage\",\"bridgeToken\":\"" + token +

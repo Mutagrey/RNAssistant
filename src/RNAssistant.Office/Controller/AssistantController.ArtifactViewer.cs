@@ -8,6 +8,25 @@ namespace RNAssistant.Office
 {
     public sealed partial class AssistantController
     {
+        public DocumentArtifactListDto ListDocumentArtifacts(DocumentArtifactListRequest request)
+        {
+            return _artifactWorkingSet.List(LoadArtifactViewerSession(request?.ChatId), request);
+        }
+
+        public ChatStateResponse ChangeArtifactLink(ArtifactLinkChangeRequest request)
+        {
+            return WithReservedChatState(LoadArtifactViewerSession(request?.ChatId), session =>
+            {
+                if (!_chatSessions.IsCurrentDocument(session))
+                    throw new InvalidOperationException("Откройте документ этого чата перед изменением ссылок.");
+                _artifactWorkingSet.Change(session, request, current =>
+                {
+                    _conversationStore.Save(current);
+                    _chatSessions.NotifySaved(current);
+                });
+            });
+        }
+
         public ArtifactViewerPageDto ReadArtifactViewerPage(
             string chatId,
             string resourceUri,

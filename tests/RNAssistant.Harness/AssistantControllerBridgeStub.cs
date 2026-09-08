@@ -633,6 +633,10 @@ namespace RNAssistant.Office
         public ResourceDataCloseResponse CancelHtmlWorkspaceMutationUpload(ResourceUploadLeaseRequest request) { LastChatId = request.ChatId; return new ResourceDataCloseResponse { Closed = true }; }
         public HtmlWorkspaceResponse SaveHtmlWorkspaceFile(HtmlWorkspaceFilePayload request, CancellationToken token) { token.ThrowIfCancellationRequested(); LastChatId = request.ChatId; return new HtmlWorkspaceResponse { ActiveChatId = request.ChatId, Workspace = HtmlWorkspaceDto.From(new HtmlWorkspace { ActiveFileId = request.Path ?? string.Empty }) }; }
         public HtmlWorkspaceResponse SaveHtmlWorkspaceData(HtmlWorkspaceDataPayload request, CancellationToken token) { token.ThrowIfCancellationRequested(); LastChatId = request.ChatId; return new HtmlWorkspaceResponse { ActiveChatId = request.ChatId, Workspace = HtmlWorkspaceDto.From(null) }; }
+        public DocumentArtifactListDto ListDocumentArtifacts(DocumentArtifactListRequest request)
+        { LastChatId = request.ChatId; return new DocumentArtifactListDto { ChatId = request.ChatId }; }
+        public ChatStateResponse ChangeArtifactLink(ArtifactLinkChangeRequest request)
+        { LastChatId = request.ChatId; LastArtifactViewerResourceUri = request.ResourceUri; return new ChatStateResponse { ActiveChatId = request.ChatId }; }
         public ArtifactViewerPageDto ReadArtifactViewerPage(string chatId, string resourceUri, string cursor,
             System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken))
         {

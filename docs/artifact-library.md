@@ -22,7 +22,8 @@ Status: slice **1a, sent originals, implemented host-neutral**. Newly sent files
 belong to the document and are discoverable/readable from its other chats.
 Slice **1b, Plan publication, is implemented host-neutral (2026-09-08)**: new Plans
 also belong to the document. Authored HTML and independent Markdown documents
-still use the earlier owners; Library selection UI is not implemented. This section owns
+still use the earlier owners. The originals/Plan working-set selector and chat-local
+unlink are implemented host-neutral (2026-09-08). This section owns
 the artifact-specific decision, not a second resource architecture.
 
 `DocumentArtifactStore` publishes immutable original metadata as a retained view
@@ -72,11 +73,61 @@ snapshot without copying its identity. A document tombstone survives removal of
 its origin message or a dialogue rewind. Discovery omits the removed Plan; retained
 exact bytes remain available for historical reads.
 
-This is the Plan storage/tool slice, not complete cross-chat UX. A new chat can
-create a separate Plan; a fork can edit its inherited selection. Selecting or
-refreshing an existing Plan in an arbitrary chat still needs the working-set
-selector. No implicit current-head replacement, old-chat migration, independent
-MD authoring, or shared HTML editing is introduced by this slice.
+A new chat can create a separate Plan, select an existing document Plan through the
+working-set selector, or inherit a selected Plan through fork. Refresh is an
+explicit selection of the displayed current snapshot; no implicit current-head
+replacement, old-chat migration, independent MD authoring or shared HTML editing.
+
+### Implemented working-set links — 2026-09-08
+
+The user requested unlinking before the remaining HTML/Markdown ownership move.
+This dependency-safe slice applies only to document-owned originals and Plans;
+it does not predeclare their future owners or complete all of slices 3–4.
+
+`ChatSession.ArtifactLinks` is append-only-event-backed chat membership: one
+logical resource identity, exact attached snapshot and detached flag per decision.
+It owns no title/body/head. In the absence of an explicit decision, existing exact
+message refs establish membership. Explicit detach overrides all message refs for
+that logical resource. Attached refs are reachability roots independent of messages.
+
+**«Убрать» / «Убрать из этого чата»** removes a working-set link and, for the selected
+Plan, clears its selection. It excludes that resource from library heads, the next
+bounded prompt manifest and new compaction reference collection. It preserves
+historical messages/checkpoints, exact resource reads, other chats and document
+CAS. It is neither a document tombstone nor an access revocation. History rewrite
+and fork preserve explicit decisions; clearing the entire chat clears membership.
+
+The **«Ресурсы» → «Из документа…»** picker remains available in an empty chat. It
+lists metadata for current Plans and originals, supports title search and returns
+50 items per page with a cursor bound to the chat revision, document, query and
+ordered collection. Duplicate names remain separate exact resources; continuation
+cannot silently skip a changed catalog. A click attaches an original or selects the
+exact displayed Plan. Detach is also available beside eligible working-set rows.
+HTML/independent MD and run/system resources have no link controls in this slice.
+
+`ArtifactWorkingSetService` owns validation and document-lease coordination; the
+typed `listDocumentArtifacts`/`changeArtifactLink` bridge carries an explicit chat,
+exact snapshot URI and expected chat revision for writes. The controller reserves
+and reloads that addressed chat, verifies the bound document, then saves membership
+(including an initially empty chat). A short document mutation lease spans Plan
+currentness validation through chat persistence. Stale chat saves fail optimistic
+concurrency; stale Plan selections fail without choosing latest. No resource head
+is published by link changes. UI requests capture chat/navigation, suppress double
+clicks, ignore late responses and never retry mutations automatically.
+
+Chat reconstruction reads Plan metadata before optional active-body hydration.
+A missing body therefore does not block unlink; an explicit body read still fails.
+Missing/corrupt metadata and unknown logical heads retain explicit failure, with
+recovery and bounded indexed enumeration tracked in the stabilization backlog.
+Enumeration still scans document revision metadata; a 50-item response does not
+claim bounded source allocation.
+
+Evidence: `artifact working set:` covers original/Plan attach, native cross-chat
+editing, restart, fork, history, missing body, clear, stale snapshot/session,
+competing document lease, foreign scope, duplicate-title paging and stale cursors.
+`artifact-working-set.test.js` covers empty-chat access, request ordering, captured
+writes, duplicate clicks and navigation races. Windows/Office/WebView2 and real
+layout qualification remain open.
 
 ### Ownership and user behavior
 

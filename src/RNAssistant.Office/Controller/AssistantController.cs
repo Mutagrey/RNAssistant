@@ -24,6 +24,7 @@ namespace RNAssistant.Office
         private readonly AppDataPaths _paths;
         private readonly SettingsService _settingsService;
         private readonly ChatStore _chatStore;
+        private readonly ArtifactWorkingSetService _artifactWorkingSet;
         private readonly IConversationStore _conversationStore;
         private readonly IEventStore _eventStore;
         private readonly ModelTracePersistenceService _modelTracePersistence;
@@ -81,6 +82,7 @@ namespace RNAssistant.Office
             RuntimeLog.Configure(_paths.Root);
             _settingsService = new SettingsService(_paths);
             _chatStore = new ChatStore(_paths, () => _settingsService.LoadStorageProtector());
+            _artifactWorkingSet = new ArtifactWorkingSetService(_chatStore.DocumentArtifacts, new ResourceMutationJournal(_paths));
             _conversationStore = new ChatConversationStoreAdapter(_chatStore);
             _eventStore = new ChatEventStoreAdapter(_chatStore);
             _modelTracePersistence = new ModelTracePersistenceService(_eventStore);

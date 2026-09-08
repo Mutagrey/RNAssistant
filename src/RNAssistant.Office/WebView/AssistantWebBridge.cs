@@ -449,6 +449,12 @@ namespace RNAssistant.Office.WebView
                     case "cancelHtmlWorkspaceMutationUpload":
                         responsePayload = _controller.CancelHtmlWorkspaceMutationUpload(Payload<ResourceUploadLeaseRequest>(payload));
                         break;
+                    case "listDocumentArtifacts":
+                        responsePayload = _controller.ListDocumentArtifacts(Payload<DocumentArtifactListRequest>(payload));
+                        break;
+                    case "changeArtifactLink":
+                        responsePayload = _controller.ChangeArtifactLink(Payload<ArtifactLinkChangeRequest>(payload));
+                        break;
                     case "readArtifactViewerPage":
                         var artifactViewerPage = Payload<ArtifactViewerPagePayload>(payload);
                         responsePayload = _controller.ReadArtifactViewerPage(

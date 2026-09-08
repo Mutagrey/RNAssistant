@@ -36,6 +36,19 @@ transport alone does not qualify source allocation.
   before rejecting its size. Revisit with a concrete large-mail Windows failure
   or before claiming bounded-source qualification; keep real Outlook gates open.
 
+## Document artifact discovery/recovery — remaining authorized slices
+
+- Artifact resource owner / slice 3: `DocumentArtifactStore.List` and the working-set
+  picker still scan committed revision metadata. Response paging is bounded, source
+  enumeration is not. Replace the scan with the existing authority projection/index
+  when implementing indexed discovery; verify large libraries and continuation drift.
+- Artifact resource owner / metadata recovery: missing/corrupt published metadata or
+  an unknown Plan logical head can prevent reconstruction/catalog listing. Body-free
+  working-set reads solve missing bodies only. Add an explicit unavailable-resource
+  projection/reconciliation path with unlink-by-retained-identity, without inventing
+  metadata, silently selecting latest or hiding unavailable entries. Verify opening
+  the affected chat, listing unaffected resources and preserving historical evidence.
+
 ## Existing defects outside the completed cutover
 
 - Host-neutral `artifacts: historical attachments stay reference-only` currently

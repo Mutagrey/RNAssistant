@@ -70,6 +70,7 @@ namespace RNAssistant.Office.Services
                 var oldReference = RNAssistant.Core.Services.ChatResourceUri.CreateArtifactRevision(session, artifact);
                 var published = _documentArtifacts.PublishOriginal(session, artifact, original);
                 session.Artifacts[session.Artifacts.IndexOf(artifact)] = published;
+                RNAssistant.Core.Services.ArtifactWorkingSet.Set(session, published, false);
                 message.ResourceRefs.RemoveAll(reference => reference.Uri == oldReference.Uri);
                 var exact = RNAssistant.Core.Services.ChatResourceUri.CreateArtifactRevision(session, published);
                 if (!message.ResourceRefs.Any(reference => reference.Uri == exact.Uri)) message.ResourceRefs.Add(exact);

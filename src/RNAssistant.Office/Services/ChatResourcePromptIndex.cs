@@ -21,7 +21,7 @@ namespace RNAssistant.Office.Services
                     .GroupBy(item => item.Id, StringComparer.OrdinalIgnoreCase)
                     .Where(group => group.Count() == 1)
                     .Select(group => group.Single())
-                    .Where(item => !PlanDocumentService.IsRemoved(session, item))
+                    .Where(item => !PlanDocumentService.IsRemoved(session, item) && !ArtifactWorkingSet.IsDetached(session, item))
                     .ToList();
             if (artifacts.Count == 0 || maxTokens <= 0) return string.Empty;
 

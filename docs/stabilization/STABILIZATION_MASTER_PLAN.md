@@ -2240,9 +2240,11 @@ endpoint.
    must pass before claiming cross-chat editing. The initial discovery/context
    correction does not move ownership or close Windows/target-model gates.
    Sent-original ownership and Plan snapshot/logical-head publication are now
-   implemented host-neutral (slices 1a/1b). Shared HTML, independent Markdown and
-   explicit working-set selection remain open; inherited Plan selections already
-   use the document head guard. Windows/target-model gates remain unchanged.
+   implemented host-neutral (slices 1a/1b). The user's 2026-09-08 unlink request
+   admits the dependency-safe originals/Plan working-set slice before HTML/MD:
+   explicit attach/select/unlink now uses chat events, exact snapshot guards and
+   document leases. Shared HTML, independent Markdown and the remaining indexed
+   discovery/recovery work remain open. Windows/target-model gates are unchanged.
 5. **11T — typed Office tools и удаление legacy host dispatch — admitted:**
    - [x] 11T0/7D — done host-neutral: один атомарный production change связывает exact выбранный workbook с
      `ExcelDocumentSession`, переключает factories и typed Excel read/write на прямой

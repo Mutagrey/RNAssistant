@@ -113,9 +113,9 @@ namespace RNAssistant.Core.Storage
                 .OrderBy(item => item.CreatedUtc).ThenBy(item => item.Id, StringComparer.Ordinal).ToArray();
         }
 
-        public ChatArtifact Read(ChatSession session, ResourceRef reference)
+        public ChatArtifact Read(ChatSession session, ResourceRef reference, bool includeBody = true)
         {
-            if (IsPlan(session, reference)) return ReadPlan(session, reference, true);
+            if (IsPlan(session, reference)) return ReadPlan(session, reference, includeBody);
             var scope = Scope(session);
             if (!Owns(session, reference)) throw new InvalidDataException("The artifact belongs to another document.");
             var head = _authority.GetHead(scope, reference.Identity);

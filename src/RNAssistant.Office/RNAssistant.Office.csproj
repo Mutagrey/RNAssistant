@@ -61,6 +61,8 @@
   </ItemGroup>
   <ItemGroup>
     <Compile Include="Contracts\ArtifactLibraryDtos.cs" />
+    <Compile Include="Contracts\ArtifactWorkingSetDtos.cs" />
+    <Compile Include="Services\ArtifactWorkingSetService.cs" />
     <Compile Include="Contracts\BridgeDtos.ArtifactViewer.cs" />
     <Compile Include="Contracts\BridgeDtos.cs" />
     <Compile Include="Contracts\BridgeDtos.Diagnostics.cs" />

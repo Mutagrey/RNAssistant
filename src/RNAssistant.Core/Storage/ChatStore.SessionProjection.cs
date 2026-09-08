@@ -21,11 +21,12 @@ namespace RNAssistant.Core.Storage
         {
             "FormatVersion", "Id", "ParentSessionId", "ParentSessionRevision", "ForkedThroughMessageId", "ResourceCopies",
             "Host", "DocumentKey", "PreviousDocumentKeys", "DocumentTitle", "DocumentPath", "DocumentAuthorityId", "LastContextReceipt",
-            "Title", "Model", "Mode", "ReasoningEnabled", "CreatedUtc", "UpdatedUtc"
+            "Title", "Model", "Mode", "ReasoningEnabled", "CreatedUtc", "UpdatedUtc", "ArtifactLinks"
         };
 
         private JObject ToProjectionToken(ChatSession session)
         {
+            ArtifactWorkingSet.Validate(session);
             var root = JObject.FromObject(session, JsonSerializer.Create(ProjectionJsonSettings));
             // Committed document originals are reconstructed from their exact refs.
             // The conversation never becomes a second owner of artifact metadata.
@@ -74,6 +75,7 @@ namespace RNAssistant.Core.Storage
         {
             if (root == null) return null;
             var session = RuntimePayloadService.HydrateActiveExecution(root, _blobs).ToObject<ChatSession>();
+            ArtifactWorkingSet.Validate(session);
             session.Revision = sequence;
             session.StorageHeadHash = headHash;
             session.StorageTailByteOffset = tailByteOffset;
@@ -83,14 +85,15 @@ namespace RNAssistant.Core.Storage
             {
                 var references = (session.Messages ?? new List<ChatMessage>()).Where(message => message != null)
                     .SelectMany(message => message.ResourceRefs ?? new List<ResourceRef>())
+                    .Concat((session.ArtifactLinks ?? new List<ChatArtifactLink>()).Where(link => !link.Detached).Select(link => link.Reference))
                     .Where(reference => DocumentArtifactStore.Owns(session, reference))
                     .GroupBy(reference => reference.Uri, StringComparer.Ordinal).Select(group => group.First());
                 foreach (var reference in references)
-                    session.Artifacts.Add(DocumentArtifacts.Read(session, reference));
+                    session.Artifacts.Add(DocumentArtifacts.Read(session, reference, false));
                 if (!string.IsNullOrWhiteSpace(session.ActivePlanDocumentArtifactId) &&
                     !session.Artifacts.Any(item => item.Id == session.ActivePlanDocumentArtifactId))
                 {
-                    session.Artifacts.Add(DocumentArtifacts.ReadPlanSelection(session, session.ActivePlanDocumentArtifactId));
+                    session.Artifacts.Add(DocumentArtifacts.ReadPlanSelection(session, session.ActivePlanDocumentArtifactId, false));
                 }
             }
             if (rebuildDerivedProjections)

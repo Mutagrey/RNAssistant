@@ -307,7 +307,8 @@ namespace RNAssistant.Office.Services
                 ResourceAddress ignored;
                 if (reference == null || string.IsNullOrWhiteSpace(reference.Uri) ||
                     !ResourceUri.TryParse(reference.Uri, out ignored) ||
-                    PlanDocumentService.IsRemovedReference(session, reference)) return;
+                    PlanDocumentService.IsRemovedReference(session, reference) ||
+                    ArtifactWorkingSet.IsDetachedReference(session, reference)) return;
                 var key = reference.Uri + "\n" + (reference.Revision ?? string.Empty);
                 if (!seen.Add(key) || result.Count >= MaximumCheckpointResourceReferences) return;
                 result.Add(new ResourceRef(reference.Uri, reference.Revision));

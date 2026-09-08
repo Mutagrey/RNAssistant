@@ -3,6 +3,12 @@ using System.Collections.Generic;
 
 namespace RNAssistant.Core.Models
 {
+    public sealed class ChatArtifactLink
+    {
+        public ResourceIdentity Identity { get; set; }
+        public ResourceRef Reference { get; set; }
+        public bool Detached { get; set; }
+    }
     public static class ChatArtifactLimits
     {
         public const int MaximumTextCharacters = 2000000;

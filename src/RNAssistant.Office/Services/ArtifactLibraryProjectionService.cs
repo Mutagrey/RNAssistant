@@ -25,6 +25,7 @@ namespace RNAssistant.Office.Services
                 .GroupBy(item => item.Id, StringComparer.OrdinalIgnoreCase)
                 .Where(group => group.Count() == 1)
                 .Select(group => group.Single())
+                .Where(item => !ArtifactWorkingSet.IsDetached(session, item))
                 .ToList();
             var byId = artifacts.ToDictionary(item => item.Id, StringComparer.OrdinalIgnoreCase);
             var heads = new List<ArtifactLibraryHeadDto>();
@@ -99,6 +100,7 @@ namespace RNAssistant.Office.Services
                 .ToList();
             return new ArtifactLibraryHeadDto
             {
+                CanDetach = RNAssistant.Core.Storage.DocumentArtifactStore.Owns(session, ChatResourceUri.CreateArtifactRevision(session, head)),
                 ArtifactId = head.Id,
                 LogicalId = logicalId,
                 ResourceClass = resourceClass,

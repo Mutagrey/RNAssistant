@@ -131,13 +131,13 @@ namespace RNAssistant.Core.Storage
             return results[0].Resource.Copy();
         }
 
-        public ChatArtifact ReadPlanSelection(ChatSession session, string artifactId)
+        public ChatArtifact ReadPlanSelection(ChatSession session, string artifactId, bool includeBody = true)
         {
             var references = _authority.Capture(Scope(session)).Heads.Values
                 .Where(head => head.Knowledge == HeadKnowledge.Known && IsPlan(session, head.Revision))
                 .Select(head => head.Revision).Where(reference => ResourceUri.Parse(reference.Uri).Segments[2] == artifactId).Take(2).ToArray();
             if (references.Length != 1) throw new InvalidDataException("The selected document Plan snapshot is unavailable or ambiguous.");
-            return ReadPlan(session, references[0], true);
+            return ReadPlan(session, references[0], includeBody);
         }
 
         private static ResourceIdentity PlanOperationIdentity(ChatSession session, string operationKey)

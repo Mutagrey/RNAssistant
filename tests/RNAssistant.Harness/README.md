@@ -39,6 +39,14 @@ version check still apply.
 
 ## Test map
 
+`artifact working set:` covers chat-local link persistence, document Plan selection
+and native editing from an empty second chat, unlink/fork/history/clear, missing
+body reads, stale chat and Plan versions, document lease conflicts, foreign scope,
+duplicate-title paging and cursor drift. Use `document Plan:`, `document originals:`
+and `artifact library:` when changing shared ownership/projection. The UI companion
+is `node tests/web/artifact-working-set.test.js`; real WebView/layout remains a
+separate qualification gate.
+
 `resource cutover: two chat mutations` covers three outcomes through separate
 executors/shared document authority, native Excel read/write, persisted read facts
 and the next actual model request: no-op keeps evidence, verified change without

@@ -1,5 +1,19 @@
 # Stabilization progress
 
+Current slice (2026-09-08): originals/Plan working-set links implemented in isolated
+`stab/11-artifact-working-set`. Typed document picker attaches originals and selects
+an exact current Plan in any chat of the document; «Убрать» removes only that chat
+link and selection, preserving historical refs and shared resources. Membership is
+chat-event-backed; prompt/library/new compaction projections, restart, fork and
+clear consume it. Missing Plan bodies do not block unlink. Captured chat/revision,
+optimistic save and document mutation lease reject stale or competing changes;
+UI ignores late navigation responses. Host-neutral working-set, document Plan,
+bridge, projection and browser checks cover this slice.
+Next ownership slice: shared HTML and independent authored Markdown; they have no
+link controls yet. Full indexed enumeration/metadata recovery and Windows/Office/
+WebView2 qualification stay open. Playwright layout is still unavailable locally.
+See [canonical artifact contract](../artifact-library.md#implemented-working-set-links--2026-09-08).
+
 Latest correction (2026-09-08): bridge аварийные ответы теперь используют один
 typed JSON contract, сохраняют request id и корректно экранируют exception text;
 неразбираемый/некоррелируемый transport failure завершает все pending UI promises

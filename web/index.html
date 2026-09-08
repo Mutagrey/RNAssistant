@@ -43,7 +43,7 @@
   <link rel="stylesheet" href="css/app-context-panel.css?v=json-viewer-20260829-1">
   <link rel="stylesheet" href="css/app-context-inspector.css?v=json-viewer-20260829-1">
   <link rel="stylesheet" href="css/app-chart-artifacts.css?v=chatui-20260622-3">
-  <link rel="stylesheet" href="css/app-artifacts.css?v=artifact-gallery-20260902-1">
+  <link rel="stylesheet" href="css/app-artifacts.css?v=artifact-links-20260908-1">
   <link rel="stylesheet" href="css/app-tree-adapter.css?v=tree-adapter-20260829-1">
   <link rel="stylesheet" href="css/app-html-workspace.css?v=html-export-20260831-1">
   <link rel="stylesheet" href="css/app-responsive.css?v=library-layout-20260907-1">
@@ -124,6 +124,15 @@
                   <input id="chatResourcesSearchInput" type="search" placeholder="Найти ресурс..." autocomplete="off">
                 </label>
                 <div class="chat-resource-list" id="chatResourcesList"></div>
+                <details id="documentArtifactsPicker">
+                  <summary>Из документа…</summary>
+                  <p class="chat-resource-empty">Подключите файл или выберите Plan из другого чата. «Убрать» удаляет только ссылку в этом чате; история и ресурс документа сохраняются.</p>
+                  <label class="chat-resource-search-wrap">
+                    <input id="documentArtifactsQuery" type="search" placeholder="Название ресурса" aria-label="Найти ресурс документа" maxlength="200">
+                    <button type="button" class="link-button" id="documentArtifactsSearch">Найти</button>
+                  </label>
+                  <div id="documentArtifactsList" class="chat-resource-list" aria-live="polite"></div>
+                </details>
                 <div class="chat-resource-popover-foot">
                   <button type="button" class="link-button" id="openArtifactsTabButton">Открыть все артефакты</button>
                 </div>
@@ -1075,7 +1084,7 @@
   <script src="js/app-agent-data.js?v=chat-projection-20260907-1"></script>
   <script src="js/app-agent-model.js?v=run-replay-20260907-1"></script>
   <script src="js/app-chart-artifacts.js?v=chart-chat-scope-20260908-1"></script>
-  <script src="js/app-artifacts.js?v=resource-index-20260907-1"></script>
+  <script src="js/app-artifacts.js?v=artifact-links-20260908-1"></script>
   <script src="js/app-task-list.js?v=planning-intents-20260902-1"></script>
   <script src="js/app-agent-activity.js?v=live-feed-20260907-1"></script>
   <script src="js/app-agent-approval.js?v=run-view-state-20260830-1"></script>

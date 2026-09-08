@@ -48,6 +48,7 @@ namespace RNAssistant.Office.Services
                 Messages = messages,
                 ContextCheckpoints = CloneContextCheckpoints(session.ContextCheckpoints, messages),
                 ActiveContextCheckpointId = session.ActiveContextCheckpointId,
+                ArtifactLinks = CloneArtifactLinks(session),
                 Artifacts = (session.Artifacts ?? new List<ChatArtifact>())
                     .Where(artifact => artifact != null)
                     .Select(CloneArtifact)
@@ -56,6 +57,12 @@ namespace RNAssistant.Office.Services
                 ActiveTaskListArtifactId = session.ActiveTaskListArtifactId,
                 ActivePlanDocumentArtifactId = session.ActivePlanDocumentArtifactId
             };
+        }
+
+        private static List<ChatArtifactLink> CloneArtifactLinks(ChatSession session)
+        {
+            return JsonConvert.DeserializeObject<List<ChatArtifactLink>>(
+                JsonConvert.SerializeObject(session.ArtifactLinks ?? new List<ChatArtifactLink>()));
         }
 
         public static DocumentContext CloneContext(DocumentContext context)
@@ -135,7 +142,8 @@ namespace RNAssistant.Office.Services
             if (source == null || fork == null || source.Id == fork.Id || fork.ParentSessionId != source.Id)
                 throw new InvalidOperationException("An explicit source and unpublished child chat are required.");
             var checkpoint = HtmlWorkspaceArtifactService.CheckpointAtOrBefore(source, fork.Messages, fork.Messages.Count - 1);
-            var additional = new List<string>();
+            fork.ArtifactLinks = CloneArtifactLinks(source);
+            var additional = ArtifactWorkingSet.LinkedArtifactIds(source).ToList();
             var selectedDocumentPlan = (source.Artifacts ?? new List<ChatArtifact>()).SingleOrDefault(item =>
                 item.Id == source.ActivePlanDocumentArtifactId && item.Kind == ChatArtifactKinds.PlanDocument &&
                 !string.IsNullOrWhiteSpace(item.DocumentAuthorityId) && item.DocumentAuthorityId == source.DocumentAuthorityId);
@@ -173,7 +181,8 @@ namespace RNAssistant.Office.Services
             ChatResourceReferenceService.LinkMessageResources(fork, 0);
             ChatResourceReferenceService.RestoreActiveTaskListFromMessages(fork);
             ChatResourceReferenceService.RestoreActivePlanDocumentFromMessages(fork);
-            if (selectedDocumentPlan != null && !PlanDocumentService.IsRemoved(fork, selectedDocumentPlan))
+            if (selectedDocumentPlan != null && !PlanDocumentService.IsRemoved(fork, selectedDocumentPlan) &&
+                !ArtifactWorkingSet.IsDetached(fork, selectedDocumentPlan))
                 fork.ActivePlanDocumentArtifactId = selectedDocumentPlan.Id;
             return plan;
         }

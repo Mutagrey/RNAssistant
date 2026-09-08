@@ -123,6 +123,7 @@ namespace RNAssistant.Office.Services
             session.HtmlWorkspace = new HtmlWorkspace();
             session.HtmlWorkspaceRecovery = null;
             session.Artifacts = new List<ChatArtifact>();
+            session.ArtifactLinks = new List<ChatArtifactLink>();
             InvalidateContextCheckpoints(session);
             session.ActiveHtmlArtifactId = null;
             session.ActiveTaskListArtifactId = null;

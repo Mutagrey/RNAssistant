@@ -78,7 +78,7 @@ namespace RNAssistant.Office.Services
                 PlanDocumentService.IsTombstone(item) &&
                 !string.IsNullOrWhiteSpace(item.SourceMessageId) &&
                 !PlanDocumentService.IsApplicableTombstone(session, item));
-            var activeArtifactIds = new List<string>();
+            var activeArtifactIds = ArtifactWorkingSet.LinkedArtifactIds(session).ToList();
             if (!string.IsNullOrWhiteSpace(session.ActiveHtmlArtifactId)) activeArtifactIds.Add(session.ActiveHtmlArtifactId);
             if (!string.IsNullOrWhiteSpace(session.ActiveTaskListArtifactId)) activeArtifactIds.Add(session.ActiveTaskListArtifactId);
             if (!string.IsNullOrWhiteSpace(session.ActivePlanDocumentArtifactId)) activeArtifactIds.Add(session.ActivePlanDocumentArtifactId);
@@ -137,6 +137,13 @@ namespace RNAssistant.Office.Services
         public static void RestoreActivePlanDocumentFromMessages(ChatSession session)
         {
             if (session == null) return;
+            var selected = (session.Artifacts ?? new List<ChatArtifact>()).SingleOrDefault(item =>
+                item.Id == session.ActivePlanDocumentArtifactId && item.Kind == ChatArtifactKinds.PlanDocument);
+            // An explicit document selection is independent of the edited message range.
+            if (selected != null && !string.IsNullOrWhiteSpace(selected.DocumentAuthorityId) &&
+                !PlanDocumentService.IsRemoved(session, selected) &&
+                (session.ArtifactLinks ?? new List<ChatArtifactLink>()).Any(link => !link.Detached &&
+                    link.Identity.Equals(ArtifactWorkingSet.Identity(session, selected)))) return;
             var artifacts = (session.Artifacts ?? new List<ChatArtifact>())
                 .Where(item => item != null && string.Equals(item.Kind, ChatArtifactKinds.PlanDocument, StringComparison.OrdinalIgnoreCase))
                 .Where(item => !string.IsNullOrWhiteSpace(item.Id))
@@ -153,7 +160,7 @@ namespace RNAssistant.Office.Services
                 {
                     ChatArtifact artifact;
                     if (!artifacts.TryGetValue(ids[idIndex], out artifact) ||
-                        PlanDocumentService.IsRemoved(session, artifact)) continue;
+                        PlanDocumentService.IsRemoved(session, artifact) || ArtifactWorkingSet.IsDetached(session, artifact)) continue;
                     session.ActivePlanDocumentArtifactId = ids[idIndex];
                     return;
                 }
