@@ -462,6 +462,14 @@ namespace RNAssistant.Office.Services
                 var data = new JObject { ["code"] = code, ["evidence_available"] = false,
                     ["complete"] = false, ["reason"] = reason,
                     ["next_action"] = "Read the required current resource explicitly." };
+                if (wire.Name == "common.resources_read")
+                {
+                    var original = ToolResultWire.ParseData(wire.Result.DataJson) as JObject;
+                    var target = original?["target"];
+                    if (target?.Type == JTokenType.String && !((string)target).Contains("://"))
+                        data["target"] = target.DeepClone();
+                    data["next_action"] = "If still needed, use common.resources_find to rediscover this resource, then common.resources_read on its advertised target. Prior text, section titles and summaries are not current evidence; do not retry a missing target unchanged.";
+                }
                 var result = RNAssistant.Core.Tools.Contracts.ToolResult.Error(
                     "Prior observation is not current evidence.", data.ToString(Formatting.None));
                 var json = ToolResultWire.WriteParsed(wire.ToolCallId, wire.Name, result, data, null);

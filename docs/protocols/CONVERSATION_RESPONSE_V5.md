@@ -59,6 +59,10 @@ Final answer:
   user input, or to emit the next tool calls; the continuation is not chat history.
 - Message wording never proves execution success, failure, verification or
   refusal. Runtime lifecycle, execution health and effect evidence remain separate.
+- On tool turns, the native schema asks `message` to briefly connect a relevant
+  observed finding, the purpose of the actual upcoming calls, and what their results
+  will clarify. Unknown parts are omitted, without invented findings or private
+  reasoning narration. This is communication guidance, not a runtime-parsed format.
 - Each call contains exactly a nonblank string `name` and object `arguments`.
   Call-level `id` is forbidden; runtime remains the only call-ID owner.
 - Names and envelope fields are case-sensitive. At most 32 calls may be returned,

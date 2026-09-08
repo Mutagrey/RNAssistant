@@ -39,6 +39,18 @@ version check still apply.
 
 ## Test map
 
+`artifacts: prompt preserves decision context` and `resource cutover: correctness
+before budget` cover optional-purpose admission, exact target preservation,
+ownership/read hints and semantic recovery after stale evidence exclusion.
+
+`resources: Markdown sections` checks native semantic reads from another chat,
+exact nested-section/fence/CRLF/Unicode boundaries, partial retained evidence and
+whole-refresh refusal, whole-read independence, missing/duplicate/oversized
+headings, uploaded/incomplete/unsupported text, missing CAS and generation drift.
+Use `resources:`, `shared Markdown:`, `document Plan:`, schema mirroring and the
+reviewed R61 inventory for the selector/schema/scanner change. Model-quality and
+Windows gates are not exercised by these harness checks.
+
 `excel discovery:` reproduces the reported document-read failure with 201 defined
 names. It verifies independent document/A1 reads, strict point-name admission,
 partial discovery/negative search, terminal paging, coverage-only cursor drift,

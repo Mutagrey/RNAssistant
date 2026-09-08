@@ -18,7 +18,7 @@ namespace RNAssistant.Office.Tools
         private const int MaximumWholeReadPages = 128;
         internal static readonly ToolDescriptor Descriptor = new ToolDescriptor(
             ResourceToolCatalog.ReadToolId,
-            "Read-only: Read a semantic target supplied by RUNTIME_CONTEXT or common.resources_find. Copy target verbatim, follow its usage and supported representations; it never contains :// and must not be constructed from a title. Do not read an Excel search scope to enumerate worksheet data: use excel.find_cells for discovery or an Excel range/table/name target for values. table/records return bounded row coverage with optional fields, offset and limit; omit path for Office targets because runtime applies their canonical record view. Text/source/structure require one complete representation; oversized requests fail explicitly. For a project-wide VBA request, read RUNTIME_CONTEXT.document.vba_project_target with representation=structure first. Exact URI, revision, cursor and guards remain runtime-owned. Media is hydrated only for the next model step; base64 is never embedded in JSON.",
+            "Read-only: Read a semantic target supplied by RUNTIME_CONTEXT or common.resources_find. Copy target verbatim, follow its usage and supported representations; it never contains :// and must not be constructed from a title. Do not read an Excel search scope to enumerate worksheet data: use excel.find_cells for discovery or an Excel range/table/name target for values. table/records return bounded row coverage with optional fields, offset and limit; omit path for Office targets because runtime applies their canonical record view. Text/source/structure read a complete representation by default. For document Markdown/Plans, section with representation=text selects a unique ATX heading and its nested subsections, bounded to 32000 characters. Section coverage never proves a whole-resource read; duplicate/missing/oversized sections fail explicitly. For a project-wide VBA request, read RUNTIME_CONTEXT.document.vba_project_target with representation=structure first. Exact URI, revision, cursor and guards remain runtime-owned. Media is hydrated only for the next model step; base64 is never embedded in JSON.",
             Parameters());
         internal static readonly ToolPolicy Policy = new ToolPolicy(ToolEffect.Read, ToolVerification.None,
             false, true, new[] { "agent", "plan", "chat" });
@@ -42,13 +42,18 @@ namespace RNAssistant.Office.Tools
             var reference = selected.Descriptor.Mutable ? new ResourceRef(selected.Reference.Uri) : selected.Reference;
             var representation = ToolArgumentReader.String(context.Arguments, "representation", "auto");
             var structured = representation == "table" || representation == "records";
+            var section = ToolArgumentReader.String(context.Arguments, "section", null);
+            if (section != null && representation != "text")
+                throw new ResourceRequestException("section requires representation=text.", "resource_section_unsupported", false);
             if (!structured && new[] { "limit", "offset", "path", "fields" }.Any(context.Arguments.ContainsKey))
                 throw new ResourceRequestException("Structural selectors require representation=table or records.", "RESOURCE_VIEW_UNSUPPORTED", false);
             var viewPath = structured
                 ? ResourceGatewayService.ResolveStructuralViewPath(selected,
                     ToolArgumentReader.String(context.Arguments, "path", null))
                 : null;
-            var selection = structured
+            var selection = section != null
+                ? Gateway.Read(Session, new ResourceReadRequest { Reference = reference, Representation = "text", Section = section, MaxChars = InternalReadCharacters })
+                : structured
                 ? Gateway.Read(Session, new ResourceReadRequest { Reference = reference, Representation = representation,
                     MaxRows = ToolArgumentReader.Int32(context.Arguments, "limit", 500),
                     RowOffset = ToolArgumentReader.Int32(context.Arguments, "offset", 0),
@@ -60,8 +65,9 @@ namespace RNAssistant.Office.Tools
                 selected.Target,
                 selected.Type,
                 selected.Scope);
+            projection.Section = section;
             var result = RuntimeResult.Ok(
-                structured ? "Bounded exact structural view read." : "Complete resource representation read.",
+                section != null ? "Complete selected Markdown section read; coverage is limited to that section." : structured ? "Bounded exact structural view read." : "Complete resource representation read.",
                 Serialize(projection),
                 selection.ResourceRefs);
             var attachments = selection.ModelAttachments ?? new ChatAttachment[0];
@@ -256,15 +262,18 @@ namespace RNAssistant.Office.Tools
         {
             const string target = "\"target\":{\"type\":\"string\",\"description\":\"Exact readable target copied verbatim from RUNTIME_CONTEXT or common.resources_find. It never contains ://; do not construct it from a title.\",\"minLength\":1,\"maxLength\":1000}";
             const string representation = "\"representation\":{\"type\":\"string\",\"description\":\"Representation to read. Complete views cannot be combined with table/records selectors.\",\"enum\":[\"metadata\",\"text\",\"structure\",\"source\",\"media\",\"formulas\",\"table\",\"records\"]}";
+            const string section = "\"section\":{\"type\":\"string\",\"description\":\"Exact unique ATX heading title copied from Markdown, without leading #. Includes nested subsections; maximum selected text is 32000 characters. Does not grant whole-resource read evidence.\",\"minLength\":1,\"maxLength\":200}";
             const string selectors = "\"limit\":{\"type\":\"integer\",\"description\":\"Maximum rows in this table/records batch.\",\"minimum\":1,\"maximum\":5000},\"offset\":{\"type\":\"integer\",\"description\":\"Zero-based table/records row offset.\",\"minimum\":0},\"path\":{\"type\":\"string\",\"description\":\"Optional record-array path for generic JSON resources. Omit it for Office targets; runtime applies their canonical record view. Otherwise use $ or an explicit object-property path such as $.records. Brackets, indexes, and wildcards are unsupported.\",\"pattern\":\"^\\\\$(?:\\\\.[A-Za-z_][A-Za-z0-9_]*)*$\",\"maxLength\":256},\"fields\":{\"type\":\"array\",\"description\":\"Structural field keys to project.\",\"maxItems\":128,\"items\":{\"type\":\"string\",\"maxLength\":128}}";
-            return "{\"type\":\"object\",\"properties\":{" + target + "," + representation + "," + selectors +
+            return "{\"type\":\"object\",\"properties\":{" + target + "," + representation + "," + section + "," + selectors +
                 "},\"required\":[\"target\"],\"additionalProperties\":false,\"anyOf\":[" +
                 "{\"type\":\"object\",\"description\":\"Read one complete metadata, text, structure, source, media, or formulas representation. Do not send limit, offset, path, or fields.\",\"properties\":{" + target + "," +
                 "\"representation\":{\"type\":\"string\",\"description\":\"Complete representation to read; omit for provider-selected auto.\",\"enum\":[\"metadata\",\"text\",\"structure\",\"source\",\"media\",\"formulas\"]}},\"required\":[\"target\"],\"additionalProperties\":false}," +
                 "{\"type\":\"object\",\"description\":\"Read bounded rows. Structural selectors are valid only in this table/records branch.\",\"properties\":{" + target + "," +
                 "\"representation\":{\"type\":\"string\",\"description\":\"Bounded structural representation to read.\",\"enum\":[\"table\",\"records\"]}," +
                 selectors +
-                "},\"required\":[\"target\",\"representation\"],\"additionalProperties\":false}]}";
+                "},\"required\":[\"target\",\"representation\"],\"additionalProperties\":false}," +
+                "{\"type\":\"object\",\"description\":\"Read one uniquely named document Markdown/Plan section.\",\"properties\":{" + target + "," + section + "," +
+                "\"representation\":{\"type\":\"string\",\"enum\":[\"text\"]}},\"required\":[\"target\",\"representation\",\"section\"],\"additionalProperties\":false}]}";
         }
 
         private static List<string> Fields(IDictionary<string, object> arguments)
@@ -276,6 +285,8 @@ namespace RNAssistant.Office.Tools
 
         private sealed class ResourceReadProjection
         {
+            [JsonProperty("section", NullValueHandling = NullValueHandling.Ignore)]
+            public string Section { get; set; }
             [JsonProperty("kind")]
             public string Kind { get; set; }
             [JsonProperty("target")]

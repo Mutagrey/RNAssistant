@@ -327,7 +327,8 @@ including CRLF and surrogate pairs.
 `sectionTitle` supplies the nearest preceding recognized ATX Markdown heading,
 excluding fenced code, with up to 200 characters plus an omission marker. This
 bounded outline recognizes at most 4096 headings; it supplies no title after an
-omitted heading. It is not a complete Markdown AST or section-read contract.
+omitted heading. It is not a complete Markdown AST. Exact section selection uses
+the complete-source scan described below, never the clipped discovery label alone.
 Search-only Gateway candidates now retain the authored description too. Both
 fields are untrusted discovery context; snippets are source excerpts, not proof of
 whole-source inspection or mutation eligibility.
@@ -340,7 +341,7 @@ the last source page as well as between pages, so a write during materialization
 cannot produce an apparently current mixed-generation result.
 
 Uploaded text and HTML members now use the extensions below. Semantic section
-reads, picker/history pagination, richer
+reads are implemented below; picker/history pagination, richer
 compiler decision context and cold allocation/Windows/layout qualification remain
 open. No model-generated synopsis or embedding publication is added.
 
@@ -394,8 +395,38 @@ selection/current head requires refresh; exact historical reads still work.
 
 The catalog still loads/parses the complete bounded aggregate for member discovery,
 including warm-index searches. This slice does not establish metadata-only HTML
-discovery or bounded cold-start allocation. Semantic section reads, picker/history
+discovery or bounded cold-start allocation. Markdown section reads are implemented
+below; picker/history
 pagination and Windows/Office/WebView2/layout qualification remain open.
+
+### Implemented Markdown section reads — 2026-09-08
+
+`common.resources_read` accepts `section` together with `representation=text` for
+document-owned authored Markdown, Plans and complete uploaded Markdown text.
+The selector is a unique ATX heading title without its leading `#` markers, up to
+200 characters, compared case-insensitively after trimming outer whitespace.
+Remaining title markup is literal. The selected text includes its heading and
+nested subsections until the next heading of equal or lesser depth. Fenced code
+headings are ignored; Setext/HTML headings are not supported by this grammar.
+
+One `MarkdownHeadingScanner` drives discovery and section selection; the existing
+v1 index manifest/label bytes are preserved. Section resolution reads the exact CAS
+text under the existing 2-million-character source bound and scans at most 4096
+headings. It does not infer uniqueness from a clipped index or incomplete extraction.
+Missing/repeated headings, truncated extraction, unsupported resources, oversized
+sections and generation drift fail explicitly with recovery guidance. A selected
+section is bounded to 32000 characters; there is no silent truncation or whole-read
+fallback. Cursors and table/record selectors cannot be combined with `section`.
+
+The result follows normal Gateway/provider/authority/evidence flow. `complete=true`
+means the named section is complete; its coverage is always the exact source
+character range, including when it spans a small file. Evidence retains only the
+delivered bytes and cannot satisfy a whole-resource refresh requirement. A later
+whole read remains independent. Discovery `usage` explains section versus whole
+reading. Native v5 `message` guidance now connects a known finding, the purpose of
+actual upcoming calls and what the result will clarify, without parsing reasoning
+or changing runtime lifecycle ownership. Real target-model response quality remains
+an open qualification gate.
 
 ### Ownership and user behavior
 
@@ -492,6 +523,24 @@ Three levels keep context useful without loading the library wholesale:
 3. Exact reads of requested sections, history and changes. Search snippets and
    descriptions never grant a whole-read mutation guard or claim full source
    coverage. Rename/deletion/ambiguity returns an explicit rediscovery route.
+
+Implemented working-set context (2026-09-08): `ChatResourcePromptIndex` advertises
+document/conversation ownership and a next-read representation for every admitted
+row. It explicitly identifies these entries as potentially historical snapshots;
+selection roles and authored descriptions do not prove currentness. Current/shared
+discovery uses `common.resources_find`, followed by `common.resources_read` with
+the returned target. The prompt index does not derive currentness from timestamps
+or create a second authority projection.
+
+Authored Markdown purpose is optional context: its projection is bounded to 240
+characters with an omission marker, sanitized and JSON-quoted. An over-budget
+description is dropped before its complete target; malformed optional description
+metadata yields an explicit unavailable label instead of aborting the prompt.
+Durable metadata is unchanged. Bodies and query snippets stay in their existing
+read/search paths. When the compiler excludes a stale/unavailable read, it retains
+only the semantic target for recovery and an explicit rediscover-then-read action;
+old source text and section titles do not become current evidence. Real model
+behavior remains unqualified; richer cross-chat decision claims remain separate.
 
 A resource's authored description records its purpose and scope; it is not a
 truncated body. A generated synopsis is a derived observation bound to the source

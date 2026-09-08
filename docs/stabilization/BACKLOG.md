@@ -10,15 +10,28 @@
 Новые product features заморожены. Запись в этом файле не разрешает начать работу
 до её явного включения в текущую фазу.
 
-## Resource prompt test expectation — 2026-09-08
+## Built-in inventory drift — 2026-09-08
 
-During the shared HTML slice, `artifacts: historical attachments stay reference-only`
-fails only at its old unquoted `target=attachment: Untitled` assertion. The committed
-`ChatResourcePromptIndex` already emits a quoted complete semantic target; neither
-that formatter nor this test changed in the HTML slice. Owner: resource context /
-harness. Reconcile the assertion with the canonical complete-target contract in
-the next resource-context slice; retain the no-historical-body/no-runtime-URI checks.
-The other 27 tests in the `artifact` filter pass. This is not Windows evidence.
+Owner: tool contracts / harness. During Markdown section-read verification against
+`22575b8c`, R61 inventory still differs for unchanged `common.resources_find`
+(schema fingerprint) and `common.tools_upsert` (fingerprint and property paths:
+runtime has `display.*`, baseline has `mode`). Review these inherited contracts
+in a separate approved slice before updating their baseline. The new
+`common.resources_read` section schema matches its reviewed inventory row.
+This gate remains failed; it is not Windows qualification.
+
+## Resource context fixture drift — 2026-09-08
+
+Owner: resource context / harness. The stale unquoted target assertion in
+`artifacts: historical attachments stay reference-only` is reconciled with the
+existing quoted-target contract. Its reference-only/body/URI assertions now pass,
+but a later compaction fixture fails with `Context compaction response contains
+unexpected fields`; review against the current compaction schema separately.
+On the `d29b1f58` branch, unchanged provider search also fails the existing
+`artifacts: prompt uses bounded working set` raw-metadata exclusion assertion
+(`runtime-secret-id` is searchable). Reconcile with the parallel projection fixes
+before declaring this integration gate closed. Neither failure is changed by the
+working-set purpose/read-hint implementation. These are not Windows evidence.
 
 ## Plan/HTML operation identity in batches — 2026-09-08
 
@@ -76,7 +89,8 @@ transport alone does not qualify source allocation.
   ordered insertion and full-authority consumers still scale with journal size.
   Markdown/Plan and uploaded extracted-text section/chunk views now use existing
   revision/CAS retention. HTML member views now reuse the same engine beneath exact
-  parent revisions. Semantic section reads and allocation qualification remain open;
+  parent revisions. Unique ATX section reads now support document Markdown/Plans
+  and complete uploaded Markdown; allocation qualification remains open;
   HTML discovery still loads/parses its bounded aggregate even with a warm index.
   No parallel durable library/search store.
 - Partial model discovery is implemented host-neutral (2026-09-08): missing/corrupt

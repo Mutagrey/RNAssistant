@@ -12,6 +12,37 @@ Checks: VBA 100/100, batch overwrite regression 1/1, managed write batch 1/1,
 confirmation correlation/replay 2/2 and diff checks pass host-neutral.
 See [incident evidence and next step](RISK_REGISTER.md#vba-patch-incident--2026-09-08).
 
+Current slice (2026-09-08), after `d29b1f58`: resource decision context now keeps
+document/conversation scope, a concrete read representation and bounded optional
+Markdown purpose beside complete targets. Historical working-set snapshots are
+not advertised as current evidence. Compiler stale-read projections retain the
+semantic recovery target and request rediscovery before reading again. No new
+store, synopsis generation or authority projection is introduced.
+Focused decision-context and stale-evidence checks pass (2/2). Historical attachment
+body/URI exclusion assertions pass before a later pre-existing compaction-fixture
+failure; the broader working-set test still exposes inherited raw-metadata search
+drift. Both integration gaps are recorded in BACKLOG, not counted as passing gates.
+Large-library memory/performance measurement is deferred at the user's request.
+Next: richer source-backed shared decision context; existing Windows/Office/WebView2,
+layout, target-model and inventory gates remain open.
+
+Current slice (2026-09-08), after `22575b8c`: **semantic Markdown section reads and
+action-purpose guidance** are implemented host-neutral. `resources_read` now accepts
+a unique ATX heading for document Markdown/Plans and complete uploaded Markdown.
+Normal Gateway/evidence retains exact selected character coverage, never a whole
+read guard. Duplicate/missing/oversized sections, incomplete extraction and writer
+drift are refused. Discovery and selection share one scanner; v1 index bytes and
+existing whole reads remain unchanged. Schema/usage guidance explains the next
+read action and connects findings with actual upcoming calls.
+Checks: resources 29/29, shared Markdown 4/4, document Plan 2/2 and schema mirroring
+pass. R61 inventory matches the reviewed new read schema but still fails on inherited
+`resources_find`/`tools_upsert` drift recorded in BACKLOG. Target-model response quality is unqualified.
+`ValidateVersionFormat` and `git diff --check` pass; version remains `16.1.0-dev`.
+Next: large-library search/cold allocation measurement and richer compiler context;
+picker/history paging, PDF extraction/read coverage follow-up, authority recovery,
+Windows/Office/WebView2/layout and upstream HTTP 502 gates remain open.
+See [section reads](../artifact-library.md#implemented-markdown-section-reads--2026-09-08).
+
 Current correction (2026-09-08): Excel semantic range targets now preserve exact
 worksheet names and accept Excel-quoted sheet names such as
 `Excel range: 'новый лист (2)'!A1:A2`. Discovery returns the preserved sheet name

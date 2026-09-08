@@ -1968,7 +1968,7 @@ namespace RNAssistant.Harness
             var command = new ToolInvocation { ToolId = "common.resources_read", ToolCallId = "call1" };
             var result = AgentJsonProtocol.CreateToolResultMessage(command,
                 new ToolResultMaterialization(RNAssistant.Core.Tools.Contracts.ToolResult.Ok("read",
-                    new JObject { ["text"] = "OBSOLETE_BODY" + new string('x', 20000) }.ToString(), new[] { r1 }),
+                    new JObject { ["target"] = "VBA module: Module1", ["text"] = "OBSOLETE_BODY" + new string('x', 20000) }.ToString(), new[] { r1 }),
                     resourceEvidence: new[] { evidence }), int.MaxValue, "tool");
             var call = new ChatMessage { Role = "assistant", ProtocolMessage = true, ToolCallId = "call1", ToolName = command.ToolId,
                 ToolCalls = new List<RNAssistant.Core.Llm.LlmToolCall> { new RNAssistant.Core.Llm.LlmToolCall { Id = "call1", Name = command.ToolId, Type = "function", ArgumentsJson = "{}" } } };
@@ -1993,6 +1993,9 @@ namespace RNAssistant.Harness
             AssertEqual("resource_evidence_stale",
                 (string)JObject.Parse(staleWire.Result.DataJson)["code"],
                 "stale evidence exposes the exact reread reason");
+            var staleData = JObject.Parse(staleWire.Result.DataJson);
+            AssertEqual("VBA module: Module1", (string)staleData["target"], "stale read retains only its semantic recovery target");
+            AssertContains((string)staleData["next_action"], "common.resources_find", "currentness loss requests rediscovery before a new read");
             var changed = compiled.Messages;
             changed[0].Content = "mutated";
             AssertTrue(compiled.Messages[0].Content != "mutated", "request projection is detached from frozen snapshot");

@@ -110,6 +110,8 @@ namespace RNAssistant.Core.Models
 
     public sealed class ResourceReadRequest
     {
+        [Newtonsoft.Json.JsonProperty("section", NullValueHandling = Newtonsoft.Json.NullValueHandling.Ignore)]
+        public string Section { get; set; }
         public const int MinimumCharacters = 128;
         public const int DefaultCharacters = 2048;
         public const int MaximumCharacters = 32000;

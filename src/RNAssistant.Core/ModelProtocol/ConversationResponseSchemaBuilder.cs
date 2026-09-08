@@ -42,7 +42,7 @@ namespace RNAssistant.Core.ModelProtocol
                     "final=true means the user-facing answer is ready; it is not execution evidence.",
                 ["properties"] = new JObject
                 {
-                    ["message"] = new JObject { ["type"] = "string", ["description"] = "User-facing message; its wording does not determine execution success." },
+                    ["message"] = new JObject { ["type"] = "string", ["description"] = "User-facing message. On tool turns, briefly connect a relevant observed finding, the purpose of the actual upcoming calls, and what their results will clarify. Omit parts not yet known; do not invent findings or narrate private reasoning. Wording never determines execution success; runtime owns status and effects." },
                     ["final"] = new JObject
                     {
                         ["type"] = "boolean",

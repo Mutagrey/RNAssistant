@@ -19,6 +19,13 @@ Domain owners retain typed guard/dispatch/read-back responsibilities.
 
 ## Domain model
 
+Model `common.resources_read` may select an exact unique ATX heading with `section`
+and `representation=text` for document Markdown/Plans and complete uploaded
+Markdown. This uses the same provider/authority/evidence path and retains only
+character-range coverage, even for a complete selected section. It cannot satisfy
+a whole-resource refresh requirement. Bounds, unsupported sources and ambiguity
+fail explicitly; see [Artifact Library](artifact-library.md#implemented-markdown-section-reads--2026-09-08).
+
 Sent originals now have `DocumentArtifactStore` as their immutable publication
 owner in the existing document authority journal and CAS (artifact slice 1a).
 The retained metadata view roots original/extraction payloads; chat projections

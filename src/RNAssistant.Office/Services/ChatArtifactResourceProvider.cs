@@ -284,6 +284,25 @@ namespace RNAssistant.Office.Services
             var artifact = FindExactArtifact(session, address.ArtifactId);
             EnsureRevision(artifact, address.Revision);
             _htmlResources.ValidateRevision(session, artifact);
+            if (request.Section != null)
+            {
+                if (address.IsMember || _documentArtifacts == null || string.IsNullOrWhiteSpace(artifact.DocumentAuthorityId) ||
+                    request.Representation != null && request.Representation != "auto" && request.Representation != "text" ||
+                    !string.IsNullOrEmpty(request.Cursor) || request.ViewPath != null || request.Fields != null || request.RowOffset != 0 || request.MaxRows != 0)
+                    throw new ResourceRequestException("Section reads require document Markdown text without other selectors.", "resource_section_unsupported", false);
+                EnsureNotRemoved(session, artifact, resourceUri);
+                var exact = ChatResourceUri.CreateArtifactRevision(session, artifact);
+                ResourceReadCursor.ValidatePinned(request, exact.Revision);
+                var generation = _documentArtifacts.InspectCurrentMetadata(session, 0, 0).Generation;
+                ResourceReadResult section;
+                try { section = _documentArtifacts.ReadMarkdownSection(session, exact, request.Section,
+                    request.MaxChars <= 0 ? ResourceReadRequest.MaximumCharacters : Math.Min(ResourceReadRequest.MaximumCharacters, request.MaxChars)); }
+                catch (MarkdownSectionException error) { throw new ResourceRequestException(error.Message, error.Code, false); }
+                if (_documentArtifacts.InspectCurrentMetadata(session, 0, 0).Generation != generation)
+                    throw new ResourceRequestException("The document changed during section reading; rediscover its current resource.", "resource_revision_changed", true);
+                section.Resource = Describe(session, artifact, false);
+                return new ResourceReadSelection { Result = section, ResourceRefs = new[] { exact } };
+            }
             if (address.IsMember) return _htmlResources.ReadMember(session, artifact, request, address);
             EnsureNotRemoved(session, artifact, resourceUri);
             var exactReference = ChatResourceUri.CreateArtifactRevision(session, artifact);
@@ -404,6 +423,9 @@ namespace RNAssistant.Office.Services
                 CreatedUtc = artifact.CreatedUtc
             };
             if (!string.IsNullOrWhiteSpace(artifact.DocumentAuthorityId)) result.Metadata["scope"] = "document";
+            if (!string.IsNullOrWhiteSpace(artifact.DocumentAuthorityId) && (artifact.Kind == ChatArtifactKinds.Markdown ||
+                artifact.Kind == ChatArtifactKinds.PlanDocument || DocumentArtifactStore.IsMarkdownOriginal(attachment) && !attachment.TextTruncated))
+                result.Metadata["sectionRead"] = "atx-heading";
             if (MarkdownDocumentIdentity.LogicalId(artifact.Id) != null)
                 result.Metadata["description"] = (string)JObject.Parse(artifact.MetadataJson ?? "{}")["description"];
             if (_payloads != null)
