@@ -1,5 +1,16 @@
 # Stabilization progress
 
+Latest tool-result correction (2026-09-08): resource-read model projection now
+preserves the entire `ResourceTableBatch` payload, including user columns and
+nested keys named `id`, `customerId`, `revision`, `hash`, `uri` or `offset`.
+Runtime metadata outside that payload remains filtered and durable results remain
+unchanged. A focused regression failed before the fix and now passes for table
+and records in all three result roles; the existing runtime-evidence projection
+check also passes (2/2). Canonical protocol examples now use semantic resource
+reads and current prompt schema 29; the two completed audit backlog entries are
+removed. No Office/VSTO validation was run; Windows and target-model gates remain
+open.
+
 Latest UI correction (2026-09-08): the shared `send` boundary now catches
 `postMessage` exceptions, removes the affected pending entry and rejects the
 original caller promise even when queued behind initialization. Other requests

@@ -20,6 +20,58 @@ namespace RNAssistant.Harness
 {
     internal static partial class Program
     {
+        private static void ModelProjectionPreservesResourceTablePayload()
+        {
+            var row = JObject.Parse(@"{
+                'id': 7, 'customerId': 'customer-1', 'revision': 'edition-2',
+                'hash': 'business-hash', 'provider': 'supplier', 'offset': 12,
+                'uri': 'https://example.test/item', 'resources': ['stock'],
+                'nested': {'id': 'nested-id', 'items': [{'revision': 3, 'hash': null}]}
+            }");
+            var table = new JObject
+            {
+                ["columns"] = new JArray(row.Properties().Select(property => new JObject
+                {
+                    ["key"] = property.Name, ["label"] = property.Name, ["type"] = "mixed"
+                })),
+                ["rows"] = new JArray(row),
+                ["totalRows"] = 1
+            };
+            var reference = new ResourceRef(
+                ResourceUri.Create("chat", "session", "artifact", "table", "revision", "1"), "1");
+            foreach (var representation in new[] { "table", "records" })
+            foreach (var role in new[] { ToolResultRoles.User, ToolResultRoles.Developer, ToolResultRoles.Tool })
+            {
+                var command = Command(ResourceToolCatalog.ReadToolId);
+                command.ToolCallId = "table_call";
+                var data = new JObject
+                {
+                    ["kind"] = "resource-read", ["target"] = "data: Customers",
+                    ["representation"] = representation, ["table"] = table.DeepClone(),
+                    ["complete"] = true, ["uri"] = reference.Uri, ["revision"] = "1",
+                    ["nextCursor"] = "runtime-cursor", ["artifactId"] = "runtime-id"
+                };
+                var source = AgentJsonProtocol.CreateToolResultMessage(command,
+                    TerminalToolResult.Ok("Read.", data.ToString(Newtonsoft.Json.Formatting.None),
+                        new[] { reference }), role);
+                var original = source.Content;
+                var projected = ModelToolResultProjection.Project(source);
+                ToolResultWireReadResult wire;
+                string error;
+                AssertTrue(ToolResultHistoryReader.TryRead(projected, out wire, out error),
+                    "table projection preserves the strict result wire for " + role);
+                var actual = JObject.Parse(wire.Result.DataJson);
+                AssertTrue(JToken.DeepEquals(table, actual["table"]),
+                    representation + " preserves all columns, rows and nested user values for " + role);
+                AssertEqual(RNAssistant.Core.Tools.Contracts.ToolResultStatus.Ok, wire.Result.Status,
+                    "projection preserves the invocation outcome");
+                AssertTrue(actual["uri"] == null && actual["revision"] == null &&
+                    actual["nextCursor"] == null && actual["artifactId"] == null &&
+                    wire.Result.Resources.Count == 0, "runtime envelope evidence stays hidden");
+                AssertEqual(original, source.Content, "durable result remains unchanged");
+            }
+        }
+
         private static void ModelProjectionHidesRuntimeEvidence()
         {
             var reference = new ResourceRef(

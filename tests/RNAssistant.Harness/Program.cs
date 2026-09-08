@@ -158,6 +158,7 @@ namespace RNAssistant.Harness
                 Test("agent: closed document keeps local tools", AgentContinuesWithLocalToolsForClosedDocument),
                 Test("agent: loads full skill through tool", SimpleAgentLoadsFullSkillThroughTool),
                 Test("agent: model projection hides runtime evidence", ModelProjectionHidesRuntimeEvidence),
+                Test("agent: model projection preserves resource table payload", ModelProjectionPreservesResourceTablePayload),
                 Test("agent: rejects oversized capability evidence explicitly", AgentRejectsOversizedCapabilityEvidenceExplicitly),
                 Test("agent: prompt skips invalid tool schemas", SimpleAgentPromptSkipsInvalidToolSchema),
                 Test("agent: default prompts are structured Markdown", DefaultPromptsAreStructuredMarkdown),
