@@ -10,10 +10,11 @@ namespace RNAssistant.Core.Storage
     public sealed partial class DocumentArtifactStore
     {
         private const string TextIndexView = "artifact-text-index-v1";
+        private const string ExtractedTextIndexView = "artifact-extracted-text-index-v1";
         private const int TextPartCharacters = 32000;
         private const int MaximumIndexedCharacters = 2000000;
 
-        // A derived view of an exact, published Markdown/Plan body in the existing
+        // A derived view of an exact, published text representation in the existing
         // revision journal/CAS. This is neither an inventory nor read evidence.
         public ResourceSearchResult SearchText(ChatSession session, ResourceRef reference,
             string query, int characterBudget, int snippetCharacters)
@@ -22,35 +23,57 @@ namespace RNAssistant.Core.Storage
                 snippetCharacters < 1 || snippetCharacters > 2000)
                 throw new ArgumentException("A bounded text search is required.");
             var artifact = Read(session, reference, false);
-            if (artifact.Kind != ChatArtifactKinds.Markdown && artifact.Kind != ChatArtifactKinds.PlanDocument)
-                throw new InvalidDataException("This index requires an authored Markdown or Plan snapshot.");
+            var original = artifact.OriginalAttachment;
+            if (original == null && artifact.Kind != ChatArtifactKinds.Markdown && artifact.Kind != ChatArtifactKinds.PlanDocument)
+                throw new InvalidDataException("This index requires a retained original text, Markdown or Plan snapshot.");
             var scope = Scope(session);
             var body = _revisions.GetRevision(scope, reference)?.Payload;
-            if (body == null || body.Sha256 != artifact.ContentSha256 || body.ByteLength != artifact.ContentByteLength ||
-                !_payloads.HasStoredReference(body.ToBlobReference()))
+            if (body == null || body.Sha256 != artifact.ContentSha256 || body.ByteLength != artifact.ContentByteLength)
+                throw new InvalidDataException("The exact source revision is unavailable.");
+            if (original != null)
+            {
+                if (string.IsNullOrWhiteSpace(original.ExtractedTextSha256) || !original.ExtractedTextByteLength.HasValue ||
+                    original.ExtractedCharCount < 0 || original.ExtractedCharCount > MaximumIndexedCharacters)
+                    throw new InvalidDataException("The exact original text extraction is unavailable.");
+                body = new PayloadRef(original.ExtractedTextSha256, original.ExtractedTextByteLength.Value, "text/plain; charset=utf-8");
+            }
+            if (!_payloads.HasStoredReference(body.ToBlobReference()))
                 throw new InvalidDataException("The exact text source is unavailable.");
-            var captured = _revisions.GetView(scope, reference, TextIndexView);
-            if (captured != null && captured.ContentSha256 != body.Sha256)
+            var sourceIncomplete = original != null && (original.TextTruncated ||
+                original.Kind == "pdf" && original.PageCount > (original.PageTextLengths?.Count ?? 0));
+            var coverage = sourceIncomplete ? new ResourceCoverage(ResourceCoverageKinds.CharacterRange, start: 0, end: original.ExtractedCharCount) : ResourceCoverage.Whole();
+            var view = original == null ? TextIndexView : ExtractedTextIndexView;
+            var markdown = original == null || string.Equals(original.ContentType, "text/markdown", StringComparison.OrdinalIgnoreCase) ||
+                string.Equals(Path.GetExtension(original.FileName), ".md", StringComparison.OrdinalIgnoreCase) ||
+                string.Equals(Path.GetExtension(original.FileName), ".markdown", StringComparison.OrdinalIgnoreCase);
+            var captured = _revisions.GetView(scope, reference, view);
+            if (captured != null && (captured.ContentSha256 != body.Sha256 || JsonConvert.SerializeObject(captured.Coverage) != JsonConvert.SerializeObject(coverage)))
                 throw new InvalidDataException("The text index does not match its exact source.");
-            if (captured == null) captured = MaterializeTextIndex(scope, reference, body);
-            try { return SearchTextIndex(captured, artifact, query, characterBudget, snippetCharacters); }
+            if (captured == null) captured = MaterializeTextIndex(scope, reference, body, view, coverage, markdown, original?.ExtractedCharCount);
+            ResourceSearchResult result;
+            try { result = SearchTextIndex(captured, artifact, query, characterBudget, snippetCharacters); }
             catch (Exception ex) when (ex is IOException || ex is InvalidDataException || ex is JsonException)
             {
                 // Recreate only this deterministic view from the SAME exact body.
                 // Missing derived bytes must not hide a healthy document. Immutable
                 // view registration rejects any conflicting derivation.
-                captured = MaterializeTextIndex(scope, reference, body);
-                return SearchTextIndex(captured, artifact, query, characterBudget, snippetCharacters);
+                captured = MaterializeTextIndex(scope, reference, body, view, coverage, markdown, original?.ExtractedCharCount);
+                result = SearchTextIndex(captured, artifact, query, characterBudget, snippetCharacters);
             }
+            result.ScanTruncated |= sourceIncomplete;
+            return result;
         }
 
-        private ResourceRevisionView MaterializeTextIndex(ResourceAuthorityScopeId scope, ResourceRef reference, PayloadRef body)
+        private ResourceRevisionView MaterializeTextIndex(ResourceAuthorityScopeId scope, ResourceRef reference, PayloadRef body,
+            string view, ResourceCoverage coverage, bool markdown, int? expectedCharacters)
         {
             if (body.ByteLength > MaximumIndexedCharacters * 4L)
                 throw new InvalidDataException("The text source exceeds the bounded index size.");
             var text = _payloads.ReadText(body.ToBlobReference());
             if (text == null || text.Length > MaximumIndexedCharacters)
                 throw new InvalidDataException("The exact text source is unavailable or exceeds the bounded index size.");
+            if (expectedCharacters.HasValue && expectedCharacters.Value != text.Length)
+                throw new InvalidDataException("The retained extraction length does not match its exact text.");
             var index = new TextIndex { Length = text.Length, SectionsThrough = text.Length };
             for (var start = 0; start < text.Length;)
             {
@@ -62,7 +85,7 @@ namespace RNAssistant.Core.Storage
                 start += length;
             }
             char fence = '\0'; int fenceLength = 0;
-            for (var start = 0; start < text.Length;)
+            for (var start = 0; markdown && start < text.Length;)
             {
                 var end = text.IndexOf('\n', start); if (end < 0) end = text.Length;
                 var position = start;
@@ -88,8 +111,8 @@ namespace RNAssistant.Core.Storage
                 start = end + 1;
             }
             var payload = PayloadRef.FromBlob(_payloads.StoreText(JsonConvert.SerializeObject(index), "application/vnd.rnassistant.text-index+json"));
-            var captured = new ResourceRevisionView(reference, TextIndexView, body.Sha256, payload,
-                ResourceCoverage.Whole(), index.Parts.Select(item => item.Payload).Concat(new[] { body }));
+            var captured = new ResourceRevisionView(reference, view, body.Sha256, payload,
+                coverage, index.Parts.Select(item => item.Payload).Concat(new[] { body }));
             _revisions.RegisterView(scope, captured);
             return captured;
         }

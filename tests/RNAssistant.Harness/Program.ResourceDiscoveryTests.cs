@@ -15,6 +15,90 @@ namespace RNAssistant.Harness
 {
     internal static partial class Program
     {
+        private static void OriginalTextIndexSearch()
+        {
+            WithTempExecutor(FakeOfficeAdapter.ForHost("Word"), (executor, adapter) =>
+            {
+                var session = NewSession(adapter); session.DocumentAuthorityId = DocumentAuthorityId.Create().Id;
+                var paths = FixturePaths.Value;
+                var chats = new ChatStore(paths);
+                var ingestion = new ChatResourceIngestionService(new AttachmentStore(paths), chats.DocumentArtifacts);
+                var text = new string('x', 145000) + "\r\n## Uploaded section\r\nuploaded-late-marker";
+                foreach (var name in new[] { "Reference.md", "Literal.txt" })
+                {
+                    var draft = ingestion.Stage(session, name, name.EndsWith(".md") ? "text/markdown" : "text/plain", Encoding.UTF8.GetBytes(text));
+                    var message = new ChatMessage { Role = "user", Attachments = ingestion.LoadDrafts(session, new[] { draft.Id }).ToList() };
+                    session.Messages.Add(message); ingestion.CommitAndLink(session, message, session.Messages.Count - 1);
+                }
+                var other = NewSession(adapter); other.DocumentAuthorityId = session.DocumentAuthorityId;
+                var authority = new ResourceAuthorityStore(paths);
+                var scope = ResourceAuthorityScopeId.Document(new DocumentAuthorityId(session.DocumentAuthorityId));
+                var owner = new DocumentArtifactStore(authority, authority, executor.Payloads);
+                var provider = new ChatArtifactResourceProvider(payloads: executor.Payloads, documentArtifacts: owner);
+                var found = provider.Search(other, "uploaded-late-marker", "document-artifact", 20, 600);
+                AssertTrue(found.Matches.Count == 2 && !found.ScanTruncated && found.UnavailableResources == 0, "late uploaded text is searchable from another empty chat");
+                var markdown = found.Matches.Single(item => item.Title == "Reference.md");
+                AssertEqual("Uploaded section", markdown.SectionTitle, "uploaded Markdown uses its own heading context");
+                AssertEqual(null, found.Matches.Single(item => item.Title == "Literal.txt").SectionTitle, "plain text hash marks are not Markdown headings");
+                var selected = provider.Read(other, new ResourceReadRequest { Reference = markdown.Reference, Representation = "text",
+                    Cursor = ResourceReadCursor.CreateImmutable(markdown.SnippetOffset, ResourceReadCursor.ReadBinding(markdown.Reference.Uri, "text")), MaxChars = markdown.Snippet.Length });
+                AssertEqual(markdown.Snippet, selected.Result.Text, "uploaded search snippet round-trips through the exact resource read");
+                var view = authority.GetView(scope, markdown.Reference, "artifact-extracted-text-index-v1");
+                var original = owner.Read(other, markdown.Reference, false).OriginalAttachment;
+                AssertEqual(original.ExtractedTextSha256, view.ContentSha256, "index binds the retained extracted representation");
+                File.Delete(executor.Payloads.PathFor(view.Payload.Sha256));
+                AssertEqual(2, provider.Search(other, "uploaded-late-marker", "document-artifact", 20, 600).Matches.Count, "derived manifest repair uses original extraction");
+                File.WriteAllText(executor.Payloads.PathFor(view.Parts[0].Sha256), "corrupt text part");
+                AssertEqual(2, provider.Search(other, "uploaded-late-marker", "document-artifact", 20, 600).Matches.Count, "derived part repair preserves uploaded text");
+                var gc = CasService(paths, chats, new VbaJournalStore(paths), () => StorageProtector.None).Collect();
+                AssertTrue(gc.Completed && gc.Health.MissingBlobCount == 0, "published originals and text views have complete GC retention edges");
+                var restarted = new ResourceAuthorityStore(paths);
+                AssertEqual(1, new DocumentArtifactStore(restarted, restarted, executor.Payloads)
+                    .SearchText(other, markdown.Reference, "uploaded-late-marker", 1000000, 600).Matches.Count, "derived text survives GC and restart");
+                File.Delete(executor.Payloads.PathFor(original.ExtractedTextSha256));
+                found = provider.Search(other, "uploaded-late-marker", "document-artifact", 20, 600);
+                AssertTrue(found.UnavailableResources > 0 && found.Matches.Count == 0, "a warm index cannot conceal missing extraction shared by both originals");
+                AssertTrue(provider.List(other, "document-artifact", null, 50).Items.Count == 2, "missing text never removes original metadata from discovery");
+            });
+        }
+
+        private static void OriginalTextIndexPreservesCoverage()
+        {
+            WithTempExecutor(FakeOfficeAdapter.ForHost("Word"), (executor, adapter) =>
+            {
+                var session = NewSession(adapter); session.DocumentAuthorityId = DocumentAuthorityId.Create().Id;
+                var authority = new ResourceAuthorityStore(FixturePaths.Value);
+                var owner = new DocumentArtifactStore(authority, authority, executor.Payloads);
+                var scope = ResourceAuthorityScopeId.Document(new DocumentAuthorityId(session.DocumentAuthorityId));
+                foreach (var explicitTruncation in new[] { true, false })
+                {
+                    var text = "# This is extracted PDF text\npartial-marker";
+                    var raw = executor.Payloads.StoreBytes(new byte[] { 0, 1, 2, 3 }, "application/pdf");
+                    var extracted = executor.Payloads.StoreText(text, "text/plain; charset=utf-8");
+                    var original = new ChatAttachment { FileName = "Extracted.pdf", Kind = "pdf", ContentType = "application/pdf",
+                        ContentSha256 = raw.Sha256, ContentByteLength = raw.ByteLength,
+                        ExtractedTextSha256 = extracted.Sha256, ExtractedTextByteLength = extracted.ByteLength, ExtractedCharCount = text.Length,
+                        TextTruncated = explicitTruncation, PageCount = explicitTruncation ? 1 : 3, PageTextLengths = new List<int> { text.Length } };
+                    var artifact = owner.PublishOriginal(session, new ChatArtifact { Id = "attachment_" + original.Id, Revision = 1,
+                        Kind = ChatArtifactKinds.File, Title = original.FileName, MimeType = original.ContentType,
+                        ContentSha256 = raw.Sha256, ContentByteLength = raw.ByteLength }, original);
+                    var reference = ChatResourceUri.CreateArtifactRevision(session, artifact);
+                    var found = owner.SearchText(session, reference, "partial-marker", 1000000, 600);
+                    AssertTrue(found.ScanTruncated && found.Matches.Count == 1, "explicit truncation or omitted PDF pages remain partial even on a hit");
+                    AssertEqual(null, found.Matches.Single().SectionTitle, "PDF extraction does not invent Markdown section semantics");
+                    var view = authority.GetView(scope, reference, "artifact-extracted-text-index-v1");
+                    AssertTrue(view.ContentSha256 == extracted.Sha256 && view.ContentSha256 != raw.Sha256, "extraction hash cannot be confused with the binary source hash");
+                    AssertTrue(view.Coverage.Kind == ResourceCoverageKinds.CharacterRange && view.Coverage.End == text.Length,
+                        "a bounded extraction is not retained as whole-source coverage");
+                    var negative = owner.SearchText(session, reference, new string('q', text.Length + 1), 1000000, 600);
+                    AssertTrue(negative.ScanTruncated && negative.Matches.Count == 0, "even a length-rejected query cannot prove absence in an incomplete extraction");
+                }
+                var provider = new ChatArtifactResourceProvider(payloads: executor.Payloads, documentArtifacts: owner);
+                var result = new ResourceGatewayService(new[] { provider }).Find(session, "absent-from-extraction", "document");
+                AssertTrue(!result.Empty && !result.Complete && result.RefineQuery, "model receives an incomplete negative with rediscovery guidance");
+            });
+        }
+
         private static void DocumentTextIndexSearch()
         {
             WithTempExecutor(FakeOfficeAdapter.ForHost("Word"), (executor, adapter) =>

@@ -2263,7 +2263,8 @@ endpoint.
    authority projection with bounded metadata IO and source-page ceilings. Direct
    identities read one record. Markdown/Plan section/chunk views now reuse exact
    revision/CAS retention and preserve source/heading context with last-page drift
-   validation; uploaded text/HTML indexing, section reads, picker/history paging, cold replay,
+   validation. Uploaded text now reuses this owner with extraction-bound hashes and
+   explicit partial/PDF-page coverage; HTML indexing, section reads, picker/history paging, cold replay,
    authority recovery and Windows/target-model gates remain open.
 5. **11T — typed Office tools и удаление legacy host dispatch — admitted:**
    - [x] 11T0/7D — done host-neutral: один атомарный production change связывает exact выбранный workbook с

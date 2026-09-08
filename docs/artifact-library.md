@@ -45,8 +45,8 @@ silently migrated. The remaining ownership seam and removal gate are tracked in
 [MIGRATION_MAP](stabilization/MIGRATION_MAP.md#document-artifact-ownership--active-slices).
 Exact reads load one metadata record. Model discovery pages current roots from the
 existing ordered authority projection before reading metadata (see below). Picker/
-history enumeration and uploaded-content indexing remain separate slice-3 work;
-Markdown/Plan text views are implemented below.
+history enumeration remain separate slice-3 work; authored and uploaded text views
+are implemented below.
 
 ### Implemented Plan publication slice
 
@@ -339,10 +339,35 @@ requested historical snapshot keeps its own index. Generation is checked after
 the last source page as well as between pages, so a write during materialization
 cannot produce an apparently current mixed-generation result.
 
-Uploaded extracted text and HTML members retain their existing bounded search
-paths. Their indexing, semantic section reads, picker/history pagination, richer
+Uploaded extracted text now uses the extension below. HTML member indexing,
+semantic section reads, picker/history pagination, richer
 compiler decision context and cold allocation/Windows/layout qualification remain
 open. No model-generated synopsis or embedding publication is added.
+
+### Implemented uploaded text discovery views — 2026-09-08
+
+`DocumentArtifactStore.SearchText` also indexes the original's retained extraction
+through `artifact-extracted-text-index-v1`. The exact resource still identifies the
+immutable upload; the view hash binds its **extracted text**, independently of the
+original binary payload hash. The existing manifest/parts/CAS mechanism, source
+bounds, source-page generation guards and repair path are reused. There is no
+second extractor, source-chat fallback or new store. Original search no longer
+uses the per-resource 128k prefix path; local resources keep their existing path.
+
+Materialization validates the retained extraction character count. Uploaded
+Markdown receives ATX heading context; PDF/plain-text hash marks do not become
+Markdown headings. Snippet offsets address the retained text representation and
+round-trip through the existing exact resource read. No read-evidence contract
+changes. If text extraction bytes are missing, text search stays unavailable even
+with a warm index; the original's metadata remains discoverable. Missing derived
+bytes are rebuilt from that exact extraction, and normal CAS GC retains the view.
+
+`TextTruncated`, or PDF page metadata showing unextracted pages, keeps search
+incomplete even on a hit or a query longer than the retained text. These views
+record character-range coverage instead of whole coverage. A complete text scan
+refers to the retained text representation; it does not inspect images or prove
+full visual coverage of a PDF. Semantic section reads and HTML member indexing
+remain subsequent work.
 
 ### Ownership and user behavior
 

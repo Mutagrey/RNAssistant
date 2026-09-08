@@ -1,6 +1,19 @@
 # Stabilization progress
 
-Current slice (2026-09-08), after `62ec1f8e`: **exact text discovery views** are
+Current slice (2026-09-08), after `4729c101`: **uploaded text discovery views** are
+implemented host-neutral through the same revision/CAS text index owner. Original
+search binds the exact retained extraction hash, finds late content across chats,
+and preserves bounded extraction/PDF page coverage. Only Markdown gets heading
+context. Derived-byte repair, exact snippet reads, GC/restart and missing-extraction
+refusal are covered; no alternate store/extractor or read-evidence changes.
+Checks: resources 27/27, document originals 2/2 and document Plan 2/2 pass.
+Version-format validation and diff checks pass.
+Next: HTML member text views, then semantic section reads. Picker/history paging,
+richer compiler context, cold allocation and Windows/Office/layout/target-model
+qualification remain open; the reported upstream HTTP 502 is not resolved here.
+See [uploaded text discovery](../artifact-library.md#implemented-uploaded-text-discovery-views--2026-09-08).
+
+Previous slice (2026-09-08), after `62ec1f8e`: **exact text discovery views** are
 implemented host-neutral for document Markdown/Plans. A deterministic section/chunk
 view reuses existing revision journal/CAS; current search reaches late content,
 retains source offsets and exposes bounded heading context plus authored descriptions.

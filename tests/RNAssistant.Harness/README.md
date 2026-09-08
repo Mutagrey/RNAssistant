@@ -59,6 +59,13 @@ missing source refusal and last-page writer drift. The existing discovery-covera
 test also checks descriptions/section context for search-only candidates. Use
 `resources:`, `shared Markdown:`, `document Plan:` and `html` for affected consumers.
 
+`resources: original text index` covers late uploaded Markdown/plain-text matches
+from another chat, exact snippet reads, source-versus-extraction hashes, heading
+semantics, derived-byte repair, GC/restart and missing extraction. It also checks
+explicit truncation/omitted PDF pages on positive and negative queries, including
+model-facing incomplete negatives. Use `resources:`, `document originals:` and
+`document Plan:` for this extension; no PDF/Office rendering is involved.
+
 `resources: document discovery` verifies healthy partial results with missing/corrupt
 current metadata, body loss, exact reads, metadata recovery, current-head selection
 without historical fallback, unknown original/logical heads and continuation drift.

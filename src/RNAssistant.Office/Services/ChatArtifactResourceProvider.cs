@@ -208,7 +208,8 @@ namespace RNAssistant.Office.Services
                                 break;
                             }
                             if (!string.IsNullOrWhiteSpace(artifact.DocumentAuthorityId) &&
-                                (artifact.Kind == ChatArtifactKinds.Markdown || artifact.Kind == ChatArtifactKinds.PlanDocument))
+                                (artifact.Kind == ChatArtifactKinds.Markdown || artifact.Kind == ChatArtifactKinds.PlanDocument ||
+                                artifact.OriginalAttachment != null && HasTextHint(artifact, artifact.OriginalAttachment)))
                             {
                                 var indexed = _documentArtifacts.SearchText(session, ChatResourceUri.CreateArtifactRevision(session, artifact),
                                     query, remaining, maxCharsPerMatch);
