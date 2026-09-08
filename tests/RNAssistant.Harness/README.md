@@ -39,6 +39,10 @@ version check still apply.
 
 ## Test map
 
+`artifacts: prompt preserves decision context` and `resource cutover: correctness
+before budget` cover optional-purpose admission, exact target preservation,
+ownership/read hints and semantic recovery after stale evidence exclusion.
+
 `resources: Markdown sections` checks native semantic reads from another chat,
 exact nested-section/fence/CRLF/Unicode boundaries, partial retained evidence and
 whole-refresh refusal, whole-read independence, missing/duplicate/oversized

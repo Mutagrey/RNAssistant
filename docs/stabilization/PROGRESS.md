@@ -1,5 +1,19 @@
 # Stabilization progress
 
+Current slice (2026-09-08), after `d29b1f58`: resource decision context now keeps
+document/conversation scope, a concrete read representation and bounded optional
+Markdown purpose beside complete targets. Historical working-set snapshots are
+not advertised as current evidence. Compiler stale-read projections retain the
+semantic recovery target and request rediscovery before reading again. No new
+store, synopsis generation or authority projection is introduced.
+Focused decision-context and stale-evidence checks pass (2/2). Historical attachment
+body/URI exclusion assertions pass before a later pre-existing compaction-fixture
+failure; the broader working-set test still exposes inherited raw-metadata search
+drift. Both integration gaps are recorded in BACKLOG, not counted as passing gates.
+Large-library memory/performance measurement is deferred at the user's request.
+Next: richer source-backed shared decision context; existing Windows/Office/WebView2,
+layout, target-model and inventory gates remain open.
+
 Current slice (2026-09-08), after `22575b8c`: **semantic Markdown section reads and
 action-purpose guidance** are implemented host-neutral. `resources_read` now accepts
 a unique ATX heading for document Markdown/Plans and complete uploaded Markdown.

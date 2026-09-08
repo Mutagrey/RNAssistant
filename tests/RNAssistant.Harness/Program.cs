@@ -503,6 +503,7 @@ namespace RNAssistant.Harness
                 Test("resource search: zero-match drift and exact snapshots", GenericSearchPublishesZeroMatchScans),
                 Test("resource search: VBA bounded scans and body-free metadata", GenericVbaSearchSeparatesScansAndMetadata),
                 Test("artifacts: prompt uses bounded working set", ArtifactPromptUsesBoundedWorkingSet),
+                Test("artifacts: prompt preserves decision context", ArtifactPromptPreservesDecisionContext),
                 Test("resources: artifact search reports incomplete scans", ArtifactSearchReportsIncompleteScans),
                 Test("artifacts: historical attachments stay reference-only", HistoricalAttachmentsStayReferenceOnly),
                 Test("artifact recovery: missing metadata and unknown head", ArtifactWorkingSetMetadataRecovery),

@@ -14,6 +14,12 @@ gates; active tool compatibility adapter отсутствует. Windows/Office 
 
 ## Document artifact ownership — active slices
 
+Resource decision context (2026-09-08): existing `ChatResourcePromptIndex` owns
+bounded purpose/scope/next-read hints; optional description no longer participates
+in mandatory target admission. Existing `ModelContextCompiler.Mark` retains a
+semantic recovery target when excluding read evidence. Neither path reads bodies
+or becomes an authority/currentness store; no adapter is introduced.
+
 Markdown section selection (2026-09-08): the existing `common.resources_read` and
 typed `ResourceReadRequest.Section` carry a semantic heading selector. The chat
 provider and `DocumentArtifactStore.ReadMarkdownSection` resolve exact CAS text;

@@ -2164,6 +2164,38 @@ namespace RNAssistant.Harness
             var resolved = new ResourceGatewayService().ResolveIntentTarget(unusual, exactTarget);
             AssertEqual(unusual.Artifacts[0].Id, ResourceUri.Parse(resolved.Reference.Uri).Segments[2],
                 "quoted prompt target round-trips through real resolver without changing title whitespace");
+
+        }
+
+        private static void ArtifactPromptPreservesDecisionContext()
+        {
+            var authored = new ChatSession { DocumentAuthorityId = "shared-document" };
+            var note = new ChatArtifact { Id = "artifact_md_" + new string('a', 64) + "_r1_12345678",
+                Kind = ChatArtifactKinds.Markdown, Title = "Purpose", DocumentAuthorityId = "shared-document",
+                MetadataJson = new JObject { ["description"] = "Useful purpose " + new string('x', 10000) }.ToString(),
+                InlineText = "BODY_MUST_NOT_ENTER_INDEX" };
+            authored.Artifacts.Add(note);
+            var context = ChatResourcePromptIndex.Build(authored, 1000);
+            AssertContains(context, "scope=document", "ownership is explicit without an authority identifier");
+            AssertContains(context, "read=text", "working-set entry supplies a concrete representation to read");
+            AssertContains(context, "Useful purpose", "bounded authored purpose remains useful");
+            AssertContains(context, "Snapshots may be historical", "working-set presence cannot certify currentness");
+            AssertTrue(!context.Contains(new string('x', 241)) && !context.Contains(note.InlineText), "optional purpose is bounded and no body is inferred");
+            note.MetadataJson = "{}";
+            var minimal = ChatResourcePromptIndex.Build(authored, 1000);
+            var exactBudget = ModelContextBudget.EstimateTextTokens(minimal, new AppSettings());
+            note.MetadataJson = new JObject { ["description"] = new string('x', 10000) }.ToString();
+            var tight = ChatResourcePromptIndex.Build(authored, exactBudget);
+            AssertContains(tight, "note: Purpose", "optional purpose cannot displace the exact readable target");
+            AssertTrue(!tight.Contains("description="), "optional detail is omitted before dropping the resource");
+            note.MetadataJson = "{invalid";
+            AssertContains(ChatResourcePromptIndex.Build(authored, 1000), "[description unavailable]", "malformed optional description cannot abort prompt compilation");
+            authored.Artifacts.Add(new ChatArtifact { Kind = ChatArtifactKinds.HtmlWorkspace, Title = "Dashboard" });
+            AssertContains(ChatResourcePromptIndex.Build(authored, 1000), "read=structure", "HTML root routes to its actual structure representation");
+            note.Title = new string('x', 12000);
+            var bounded = ChatResourcePromptIndex.Build(authored, 240);
+            AssertContains(bounded, "HTML workspace: Dashboard", "an oversized target does not starve another useful resource");
+            AssertTrue(!bounded.Contains(new string('x', 10)), "exact targets are omitted whole rather than clipped");
         }
 
         private static void ArtifactSearchReportsIncompleteScans()
@@ -2255,7 +2287,7 @@ namespace RNAssistant.Harness
             AssertEqual(0, old.Attachments.Count, "historical attachment bodies are removed from replay");
             AssertTrue(old.Content.IndexOf(historicUri, StringComparison.Ordinal) < 0,
                 "historical model message hides canonical resource identity");
-            AssertContains(FlattenSimple(prompt), "target=attachment: Untitled",
+            AssertContains(FlattenSimple(prompt), "attachment: Untitled",
                 "runtime context keeps a semantic resource target");
             AssertTrue(old.Content.IndexOf("artifact:attachment_old-text", StringComparison.Ordinal) < 0,
                 "model history does not expose a second artifact-id reference channel");

@@ -341,7 +341,7 @@ the last source page as well as between pages, so a write during materialization
 cannot produce an apparently current mixed-generation result.
 
 Uploaded text and HTML members now use the extensions below. Semantic section
-reads, picker/history pagination, richer
+reads are implemented below; picker/history pagination, richer
 compiler decision context and cold allocation/Windows/layout qualification remain
 open. No model-generated synopsis or embedding publication is added.
 
@@ -523,6 +523,24 @@ Three levels keep context useful without loading the library wholesale:
 3. Exact reads of requested sections, history and changes. Search snippets and
    descriptions never grant a whole-read mutation guard or claim full source
    coverage. Rename/deletion/ambiguity returns an explicit rediscovery route.
+
+Implemented working-set context (2026-09-08): `ChatResourcePromptIndex` advertises
+document/conversation ownership and a next-read representation for every admitted
+row. It explicitly identifies these entries as potentially historical snapshots;
+selection roles and authored descriptions do not prove currentness. Current/shared
+discovery uses `common.resources_find`, followed by `common.resources_read` with
+the returned target. The prompt index does not derive currentness from timestamps
+or create a second authority projection.
+
+Authored Markdown purpose is optional context: its projection is bounded to 240
+characters with an omission marker, sanitized and JSON-quoted. An over-budget
+description is dropped before its complete target; malformed optional description
+metadata yields an explicit unavailable label instead of aborting the prompt.
+Durable metadata is unchanged. Bodies and query snippets stay in their existing
+read/search paths. When the compiler excludes a stale/unavailable read, it retains
+only the semantic target for recovery and an explicit rediscover-then-read action;
+old source text and section titles do not become current evidence. Real model
+behavior remains unqualified; richer cross-chat decision claims remain separate.
 
 A resource's authored description records its purpose and scope; it is not a
 truncated body. A generated synopsis is a derived observation bound to the source
