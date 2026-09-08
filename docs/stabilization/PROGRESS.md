@@ -1,5 +1,16 @@
 # Stabilization progress
 
+Latest chat presentation correction (2026-09-08): tool rows keep action, full
+semantic target and a Russian result caption, with separate operation icons.
+Known resource/capability reads show counts and incomplete-search/read outcomes;
+unknown effects remain unverified and failed no-ops remain failures. Accepted
+Word/PowerPoint/Outlook arguments now supply useful target captions. Raw result
+messages, codes and JSON stay in labelled journal details; a guarded link opens
+the existing next-request context inspector. Display captions do not rewrite
+model-facing/durable results. Focused Web, narrow/desktop Chromium layout and
+host-neutral transcript/causal-projection checks pass. Windows/Office/WebView2
+and target-model gates remain open.
+
 Latest chat-order correction (2026-09-08): chat-tree siblings sort by a disposable
 `LastActivityUtc` header/summary projection from retained messages, run start and
 creation time. Opening, renaming or saving metadata does not promote a chat;

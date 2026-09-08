@@ -39,6 +39,11 @@ version check still apply.
 
 ## Test map
 
+`tests/web/agent-activity-layout.test.js` checks action/target/result wrapping at
+wide and narrow chat widths, technical disclosure and the addressed context-inspector
+link. It uses the same bundled Playwright and optional browser/screenshot variables
+as the artifact/diagnostics layout check below.
+
 `tests/web/artifact-diagnostics-layout.test.js` checks actual Chromium geometry for
 artifact names/metadata, single selection, inline JSON values, left-aligned events
 and split dragging. Use the bundled Playwright through `NODE_PATH`; optionally set

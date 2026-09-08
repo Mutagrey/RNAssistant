@@ -430,21 +430,13 @@
   overflow-wrap: anywhere;
 }
 
-.agent-activity-state {
-  color: var(--muted);
-  font-size: inherit;
-  line-height: inherit;
-}
-
-.agent-activity-heading > .agent-activity-caret {
+.agent-activity-copy > .agent-activity-caret {
   display: inline-grid;
   vertical-align: top;
   margin-left: 6px;
 }
 
-.agent-activity-target::before,
-.agent-activity-caption::before,
-.agent-activity-state::before {
+.agent-activity-target::before {
   content: " · ";
   white-space: pre-wrap;
 }
@@ -932,3 +924,20 @@
 @keyframes rn-chat-run-spin {
   to { transform: rotate(360deg); }
 }
+
+/* Action, semantic target and outcome share a wrapping line; details stay separate. */
+.agent-activity-target { color: var(--text); }
+.agent-activity-caption::before { content: " → "; white-space: pre-wrap; }
+.agent-activity-status-symbol { margin-right: 4px; font-weight: 600; }
+.agent-activity-caption.status-failed { color: var(--danger); }
+.agent-activity-caption.status-unknown,
+.agent-activity-caption.status-waiting { color: var(--text); }
+.agent-activity-context-note {
+  margin: 6px 0;
+  color: var(--muted);
+  font-size: .8571rem;
+  line-height: 1.5;
+}
+.agent-activity-mark.operation-search { color: var(--accent); }
+.agent-activity-mark.operation-write,
+.agent-activity-mark.operation-delete { color: var(--text); }

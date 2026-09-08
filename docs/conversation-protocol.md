@@ -658,12 +658,26 @@ retain a visible verification warning outside collapsed history. A pre-dispatch
 `excel_sheet_already_exists` is displayed as a quiet conflict, never as proof that
 the sheet satisfies the request or that a later call resolved the conflict.
 
-Activities show localized action labels, accepted semantic target/representation
-and a bounded result caption in one naturally wrapping, muted 12 px text flow.
-Action labels use regular weight, with a 6 px icon gap; narration remains distinct.
-`AgentTranscript` derives target captions from
-accepted scalar arguments without resource lookup or new authority. Exact tool
-ids and arguments remain in expandable details. Consecutive transcript groups
+Activities show **action → semantic target → result** in a naturally wrapping,
+muted 12 px flow. Targets remain readable without extra UI truncation; distinct
+icons identify search, read, write, capability study, delete, questions, plans,
+charts and other operations. The display classifies icons only, never tool effects.
+`AgentTranscript` derives target captions from accepted scalar arguments, including
+Word insertion locations, PowerPoint slide/shape targets and Outlook draft
+subjects/recipients, without resource lookup or new authority.
+
+Short Russian result captions use typed status/error/effect evidence. Unknown effects
+win over success/error wording; failed no-ops remain failures. Bounded, cached reads
+of the documented resource/capability result fields may add match/row counts and
+explicit incompleteness. Empty partial searches never claim global absence.
+Raw errors and protocol metadata stay in the expandable diagnostic details.
+
+These captions are UI-only: they do not replace or rewrite tool arguments, durable
+results or the model-facing result projection. Details label their JSON as journal
+data and link to the existing next-request context inspector. That inspector shows
+a current preparation snapshot, not a claim that an old tool result or UI caption
+was sent unchanged to the model. Exact tool ids and arguments remain available.
+Consecutive transcript groups
 require the same runtime `RunId`; confirmation segments keep their own grouping
 while their typed state retains the logical turn's counts. Throughout a live run,
 step narration and all action rows stay visible in chronological order, including

@@ -40,7 +40,7 @@ function appendAgentJsonViewer(parent, label, text, className, open) {
 }
 
 function appendArgumentsData(parent, text) {
-  appendAgentJsonViewer(parent, "Аргументы", text, "agent-data agent-arguments", false);
+  appendAgentJsonViewer(parent, "Аргументы вызова", text, "agent-data agent-arguments", false);
 }
 
 function appendActivityData(parent, label, text) {

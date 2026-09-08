@@ -169,6 +169,59 @@ tests.push(["semantic target is visible and unknown effect takes precedence over
   assert.match(context.activityDisplayResult(conflict), /не подтверждён/);
 }]);
 
+tests.push(["tool rows preserve action target and result without rewriting model data", () => {
+  const activity = { Kind: "tool", ToolId: "common.capabilities_read", Subtitle: "excel.write_range", Status: "completed",
+    ArgumentsJson: '{"id":"excel.write_range"}', DataJson: '{"catalogRevision":"private-revision","complete":true}',
+    ResultMessage: "Capability loaded with catalogRevision=private-revision" };
+  const before = JSON.stringify(activity);
+  const row = context.renderActivityRow(activity, false, true, null);
+  assert.match(row.textContent, /Изучение/);
+  assert.match(row.textContent, /excel.write_range/);
+  assert.match(row.textContent, /Загружено/);
+  assert.doesNotMatch(row.textContent, /catalogRevision|private-revision|Capability loaded/);
+  assert.equal(JSON.stringify(activity), before, "presentation leaves exact arguments and results unchanged");
+  const longTarget = "Документ / " + "Раздел с длинным названием / ".repeat(8) + "Конец";
+  const write = { Kind: "tool", ToolId: "word.replace_text", Subtitle: longTarget, Status: "completed",
+    ExecutionEvidence: { Effect: "VerifiedChange", Dispatch: "MayHaveDispatched" } };
+  const changed = context.renderActivityRow(write, false, false, null);
+  assert.match(changed.textContent, /Замена текста/);
+  assert.ok(changed.textContent.includes(longTarget), "long semantic target wraps, it is not cropped");
+  assert.match(changed.textContent, /Изменения подтверждены/);
+  write.ExecutionEvidence = { Effect: "VerifiedNoChange", Dispatch: "MayHaveDispatched" };
+  assert.equal(context.activityDisplayResult(write), "Без изменений");
+  write.Status = "failed";
+  assert.notEqual(context.activityDisplayResult(write), "Без изменений", "failed no-op remains a failure");
+}]);
+tests.push(["search and read captions distinguish complete empty and partial data", () => {
+  const search = { Kind: "tool", ToolId: "common.resources_find", Status: "completed",
+    DataJson: '{"items":[],"complete":false,"partial":true}' };
+  assert.equal(context.activityDisplayResult(search), "В просмотренной части совпадений нет · поиск неполный");
+  assert.equal(context.activityPresentationState(search), "partial");
+  search.DataJson = '{"items":[{},{}],"complete":true}';
+  assert.equal(context.activityDisplayResult(search), "Найдено: 2", "cached caption follows replaced payload");
+  assert.equal(context.activityPresentationState(search), "completed");
+  search.DataJson = '{"items":[],"complete":true}';
+  assert.equal(context.activityDisplayResult(search), "Совпадений нет");
+  const read = { Kind: "tool", ToolId: "common.resources_read", Status: "completed",
+    DataJson: '{"kind":"resource-read","table":{"rows":[{},{}]},"complete":false}' };
+  assert.equal(context.activityDisplayResult(read), "Получено строк: 2 · часть данных");
+  read.DataJson = '{"truncated":true,"preview":"not the model result"}';
+  assert.equal(context.activityDisplayResult(read), "Прочитано");
+}]);
+tests.push(["localized failures and operation icons remain independent of model wording", () => {
+  const failure = { Kind: "tool", ToolId: "common.capabilities_read", Status: "failed", ErrorCode: "capability_not_found",
+    ResultMessage: "Missing tool. RUNTIME_CONTEXT.capabilities catalogRevision=abc" };
+  assert.equal(context.activityDisplayResult(failure), "Инструмент или навык не найден");
+  failure.ErrorCode = "unexpected_vendor_failure";
+  assert.equal(context.activityDisplayResult(failure), "Действие завершилось с ошибкой");
+  failure.ExecutionEvidence = { Effect: "Unknown", Dispatch: "MayHaveDispatched" };
+  assert.match(context.activityDisplayResult(failure), /не подтверждён/);
+  assert.equal(context.activityPresentationState(failure), "unknown");
+  const types = ["common.resources_find", "common.resources_read", "excel.write_range", "common.capabilities_read", "common.questions_ask", "common.vba_delete"];
+  assert.deepEqual(types.map(ToolId => context.activityOperation({ Kind: "tool", ToolId })), ["search", "read", "write", "learn", "question", "delete"]);
+  assert.equal(new Set(types.map(ToolId => context.activityOperationIcon({ Kind: "tool", ToolId }))).size, types.length);
+}]);
+
 context.appendActivityArtifacts = () => {};
 context.appendQuestionCards = () => {};
 context.enhanceActivity = () => {};
