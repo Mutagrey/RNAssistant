@@ -39,6 +39,10 @@ version check still apply.
 
 ## Test map
 
+`context: compaction` includes typed claim/source-role admission, Tool Result
+envelope-role isolation, exact evidence preservation, per-claim invalidation after
+source changes, interpretation-promotion refusal, persistence and old-version skip.
+
 `artifacts: prompt preserves decision context` and `resource cutover: correctness
 before budget` cover optional-purpose admission, exact target preservation,
 ownership/read hints and semantic recovery after stale evidence exclusion.

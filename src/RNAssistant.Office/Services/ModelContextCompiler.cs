@@ -173,16 +173,16 @@ namespace RNAssistant.Office.Services
                 foreach (var message in atom.Messages)
                 {
                     if (message.ContextClaims == null || message.ContextClaims.Count == 0) continue;
-                    var current = message.ContextClaims.Where(claim =>
+                    var current = message.ContextClaims.Where(claim => claim != null && claim.HasTypedProvenance() &&
                         (string.IsNullOrEmpty(claim.ToolGeneration) || claim.ToolGeneration == authority.ToolGeneration) &&
                         (string.IsNullOrEmpty(claim.SkillGeneration) || claim.SkillGeneration == authority.Skills.Generation) &&
                         (string.IsNullOrEmpty(claim.SchemaGeneration) || claim.SchemaGeneration == authority.SchemaGeneration) &&
                         (claim.Evidence ?? new List<ResourceEvidence>()).All(e => _reducer.Reduce(e, authority.Resources).State == EvidenceState.Current))
                         .ToArray();
-                    message.Content = "STRUCTURED_CONTEXT_CLAIMS (reference only):\n" +
+                    message.Content = "STRUCTURED_CONTEXT_CLAIMS (reference only; kinds preserve source roles, not proof of entailment; interpretations are not observations and next_action is proposed work):\n" +
                         string.Join("\n", current.Select(claim =>
-                            ModelToolResultProjection.SanitizeRuntimeText(
-                                claim.Text)));
+                            JsonConvert.SerializeObject(new { kind = claim.Kind, sourceRoles = claim.SourceRoles,
+                                text = ModelToolResultProjection.SanitizeRuntimeText(claim.Text) })));
                 }
             }
 

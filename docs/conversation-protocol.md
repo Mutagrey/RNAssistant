@@ -492,6 +492,14 @@ tool-call IDs from its text transcript; exact provenance is reattached locally.
 Compaction checkpoint artifacts are runtime replay state: they are absent from the
 model resource index and semantic resource discovery. Only their authority-filtered
 structured claims enter a later request.
+Compaction `context-claims-v4` requires `claims[{kind,text,sourceIds}]`. Runtime
+reattaches source roles, exact evidence and generations; the model cannot author
+them. The compiler preserves claim kind/roles and rejects untyped claims. User
+constraints/decisions, supported tool observations and assistant interpretations
+remain distinct; proposed work is `next_action`. Recompaction cannot upgrade an
+interpretation to a decision or observation. Older checkpoints are preserved but
+skipped. This changes compaction only, not conversation-response v5 or runtime
+lifecycle; see [claim semantics](artifact-library.md#discovery-descriptions-and-model-context).
 Semantic artifact search indexes public title/type/MIME/description only; raw
 artifact metadata, storage ids and provenance cannot become a returned snippet.
 

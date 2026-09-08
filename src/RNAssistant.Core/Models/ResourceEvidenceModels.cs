@@ -68,11 +68,30 @@ namespace RNAssistant.Core.Models
     public sealed class StructuredContextClaim
     {
         public string ClaimId { get; set; }
+        public string Kind { get; set; }
+        public List<string> SourceRoles { get; set; } = new List<string>();
         public string Text { get; set; }
         public List<ResourceEvidence> Evidence { get; set; } = new List<ResourceEvidence>();
         public List<string> SourceMessageIds { get; set; } = new List<string>();
         public string ToolGeneration { get; set; }
         public string SkillGeneration { get; set; }
         public string SchemaGeneration { get; set; }
+
+        public static bool SupportsKind(string kind)
+        {
+            return kind == "constraint" || kind == "decision" || kind == "observation" ||
+                kind == "interpretation" || kind == "question" || kind == "next_action";
+        }
+
+        public bool HasTypedProvenance()
+        {
+            return SupportsKind(Kind) && !string.IsNullOrWhiteSpace(Text) &&
+                SourceMessageIds != null && SourceMessageIds.Count > 0 && SourceMessageIds.All(id => !string.IsNullOrWhiteSpace(id)) &&
+                SourceRoles != null && SourceRoles.Count > 0 && SourceRoles.All(role =>
+                    role == "user" || role == "assistant" || role == "tool" || role == "system" || role == "developer") &&
+                Evidence != null && Evidence.All(item => item != null) &&
+                ((Kind != "constraint" && Kind != "decision") || SourceRoles.All(role => role == "user")) &&
+                (Kind != "observation" || SourceRoles.All(role => role == "tool") && Evidence.Count > 0);
+        }
     }
 }

@@ -14,6 +14,13 @@ gates; active tool compatibility adapter отсутствует. Windows/Office 
 
 ## Document artifact ownership — active slices
 
+Typed compaction provenance (2026-09-08): `StructuredContextClaim`, existing
+`ContextCompactionService` and `ModelContextCompiler` now retain kind/source roles.
+`context-claims-v4` replaces untyped v3 replay admission; older checkpoints remain
+preserved but skipped. Both first compaction and recompaction validate source
+eligibility. No alternate summary parser, shared store or implicit cross-chat replay
+is introduced; document-owned decision-resource publication remains open.
+
 Resource decision context (2026-09-08): existing `ChatResourcePromptIndex` owns
 bounded purpose/scope/next-read hints; optional description no longer participates
 in mandatory target admission. Existing `ModelContextCompiler.Mark` retains a

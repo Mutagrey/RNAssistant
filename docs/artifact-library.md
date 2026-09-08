@@ -561,10 +561,25 @@ Compaction retains supported findings, decisions, unresolved questions, constrai
 and next actions with source provenance. A valid `sourceIds` link checks provenance,
 not semantic entailment: model claims remain interpretations. Do not relabel a
 promise as completed work or promote resource instructions to user requirements.
-Typed findings/decisions, if added, belong to the existing claim/compiler contract,
-with source-role validation and stale-evidence exclusion; never extract them by
-parsing ad-hoc headings from `message`. Shared decision memory should be a
+Typed findings/decisions belong to the existing claim/compiler contract, with
+source-role validation and stale-evidence exclusion; never extract them by parsing
+ad-hoc headings from `message`. Shared decision memory should be a
 versioned resource with source citations, not an untraceable global summary.
+
+Implemented prerequisite (2026-09-08): `context-claims-v4` compaction carries
+`kind` plus runtime-derived `SourceRoles`. Kinds are `constraint`, `decision`,
+`observation`, `interpretation`, `question` and `next_action`. Constraints and
+decisions require only genuine user-message sources or prior claims of the same
+kind. Observations require successful Tool Results with canonical resource evidence
+or prior observations. Tool Result envelope roles do not change their source role.
+Recompaction cannot promote a prior interpretation into a decision/observation.
+The compiler retains these distinctions and filters changed source evidence using
+the existing frozen authority/reducer; unrelated claims survive. These checks
+establish source eligibility, not semantic entailment or proof of user approval.
+Invalid extraction preserves the prior checkpoint. Older/untyped checkpoints are
+retained but skipped, leaving original messages available for fresh compaction.
+This is used by current chat compaction; document-owned publication, discovery and
+explicit cross-chat consumption of decision memory are not implemented yet.
 
 ### Resource Fabric boundary audit — 2026-09-08
 

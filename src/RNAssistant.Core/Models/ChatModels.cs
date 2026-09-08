@@ -302,7 +302,7 @@ namespace RNAssistant.Core.Models
 
     public sealed class ContextCheckpoint
     {
-        public const string CurrentPromptVersion = "context-claims-v3";
+        public const string CurrentPromptVersion = "context-claims-v4";
 
         public string Id { get; set; }
         public string ThroughMessageId { get; set; }

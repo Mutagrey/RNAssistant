@@ -2310,7 +2310,7 @@ namespace RNAssistant.Harness
             LlmCompletionDelegate completion = (requestSettings, messages, options, stream, cancellationToken) =>
             {
                 compactionInput = FlattenSimple(messages);
-                return Task.FromResult(new LlmCompletionResult { Content = "{\"summary\":\"References retained.\"}" });
+                return Task.FromResult(CompactionReply(messages, "References retained."));
             };
             new ContextCompactionService(completion).EnsureWithinBudgetAsync(
                 session,

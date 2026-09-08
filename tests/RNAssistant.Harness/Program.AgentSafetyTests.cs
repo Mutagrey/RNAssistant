@@ -382,6 +382,7 @@ namespace RNAssistant.Harness
             AssertTrue(ContextCompactionService.ActiveCheckpoint(session) == null,
                 "free-form legacy summary cannot become current context authority");
             checkpoint.Claims.Add(new StructuredContextClaim { ClaimId = "earlier-read", Text = "Earlier read completed.",
+                Kind = "interpretation", SourceRoles = new List<string> { "assistant" },
                 SourceMessageIds = new List<string> { session.Messages[3].Id, session.Messages[4].Id } });
             AssertTrue(!ContextCompactionService.BuildActiveWindow(session).Any(message => message.Id == session.Messages[3].Id),
                 "compaction really excludes the earlier accepted call from the prompt window");
@@ -620,6 +621,7 @@ namespace RNAssistant.Harness
                 var checkpoint = new ContextCheckpoint { ThroughMessageId = through.Id, SummaryMarkdown = "Schema discovery summarized.",
                     Claims = new List<StructuredContextClaim> { new StructuredContextClaim {
                         ClaimId = "schema-discovery", Text = "Schema discovery completed; admission remains runtime-owned.",
+                        Kind = "interpretation", SourceRoles = new List<string> { "assistant", "tool" },
                         SourceMessageIds = new List<string> { schemaCall.Id, through.Id } } } };
                 session.Artifacts.Add(new ChatArtifact { Id = checkpoint.Id, Kind = ChatArtifactKinds.Compaction,
                     MimeType = "application/json", InlineText = JsonConvert.SerializeObject(checkpoint, Formatting.None) });
@@ -1909,6 +1911,8 @@ namespace RNAssistant.Harness
                     new StructuredContextClaim
                     {
                         ClaimId = "claim-runtime-reference",
+                        Kind = "interpretation", SourceRoles = new List<string> { "assistant" },
+                        SourceMessageIds = new List<string> { "source-message" },
                         Text = "Prior resource was " + genericReference.Uri + "."
                     }
                 }

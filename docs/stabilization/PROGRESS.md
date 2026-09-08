@@ -1,5 +1,19 @@
 # Stabilization progress
 
+Current slice (2026-09-08), after `b01babf2`: **typed claim provenance prerequisite**
+is implemented in existing compaction/compiler. `context-claims-v4` preserves
+constraint/decision/observation/interpretation/question/next_action and attaches
+source roles in runtime. Source-role checks reject assistant/tool instructions as
+user decisions and prevent interpretation promotion during recompaction. Frozen
+authority still excludes changed evidence per claim. Invalid extraction leaves
+the previous checkpoint intact; older/untyped checkpoints are skipped, not deleted.
+This does not publish shared memory yet. Next: document-owned versioned publication
+and explicit cross-chat discovery/read of claims through existing Resource Fabric,
+including source retention, origin deletion and stale-read qualification. Performance
+measurement remains deferred; Windows/Office/WebView2/target-model gates stay open.
+Checks: focused compaction 3/3 and historical attachment reference-only 1/1 pass;
+`ValidateVersionFormat` and diff checks pass. Version remains `16.1.0-dev`.
+
 Current slice (2026-09-08), after `d29b1f58`: resource decision context now keeps
 document/conversation scope, a concrete read representation and bounded optional
 Markdown purpose beside complete targets. Historical working-set snapshots are
