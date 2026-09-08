@@ -1,6 +1,19 @@
 # Stabilization progress
 
-Current slice (2026-09-08), after `2598e224`: **partial current artifact discovery**
+Current correction (2026-09-08), after `ff47c276`: **incomplete Excel catalogs no
+longer block document reads**. The reported `document:` read enumerated all document
+catalogs and failed on bounded defined-name capture. Resolution now uses the live
+document provider's exact kind/title and bound-session guards. Names/tables list
+captured metadata with honest terminal truncation; point name/table reads still
+require complete identity evidence. Excel search preserves page/source/result
+truncation and coverage changes invalidate continuation. No limit increase/store.
+Checks: 201-name reproduction 1/1, Excel names 2/2, tables 2/2, reads 5/5 and
+resources 22/22 pass host-neutral. Windows/Office retest of the reported workbook
+and the separately observed upstream HTTP 502 remain open.
+Next: resume bounded source enumeration/content indexing and richer shared context.
+See [Excel discovery contract](../resource-fabric.md#excel-catalog-discovery-and-document-reads).
+
+Previous slice (2026-09-08), after `2598e224`: **partial current artifact discovery**
 is implemented host-neutral. One authority capture chooses exact current Plan/HTML/MD
 snapshots before metadata reads. Missing historical records no longer poison current
 search; missing current metadata/body or unknown heads preserve healthy results with

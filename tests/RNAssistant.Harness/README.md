@@ -39,6 +39,13 @@ version check still apply.
 
 ## Test map
 
+`excel discovery:` reproduces the reported document-read failure with 201 defined
+names. It verifies independent document/A1 reads, strict point-name admission,
+partial discovery/negative search, terminal paging, coverage-only cursor drift,
+result clipping and bound-document refusal. Use `excel names:`, `excel tables:`,
+`excel read:` and `resources:` for affected consumers. Live workbook/502 qualification
+requires the reported Windows/server environment.
+
 `resources: document discovery` verifies healthy partial results with missing/corrupt
 current metadata, body loss, exact reads, metadata recovery, current-head selection
 without historical fallback, unknown original/logical heads and continuation drift.

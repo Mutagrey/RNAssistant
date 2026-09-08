@@ -240,7 +240,7 @@ namespace RNAssistant.Office.Services
             var truncated = false;
             var scope = IntentTargetScope(target);
             var states = EnumerateIntentResources(
-                session, IntentPlansForScope(scope), unavailable, failures, ref truncated);
+                session, IntentPlansForTarget(scope, target), unavailable, failures, ref truncated);
             var searchConfirmedTarget = false;
             var searchIncomplete = false;
             if (truncated)
@@ -475,6 +475,16 @@ namespace RNAssistant.Office.Services
                     string.Equals(scope, "all", StringComparison.Ordinal)) continue;
                 yield return plan;
             }
+        }
+
+        private IEnumerable<ResourceIntentPlan> IntentPlansForTarget(string scope, string target)
+        {
+            // The document target belongs to the live document provider. Unrelated
+            // name/table/artifact catalogs cannot prove or disprove its identity.
+            if (target.StartsWith("document: ", StringComparison.Ordinal))
+                return _registry.All().OfType<LiveDocumentResourceProvider>()
+                    .Select(provider => new ResourceIntentPlan(provider, LiveDocumentResourceProvider.DocumentKind, "document"));
+            return IntentPlansForScope(scope);
         }
 
         private IEnumerable<ResourceIntentPlan> IntentPlansForScope(string scope)

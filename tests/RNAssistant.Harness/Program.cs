@@ -429,6 +429,7 @@ namespace RNAssistant.Harness
                 Test("attachments: accepts text formats and encodings", AttachmentAcceptsTextFormatsAndEncodings),
                 Test("attachments: stores extracted text sidecar", AttachmentStoresExtractedTextSidecar),
                 Test("tool runtime: native resource tools manual and model paths", NativeResourceToolsUseRuntimeForManualAndModelCalls),
+                Test("excel discovery: incomplete catalogs preserve document reads", ExcelDiscoveryDoesNotBlockDocumentReads),
                 Test("excel read: native ownership and exact registration", ExcelReadUsesExactNativeOwnership),
                 Test("excel read: exact resource evidence and retained profile", ExcelRangeReadsRetainExactEvidence),
                 Test("excel read: selectors and canonical snapshots", ExcelReadSelectorsAreCanonical),

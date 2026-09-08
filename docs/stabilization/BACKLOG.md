@@ -222,3 +222,12 @@ claims with valid sourceIds and attaches source messages/evidence/generations.
 no direct Excel/VBA/PDF/HTML execution was found. `BuildPreview` still accepts an
 Office adapter and delegates prompt composition; this is a boundary to watch, not
 proof of a domain-executing compiler monolith.
+
+## Reported upstream model HTTP 502 — 2026-09-08
+
+The user's run-log screenshot reports HTTP 502 Bad Gateway from the configured
+model endpoint alongside an unrelated incomplete Excel name-catalog read refusal.
+The local resource-routing defect is corrected separately. The photograph does not
+establish the 502 cause or a causal link to the resource failure. Retest the workbook
+with the corrected build; if 502 recurs, correlate the failed request with server/
+gateway diagnostics. No speculative model-setting changes or mutation replay.
