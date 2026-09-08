@@ -10,6 +10,7 @@ using RNAssistant.Core.Models;
 using RNAssistant.Core.Storage;
 using RNAssistant.Harness;
 using RNAssistant.Office;
+using RNAssistant.Office.Contracts;
 
 namespace RNAssistant.MockDemo
 {
@@ -154,11 +155,27 @@ namespace RNAssistant.MockDemo
                 var init = await SendAsync(bridge, "failure-init", "init", null, null).ConfigureAwait(false);
                 var token = Payload(init)["bridgeToken"].ToString();
                 var chatId = Payload(init)["activeChatId"].ToString();
-                var draft = controller.StageChatResource(
-                    chatId,
-                    "failure-note.txt",
-                    "text/plain",
-                    Convert.ToBase64String(System.Text.Encoding.UTF8.GetBytes("durable attachment")));
+                var bytes = System.Text.Encoding.UTF8.GetBytes("durable attachment");
+                var upload = controller.BeginChatResourceUpload(new ResourceUploadOpenRequest
+                {
+                    ChatId = chatId,
+                    FileName = "failure-note.txt",
+                    ContentType = "text/plain",
+                    ByteLength = bytes.Length
+                });
+                using (var body = new MemoryStream(bytes, false))
+                using (var response = controller.HandleResourceData(
+                    "POST",
+                    upload.Url + "?offset=0&count=" + bytes.Length,
+                    CancellationToken.None,
+                    body).Body)
+                {
+                }
+                var draft = await controller.CompleteChatResourceUploadAsync(new ResourceUploadLeaseRequest
+                {
+                    ChatId = chatId,
+                    LeaseId = upload.LeaseId
+                }).ConfigureAwait(false);
                 var request = JsonConvert.SerializeObject(new
                 {
                     id = "failure-send",
@@ -380,19 +397,19 @@ namespace RNAssistant.MockDemo
             var hasHtml = false;
             var hasCss = false;
             var hasScript = false;
-            var scriptContent = string.Empty;
             foreach (var token in files.OfType<JObject>())
             {
                 var kind = ((string)(token["kind"] ?? token["Kind"]) ?? string.Empty).ToLowerInvariant();
                 var path = ((string)(token["path"] ?? token["Path"]) ?? string.Empty).ToLowerInvariant();
-                var content = (string)(token["content"] ?? token["Content"]) ?? string.Empty;
                 hasHtml = hasHtml || kind == "html" || path.EndsWith(".html", StringComparison.OrdinalIgnoreCase);
                 hasCss = hasCss || kind == "css" || path.EndsWith(".css", StringComparison.OrdinalIgnoreCase);
                 if (kind == "script" || path.EndsWith(".js", StringComparison.OrdinalIgnoreCase))
                 {
                     hasScript = true;
-                    scriptContent = content;
                 }
+                if ((int?)(token["byteLength"] ?? token["ByteLength"]) <= 0 ||
+                    string.IsNullOrWhiteSpace((string)(token["sha256"] ?? token["Sha256"])))
+                    throw new InvalidOperationException("HTML workspace file metadata is incomplete");
             }
 
             if (!hasHtml || !hasCss || !hasScript)
@@ -400,23 +417,24 @@ namespace RNAssistant.MockDemo
                 throw new InvalidOperationException("HTML workspace must contain html, css, and script files");
             }
 
-            var dataJson = (string)(dataSources[0]["json"] ?? dataSources[0]["Json"]) ?? string.Empty;
-            if (dataJson.IndexOf("\"sales\"", StringComparison.OrdinalIgnoreCase) < 0 &&
-                dataJson.IndexOf("\"rows\"", StringComparison.OrdinalIgnoreCase) < 0)
+            var data = (JObject)dataSources[0];
+            var binding = (data["binding"] ?? data["Binding"]) as JObject;
+            var resource = binding == null ? null : (binding["resource"] ?? binding["Resource"]) as JObject;
+            if (!string.Equals((string)(data["name"] ?? data["Name"]), "sales", StringComparison.OrdinalIgnoreCase) ||
+                resource == null || string.IsNullOrWhiteSpace((string)(resource["uri"] ?? resource["Uri"])) ||
+                string.IsNullOrWhiteSpace((string)(resource["revision"] ?? resource["Revision"])))
             {
-                throw new InvalidOperationException("HTML workspace data source does not contain rows");
+                throw new InvalidOperationException("HTML workspace data source does not expose an exact resource binding");
             }
 
             if (expectEdit)
             {
-                if (dataJson.IndexOf("Mar", StringComparison.OrdinalIgnoreCase) < 0)
-                {
-                    throw new InvalidOperationException("HTML edit did not add March data");
-                }
-                if (scriptContent.IndexOf("updated", StringComparison.OrdinalIgnoreCase) < 0)
-                {
-                    throw new InvalidOperationException("HTML edit did not update app.js");
-                }
+                var results = payload["toolResults"] as JArray ?? new JArray();
+                foreach (var expected in new[] { "common.html_data_write", "common.html_workspace_write_file" })
+                    if (!results.OfType<JObject>().Any(item =>
+                        string.Equals((string)item["toolId"], expected, StringComparison.Ordinal) &&
+                        string.Equals((string)item["status"], "ok", StringComparison.OrdinalIgnoreCase)))
+                        throw new InvalidOperationException("HTML edit did not complete " + expected);
             }
         }
 

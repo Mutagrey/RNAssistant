@@ -1,5 +1,17 @@
 # Stabilization progress
 
+Latest build correction (2026-09-08): the reported Windows solution failure was
+one production `RNAssistant.Office` compile break followed by cascading `CS0006`
+errors, plus stale source-linked MockDemo contracts. `ChatStore` now exposes its
+typed `DocumentArtifactStore` owner across the Core/Office assembly boundary, the
+artifact viewer imports its exact `ChatSession` model, and MockDemo includes the
+shared `OfficeToolFailure`, stages attachments through the bounded upload data
+plane, emits conversation-response v5, consumes folded mutation frames, and uses
+the current semantic HTML tools/metadata-only projection. Core and Office Debug
+builds and the MockDemo build pass host-neutral; all four mock model profiles,
+failed-turn persistence and artifact-commit projection pass. Windows x64 solution,
+VSTO/Office/WebView2 validation remains open.
+
 Latest correction (2026-09-08): bridge аварийные ответы теперь используют один
 typed JSON contract, сохраняют request id и корректно экранируют exception text;
 неразбираемый/некоррелируемый transport failure завершает все pending UI promises

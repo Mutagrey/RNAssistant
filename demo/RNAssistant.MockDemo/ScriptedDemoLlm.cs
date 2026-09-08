@@ -188,19 +188,21 @@ namespace RNAssistant.MockDemo
             {
                 return new[]
                 {
-                    Cmd("common.capabilities_read", "id", "common.html_workspace_upsert"),
-                    Cmd("common.html_workspace_upsert", "resourceType", "data", "name", "sales", "content", "{\"rows\":[{\"month\":\"Jan\",\"sales\":120},{\"month\":\"Feb\",\"sales\":150},{\"month\":\"Mar\",\"sales\":180}],\"title\":\"Updated Sales HTML Dashboard\"}"),
-                    Cmd("common.html_workspace_upsert", "resourceType", "file", "name", "app.js", "content", "(function(){var data=window.RNAssistantData.sales||{};var rows=data.rows||[];var total=rows.reduce(function(sum,row){return sum+Number(row.sales||0);},0);document.getElementById('salesTitle').textContent=data.title||'Sales HTML Dashboard';document.getElementById('salesTotal').textContent='Total: '+total;var list=document.getElementById('salesRows');if(list){list.innerHTML=rows.map(function(row){return '<article class=\"row-card\"><strong>'+row.month+'</strong><span>'+row.sales+'</span></article>';}).join('');}document.body.setAttribute('data-script-ready','updated');}());", "setActive", false)
+                    Cmd("common.capabilities_read", "id", "common.html_workspace_write_file"),
+                    Cmd("common.capabilities_read", "id", "common.html_data_write"),
+                    Cmd("common.html_data_write", "name", "sales", "json", "{\"rows\":[{\"month\":\"Jan\",\"sales\":120},{\"month\":\"Feb\",\"sales\":150},{\"month\":\"Mar\",\"sales\":180}],\"title\":\"Updated Sales HTML Dashboard\"}"),
+                    Cmd("common.html_workspace_write_file", "path", "app.js", "content", "(async function(){var handle=await RN.resources.open('sales');var json='';try{for await(var batch of handle.stream({view:'text',limit:4096})){json+=batch.text||'';}}finally{await handle.close();}var data=JSON.parse(json||'{}');var rows=data.rows||[];var total=rows.reduce(function(sum,row){return sum+Number(row.sales||0);},0);document.getElementById('salesTitle').textContent=data.title||'Sales HTML Dashboard';document.getElementById('salesTotal').textContent='Total: '+total;var list=document.getElementById('salesRows');if(list){list.innerHTML=rows.map(function(row){return '<article class=\"row-card\"><strong>'+row.month+'</strong><span>'+row.sales+'</span></article>';}).join('');}document.body.setAttribute('data-script-ready','updated');}()).catch(function(error){document.body.setAttribute('data-script-error',error.message||'resource-error');});")
                 };
             }
 
             return new[]
             {
-                Cmd("common.capabilities_read", "id", "common.html_workspace_upsert"),
-                Cmd("common.html_workspace_upsert", "resourceType", "data", "name", "sales", "content", "{\"rows\":[{\"month\":\"Jan\",\"sales\":120},{\"month\":\"Feb\",\"sales\":150}],\"title\":\"Sales HTML Dashboard\"}"),
-                Cmd("common.html_workspace_upsert", "resourceType", "file", "name", "styles.css", "content", "body{font-family:Segoe UI,Arial,sans-serif;margin:0;min-height:100vh;background:#f8fafc;color:#111827}.dashboard{min-height:100vh;padding:32px clamp(20px,4vw,56px);display:grid;align-content:start;gap:22px}.hero{display:flex;justify-content:space-between;gap:18px;align-items:flex-end;border-bottom:1px solid #d0d5dd;padding-bottom:18px}.hero h1{margin:0;font-size:clamp(28px,4vw,48px);font-weight:500}.hero p{margin:8px 0 0;color:#475467}.metric{margin:0;font-size:clamp(32px,5vw,56px);font-weight:500;color:#0f766e}.rows{display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:12px}.row-card{display:flex;justify-content:space-between;gap:12px;border:1px solid #d0d5dd;border-radius:8px;padding:14px;background:#fff}"),
-                Cmd("common.html_workspace_upsert", "resourceType", "file", "name", "app.js", "content", "(function(){var data=window.RNAssistantData.sales||{};var rows=data.rows||[];var total=rows.reduce(function(sum,row){return sum+Number(row.sales||0);},0);document.getElementById('salesTitle').textContent=data.title||'Sales HTML Dashboard';document.getElementById('salesTotal').textContent='Total: '+total;var list=document.getElementById('salesRows');if(list){list.innerHTML=rows.map(function(row){return '<article class=\"row-card\"><strong>'+row.month+'</strong><span>'+row.sales+'</span></article>';}).join('');}document.body.setAttribute('data-script-ready','created');}());", "setActive", false),
-                Cmd("common.html_workspace_upsert", "resourceType", "file", "name", "index.html", "content", "<!doctype html><html><head><meta charset=\"utf-8\"><title>Sales HTML Dashboard</title></head><body><main class=\"dashboard\"><section class=\"hero\"><div><h1 id=\"salesTitle\">Sales HTML Dashboard</h1><p>Data comes from RNAssistantData.sales</p></div><p id=\"salesTotal\" class=\"metric\">Total: 0</p></section><section id=\"salesRows\" class=\"rows\"></section></main></body></html>", "setActive", true)
+                Cmd("common.capabilities_read", "id", "common.html_workspace_write_file"),
+                Cmd("common.capabilities_read", "id", "common.html_data_write"),
+                Cmd("common.html_data_write", "name", "sales", "json", "{\"rows\":[{\"month\":\"Jan\",\"sales\":120},{\"month\":\"Feb\",\"sales\":150}],\"title\":\"Sales HTML Dashboard\"}"),
+                Cmd("common.html_workspace_write_file", "path", "styles.css", "content", "body{font-family:Segoe UI,Arial,sans-serif;margin:0;min-height:100vh;background:#f8fafc;color:#111827}.dashboard{min-height:100vh;padding:32px clamp(20px,4vw,56px);display:grid;align-content:start;gap:22px}.hero{display:flex;justify-content:space-between;gap:18px;align-items:flex-end;border-bottom:1px solid #d0d5dd;padding-bottom:18px}.hero h1{margin:0;font-size:clamp(28px,4vw,48px);font-weight:500}.hero p{margin:8px 0 0;color:#475467}.metric{margin:0;font-size:clamp(32px,5vw,56px);font-weight:500;color:#0f766e}.rows{display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:12px}.row-card{display:flex;justify-content:space-between;gap:12px;border:1px solid #d0d5dd;border-radius:8px;padding:14px;background:#fff}"),
+                Cmd("common.html_workspace_write_file", "path", "app.js", "content", "(async function(){var handle=await RN.resources.open('sales');var json='';try{for await(var batch of handle.stream({view:'text',limit:4096})){json+=batch.text||'';}}finally{await handle.close();}var data=JSON.parse(json||'{}');var rows=data.rows||[];var total=rows.reduce(function(sum,row){return sum+Number(row.sales||0);},0);document.getElementById('salesTitle').textContent=data.title||'Sales HTML Dashboard';document.getElementById('salesTotal').textContent='Total: '+total;var list=document.getElementById('salesRows');if(list){list.innerHTML=rows.map(function(row){return '<article class=\"row-card\"><strong>'+row.month+'</strong><span>'+row.sales+'</span></article>';}).join('');}document.body.setAttribute('data-script-ready','created');}()).catch(function(error){document.body.setAttribute('data-script-error',error.message||'resource-error');});"),
+                Cmd("common.html_workspace_write_file", "path", "index.html", "content", "<!doctype html><html><head><meta charset=\"utf-8\"><title>Sales HTML Dashboard</title></head><body><main class=\"dashboard\"><section class=\"hero\"><div><h1 id=\"salesTitle\">Sales HTML Dashboard</h1><p>Data comes from RNAssistantData.sales</p></div><p id=\"salesTotal\" class=\"metric\">Total: 0</p></section><section id=\"salesRows\" class=\"rows\"></section></main></body></html>")
             };
         }
 
@@ -247,6 +249,7 @@ namespace RNAssistant.MockDemo
             return JsonConvert.SerializeObject(new
             {
                 message = "Выполняю следующий шаг: " + command.ToolId + ".",
+                final = false,
                 tool_calls = new[]
                 {
                     new
@@ -263,6 +266,7 @@ namespace RNAssistant.MockDemo
             return JsonConvert.SerializeObject(new
             {
                 message = message ?? string.Empty,
+                final = true,
                 tool_calls = new object[0]
             });
         }
@@ -345,6 +349,25 @@ namespace RNAssistant.MockDemo
                 var message = messages[index];
                 var content = message == null ? string.Empty : message.Content ?? string.Empty;
                 const string marker = "TOOL_RESULT:";
+                const string causalMarker = "TOOL_INTERACTION (completed causal frame):";
+                if (content.StartsWith(causalMarker, StringComparison.Ordinal))
+                {
+                    try
+                    {
+                        var frame = JObject.Parse(content.Substring(causalMarker.Length).Trim());
+                        results.Add(new JObject
+                        {
+                            ["name"] = frame["tool"],
+                            ["status"] = string.Equals((string)frame["outcome"], "Ok", StringComparison.OrdinalIgnoreCase)
+                                ? "ok" : string.Equals((string)frame["outcome"], "Unknown", StringComparison.OrdinalIgnoreCase)
+                                    ? "unknown" : "error"
+                        });
+                    }
+                    catch (JsonException)
+                    {
+                    }
+                    continue;
+                }
                 if (content.StartsWith(marker, StringComparison.Ordinal))
                 {
                     content = content.Substring(marker.Length).Trim();

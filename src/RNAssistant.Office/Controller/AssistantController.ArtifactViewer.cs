@@ -1,4 +1,5 @@
 using System;
+using RNAssistant.Core.Models;
 using RNAssistant.Office.Contracts;
 using RNAssistant.Core.Services;
 using RNAssistant.Office.Services;

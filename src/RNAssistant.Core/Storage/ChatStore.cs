@@ -47,7 +47,7 @@ namespace RNAssistant.Core.Storage
 
         private readonly AppDataPaths _paths;
         private readonly ChatBlobStore _blobs;
-        internal DocumentArtifactStore DocumentArtifacts { get; private set; }
+        public DocumentArtifactStore DocumentArtifacts { get; private set; }
         private readonly Func<StorageProtector> _protectionProvider;
         private readonly BoundedLruCache<ProjectionCacheEntry> _projectionCache;
         private readonly BoundedLruCache<HeaderCacheEntry> _headerCache;
