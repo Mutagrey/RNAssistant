@@ -1941,6 +1941,82 @@ namespace RNAssistant.Harness
             });
         }
 
+        private static void SimpleAgentVbaBatchReadCannotAuthorizeStaleOverwrite()
+        {
+            WithTempPaths(paths =>
+            {
+                const string before = "Option Explicit\nSub Main()\nEnd Sub";
+                const string patched = "Option Explicit\nSub Main()\nDebug.Print \"started\"\nEnd Sub";
+                var adapter = FakeOfficeAdapter.ForHost("Excel");
+                adapter.VbaModuleCode = before;
+                var journal = new VbaJournalStore(paths);
+                var executor = new OfficeToolExecutor(adapter, journal, new SkillStore(paths));
+                var session = NewSession(adapter);
+                var responses = new Queue<string>(new[]
+                {
+                    LoadToolSchemaResponse("common.vba_apply_patch"),
+                    LoadToolSchemaResponse("common.vba_write_module"),
+                    new JObject
+                    {
+                        ["message"] = "Добавляю диагностику и обновляю заголовок.",
+                        ["final"] = false,
+                        ["tool_calls"] = new JArray(
+                            new JObject { ["name"] = "common.vba_apply_patch", ["arguments"] = new JObject
+                            {
+                                ["moduleName"] = "Module1", ["patch"] = new JArray(new JObject
+                                { ["find"] = "Sub Main()", ["text"] = "Sub Main()\nDebug.Print \"started\"" })
+                            } },
+                            new JObject { ["name"] = "common.resources_read", ["arguments"] = new JObject
+                            { ["target"] = "VBA module: Module1", ["representation"] = "source" } },
+                            new JObject { ["name"] = "common.vba_write_module", ["arguments"] = new JObject
+                            { ["moduleName"] = "Module1", ["code"] = "' Version 2\n" + before, ["mode"] = "updateOnly" } })
+                    }.ToString(Formatting.None),
+                    new JObject
+                    {
+                        ["message"] = "Сохраняю заголовок вместе с прочитанной диагностикой.",
+                        ["final"] = false,
+                        ["tool_calls"] = new JArray(new JObject
+                        {
+                            ["name"] = "common.vba_write_module", ["arguments"] = new JObject
+                            { ["moduleName"] = "Module1", ["code"] = "' Version 2\n" + patched, ["mode"] = "updateOnly" }
+                        })
+                    }.ToString(Formatting.None),
+                    "{\"message\":\"Проверка завершена.\",\"final\":true,\"tool_calls\":[]}"
+                });
+                LlmCompletionDelegate completion = (settings, messages, options, stream, token) =>
+                {
+                    if (responses.Count == 2)
+                    {
+                        AssertEqual(patched, adapter.VbaModuleCode, "stale batch overwrite preserves the patch");
+                        AssertEqual(1, adapter.CountVbaCalls(FakeVbaOperation.ReplaceModule), "only the patch dispatched");
+                        AssertEqual(1, journal.ListMutations(adapter.HostName, adapter.DocumentKey).Count,
+                            "rejected overwrite creates no second VBA preparation");
+                    }
+                    return Task.FromResult(new LlmCompletionResult { Content = responses.Dequeue() });
+                };
+                var result = CreateConversationRunService(adapter, executor, completion).ExecuteAsync(
+                    ChatModes.Agent, "Добавь Debug.Print, сохрани его при обновлении заголовка.",
+                    session, NewContext(adapter), new AppSettings { AutoConfirmToolActions = true },
+                    OfficeToolCatalog.ForHost(adapter.HostName).Concat(executor.GetControllerTools()).ToList(), null)
+                    .GetAwaiter().GetResult();
+                var writes = result.ToolResults.Select(item => JObject.FromObject(item))
+                    .Where(item => (string)item["toolId"] == "common.vba_write_module").ToList();
+                AssertEqual(2, writes.Count, "rejected stale call and newly authored write each produce a result");
+                var write = writes[0];
+                AssertEqual("error", (string)write["status"],
+                    "a read in the same response cannot authorize already-authored whole source");
+                AssertEqual("vba_snapshot_refresh_required", (string)write["errorCode"],
+                    "stale whole source requires a new model response after observation");
+                AssertEqual("ok", (string)writes[1]["status"], "next model response can use delivered source evidence");
+                AssertEqual("' Version 2\n" + patched, adapter.VbaModuleCode, "new write retains diagnostic code");
+                AssertEqual(2, adapter.CountVbaCalls(FakeVbaOperation.ReplaceModule), "only patch and fresh write dispatch");
+                var mutations = journal.ListMutations(adapter.HostName, adapter.DocumentKey);
+                AssertEqual(2, mutations.Count, "two real writes have journal evidence");
+                AssertTrue(mutations.All(item => item.Terminal.Status == VbaMutationStatuses.Committed),
+                    "both applied writes have verified read-back and durable terminals");
+            });
+        }
+
         private static void SimpleAgentExecutesMultipleToolsSequentially()
         {
             WithTempExecutor(FakeOfficeAdapter.ForHost("Excel"), delegate(OfficeToolExecutor executor, FakeOfficeAdapter adapter)

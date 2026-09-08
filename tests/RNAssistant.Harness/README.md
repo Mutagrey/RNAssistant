@@ -393,6 +393,12 @@ protection and partial COM effects remain WQ-EXCEL gates. See
 
 ## Typed VBA mutation outcome (Phase 6D)
 
+`agent: VBA batch read` covers patch/read/stale whole write in one accepted model
+response: the sibling read cannot authorize the stale overwrite; the next response
+can use delivered source to write safely. Both real writes retain committed journal
+evidence. The existing `vba: queued guard` and `vba: confirmed mutation` checks cover
+competing chats and stale confirmation guards.
+
 `vba: mutation` covers the typed service boundary and injected prepare, terminal,
 backend, read-back and cancellation faults. The broader `vba:` slice reuses
 restart, normalization, collision and not-found cases. These are fake-host ordering

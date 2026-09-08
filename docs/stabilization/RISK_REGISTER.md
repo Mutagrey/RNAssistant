@@ -1,5 +1,52 @@
 # Stabilization risk register
 
+## VBA patch incident — 2026-09-08
+
+Original incident open; overwrite defect reproduced and corrected host-neutral.
+User reports: assistant claims changes succeeded while requested code was
+reported absent. Photos 1–2 show two DemoModule diff rows labelled unverified;
+photo 2 shows a subsequent source read and patch attempt. Photo 4 contains
+`Debug.Print` in SumRange, FormatHeader and CleanData after the later attempt.
+The photos do not expose the initial accepted patch arguments, tool results,
+exact read coverage, journal terminal or Windows build revision. Model prose
+about a failed/overwritten patch is not execution evidence.
+
+Initial code inspection and 19 focused host-neutral checks established:
+
+- `VbaPatchEngine` / `VbaMutationService.ApplyPatch` reject stale or ambiguous
+  hunks before dispatch; ordered replacements are applied to candidate text only.
+- `VbaReadBackRejectsWriteDrift` injects backend success without changing source:
+  result is `error`, code `vba_patch_verify_mismatch`, terminal `not_applied`.
+  Unreadable/divergent final state is `unknown`; terminal persistence failure is
+  also `unknown`. Current native/result projection retains these statuses.
+- `RunChangesService.AddVba` requires matching live-text hashes for the retained
+  diff. A write accepted by VBE-comparable verification can still get the same
+  `unverified` label when VBE changes formatting. This is a diagnostic ambiguity,
+  not proof that read-back accepted missing executable statements.
+
+Owners: VBA mutation/verifier, model result projection, run changes projection.
+Follow-up reproduction: one accepted model response contains an exact patch adding
+`Debug.Print`, a source read, then a whole write containing the old source plus a
+new header. Before correction, the whole write returned `ok`: `MutationCorrelation`
+collected evidence from all chat messages, including the sibling read whose result
+the model had not yet received. Both writes could match their own read-back; this
+is an observation/authorization ordering defect, not concurrent COM dispatch or a
+missing full-module patch buffer. Accepted calls now retain their input-snapshot
+evidence and the VBA native owner uses that exact call's evidence. The regression
+rejects the stale overwrite before dispatch and permits a corrected write after
+the next model response receives the current source. Manual/editor guards and
+multiple managed writes remain supported.
+
+Next evidence: export the affected chat's accepted calls/results and exact source
+read responses, plus correlated `mutation.prepared` / `mutation.terminal` and
+before/intended source from `%AppData%/RNAssistant/vba-journals` / shared CAS; record
+the actual Windows build revision. Determine whether the missing change was in
+the accepted patch, rejected before dispatch, rolled back, left unknown, or replaced
+by a later write, and what result reached the model. Do not infer the exact
+cause for the original incident from photos alone. Windows/Office reproduction and
+the diff-label ambiguity remain open; the reproduced sibling-observation defect is
+fixed host-neutral.
+
 Исходная база: `v16.0.4`. Приоритеты ниже — стартовая оценка из master plan,
 не утверждение о воспроизведённых дефектах. Phase 0 не проверяла runtime/Office.
 Отдельно отмеченные результаты Phase 1A получены с fake LLM/Office, не на реальном COM.

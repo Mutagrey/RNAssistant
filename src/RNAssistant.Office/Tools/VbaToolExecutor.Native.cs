@@ -523,12 +523,24 @@ namespace RNAssistant.Office.Tools
             ToolExecutionContext execution,
             RNAssistant.Core.Models.ChatSession session)
         {
+            // Accepted model calls retain the evidence from their own input snapshot.
+            // A sibling read can advance authority, but its result was not available
+            // when this call's source was authored. Manual/editor calls have no
+            // accepted model origin and keep their existing observation/hash guard.
+            var accepted = session?.Messages.SingleOrDefault(message =>
+                message.AcceptedCallOrigin != null &&
+                message.ToolCallId == execution?.Call?.Id);
+            if (accepted != null && (accepted.RunId != execution.RunId ||
+                accepted.AcceptedCallOrigin.StepId != execution.StepId))
+                throw new InvalidOperationException("VBA call observation belongs to another accepted execution.");
             return new VbaMutationCorrelation
             {
                 SessionId = session == null ? string.Empty : session.Id,
                 DocumentAuthorityId = session == null ? null : session.DocumentAuthorityId,
                 Authority = _authority.Store.CaptureMany(new[] { _authority.Scope(session, true) }),
-                Evidence = session == null ? new RNAssistant.Core.Models.ResourceEvidence[0] :
+                Evidence = accepted != null ? (accepted.ResourceEvidence ??
+                    new List<RNAssistant.Core.Models.ResourceEvidence>()).ToArray() :
+                    session == null ? new RNAssistant.Core.Models.ResourceEvidence[0] :
                     session.Messages.SelectMany(message => message.ResourceEvidence ??
                         new List<RNAssistant.Core.Models.ResourceEvidence>()).ToArray(),
                 ExpectedContentSha256 = execution == null ? null : execution.ExpectedContentSha256,

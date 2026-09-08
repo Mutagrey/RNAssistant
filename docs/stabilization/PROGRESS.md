@@ -1,5 +1,17 @@
 # Stabilization progress
 
+Current correction (2026-09-08): reproduced same-response VBA
+`patch → resources_read → stale write_module` incorrectly accepting the final
+overwrite. Accepted calls now retain their model-input resource evidence; VBA
+guards no longer borrow observations from later sibling results. The regression
+rejects the stale overwrite before dispatch and permits a corrected whole write
+in the next model response. Multiple managed writes remain allowed. The original
+Windows screenshot incident still needs correlated chat/journal evidence; no
+Windows gate is closed. The diff's formatting-related `unverified` ambiguity remains.
+Checks: VBA 100/100, batch overwrite regression 1/1, managed write batch 1/1,
+confirmation correlation/replay 2/2 and diff checks pass host-neutral.
+See [incident evidence and next step](RISK_REGISTER.md#vba-patch-incident--2026-09-08).
+
 Current correction (2026-09-08): Excel semantic range targets now preserve exact
 worksheet names and accept Excel-quoted sheet names such as
 `Excel range: 'новый лист (2)'!A1:A2`. Discovery returns the preserved sheet name

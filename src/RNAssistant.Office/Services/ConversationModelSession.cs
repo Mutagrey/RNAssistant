@@ -156,6 +156,7 @@ namespace RNAssistant.Office.Services
             AcceptedToolCallOrigin origin)
         {
             var accepted = AgentJsonProtocol.CreateToolCallMessage(call, message, completion, _settings.ToolResultRole, origin);
+            AttachResponseEvidence(accepted);
             var arguments = JsonConvert.SerializeObject(call.Arguments);
             if (_payloads != null && arguments.Length > 8192)
             {
