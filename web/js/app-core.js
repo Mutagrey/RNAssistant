@@ -254,6 +254,25 @@ function send(type, payload) {
   return promise;
 }
 
+function failBridgeTransport(response, cause) {
+  var message = response && (response.errorDetail || response.error) ||
+    cause && cause.message || "WebView transport failed.";
+  var error = new Error(message);
+  error.detail = message;
+  error.code = response && response.errorCode || "bridge_transport_failed";
+  error.transportFailure = true;
+  state.bridgeUnavailable = true;
+  state.bridgeToken = "";
+  Object.keys(state.pending).forEach(function (id) {
+    var pending = state.pending[id];
+    delete state.pending[id];
+    pending.reject(error);
+  });
+  if (typeof applyBridgeUnavailableState === "function") {
+    applyBridgeUnavailableState(error);
+  }
+}
+
 function cancelBridgeRequest(requestId) {
   if (!requestId) {
     return Promise.resolve({ cancelled: false });
@@ -328,9 +347,23 @@ function scheduleFocusStateReport() {
 
 if (window.chrome && window.chrome.webview) {
   window.chrome.webview.addEventListener("message", function (event) {
-    var response = event.data;
-    if (typeof response === "string") {
-      response = JSON.parse(response);
+    var response;
+    try {
+      response = event.data;
+      if (typeof response === "string") {
+        response = JSON.parse(response);
+      }
+    } catch (error) {
+      failBridgeTransport(null, error);
+      return;
+    }
+    if (!response || typeof response !== "object" || Array.isArray(response)) {
+      failBridgeTransport(null, new Error("WebView bridge returned an invalid response envelope."));
+      return;
+    }
+    if (response && response.transportFailure && !response.id) {
+      failBridgeTransport(response, null);
+      return;
     }
     if (response && response.type === "modelDiagnostics") {
       if (typeof handleModelDiagnosticsUpdate === "function") {
@@ -460,6 +493,8 @@ if (window.chrome && window.chrome.webview) {
     } else {
       var error = new Error(response.error || "Bridge error");
       error.detail = response.errorDetail || response.error || "";
+      error.code = response.errorCode || "bridge_request_failed";
+      error.transportFailure = !!response.transportFailure;
       error.cancelled = !!response.cancelled;
       pending.reject(error);
     }

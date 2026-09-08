@@ -236,6 +236,10 @@
     if (!artifact) {
       return null;
     }
+    context = {
+      chatId: context && context.chatId ? context.chatId : state.activeChatId,
+      messageId: context && context.messageId ? context.messageId : ""
+    };
 
     var config = artifactConfig(artifact);
     var node = document.createElement("section");
@@ -482,19 +486,21 @@
   }
 
   function saveArtifact(context, artifact) {
-    if (!context || !context.messageId) {
+    if (!context || !context.chatId || !context.messageId) {
       return;
     }
-    var key = context.messageId;
+    var chatId = context.chatId;
+    var messageId = context.messageId;
+    var key = chatId + "\n" + messageId;
     var dataJson = JSON.stringify(artifact);
-    updateLocalMessageArtifact(context.messageId, dataJson);
+    updateLocalMessageArtifact(chatId, messageId, dataJson);
     if (saveTimers[key]) {
       window.clearTimeout(saveTimers[key]);
     }
     saveTimers[key] = window.setTimeout(function () {
       send("updateMessageActivityData", {
-        chatId: state.activeChatId,
-        messageId: context.messageId,
+        chatId: chatId,
+        messageId: messageId,
         dataJson: dataJson
       }).catch(function (error) {
         log("Chart artifact save failed: " + (error.detail || error.message), "error");
@@ -502,7 +508,10 @@
     }, 350);
   }
 
-  function updateLocalMessageArtifact(targetMessageId, dataJson) {
+  function updateLocalMessageArtifact(chatId, targetMessageId, dataJson) {
+    if (state.activeChatId !== chatId) {
+      return false;
+    }
     state.messages.forEach(function (message) {
       if (messageId(message) === targetMessageId && messageActivity(message)) {
         var activity = messageActivity(message);
@@ -510,9 +519,12 @@
         activity.dataJson = dataJson;
       }
     });
+    return true;
   }
 
   async function refreshArtifactFromExcel(artifact, context, button) {
+    var chatId = context.chatId;
+    var targetMessageId = context.messageId;
     var source = artifactValue(artifact, "Source", "source", {}) || {};
     var mode = artifactValue(source, "SourceMode", "sourceMode", "selection");
     var args = {
@@ -533,7 +545,12 @@
     button.disabled = true;
     button.textContent = "Обновляю...";
     try {
-      var result = await send("runTool", { toolId: "excel.create_chat_chart", arguments: args, dryRun: false });
+      var result = await send("runTool", {
+        chatId: chatId,
+        toolId: "excel.create_chat_chart",
+        arguments: args,
+        dryRun: false
+      });
       if (result.Success === false || result.success === false) {
         throw new Error(result.Message || result.message || "Tool failed.");
       }
@@ -547,9 +564,10 @@
       setConfigValue(nextConfig, "Transposed", "transposed", isTransposed(artifactConfig(artifact)));
       resetConfigForCurrentOrientation(nextArtifact, nextConfig);
       dataJson = JSON.stringify(nextArtifact);
-      updateLocalMessageArtifact(context.messageId, dataJson);
-      await send("updateMessageActivityData", { chatId: state.activeChatId, messageId: context.messageId, dataJson: dataJson });
-      renderMessages();
+      await send("updateMessageActivityData", { chatId: chatId, messageId: targetMessageId, dataJson: dataJson });
+      if (updateLocalMessageArtifact(chatId, targetMessageId, dataJson)) {
+        renderMessages();
+      }
     } catch (error) {
       log("Chart refresh failed: " + (error.detail || error.message), "error");
     } finally {

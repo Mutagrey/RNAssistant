@@ -50,6 +50,11 @@ path/title, folder/mail id и selection reference. Долгоживущие COM-
   `confirmAgentTool` и `runTool` сначала переходят на cancellable worker boundary;
   Office-owned действия внутри них по-прежнему маршалятся через bound dispatcher.
   Поэтому долгий run не блокирует доставку cancel и chat-navigation команд.
+- Bridge request разбирается один раз как typed envelope. Любая terminal response,
+  включая внешний аварийный путь, сериализуется штатным `BridgeResponse` и сохраняет
+  request id. Если повреждение envelope не позволяет восстановить id, UI помечает
+  transport недоступным и отклоняет все pending promises с явным
+  `bridge_transport_failed`; mutation автоматически не повторяется.
 - Фоновая синхронизация чатов в WebView использует catalog-only projection
   `listChats`: summaries чатов/документов, active id и run view. Полный transcript,
   context, artifacts и HTML workspace загружаются только через `init`, явный выбор

@@ -49,7 +49,12 @@ class Element {
 const body = new Element("body");
 const copied = [];
 const context = vm.createContext({
-  document: { body, createElement: tag => new Element(tag), execCommand: () => true },
+  document: {
+    body,
+    createElement: tag => new Element(tag),
+    createTextNode: text => { const node = new Element("text"); node.textContent = text; return node; },
+    execCommand: () => true
+  },
   navigator: { clipboard: { writeText(text) { copied.push(String(text)); return Promise.resolve(); } } }
 });
 context.window = context;
@@ -111,5 +116,68 @@ function settle() { return new Promise(resolve => setImmediate(resolve)); }
   assert.equal(context.tryRenderChartArtifact({ data: "not-json" }), null);
   assert.equal(context.tryRenderChartArtifact({ data: '{"type":"not-a-chart"}' }), null);
   console.log("PASS agent JSON viewer: clipboard failures propagate and old renderer/cross-owner parser are removed");
-  console.log("OK 4/4");
+
+  const chartPayload = JSON.stringify({
+    type: "rnassistant.chart", title: "Sales",
+    source: { workbook: "Book.xlsx", sheet: "Data", address: "A1:B2" },
+    columns: [{ name: "Month", kind: "category" }, { name: "Sales", kind: "number" }],
+    rows: [{ Month: "Jan", Sales: 10 }],
+    config: { chartType: "line", x: "Month", series: ["Sales"] }
+  });
+  const refreshedPayload = JSON.stringify({
+    type: "rnassistant.chart", title: "Sales",
+    source: { workbook: "Book.xlsx", sheet: "Data", address: "A1:B3" },
+    columns: [{ name: "Month", kind: "category" }, { name: "Sales", kind: "number" }],
+    rows: [{ Month: "Feb", Sales: 20 }],
+    config: { chartType: "line", x: "Month", series: ["Sales"] }
+  });
+  const bridgeCalls = [];
+  const delayedSaves = [];
+  let releaseRefresh;
+  let renders = 0;
+  context.state = {
+    activeChatId: "chat-a",
+    messages: [{ id: "message-a", activity: { dataJson: chartPayload } }]
+  };
+  context.echarts = {
+    getInstanceByDom() { return null; },
+    init() { return { clear() {}, setOption() {}, off() {}, on() {}, resize() {} }; }
+  };
+  context.setTimeout = (callback, delay) => {
+    if (delay === 350) delayedSaves.push(callback); else callback();
+    return delayedSaves.length;
+  };
+  context.clearTimeout = () => {};
+  context.renderMessages = () => { renders += 1; };
+  context.log = () => {};
+  context.send = (method, payload) => {
+    bridgeCalls.push({ method, payload: JSON.parse(JSON.stringify(payload)) });
+    if (method === "runTool") {
+      return new Promise(resolve => { releaseRefresh = resolve; });
+    }
+    return Promise.resolve({});
+  };
+  const chart = context.tryRenderChartArtifact(
+    { data: chartPayload }, { messageId: "message-a" });
+  button(chart, "По колонкам").click();
+  context.state.activeChatId = "chat-b";
+  context.state.messages = [];
+  delayedSaves.shift()();
+  await settle();
+  assert.equal(bridgeCalls.find(call => call.method === "updateMessageActivityData").payload.chatId, "chat-a",
+    "delayed chart save stays addressed to its source chat");
+
+  context.state.activeChatId = "chat-a";
+  button(chart, "Обновить").click();
+  assert.equal(bridgeCalls.find(call => call.method === "runTool").payload.chatId, "chat-a",
+    "chart refresh tool call stays addressed to its source chat");
+  context.state.activeChatId = "chat-b";
+  releaseRefresh({ Success: true, DataJson: refreshedPayload });
+  await settle(); await settle();
+  const updates = bridgeCalls.filter(call => call.method === "updateMessageActivityData");
+  assert.equal(updates.at(-1).payload.chatId, "chat-a",
+    "late chart refresh persists to its source chat");
+  assert.equal(renders, 0, "late chart refresh cannot rewrite the newly active chat projection");
+  console.log("PASS chart artifact: delayed save and refresh retain source chat identity");
+  console.log("OK 5/5");
 })().catch(error => { console.error(error); process.exitCode = 1; });

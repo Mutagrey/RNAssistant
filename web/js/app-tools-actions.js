@@ -213,6 +213,7 @@
         var args = semanticNext ? options.readNextArguments() : options.readRunArguments();
         if (options.setContinuation) options.setContinuation(null);
         var response = requireToolRunResult(await options.send("runTool", {
+          chatId: state.activeChatId,
           toolId: tool.Id,
           arguments: args,
           dryRun: !!dryRun

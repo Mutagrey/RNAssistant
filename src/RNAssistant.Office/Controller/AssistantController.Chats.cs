@@ -21,7 +21,7 @@ namespace RNAssistant.Office
         public ChatTrajectoryResponse GetChatTrajectory(ChatTrajectoryRequest request)
         {
             request = request ?? new ChatTrajectoryRequest();
-            var session = LoadSession(request.ChatId);
+            var session = LoadAddressedSession(request.ChatId);
             var events = _eventStore.Read(session, SessionEventReadMode.Validated);
             if (!string.IsNullOrWhiteSpace(request.View) && !TrajectoryViews.IsSupported(request.View))
             {
@@ -118,7 +118,7 @@ namespace RNAssistant.Office
 
         public ChatStateResponse DeleteMessage(string id, int index, string chatId = null)
         {
-            return WithReservedChatState(LoadSession(chatId), session =>
+            return WithReservedChatState(LoadAddressedSession(chatId), session =>
             {
                 var targetIndex = -1;
                 if (!string.IsNullOrWhiteSpace(id))
@@ -163,7 +163,7 @@ namespace RNAssistant.Office
 
         public ChatStateResponse ForkChat(string id, int index, string chatId = null)
         {
-            var source = LoadSession(chatId);
+            var source = LoadAddressedSession(chatId);
             ChatSession fork;
             using (ReserveChatOperation(source))
             {
@@ -269,6 +269,10 @@ namespace RNAssistant.Office
 
         public ChatStateResponse UpdateMessageActivityData(string messageId, string dataJson, string chatId = null)
         {
+            if (string.IsNullOrWhiteSpace(chatId))
+            {
+                throw new InvalidOperationException("An exact chat id is required for chart updates.");
+            }
             if (string.IsNullOrWhiteSpace(messageId))
             {
                 throw new InvalidOperationException("messageId is required.");
@@ -286,7 +290,13 @@ namespace RNAssistant.Office
                 throw new InvalidOperationException("Only rnassistant.chart activity data can be updated.");
             }
 
-            return WithReservedChatState(LoadSession(chatId), session =>
+            var addressed = LoadAddressedSession(chatId);
+            if (!_chatSessions.IsCurrentDocument(addressed))
+            {
+                throw new InvalidOperationException(
+                    "Chart updates are limited to a chat of the current document.");
+            }
+            return WithReservedChatState(addressed, session =>
             {
                 var message = (session.Messages ?? new List<ChatMessage>()).FirstOrDefault(m =>
                     m != null && string.Equals(m.Id, messageId, StringComparison.OrdinalIgnoreCase));
@@ -308,7 +318,7 @@ namespace RNAssistant.Office
 
         public ChatStateResponse GetChatState(string chatId = null)
         {
-            return ChatState(LoadSession(chatId));
+            return ChatState(LoadAddressedSession(chatId));
         }
 
         public ChatStateResponse CreateChat(string title)
@@ -377,7 +387,7 @@ namespace RNAssistant.Office
 
         public ChatStateResponse RenameChat(string chatId, string title)
         {
-            return WithReservedChatState(LoadSession(chatId), session =>
+            return WithReservedChatState(LoadAddressedSession(chatId), session =>
             {
                 if (!string.IsNullOrWhiteSpace(title))
                 {
@@ -389,7 +399,7 @@ namespace RNAssistant.Office
 
         public ChatStateResponse SetChatModel(string chatId, string model)
         {
-            return WithReservedChatState(LoadSession(chatId), session =>
+            return WithReservedChatState(LoadAddressedSession(chatId), session =>
             {
                 session.Model = string.IsNullOrWhiteSpace(model) ? null : model.Trim();
                 SaveSessionChanges(session);
@@ -398,7 +408,7 @@ namespace RNAssistant.Office
 
         public ChatStateResponse SetChatMode(string chatId, string mode)
         {
-            return WithReservedChatState(LoadSession(chatId), session =>
+            return WithReservedChatState(LoadAddressedSession(chatId), session =>
             {
                 session.Mode = ChatModes.Normalize(mode);
                 RemovePendingAgentToolsForSession(session.Id);
@@ -410,7 +420,7 @@ namespace RNAssistant.Office
 
         public ChatStateResponse SetChatReasoning(string chatId, bool enabled)
         {
-            return WithReservedChatState(LoadSession(chatId), session =>
+            return WithReservedChatState(LoadAddressedSession(chatId), session =>
             {
                 session.ReasoningEnabled = enabled;
                 SaveSessionChanges(session);
@@ -419,7 +429,7 @@ namespace RNAssistant.Office
 
         public ChatStateResponse ClearChat(string chatId)
         {
-            return WithReservedChatState(LoadSession(chatId), session =>
+            return WithReservedChatState(LoadAddressedSession(chatId), session =>
             {
                 _toolExecutor.MutateChatResources(session, new ChatResourceMutationIntent(ChatResourceMutationKind.Clear), () =>
                 {

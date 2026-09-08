@@ -39,7 +39,7 @@ namespace RNAssistant.Office
 
         public ArtifactPdfViewerDto ReadArtifactPdfInfo(string chatId, string resourceUri)
         {
-            return _artifactViewer.ReadPdfInfo(LoadSession(chatId), resourceUri);
+            return _artifactViewer.ReadPdfInfo(LoadArtifactViewerSession(chatId), resourceUri);
         }
 
         public ArtifactPdfPageDto ReadArtifactPdfPage(string chatId, string resourceUri, int pageIndex, CancellationToken cancellationToken = default(CancellationToken))
@@ -55,7 +55,7 @@ namespace RNAssistant.Office
         private ResourceDataOpenResponse OpenArtifactView(string chatId, string resourceUri, string view, string path = null,
             CancellationToken cancellationToken = default(CancellationToken))
         {
-            var session = LoadSession(chatId);
+            var session = LoadArtifactViewerSession(chatId);
             var artifact = _toolExecutor.ResourceGateway.ResolveArtifact(session, resourceUri);
             return _resourceData.Open(session, "viewer", ChatResourceUri.CreateArtifactRevision(session, artifact), view, path, cancellationToken);
         }
@@ -69,6 +69,13 @@ namespace RNAssistant.Office
                 Width = data.Binary.Width, Height = data.Binary.Height,
                 ImageMimeType = data.Binary.Payload.ContentType, ImageContentSha256 = data.Binary.Payload.Sha256,
                 ImageByteLength = data.Binary.Payload.ByteLength, Data = data };
+        }
+
+        private ChatSession LoadArtifactViewerSession(string chatId)
+        {
+            if (string.IsNullOrWhiteSpace(chatId))
+                throw new InvalidOperationException("RESOURCE_ACCESS_DENIED: an explicit chat is required for artifact viewing.");
+            return LoadAddressedSession(chatId);
         }
     }
 }

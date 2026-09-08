@@ -242,11 +242,28 @@ namespace RNAssistant.Office
             string toolId,
             IDictionary<string, object> arguments,
             bool dryRun,
+            string chatId,
             Action<string, string> progress = null,
             CancellationToken cancellationToken = default(CancellationToken))
         {
+            if (string.IsNullOrWhiteSpace(chatId))
+            {
+                return ToolRunResult.Error(
+                    "An exact chat id is required for manual tool execution.",
+                    null,
+                    "manual_tool_chat_required",
+                    false);
+            }
             var settings = _settingsService.Load();
-            var session = LoadSession(null);
+            var session = LoadAddressedSession(chatId);
+            if (!_chatSessions.IsCurrentDocument(session))
+            {
+                return ToolRunResult.Error(
+                    "Manual tool execution is limited to a chat of the current document.",
+                    null,
+                    "manual_tool_document_mismatch",
+                    false);
+            }
             var tools = _toolCatalog.GetVisibleTools().Where(s => s.Enabled).ToList();
             var command = new ToolInvocation { ToolId = toolId };
             foreach (var pair in arguments ?? new Dictionary<string, object>())

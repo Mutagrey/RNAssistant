@@ -21,7 +21,7 @@ namespace RNAssistant.Office
             if (request == null || string.IsNullOrWhiteSpace(request.ChatId) ||
                 string.IsNullOrWhiteSpace(request.WorkspaceId) || string.IsNullOrWhiteSpace(request.BindingName))
                 throw new InvalidOperationException("RESOURCE_ACCESS_DENIED: explicit workspace binding required.");
-            var session = LoadSession(request.ChatId);
+            var session = LoadAddressedSession(request.ChatId);
             if (!string.Equals(session.ActiveHtmlArtifactId, request.WorkspaceId, StringComparison.Ordinal))
                 throw new InvalidOperationException("RESOURCE_ACCESS_DENIED: the workspace revision is no longer active.");
             var matches = session.HtmlWorkspace.DataSources.Where(item => item.Name == request.BindingName).ToArray();
@@ -83,7 +83,7 @@ namespace RNAssistant.Office
 
         public HtmlWorkspaceResponse GetHtmlWorkspace(string chatId = null)
         {
-            var session = LoadSession(chatId);
+            var session = LoadAddressedSession(chatId);
             return HtmlWorkspaceState(session);
         }
 
@@ -165,7 +165,7 @@ namespace RNAssistant.Office
             string expectedActiveHtmlArtifactId,
             CancellationToken cancellationToken = default(CancellationToken))
         {
-            return WithReservedSession(LoadSession(chatId), session =>
+            return WithReservedSession(LoadAddressedSession(chatId), session =>
             {
                 var previousArtifactId = session.ActiveHtmlArtifactId;
                 var exportArtifactId = _toolExecutor.MutateLocalResources(session, "common.html_workspace_export",
@@ -191,7 +191,7 @@ namespace RNAssistant.Office
 
         public HtmlWorkspaceResponse DeleteHtmlWorkspaceFile(string chatId, string path)
         {
-            return WithReservedSession(LoadSession(chatId), session =>
+            return WithReservedSession(LoadAddressedSession(chatId), session =>
             {
                 _toolExecutor.MutateLocalResources(session, "common.html_workspace_delete", new Dictionary<string, object> { ["target"] = path },
                     () => HtmlWorkspaceToolService.DeleteFile(session, path));
@@ -202,7 +202,7 @@ namespace RNAssistant.Office
 
         public HtmlWorkspaceResponse DeleteHtmlWorkspaceData(string chatId, string name)
         {
-            return WithReservedSession(LoadSession(chatId), session =>
+            return WithReservedSession(LoadAddressedSession(chatId), session =>
             {
                 _toolExecutor.MutateLocalResources(session, "common.html_workspace_delete", new Dictionary<string, object> { ["target"] = name },
                     () => HtmlWorkspaceToolService.DeleteDataSource(session, name));
@@ -213,7 +213,7 @@ namespace RNAssistant.Office
 
         public HtmlWorkspaceResponse SetActiveHtmlWorkspaceFile(string chatId, string path)
         {
-            return WithReservedSession(LoadSession(chatId), session =>
+            return WithReservedSession(LoadAddressedSession(chatId), session =>
             {
                 _toolExecutor.MutateLocalResources(session, "common.html_workspace_select", new Dictionary<string, object> { ["path"] = path },
                     () => HtmlWorkspaceToolService.SetActiveFile(session, path));
@@ -224,7 +224,7 @@ namespace RNAssistant.Office
 
         public HtmlWorkspaceResponse RestoreHtmlWorkspaceSnapshot(string chatId, string snapshotId)
         {
-            return WithReservedSession(LoadSession(chatId), session =>
+            return WithReservedSession(LoadAddressedSession(chatId), session =>
             {
                 var recovery = session.HtmlWorkspaceRecovery ?? new HtmlWorkspaceRecoveryState();
                 var degraded = string.Equals(recovery.Status, HtmlWorkspaceRecoveryStatuses.Degraded, System.StringComparison.OrdinalIgnoreCase);
@@ -259,7 +259,7 @@ namespace RNAssistant.Office
 
         public HtmlWorkspaceResponse RedoHtmlWorkspaceSnapshot(string chatId, string snapshotId)
         {
-            return WithReservedSession(LoadSession(chatId), session =>
+            return WithReservedSession(LoadAddressedSession(chatId), session =>
             {
                 var branches = HtmlWorkspaceNavigationService.GetRedoBranches(session);
                 if (string.IsNullOrWhiteSpace(snapshotId) && branches.Count > 1)

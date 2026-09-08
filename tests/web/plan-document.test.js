@@ -74,7 +74,7 @@ vm.runInContext(source, context, { filename: "app-html-workspace-artifacts.js" }
   ["app-task-list.js", "app-agent-activity.js"].forEach(asset => {
     assert.ok(index.includes(asset + "?v=" + (asset === "app-agent-activity.js" ? "live-feed-20260907-1" : "planning-intents-20260902-1")), asset + " has the current planning-intent cache key");
   });
-  assert.ok(index.includes("app-html-workspace-actions.js?v=html-read-20260906-1"),
+  assert.ok(index.includes("app-html-workspace-actions.js?v=manual-tool-chat-20260908-1"),
     "app-html-workspace-actions.js has the current preview cache key");
   assert.ok(index.includes("app-html-workspace.js?v=html-read-20260906-1"),
     "app-html-workspace.js has the current preview cache key");
@@ -161,6 +161,7 @@ vm.runInContext(source, context, { filename: "app-html-workspace-artifacts.js" }
     revision: 1
   }), true);
   assert.equal(calls[0].payload.toolId, "common.plan_doc_restore");
+  assert.equal(calls[0].payload.chatId, "chat-c");
   assert.deepEqual(calls[0].payload.arguments, { version: 1 });
   assert.equal(calls[0].payload.dryRun, false);
   assert.match(confirmations[0], /v1.*новую версию/);
@@ -176,6 +177,8 @@ vm.runInContext(source, context, { filename: "app-html-workspace-artifacts.js" }
   }), true);
   assert.equal(calls[0].payload.dryRun, true);
   assert.equal(calls[1].payload.dryRun, false);
+  assert.equal(calls[0].payload.chatId, "chat-c");
+  assert.equal(calls[1].payload.chatId, "chat-c");
   assert.deepEqual(calls[0].payload.arguments, {});
   assert.deepEqual(calls[1].payload.arguments, calls[0].payload.arguments);
   assert.match(confirmations[0], /ревизия удаления/);

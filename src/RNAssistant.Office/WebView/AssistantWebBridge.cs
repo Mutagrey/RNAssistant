@@ -35,14 +35,30 @@ namespace RNAssistant.Office.WebView
             _controller.ResourceAuthorityChanged += ReportResourceChanged;
         }
 
-        public async Task<string> HandleMessageAsync(string requestJson)
+        public Task<string> HandleMessageAsync(string requestJson)
+        {
+            try
+            {
+                var request = JsonConvert.DeserializeObject<BridgeRequest>(requestJson);
+                if (request == null) throw new InvalidOperationException("WebView bridge request is missing.");
+                return HandleMessageAsync(request);
+            }
+            catch (Exception ex)
+            {
+                RuntimeLog.Error("WebView bridge request envelope failed.", ex);
+                return Task.FromResult(SerializeFailure(null, "WebView transport failed.",
+                    ex.Message, "bridge_transport_failed", true));
+            }
+        }
+
+        internal async Task<string> HandleMessageAsync(BridgeRequest request)
         {
             string id = null;
             CancellationTokenSource cancellationSource = null;
             try
             {
                 _cancellations.ThrowIfDisposed();
-                var request = JsonConvert.DeserializeObject<BridgeRequest>(requestJson) ?? new BridgeRequest();
+                if (request == null) throw new InvalidOperationException("WebView bridge request is missing.");
                 id = request.Id;
                 var type = (request.Type ?? string.Empty).Trim();
                 var payload = request.Payload ?? JValue.CreateNull();
@@ -346,6 +362,7 @@ namespace RNAssistant.Office.WebView
                                 runTool.ToolId,
                                 runArguments,
                                 runTool.DryRun,
+                                runTool.ChatId,
                                 (phase, message) => ReportProgress(id, phase, message),
                                 cancellationToken),
                             cancellationToken).ConfigureAwait(false);
@@ -559,25 +576,16 @@ namespace RNAssistant.Office.WebView
             }
             catch (OperationCanceledException ex)
             {
-                return Serialize(new BridgeResponse
-                {
-                    Id = id,
-                    Ok = false,
-                    Error = "Request cancelled.",
-                    ErrorDetail = string.IsNullOrWhiteSpace(ex.Message) ? "Request cancelled." : ex.Message,
-                    Cancelled = true
-                });
+                return SerializeFailure(id, "Request cancelled.",
+                    string.IsNullOrWhiteSpace(ex.Message) ? "Request cancelled." : ex.Message,
+                    "bridge_request_cancelled", false, true);
             }
             catch (Exception ex)
             {
                 RuntimeLog.Error("WebView bridge request failed.", ex);
-                return Serialize(new BridgeResponse
-                {
-                    Id = id,
-                    Ok = false,
-                    Error = ex.Message,
-                    ErrorDetail = "Request failed. See the local runtime log for details."
-                });
+                return SerializeFailure(id, ex.Message,
+                    "Request failed. See the local runtime log for details.",
+                    "bridge_request_failed", false);
             }
             finally
             {
@@ -626,6 +634,21 @@ namespace RNAssistant.Office.WebView
         private static string Serialize(BridgeResponse response)
         {
             return JsonConvert.SerializeObject(response);
+        }
+
+        internal static string SerializeFailure(string id, string error, string detail,
+            string errorCode, bool transportFailure, bool cancelled = false)
+        {
+            return Serialize(new BridgeResponse
+            {
+                Id = id,
+                Ok = false,
+                Error = error,
+                ErrorDetail = detail,
+                ErrorCode = errorCode,
+                TransportFailure = transportFailure ? (bool?)true : null,
+                Cancelled = cancelled ? (bool?)true : null
+            });
         }
 
         private static Task<T> RunBridgeWorkAsync<T>(Func<T> work, CancellationToken cancellationToken)

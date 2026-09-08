@@ -401,6 +401,7 @@ namespace RNAssistant.Office.WebView
 
         private async void OnWebMessageReceived(object sender, CoreWebView2WebMessageReceivedEventArgs e)
         {
+            BridgeRequest request = null;
             try
             {
                 if (!WebViewSecurityPolicy.IsTrustedDocument(e.Source, _trustedDocumentUri))
@@ -409,32 +410,40 @@ namespace RNAssistant.Office.WebView
                     return;
                 }
 
-                var requestJson = e.WebMessageAsJson;
-                if (TryHandleHostStateMessage(requestJson))
+                request = JsonConvert.DeserializeObject<BridgeRequest>(e.WebMessageAsJson);
+                if (request == null)
+                {
+                    throw new InvalidOperationException("WebView bridge request is missing.");
+                }
+                if (TryHandleHostStateMessage(request))
                 {
                     return;
                 }
 
-                var responseJson = await _bridge.HandleMessageAsync(requestJson).ConfigureAwait(true);
+                var responseJson = await _bridge.HandleMessageAsync(request).ConfigureAwait(true);
                 PostBridgeMessage(responseJson);
             }
             catch (Exception ex)
             {
                 RuntimeLog.Error("Web message handling failed.", ex);
-                PostBridgeMessage("{\"ok\":false,\"error\":\"" + EscapeJson(ex.Message) + "\"}");
+                PostBridgeMessage(AssistantWebBridge.SerializeFailure(
+                    request == null ? null : request.Id,
+                    "WebView transport failed.", ex.Message,
+                    "bridge_transport_failed", true));
             }
         }
 
-        private bool TryHandleHostStateMessage(string requestJson)
+        private bool TryHandleHostStateMessage(BridgeRequest request)
         {
-            var request = JsonConvert.DeserializeObject<FocusStateMessage>(requestJson);
             var type = request == null ? string.Empty : (request.Type ?? string.Empty).Trim();
             if (!string.Equals(type, "focusState", StringComparison.OrdinalIgnoreCase))
             {
                 return false;
             }
 
-            _webContentWantsKeyboard = request.Payload != null && request.Payload.WantsKeyboard;
+            var payload = request.Payload == null || request.Payload.Type == Newtonsoft.Json.Linq.JTokenType.Null
+                ? null : request.Payload.ToObject<FocusStatePayload>();
+            _webContentWantsKeyboard = payload != null && payload.WantsKeyboard;
             return true;
         }
 
@@ -626,11 +635,6 @@ namespace RNAssistant.Office.WebView
             {
                 _webView.CoreWebView2.PostWebMessageAsJson(json);
             }
-        }
-
-        private static string EscapeJson(string value)
-        {
-            return (value ?? string.Empty).Replace("\\", "\\\\").Replace("\"", "\\\"");
         }
 
         private bool IsKeyboardFocusInsidePane(IntPtr focusedWindow)

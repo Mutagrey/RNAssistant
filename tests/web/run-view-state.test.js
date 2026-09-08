@@ -130,7 +130,7 @@ function state(runId, lifecycle = "completed", health = "clean", pending = null)
   assert.ok(index.includes("app-agent.js?v=run-replay-20260907-1"),
     "agent outcome uses the diagnostics cache key");
   assert.ok(index.includes("app-chat-session.js?v=startup-secondary-lazy-20260907-1"), "chat session uses the current cache key");
-  assert.ok(index.includes("app-core.js?v=stream-coalesce-20260907-1"), "core uses the chat sync cache key");
+  assert.ok(index.includes("app-core.js?v=bridge-transport-20260908-1"), "core uses the bridge transport cache key");
   assert.ok(index.includes("app-chat-state.js?v=context-usage-display-20260907-1"), "chat state uses the current cache key");
   assert.ok(index.includes("app-messages.js?v=run-replay-20260907-1"), "messages uses the transcript incremental cache key");
   assert.equal(/function updateEstimatedContextUsage\(\)[\s\S]*?state\.messages\.forEach/.test(chatState), false,

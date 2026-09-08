@@ -265,15 +265,30 @@ namespace RNAssistant.Harness
             {
                 var adapter = new FakeOfficeAdapter();
                 var store = new ChatStore(paths);
-                var service = new ChatSessionService(adapter, ConversationStore(store));
+                var registry = new DocumentAuthorityRegistry(paths);
+                var service = new ChatSessionService(adapter, ConversationStore(store), null, registry);
                 var active = service.LoadSession(null);
                 var archived = store.Create("Word", "archived-doc", "Archive.docx", "Archive chat");
+                archived.DocumentPath = "C:\\Archive.docx";
+                archived.DocumentAuthorityId = registry.Resolve(
+                    archived.Host, null, archived.DocumentPath).Id;
+                store.Save(archived);
+                var activeAuthorityId = active.DocumentAuthorityId;
+                var archivedAuthorityId = archived.DocumentAuthorityId;
 
                 var loaded = service.LoadAddressedSession(archived.Id);
 
                 AssertEqual(archived.Id, loaded.Id, "addressed session id");
                 AssertEqual("Word", loaded.Host, "addressed host");
                 AssertEqual("archived-doc", loaded.DocumentKey, "addressed document key");
+                AssertEqual(archivedAuthorityId, loaded.DocumentAuthorityId,
+                    "addressed load preserves the foreign document authority");
+                AssertEqual(activeAuthorityId, registry.Resolve(adapter.HostName,
+                    adapter.RuntimeDocumentKey, adapter.DocumentPathValue).Id,
+                    "addressed load does not bind the current runtime to the foreign authority");
+                AssertEqual(archivedAuthorityId, registry.Resolve(archived.Host,
+                    null, archived.DocumentPath).Id,
+                    "addressed load does not move the foreign authority locator");
                 AssertEqual(active.Id, service.GetActiveSession().Id,
                     "addressed load preserves the selected chat");
             });

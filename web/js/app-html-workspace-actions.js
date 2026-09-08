@@ -134,6 +134,7 @@
     async function savePlan(selection, chatId) {
       var plan = options.validatePlanDraft(selection.item);
       var result = await options.send("runTool", {
+        chatId: chatId,
         toolId: "common.plan_doc_save",
         arguments: { title: plan.title, markdown: plan.markdown, status: "draft" },
         dryRun: false
@@ -179,6 +180,7 @@
       try {
         var args = {};
         var preview = await options.send("runTool", {
+          chatId: chatId,
           toolId: "common.plan_doc_delete",
           arguments: args,
           dryRun: true
@@ -196,6 +198,7 @@
             : "Ссылок в сообщениях нет.");
         if (!window.confirm(warning)) return false;
         var result = await options.send("runTool", {
+          chatId: chatId,
           toolId: "common.plan_doc_delete",
           arguments: args,
           dryRun: false
@@ -246,6 +249,7 @@
         if (!window.confirm(warning)) return false;
         var chatId = state.activeChatId;
         var result = await options.send("runTool", {
+          chatId: chatId,
           toolId: "common.plan_doc_restore",
           arguments: {
             version: Number(request.revision)
@@ -434,6 +438,7 @@
       var chatId = state.activeChatId;
       try {
         var result = await options.send("runTool", {
+          chatId: chatId,
           toolId: "common.plan_doc_save",
           arguments: {
             title: "Новый план",
@@ -509,6 +514,7 @@
           var args = {};
           if (targets[index]) args.name = targets[index];
           var result = await options.send("runTool", {
+            chatId: chatId,
             toolId: "common.html_data_refresh",
             arguments: args,
             dryRun: false

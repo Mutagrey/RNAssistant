@@ -25,15 +25,6 @@ namespace RNAssistant.Office.Contracts
         public string BridgeToken { get; set; }
     }
 
-    public sealed class FocusStateMessage
-    {
-        [JsonProperty("type")]
-        public string Type { get; set; }
-
-        [JsonProperty("payload")]
-        public FocusStatePayload Payload { get; set; }
-    }
-
     public sealed class FocusStatePayload
     {
         [JsonProperty("wantsKeyboard")]
@@ -56,6 +47,12 @@ namespace RNAssistant.Office.Contracts
 
         [JsonProperty("errorDetail", NullValueHandling = NullValueHandling.Ignore)]
         public string ErrorDetail { get; set; }
+
+        [JsonProperty("errorCode", NullValueHandling = NullValueHandling.Ignore)]
+        public string ErrorCode { get; set; }
+
+        [JsonProperty("transportFailure", NullValueHandling = NullValueHandling.Ignore)]
+        public bool? TransportFailure { get; set; }
 
         [JsonProperty("cancelled", NullValueHandling = NullValueHandling.Ignore)]
         public bool? Cancelled { get; set; }
@@ -425,7 +422,7 @@ namespace RNAssistant.Office.Contracts
         public string DataJson { get; set; }
     }
 
-    public sealed class RunToolPayload
+    public sealed class RunToolPayload : ChatPayload
     {
         [JsonProperty("toolId")]
         public string ToolId { get; set; }

@@ -209,7 +209,9 @@ namespace RNAssistant.Office
                     message.Role == "assistant" && message.ToolCallId == pending.Command.ToolCallId &&
                     message.ToolName == pending.Command.ToolId &&
                     message.ToolResultProtocolVersion == RNAssistant.Core.ModelProtocol.ToolResultWire.CurrentVersion);
-                if (acceptedCall != null && RNAssistant.Core.ModelProtocol.ConversationResponseHistoryReader.Read(acceptedCall).Success)
+                if (acceptedCall != null &&
+                    (AcceptedCallPayloadService.IsExternalizedCall(acceptedCall) ||
+                     RNAssistant.Core.ModelProtocol.ConversationResponseHistoryReader.Read(acceptedCall).Success))
                     session.Messages.Add(AgentJsonProtocol.CreateToolResultMessage(
                         CloneCommand(pending.Command),
                         RNAssistant.Core.Tools.Contracts.ToolResult.Error(result.Message,
@@ -260,15 +262,19 @@ namespace RNAssistant.Office
             {
                 throw new InvalidOperationException("Pending tool id is required.");
             }
+            if (string.IsNullOrWhiteSpace(chatId))
+            {
+                throw new InvalidOperationException("An exact chat id is required for a pending tool.");
+            }
 
             pending = TryGetPendingAgentTool(pendingId);
             if (pending != null)
             {
                 EnsurePendingChatMatches(pending, chatId);
-                return LoadSession(pending.SessionId);
+                return LoadAddressedSession(pending.SessionId);
             }
 
-            var session = LoadSession(chatId);
+            var session = LoadAddressedSession(chatId);
             pending = FindPendingAgentTool(session, pendingId);
             if (pending == null)
             {

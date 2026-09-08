@@ -423,7 +423,7 @@ namespace RNAssistant.Harness
             var bridge = new AssistantWebBridge(controller, progressMessages.Add);
             var token = BridgeToken(bridge);
             var responseJson = bridge.HandleMessageAsync(
-                "{\"id\":\"b1\",\"type\":\"runTool\",\"bridgeToken\":\"" + token + "\",\"payload\":{\"toolId\":\"excel.add_sheet\",\"arguments\":{\"name\":\"Report\",\"count\":2,\"enabled\":true,\"values\":[[\"A\"]]},\"dryRun\":true}}")
+                "{\"id\":\"b1\",\"type\":\"runTool\",\"bridgeToken\":\"" + token + "\",\"payload\":{\"chatId\":\"chat-a\",\"toolId\":\"excel.add_sheet\",\"arguments\":{\"name\":\"Report\",\"count\":2,\"enabled\":true,\"values\":[[\"A\"]]},\"dryRun\":true}}")
                 .GetAwaiter()
                 .GetResult();
 
@@ -431,6 +431,7 @@ namespace RNAssistant.Harness
             AssertTrue(response["ok"].Value<bool>(), "bridge response ok");
             AssertEqual("b1", response["id"].Value<string>(), "bridge response id");
             AssertTrue(response["payload"]["success"].Value<bool>(), "bridge payload success");
+            AssertEqual("chat-a", controller.LastChatId, "manual tool keeps exact chat identity");
             AssertEqual("excel.add_sheet", controller.LastToolId, "tool id");
             AssertContains(controller.LastArgumentsJson, "Report", "tool args");
             AssertEqual(2, JObject.Parse(controller.LastArgumentsJson)["count"].Value<int>(), "integer tool arg");
@@ -514,7 +515,7 @@ namespace RNAssistant.Harness
                 var token = BridgeToken(bridge);
                 var running = bridge.HandleMessageAsync(
                     "{\"id\":\"long-tool\",\"type\":\"runTool\",\"bridgeToken\":\"" + token +
-                    "\",\"payload\":{\"toolId\":\"fixture.read\",\"arguments\":{},\"dryRun\":true}}");
+                    "\",\"payload\":{\"chatId\":\"chat-a\",\"toolId\":\"fixture.read\",\"arguments\":{},\"dryRun\":true}}");
                 AssertTrue(entered.Wait(TimeSpan.FromSeconds(5)),
                     "long tool entered background bridge work");
                 try
@@ -600,6 +601,31 @@ namespace RNAssistant.Harness
             var token = BridgeToken(bridge);
 
             AssertTrue(!string.IsNullOrWhiteSpace(token), "bridge token returned");
+        }
+
+        private static void BridgeTransportFailureIsTypedAndCorrelated()
+        {
+            var json = AssistantWebBridge.SerializeFailure("request-17", "Transport failed.",
+                "line one\nline two\t\"quoted\"", "bridge_transport_failed", true);
+            var response = JsonConvert.DeserializeObject<BridgeResponse>(json);
+            AssertEqual("request-17", response.Id, "outer failure retains request correlation");
+            AssertTrue(!response.Ok && response.TransportFailure == true,
+                "outer failure uses the typed bridge response envelope");
+            AssertEqual("bridge_transport_failed", response.ErrorCode, "transport failure has a stable code");
+            AssertEqual("line one\nline two\t\"quoted\"", response.ErrorDetail,
+                "JSON serialization preserves exception control characters");
+
+            using (var bridge = new AssistantWebBridge(new AssistantController(), null))
+            {
+                var malformed = JsonConvert.DeserializeObject<BridgeResponse>(
+                    bridge.HandleMessageAsync("{not-json\n").GetAwaiter().GetResult());
+                AssertTrue(!malformed.Ok && malformed.TransportFailure == true && string.IsNullOrEmpty(malformed.Id),
+                    "unrecoverable malformed envelope is an explicit uncorrelated transport failure");
+                var missing = JsonConvert.DeserializeObject<BridgeResponse>(
+                    bridge.HandleMessageAsync("null").GetAwaiter().GetResult());
+                AssertTrue(!missing.Ok && missing.TransportFailure == true && string.IsNullOrEmpty(missing.Id),
+                    "missing envelope is also an explicit uncorrelated transport failure");
+            }
         }
 
         private static void BridgeListChatsIsCatalogOnly()

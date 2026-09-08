@@ -233,6 +233,7 @@ console.log("PASS Tool Library form: typed controls, omit/null, bounds and seman
   const outputs = [];
   let next = false;
   const actionState = {
+    activeChatId: "chat",
     tools: [{ Id: "common.capabilities_read" }], selectedToolIndex: 0
   };
   const actions = actionContext.RNAssistantToolActions.create({
@@ -270,6 +271,7 @@ console.log("PASS Tool Library form: typed controls, omit/null, bounds and seman
   await actions.run();
   assert.equal(continuations.at(-1).referencePath, "references/details.md");
   await actions.next();
+  assert.equal(calls[1].payload.chatId, "chat");
   assert.equal(calls[1].payload.arguments.action, "next");
   assert.equal(Object.prototype.hasOwnProperty.call(calls[1].payload.arguments, "cursor"), false);
   assert.equal(continuations.at(-1), null);

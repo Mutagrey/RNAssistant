@@ -934,11 +934,12 @@ namespace RNAssistant.Office
             return new { deleted = true };
         }
 
-        public ToolRunResult RunTool(string toolId, IDictionary<string, object> arguments, bool dryRun, Action<string, string> progress = null, CancellationToken cancellationToken = default(CancellationToken))
+        public ToolRunResult RunTool(string toolId, IDictionary<string, object> arguments, bool dryRun, string chatId, Action<string, string> progress = null, CancellationToken cancellationToken = default(CancellationToken))
         {
             cancellationToken.ThrowIfCancellationRequested();
             if (RunToolEntered != null) RunToolEntered.Set();
             if (RunToolRelease != null) RunToolRelease.Wait(cancellationToken);
+            LastChatId = chatId;
             LastToolId = toolId;
             LastArgumentsJson = JsonConvert.SerializeObject(arguments ?? new Dictionary<string, object>());
             LastDryRun = dryRun;

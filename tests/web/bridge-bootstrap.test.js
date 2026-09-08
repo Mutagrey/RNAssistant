@@ -11,6 +11,7 @@ const chatSessionSource = fs.readFileSync(path.join(root, "web/js/app-chat-sessi
 
 function createContext() {
   const posted = [];
+  let messageListener = null;
   const context = vm.createContext({
     console,
     setTimeout,
@@ -24,12 +25,12 @@ function createContext() {
   };
   context.chrome = {
     webview: {
-      addEventListener: () => {},
+      addEventListener: (type, listener) => { if (type === "message") messageListener = listener; },
       postMessage: message => posted.push(JSON.parse(JSON.stringify(message)))
     }
   };
   vm.runInContext(source, context, { filename: "app-core.js" });
-  return { context, posted };
+  return { context, posted, deliver: data => messageListener({ data }) };
 }
 
 (async function () {
@@ -98,7 +99,45 @@ function createContext() {
     console.log("PASS bridge bootstrap: failed init projection revokes token and queued calls");
   }
 
-  console.log("OK 4/4");
+  {
+    const { context, posted, deliver } = createContext();
+    context.state.bridgeToken = "token";
+    const first = context.send("listChats", {});
+    const second = context.send("getChatState", { chatId: "chat" });
+    deliver({ id: posted[0].id, ok: false, error: "Transport failed.", errorDetail: "line one\nline two", errorCode: "bridge_transport_failed", transportFailure: true });
+    await assert.rejects(first, error => error.code === "bridge_transport_failed" && error.transportFailure && error.detail.includes("line two"));
+    assert.equal(Object.keys(context.state.pending).length, 1);
+    deliver({ id: posted[1].id, ok: true, payload: { ok: true } });
+    await second;
+    assert.equal(context.state.bridgeUnavailable, false);
+    console.log("PASS bridge bootstrap: correlated transport failure settles only its request");
+  }
+
+  {
+    const { context, deliver } = createContext();
+    context.state.bridgeToken = "token";
+    const first = context.send("listChats", {});
+    const second = context.send("getChatState", { chatId: "chat" });
+    deliver({ ok: false, error: "Transport failed.", errorCode: "bridge_transport_failed", transportFailure: true });
+    const settled = await Promise.allSettled([first, second]);
+    assert.ok(settled.every(result => result.status === "rejected" && result.reason.transportFailure));
+    assert.equal(Object.keys(context.state.pending).length, 0);
+    assert.equal(context.state.bridgeUnavailable, true);
+    console.log("PASS bridge bootstrap: uncorrelated transport failure settles all waits");
+  }
+
+  {
+    const { context, deliver } = createContext();
+    context.state.bridgeToken = "token";
+    const pending = context.send("listChats", {});
+    deliver(null);
+    await assert.rejects(pending, error => error.transportFailure && error.code === "bridge_transport_failed");
+    assert.equal(Object.keys(context.state.pending).length, 0);
+    assert.equal(context.state.bridgeUnavailable, true);
+    console.log("PASS bridge bootstrap: invalid JSON values cannot strand pending requests");
+  }
+
+  console.log("OK 7/7");
 }()).catch(error => {
   console.error(error.stack || error);
   process.exitCode = 1;

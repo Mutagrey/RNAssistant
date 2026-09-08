@@ -427,7 +427,15 @@ namespace RNAssistant.Office.Services
                 session = _conversations.LoadOrCreateActive(host, documentKey, title);
             }
 
-            BindDocumentAuthority(session, host, runtimeKey, documentPath);
+            if (makeActive || IsCurrentDocument(session))
+            {
+                BindDocumentAuthority(session, host, runtimeKey, documentPath);
+            }
+            else if (string.IsNullOrWhiteSpace(session.DocumentAuthorityId))
+            {
+                BindDocumentAuthority(session, session.Host, null,
+                    ResolveDocumentPath(session));
+            }
 
             session.Mode = ChatModes.Normalize(session.Mode);
             if (makeActive && migrationDeferred)
