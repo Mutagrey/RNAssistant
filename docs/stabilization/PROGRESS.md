@@ -1,5 +1,12 @@
 # Stabilization progress
 
+Current build correction (2026-09-08): the existing read-only CAS presence check
+used by shared-context claim filtering is now public across the Core/Office assembly
+boundary. This fixes the reported `CS0122` in `ModelContextCompiler`; the downstream
+missing-metadata errors are expected build cascades. No contract or runtime behavior
+changed. Host-neutral Core build and shared-context checks pass; Windows/Office/VSTO
+qualification remains open.
+
 Current tool-result presentation slice (2026-09-08): local typed text/list/table/change
 blocks replace browser payload guessing. Exact chat/run/call requests lazily project
 retained results; VBA changes filter calls before folding, and artifact comparisons

@@ -103,7 +103,7 @@ namespace RNAssistant.Core.Storage
             }
         }
 
-        internal bool HasStoredReference(ChatBlobReference reference)
+        public bool HasStoredReference(ChatBlobReference reference)
         {
             return HasStoredReference(reference, Protection());
         }
