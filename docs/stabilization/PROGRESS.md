@@ -1,6 +1,21 @@
 # Stabilization progress
 
-Current slice (2026-09-08), after `b9d434ec`: **independent Markdown is implemented
+Current slice (2026-09-08), after `2598e224`: **partial current artifact discovery**
+is implemented host-neutral. One authority capture chooses exact current Plan/HTML/MD
+snapshots before metadata reads. Missing historical records no longer poison current
+search; missing current metadata/body or unknown heads preserve healthy results with
+explicit incomplete coverage. No fallback to older revisions or unique-target/absence
+inference from unavailable scopes. The model gets a recovery hint; specific live
+provider errors remain intact. Page fingerprints include authority generation and
+availability. No second store/index or discovery-time publication is introduced.
+Checks: resources 22/22, HTML 33/33, shared Markdown 4/4, document Plan 2/2
+and production source inclusion pass. Version-format and diff checks pass.
+Next: bounded source enumeration/content indexing and richer shared resource context.
+Picker/history scans and whole-authority recovery remain separate open work. Plan/HTML
+batch operation identity, Windows/Office/WebView2, target-model and Playwright layout
+gates remain open. See [partial discovery](../artifact-library.md#implemented-partial-current-discovery--2026-09-08).
+
+Previous slice (2026-09-08), after `b9d434ec`: **independent Markdown is implemented
 host-neutral in Agent mode**. The common authored-record/CAS path retains complete
 MD and purpose/contents metadata. Native save/restore uses typed prepared intent,
 exact semantic targets, document head guards and atomic publication/receipts.
@@ -50,8 +65,8 @@ preserves new local edits or navigation state when a response arrives late;
 stale export responses still release their exact leases. Focused guard/bridge,
 HTML editor/import/export/source and UI race checks pass host-neutral.
 At that checkpoint shared HTML/Markdown still awaited the ownership move; shared
-HTML is now implemented above, independent authored Markdown remains open. Partial model discovery and authority-journal recovery
-remain separate open work. Windows/Office/WebView2 and Playwright layout gates
+HTML/Markdown and partial model discovery are now implemented above. Bounded indexing
+and authority-journal recovery remain separate open work. Windows/Office/WebView2 and Playwright layout gates
 remain open; the production controller's live document switch needs Windows evidence.
 
 Previous correction (`bd7a43b1`): individual metadata loss no longer hides a chat

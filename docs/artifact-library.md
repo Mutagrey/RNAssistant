@@ -43,8 +43,9 @@ Missing metadata/extraction fails explicitly, with no origin-chat/body fallback;
 foreign document references are refused. Existing chat-local records are not
 silently migrated. The remaining ownership seam and removal gate are tracked in
 [MIGRATION_MAP](stabilization/MIGRATION_MAP.md#document-artifact-ownership--active-slices).
-Exact reads load one metadata record; library enumeration still scans committed
-artifact revision metadata. Bounded indexed discovery remains slice 3.
+Exact reads load one metadata record. Model discovery now selects current snapshots
+from one authority capture before reading their metadata (see below); picker/history
+enumeration still scans retained metadata. Bounded indexed discovery remains slice 3.
 
 ### Implemented Plan publication slice
 
@@ -197,7 +198,8 @@ clicks, ignore late responses and never retry mutations automatically.
 Chat reconstruction reads Plan metadata before optional active-body hydration.
 A missing body therefore does not block unlink; an explicit body read still fails.
 Per-resource metadata recovery is implemented below; bounded indexed enumeration
-and model-facing partial discovery remain tracked in the stabilization backlog.
+remains tracked in the stabilization backlog. Model-facing partial discovery is
+implemented in the following correction.
 Enumeration still scans document revision metadata; a 50-item response does not
 claim bounded source allocation.
 
@@ -241,12 +243,43 @@ message. Restoring the exact metadata removes the issue on a fresh load but neve
 reattaches a previously detached link.
 
 This does not repair lost authority journals, invent missing references, revoke
-historical bytes or make strict `common.resources_*` enumeration partially complete.
-Those failures remain explicit; indexed/partial model discovery is a separate
-remaining slice. No second store, user-data deletion or resource-head publication
+historical bytes. The later partial-discovery correction below isolates failures
+for model enumeration; exact reads remain strict and indexed discovery remains open. No second store, user-data deletion or resource-head publication
 is introduced. `artifact recovery:` verifies deleted Plan metadata, corrupted
 original metadata, healthy picker entries, forbidden selection/read, durable unlink,
 metadata return, unknown head and fork. Real WebView qualification remains open.
+
+### Implemented partial current discovery — 2026-09-08
+
+`DocumentArtifactStore.InspectCurrentMetadata` builds a disposable result from one
+captured authority generation. The provider reads only the exact current Plan,
+HTML and authored Markdown metadata selected by logical-head dependencies, plus
+originals and other retained artifact roots. Historical metadata is loaded by
+explicit history/exact consumers. A missing or unknown head never chooses the
+largest retained version; missing current metadata never falls back to history.
+
+Collection list/search isolates per-resource metadata, aggregate and text-body
+availability failures. Healthy matches remain visible. Typed `unavailableResources`
+counts survive pagination and feed the existing model `partial`, `complete`,
+`empty` and `unavailableScopes` fields. An unavailable resource cannot become a
+complete negative or establish a unique semantic target, even if one healthy
+candidate remains. `availabilityHint` gives a runtime-owned recovery route;
+existing specific provider errors (including a changed live document) are preserved.
+Exact retained reads remain independent of unrelated collection damage.
+
+Root and HTML-member continuation fingerprints include document authority generation
+and observed availability as well as descriptors. A changed generation or recovered
+metadata invalidates continuation instead of silently mixing pages. No resource
+head is published during discovery or metadata recovery. An unavailable authority
+capture is still a whole-provider failure; the projection does not reconstruct it.
+
+This replaces model discovery's strict all-history metadata load and per-entry
+live head recapture. It does not introduce another store or index. Head enumeration,
+current-record hydration and the picker still need bounded source pagination;
+section/content indexing, richer compiler context and authority-journal recovery
+remain open. Host-neutral `resources: document discovery` and the generic incomplete
+coverage test cover partial matches/negatives, metadata recovery, missing bodies,
+current-vs-history selection, unknown heads and continuation drift.
 
 ### Ownership and user behavior
 

@@ -99,6 +99,8 @@ namespace RNAssistant.Office.Services
                 Complete = !resultTruncated && unavailable.Count == 0,
                 Empty = selected.Count == 0 && !resultTruncated && unavailable.Count == 0,
                 Partial = unavailable.Count > 0,
+                AvailabilityHint = unavailable.Count == 0 ? null :
+                    "Discovery is incomplete for unavailableScopes. Restore those sources or search a healthy scope. Repeat only after availability changes; do not infer absence or target uniqueness within an unavailable scope.",
                 RefineQuery = resultTruncated,
                 UnavailableScopes = unavailable
                     .OrderBy(value => value, StringComparer.OrdinalIgnoreCase)
@@ -225,6 +227,14 @@ namespace RNAssistant.Office.Services
                     state.Target, target, StringComparison.Ordinal))
                 .Take(2)
                 .ToList();
+            if (unavailable.Count > 0)
+            {
+                ResourceRequestException availabilityFailure;
+                if (failures.TryGetValue(scope, out availabilityFailure)) throw availabilityFailure;
+                throw new ResourceRequestException(
+                    "Some resources in this scope are unavailable; target uniqueness cannot be established. Restore availability and run common.resources_find again. Exact retained references remain readable.",
+                    "resource_scope_incomplete", false);
+            }
             if ((truncated || searchIncomplete) &&
                 !(matches.Count == 1 && searchConfirmedTarget && !searchIncomplete))
                 throw new ResourceRequestException(
@@ -239,9 +249,6 @@ namespace RNAssistant.Office.Services
             }
             if (matches.Count == 0)
             {
-                ResourceRequestException failure;
-                if (failures.TryGetValue(scope, out failure))
-                    throw failure;
                 throw new ResourceRequestException(
                     "Resource target is no longer available: " + target +
                     ". Run common.resources_find and choose one exact returned target.",
@@ -301,6 +308,7 @@ namespace RNAssistant.Office.Services
                         // A normal page is completed by its continuation. Terminal
                         // truncation is missing source coverage, not a finished catalog.
                         if (page.Truncated && string.IsNullOrWhiteSpace(page.NextCursor)) truncated = true;
+                        if (page.UnavailableResources > 0) unavailable.Add(plan.Scope);
                         foreach (var descriptor in page.Items ??
                             new List<ResourceDescriptor>())
                         {
@@ -348,6 +356,7 @@ namespace RNAssistant.Office.Services
                 {
                     var result = Search(session, plan.Provider.Id, query, plan.Kind, MaximumIntentResults, IntentSnippetCharacters);
                     truncated = truncated || result.ScanTruncated;
+                    if (result.UnavailableResources > 0) unavailable.Add(plan.Scope);
                     foreach (var match in result.Matches ??
                         new List<ResourceSearchMatch>())
                     {
@@ -777,6 +786,8 @@ namespace RNAssistant.Office.Services
         public bool Partial { get; set; }
         [Newtonsoft.Json.JsonProperty("refineQuery")]
         public bool RefineQuery { get; set; }
+        [Newtonsoft.Json.JsonProperty("availabilityHint", NullValueHandling = Newtonsoft.Json.NullValueHandling.Ignore)]
+        public string AvailabilityHint { get; set; }
         [Newtonsoft.Json.JsonProperty("unavailableScopes")]
         public List<string> UnavailableScopes { get; set; }
         [Newtonsoft.Json.JsonIgnore]

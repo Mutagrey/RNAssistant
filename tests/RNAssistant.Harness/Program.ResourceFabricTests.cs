@@ -244,7 +244,16 @@ namespace RNAssistant.Harness
             AssertTrue(!gateway.Find(session, "Test", "conversation").Complete, "terminal truncation also survives multi-page discovery");
             var mixed = new ResourceGatewayService(new IResourceProvider[] { provider, new TestResourceProvider("zeta") });
             AssertTrue(!mixed.Find(session, null, "conversation").Complete, "a later complete provider cannot erase earlier truncation");
-            incomplete = false; provider.SearchTruncated = true;
+            incomplete = false;
+            provider.ListPage = cursor => new ResourceListPage {
+                Items = new System.Collections.Generic.List<ResourceDescriptor> { new ResourceDescriptor {
+                    Reference = new ResourceRef(ResourceUri.Create("alpha", "same"), "1"), Kind = "test", Title = "Same" } },
+                NextCursor = cursor == "next" ? null : "next", UnavailableResources = cursor == "next" ? 0 : 1 };
+            var partial = gateway.Find(session, null, "conversation");
+            AssertTrue(partial.Items.Count == 1 && partial.Partial && !partial.Complete, "later healthy pages cannot erase an earlier unavailable resource");
+            AssertEqual("resource_scope_incomplete", RuntimeThrows<ResourceRequestException>(() =>
+                gateway.ResolveIntentTarget(session, partial.Items.Single().Target)).ErrorCode, "partial healthy pages cannot prove uniqueness");
+            provider.SearchTruncated = true;
             AssertTrue(!gateway.Find(session, "missing", "conversation").Empty, "an incomplete content scan cannot prove absence either");
         }
 

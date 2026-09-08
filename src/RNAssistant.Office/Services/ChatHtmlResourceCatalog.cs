@@ -34,7 +34,7 @@ namespace RNAssistant.Office.Services
                 string.Equals(kind, DataKind, StringComparison.OrdinalIgnoreCase);
         }
 
-        public ResourceListPage List(ChatSession session, string kind, string cursor, int limit)
+        public ResourceListPage List(ChatSession session, string kind, string cursor, int limit, string sourceRevision = null, int unavailableResources = 0)
         {
             limit = Math.Max(1, Math.Min(MaximumItems, limit <= 0 ? 20 : limit));
             var members = ActiveMembers(session)
@@ -46,7 +46,7 @@ namespace RNAssistant.Office.Services
             var descriptors = members.Select(Describe).ToList();
             var cursorBinding = ResourceReadCursor.ListBinding(ChatArtifactResourceProvider.ProviderName, kind);
             var position = ResourceReadCursor.ParseRevisionBound(cursor, cursorBinding);
-            var collectionRevision = ResourceReadCursor.CollectionRevision(descriptors);
+            var collectionRevision = ResourceReadCursor.CollectionRevision(descriptors, sourceRevision == null ? null : sourceRevision + ":" + unavailableResources);
             ResourceReadCursor.ValidateContinuation(position, collectionRevision);
             ResourceReadCursor.ValidateCollectionOffset(position, descriptors.Count);
             var offset = position.Offset;
@@ -60,7 +60,8 @@ namespace RNAssistant.Office.Services
                 NextCursor = next < members.Count
                     ? ResourceReadCursor.CreateRevisionBound(next, collectionRevision, cursorBinding)
                     : null,
-                Truncated = next < members.Count
+                Truncated = next < members.Count,
+                UnavailableResources = unavailableResources
             };
         }
 

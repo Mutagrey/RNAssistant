@@ -39,6 +39,13 @@ version check still apply.
 
 ## Test map
 
+`resources: document discovery` verifies healthy partial results with missing/corrupt
+current metadata, body loss, exact reads, metadata recovery, current-head selection
+without historical fallback, unknown original/logical heads and continuation drift.
+`resources: discovery preserves` covers completeness across pages/providers and
+unique-target refusal. Use `resources:`, `html`, `shared Markdown:` and
+`document Plan:` for affected consumers; this slice does not alter browser layout.
+
 `shared Markdown:` verifies independent document ownership, exact text and metadata,
 cross-chat discovery/editing, prepared stale guards, same-step call identities,
 restore, immutable uploaded MD, missing-body unlink, failed link save, fork, GC

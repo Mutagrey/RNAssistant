@@ -207,6 +207,8 @@ namespace RNAssistant.Core.Models
 
     public sealed class ResourceListPage
     {
+        [Newtonsoft.Json.JsonProperty("unavailableResources")]
+        public int UnavailableResources { get; set; }
         [Newtonsoft.Json.JsonProperty("provider")]
         public string Provider { get; set; }
         [Newtonsoft.Json.JsonProperty("providers")]
@@ -265,6 +267,8 @@ namespace RNAssistant.Core.Models
 
     public sealed class ResourceSearchResult
     {
+        [Newtonsoft.Json.JsonProperty("unavailableResources")]
+        public int UnavailableResources { get; set; }
         // Provider captures, including zero-match scans. Never part of search output.
         [Newtonsoft.Json.JsonIgnore]
         public List<ResourceReadResult> Scans { get; set; }

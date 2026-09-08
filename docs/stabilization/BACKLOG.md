@@ -61,16 +61,16 @@ transport alone does not qualify source allocation.
 
 ## Document artifact discovery/recovery — remaining authorized slices
 
-- Artifact resource owner / slice 3: `DocumentArtifactStore.List` and the working-set
-  picker still scan committed revision metadata. Response paging is bounded, source
-  enumeration is not. Replace the scan with the existing authority projection/index
-  when implementing indexed discovery; verify large libraries and continuation drift.
-- Gateway/provider / partial model discovery: chat and document-picker inspection
-  now isolates missing/corrupt per-resource metadata and unknown Plan heads, retaining
-  an explicit unavailable projection and unlink. Strict `common.resources_*`
-  collection discovery still fails explicitly on unavailable metadata. Add typed
-  partial discovery with correct completeness before returning healthy subsets;
-  verify no unique-target or complete-negative inference from incomplete catalogs.
+- Artifact resource owner / slice 3: model discovery now selects current snapshots
+  through one existing authority projection before reading metadata. Authority-head
+  enumeration/current metadata hydration and the working-set picker remain unbounded
+  at source. Add bounded pagination/indexing in the existing owner; verify large
+  libraries and source allocation. No parallel durable library/search store.
+- Partial model discovery is implemented host-neutral (2026-09-08): missing/corrupt
+  current metadata, bodies and unknown heads preserve healthy matches with explicit
+  incomplete coverage. No uniqueness/negative inference from unavailable scopes;
+  generation and metadata recovery invalidate page continuation. Exact reads stay
+  strict. Section/content indexing and richer shared context remain open.
 - Resource authority / journal recovery: whole-authority capture failure or invalid
   runtime identity still fails explicitly. Per-resource projections cannot invent
   lost authority records. Reconcile only from validated durable evidence; no latest

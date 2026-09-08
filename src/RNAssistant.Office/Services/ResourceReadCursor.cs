@@ -162,9 +162,10 @@ namespace RNAssistant.Office.Services
             if (position == null || position.Offset > Math.Max(0, count)) throw InvalidCursor();
         }
 
-        public static string CollectionRevision(IEnumerable<ResourceDescriptor> descriptors)
+        public static string CollectionRevision(IEnumerable<ResourceDescriptor> descriptors, string sourceRevision = null)
         {
             var builder = new StringBuilder();
+            if (sourceRevision != null) AppendField(builder, sourceRevision);
             foreach (var descriptor in descriptors ?? new ResourceDescriptor[0])
             {
                 if (descriptor == null) continue;
