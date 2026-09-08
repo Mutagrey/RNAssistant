@@ -623,9 +623,20 @@ document-owned source uses exact existing gateway reads and retains removal rule
 VBA uses the addressed document journal and exact chat/run correlation. Accepted
 protocol-call IDs also locate preparations belonging to an earlier confirmation run;
 the current call run owns the display. Only terminal exact actual/intended source-hash
-agreement permits an after text. Comparable-hash agreement or an open/unknown record
-cannot promote planned code to actual code. Verified no-ops disappear, continuous
-source pairs collapse, and interrupted/discontinuous evidence remains separate.
+agreement permits the verified `after` text. For an open/unknown record or
+comparable-only hash agreement, retained `before` and separately typed
+`intendedAfter`/`intendedAfterExists` expose the planned diff with the visible label
+«Результат не подтверждён». The expanded comparison explicitly identifies original
+→ planned source; it never claims to show the actual resulting code. Planned line
+counts are available per entry and included in the overall header total. The
+«Не подтверждено» subtotal appears below only when unverified entries exist;
+the unavailable-comparison notice appears only when source/comparison coverage is
+incomplete. No explanatory caption is shown for fully available confirmed results. Planned creation/deletion use known absent sides;
+planned rename remains one comparison. Missing/corrupt/oversized source cannot be
+replaced with empty text. Preview bodies share the existing response budget;
+truncating them does not erase the unverified label. No journal/effect status changes.
+Verified no-ops disappear, continuous verified source pairs collapse, and planned
+comparisons break aggregation across interrupted/discontinuous evidence.
 Identity-preserving rename shows old → new without fabricated added/deleted code.
 Only CodeOnly UserForm source is included; Designer/FRX and opaque macro side effects
 without captured source are not inferred.

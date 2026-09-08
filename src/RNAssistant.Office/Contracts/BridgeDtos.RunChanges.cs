@@ -27,6 +27,9 @@ namespace RNAssistant.Office.Contracts
         [JsonProperty("afterExists")] public bool AfterExists { get; set; }
         [JsonProperty("before")] public string Before { get; set; }
         [JsonProperty("after")] public string After { get; set; }
+        // Planned source remains separate from the verified After field.
+        [JsonProperty("intendedAfter")] public string IntendedAfter { get; set; }
+        [JsonProperty("intendedAfterExists")] public bool? IntendedAfterExists { get; set; }
         [JsonProperty("availability")] public string Availability { get; set; }
     }
 }

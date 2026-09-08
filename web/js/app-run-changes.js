@@ -30,17 +30,26 @@
     var card = element("details", "run-changes"); card.open = true;
     var summary = element("summary", "run-changes-summary");
     summary.appendChild(element("span", "", "Изменения: " + items.length));
-    var added = 0, removed = 0, compared = 0, uncertain = !result.complete;
+    var added = 0, removed = 0, compared = 0, plannedAdded = 0, plannedRemoved = 0, planned = 0, unverified = 0, uncertain = !result.complete;
     var rows = items.map(function (item) {
-      var diff = item.availability === "available" ? window.RNAssistantTextDiff.format(item.before, item.after) : null;
-      if (diff && diff.complete) { added += diff.added; removed += diff.removed; compared++; } else uncertain = true;
-      return { item: item, diff: diff };
+      if (item.availability === "unverified") unverified++;
+      var preview = item.availability === "unverified" && typeof item.before === "string" &&
+        typeof item.intendedAfter === "string" && typeof item.intendedAfterExists === "boolean";
+      var diff = item.availability === "available" ? window.RNAssistantTextDiff.format(item.before, item.after) :
+        preview ? window.RNAssistantTextDiff.format(item.before, item.intendedAfter) : null;
+      if (diff && diff.complete && !preview) { added += diff.added; removed += diff.removed; compared++; }
+      else if (diff && diff.complete && preview) { plannedAdded += diff.added; plannedRemoved += diff.removed; planned++; }
+      else uncertain = true;
+      return { item: item, diff: diff, preview: preview };
     });
-    if (compared) counts(summary, added, removed);
+    if (compared || planned) counts(summary, added + plannedAdded, removed + plannedRemoved);
     card.appendChild(summary);
-    var caption = element("div", "run-changes-caption", uncertain ?
-      "Счётчики только для доступных подтверждённых сравнений." : "Сохранённые изменения этого запуска");
-    card.appendChild(caption);
+    if (unverified) {
+      var plannedSummary = element("div", "run-changes-caption run-changes-planned", "Не подтверждено");
+      if (planned) { plannedSummary.appendChild(document.createTextNode(": ")); counts(plannedSummary, plannedAdded, plannedRemoved); }
+      card.appendChild(plannedSummary);
+    }
+    if (uncertain) card.appendChild(element("p", "run-changes-caption run-changes-unavailable", "Часть сравнений недоступна; её строки не учтены."));
     rows.forEach(function (entry, index) {
       var item = entry.item, diff = entry.diff;
       var row = element("details", "run-change-file" + (index >= 3 ? " run-change-extra" : ""));
@@ -62,8 +71,17 @@
       row.addEventListener("toggle", function () {
         if (!row.open || rendered) return;
         rendered = true;
-        if (diff) window.RNAssistantTextDiff.render(body, diff);
-        else body.appendChild(element("p", "run-changes-caption", availability(item) + ". Счётчик строк не вычисляется."));
+        if (diff) {
+          var output = body;
+          if (entry.preview) {
+            body.appendChild(element("p", "run-changes-caption run-change-preview-notice",
+              "План изменений: исходный → запланированный код. Фактический исходник результата не подтверждён."));
+            output = element("div", "run-change-preview-source"); body.appendChild(output);
+          }
+          window.RNAssistantTextDiff.render(output, diff);
+        } else body.appendChild(element("p", "run-changes-caption", item.availability === "unverified" ?
+          "Результат не подтверждён. Исходник плана недоступен или превышает лимит сравнения." :
+          availability(item) + ". Счётчик строк не вычисляется."));
       });
       card.appendChild(row);
     });

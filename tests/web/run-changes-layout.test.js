@@ -19,7 +19,8 @@ const read = file => fs.readFileSync(path.join(__dirname, '../../web', file), 'u
         {id:'html',title:'reports/quarterly/index.html',scope:'HTML-проект',beforeExists:true,afterExists:true,availability:'available',before:'<h1>Продажи</h1>\n',after:'<h1>Продажи по регионам</h1>\n'},
         {id:'md',title:'README.md',scope:'HTML-проект',beforeExists:false,afterExists:true,availability:'available',before:'',after:'# Отчёт\n\nДанные обновляются из Excel.\n'},
         {id:'js',title:'src/a-long-folder-name/renamed.js',beforeTitle:'src/old.js',scope:'HTML-проект',beforeExists:true,afterExists:true,availability:'available',before:'alert(1);\n',after:'alert(1);\n'},
-        {id:'unknown',title:'UnknownModule',scope:'VBA',availability:'unverified'},
+        {id:'unknown',title:'UnknownModule',scope:'VBA',availability:'unverified',beforeExists:true,before:'old\n',intendedAfterExists:true,intendedAfter:'<script>planned()</script>\n'},
+        {id:'missing',title:'MissingModule',scope:'VBA',availability:'unverified'},
         {id:'inert',title:'<img src=x onerror=alert(1)>.md',scope:'Текст',beforeExists:true,afterExists:true,availability:'available',before:'<script>bad()</script>',after:'<script>stillInert()</script>'}
       ]};
       window.send = async () => { window.calls++; return window.fixture; };
@@ -46,14 +47,23 @@ const read = file => fs.readFileSync(path.join(__dirname, '../../web', file), 'u
     });
     await page.locator('.run-changes-summary').waitFor();
     assert.equal(await page.locator('.run-change-file:visible').count(), 3);
-    assert.equal(await page.locator('.run-changes-summary .run-change-added').textContent(), '+7');
-    assert.equal(await page.locator('.run-changes-summary .run-change-removed').textContent(), '−4');
+    assert.equal(await page.locator('.run-changes-summary .run-change-added').textContent(), '+8');
+    assert.equal(await page.locator('.run-changes-summary .run-change-removed').textContent(), '−5');
     await page.locator('.run-change-file-summary').first().click();
     await page.locator('.run-change-diff .vba-diff-line').first().waitFor();
     assert.equal(await page.locator('.run-change-diff .vba-diff-line.add').count(), 2);
     await page.locator('.run-changes-more').click();
-    assert.equal(await page.locator('.run-change-file:visible').count(), 6);
-    assert.equal(await page.locator('.run-change-file').nth(4).locator('.run-change-counts').count(), 0);
+    assert.equal(await page.locator('.run-change-file:visible').count(), 7);
+    const planned = page.locator('.run-change-file').nth(4);
+    assert.equal(await planned.locator('.run-change-added').textContent(), '+1');
+    assert.match(await planned.locator('.run-change-scope').textContent(), /Результат не подтверждён/);
+    assert.equal(await page.locator('.run-changes-planned .run-change-added').textContent(), '+1');
+    assert.equal(await page.locator('.run-changes-summary .run-change-added').textContent(), '+8', 'planned additions included in overall total');
+    assert.equal(await page.locator('.run-change-file').nth(5).locator('.run-change-counts').count(), 0, 'missing source has no fabricated counts');
+    await planned.locator('summary').click();
+    await planned.locator('.vba-diff-line.add').waitFor();
+    assert.match(await planned.locator('.run-change-preview-notice').textContent(), /исходный → запланированный/);
+    assert.match(await planned.locator('.vba-diff-line.add code').textContent(), /<script>planned/);
     await page.locator('.run-change-file-summary').last().click();
     await page.waitForFunction(() => document.querySelectorAll('.run-change-diff code').length > 4);
     assert.equal(await page.locator('#output img, #output script').count(), 0);
@@ -63,9 +73,37 @@ const read = file => fs.readFileSync(path.join(__dirname, '../../web', file), 'u
     }
     await page.setViewportSize({width: 390, height: 844});
     if (process.env.LAYOUT_SCREENSHOT) await page.screenshot({path: process.env.LAYOUT_SCREENSHOT, fullPage:true});
+    // Unknown-only results contribute to the header and show only the relevant notice.
+    await page.evaluate(() => {
+      document.getElementById('output').textContent = '';
+      window.state.chatProjectionRevisions.chat = 2;
+      window.fixture = {...window.fixture, items: [window.fixture.items[4]]};
+      window.appendRunChanges(document.getElementById('output'), 'chat', 'run');
+    });
+    await page.locator('.run-changes-planned').waitFor();
+    assert.equal(await page.locator('.run-changes-summary .run-change-added').textContent(), '+1');
+    assert.equal(await page.locator('.run-changes-unavailable').count(), 0);
+    assert.equal(await page.locator('.run-changes > .run-changes-caption').count(), 1);
+    await page.evaluate(() => {
+      document.getElementById('output').textContent = '';
+      window.state.chatProjectionRevisions.chat = 3;
+      window.fixture = {...window.fixture, items: [{id:'verified',title:'Verified',scope:'VBA',availability:'available',before:'a',after:'b',beforeExists:true,afterExists:true}]};
+      window.appendRunChanges(document.getElementById('output'), 'chat', 'run');
+    });
+    await page.locator('.run-changes-summary').waitFor();
+    assert.equal(await page.locator('.run-changes > .run-changes-caption').count(), 0, 'confirmed complete results have no header notices');
+    await page.evaluate(() => {
+      document.getElementById('output').textContent = '';
+      window.state.chatProjectionRevisions.chat = 4;
+      window.fixture = {...window.fixture, items: [{id:'missing',title:'Missing',scope:'VBA',availability:'unverified'}]};
+      window.appendRunChanges(document.getElementById('output'), 'chat', 'run');
+    });
+    await page.locator('.run-changes-unavailable').waitFor();
+    assert.equal(await page.locator('.run-changes-planned').count(), 1);
+    assert.equal(await page.locator('.run-changes-summary .run-change-counts').count(), 0, 'missing sources have no invented total');
     // A late result must not attach to a different chat after navigation.
     await page.evaluate(() => {
-      window.state.chatProjectionRevisions.chat = 2;
+      window.state.chatProjectionRevisions.chat = 5;
       window.send = () => new Promise(resolve => window.resolveChanges = resolve);
       document.getElementById('output').textContent = '';
       window.appendRunChanges(document.getElementById('output'), 'chat', 'run');

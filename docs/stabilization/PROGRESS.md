@@ -1,5 +1,15 @@
 # Stabilization progress
 
+Current user-requested diff correction (2026-09-08): unverified VBA results now
+expose retained original → intended source with an explicit planned/unverified
+label, per-entry counts and an overall header total including planned lines.
+Unverified subtotals and unavailable-source notices appear only when applicable.
+Verified `after` and journal outcomes remain unchanged; previews never bridge verified comparison chains.
+Creation/deletion/rename and source budgets retain explicit missing-data behavior.
+Checks: focused run changes 3/3, integrated Chromium summary/narrow/wide checks,
+version-format and diff checks pass. Windows/Office/WebView2 qualification remains
+open. See [run text changes](../conversation-protocol.md#run-text-changes).
+
 Current correction (2026-09-08): reproduced same-response VBA
 `patch → resources_read → stale write_module` incorrectly accepting the final
 overwrite. Accepted calls now retain their model-input resource evidence; VBA

@@ -102,8 +102,12 @@ namespace RNAssistant.Office.Services
             var remaining = MaximumTotalCharacters;
             foreach (var item in result.Items)
             {
-                var length = (item.Before?.Length ?? 0) + (item.After?.Length ?? 0);
-                if (length > remaining) { item.Before = item.After = null; item.Availability = "too_large"; }
+                var length = (item.Before?.Length ?? 0) + (item.After?.Length ?? 0) + (item.IntendedAfter?.Length ?? 0);
+                if (length > remaining)
+                {
+                    item.Before = item.After = item.IntendedAfter = null;
+                    if (item.Availability != "unverified") item.Availability = "too_large";
+                }
                 else remaining -= length;
             }
             return result;
@@ -192,6 +196,15 @@ namespace RNAssistant.Office.Services
                 {
                     var oldName = detail.Components.FirstOrDefault(c => c.BeforeExists && !c.IntendedAfterExists);
                     var newName = detail.Components.FirstOrDefault(c => !c.BeforeExists && c.IntendedAfterExists);
+                    if (oldName != null && newName != null &&
+                        !(MatchesExactState(oldName, false) && MatchesExactState(newName, false)) &&
+                        !(MatchesExactState(oldName, true) && MatchesExactState(newName, true)))
+                    {
+                        AddIntendedPreview(result, row.MutationId, newName.ModuleName,
+                            true, oldName.BeforeCode, true, newName.IntendedAfterCode, oldName.ModuleName);
+                        chains.Remove(oldName.ModuleName); chains.Remove(newName.ModuleName);
+                        continue;
+                    }
                     if (oldName != null && newName != null && oldName.ActualExists == false &&
                         newName.ActualExists == true && Same(newName.ActualCodeSha256, newName.IntendedAfterCodeSha256) &&
                         oldName.BeforeCode != null && newName.IntendedAfterCode != null)
@@ -217,14 +230,15 @@ namespace RNAssistant.Office.Services
                 {
                     var key = component.ModuleName ?? "VBA";
                     // MatchesIntendedAfter may use a comparable hash. Only exact captured bytes may supply the after text.
-                    var exactAfter = component.ActualExists == component.IntendedAfterExists &&
-                        (!component.IntendedAfterExists || Same(component.ActualCodeSha256, component.IntendedAfterCodeSha256));
-                    var exactBefore = component.ActualExists == component.BeforeExists &&
-                        (!component.BeforeExists || Same(component.ActualCodeSha256, component.BeforeCodeSha256));
+                    var exactAfter = MatchesExactState(component, true);
+                    var exactBefore = MatchesExactState(component, false);
                     if (exactBefore) continue;
                     if (!exactAfter)
                     {
-                        AddGap(result, row.MutationId + ":" + key, key, "VBA", "unverified"); chains.Remove(key); continue;
+                        AddIntendedPreview(result, row.MutationId + ":" + key, key,
+                            component.BeforeExists, component.BeforeCode,
+                            component.IntendedAfterExists, component.IntendedAfterCode);
+                        chains.Remove(key); continue;
                     }
                     var change = new RunTextChangeDto { Id = row.MutationId + ":" + key, Title = key, Scope = "VBA",
                         BeforeExists = component.BeforeExists, AfterExists = component.IntendedAfterExists,
@@ -240,6 +254,26 @@ namespace RNAssistant.Office.Services
             }
             result.Items.RemoveAll(item => item.Availability == "available" && item.BeforeExists == item.AfterExists &&
                 item.Before == item.After && (item.BeforeTitle == null || item.BeforeTitle == item.Title));
+        }
+
+        private static bool MatchesExactState(VbaMutationComponentDetail component, bool intended)
+        {
+            var exists = intended ? component.IntendedAfterExists : component.BeforeExists;
+            var hash = intended ? component.IntendedAfterCodeSha256 : component.BeforeCodeSha256;
+            return component.ActualExists == exists && (!exists || Same(component.ActualCodeSha256, hash));
+        }
+
+        private static void AddIntendedPreview(RunChangesDto result, string id, string title,
+            bool beforeExists, string before, bool intendedExists, string intended, string beforeTitle = null)
+        {
+            before = beforeExists ? before : "";
+            intended = intendedExists ? intended : "";
+            var complete = before != null && intended != null &&
+                before.Length <= MaximumSourceCharacters && intended.Length <= MaximumSourceCharacters;
+            Add(result, new RunTextChangeDto { Id = id, Title = title, BeforeTitle = beforeTitle, Scope = "VBA",
+                BeforeExists = beforeExists, Before = complete ? before : null,
+                IntendedAfterExists = intendedExists, IntendedAfter = complete ? intended : null,
+                Availability = "unverified" });
         }
 
         private static void Add(RunChangesDto result, RunTextChangeDto item)

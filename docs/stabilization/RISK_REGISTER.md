@@ -24,6 +24,13 @@ Initial code inspection and 19 focused host-neutral checks established:
   `unverified` label when VBE changes formatting. This is a diagnostic ambiguity,
   not proof that read-back accepted missing executable statements.
 
+Run-diff follow-up (2026-09-08): retained original → intended code is now visible
+for unverified results, including comparable-only formatting matches. A separate
+planned label and subtotal distinguish it from exact confirmed source; the header
+includes all available comparisons. This removes
+the hidden-preview limitation; it does not establish the actual source for the
+original Windows incident or close its evidence gate.
+
 Owners: VBA mutation/verifier, model result projection, run changes projection.
 Follow-up reproduction: one accepted model response contains an exact patch adding
 `Debug.Print`, a source read, then a whole write containing the old source plus a

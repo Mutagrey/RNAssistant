@@ -94,6 +94,9 @@ namespace RNAssistant.Harness
                 var unknown = result.Items.Single(i => i.Title == "Unknown");
                 AssertEqual("unverified", unknown.Availability, "open preparation cannot prove intended source");
                 AssertTrue(unknown.After == null, "never publish intended code as actual unknown effect");
+                AssertContains(unknown.Before, "Sub Before()", "preview retains actual baseline");
+                AssertContains(unknown.IntendedAfter, "Sub Intended()", "unverified planned source remains inspectable");
+                AssertEqual(true, unknown.IntendedAfterExists, "intended existence is separate from actual result");
                 var moduleRows = reopened.QueryMutations(session.Host, session.DocumentKey,
                     new VbaMutationQueryRequest { RunId = "run", Search = "Module1" }).Rows;
                 foreach (var row in moduleRows) session.Messages.Add(new ChatMessage {
@@ -121,6 +124,59 @@ namespace RNAssistant.Harness
                     id => reopened.GetMutationDetail(session.Host, session.DocumentKey, id)).Read(session, "run").Items.Count,
                     "journal rows are scoped to exact chat as well as run");
             });
+        }
+        private static void RunChangesIntendedPreviews()
+        {
+            var session = NewSession(FakeOfficeAdapter.ForHost("Excel"));
+            Func<VbaMutationComponentDetail[], RNAssistant.Office.Contracts.RunChangesDto> project = components =>
+                new RunChangesService(a => a.InlineText,
+                    query => new VbaMutationQueryPage { Rows = components.Select((c, i) =>
+                        new VbaMutationQueryRow { MutationId = i.ToString(), SessionId = session.Id, FirstSequence = i }).ToList() },
+                    id => new VbaMutationDetail { Components = new List<VbaMutationComponentDetail> { components[int.Parse(id)] } })
+                    .Read(session, "run");
+            var result = project(new[] {
+                new VbaMutationComponentDetail { ModuleName = "Chain", BeforeExists = true, BeforeCode = "a",
+                    IntendedAfterExists = true, IntendedAfterCode = "b", IntendedAfterCodeSha256 = "b", ActualExists = true, ActualCodeSha256 = "b" },
+                new VbaMutationComponentDetail { ModuleName = "Chain", BeforeExists = true, BeforeCode = "b",
+                    IntendedAfterExists = true, IntendedAfterCode = "c" },
+                new VbaMutationComponentDetail { ModuleName = "Chain", BeforeExists = true, BeforeCode = "c",
+                    IntendedAfterExists = true, IntendedAfterCode = "d", IntendedAfterCodeSha256 = "d", ActualExists = true, ActualCodeSha256 = "d" },
+                new VbaMutationComponentDetail { ModuleName = "Formatted", BeforeExists = true, BeforeCode = "before",
+                    IntendedAfterExists = true, IntendedAfterCode = "planned", IntendedAfterCodeSha256 = "planned",
+                    ActualExists = true, ActualCodeSha256 = "formatted", MatchesIntendedAfter = true },
+                new VbaMutationComponentDetail { ModuleName = "Create", IntendedAfterExists = true, IntendedAfterCode = "new" },
+                new VbaMutationComponentDetail { ModuleName = "Delete", BeforeExists = true, BeforeCode = "old" },
+                new VbaMutationComponentDetail { ModuleName = "Missing", BeforeExists = true, IntendedAfterExists = true, IntendedAfterCode = "new" }
+            });
+            AssertEqual(7, result.Items.Count, "unknown interrupts net comparison rather than joining verified chains");
+            AssertEqual("a", result.Items[0].Before, "verified first baseline preserved");
+            AssertEqual("b", result.Items[0].After, "preview is not appended to verified result");
+            AssertEqual("c", result.Items[1].IntendedAfter, "interrupted step has its own plan");
+            AssertEqual("c", result.Items[2].Before, "later verified chain starts separately");
+            AssertEqual("unverified", result.Items[3].Availability, "comparable-only verification remains explicitly unverified as exact text");
+            AssertEqual("planned", result.Items[3].IntendedAfter, "formatting mismatch keeps planned diff");
+            AssertEqual("", result.Items[4].Before, "creation has known absent baseline");
+            AssertEqual("", result.Items[5].IntendedAfter, "deletion has known absent intended source");
+            AssertTrue(result.Items[6].Before == null && result.Items[6].IntendedAfter == null,
+                "missing source cannot be replaced with empty text");
+            var bounded = project(Enumerable.Range(0, 3).Select(i => new VbaMutationComponentDetail {
+                ModuleName = "Large" + i, BeforeExists = true, BeforeCode = new string('a', RunChangesService.MaximumSourceCharacters),
+                IntendedAfterExists = true, IntendedAfterCode = new string('b', RunChangesService.MaximumSourceCharacters) }).ToArray());
+            AssertTrue(bounded.Items[2].Before == null && bounded.Items[2].IntendedAfter == null,
+                "planned source counts toward shared response character budget");
+            AssertEqual("unverified", bounded.Items[2].Availability, "budget limit does not erase effect uncertainty");
+            var renamed = new RunChangesService(a => a.InlineText,
+                query => new VbaMutationQueryPage { Rows = new List<VbaMutationQueryRow> {
+                    new VbaMutationQueryRow { MutationId = "rename", SessionId = session.Id } } },
+                id => new VbaMutationDetail { Operation = "rename", Components = new List<VbaMutationComponentDetail> {
+                    new VbaMutationComponentDetail { ModuleName = "Old", BeforeExists = true, BeforeCode = "code" },
+                    new VbaMutationComponentDetail { ModuleName = "New", IntendedAfterExists = true, IntendedAfterCode = "code" } } })
+                .Read(session, "run");
+            AssertEqual(1, renamed.Items.Count, "planned rename remains one identity-preserving comparison");
+            AssertEqual("Old", renamed.Items[0].BeforeTitle, "planned old name");
+            AssertEqual("New", renamed.Items[0].Title, "planned new name");
+            AssertEqual(renamed.Items[0].Before, renamed.Items[0].IntendedAfter, "planned rename has no fabricated line churn");
+            AssertTrue(renamed.Items[0].After == null, "planned rename is never actual after source");
         }
     }
 }
