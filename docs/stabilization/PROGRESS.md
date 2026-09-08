@@ -1,5 +1,13 @@
 # Stabilization progress
 
+Current correction (2026-09-08): HTML authored workspace operation receipts are
+now keyed by exact tool call id in addition to chat/run/step. Multiple HTML/CSS/JS
+writes emitted in one model batch no longer collide after the first publication
+as `html_attempt_already_published`; true replay of the same call remains blocked
+before dispatch. Focused HTML batch/shared-publication, VBA mutation/effect and
+kernel cumulative-health checks pass host-neutral. Windows/Office/WebView2 and
+target-model qualification remain open.
+
 Current slice (2026-09-08), after `2598e224`: **partial current artifact discovery**
 is implemented host-neutral. One authority capture chooses exact current Plan/HTML/MD
 snapshots before metadata reads. Missing historical records no longer poison current

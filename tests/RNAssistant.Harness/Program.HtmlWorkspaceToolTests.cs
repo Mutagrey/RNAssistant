@@ -253,6 +253,42 @@ namespace RNAssistant.Harness
                 });
         }
 
+        private static void HtmlWorkspaceBatchedWritesUsePerCallOperationIdentity()
+        {
+            WithTempExecutor(FakeOfficeAdapter.ForHost("Excel"),
+                delegate(OfficeToolExecutor executor, FakeOfficeAdapter adapter)
+                {
+                    var session = NewSession(adapter);
+                    var definitions = OfficeToolCatalog.ForHost(adapter.HostName)
+                        .Concat(executor.GetControllerTools()).ToList();
+                    var runtime = executor.CreateNativeRuntime(
+                        session, definitions, new AppSettings(), "agent", false);
+                    Func<string, string, string, ToolExecutionRecord> write = delegate(string callId, string path, string content)
+                    {
+                        var call = new ToolCall(callId, HtmlWorkspaceToolCatalog.WriteFileToolId,
+                            new JObject { ["path"] = path, ["content"] = content }.ToString(Formatting.None));
+                        return runtime.ExecuteAsync(new ToolExecutionContext(
+                                call, runtime.Describe(call), "html_batch_run", "html_batch_turn",
+                                "html_batch_step", DateTime.UtcNow, false, 4), CancellationToken.None)
+                            .GetAwaiter().GetResult();
+                    };
+
+                    var first = write("html_batch_styles", "styles.css", "body { color: #123456; }");
+                    var second = write("html_batch_app", "app.js", "window.ready = true;");
+                    AssertEqual(ToolExecutionOutcome.Ok, first.Outcome, "first same-step HTML write succeeds");
+                    AssertEqual(ToolExecutionOutcome.Ok, second.Outcome, "second same-step HTML write is not treated as a replay");
+                    AssertEqual(2, session.HtmlWorkspace.Files.Count, "both files are retained in one workspace");
+                    AssertTrue(session.HtmlWorkspace.Files.Any(item => item.Path == "styles.css" && item.Content.Contains("#123456")),
+                        "CSS content is present");
+                    AssertTrue(session.HtmlWorkspace.Files.Any(item => item.Path == "app.js" && item.Content.Contains("ready")),
+                        "JS content is present");
+                    var scope = executor.ResourceAuthority.Scope(session, true);
+                    var operationHeads = executor.ResourceAuthority.Store.Capture(scope).Heads.Values
+                        .Count(head => head.Identity.Uri.IndexOf("/html_operation_", StringComparison.Ordinal) >= 0);
+                    AssertEqual(2, operationHeads, "each same-step HTML write publishes its own operation receipt");
+                });
+        }
+
         private static void AppendAcceptedHtmlSource(
             ChatSession session,
             string runId,
