@@ -1310,6 +1310,7 @@ namespace RNAssistant.Harness
             public PowerPointMutationBackendResult DuplicateSlide(PowerPointDuplicateSlideRequest request, Action markDispatchPossible) { BeforeRead?.Invoke(FakeOfficeAdapter.PowerPointDuplicateOperation); return _inner.DuplicateSlide(request, markDispatchPossible); }
             public PowerPointMutationBackendResult MoveSlide(PowerPointMoveSlideRequest request, Action markDispatchPossible) { BeforeRead?.Invoke(FakeOfficeAdapter.PowerPointMoveOperation); return _inner.MoveSlide(request, markDispatchPossible); }
             public OutlookMailDiscoverySnapshot DiscoverMail(int maxItems) { BeforeRead?.Invoke("outlook.discover.direct"); return _inner.DiscoverMail(maxItems); }
+            public OutlookAttachmentContentSnapshot ReadAttachment(OutlookAttachmentReadRequest request) { BeforeRead?.Invoke("outlook.attachment.direct"); return _inner.ReadAttachment(request); }
             public OutlookMailReadSnapshot ReadMail(OutlookReadMailRequest request) { BeforeRead?.Invoke(FakeOfficeAdapter.OutlookReadMailOperation); return _inner.ReadMail(request); }
             public OutlookFolderSnapshot ReadFolder(OutlookFolderReadRequest request) { BeforeRead?.Invoke(FakeOfficeAdapter.OutlookReadFolderOperation); return _inner.ReadFolder(request); }
             public OutlookDraftBackendResult CreateDraft(OutlookCreateDraftRequest request, Action markDispatchPossible) { BeforeRead?.Invoke(FakeOfficeAdapter.OutlookCreateDraftOperation); return _inner.CreateDraft(request, markDispatchPossible); }

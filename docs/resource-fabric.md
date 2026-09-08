@@ -467,6 +467,45 @@ existing contour; folder search uses the exact projection described below. Real 
 membership, unsaved-mail identity, WebView2 and final catalog/model qualification
 remain open; this reader switch does not close those gates.
 
+### Outlook attachment content (user-authorized, 2026-09-08)
+
+`Outlook attachment: <mail title> / <index>: <file name>` is a semantic target.
+Filename discovery covers the selected/open mail only; Explorer coverage is explicitly
+partial. Other mail `structure`/`source` views advertise attachment targets; pass a
+copied target to `common.resources_find`, then `common.resources_read`. Target resolution
+requires unique complete mail discovery (at most 500 folder items); open an Inspector
+when folder discovery is incomplete. Attachment coverage does not gate other resource
+families. No mailbox-wide attachment-content search is introduced.
+
+`metadata` reads no file bytes; `text` reads text/CSV or extracted PDF text; `media`
+uses the existing model attachment/vision routing for images and PDFs. Auto selects
+media for images and PDFs with little/no page text. Explicit PDF text includes a warning
+when visual content is absent from extraction. No separate OCR, model protocol or UI is
+introduced. DOCX/XLSX/PPTX, archives, embedded messages and OLE attachments are outside
+this slice; unsupported/invalid content fails explicitly.
+
+`OutlookService.CaptureAttachment` validates the typed request/result. The bound
+`OutlookInteropBackend` saves only `olByValue` into a uniquely named temporary directory,
+checks reported size before saving and actual file length before allocating bytes, then
+checks attachment metadata and mail modification time again. Limit: 20 MiB per file;
+complete extracted text: 1,000,000 characters. Temporary files are removed in `finally`;
+new attachment/collection and owned Explorer-mail COM references are released. No mail mutation/open/execute
+occurs. Attachment capture itself never obtains `MailItem.Body`.
+
+Runtime keys pin the parent mail, attachment index and metadata fingerprint, preventing
+an already-resolved slot from silently following a renamed/replaced attachment. Original
+bytes and extracted text are parts of one private CAS source view registered before
+shared authority publication. `CompleteViewParts` is runtime-only capture metadata;
+there is no new store or legacy reader. Text continuations and historical media use that
+exact source, never another live capture; later observed byte changes publish drift.
+The private manifest and its payload references never enter model-facing text.
+
+Host-neutral Outlook, CAS retention/drift, model media and bound-STA/closed-window checks
+pass. Actual Windows x64 + Office x64 + VS 2022 build and Outlook/COM checks remain open:
+Inspector/Explorer and store identity, SaveAsFile/read-back/cleanup, large files,
+protected/corrupt PDFs, unsaved/inline attachments, and real vision-model delivery.
+Existing Windows/x86 PDF and source-allocation gates are unchanged.
+
 Folder collection uses the same document provider, shared authority and CAS;
 `outlook.collect_mail`, its handler/request/output and monthly JSON wrapper are
 removed, including accepted-call replay. `common.resources_find` exposes an

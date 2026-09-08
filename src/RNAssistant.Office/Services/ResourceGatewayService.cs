@@ -234,6 +234,9 @@ namespace RNAssistant.Office.Services
             }
             var provider = ProviderFor(request.Reference.Uri);
             var live = provider is ILiveOfficeResourceProvider;
+            var outlook = provider as LiveDocumentResourceProvider;
+            if (outlook?.IsOutlookAttachment(request.Reference.Uri) == true)
+                return ReadOutlookAttachment(session, request, outlook);
             // Structural owners validate the caller's exact continuation before a
             // floating artifact identity can be resolved to its current revision.
             if (request.Representation == "table" || request.Representation == "records")

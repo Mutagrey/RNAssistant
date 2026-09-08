@@ -10,6 +10,21 @@
 Новые product features заморожены. Запись в этом файле не разрешает начать работу
 до её явного включения в текущую фазу.
 
+## Outlook attachment follow-ups — 2026-09-08
+
+Owner: Outlook domain / Resource Fabric. The authorized PDF/text/image slice does
+not include DOCX/XLSX/PPTX extraction, archives, embedded .msg/OLE items or mailbox-wide
+attachment search. Any extension requires a separate approved scope. Windows delivery
+and real model/COM checks remain open under the existing qualification gates.
+
+## Dependency-direction substring false positives — 2026-09-08
+
+Owner: architecture harness. `architecture: mandatory dependency direction` reports
+six Office files for `DocumentIdentity.` because the text scan also matches
+`MarkdownDocumentIdentity.`. All six matching lines exist unchanged in base HEAD
+`670301c9`; the Outlook attachment slice adds none. Correct identifier matching in a
+separate approved test correction; do not treat this failed gate as passed.
+
 ## Resource prompt test expectation — 2026-09-08
 
 During the shared HTML slice, `artifacts: historical attachments stay reference-only`

@@ -88,6 +88,74 @@ namespace RNAssistant.OfficeHosts
             };
         }
 
+        public OutlookAttachmentContentSnapshot ReadAttachment(OutlookAttachmentReadRequest request)
+        {
+            if (request?.Expected == null || (request.BoundMailOnly && !_session.IsMailTarget) ||
+                (!request.BoundMailOnly && string.IsNullOrEmpty(request.EntryId)))
+                throw new OutlookBackendException("An exact bound attachment is required.", "outlook_attachment_target_invalid", false);
+            var mail = _session.ResolveMail(request.EntryId);
+            if (mail == null) throw new OutlookBackendException("Mail is unavailable.", "outlook_mail_not_found", false);
+            var ownsMailReference = !_session.IsMailTarget;
+            Outlook.Attachments attachments = null;
+            Outlook.Attachment attachment = null;
+            string directory = null;
+            try
+            {
+                attachments = mail.Attachments;
+                if (request.Expected.Index < 1 || request.Expected.Index > attachments.Count)
+                    throw new OutlookBackendException("Attachment was removed.", "outlook_attachment_changed", false);
+                attachment = attachments[request.Expected.Index];
+                var before = AttachmentMetadata(attachment, request.Expected.Index);
+                var modified = mail.LastModificationTime;
+                if (!OutlookService.AttachmentMatches(request.Expected, before))
+                    throw new OutlookBackendException("Attachment changed before capture.", "outlook_attachment_changed", false);
+                if (before.Type != "olByValue" || before.Size < 1 || before.Size > OutlookService.MaxAttachmentBytes)
+                    throw new OutlookBackendException("Only bounded file attachments are supported.", "outlook_attachment_unsupported", false);
+                directory = System.IO.Path.Combine(System.IO.Path.GetTempPath(), "RNAssistant-attachment-" + Guid.NewGuid().ToString("N"));
+                System.IO.Directory.CreateDirectory(directory);
+                var path = System.IO.Path.Combine(directory, "source.bin");
+                attachment.SaveAsFile(path);
+                byte[] bytes;
+                using (var stream = new System.IO.FileStream(path, System.IO.FileMode.Open, System.IO.FileAccess.Read, System.IO.FileShare.Read))
+                {
+                    if (stream.Length < 1 || stream.Length > OutlookService.MaxAttachmentBytes)
+                        throw new OutlookBackendException("Attachment exceeds the byte limit.", "outlook_attachment_unsupported", false);
+                    bytes = new byte[(int)stream.Length];
+                    var offset = 0;
+                    while (offset < bytes.Length)
+                    {
+                        var read = stream.Read(bytes, offset, bytes.Length - offset);
+                        if (read == 0) throw new System.IO.EndOfStreamException();
+                        offset += read;
+                    }
+                }
+                if (mail.LastModificationTime != modified || !OutlookService.AttachmentMatches(before,
+                    AttachmentMetadata(attachment, request.Expected.Index)))
+                    throw new OutlookBackendException("Attachment changed during capture.", "outlook_attachment_changed", false);
+                return new OutlookAttachmentContentSnapshot { EntryId = mail.EntryID ?? string.Empty,
+                    Attachment = before, Bytes = bytes };
+            }
+            finally
+            {
+                try { if (directory != null && System.IO.Directory.Exists(directory)) System.IO.Directory.Delete(directory, true); }
+                finally
+                {
+                    try { if (attachment != null) System.Runtime.InteropServices.Marshal.ReleaseComObject(attachment); }
+                    finally
+                    {
+                        try { if (attachments != null) System.Runtime.InteropServices.Marshal.ReleaseComObject(attachments); }
+                        finally { if (ownsMailReference) System.Runtime.InteropServices.Marshal.ReleaseComObject(mail); }
+                    }
+                }
+            }
+        }
+
+        private static OutlookAttachmentSnapshot AttachmentMetadata(Outlook.Attachment attachment, int index)
+        {
+            return new OutlookAttachmentSnapshot { Index = index, FileName = attachment.FileName ?? string.Empty,
+                DisplayName = attachment.DisplayName ?? string.Empty, Size = attachment.Size, Type = attachment.Type.ToString() };
+        }
+
         public OutlookFolderSnapshot ReadFolder(OutlookFolderReadRequest request)
         {
             request = request ?? new OutlookFolderReadRequest();

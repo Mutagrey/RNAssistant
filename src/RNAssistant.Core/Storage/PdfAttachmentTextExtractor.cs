@@ -16,22 +16,29 @@ namespace RNAssistant.Core.Storage
     {
         public static PdfAttachmentTextExtraction Extract(string path, int maxCharacters)
         {
+            using (var document = PdfDocument.Open(path)) return Extract(document, maxCharacters);
+        }
+
+        public static PdfAttachmentTextExtraction Extract(byte[] bytes, int maxCharacters)
+        {
+            using (var document = PdfDocument.Open(bytes)) return Extract(document, maxCharacters);
+        }
+
+        private static PdfAttachmentTextExtraction Extract(PdfDocument document, int maxCharacters)
+        {
             var builder = new StringBuilder();
             var result = new PdfAttachmentTextExtraction
             {
                 PageTextLengths = new List<int>()
             };
-            using (var document = PdfDocument.Open(path))
+            result.PageCount = document.NumberOfPages;
+            foreach (var page in document.GetPages())
             {
-                result.PageCount = document.NumberOfPages;
-                foreach (var page in document.GetPages())
-                {
-                    if (builder.Length >= maxCharacters) break;
-                    var pageText = ContentOrderTextExtractor.GetText(page) ?? string.Empty;
-                    result.PageTextLengths.Add(pageText.Trim().Length);
-                    builder.AppendLine("[PDF page " + page.Number + "]");
-                    builder.AppendLine(pageText);
-                }
+                if (builder.Length >= maxCharacters) break;
+                var pageText = ContentOrderTextExtractor.GetText(page) ?? string.Empty;
+                result.PageTextLengths.Add(pageText.Trim().Length);
+                builder.AppendLine("[PDF page " + page.Number + "]");
+                builder.AppendLine(pageText);
             }
             result.Text = builder.ToString();
             return result;

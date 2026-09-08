@@ -25,6 +25,11 @@ namespace RNAssistant.Office.Services
                 {
                     throw new KeyNotFoundException("Live Office resource was not found: " + resourceUri);
                 }
+                if (IsOutlookAttachment(resourceUri) && request.Representation == OutlookAttachmentSourceView)
+                {
+                    ResourceReadCursor.RejectCursor(request);
+                    return CaptureAttachmentSource(session, target);
+                }
                 var representation = NormalizeRepresentation(request == null ? null : request.Representation, target);
                 if (representation == ResourceRepresentations.Metadata)
                 {

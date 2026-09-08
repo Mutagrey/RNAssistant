@@ -139,6 +139,8 @@ namespace RNAssistant.Core.Models
         // Provider read-back ownership only, never proof of consumer observation.
         [Newtonsoft.Json.JsonIgnore]
         public PayloadRef CompleteViewPayload { get; set; }
+        [Newtonsoft.Json.JsonIgnore]
+        public IReadOnlyList<PayloadRef> CompleteViewParts { get; set; }
         [Newtonsoft.Json.JsonProperty("resource")]
         public ResourceDescriptor Resource { get; set; }
         [Newtonsoft.Json.JsonProperty("representation")]

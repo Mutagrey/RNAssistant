@@ -24,6 +24,34 @@ namespace RNAssistant.Office.Domains.Outlook
             _backend = backend ?? throw new ArgumentNullException(nameof(backend));
         }
 
+        public const long MaxAttachmentBytes = RNAssistant.Core.Storage.AttachmentStore.MaxFileBytes;
+
+        public OutlookAttachmentContentSnapshot CaptureAttachment(
+            OutlookAttachmentReadRequest request, CancellationToken cancellationToken)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            var expected = request?.Expected;
+            if (expected == null || expected.Index < 1 || expected.Index > MaxAttachments ||
+                string.IsNullOrEmpty(expected.FileName) || expected.Size < 1 || expected.Size > MaxAttachmentBytes ||
+                expected.Type != "olByValue" || (!request.BoundMailOnly && string.IsNullOrEmpty(request.EntryId)))
+                throw new OutlookBackendException("Read requires a bounded file attachment in one exact mail; embedded/OLE items are unsupported.",
+                    "outlook_attachment_unsupported", false);
+            var result = _backend.ReadAttachment(request);
+            cancellationToken.ThrowIfCancellationRequested();
+            if (result?.Bytes == null || result.Bytes.LongLength < 1 || result.Bytes.LongLength > MaxAttachmentBytes ||
+                !AttachmentMatches(expected, result.Attachment) ||
+                (!string.IsNullOrEmpty(request.EntryId) && request.EntryId != result.EntryId))
+                throw new OutlookBackendException("The attachment capture is incomplete or changed.", "outlook_attachment_changed", false);
+            return result;
+        }
+
+        public static bool AttachmentMatches(OutlookAttachmentSnapshot expected, OutlookAttachmentSnapshot actual)
+        {
+            return expected != null && actual != null && expected.Index == actual.Index &&
+                expected.FileName == actual.FileName && expected.DisplayName == actual.DisplayName &&
+                expected.Size == actual.Size && expected.Type == actual.Type;
+        }
+
         public OutlookMailReadSnapshot CaptureMail(
             OutlookReadMailRequest request, CancellationToken cancellationToken)
         {
