@@ -18,7 +18,7 @@ namespace RNAssistant.Office.Tools
         private const int MaximumWholeReadPages = 128;
         internal static readonly ToolDescriptor Descriptor = new ToolDescriptor(
             ResourceToolCatalog.ReadToolId,
-            "Read-only: Read a semantic target supplied by RUNTIME_CONTEXT or common.resources_find. Copy target verbatim, follow its usage and supported representations; it never contains :// and must not be constructed from a title. Do not read an Excel search scope to enumerate worksheet data: use excel.find_cells for discovery or an Excel range/table/name target for values. table/records return bounded row coverage with optional semantic path, fields, offset and limit. Text/source/structure require one complete representation; oversized requests fail explicitly. For a project-wide VBA request, read RUNTIME_CONTEXT.document.vba_project_target with representation=structure first. Exact URI, revision, cursor and guards remain runtime-owned. Media is hydrated only for the next model step; base64 is never embedded in JSON.",
+            "Read-only: Read a semantic target supplied by RUNTIME_CONTEXT or common.resources_find. Copy target verbatim, follow its usage and supported representations; it never contains :// and must not be constructed from a title. Do not read an Excel search scope to enumerate worksheet data: use excel.find_cells for discovery or an Excel range/table/name target for values. table/records return bounded row coverage with optional fields, offset and limit; omit path for Office targets because runtime applies their canonical record view. Text/source/structure require one complete representation; oversized requests fail explicitly. For a project-wide VBA request, read RUNTIME_CONTEXT.document.vba_project_target with representation=structure first. Exact URI, revision, cursor and guards remain runtime-owned. Media is hydrated only for the next model step; base64 is never embedded in JSON.",
             Parameters());
         internal static readonly ToolPolicy Policy = new ToolPolicy(ToolEffect.Read, ToolVerification.None,
             false, true, new[] { "agent", "plan", "chat" });
@@ -44,11 +44,15 @@ namespace RNAssistant.Office.Tools
             var structured = representation == "table" || representation == "records";
             if (!structured && new[] { "limit", "offset", "path", "fields" }.Any(context.Arguments.ContainsKey))
                 throw new ResourceRequestException("Structural selectors require representation=table or records.", "RESOURCE_VIEW_UNSUPPORTED", false);
+            var viewPath = structured
+                ? ResourceGatewayService.ResolveStructuralViewPath(selected,
+                    ToolArgumentReader.String(context.Arguments, "path", null))
+                : null;
             var selection = structured
                 ? Gateway.Read(Session, new ResourceReadRequest { Reference = reference, Representation = representation,
                     MaxRows = ToolArgumentReader.Int32(context.Arguments, "limit", 500),
                     RowOffset = ToolArgumentReader.Int32(context.Arguments, "offset", 0),
-                    ViewPath = ToolArgumentReader.String(context.Arguments, "path", "$"),
+                    ViewPath = viewPath,
                     Fields = Fields(context.Arguments) })
                 : ReadWhole(reference, representation);
             var projection = Project(
@@ -252,7 +256,7 @@ namespace RNAssistant.Office.Tools
         {
             const string target = "\"target\":{\"type\":\"string\",\"description\":\"Exact readable target copied verbatim from RUNTIME_CONTEXT or common.resources_find. It never contains ://; do not construct it from a title.\",\"minLength\":1,\"maxLength\":1000}";
             const string representation = "\"representation\":{\"type\":\"string\",\"description\":\"Representation to read. Complete views cannot be combined with table/records selectors.\",\"enum\":[\"metadata\",\"text\",\"structure\",\"source\",\"media\",\"formulas\",\"table\",\"records\"]}";
-            const string selectors = "\"limit\":{\"type\":\"integer\",\"description\":\"Maximum rows in this table/records batch.\",\"minimum\":1,\"maximum\":5000},\"offset\":{\"type\":\"integer\",\"description\":\"Zero-based table/records row offset.\",\"minimum\":0},\"path\":{\"type\":\"string\",\"description\":\"Root array $ or an explicit object-property path such as $.records. Brackets, indexes, and wildcards are unsupported.\",\"pattern\":\"^\\\\$(?:\\\\.[A-Za-z_][A-Za-z0-9_]*)*$\",\"maxLength\":256},\"fields\":{\"type\":\"array\",\"description\":\"Structural field keys to project.\",\"maxItems\":128,\"items\":{\"type\":\"string\",\"maxLength\":128}}";
+            const string selectors = "\"limit\":{\"type\":\"integer\",\"description\":\"Maximum rows in this table/records batch.\",\"minimum\":1,\"maximum\":5000},\"offset\":{\"type\":\"integer\",\"description\":\"Zero-based table/records row offset.\",\"minimum\":0},\"path\":{\"type\":\"string\",\"description\":\"Optional record-array path for generic JSON resources. Omit it for Office targets; runtime applies their canonical record view. Otherwise use $ or an explicit object-property path such as $.records. Brackets, indexes, and wildcards are unsupported.\",\"pattern\":\"^\\\\$(?:\\\\.[A-Za-z_][A-Za-z0-9_]*)*$\",\"maxLength\":256},\"fields\":{\"type\":\"array\",\"description\":\"Structural field keys to project.\",\"maxItems\":128,\"items\":{\"type\":\"string\",\"maxLength\":128}}";
             return "{\"type\":\"object\",\"properties\":{" + target + "," + representation + "," + selectors +
                 "},\"required\":[\"target\"],\"additionalProperties\":false,\"anyOf\":[" +
                 "{\"type\":\"object\",\"description\":\"Read one complete metadata, text, structure, source, media, or formulas representation. Do not send limit, offset, path, or fields.\",\"properties\":{" + target + "," +

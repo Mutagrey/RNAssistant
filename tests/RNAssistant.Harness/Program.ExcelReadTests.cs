@@ -118,8 +118,18 @@ namespace RNAssistant.Harness
             {
                 var session = NewSession(adapter);
                 executor.BindResourceAuthority(session);
+                var gateway = executor.ResourceGateway;
                 var tools = OfficeToolCatalog.ForHost("Excel").Concat(executor.GetControllerTools()).ToList();
                 var runtime = executor.CreateNativeRuntime(session, tools, new AppSettings(), "agent", false);
+                adapter.ExcelBackendCalls.Clear();
+                var direct = gateway.Find(session, "Data!A1:B4", "document");
+                AssertTrue(direct.Complete && !direct.Partial && direct.Items.Count == 1,
+                    "an exact Excel address is a complete point lookup");
+                AssertContains(direct.Items.Single().Usage, "omit path",
+                    "range discovery keeps the canonical record path runtime-owned");
+                AssertEqual(0, adapter.ExcelBackendCalls.Count(call =>
+                    call == FakeOfficeAdapter.ExcelInspectOperation),
+                    "an exact range lookup does not scan unrelated document catalogs");
                 adapter.SetExcelCellForTest("Data", "A1", new string('a', 20000));
                 adapter.SetExcelCellForTest("Data", "B1", new string('b', 20000));
                 var first = ExecuteHtmlNative(runtime, ResourceToolCatalog.ReadToolId,
@@ -168,7 +178,10 @@ namespace RNAssistant.Harness
                 var listed = gateway.List(session, "excel", ExcelResourceProvider.TableKind, null, 20).Items.Single();
                 AssertEqual("Sales", listed.Title, "table discovery uses its semantic name");
                 AssertEqual(0, adapter.ExcelBackendCalls.Count(item => item == FakeOfficeAdapter.ExcelRangeReadOperation), "discovery does not read cells");
-                AssertTrue(gateway.Find(session, "Sales", "document").Items.Any(item => item.Target == "Excel table: Sales"), "generic find discovers named tables");
+                var tableCandidate = gateway.Find(session, "Sales", "document").Items
+                    .Single(item => item.Target == "Excel table: Sales");
+                AssertContains(tableCandidate.Usage, "omit path",
+                    "table discovery keeps the canonical record path runtime-owned");
                 var tools = OfficeToolCatalog.ForHost("Excel").Concat(executor.GetControllerTools()).ToList();
                 var runtime = executor.CreateNativeRuntime(session, tools, new AppSettings(), "agent", false);
                 var first = ExecuteHtmlNative(runtime, ResourceToolCatalog.ReadToolId,
@@ -199,8 +212,25 @@ namespace RNAssistant.Harness
                 }
                 adapter.SetExcelTableRangeForTest("Data", "Sales", "E1:F3");
                 var rows = ExecuteHtmlNative(runtime, ResourceToolCatalog.ReadToolId,
-                    new JObject { ["target"] = "Excel table: Sales", ["representation"] = "records", ["path"] = "$.values", ["limit"] = 2 });
-                AssertEqual(ToolExecutionOutcome.Ok, rows.Outcome, "bounded model records follow table resize through the same provider");
+                    new JObject { ["target"] = "Excel table: Sales", ["representation"] = "records", ["limit"] = 2 });
+                AssertEqual(ToolExecutionOutcome.Ok, rows.Outcome,
+                    "bounded model records use the table's canonical path without model plumbing");
+                var rangeReads = adapter.ExcelBackendCalls.Count(item =>
+                    item == FakeOfficeAdapter.ExcelRangeReadOperation);
+                var wrongPath = ExecuteHtmlNative(runtime, ResourceToolCatalog.ReadToolId,
+                    new JObject { ["target"] = "Excel table: Sales", ["representation"] = "records", ["path"] = "$.records" });
+                AssertEqual(ToolExecutionOutcome.Error, wrongPath.Outcome,
+                    "a conflicting explicit table path is rejected");
+                AssertEqual("RESOURCE_VIEW_PATH_MISMATCH",
+                    (string)JObject.Parse(wrongPath.Result.DataJson)["code"],
+                    "path mismatch has a stable replan code");
+                AssertEqual(ToolRetryPolicy.Replan, wrongPath.Recovery.RetryPolicy,
+                    "path mismatch requires changed arguments, not an automatic retry");
+                AssertContains(wrongPath.Result.Message, "$.values",
+                    "path mismatch reports the exact canonical value");
+                AssertEqual(rangeReads, adapter.ExcelBackendCalls.Count(item =>
+                    item == FakeOfficeAdapter.ExcelRangeReadOperation),
+                    "path mismatch is rejected before cell capture");
                 var formulas = ExecuteHtmlNative(runtime, ResourceToolCatalog.ReadToolId,
                     new JObject { ["target"] = "Excel table: Sales", ["representation"] = "formulas" });
                 AssertEqual(ToolExecutionOutcome.Ok, formulas.Outcome, "named table retains formula view");
@@ -257,7 +287,10 @@ namespace RNAssistant.Harness
                 var gateway = executor.ResourceGateway;
                 var listed = gateway.List(session, "excel", ExcelResourceProvider.NameKind, null, 20).Items;
                 AssertEqual(2, listed.Select(item => item.Reference.Uri).Distinct().Count(), "global and sheet-qualified names have distinct identities");
-                AssertTrue(gateway.Find(session, "Sales", "document").Items.Any(item => item.Target == "Excel name: Sales"), "generic find discovers defined names");
+                var nameCandidate = gateway.Find(session, "Sales", "document").Items
+                    .Single(item => item.Target == "Excel name: Sales");
+                AssertContains(nameCandidate.Usage, "omit path",
+                    "defined-name discovery keeps the canonical record path runtime-owned");
                 AssertEqual("Excel name: Data!Sales", gateway.Find(session, "Excel name: Data!Sales", "document").Items.Single().Target,
                     "qualified name bypasses A1 target parsing");
                 AssertEqual(0, adapter.ExcelBackendCalls.Count(item => item == FakeOfficeAdapter.ExcelRangeReadOperation), "name discovery does not read cells");
@@ -299,7 +332,7 @@ namespace RNAssistant.Harness
                 foreach (var view in new[] { "records", "formulas", "structure" })
                 {
                     var args = new JObject { ["target"] = "Excel name: Sales", ["representation"] = view };
-                    if (view == "records") { args["path"] = "$.range.values"; args["limit"] = 2; }
+                    if (view == "records") args["limit"] = 2;
                     var read = ExecuteHtmlNative(runtime, ResourceToolCatalog.ReadToolId, args);
                     AssertEqual(ToolExecutionOutcome.Ok, read.Outcome, "resized name supports shared " + view + " view");
                 }

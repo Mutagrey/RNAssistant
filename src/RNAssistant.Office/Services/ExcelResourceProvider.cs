@@ -128,6 +128,7 @@ namespace RNAssistant.Office.Services
             descriptor.Representations.AddRange(new[] { "text", "formulas", "structure", "table", "records" });
             descriptor.Capabilities.Add("read");
             descriptor.Metadata["sheet"] = sheet; descriptor.Metadata["address"] = range;
+            descriptor.Metadata["recordsPath"] = "$";
             descriptor.Metadata["maximumSnapshotCells"] = ExcelReadService.MaxReadCells.ToString();
             return descriptor;
         }

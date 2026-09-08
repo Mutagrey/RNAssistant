@@ -77,8 +77,11 @@ namespace RNAssistant.Office.Tools
                 throw new ResourceRequestException(
                     "Excel search scopes expose search evidence, not tabular source data. Bind an Excel range, table, or name target returned by common.resources_find.",
                     "RESOURCE_VIEW_UNSUPPORTED", false);
+            var requestedPath = ToolArgumentReader.String(arguments, "path", null);
             var binding = new HtmlWorkspaceDataBinding { Resource = target.Reference, Policy = "head", View = view,
-                ViewPath = ToolArgumentReader.String(arguments, "path", null) };
+                ViewPath = view == "table" || view == "records"
+                    ? ResourceGatewayService.ResolveStructuralViewPath(target, requestedPath)
+                    : requestedPath };
             var exact = ReadBinding(session, binding, cancellationToken).Resource.Reference;
             binding.Resource = policy == "head" ? new ResourceRef(exact.Identity.Uri) : exact.Copy();
             binding.Policy = policy;

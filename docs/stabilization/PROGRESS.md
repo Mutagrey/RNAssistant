@@ -11,6 +11,16 @@ reads and current prompt schema 29; the two completed audit backlog entries are
 removed. No Office/VSTO validation was run; Windows and target-model gates remain
 open.
 
+Latest resource-read correction (2026-09-08): exact Office target queries are now
+point lookups and no longer scan unrelated document catalogs, so an available Excel
+range cannot inherit their partial/unavailable result. Discovery publishes each
+provider-owned record-view usage; model and HTML table/records reads keep the path
+runtime-owned, while conflicting explicit paths fail before cell capture with typed
+`RejectedNoEffect/Replan` recovery. Partial broad discovery now tells the model to
+use returned usable targets instead of repeating the same find. Focused Excel
+read/table/name, resource-discovery and HTML binding checks pass host-neutral;
+Windows/Office/WebView2 and target-model qualification remain open.
+
 Latest UI correction (2026-09-08): the shared `send` boundary now catches
 `postMessage` exceptions, removes the affected pending entry and rejects the
 original caller promise even when queued behind initialization. Other requests

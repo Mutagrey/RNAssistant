@@ -102,6 +102,13 @@ bytes retain that revision; historical LF/CRLF snapshots are never rewritten.
 Model discovery/read uses `common.resources_find/read` with runtime-resolved
 semantic targets and exact internal references/continuations. Live document/VBA
 search providers return typed, non-serialized scan captures independently of matches.
+An exact domain target query such as `Sheet!A1:B20`, `Excel table: Sales`,
+`Excel name: Sales`, `Word range: 0:100`, or `PowerPoint slide: 2` is a point
+lookup: it resolves that target without scanning unrelated resource catalogs or
+inheriting their availability. Provider descriptors retain canonical record paths
+as runtime-owned routing. Model and HTML structured reads omit `path` for those
+targets; runtime applies the canonical value, while a conflicting explicit value
+is a no-effect `Replan` rejection.
 Gateway publishes each captured view through the shared authority before binding
 bounded match evidence to that exact logical revision. Zero-match scans therefore
 publish observed drift too. Complete captures stay in the existing CAS for historical

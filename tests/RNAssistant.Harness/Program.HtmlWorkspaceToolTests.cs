@@ -72,15 +72,15 @@ namespace RNAssistant.Harness
                         "HTML binding selects a resource view, not a second transform pipeline");
                     string bindError;
                     AssertTrue(ToolSchemaSupport.ValidateArguments(new JObject {
-                        ["name"] = "sales", ["target"] = "Excel range: DATA!A1:B10",
+                        ["name"] = "sales", ["target"] = "attachment: records.json",
                         ["view"] = "records", ["path"] = "$.records"
                     }, bindSchema, false, out bindError), "HTML binding admits an explicit structural path");
                     AssertTrue(!ToolSchemaSupport.ValidateArguments(new JObject {
-                        ["name"] = "sales", ["target"] = "Excel range: DATA!A1:B10",
+                        ["name"] = "sales", ["target"] = "attachment: records.json",
                         ["view"] = "records", ["path"] = "$[*]"
                     }, bindSchema, false, out bindError), "HTML binding rejects wildcard structural paths before execution");
                     AssertTrue(!ToolSchemaSupport.ValidateArguments(new JObject {
-                        ["name"] = "sales", ["target"] = "Excel range: DATA!A1:B10",
+                        ["name"] = "sales", ["target"] = "attachment: records.json",
                         ["view"] = "text", ["path"] = "$.records"
                     }, bindSchema, false, out bindError), "HTML binding rejects structural selectors on complete views");
                     AssertTrue(ToolSchemaSupport.ValidateArguments(new JObject {
@@ -128,6 +128,19 @@ namespace RNAssistant.Harness
                     AssertEqual(ToolRetryPolicy.Replan,
                         searchBinding.Recovery.RetryPolicy,
                         "invalid HTML binding requires a different semantic target");
+
+                    adapter.AddExcelTableForTest(
+                        "Data", "A1:B4", "Sales", true, string.Empty);
+                    var tableBinding = ExecuteHtmlNative(runtime,
+                        HtmlWorkspaceToolCatalog.BindDataToolId,
+                        new JObject { ["name"] = "table-sales",
+                            ["target"] = "Excel table: Sales",
+                            ["view"] = "records" });
+                    AssertEqual(ToolExecutionOutcome.Ok, tableBinding.Outcome,
+                        "HTML binding applies an Office target's canonical record view");
+                    AssertEqual("$.values", session.HtmlWorkspace.DataSources
+                            .Single(item => item.Name == "table-sales").Binding.ViewPath,
+                        "HTML binding persists the runtime-selected canonical path");
 
                     var upsert = ExecuteHtmlNative(runtime,
                         HtmlWorkspaceToolCatalog.WriteFileToolId,

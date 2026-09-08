@@ -21,6 +21,32 @@ namespace RNAssistant.Office.Services
         {
             query = (query ?? string.Empty).Trim();
             scope = NormalizeIntentScope(scope);
+            var direct = ResolveDirectIntentQuery(session, query, scope);
+            if (direct != null)
+            {
+                var state = new ResourceIntentState
+                {
+                    Descriptor = direct,
+                    Reference = direct.Reference.Copy(),
+                    Type = IntentType(direct)
+                };
+                state.Scope = IntentScope(direct, state.Type);
+                state.Target = IntentTarget(direct);
+                var candidate = ProjectIntentCandidate(state, null);
+                return new ResourceIntentFindResult
+                {
+                    Scope = scope,
+                    Query = query,
+                    Items = new List<ResourceIntentCandidate> { candidate },
+                    Total = 1,
+                    Complete = true,
+                    Empty = false,
+                    Partial = false,
+                    RefineQuery = false,
+                    UnavailableScopes = new List<string>(),
+                    ResourceRefs = new List<ResourceRef> { candidate.Reference }
+                };
+            }
             var unavailable = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
             var sourceTruncated = false;
             var plans = IntentPlansForScope(scope).ToList();
@@ -31,36 +57,6 @@ namespace RNAssistant.Office.Services
             }
             var states = EnumerateIntentResources(
                 session, plans, unavailable, null, ref sourceTruncated);
-            if ((scope == "all" || scope == "document") && query.StartsWith("Excel search scope: ", StringComparison.Ordinal))
-            {
-                var excel = _registry.All().OfType<ExcelResourceProvider>().SingleOrDefault();
-                if (excel != null) AddIntentState(states, WithProvider(excel, session, () => excel.ResolveSearch(session, query.Substring(20))));
-            }
-            else if ((scope == "all" || scope == "document") && query.StartsWith("Excel table: ", StringComparison.Ordinal))
-            {
-                var excel = _registry.All().OfType<ExcelResourceProvider>().SingleOrDefault();
-                if (excel != null) AddIntentState(states, WithProvider(excel, session, () => excel.ResolveTable(session, query.Substring(13))));
-            }
-            else if ((scope == "all" || scope == "document") && query.StartsWith("Excel name: ", StringComparison.Ordinal))
-            {
-                var excel = _registry.All().OfType<ExcelResourceProvider>().SingleOrDefault();
-                if (excel != null) AddIntentState(states, WithProvider(excel, session, () => excel.ResolveName(session, query.Substring(12))));
-            }
-            else if ((scope == "all" || scope == "document") && query.IndexOf('!') > 0)
-            {
-                var excel = _registry.All().OfType<ExcelResourceProvider>().SingleOrDefault();
-                if (excel != null) AddIntentState(states, WithProvider(excel, session, () => excel.ResolveRange(session, query)));
-            }
-            if ((scope == "all" || scope == "document") && query.StartsWith("Word range: ", StringComparison.Ordinal))
-            {
-                var word = _registry.All().OfType<LiveDocumentResourceProvider>().SingleOrDefault();
-                if (word != null) AddIntentState(states, WithProvider(word, session, () => word.ResolveWordRange(session, query)));
-            }
-            if ((scope == "all" || scope == "document") && query.StartsWith("PowerPoint slide: ", StringComparison.Ordinal))
-            {
-                var powerPoint = _registry.All().OfType<LiveDocumentResourceProvider>().SingleOrDefault();
-                if (powerPoint != null) AddIntentState(states, WithProvider(powerPoint, session, () => powerPoint.ResolvePowerPointSlide(session, query)));
-            }
             Dictionary<string, ResourceSearchMatch> matches = null;
             if (query.Length > 0)
             {
@@ -105,6 +101,44 @@ namespace RNAssistant.Office.Services
                     .ToList(),
                 ResourceRefs = shown.Select(item => item.Reference).ToList()
             };
+        }
+
+        private ResourceDescriptor ResolveDirectIntentQuery(
+            ChatSession session,
+            string query,
+            string scope)
+        {
+            if (query.Length == 0 ||
+                scope != "all" && scope != "document") return null;
+            var excel = _registry.All().OfType<ExcelResourceProvider>()
+                .SingleOrDefault();
+            if (query.StartsWith("Excel search scope: ", StringComparison.Ordinal))
+                return excel == null ? null : WithProvider(excel, session,
+                    () => excel.ResolveSearch(session, query.Substring(20)));
+            if (query.StartsWith("Excel table: ", StringComparison.Ordinal))
+                return excel == null ? null : WithProvider(excel, session,
+                    () => excel.ResolveTable(session, query.Substring(13)));
+            if (query.StartsWith("Excel name: ", StringComparison.Ordinal))
+                return excel == null ? null : WithProvider(excel, session,
+                    () => excel.ResolveName(session, query.Substring(12)));
+            if (query.IndexOf('!') > 0)
+                return excel == null ? null : WithProvider(excel, session,
+                    () => excel.ResolveRange(session, query));
+            if (query.StartsWith("Word range: ", StringComparison.Ordinal))
+            {
+                var word = _registry.All().OfType<LiveDocumentResourceProvider>()
+                    .SingleOrDefault();
+                return word == null ? null : WithProvider(word, session,
+                    () => word.ResolveWordRange(session, query));
+            }
+            if (query.StartsWith("PowerPoint slide: ", StringComparison.Ordinal))
+            {
+                var powerPoint = _registry.All()
+                    .OfType<LiveDocumentResourceProvider>().SingleOrDefault();
+                return powerPoint == null ? null : WithProvider(powerPoint,
+                    session, () => powerPoint.ResolvePowerPointSlide(session, query));
+            }
+            return null;
         }
 
         public ResourceIntentTarget ResolveIntentTarget(
@@ -492,7 +526,7 @@ namespace RNAssistant.Office.Services
                 CreatedUtc = state.Descriptor.CreatedUtc,
                 Representations = (state.Descriptor.Representations ??
                     new List<string>()).ToList(),
-                Usage = IntentUsage(state.Type),
+                Usage = IntentUsage(state.Type, state.Descriptor),
                 MatchRepresentation = match == null ? null : match.Representation,
                 Snippet = match == null ? null : match.Snippet,
                 Evidence = match == null ? null : match.Evidence,
@@ -502,11 +536,46 @@ namespace RNAssistant.Office.Services
             };
         }
 
-        private static string IntentUsage(string type)
+        private static string IntentUsage(
+            string type,
+            ResourceDescriptor descriptor)
         {
             if (type == "Excel search scope")
                 return "Discovery only: use excel.find_cells with a query. Do not read this target to enumerate worksheet data; read an Excel range, table, or name target instead.";
+            if (!string.IsNullOrWhiteSpace(IntentRecordsPath(descriptor)))
+                return "For table/records omit path; runtime applies this target's canonical record view.";
             return null;
+        }
+
+        internal static string ResolveStructuralViewPath(
+            ResourceIntentTarget target,
+            string requestedPath)
+        {
+            var canonical = IntentRecordsPath(target == null
+                ? null
+                : target.Descriptor);
+            if (string.IsNullOrWhiteSpace(requestedPath))
+                return string.IsNullOrWhiteSpace(canonical) ? "$" : canonical;
+            if (!string.IsNullOrWhiteSpace(canonical) &&
+                !string.Equals(canonical, requestedPath, StringComparison.Ordinal))
+            {
+                throw new ResourceRequestException(
+                    "This target exposes records at " + canonical +
+                    ". Omit path or pass that exact value.",
+                    "RESOURCE_VIEW_PATH_MISMATCH",
+                    false);
+            }
+            return requestedPath;
+        }
+
+        private static string IntentRecordsPath(ResourceDescriptor descriptor)
+        {
+            string path;
+            return descriptor != null && descriptor.Metadata != null &&
+                descriptor.Metadata.TryGetValue("recordsPath", out path) &&
+                !string.IsNullOrWhiteSpace(path)
+                    ? path
+                    : null;
         }
 
         private static string IntentMetadata(ResourceIntentState state)

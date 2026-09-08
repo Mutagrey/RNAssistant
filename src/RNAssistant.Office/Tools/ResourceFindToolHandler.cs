@@ -9,7 +9,7 @@ namespace RNAssistant.Office.Tools
     {
         internal static readonly ToolDescriptor Descriptor = new ToolDescriptor(
             ResourceToolCatalog.FindToolId,
-            "Read-only: Find readable conversation, document, selection, HTML, VBA, or backup resources. Returns semantic targets, supported representations, and usage constraints for common.resources_read. Follow each candidate's usage; a query returns filtered matches, not a complete inventory. For all VBA modules, prefer the bound project target in RUNTIME_CONTEXT; if absent, browse scope=vba without query and read the first VBA project target as structure. Provider routing, resource kinds, exact references, paging, and limits are runtime-owned.",
+            "Read-only: Find readable conversation, document, selection, HTML, VBA, or backup resources. Returns semantic targets, supported representations, and usage constraints for common.resources_read. Follow each candidate's usage; a query returns filtered matches, not a complete inventory. Exact Office target queries are point lookups. For all VBA modules, prefer the bound project target in RUNTIME_CONTEXT; if absent, browse scope=vba without query and read the first VBA project target as structure. Provider routing, resource kinds, exact references, paging, record paths, and limits are runtime-owned.",
             Parameters());
         internal static readonly ToolPolicy Policy = new ToolPolicy(
             ToolEffect.Read,
@@ -37,7 +37,9 @@ namespace RNAssistant.Office.Tools
                 result.Empty
                     ? "No resources matched the semantic scope."
                     : result.Partial
-                        ? "Resource find completed with unavailable scopes."
+                        ? result.Items.Count > 0
+                            ? "Resource find returned usable targets; some other sources were unavailable. Use a returned target directly and do not repeat the same find."
+                            : "Resource find is incomplete because some sources were unavailable. Refine the scope or query before retrying."
                         : !result.Complete
                             ? "Resource find is incomplete; absence is not established."
                             : "Resource find completed.",
