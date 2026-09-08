@@ -1,6 +1,19 @@
 # Stabilization progress
 
-Current correction (2026-09-08), after metadata recovery commit `bd7a43b1`:
+Current architecture correction (2026-09-08), after `629c089a`: checked the
+Resource MASTER and all three canonical contracts before continuing shared HTML.
+Removed the unregistered HTML-specific record/read draft. Extracted the existing
+Plan metadata/body registration and exact reading into one private artifact-record
+path within `DocumentArtifactStore`; Plan uses it now, with unchanged durable view/
+provenance shape and existing authority/CAS publication. No additional store,
+provider, file layout, HTML identity or new ownership contract is active.
+Next: implement the HTML domain publication and its consumers through that common
+path and the existing mutation observer/Gateway. Preserve supported head bindings,
+exact dependencies, new-revision restore and chat-local selection semantics.
+Shared HTML/Markdown remains open, as do Windows/Office/WebView2 and layout gates.
+See [boundary audit](../artifact-library.md#resource-fabric-boundary-audit--2026-09-08).
+
+Previous correction (2026-09-08), after metadata recovery commit `bd7a43b1`:
 HTML UI delete file/data, entry selection, import/export and undo/redo/recovery now
 require the captured chat, active snapshot and session revision. The addressed
 controller reserves/reloads the chat, checks the bound document and revalidates

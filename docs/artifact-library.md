@@ -289,6 +289,38 @@ with source-role validation and stale-evidence exclusion; never extract them by
 parsing ad-hoc headings from `message`. Shared decision memory should be a
 versioned resource with source citations, not an untraceable global summary.
 
+### Resource Fabric boundary audit — 2026-09-08
+
+The HTML owner cutover must reuse the Resource MASTER's three canonical contracts.
+`DocumentArtifactStore` is an artifact-domain facade over the existing
+`IResourceAuthorityStore`, `IResourceRevisionStore` and CAS. A partial source file
+is not a new physical store, but duplicating registration/read rules by artifact
+kind is still unnecessary. Its common `RetainRecord` / `ReadRecordSnapshot` path
+now serves Plan metadata and bodies; the former Plan-only record implementation
+is removed. Existing Plan record view, provenance fields and publication barriers
+are retained. No HTML identity, format or ownership is activated by this refactor.
+
+The discarded, unconnected `DocumentArtifactStore.Html.cs` draft must not return
+as an independent HTML metadata/read/receipt subsystem. For the following HTML
+slice:
+
+- Keep aggregate assembly and binding semantics in the HTML domain owner. Retain
+  its immutable artifact record through the common facade, with `PayloadRef` and
+  typed `ResourceDependency` provenance in the existing revision store.
+- Keep guards, operation receipts, unknown outcomes and atomic effect/head/
+  generation publication in the existing mutation observer/authority journal.
+  Do not build an HTML-specific authority or freshness registry.
+- Keep reads, schema/mapping resolution, derived resources and leases on the
+  existing Gateway/providers/data plane. Document ownership alone does not justify
+  an HTML-specific JSON store, copying every dependency, or banning supported
+  `head` bindings. Historical/exact views and live bindings follow Fabric semantics.
+- Publish restore through the existing mutation protocol as a new logical revision
+  with parent/restored-from provenance. Changing a chat selection or editing/forking
+  dialogue must not publish a rollback of a shared resource head.
+
+The drift was confined to an unregistered draft and is removed. Shared HTML and
+independent Markdown still require the complete owner/tools/consumer cutover below.
+
 ### Required implementation slices and acceptance
 
 HTML/Markdown cutover audit (2026-09-08): switch these remaining assumptions
