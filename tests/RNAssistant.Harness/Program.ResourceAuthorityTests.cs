@@ -1323,19 +1323,19 @@ namespace RNAssistant.Harness
                 executor.MutateLocalResources(session, "common.html_workspace_write_file", null,
                     () => RNAssistant.Office.Tools.HtmlWorkspaceToolService.UpsertFile(session, "index.html", "html", "<p>one</p>", true));
                 var originalArtifact = session.ActiveHtmlArtifactId;
-                var scope = executor.ResourceAuthority.Scope(session, false);
-                var identity = ResourceStateProvider.Identity(scope, "html-workspace");
+                var scope = executor.ResourceAuthority.Scope(session, true);
+                var identity = HtmlWorkspaceIdentity.Identity(session, HtmlWorkspaceIdentity.LogicalId(session.ActiveHtmlArtifactId));
                 var first = executor.ResourceAuthority.Store.GetHead(scope, identity).Revision;
                 executor.MutateLocalResources(session, "common.html_workspace_write_file", null,
                     () => RNAssistant.Office.Tools.HtmlWorkspaceToolService.UpsertFile(session, "index.html", "html", "<p>two</p>", true));
-                executor.MutateLocalResources(session, "common.html_workspace_restore", null, () => {
-                    RNAssistant.Office.Tools.HtmlWorkspaceToolService.RestoreSnapshot(session, originalArtifact); return true; });
+                executor.MutateLocalResources(session, "common.html_workspace_restore", new Dictionary<string, object> { ["snapshotId"] = originalArtifact }, () => {
+                    HtmlWorkspaceArtifactService.RestoreAsRevision(session, originalArtifact); return true; });
                 var restored = executor.ResourceAuthority.Store.GetHead(scope, identity).Revision;
                 AssertTrue(first.Revision != restored.Revision, "restore is a new logical revision even for the same payload");
                 var revisions = (IResourceRevisionStore)executor.ResourceAuthority.Store;
                 var metadata = revisions.GetRevision(scope, restored);
                 AssertEqual(first.Revision, metadata.RestoredFrom.Revision, "restore retains exact origin lineage");
-                AssertEqual(revisions.GetRevision(scope, first).Payload.Sha256, metadata.Payload.Sha256, "CAS deduplicates identical restored bytes");
+                AssertEqual("<p>one</p>", session.HtmlWorkspace.Files.Single().Content, "restore preserves source content under a new snapshot link");
             });
         }
 
@@ -1370,11 +1370,12 @@ namespace RNAssistant.Harness
                     () => new TaskListService().Set(session, "Goal", new[] { "Read", "Change", "Verify" }
                         .Select(text => new ChatTaskStep { Text = text }).ToList(), () => { }));
                 var scope = executor.ResourceAuthority.Scope(session, false);
-                var html = ResourceStateProvider.Identity(scope, "html-workspace");
+                var htmlScope = executor.ResourceAuthority.Scope(session, true);
+                var html = HtmlWorkspaceIdentity.Identity(session, HtmlWorkspaceIdentity.LogicalId(session.ActiveHtmlArtifactId));
                 var planScope = executor.ResourceAuthority.Scope(session, true);
                 var plan = DocumentArtifactStore.PlanIdentity(session, PlanDocumentService.PlanId(session.Artifacts.Single(item => item.Id == session.ActivePlanDocumentArtifactId)));
                 var tasks = ResourceStateProvider.Identity(scope, "task-list");
-                var first = store.GetHead(scope, html).Revision;
+                var first = store.GetHead(htmlScope, html).Revision;
                 var planBefore = store.GetHead(planScope, plan).Revision;
                 var tasksBefore = store.GetHead(scope, tasks).Revision;
                 session.Messages.Add(new ChatMessage { Role = "user", Content = "Start" });
@@ -1387,15 +1388,13 @@ namespace RNAssistant.Harness
                 executor.MutateLocalResources(session, "common.html_workspace_write_file", null,
                     () => HtmlWorkspaceToolService.UpsertFile(session, "index.html", "html", "<p>two</p>", true));
                 session.Messages.Add(new ChatMessage { Role = "assistant", Content = "Changed" });
-                var second = store.GetHead(scope, html).Revision;
+                var second = store.GetHead(htmlScope, html).Revision;
                 expectedGenerationDuringSave = store.Capture(scope).Generation;
                 executor.MutateChatResources(session, new ChatResourceMutationIntent(ChatResourceMutationKind.Edit, target.Id, text: "Replay"),
                     () => edits.RewriteUserMessage(session, session.Id, target.Id, -1, "Replay"));
                 expectedGenerationDuringSave = null;
-                var restored = store.GetHead(scope, html).Revision;
-                var metadata = store.GetRevision(scope, restored);
-                AssertEqual(first.Revision, metadata.RestoredFrom.Revision, "edit has exact restore origin");
-                AssertEqual(second.Revision, metadata.Parent.Revision, "edit advances, never rewinds, logical lineage");
+                var restored = store.GetHead(htmlScope, html).Revision;
+                AssertEqual(second.Revision, restored.Revision, "dialogue rewrite cannot restore or advance shared HTML");
                 AssertEqual(planBefore.Revision, store.GetHead(planScope, plan).Revision.Revision, "chat edit cannot change the document Plan head");
                 AssertEqual(tasksBefore.Revision, store.GetHead(scope, tasks).Revision.Revision, "unchanged task list has no spurious revision");
                 AssertEqual("Replay", chats.Load(session.Id).Messages.Last().Content, "rewritten history is durable before return");
@@ -1407,8 +1406,8 @@ namespace RNAssistant.Harness
                 fork.Messages = ChatCloneService.CloneMessages(session.Messages);
                 var preparedFork = ChatCloneService.PrepareForkResources(session, fork, chats.LoadArtifactBody,
                     new ResourceForkService(executor.ResourceAuthority, executor.Payloads));
-                AssertTrue(fork.HtmlWorkspace.DataSources.Single().Binding.Resource.Uri != session.HtmlWorkspace.DataSources.Single().Binding.Resource.Uri,
-                    "copied artifact bindings are explicitly rebound to child resources");
+                AssertTrue(fork.HtmlWorkspace.DataSources.Single().Binding.Resource.Uri == session.HtmlWorkspace.DataSources.Single().Binding.Resource.Uri,
+                    "shared artifact bindings keep their document identity");
                 AssertTrue(fork.Artifacts.Any(item => item.Id == session.ActiveHtmlArtifactId &&
                     item.InlineText == session.Artifacts.Single(source => source.Id == session.ActiveHtmlArtifactId).InlineText),
                     "rebinding never rewrites the immutable copied snapshot body");
@@ -1416,17 +1415,18 @@ namespace RNAssistant.Harness
                 executor.MutateChatResources(fork, new ChatResourceMutationIntent(ChatResourceMutationKind.Fork, target.Id, source: session, fork: preparedFork), () => fork);
                 expectedGenerationDuringSave = null;
                 var forkScope = executor.ResourceAuthority.Scope(fork, false);
-                var forkHead = store.GetHead(forkScope, ResourceStateProvider.Identity(forkScope, "html-workspace")).Revision;
+                var forkHead = store.GetHead(htmlScope, html).Revision;
+                AssertTrue(store.GetHead(forkScope, ResourceStateProvider.Identity(forkScope, "html-workspace")) == null, "fork does not introduce conversation HTML authority");
                 AssertEqual(1L, store.Capture(forkScope).Generation, "all fork heads are published in one commit");
-                AssertEqual(3, store.Capture(forkScope).Commits.Single().HeadChanges.Count, "fork publishes workspace, tasks and membership without copying the document Plan head");
+                AssertEqual(2, store.Capture(forkScope).Commits.Single().HeadChanges.Count, "fork publishes tasks and membership without copying document HTML/Plan heads");
                 AssertEqual(session.DocumentAuthorityId, fork.DocumentAuthorityId, "chat fork keeps the same live document authority");
-                AssertTrue(forkHead.Uri != restored.Uri && forkHead.Revision != restored.Revision, "fork has its own logical resource identity/revision");
+                AssertEqual(restored.Revision, forkHead.Revision, "fork keeps the shared logical resource revision");
                 executor.MutateChatResources(fork, new ChatResourceMutationIntent(ChatResourceMutationKind.Edit, target.Id, text: "Replay"), () => true);
                 AssertEqual(ResourceEffectOutcome.VerifiedNoChange, store.Capture(forkScope).Commits.Last().Effect.Outcome,
                     "history with unchanged resource membership does not invent revisions");
-                AssertEqual(forkHead.Revision, store.GetHead(forkScope, forkHead.Identity).Revision.Revision, "no-op preserves exact head");
+                AssertEqual(forkHead.Revision, store.GetHead(htmlScope, forkHead.Identity).Revision.Revision, "no-op preserves exact head");
 
-                var retained = store.GetRevision(forkScope, forkHead).Payload;
+                var retained = store.GetRevision(htmlScope, forkHead).Payload;
                 expectedGenerationDuringSave = store.Capture(forkScope).Generation;
                 executor.MutateChatResources(fork, new ChatResourceMutationIntent(ChatResourceMutationKind.Clear), () =>
                 { edits.Clear(fork, new DocumentContext()); return true; });
@@ -1435,10 +1435,11 @@ namespace RNAssistant.Harness
                     "clear atomically removes active heads");
                 AssertEqual(0, chats.Load(fork.Id).Messages.Count, "clear is durable");
                 AssertEqual(sourceGeneration, store.Capture(scope).Generation, "fork and clear cannot change source chat heads");
-                AssertEqual(retained.Sha256, store.GetRevision(forkScope, forkHead).Payload.Sha256, "clear retains immutable revision and CAS");
-                var historical = executor.ResourceGateway.Read(fork, new ResourceReadRequest { Reference = forkHead, Representation = "text", MaxChars = 32000 }).Result;
-                AssertTrue(historical.Text.Contains("<p>one</p>"), "exact logical revision stays readable after clear");
-                AssertEqual(HeadKnowledge.Unavailable, store.GetHead(forkScope, forkHead.Identity).Knowledge, "historical read cannot resurrect current head");
+                AssertEqual(retained.Sha256, store.GetRevision(htmlScope, forkHead).Payload.Sha256, "clear retains immutable revision and CAS");
+                var snapshotRef = store.GetRevision(htmlScope, forkHead).Dependencies.Single(item => item.Kind == "immutable-snapshot").Resource;
+                var historical = chats.DocumentArtifacts.Read(fork, snapshotRef);
+                AssertTrue(historical.InlineText.Contains("<p>two</p>"), "exact shared snapshot stays readable after clear");
+                AssertEqual(HeadKnowledge.Known, store.GetHead(htmlScope, forkHead.Identity).Knowledge, "clear and historical reads leave the document head intact");
             });
         }
 
@@ -1458,7 +1459,8 @@ namespace RNAssistant.Harness
                 executor.MutateLocalResources(session, "common.html_workspace_write_file", null,
                     () => HtmlWorkspaceToolService.UpsertFile(session, "index.html", "html", "<p>retained</p>", true));
                 var scope = executor.ResourceAuthority.Scope(session, false);
-                var old = store.GetHead(scope, ResourceStateProvider.Identity(scope, "html-workspace")).Revision;
+                var documentScope = executor.ResourceAuthority.Scope(session, true);
+                var old = store.GetHead(documentScope, HtmlWorkspaceIdentity.Identity(session, HtmlWorkspaceIdentity.LogicalId(session.ActiveHtmlArtifactId))).Revision;
                 fail = true;
                 RuntimeThrows<System.IO.IOException>(() => executor.MutateChatResources(session,
                     new ChatResourceMutationIntent(ChatResourceMutationKind.Clear), () => { edits.Clear(session, new DocumentContext()); return true; }));
@@ -1467,9 +1469,10 @@ namespace RNAssistant.Harness
                 var journal = new ResourceMutationJournal(paths);
                 AssertEqual(MutationAttemptState.DispatchMayHaveOccurred, journal.Unresolved().Single().State, "failed publication remains unresolved");
                 ResourceMutationAuthorityObserver.ReconcileInterrupted(executor.ResourceAuthority, journal);
-                AssertEqual(HeadKnowledge.Unknown, store.GetHead(scope, old.Identity).Knowledge, "recovery marks uncertain effect unknown");
+                AssertEqual(HeadKnowledge.Known, store.GetHead(documentScope, old.Identity).Knowledge, "uncertain chat clear cannot invalidate shared HTML");
+                AssertTrue(store.Capture(scope).Heads.Values.All(head => head.Knowledge == HeadKnowledge.Unknown), "recovery marks uncertain chat membership unknown");
                 AssertEqual(0, journal.Unresolved().Count, "recovery links a terminal authority commit without replaying clear");
-                AssertTrue(store.GetRevision(scope, old).Payload != null, "failed clear never deletes historical bytes");
+                AssertTrue(store.GetRevision(documentScope, old).Payload != null, "failed clear never deletes historical bytes");
             });
         }
 

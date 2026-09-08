@@ -164,6 +164,7 @@
     <Compile Include="Services\HtmlWorkspaceCopyService.cs" />
     <Compile Include="Services\HtmlWorkspaceHistoryPolicy.cs" />
     <Compile Include="Services\HtmlWorkspaceNavigationService.cs" />
+    <Compile Include="Services\HtmlWorkspaceIdentity.cs" />
     <Compile Include="Services\EventStreamTrajectoryQuery.cs" />
     <Compile Include="Services\TrajectoryDerivedProjection.cs" />
     <Compile Include="Services\TrajectoryRunProjection.cs" />

@@ -326,10 +326,20 @@ namespace RNAssistant.Office.Services
                         result.Resource.Dependencies.Add(new ResourceDependency(logical.Revision, "text", ResourceCoverage.Whole(), "current-state"));
                 }
                 string artifactId;
+                if (ChatResourceUri.TryGetCurrentArtifactId(session, exact, out artifactId) && HtmlWorkspaceIdentity.LogicalId(artifactId) != null)
+                {
+                    var logical = snapshot.GetHead(HtmlWorkspaceIdentity.Identity(session, HtmlWorkspaceIdentity.LogicalId(artifactId)));
+                    if (logical?.Knowledge == HeadKnowledge.Known)
+                    {
+                        var source = _revisions.GetRevision(scope, logical.Revision)?.Dependencies.SingleOrDefault(item => item.Kind == "immutable-snapshot")?.Resource;
+                        string sourceId;
+                        if (source != null && ChatResourceUri.TryGetArtifactId(session, source, out sourceId) && sourceId == artifactId)
+                            result.Resource.Dependencies.Add(new ResourceDependency(logical.Revision, "text", ResourceCoverage.Whole(), "current-state"));
+                    }
+                }
                 if (ChatResourceUri.TryGetCurrentArtifactId(session, exact, out artifactId))
                 {
-                    var name = artifactId == session.ActiveHtmlArtifactId ? "html-workspace" :
-                        artifactId == session.ActiveTaskListArtifactId ? "task-list" : null;
+                    var name = artifactId == session.ActiveTaskListArtifactId ? "task-list" : null;
                     if (name != null)
                     {
                         var state = _authority.GetHead(scope, ResourceStateProvider.Identity(scope, name));
@@ -394,7 +404,7 @@ namespace RNAssistant.Office.Services
             new Dictionary<string, MutationAttempt>(StringComparer.Ordinal);
         private readonly object _sync = new object();
         private readonly Dictionary<string, IDisposable> _leases = new Dictionary<string, IDisposable>(StringComparer.Ordinal);
-        private readonly Dictionary<string, string> _planOperationKeys = new Dictionary<string, string>(StringComparer.Ordinal);
+        private readonly Dictionary<string, string> _documentOperationKeys = new Dictionary<string, string>(StringComparer.Ordinal);
 
         internal ResourceMutationAuthorityObserver(ResourceAuthorityService authority,
             ResourceMutationJournal journal, ChatSession session, ChatBlobStore payloads,
@@ -413,27 +423,32 @@ namespace RNAssistant.Office.Services
         {
             var scope = ResourceMutationDomains.Scope(_authority, _session, context.Call.Name);
             var expected = StringArgument(arguments, "expectedRevision");
-            var lease = _journal.AcquireScope(scope, RNAssistant.Office.Tools.PlanDocumentToolCatalog.Owns(context.Call.Name));
+            var lease = _journal.AcquireScope(scope, RNAssistant.Office.Tools.PlanDocumentToolCatalog.Owns(context.Call.Name) || HtmlWorkspacePublication.Owns(context.Call.Name));
             try
             {
                 var snapshot = _authority.CaptureMany(new[] { scope }).Get(scope);
                 var impacts = RNAssistant.Office.Tools.PlanDocumentToolCatalog.Owns(context.Call.Name)
                     ? PreparePlan(context, arguments)
-                    : ResourceMutationDomains.Impacts(scope, context.Call.Name, arguments, snapshot);
+                    : HtmlWorkspacePublication.Owns(context.Call.Name)
+                        ? HtmlWorkspacePublication.Prepare(_session, context, arguments,
+                            new DocumentArtifactStore(_authority.Store, _authority.Revisions, _payloads), _authority)
+                        : ResourceMutationDomains.Impacts(scope, context.Call.Name, arguments, snapshot);
                 var target = impacts[0].Identity;
-                if (RNAssistant.Office.Tools.PlanDocumentToolCatalog.Owns(context.Call.Name))
+                if (RNAssistant.Office.Tools.PlanDocumentToolCatalog.Owns(context.Call.Name) || HtmlWorkspacePublication.Owns(context.Call.Name))
                     expected = snapshot.GetHead(target)?.Revision?.Revision;
                 var payload = PayloadRef.FromBlob(_payloads.StoreText(context.Call.ArgumentsJson, "application/json"));
                 var attempt = _journal.Prepare(scope, context.Call.Name, target, expected, payload, intendedImpacts: impacts);
                 lock (_sync)
                 {
                     _attempts[attempt.AttemptId] = attempt; _leases[attempt.AttemptId] = lease;
+                    if (HtmlWorkspacePublication.Owns(context.Call.Name))
+                        _documentOperationKeys[attempt.AttemptId] = HtmlWorkspacePublication.OperationKey(_session, context);
                     if (RNAssistant.Office.Tools.PlanDocumentToolCatalog.Owns(context.Call.Name))
-                        _planOperationKeys[attempt.AttemptId] = PlanDocumentService.CreationId(_session, context);
+                        _documentOperationKeys[attempt.AttemptId] = PlanDocumentService.CreationId(_session, context);
                 }
                 return attempt.AttemptId;
             }
-            catch { lease.Dispose(); throw; }
+            catch { if (HtmlWorkspacePublication.Owns(context.Call.Name)) _session.PreparedHtmlWorkspaceId = null; lease.Dispose(); throw; }
         }
 
         public void MarkDispatchMayHaveOccurred(string attemptId)
@@ -490,21 +505,24 @@ namespace RNAssistant.Office.Services
         public ResourceAuthorityCommit Complete(string attemptId, ToolExecutionRecord record)
         {
             MutationAttempt attempt;
-            string planOperationKey;
+            string documentOperationKey;
             lock (_sync)
             {
                 if (!_attempts.TryGetValue(attemptId, out attempt))
                     throw new InvalidOperationException("Mutation authority attempt is missing.");
-                _planOperationKeys.TryGetValue(attemptId, out planOperationKey);
+                _documentOperationKeys.TryGetValue(attemptId, out documentOperationKey);
             }
             if (attempt.State != MutationAttemptState.DispatchMayHaveOccurred)
                 throw new InvalidOperationException("A dispatched mutation lacks its durable dispatch marker.");
             try
             {
                 var readBack = record.ResourceReadBack.ToList();
-                if (RNAssistant.Office.Tools.PlanDocumentToolCatalog.Owns(attempt.Operation))
+                if (RNAssistant.Office.Tools.PlanDocumentToolCatalog.Owns(attempt.Operation) || HtmlWorkspacePublication.Owns(attempt.Operation))
                 {
-                    if (record.Evidence?.Effect == ToolEffectEvidence.VerifiedChange)
+                    if (record.Evidence?.Effect == ToolEffectEvidence.VerifiedChange && HtmlWorkspacePublication.Owns(attempt.Operation))
+                        readBack.AddRange(HtmlWorkspacePublication.ReadBack(_session, attempt, documentOperationKey,
+                            new DocumentArtifactStore(_authority.Store, _authority.Revisions, _payloads), _payloads));
+                    else if (record.Evidence?.Effect == ToolEffectEvidence.VerifiedChange)
                     {
                         var planId = ResourceUri.Parse(attempt.Target.Uri).Segments.Last();
                         var artifact = (_session.Artifacts ?? new List<ChatArtifact>())
@@ -516,7 +534,7 @@ namespace RNAssistant.Office.Services
                             restoredFrom = ChatResourceUri.CreateArtifactRevision(_session, _session.Artifacts.Single(item => item.Id == sourceId));
                         }
                         readBack.AddRange(new DocumentArtifactStore(_authority.Store, _authority.Revisions, _payloads)
-                            .RetainPlan(_session, planId, artifact, attempt.AttemptId, planOperationKey,
+                            .RetainPlan(_session, planId, artifact, attempt.AttemptId, documentOperationKey,
                                 PlanDocumentService.IsTombstone(artifact), restoredFrom));
                     }
                     ResourceAuthorityCommit publication = null;
@@ -567,9 +585,8 @@ namespace RNAssistant.Office.Services
                         dependencies: references.Select(reference => new ResourceDependency(reference, kind: "member")));
                     continue;
                 }
-                if (name != "html-workspace" && name != "task-list") continue;
-                var artifactId = name == "html-workspace" ? _session.ActiveHtmlArtifactId :
-                    _session.ActiveTaskListArtifactId;
+                if (name != "task-list") continue;
+                var artifactId = _session.ActiveTaskListArtifactId;
                 if (string.IsNullOrWhiteSpace(artifactId))
                 {
                     yield return new ResourceMutationReadBack(impact.Identity, false);
@@ -609,9 +626,9 @@ namespace RNAssistant.Office.Services
             var prior = authority.Store.Capture(attempt.ScopeId).Commits.FirstOrDefault(item => item.MutationAttemptId == attempt.AttemptId);
             if (prior != null) { journal.Resolve(attempt.AttemptId, prior.CommitId); return prior; }
             var snapshot = authority.Store.Capture(attempt.ScopeId);
-            if (RNAssistant.Office.Tools.PlanDocumentToolCatalog.Owns(attempt.Operation) &&
+            if ((RNAssistant.Office.Tools.PlanDocumentToolCatalog.Owns(attempt.Operation) || HtmlWorkspacePublication.Owns(attempt.Operation)) &&
                 snapshot.GetHead(attempt.Target)?.Revision?.Revision != attempt.ExpectedRevision)
-                throw new InvalidOperationException("The prepared Plan head changed before publication; reconcile the retained attempt without replay.");
+                throw new InvalidOperationException("The prepared artifact head changed before publication; reconcile the retained attempt without replay.");
             var outcome = Outcome(record);
             if (outcome == ResourceEffectOutcome.VerifiedChanged && (attempt.Operation == "common.vba_restore_backup" ||
                 attempt.Operation == "common.plan_doc_restore" || attempt.Operation == "common.html_workspace_restore" ||
@@ -692,10 +709,14 @@ namespace RNAssistant.Office.Services
         {
             lock (_sync)
             {
+                MutationAttempt attempt;
+                if (_attempts.TryGetValue(attemptId, out attempt) && HtmlWorkspacePublication.Owns(attempt.Operation))
+                    _session.PreparedHtmlWorkspaceId = null;
+                _attempts.Remove(attemptId);
+                _documentOperationKeys.Remove(attemptId);
+                // Clear transient intent before the next document writer can acquire the lease.
                 IDisposable lease;
                 if (_leases.TryGetValue(attemptId, out lease)) { _leases.Remove(attemptId); lease.Dispose(); }
-                _attempts.Remove(attemptId);
-                _planOperationKeys.Remove(attemptId);
             }
         }
 

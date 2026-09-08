@@ -138,9 +138,11 @@ namespace RNAssistant.Office.Services
             if (request.ExpectedActiveHtmlArtifactId == null || request.ExpectedActiveHtmlArtifactId != (session.ActiveHtmlArtifactId ?? ""))
                 throw Stale();
             var authority = _executor.ResourceAuthority;
-            var scope = authority.Scope(session, false);
-            var head = authority.CaptureMany(new[] { scope }).Get(scope).GetHead(ResourceStateProvider.Identity(scope, "html-workspace"));
-            if (string.IsNullOrEmpty(session.ActiveHtmlArtifactId) && (head == null || head.Knowledge == HeadKnowledge.Unavailable)) return null;
+            if (string.IsNullOrEmpty(session.ActiveHtmlArtifactId)) return null;
+            var logicalId = HtmlWorkspaceIdentity.LogicalId(session.ActiveHtmlArtifactId);
+            if (logicalId == null) throw Error("RESOURCE_ACCESS_DENIED", "Create a document-owned HTML workspace before editing.");
+            var scope = authority.Scope(session, true);
+            var head = authority.CaptureMany(new[] { scope }).Get(scope).GetHead(HtmlWorkspaceIdentity.Identity(session, logicalId));
             if (head?.Knowledge != HeadKnowledge.Known)
                 throw Error("RESOURCE_SNAPSHOT_UNAVAILABLE", "The current HTML workspace must have a known publication.");
             var revision = ((IResourceRevisionStore)authority.Store).GetRevision(scope, head.Revision);

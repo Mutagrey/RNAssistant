@@ -11,7 +11,7 @@ namespace RNAssistant.Office.Services
 {
     internal static class HtmlWorkspaceArtifactService
     {
-        public static string CaptureCurrent(ChatSession session, string title)
+        public static string CaptureCurrent(ChatSession session, string title, bool forceRevision = false)
         {
             if (session == null) return string.Empty;
             if (session.HtmlWorkspaceRecovery != null && !session.HtmlWorkspaceRecovery.CanMutate)
@@ -31,7 +31,7 @@ namespace RNAssistant.Office.Services
                 string.IsNullOrWhiteSpace(title) ? "HTML workspace" : title);
             var stateJson = SerializeState(snapshot);
             var current = FindArtifact(session, session.ActiveHtmlArtifactId);
-            if (current != null && SameState(current.InlineText, snapshot))
+            if (!forceRevision && current != null && SameState(current.InlineText, snapshot))
             {
                 RebuildNavigation(session);
                 return current.Id;
@@ -43,20 +43,25 @@ namespace RNAssistant.Office.Services
                 session.HtmlWorkspace.RedoBranches = new List<HtmlWorkspaceRedoBranch>();
                 return string.Empty;
             }
+            var logicalId = session.PreparedHtmlWorkspaceId ?? HtmlWorkspaceIdentity.LogicalId(current?.Id) ??
+                "html_ws_" + Guid.NewGuid().ToString("N") + Guid.NewGuid().ToString("N");
+            var revision = NextRevision(session);
             var artifact = new ChatArtifact
             {
+                Id = HtmlWorkspaceIdentity.SnapshotId(logicalId, revision),
+                DocumentAuthorityId = session.DocumentAuthorityId,
                 Kind = ChatArtifactKinds.HtmlWorkspace,
                 Title = snapshot.Label,
                 MimeType = "application/vnd.rnassistant.html-workspace+json",
                 ParentArtifactId = current?.Id,
-                Revision = NextRevision(session),
+                Revision = revision,
                 InlineText = stateJson,
                 MetadataJson = Metadata(snapshot, current)
             };
             foreach (var binding in snapshot.DataSources.Select(item => item.Binding).Where(item => item?.Resource != null))
             {
                 var address = ResourceUri.Parse(binding.Resource.Uri);
-                if (address.Provider == "chat" && address.Segments.Count >= 3 && address.Segments[0] == session.Id &&
+                if (address.Provider == "chat" && address.Segments.Count >= 3 && (address.Segments[0] == session.Id || address.Segments[0] == session.DocumentAuthorityId) &&
                     address.Segments[1] == "artifact")
                     artifact.RelatedArtifactIds.Add(address.Segments[2]);
             }
@@ -92,9 +97,35 @@ namespace RNAssistant.Office.Services
             return true;
         }
 
+        internal static void RestoreAsRevision(ChatSession session, string snapshotId, bool redo = false)
+        {
+            var previous = FindArtifact(session, session.ActiveHtmlArtifactId);
+            var source = FindArtifact(session, snapshotId);
+            if (previous == null || source == null || HtmlWorkspaceIdentity.LogicalId(source.Id) != session.PreparedHtmlWorkspaceId ||
+                HtmlWorkspaceIdentity.LogicalId(previous.Id) != session.PreparedHtmlWorkspaceId || !Restore(session, snapshotId))
+                throw new InvalidOperationException("The selected HTML revision is unavailable or belongs to another workspace.");
+            session.ActiveHtmlArtifactId = previous.Id;
+            var id = CaptureCurrent(session, "HTML restored: " + source.Title, true);
+            var artifact = FindArtifact(session, id);
+            var metadata = JObject.Parse(artifact.MetadataJson);
+            metadata["restoredFromArtifactId"] = source.Id;
+            metadata["navigationBaseArtifactId"] = source.Id;
+            var previousMetadata = JObject.Parse(previous.MetadataJson ?? "{}");
+            var redoStack = previousMetadata["redoArtifactIds"] as JArray ?? new JArray();
+            if (redo)
+            {
+                if (redoStack.Count > 0) redoStack.RemoveAt(0);
+            }
+            else redoStack.Insert(0, (string)previousMetadata["navigationBaseArtifactId"] ?? previous.Id);
+            metadata["redoArtifactIds"] = redoStack;
+            artifact.MetadataJson = metadata.ToString(Formatting.None);
+            RebuildNavigation(session);
+        }
+
         private static bool RebindForkResources(ChatSession session, HtmlWorkspace workspace)
         {
-            if (string.IsNullOrEmpty(session.ParentSessionId)) return false;
+            if (string.IsNullOrEmpty(session.ParentSessionId) ||
+                FindArtifact(session, session.ActiveHtmlArtifactId)?.DocumentAuthorityId != null) return false;
             // Rebind only deliberately copied immutable artifacts. Never mutate an
             // existing snapshot body or grant implicit access to another chat's state.
             var bindings = workspace.DataSources.Where(item => item?.Binding != null).Select(item => new
@@ -167,6 +198,13 @@ namespace RNAssistant.Office.Services
                 throw new InvalidOperationException("HTML workspace changed; reload it before exporting.");
             }
             EnsureMutable(session);
+            var selected = FindArtifact(session, session.ActiveHtmlArtifactId);
+            if (!string.IsNullOrEmpty(selected?.DocumentAuthorityId))
+            {
+                if (!SameState(selected.InlineText, HtmlWorkspaceCopyService.CaptureSnapshot(session.HtmlWorkspace, selected.Title)))
+                    throw new InvalidOperationException("Save the HTML changes before exporting the selected document revision.");
+                return selected.Id;
+            }
             var artifactId = CaptureCurrent(session, "HTML export checkpoint");
             if (string.IsNullOrWhiteSpace(artifactId))
             {
@@ -215,12 +253,14 @@ namespace RNAssistant.Office.Services
                     false);
                 return;
             }
-            var visited = new HashSet<string>(StringComparer.OrdinalIgnoreCase) { active.Id };
-            var current = active;
-            string issue = null;
-            string message = null;
-            string problemArtifactId = null;
-            while (!string.IsNullOrWhiteSpace(current.ParentArtifactId))
+            var navigationId = (string)JObject.Parse(active.MetadataJson ?? "{}")["navigationBaseArtifactId"];
+            var current = string.IsNullOrEmpty(navigationId) ? active : FindArtifact(session, navigationId);
+            if (current != null && !string.IsNullOrEmpty(current.AvailabilityIssue)) current = null;
+            var visited = new HashSet<string>(StringComparer.OrdinalIgnoreCase) { current?.Id ?? active.Id };
+            string issue = current == null ? HtmlWorkspaceRecoveryIssues.ParentArtifactMissing : null;
+            string message = current == null ? "The restored HTML navigation source is unavailable. The active revision is readable, but undo history is incomplete." : null;
+            string problemArtifactId = current == null ? navigationId : null;
+            while (current != null && !string.IsNullOrWhiteSpace(current.ParentArtifactId))
             {
                 problemArtifactId = current.ParentArtifactId;
                 if (!visited.Add(problemArtifactId))
@@ -356,7 +396,8 @@ namespace RNAssistant.Office.Services
                     : session.Artifacts)
                 .Where(item => item != null)
                 .ToList();
-            var artifacts = allArtifacts
+            var logicalId = session.PreparedHtmlWorkspaceId ?? HtmlWorkspaceIdentity.LogicalId(session.ActiveHtmlArtifactId);
+            var artifacts = allArtifacts.Where(item => logicalId == null || HtmlWorkspaceIdentity.LogicalId(item.Id) == logicalId)
                 .Where(item => item != null && string.Equals(
                     item.Kind,
                     ChatArtifactKinds.HtmlWorkspace,

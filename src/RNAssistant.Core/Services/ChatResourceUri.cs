@@ -24,6 +24,15 @@ namespace RNAssistant.Core.Services
                 revision);
         }
 
+        public static ResourceRef ArtifactSnapshot(ResourceRef reference)
+        {
+            string owner, id; int revision;
+            if (!TryParseArtifactRevision(reference, out owner, out id, out revision))
+                throw new InvalidOperationException("An artifact snapshot or member reference is required.");
+            var version = revision.ToString(CultureInfo.InvariantCulture);
+            return new ResourceRef(ResourceUri.Create(ProviderName, owner, "artifact", id, "revision", version), version);
+        }
+
         public static string CreateArtifactRevisionUri(ChatSession session, ChatArtifact artifact)
         {
             return CreateArtifactRevision(session, artifact).Uri;

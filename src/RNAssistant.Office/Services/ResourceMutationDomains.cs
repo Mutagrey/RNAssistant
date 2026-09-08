@@ -26,7 +26,7 @@ namespace RNAssistant.Office.Services
 
         internal static ResourceAuthorityScopeId Scope(ResourceAuthorityService authority, ChatSession session, string operation)
         {
-            if (PlanDocumentToolCatalog.Owns(operation)) return authority.Scope(session, true);
+            if (PlanDocumentToolCatalog.Owns(operation) || HtmlWorkspacePublication.Owns(operation)) return authority.Scope(session, true);
             if (new CatalogResourceMutationDomain().Owns(operation)) return new ResourceAuthorityScopeId("catalog", "local");
             return authority.Scope(session, !new ConversationResourceMutationDomain().Owns(operation) && !ResourceDefinitionToolHandler.Owns(operation));
         }
@@ -108,14 +108,12 @@ namespace RNAssistant.Office.Services
         }
         internal static string StateName(string operation)
         {
-            return operation.StartsWith("common.html_", StringComparison.Ordinal) ? "html-workspace" :
-                operation.StartsWith("common.plan_", StringComparison.Ordinal) ? "plan-document" :
+            return operation.StartsWith("common.plan_", StringComparison.Ordinal) ? "plan-document" :
                 operation.StartsWith("common.task_", StringComparison.Ordinal) ? "task-list" : null;
         }
         public bool Owns(string operation)
         {
-            return operation.StartsWith("common.html_", StringComparison.Ordinal) ||
-                operation.StartsWith("common.plan_", StringComparison.Ordinal) || operation.StartsWith("common.task_", StringComparison.Ordinal) ||
+            return operation.StartsWith("common.plan_", StringComparison.Ordinal) || operation.StartsWith("common.task_", StringComparison.Ordinal) ||
                 operation == "excel.create_chat_chart" || IsHistoryMutation(operation);
         }
         public IEnumerable<ResourceImpact> Impacts(ResourceAuthorityScopeId scope, string operation,
@@ -125,7 +123,7 @@ namespace RNAssistant.Office.Services
             {
                 if (operation == "common.chat_fork" && snapshot.Generation != 0)
                     throw new InvalidOperationException("Fork publication requires an unpublished target authority.");
-                foreach (var name in new[] { "html-workspace", "task-list", "artifacts" })
+                foreach (var name in new[] { "task-list", "artifacts" })
                     yield return new ResourceImpact(ResourceStateProvider.Identity(scope, name), ResourceImpactRelation.ContainerMembership);
                 // Clear removes active conversation-owned definitions as well, but never
                 // deletes retained exact revisions or changes document/catalog authority.

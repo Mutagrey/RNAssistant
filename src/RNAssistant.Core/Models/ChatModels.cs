@@ -275,6 +275,8 @@ namespace RNAssistant.Core.Models
         public List<ChatArtifact> Artifacts { get; set; }
         public List<ChatArtifactLink> ArtifactLinks { get; set; }
         public string ActiveHtmlArtifactId { get; set; }
+        [JsonIgnore]
+        public string PreparedHtmlWorkspaceId { get; set; }
         public string ActiveTaskListArtifactId { get; set; }
         public string ActivePlanDocumentArtifactId { get; set; }
 

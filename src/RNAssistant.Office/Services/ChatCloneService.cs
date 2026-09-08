@@ -141,13 +141,20 @@ namespace RNAssistant.Office.Services
             if (definitions == null) throw new ArgumentNullException(nameof(definitions));
             if (source == null || fork == null || source.Id == fork.Id || fork.ParentSessionId != source.Id)
                 throw new InvalidOperationException("An explicit source and unpublished child chat are required.");
-            var checkpoint = HtmlWorkspaceArtifactService.CheckpointAtOrBefore(source, fork.Messages, fork.Messages.Count - 1);
+            var selectedHtml = (source.Artifacts ?? new List<ChatArtifact>()).SingleOrDefault(item => item.Id == source.ActiveHtmlArtifactId);
+            var historicalCheckpoint = HtmlWorkspaceArtifactService.CheckpointAtOrBefore(source, fork.Messages, fork.Messages.Count - 1);
+            var sharedHtml = !string.IsNullOrEmpty(source.DocumentAuthorityId) &&
+                (!string.IsNullOrEmpty(selectedHtml?.DocumentAuthorityId) ||
+                 HtmlWorkspaceIdentity.LogicalId(source.ActiveHtmlArtifactId) != null ||
+                 HtmlWorkspaceIdentity.LogicalId(historicalCheckpoint) != null);
+            var checkpoint = sharedHtml ? source.ActiveHtmlArtifactId : historicalCheckpoint;
             fork.ArtifactLinks = CloneArtifactLinks(source);
             var additional = ArtifactWorkingSet.LinkedArtifactIds(source).ToList();
             var selectedDocumentPlan = (source.Artifacts ?? new List<ChatArtifact>()).SingleOrDefault(item =>
                 item.Id == source.ActivePlanDocumentArtifactId && item.Kind == ChatArtifactKinds.PlanDocument &&
                 !string.IsNullOrWhiteSpace(item.DocumentAuthorityId) && item.DocumentAuthorityId == source.DocumentAuthorityId);
             if (selectedDocumentPlan != null) additional.Add(selectedDocumentPlan.Id);
+            if (sharedHtml && selectedHtml != null) additional.Add(selectedHtml.Id);
             if (string.IsNullOrWhiteSpace(checkpoint))
             {
                 if (source.HtmlWorkspaceRecovery != null && !source.HtmlWorkspaceRecovery.CanMutate)

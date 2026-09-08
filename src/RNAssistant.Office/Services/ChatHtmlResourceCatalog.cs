@@ -327,7 +327,7 @@ namespace RNAssistant.Office.Services
         {
             return ResourceUri.Create(
                 ChatArtifactResourceProvider.ProviderName,
-                member.Session.Id,
+                member.Artifact.DocumentAuthorityId ?? member.Session.Id,
                 "artifact",
                 member.Artifact.Id,
                 "revision",

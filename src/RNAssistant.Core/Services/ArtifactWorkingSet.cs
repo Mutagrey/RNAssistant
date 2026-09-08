@@ -23,12 +23,14 @@ namespace RNAssistant.Core.Services
         {
             if (artifact == null || string.IsNullOrWhiteSpace(session?.DocumentAuthorityId) || artifact.DocumentAuthorityId != session.DocumentAuthorityId)
                 throw new InvalidDataException("The artifact is not owned by this document.");
+            if (artifact.Kind == ChatArtifactKinds.HtmlWorkspace)
+                return HtmlWorkspaceIdentity.Identity(session, HtmlWorkspaceIdentity.LogicalId(artifact.Id));
             if (artifact.Kind == ChatArtifactKinds.PlanDocument)
             {
                 return DocumentArtifactStore.PlanIdentity(session,
                     DocumentArtifactStore.PlanIdFromSnapshot(ChatResourceUri.CreateArtifactRevision(session, artifact)));
             }
-            if (!artifact.Id.StartsWith("attachment_", StringComparison.Ordinal))
+            if (!artifact.Id.StartsWith("attachment_", StringComparison.Ordinal) && !artifact.Id.StartsWith("artifact_", StringComparison.Ordinal))
                 throw new InvalidDataException("This artifact has no document working-set owner yet.");
             return ChatResourceUri.CreateArtifactRevision(session, artifact).Identity;
         }
@@ -81,6 +83,12 @@ namespace RNAssistant.Core.Services
             session.ArtifactLinks.RemoveAll(link => identity.Equals(link.Identity));
             session.ArtifactLinks.Add(new ChatArtifactLink { Identity = identity,
                 Reference = ChatResourceUri.CreateArtifactRevision(session, artifact), Detached = detached });
+            if (detached && artifact.Kind == ChatArtifactKinds.HtmlWorkspace)
+            {
+                var selected = (session.Artifacts ?? new List<ChatArtifact>()).SingleOrDefault(item => item.Id == session.ActiveHtmlArtifactId);
+                if (selected != null && identity.Equals(Identity(session, selected)))
+                { session.ActiveHtmlArtifactId = null; session.HtmlWorkspace = new HtmlWorkspace(); session.HtmlWorkspaceRecovery = new HtmlWorkspaceRecoveryState(); }
+            }
             if (detached && artifact.Kind == ChatArtifactKinds.PlanDocument)
             {
                 var selected = (session.Artifacts ?? new List<ChatArtifact>()).SingleOrDefault(item => item.Id == session.ActivePlanDocumentArtifactId);

@@ -239,9 +239,7 @@ namespace RNAssistant.Office
                 }
                 MutateHtmlWorkspaceAction(session, request, "common.html_workspace_restore",
                     new Dictionary<string, object> { ["snapshotId"] = targetId }, () => {
-                        string error;
-                        if (!_chatStore.TryActivateHtmlWorkspaceRevision(session, targetId, out error))
-                            throw new InvalidOperationException(error ?? "HTML workspace artifact body is missing or corrupt.");
+                        HtmlWorkspaceArtifactService.RestoreAsRevision(session, targetId);
                         return true;
                     });
                 SaveSessionChanges(session);
@@ -266,11 +264,9 @@ namespace RNAssistant.Office
                     throw new System.InvalidOperationException("HTML workspace redo target must be a direct child revision.");
                 }
                 var targetId = branch.Id;
-                MutateHtmlWorkspaceAction(session, request, "common.html_workspace_restore",
+                MutateHtmlWorkspaceAction(session, request, "common.html_workspace_redo",
                     new Dictionary<string, object> { ["snapshotId"] = targetId }, () => {
-                        string error;
-                        if (!_chatStore.TryActivateHtmlWorkspaceRevision(session, targetId, out error))
-                            throw new InvalidOperationException(error ?? "HTML workspace artifact body is missing or corrupt.");
+                        HtmlWorkspaceArtifactService.RestoreAsRevision(session, targetId, true);
                         return true;
                     });
                 SaveSessionChanges(session);

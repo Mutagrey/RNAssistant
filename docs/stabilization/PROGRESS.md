@@ -1,17 +1,22 @@
 # Stabilization progress
 
-Current architecture correction (2026-09-08), after `629c089a`: checked the
-Resource MASTER and all three canonical contracts before continuing shared HTML.
-Removed the unregistered HTML-specific record/read draft. Extracted the existing
-Plan metadata/body registration and exact reading into one private artifact-record
-path within `DocumentArtifactStore`; Plan uses it now, with unchanged durable view/
-provenance shape and existing authority/CAS publication. No additional store,
-provider, file layout, HTML identity or new ownership contract is active.
-Next: implement the HTML domain publication and its consumers through that common
-path and the existing mutation observer/Gateway. Preserve supported head bindings,
-exact dependencies, new-revision restore and chat-local selection semantics.
-Shared HTML/Markdown remains open, as do Windows/Office/WebView2 and layout gates.
-See [boundary audit](../artifact-library.md#resource-fabric-boundary-audit--2026-09-08).
+Current slice (2026-09-08), after `c077ab38`: **shared authored HTML is implemented
+host-neutral** through the common `DocumentArtifactStore` record path and existing
+mutation observer/authority/CAS. Workspace, authored JSON, logical head and operation
+receipt publish under the document lease; the chat persists selection/links only.
+Another chat can select current HTML through «Ресурсы → Из документа…» and edit it;
+stale/concurrent writers are rejected before dispatch. Undo/redo create new causal
+revisions, dialogue rewrite/fork preserve shared heads, and root/member refs rebuild
+one snapshot on restart. Supported head bindings stay dynamic. Unlink survives a
+missing body; origin deletion/GC retain HTML and authored JSON. No separate HTML
+store or compatibility fallback is introduced; old chat-owned mutation is rejected.
+Checks: HTML 33/33, chat lifecycle 2/2, logical restore and fork refusal, document
+Plan 2/2, originals 2/2 and source inclusion pass. Artifact filter: 27/28; the
+unchanged unquoted prompt-target assertion is tracked in [backlog](BACKLOG.md#resource-prompt-test-expectation--2026-09-08).
+Working-set, library, Plan and HTML-action browser checks pass.
+Next: independent authored Markdown, then bounded indexed discovery/recovery and
+richer resource context. Windows/Office/WebView2, target-model and Playwright layout
+gates remain open. See [HTML contract](../artifact-library.md#implemented-shared-html-publication--2026-09-08).
 
 Previous correction (2026-09-08), after metadata recovery commit `bd7a43b1`:
 HTML UI delete file/data, entry selection, import/export and undo/redo/recovery now
@@ -22,9 +27,8 @@ removed. UI captures before dialogs, suppresses duplicate/competing actions and
 preserves new local edits or navigation state when a response arrives late;
 stale export responses still release their exact leases. Focused guard/bridge,
 HTML editor/import/export/source and UI race checks pass host-neutral.
-Next ownership slice: shared HTML, then independent authored Markdown. Both remain
-chat-owned without cross-chat link controls; this correction is a prerequisite,
-not the ownership move. Partial model discovery and authority-journal recovery
+At that checkpoint shared HTML/Markdown still awaited the ownership move; shared
+HTML is now implemented above, independent authored Markdown remains open. Partial model discovery and authority-journal recovery
 remain separate open work. Windows/Office/WebView2 and Playwright layout gates
 remain open; the production controller's live document switch needs Windows evidence.
 
@@ -42,8 +46,8 @@ clear consume it. Missing Plan bodies do not block unlink. Captured chat/revisio
 optimistic save and document mutation lease reject stale or competing changes;
 UI ignores late navigation responses. Host-neutral working-set, document Plan,
 bridge, projection and browser checks cover this slice.
-Next ownership slice: shared HTML and independent authored Markdown; they have no
-link controls yet. Full indexed/partial model enumeration and Windows/Office/
+The later shared HTML slice above extends these controls; independent authored
+Markdown remains open. Full indexed/partial model enumeration and Windows/Office/
 WebView2 qualification stay open. Playwright layout is still unavailable locally.
 See [canonical artifact contract](../artifact-library.md#implemented-working-set-links--2026-09-08).
 

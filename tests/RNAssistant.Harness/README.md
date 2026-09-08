@@ -39,6 +39,13 @@ version check still apply.
 
 ## Test map
 
+`shared HTML:` covers document publication, failed chat-link replay refusal,
+second-chat selection/edit/restart, member URI round-trip, concurrent stale writers,
+new-revision undo/redo, shared fork, origin deletion/GC, independent workspaces and
+unlink with a missing body. Use `html`, `resource cutover: local restore`,
+`resource cutover: chat lifecycle` and `artifact working set:` for the ownership
+cutover; the same working-set browser test covers HTML selection and dirty drafts.
+
 `html actions:` covers exact chat/snapshot/session controls, ABA revision drift,
 refusal before mutation dispatch, unchanged authority/no unresolved effect, fresh
 retry and all seven typed bridge routes. UI companion:

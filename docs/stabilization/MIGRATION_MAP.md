@@ -16,14 +16,18 @@ gates; active tool compatibility adapter отсутствует. Windows/Office 
 
 | Seam | Owner and consumers | Removal gate |
 |---|---|---|
-| Transient `ChatArtifact` projection over document-owned originals/Plans alongside chat-owned HTML/Markdown | `DocumentArtifactStore` owns new originals and Plan snapshots in existing authority/CAS; native Plan binding v3 and mutation observer publish per-Plan document heads. Ingestion, Gateway/provider, viewers, chat projection and fork consume document refs. Plan conversation-head publication and direct local-action mutation bypass are removed. No second store or document-ref fallback; old chat Plans are explicitly rejected for mutation | Remaining slices 1b–2 switch HTML/independent Markdown identity, heads and tools; slices 3–4 finish indexed discovery/recovery and remove remaining chat-only ownership. Individual metadata loss now uses transient unavailable projections; strict partial model discovery and authority-wide recovery remain open. Originals/Plan explicit selection/refresh/unlink now use `ArtifactWorkingSetService` and chat-event-backed `ArtifactLinks`; prompt/library/compaction, fork and clear consume these decisions. Incompatible stream handling stays explicit, without deleting user data. Windows delivery remains open |
+| Transient `ChatArtifact` projection over document-owned originals/Plans/HTML alongside the remaining Markdown seam | `DocumentArtifactStore` owns new originals, Plan and HTML/JSON snapshots in existing authority/CAS; native Plan binding v3 and mutation observer publish per-Plan document heads. Ingestion, Gateway/provider, viewers, chat projection and fork consume document refs. Plan conversation-head publication and direct local-action mutation bypass are removed. No second store or document-ref fallback; old chat Plans are explicitly rejected for mutation | HTML identity/head/tools and working-set consumers are switched through the same record path and mutation observer; remaining slice 2 switches independent Markdown; slices 3–4 finish indexed discovery/recovery and remove remaining chat-only ownership. Individual metadata loss now uses transient unavailable projections; strict partial model discovery and authority-wide recovery remain open. Originals/Plan/HTML explicit selection/refresh/unlink now use `ArtifactWorkingSetService` and chat-event-backed `ArtifactLinks`; prompt/library/compaction, fork and clear consume these decisions. Incompatible stream handling stays explicit, without deleting user data. Windows delivery remains open |
 
 Artifact metadata seam consolidated (2026-09-08): `DocumentArtifactStore` now uses
 one private record retention/read path over its existing authority/revision/CAS
-ports. The Plan-only record implementation is removed; Plan remains the active
-consumer with the same persisted view and provenance shape. The unregistered
-HTML-specific draft was discarded before wiring. HTML ownership and publication
-still have the removal gate in the table above; no parallel store is admitted.
+ports. The Plan-only record implementation is removed; Plan retains its persisted
+view and provenance shape. The unregistered HTML-specific draft was discarded.
+Shared HTML/JSON now uses the common authored-record path. HTML conversation-head
+publication, member-URI chat rebasing, implicit export capture, dialogue rollback
+and shared fork copying are removed from active consumers. Restore/redo advances
+the document lineage. Unused direct restore/redo and ChatStore activation entry
+points are removed; old navigation coverage uses test-only projection fixtures.
+No temporary storage adapter or parallel store is admitted.
 
 HTML UI action seam removed (2026-09-08): the typed bridge passes complete
 `HtmlWorkspaceActionPayload` guards to addressed/reserved controller actions.

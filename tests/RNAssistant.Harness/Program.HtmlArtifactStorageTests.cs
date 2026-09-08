@@ -7,6 +7,7 @@ using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
 using RNAssistant.Core.Models;
 using RNAssistant.Core.Storage;
+using RNAssistant.Core.Services;
 using RNAssistant.Core.Tools;
 using RNAssistant.Office.Services;
 using RNAssistant.Office.Tools;
@@ -15,6 +16,25 @@ namespace RNAssistant.Harness
 {
     internal static partial class Program
     {
+        // Legacy chat projection fixtures only. Production restore/redo uses the
+        // document publication owner and creates a new causal revision.
+        private static void RestoreHtmlFixtureSnapshot(ChatSession session, string snapshotId)
+        {
+            var snapshot = session.HtmlWorkspace.History.FirstOrDefault(item => item.Id == snapshotId);
+            if (snapshot == null || !HtmlWorkspaceArtifactService.Restore(session, snapshot.Id))
+                throw new InvalidOperationException("The fixture snapshot is unavailable.");
+        }
+
+        private static void RedoHtmlFixtureSnapshot(ChatSession session, string snapshotId)
+        {
+            var branches = HtmlWorkspaceNavigationService.GetRedoBranches(session);
+            if (string.IsNullOrWhiteSpace(snapshotId) && branches.Count > 1)
+                throw new InvalidOperationException("The fixture has multiple branches; an explicit branch is required.");
+            var branch = string.IsNullOrWhiteSpace(snapshotId) ? branches.SingleOrDefault() : branches.FirstOrDefault(item => item.Id == snapshotId);
+            if (branch == null || !HtmlWorkspaceArtifactService.Restore(session, branch.Id))
+                throw new InvalidOperationException("The fixture branch is unavailable.");
+        }
+
         private static void UploadedHtmlImportPreservesExactSource()
         {
             WithTempPaths(paths =>
@@ -171,8 +191,7 @@ namespace RNAssistant.Harness
                 AssertContains(prior.Result.Text, "1", "old payload remains an immutable snapshot");
                 HtmlWorkspaceToolService.UpsertFile(replayed, "index.html", "html", "<main>later</main>", true);
                 store.Save(replayed);
-                string error;
-                AssertTrue(store.TryActivateHtmlWorkspaceRevision(replayed, exportId, out error), "explicit recovery target");
+                AssertTrue(store.LoadArtifactBody(replayed, exportId) && HtmlWorkspaceArtifactService.Restore(replayed, exportId), "explicit recovery target");
                 AssertEqual(exportedReference.Uri, replayed.HtmlWorkspace.DataSources.Single().Binding.Resource.Uri, "recovery restores the exact binding");
             });
         }
@@ -191,16 +210,16 @@ namespace RNAssistant.Harness
             var branchAChildId = session.ActiveHtmlArtifactId;
             AssertEqual(3, session.Artifacts.Single(item => item.Id == branchAChildId).Revision, "first branch child revision");
 
-            HtmlWorkspaceToolService.RestoreSnapshot(session, rootId);
+            RestoreHtmlFixtureSnapshot(session, rootId);
             HtmlWorkspaceToolService.UpsertFile(session, "index.html", "html", "branch B", true);
             var branchBId = session.ActiveHtmlArtifactId;
             var branchB = session.Artifacts.Single(item => item.Id == branchBId);
             AssertEqual(4, branchB.Revision, "alternative branch uses the next global revision");
             AssertEqual(rootId, branchB.ParentArtifactId, "alternative branch keeps the exact active parent");
 
-            HtmlWorkspaceToolService.RestoreSnapshot(session, rootId);
+            RestoreHtmlFixtureSnapshot(session, rootId);
             AssertEqual(2, session.HtmlWorkspace.RedoBranches.Count, "both direct branches remain available");
-            HtmlWorkspaceToolService.RedoSnapshot(session, branchBId);
+            RedoHtmlFixtureSnapshot(session, branchBId);
             HtmlWorkspaceToolService.UpsertFile(session, "index.html", "html", "branch B child", true);
             var branchBChildId = session.ActiveHtmlArtifactId;
             var branchBChild = session.Artifacts.Single(item => item.Id == branchBChildId);

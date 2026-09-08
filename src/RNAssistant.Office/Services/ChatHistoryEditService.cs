@@ -36,25 +36,33 @@ namespace RNAssistant.Office.Services
             var messages = session.Messages;
             var target = messages[targetIndex];
 
+            // Dialogue rewrites neither select historical shared HTML nor restore a
+            // detached workspace. Only incompatible chat-owned projections use checkpoints.
+            var selectedHtml = session.Artifacts.SingleOrDefault(item => item.Id == session.ActiveHtmlArtifactId);
             string targetCheckpointId;
             var workspaceCheckpoint = ChatResourceUri.TryGetArtifactId(session, target.HtmlWorkspaceCheckpoint, out targetCheckpointId)
                 ? targetCheckpointId
                 : HtmlWorkspaceArtifactService.CheckpointAtOrBefore(session, messages, targetIndex);
-            if (!string.IsNullOrWhiteSpace(workspaceCheckpoint) && _loadArtifactBody != null)
+            var sharedHtml = !string.IsNullOrEmpty(session.DocumentAuthorityId) &&
+                (!string.IsNullOrEmpty(selectedHtml?.DocumentAuthorityId) ||
+                 HtmlWorkspaceIdentity.LogicalId(session.ActiveHtmlArtifactId) != null ||
+                 HtmlWorkspaceIdentity.LogicalId(workspaceCheckpoint) != null);
+            if (!sharedHtml)
             {
-                _loadArtifactBody(session, workspaceCheckpoint);
-            }
-            if (string.IsNullOrWhiteSpace(workspaceCheckpoint))
-            {
-                session.HtmlWorkspace = new HtmlWorkspace();
-                session.ActiveHtmlArtifactId = null;
-                HtmlWorkspaceArtifactService.RebuildNavigation(session);
-            }
-            else if (!HtmlWorkspaceArtifactService.Restore(session, workspaceCheckpoint))
-            {
-                session.HtmlWorkspace = new HtmlWorkspace();
-                session.ActiveHtmlArtifactId = workspaceCheckpoint;
-                HtmlWorkspaceArtifactService.RebuildNavigation(session);
+                if (!string.IsNullOrWhiteSpace(workspaceCheckpoint) && _loadArtifactBody != null)
+                    _loadArtifactBody(session, workspaceCheckpoint);
+                if (string.IsNullOrWhiteSpace(workspaceCheckpoint))
+                {
+                    session.HtmlWorkspace = new HtmlWorkspace();
+                    session.ActiveHtmlArtifactId = null;
+                    HtmlWorkspaceArtifactService.RebuildNavigation(session);
+                }
+                else if (!HtmlWorkspaceArtifactService.Restore(session, workspaceCheckpoint))
+                {
+                    session.HtmlWorkspace = new HtmlWorkspace();
+                    session.ActiveHtmlArtifactId = workspaceCheckpoint;
+                    HtmlWorkspaceArtifactService.RebuildNavigation(session);
+                }
             }
 
             var removedMessages = new List<ChatMessage>();

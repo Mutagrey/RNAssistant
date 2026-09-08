@@ -229,8 +229,7 @@ namespace RNAssistant.Harness
             var allowedConcreteCalls = new[]
             {
                 ".LoadArtifactBody",
-                ".LoadArtifactBodies",
-                ".TryActivateHtmlWorkspaceRevision"
+                ".LoadArtifactBodies"
             };
             var offenders = new List<string>();
             foreach (var path in Directory.GetFiles(officeRoot, "*.cs", SearchOption.AllDirectories))

@@ -445,7 +445,7 @@ namespace RNAssistant.Office
                 {
                     documentRuntimeKey = CaptureExpectedRuntimeDocumentKey(session);
                 }
-                HtmlWorkspaceArtifactService.CaptureCurrent(session, "Before chat turn");
+                HtmlWorkspaceArtifactService.RebuildNavigation(session);
                 var firstRunMessageIndex = session.Messages == null ? 0 : session.Messages.Count;
                 ChatMessage appendedUserMessage = null;
                 var commitUserAttachments = input.CommitUserAttachments;

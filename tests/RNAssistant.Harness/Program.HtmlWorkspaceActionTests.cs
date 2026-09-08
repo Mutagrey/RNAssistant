@@ -2,6 +2,7 @@ using System;
 using System.Linq;
 using Newtonsoft.Json.Linq;
 using RNAssistant.Core.Models;
+using RNAssistant.Core.Services;
 using RNAssistant.Core.Storage;
 using RNAssistant.Office;
 using RNAssistant.Office.Contracts;
@@ -43,8 +44,8 @@ namespace RNAssistant.Harness
                 HtmlWorkspaceActionGuard.Validate(session, request);
                 // A competing operation can restore the same snapshot, while the chat revision still advances.
                 session.Revision++;
-                var scope = executor.ResourceAuthority.Scope(session, false);
-                var identity = ResourceStateProvider.Identity(scope, "html-workspace");
+                var scope = executor.ResourceAuthority.Scope(session, true);
+                var identity = HtmlWorkspaceIdentity.Identity(session, HtmlWorkspaceIdentity.LogicalId(session.ActiveHtmlArtifactId));
                 var head = executor.ResourceAuthority.Store.Capture(scope).GetHead(identity);
                 var dispatched = false;
                 AssertEqual("RESOURCE_REVISION_CHANGED", RuntimeThrows<ResourceRequestException>(() =>

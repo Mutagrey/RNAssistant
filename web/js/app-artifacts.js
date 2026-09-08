@@ -926,16 +926,16 @@
         row.className = "artifact-link-entry";
         var label = document.createElement("span");
         label.className = "chat-resource-row-copy";
-        label.textContent = item.title + (item.kind === "plan_document" ? " · v" + item.revision : " · оригинал") +
+        label.textContent = item.title + (item.kind === "plan_document" || item.kind === "html_workspace" ? " · v" + item.revision : " · ресурс") +
           (item.selected ? " · выбран" : item.linked ? " · в чате" : "") +
           (item.availabilityIssue === "metadata_unavailable" ? " · метаданные недоступны" :
            item.availabilityIssue ? " · текущая версия неизвестна" : "");
         row.appendChild(label);
-        if (!item.availabilityIssue && (!item.linked || item.kind === "plan_document" && !item.selected)) {
+        if (!item.availabilityIssue && (!item.linked || (item.kind === "plan_document" || item.kind === "html_workspace") && !item.selected)) {
           var attach = document.createElement("button");
           attach.type = "button";
           attach.className = "link-button";
-          attach.textContent = item.kind === "plan_document" ? "Выбрать Plan" : "В чат";
+          attach.textContent = item.kind === "plan_document" ? "Выбрать Plan" : item.kind === "html_workspace" ? "Выбрать HTML" : "В чат";
           attach.addEventListener("click", function () {
             changeDocumentArtifactLink(chatId, response.sessionRevision, item.resourceUri, false, attach);
           });
@@ -976,13 +976,16 @@
   async function changeDocumentArtifactLink(chatId, revision, resourceUri, detached, button) {
     if (artifactLinkPending || chatId !== state.activeChatId) return;
     var navigation = state.chatNavigationVersion;
+    var editVersion = state.htmlWorkspaceEditVersion || 0;
+    if (state.htmlWorkspaceDirty && !window.confirm("Переключение ресурса отменит несохранённые правки. Продолжить?")) return;
+    if (chatId !== state.activeChatId || navigation !== state.chatNavigationVersion || editVersion !== (state.htmlWorkspaceEditVersion || 0)) return;
     artifactLinkPending = true;
     button.disabled = true;
     try {
       var response = await send("changeArtifactLink", {
         chatId: chatId, expectedSessionRevision: revision, resourceUri: resourceUri, detached: detached
       });
-      if (chatId !== state.activeChatId || navigation !== state.chatNavigationVersion) return;
+      if (chatId !== state.activeChatId || navigation !== state.chatNavigationVersion || editVersion !== (state.htmlWorkspaceEditVersion || 0)) return;
       applyChatStateForChat(response, chatId);
       await loadDocumentArtifacts();
     } catch (error) {

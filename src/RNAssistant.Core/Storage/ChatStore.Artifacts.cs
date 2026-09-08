@@ -179,13 +179,15 @@ namespace RNAssistant.Core.Storage
 
             var workspace = HtmlWorkspaceCopyService.CreateWorkspaceFromSnapshot(activeSnapshot);
             workspace.UpdatedUtc = active.CreatedUtc;
-            var current = active;
-            var visited = new HashSet<string>(StringComparer.OrdinalIgnoreCase) { active.Id };
-            string issue = null;
-            string message = null;
-            string problemArtifactId = null;
+            var navigationId = (string)JObject.Parse(active.MetadataJson ?? "{}")["navigationBaseArtifactId"];
+            var current = string.IsNullOrEmpty(navigationId) ? active : FindHtmlArtifact(session, navigationId);
+            if (current != null && !string.IsNullOrEmpty(current.AvailabilityIssue)) current = null;
+            var visited = new HashSet<string>(StringComparer.OrdinalIgnoreCase) { current?.Id ?? active.Id };
+            string issue = current == null ? HtmlWorkspaceRecoveryIssues.ParentArtifactMissing : null;
+            string message = current == null ? "The restored HTML navigation source is unavailable. The active revision is readable, but undo history is incomplete." : null;
+            string problemArtifactId = current == null ? navigationId : null;
             long historyCharacters = 0;
-            while (!string.IsNullOrWhiteSpace(current.ParentArtifactId))
+            while (current != null && !string.IsNullOrWhiteSpace(current.ParentArtifactId))
             {
                 if (workspace.History.Count >= HtmlWorkspaceHistoryPolicy.MaxItems ||
                     historyCharacters >= HtmlWorkspaceHistoryPolicy.MaxContentCharacters)

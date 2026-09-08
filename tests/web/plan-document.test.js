@@ -65,7 +65,7 @@ vm.runInContext(source, context, { filename: "app-html-workspace-artifacts.js" }
   const editor = fs.readFileSync(path.join(root, "web/js/app-html-workspace-editor.js"), "utf8");
   const questions = fs.readFileSync(path.join(root, "web/js/app-agent-activity.js"), "utf8");
   const taskList = fs.readFileSync(path.join(root, "web/js/app-task-list.js"), "utf8");
-  assert.ok(index.includes("app-artifacts.js?v=artifact-recovery-20260908-1"), "artifact cards use the working-set cache key");
+  assert.ok(index.includes("app-artifacts.js?v=shared-html-20260908-1"), "artifact cards use the working-set cache key");
   assert.ok(index.includes("app-artifact-viewer-actions.js?v=binary-chunks-20260906-1"),
     "artifact actions have the current artifact cache key");
   assert.ok(index.includes("app-html-workspace-artifacts.js?v=binary-chunks-20260906-1"),

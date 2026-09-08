@@ -87,6 +87,7 @@ namespace RNAssistant.Core.Storage
                     .SelectMany(message => message.ResourceRefs ?? new List<ResourceRef>())
                     .Concat((session.ArtifactLinks ?? new List<ChatArtifactLink>()).Where(link => !link.Detached).Select(link => link.Reference))
                     .Where(reference => DocumentArtifactStore.Owns(session, reference))
+                    .Select(ChatResourceUri.ArtifactSnapshot)
                     .GroupBy(reference => reference.Uri, StringComparer.Ordinal).Select(group => group.First());
                 foreach (var reference in references)
                     session.Artifacts.Add(DocumentArtifacts.InspectMetadata(session, reference));
@@ -95,6 +96,13 @@ namespace RNAssistant.Core.Storage
                 {
                     session.Artifacts.Add(DocumentArtifacts.InspectMetadata(session, DocumentArtifactStore.PlanSelectionReference(session, session.ActivePlanDocumentArtifactId)));
                 }
+            }
+            if (rebuildDerivedProjections && !string.IsNullOrEmpty(session.DocumentAuthorityId))
+            {
+                var logicalId = HtmlWorkspaceIdentity.LogicalId(session.ActiveHtmlArtifactId);
+                if (logicalId != null)
+                    foreach (var artifact in DocumentArtifacts.SnapshotHistory(session, logicalId))
+                        if (!session.Artifacts.Any(item => item.Id == artifact.Id)) session.Artifacts.Add(artifact);
             }
             if (rebuildDerivedProjections)
             {

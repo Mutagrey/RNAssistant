@@ -108,8 +108,8 @@ namespace RNAssistant.Core.Storage
             var scope = Scope(session);
             var snapshot = _authority.Capture(scope);
             return snapshot.Heads.Values.Where(head => head.Knowledge == HeadKnowledge.Known &&
-                Owns(session, head.Revision))
-                .Select(head => IsPlan(session, head.Revision) ? ReadPlan(session, head.Revision, false) : Read(session, head.Revision))
+                Owns(session, head.Revision) && IsSnapshotReference(head.Revision))
+                .Select(head => Read(session, head.Revision, false))
                 .OrderBy(item => item.CreatedUtc).ThenBy(item => item.Id, StringComparer.Ordinal).ToArray();
         }
 
@@ -117,7 +117,7 @@ namespace RNAssistant.Core.Storage
         {
             // Failure to capture the authority itself is not a per-resource issue.
             var snapshot = _authority.Capture(Scope(session));
-            return snapshot.Heads.Values.Where(head => Owns(session, head.Revision))
+            return snapshot.Heads.Values.Where(head => Owns(session, head.Revision) && IsSnapshotReference(head.Revision))
                 .Select(head => InspectMetadata(session, head.Revision)).ToArray();
         }
 
@@ -138,7 +138,8 @@ namespace RNAssistant.Core.Storage
             return new ChatArtifact
             {
                 Id = id, DocumentAuthorityId = owner, Revision = revision,
-                Kind = IsPlan(session, reference) ? ChatArtifactKinds.PlanDocument : ChatArtifactKinds.File,
+                Kind = IsPlan(session, reference) ? ChatArtifactKinds.PlanDocument :
+                    HtmlWorkspaceIdentity.LogicalId(id) != null ? ChatArtifactKinds.HtmlWorkspace : ChatArtifactKinds.File,
                 CreatedUtc = default(DateTime), AvailabilityIssue = "metadata_unavailable"
             };
         }
@@ -146,6 +147,13 @@ namespace RNAssistant.Core.Storage
         public ChatArtifact Read(ChatSession session, ResourceRef reference, bool includeBody = true)
         {
             if (IsPlan(session, reference)) return ReadPlan(session, reference, includeBody);
+            if (IsAuthored(session, reference))
+            {
+                string owner, id; int version;
+                ChatResourceUri.TryParseArtifactRevision(reference, out owner, out id, out version);
+                return ReadRecordSnapshot(session, reference, AuthoredRecordView,
+                    HtmlWorkspaceIdentity.LogicalId(id) != null ? ChatArtifactKinds.HtmlWorkspace : ChatArtifactKinds.File, includeBody);
+            }
             var scope = Scope(session);
             if (!Owns(session, reference)) throw new InvalidDataException("The artifact belongs to another document.");
             var head = _authority.GetHead(scope, reference.Identity);
@@ -171,7 +179,14 @@ namespace RNAssistant.Core.Storage
             return !string.IsNullOrWhiteSpace(session?.DocumentAuthorityId) &&
                 ChatResourceUri.TryParseArtifactRevision(reference, out owner, out id, out revision) &&
                 owner == session.DocumentAuthorityId && (id.StartsWith("attachment_", StringComparison.Ordinal) ||
-                    id.StartsWith("plan_doc_", StringComparison.Ordinal));
+                    id.StartsWith("plan_doc_", StringComparison.Ordinal) || HtmlWorkspaceIdentity.LogicalId(id) != null ||
+                    id.StartsWith("artifact_", StringComparison.Ordinal));
+        }
+
+        private static bool IsSnapshotReference(ResourceRef reference)
+        {
+            ResourceAddress address;
+            return reference != null && ResourceUri.TryParse(reference.Uri, out address) && address.Segments.Count == 5;
         }
 
         private OriginalRecord ReadRecord(ResourceRevisionView view)

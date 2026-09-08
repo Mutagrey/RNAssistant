@@ -447,7 +447,8 @@ namespace RNAssistant.Office.Services
                 message.Activity.DataJson = RebaseJsonText(session, message.Activity.DataJson, null);
             }
 
-            if (message.HtmlWorkspaceCheckpoint != null)
+            if (message.HtmlWorkspaceCheckpoint != null &&
+                !RNAssistant.Core.Storage.DocumentArtifactStore.Owns(session, message.HtmlWorkspaceCheckpoint))
             {
                 var checkpoint = ChatResourceUri.RebaseArtifactRevision(message.HtmlWorkspaceCheckpoint, session.Id);
                 string checkpointId;

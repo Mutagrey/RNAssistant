@@ -230,7 +230,7 @@ namespace RNAssistant.Office.Tools
             if (PlanDocumentToolCatalog.Owns(operation))
                 throw new InvalidOperationException("Document Plan mutations require the native Plan handler and its prepared logical identity.");
             var historyMutation = ConversationResourceMutationDomain.IsHistoryMutation(operation);
-            if (session == null || action == null || ConversationResourceMutationDomain.StateName(operation) == null && !historyMutation)
+            if (session == null || action == null || ConversationResourceMutationDomain.StateName(operation) == null && !historyMutation && !HtmlWorkspacePublication.Owns(operation))
                 throw new ArgumentException("An explicit local resource mutation is required.");
             BindResourceAuthority(session);
             var id = Guid.NewGuid().ToString("N");

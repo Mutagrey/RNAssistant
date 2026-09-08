@@ -2390,9 +2390,11 @@ namespace RNAssistant.Harness
                     AssertEqual(html, (string)JObject.Parse(parsed.Response.ToolCalls.Single().ArgumentsJson)["content"],
                         "ID assignment preserves every HTML character in history");
                 }
+                AssertTrue(session.HtmlWorkspace.Files.Any(file => file.Path == "report.html"), "live HTML file exists");
                 AssertEqual(html, session.HtmlWorkspace.Files.Single(file => file.Path == "report.html").Content,
                     "executor receives the complete original HTML");
                 var replayed = AssertKernelReplay(session);
+                AssertTrue(replayed.HtmlWorkspace.Files.Any(file => file.Path == "report.html"), "replayed HTML file exists: " + JsonConvert.SerializeObject(replayed.HtmlWorkspaceRecovery));
                 AssertEqual(html, replayed.HtmlWorkspace.Files.Single(file => file.Path == "report.html").Content,
                     "durable replay retains the full HTML and its accepted IDs");
             });

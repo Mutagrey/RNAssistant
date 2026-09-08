@@ -3090,7 +3090,7 @@ namespace RNAssistant.Harness
                 var loaded = store.Load(session.Host, session.DocumentKey, session.Id);
                 AssertEqual("version two", loaded.HtmlWorkspace.Files.Single().Content, "active revision projected");
                 AssertEqual(firstId, loaded.HtmlWorkspace.History.Single().Id, "undo points to parent artifact");
-                HtmlWorkspaceToolService.RestoreSnapshot(loaded, firstId);
+                RestoreHtmlFixtureSnapshot(loaded, firstId);
                 AssertEqual(firstId, loaded.ActiveHtmlArtifactId, "undo activates prior artifact");
                 AssertEqual(secondId, loaded.HtmlWorkspace.RedoBranches.Single().Id, "redo points to direct child artifact");
                 store.Save(loaded);
@@ -3098,7 +3098,7 @@ namespace RNAssistant.Harness
                 loaded = store.Load(loaded.Id);
                 AssertEqual("version one", loaded.HtmlWorkspace.Files.Single().Content, "undo survives replay");
                 AssertTrue(store.LoadArtifactBody(loaded, secondId), "redo artifact body loads lazily");
-                HtmlWorkspaceToolService.RedoSnapshot(loaded, secondId);
+                RedoHtmlFixtureSnapshot(loaded, secondId);
                 AssertEqual("version two", loaded.HtmlWorkspace.Files.Single().Content, "redo activates child artifact");
                 AssertEqual(2, loaded.Artifacts.Count(item => item.Kind == ChatArtifactKinds.HtmlWorkspace),
                     "undo and redo do not duplicate revisions");
@@ -3153,13 +3153,11 @@ namespace RNAssistant.Harness
                 AssertEqual(artifactCount, loaded.Artifacts.Count, "unrelated save does not create an empty HTML branch");
                 AssertTrue(!loaded.HtmlWorkspaceRecovery.CanMutate, "recovery survives unrelated session commits");
 
-                string error;
-                AssertTrue(!store.TryActivateHtmlWorkspaceRevision(loaded, brokenId, out error),
+                AssertTrue(!(store.LoadArtifactBody(loaded, brokenId) && HtmlWorkspaceArtifactService.Restore(loaded, brokenId)),
                     "corrupt recovery candidate is rejected");
                 AssertEqual(brokenId, loaded.ActiveHtmlArtifactId, "failed selection does not move the active pointer");
-                AssertTrue(store.TryActivateHtmlWorkspaceRevision(loaded, rootId, out error),
+                AssertTrue((store.LoadArtifactBody(loaded, rootId) && HtmlWorkspaceArtifactService.Restore(loaded, rootId)),
                     "explicit healthy revision activates");
-                AssertTrue(string.IsNullOrWhiteSpace(error), "successful recovery has no error");
                 AssertEqual("healthy root", loaded.HtmlWorkspace.Files.Single().Content, "healthy revision body is restored");
                 AssertEqual(HtmlWorkspaceRecoveryStatuses.Healthy, loaded.HtmlWorkspaceRecovery.Status,
                     "successful selection clears recovery block");
@@ -3220,12 +3218,12 @@ namespace RNAssistant.Harness
                 store.Save(session);
                 var descendantId = session.ActiveHtmlArtifactId;
 
-                HtmlWorkspaceToolService.RestoreSnapshot(session, rootId);
+                RestoreHtmlFixtureSnapshot(session, rootId);
                 store.Save(session);
                 HtmlWorkspaceToolService.UpsertFile(session, "index.html", "html", "branch B", true);
                 store.Save(session);
                 var branchBId = session.ActiveHtmlArtifactId;
-                HtmlWorkspaceToolService.RestoreSnapshot(session, rootId);
+                RestoreHtmlFixtureSnapshot(session, rootId);
                 store.Save(session);
 
                 File.AppendAllText(SessionEventFile(paths, session), "{\"SchemaVersion\":");
@@ -3252,7 +3250,7 @@ namespace RNAssistant.Harness
                 var ambiguousRejected = false;
                 try
                 {
-                    HtmlWorkspaceToolService.RedoSnapshot(loaded, null);
+                    RedoHtmlFixtureSnapshot(loaded, null);
                 }
                 catch (InvalidOperationException ex)
                 {
@@ -3263,7 +3261,7 @@ namespace RNAssistant.Harness
                 var descendantRejected = false;
                 try
                 {
-                    HtmlWorkspaceToolService.RedoSnapshot(loaded, descendantId);
+                    RedoHtmlFixtureSnapshot(loaded, descendantId);
                 }
                 catch (InvalidOperationException)
                 {
@@ -3272,12 +3270,12 @@ namespace RNAssistant.Harness
                 AssertTrue(descendantRejected, "redo cannot jump over a direct child");
 
                 AssertTrue(store.LoadArtifactBody(loaded, branchAId), "selected branch body loads on demand");
-                HtmlWorkspaceToolService.RedoSnapshot(loaded, branchAId);
+                RedoHtmlFixtureSnapshot(loaded, branchAId);
                 AssertEqual("branch A", loaded.HtmlWorkspace.Files.Single().Content, "explicit branch redo succeeds");
                 AssertEqual(descendantId, loaded.HtmlWorkspace.RedoBranches.Single().Id,
                     "next direct child becomes the only redo choice");
                 AssertTrue(store.LoadArtifactBody(loaded, descendantId), "next branch body loads on demand");
-                HtmlWorkspaceToolService.RedoSnapshot(loaded, null);
+                RedoHtmlFixtureSnapshot(loaded, null);
                 AssertEqual("branch A child", loaded.HtmlWorkspace.Files.Single().Content,
                     "redo without id succeeds for exactly one child");
             });

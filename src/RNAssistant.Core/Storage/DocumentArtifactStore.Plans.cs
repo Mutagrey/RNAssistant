@@ -82,12 +82,7 @@ namespace RNAssistant.Core.Storage
             {
                 if (!IsPlan(session, restoredFrom) || !ReadPlan(session, restoredFrom, false).Id.StartsWith(planId + "_r", StringComparison.Ordinal))
                     throw new InvalidDataException("The Plan restore source belongs to another lineage.");
-                logicalRestore = _authority.Capture(scope).Commits.SelectMany(commit => commit.HeadChanges)
-                    .Where(change => change.Identity.Equals(identity) && change.After.Knowledge == HeadKnowledge.Known)
-                    .Select(change => change.After.Revision).FirstOrDefault(reference =>
-                        _revisions.GetRevision(scope, reference)?.Dependencies.Any(dependency => dependency.Kind == "immutable-snapshot" &&
-                            dependency.Resource.Uri == restoredFrom.Uri && dependency.Resource.Revision == restoredFrom.Revision) == true);
-                if (logicalRestore == null) throw new InvalidDataException("The Plan restore source has no logical publication.");
+                logicalRestore = LogicalRevisionForSnapshot(session, identity, restoredFrom);
             }
             var retained = RetainRecord(session, artifact, artifact.InlineText ?? string.Empty,
                 PlanRecordView, "application/vnd.rnassistant.artifact-plan+json", mutationAttemptId, operationKey, restoredFrom);

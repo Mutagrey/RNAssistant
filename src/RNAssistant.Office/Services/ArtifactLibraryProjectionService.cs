@@ -207,7 +207,7 @@ namespace RNAssistant.Office.Services
         {
             var kind = NormalizeKind(artifact == null ? null : artifact.Kind);
             if (string.Equals(kind, ChatArtifactKinds.HtmlWorkspace, StringComparison.OrdinalIgnoreCase))
-                return "html_workspace";
+                return HtmlWorkspaceIdentity.LogicalId(artifact.Id) ?? "html_workspace";
             if (string.Equals(kind, ChatArtifactKinds.PlanDocument, StringComparison.OrdinalIgnoreCase))
                 return !string.IsNullOrWhiteSpace(artifact.DocumentAuthorityId)
                     ? RNAssistant.Core.Storage.DocumentArtifactStore.PlanIdFromArtifact(artifact)

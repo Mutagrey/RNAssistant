@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.IO;
+using System.Linq;
 using Newtonsoft.Json;
 using RNAssistant.Core.Models;
 using RNAssistant.Core.Services;
@@ -9,6 +10,61 @@ namespace RNAssistant.Core.Storage
 {
     public sealed partial class DocumentArtifactStore
     {
+        private const string AuthoredRecordView = "artifact-authored-record";
+
+        public ResourceMutationReadBack RetainAuthoredSnapshot(ChatSession session, ChatArtifact artifact,
+            string attemptId, string operationKey, ResourceRef restoredFrom = null, IEnumerable<ResourceDependency> dependencies = null)
+        {
+            if (artifact == null || artifact.Kind != ChatArtifactKinds.HtmlWorkspace && artifact.Kind != ChatArtifactKinds.File ||
+                artifact.DocumentAuthorityId != Scope(session).Id || !IsAuthored(session, ChatResourceUri.CreateArtifactRevision(session, artifact)))
+                throw new InvalidDataException("A document-owned authored snapshot is required.");
+            return RetainRecord(session, artifact, artifact.InlineText, AuthoredRecordView,
+                "application/vnd.rnassistant.artifact-record+json", attemptId, operationKey, restoredFrom, dependencies);
+        }
+
+        public static bool IsAuthored(ChatSession session, ResourceRef reference)
+        {
+            string owner, id; int revision;
+            return Owns(session, reference) && ChatResourceUri.TryParseArtifactRevision(reference, out owner, out id, out revision) &&
+                (HtmlWorkspaceIdentity.LogicalId(id) != null || id.StartsWith("artifact_", StringComparison.Ordinal));
+        }
+
+        public ResourceRef CurrentSnapshot(ChatSession session, ResourceIdentity logicalIdentity)
+        {
+            var scope = Scope(session);
+            var address = ResourceUri.Parse(logicalIdentity.Uri);
+            if (address.Provider != "state" || address.Segments.Count != 3 || address.Segments[0] != scope.Kind || address.Segments[1] != scope.Id)
+                throw new InvalidDataException("The logical artifact belongs to another scope.");
+            var head = _authority.GetHead(scope, logicalIdentity);
+            if (head == null) return null;
+            if (head.Knowledge != HeadKnowledge.Known) throw new InvalidDataException("The artifact head is unavailable; reconcile without replay.");
+            var refs = _revisions.GetRevision(scope, head.Revision)?.Dependencies.Where(item => item.Kind == "immutable-snapshot").ToArray();
+            if (refs == null || refs.Length != 1 || !Owns(session, refs[0].Resource))
+                throw new InvalidDataException("The artifact head has no exact document snapshot.");
+            return refs[0].Resource.Copy();
+        }
+
+        public ResourceRef LogicalRevisionForSnapshot(ChatSession session, ResourceIdentity identity, ResourceRef snapshot)
+        {
+            var scope = Scope(session);
+            if (!Owns(session, snapshot)) throw new InvalidDataException("The restore snapshot belongs to another document.");
+            var restored = _authority.Capture(scope).Commits.SelectMany(commit => commit.HeadChanges)
+                .Where(change => change.Identity.Equals(identity) && change.After.Knowledge == HeadKnowledge.Known)
+                .Select(change => change.After.Revision).FirstOrDefault(reference =>
+                    _revisions.GetRevision(scope, reference)?.Dependencies.Any(dependency => dependency.Kind == "immutable-snapshot" &&
+                        dependency.Resource.Uri == snapshot.Uri && dependency.Resource.Revision == snapshot.Revision) == true);
+            return restored ?? throw new InvalidDataException("The restore source has no logical publication.");
+        }
+
+        public IReadOnlyList<ChatArtifact> SnapshotHistory(ChatSession session, string logicalId)
+        {
+            return _authority.Capture(Scope(session)).Heads.Values.Where(head => head.Knowledge == HeadKnowledge.Known && Owns(session, head.Revision) && IsSnapshotReference(head.Revision))
+                .Where(head => { string owner, id; int revision;
+                    return ChatResourceUri.TryParseArtifactRevision(head.Revision, out owner, out id, out revision) &&
+                        id.StartsWith(logicalId + "_r", StringComparison.Ordinal); })
+                .Select(head => InspectMetadata(session, head.Revision)).OrderBy(item => item.Revision).ToArray();
+        }
+
         // Artifact metadata is a retained view of the same canonical revision.
         // This code never publishes heads/effects or creates another inventory.
         private ResourceMutationReadBack RetainRecord(ChatSession session, ChatArtifact artifact, string text,

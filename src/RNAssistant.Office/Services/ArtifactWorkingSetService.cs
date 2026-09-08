@@ -59,7 +59,7 @@ namespace RNAssistant.Office.Services
                         Title = string.IsNullOrEmpty(item.AvailabilityIssue) ? item.Title : item.Title ?? "Недоступный ресурс",
                         AvailabilityIssue = item.AvailabilityIssue, Kind = item.Kind, Revision = item.Revision,
                         Linked = ArtifactWorkingSet.IsLinked(session, item),
-                        Selected = item.Id == session.ActivePlanDocumentArtifactId
+                        Selected = item.Id == session.ActivePlanDocumentArtifactId || item.Id == session.ActiveHtmlArtifactId
                     }).ToArray()
                 };
             }
@@ -73,16 +73,18 @@ namespace RNAssistant.Office.Services
                 .GroupBy(item => ArtifactWorkingSet.Identity(session, item)))
             {
                 var first = group.First();
-                if (first.Kind != ChatArtifactKinds.PlanDocument) { yield return group.Single(); continue; }
+                if (first.Kind != ChatArtifactKinds.PlanDocument && first.Kind != ChatArtifactKinds.HtmlWorkspace) { yield return group.Single(); continue; }
                 ResourceRef current = null;
                 var unavailableHead = false;
-                try { current = _artifacts.CurrentPlan(session, DocumentArtifactStore.PlanIdFromArtifact(first)); }
+                try { current = first.Kind == ChatArtifactKinds.PlanDocument
+                    ? _artifacts.CurrentPlan(session, DocumentArtifactStore.PlanIdFromArtifact(first))
+                    : _artifacts.CurrentSnapshot(session, HtmlWorkspaceIdentity.Identity(session, HtmlWorkspaceIdentity.LogicalId(first.Id))); }
                 catch (InvalidDataException) { unavailableHead = true; }
                 catch (IOException) { unavailableHead = true; }
                 if (current == null) unavailableHead = true;
                 if (unavailableHead)
                 {
-                    var retained = group.FirstOrDefault(item => item.Id == session.ActivePlanDocumentArtifactId) ??
+                    var retained = group.FirstOrDefault(item => item.Id == session.ActivePlanDocumentArtifactId || item.Id == session.ActiveHtmlArtifactId) ??
                         group.OrderByDescending(item => item.Revision).First();
                     retained.AvailabilityIssue = "head_unavailable";
                     yield return retained;
@@ -119,11 +121,34 @@ namespace RNAssistant.Office.Services
                     (PlanDocumentService.IsTombstone(artifact) ||
                      _artifacts.CurrentPlan(session, ArtifactWorkingSet.PlanId(artifact))?.Uri != reference.Uri))
                     throw new InvalidOperationException("Версия Plan изменилась или удалена. Обновите список и выберите актуальную версию.");
+                if (!request.Detached.Value && artifact.Kind == ChatArtifactKinds.HtmlWorkspace &&
+                    _artifacts.CurrentSnapshot(session, HtmlWorkspaceIdentity.Identity(session, HtmlWorkspaceIdentity.LogicalId(artifact.Id)))?.Uri != reference.Uri)
+                    throw new InvalidOperationException("Версия HTML изменилась. Выберите актуальную версию из документа.");
+                ChatSession selectedHtml = null;
+                if (!request.Detached.Value && artifact.Kind == ChatArtifactKinds.HtmlWorkspace)
+                {
+                    // Validate the complete selected aggregate before changing chat membership.
+                    selectedHtml = new ChatSession { Id = session.Id, DocumentAuthorityId = session.DocumentAuthorityId,
+                        ActiveHtmlArtifactId = artifact.Id,
+                        Artifacts = _artifacts.SnapshotHistory(session, HtmlWorkspaceIdentity.LogicalId(artifact.Id))
+                            .Select(item => item.Id == artifact.Id ? _artifacts.Read(session, reference) : item).ToList() };
+                    if (!HtmlWorkspaceArtifactService.Restore(selectedHtml, artifact.Id))
+                        throw new InvalidDataException("Выбранная версия HTML недоступна. Ссылка чата не изменена.");
+                }
                 session.Artifacts = session.Artifacts ?? new List<ChatArtifact>();
                 if (!session.Artifacts.Any(item => item.Id == artifact.Id)) session.Artifacts.Add(artifact);
                 ArtifactWorkingSet.Set(session, artifact, request.Detached.Value);
                 if (!request.Detached.Value && artifact.Kind == ChatArtifactKinds.PlanDocument)
                     session.ActivePlanDocumentArtifactId = artifact.Id;
+                if (selectedHtml != null)
+                {
+                    var ids = new HashSet<string>(selectedHtml.Artifacts.Select(item => item.Id), StringComparer.Ordinal);
+                    session.Artifacts.RemoveAll(item => ids.Contains(item.Id));
+                    session.Artifacts.AddRange(selectedHtml.Artifacts);
+                    session.ActiveHtmlArtifactId = selectedHtml.ActiveHtmlArtifactId;
+                    session.HtmlWorkspace = selectedHtml.HtmlWorkspace;
+                    session.HtmlWorkspaceRecovery = selectedHtml.HtmlWorkspaceRecovery;
+                }
                 persist(session);
             }
         }

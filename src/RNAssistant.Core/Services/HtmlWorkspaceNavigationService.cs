@@ -25,6 +25,17 @@ namespace RNAssistant.Core.Services
                 string.Equals(item.Kind, ChatArtifactKinds.HtmlWorkspace, StringComparison.OrdinalIgnoreCase));
             if (active == null) return new List<HtmlWorkspaceRedoBranch>();
 
+            if (HtmlWorkspaceIdentity.LogicalId(active.Id) != null && !string.IsNullOrWhiteSpace(active.DocumentAuthorityId))
+            {
+                var redoIds = JObject.Parse(active.MetadataJson ?? "{}")["redoArtifactIds"] as JArray;
+                if (redoIds != null)
+                {
+                    var next = (string)redoIds.FirstOrDefault();
+                    return artifacts.Where(item => item.Id == next && HtmlWorkspaceIdentity.LogicalId(item.Id) == HtmlWorkspaceIdentity.LogicalId(active.Id))
+                        .Select(ToBranch).ToList();
+                }
+            }
+
             var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase) { active.Id };
             return artifacts
                 .Where(item => item != null &&
@@ -71,6 +82,8 @@ namespace RNAssistant.Core.Services
                 string.Equals(item.Kind, ChatArtifactKinds.HtmlWorkspace, StringComparison.OrdinalIgnoreCase));
             var preferredParentId = active == null ? null : active.ParentArtifactId;
             return artifacts
+                .Where(item => HtmlWorkspaceIdentity.LogicalId(excludedArtifactId) == null ||
+                    HtmlWorkspaceIdentity.LogicalId(item.Id) == HtmlWorkspaceIdentity.LogicalId(excludedArtifactId))
                 .Where(item => item != null &&
                     !string.IsNullOrWhiteSpace(item.Id) &&
                     !string.Equals(item.Id, excludedArtifactId, StringComparison.OrdinalIgnoreCase) &&

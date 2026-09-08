@@ -267,7 +267,9 @@ namespace RNAssistant.Harness
                 var deleteDataResult = executor.ExecuteManual(deleteData, tools, new AppSettings(), false, false, session);
                 AssertTrue(deleteDataResult.Success, "html workspace data delete succeeds");
                 AssertEqual(0, session.HtmlWorkspace.DataSources.Count, "html data deleted");
-                HtmlWorkspaceToolService.RestoreSnapshot(session, session.HtmlWorkspace.History[0].Id);
+                var undoId = session.HtmlWorkspace.History[0].Id;
+                executor.MutateLocalResources(session, "common.html_workspace_restore", new Dictionary<string, object> { ["snapshotId"] = undoId },
+                    () => { HtmlWorkspaceArtifactService.RestoreAsRevision(session, undoId); return true; });
                 AssertEqual(1, session.HtmlWorkspace.DataSources.Count, "html data delete can be undone");
 
                 var boundSession = NewSession(adapter);
@@ -325,7 +327,7 @@ namespace RNAssistant.Harness
                 var failedSession = new ChatSession { Title = "HTML failed mutation" };
                 HtmlWorkspaceToolService.UpsertFile(failedSession, "index.html", "html", "<h1>First</h1>", true);
                 HtmlWorkspaceToolService.UpsertFile(failedSession, "index.html", "html", "<h1>Second</h1>", true);
-                HtmlWorkspaceToolService.RestoreSnapshot(failedSession, failedSession.HtmlWorkspace.History[0].Id);
+                RestoreHtmlFixtureSnapshot(failedSession, failedSession.HtmlWorkspace.History[0].Id);
                 var failedHistoryCount = failedSession.HtmlWorkspace.History.Count;
                 var failedRedoCount = failedSession.HtmlWorkspace.RedoBranches.Count;
                 var missingSelectionRejected = false;
@@ -367,10 +369,13 @@ namespace RNAssistant.Harness
                     Title = "HTML source tools"
                 };
                 var tools = new List<ToolCatalogEntry>(OfficeToolCatalog.ForHost(adapter.HostName));
-                HtmlWorkspaceToolService.UpsertFile(session, "index.html", "html", "one\ntwo\nthree\nfour", true);
-                HtmlWorkspaceToolService.UpsertFile(session, "app.js", "script", "alpha\nconst beta = 1;\nalpha beta;", false);
+                tools.AddRange(executor.GetControllerTools());
+                foreach (var source in new[] { new[] { "index.html", "one\ntwo\nthree\nfour" }, new[] { "app.js", "alpha\nconst beta = 1;\nalpha beta;" } })
+                    AssertTrue(executor.ExecuteManual(Command(HtmlWorkspaceToolCatalog.WriteFileToolId, "path", source[0], "content", source[1]),
+                        tools, new AppSettings(), false, false, session).Success, "publish source through the document owner");
 
-                var gateway = new ResourceGatewayService();
+                var gateway = new ResourceGatewayService(new IResourceProvider[] { new ChatArtifactResourceProvider(
+                    payloads: executor.Payloads, documentArtifacts: new ChatStore(FixturePaths.Value).DocumentArtifacts) });
                 var files = gateway.List(
                     session,
                     ChatArtifactResourceProvider.ProviderName,
@@ -506,7 +511,7 @@ namespace RNAssistant.Harness
                 AssertEqual(1, loaded.HtmlWorkspace.Files.Count, "html workspace preserved");
                 AssertEqual("index.html", loaded.HtmlWorkspace.ActiveFileId, "active html preserved");
                 AssertEqual(1, loaded.HtmlWorkspace.History.Count, "html history preserved");
-                HtmlWorkspaceToolService.RestoreSnapshot(loaded, loaded.HtmlWorkspace.History[0].Id);
+                RestoreHtmlFixtureSnapshot(loaded, loaded.HtmlWorkspace.History[0].Id);
                 AssertEqual("<h1>Saved</h1>", loaded.HtmlWorkspace.Files[0].Content, "persisted html history supports undo");
 
                 AssertTrue(store.Delete(session.Host, session.DocumentKey, session.Id), "chat deleted");
@@ -523,14 +528,14 @@ namespace RNAssistant.Harness
 
             AssertTrue(session.HtmlWorkspace.History.Count > 0, "html history created");
             var historyCount = session.HtmlWorkspace.History.Count;
-            HtmlWorkspaceToolService.RestoreSnapshot(session, session.HtmlWorkspace.History[0].Id);
+            RestoreHtmlFixtureSnapshot(session, session.HtmlWorkspace.History[0].Id);
             AssertContains(session.HtmlWorkspace.Files[0].Content, "First", "html undo restores previous file content");
             AssertEqual("index.html", session.HtmlWorkspace.ActiveFileId, "html undo keeps active file");
             AssertEqual(1, session.HtmlWorkspace.DataSources.Count, "html undo keeps data");
             AssertEqual(historyCount - 1, session.HtmlWorkspace.History.Count, "html undo consumes restored version");
             AssertEqual(1, session.HtmlWorkspace.RedoBranches.Count, "html undo exposes one redo branch");
 
-            HtmlWorkspaceToolService.RedoSnapshot(session, session.HtmlWorkspace.RedoBranches[0].Id);
+            RedoHtmlFixtureSnapshot(session, session.HtmlWorkspace.RedoBranches[0].Id);
             AssertContains(session.HtmlWorkspace.Files[0].Content, "Second", "html redo restores undone file content");
             AssertEqual("index.html", session.HtmlWorkspace.ActiveFileId, "html redo keeps active file");
             AssertEqual(0, session.HtmlWorkspace.RedoBranches.Count, "html redo has no direct child after moving forward");
@@ -568,9 +573,9 @@ namespace RNAssistant.Harness
             AssertTrue(storedCharacters <= HtmlWorkspaceHistoryPolicy.MaxContentCharacters, "large html history stays within character budget");
             AssertEqual('k', largeSession.HtmlWorkspace.History[0].Files[0].Content[0], "latest undo snapshot is retained");
 
-            HtmlWorkspaceToolService.RestoreSnapshot(largeSession, largeSession.HtmlWorkspace.History[0].Id);
+            RestoreHtmlFixtureSnapshot(largeSession, largeSession.HtmlWorkspace.History[0].Id);
             AssertEqual('k', largeSession.HtmlWorkspace.Files[0].Content[0], "bounded history still supports undo");
-            HtmlWorkspaceToolService.RedoSnapshot(largeSession, largeSession.HtmlWorkspace.RedoBranches[0].Id);
+            RedoHtmlFixtureSnapshot(largeSession, largeSession.HtmlWorkspace.RedoBranches[0].Id);
             AssertEqual('l', largeSession.HtmlWorkspace.Files[0].Content[0], "bounded history still supports redo");
 
             var transportSession = new ChatSession { Title = "HTML compact transport" };

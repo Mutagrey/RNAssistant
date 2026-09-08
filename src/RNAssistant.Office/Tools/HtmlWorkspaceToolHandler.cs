@@ -37,7 +37,7 @@ namespace RNAssistant.Office.Tools
             if (!HtmlWorkspaceToolCatalog.Owns(toolId)) return null;
             return new ToolBinding(
                 "html." + toolId.Substring("common.html_".Length)
-                    .Replace('_', '.') + ".v1");
+                    .Replace('_', '.') + ".v2");
         }
 
         public Task<ToolHandlerResult> ExecuteAsync(

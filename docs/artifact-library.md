@@ -21,9 +21,10 @@ introduce another artifact transport or store.
 Status: slice **1a, sent originals, implemented host-neutral**. Newly sent files
 belong to the document and are discoverable/readable from its other chats.
 Slice **1b, Plan publication, is implemented host-neutral (2026-09-08)**: new Plans
-also belong to the document. Authored HTML and independent Markdown documents
-still use the earlier owners. The originals/Plan working-set selector and chat-local
-unlink are implemented host-neutral (2026-09-08). This section owns
+also belong to the document. Shared authored HTML workspaces and their authored
+JSON resources are implemented host-neutral (2026-09-08), using the same retained
+artifact-record path, revision journal and CAS. Independent Markdown authoring is
+still open. Originals/Plan/HTML selection and chat-local unlink are implemented. This section owns
 the artifact-specific decision, not a second resource architecture.
 
 `DocumentArtifactStore` publishes immutable original metadata as a retained view
@@ -42,7 +43,7 @@ foreign document references are refused. Existing chat-local records are not
 silently migrated. The remaining ownership seam and removal gate are tracked in
 [MIGRATION_MAP](stabilization/MIGRATION_MAP.md#document-artifact-ownership--active-slices).
 Exact reads load one metadata record; library enumeration still scans committed
-original/Plan revision metadata. Bounded indexed discovery remains slice 3.
+artifact revision metadata. Bounded indexed discovery remains slice 3.
 
 ### Implemented Plan publication slice
 
@@ -76,13 +77,53 @@ exact bytes remain available for historical reads.
 A new chat can create a separate Plan, select an existing document Plan through the
 working-set selector, or inherit a selected Plan through fork. Refresh is an
 explicit selection of the displayed current snapshot; no implicit current-head
-replacement, old-chat migration, independent MD authoring or shared HTML editing.
+replacement or old-chat migration. Independent MD authoring remains open.
+
+### Implemented shared HTML publication — 2026-09-08
+
+`HtmlWorkspacePublication` supplies domain preparation and aggregate read-back to
+`ResourceMutationAuthorityObserver`. The existing document mutation lease serializes
+writers; the selected exact snapshot must match the logical workspace head before
+dispatch. Preparation reconstructs the current aggregate from its published bytes.
+A new unselected chat creates a separate logical workspace. Multiple workspaces
+have independent identities and lineages in the same document.
+
+The common `DocumentArtifactStore.RetainAuthoredSnapshot` path retains workspace
+records and newly authored JSON files in the existing revision store/CAS. There is
+no HTML-specific metadata/data store. Snapshot, logical head and operation receipt
+cross one authority publication barrier; saving chat links follows publication.
+A failed link save leaves a discoverable resource, and replaying the same operation
+is refused. Incompatible chat-owned HTML is explicitly rejected for mutation.
+
+Gateway and HTML member URIs preserve the document owner. Exact root/member refs
+reconstruct one snapshot in chat projection; member refs do not create duplicate
+artifact records. Current reads carry the shared logical-head dependency. Exact
+bindings retain exact dependency evidence; supported `head` bindings remain dynamic
+identities resolved through the existing Gateway/data plane at read/export time.
+Uploaded HTML remains an immutable original; authored JSON is an ordinary file
+artifact. Export requires a saved document snapshot and does not create a revision.
+
+**«Ресурсы» → «Из документа…» → «Выбрать HTML»** loads the displayed current snapshot
+in another chat. Selection validates the complete body before changing membership.
+A stale writer is rejected before dispatch and must explicitly select the new head.
+The picker and response guards preserve newer drafts/navigation. Unlink clears
+only this chat's selected workspace, including when its body is unavailable.
+
+Undo/recovery/redo publish new causal snapshots with parent and exact restore-source
+provenance, including the corresponding logical revision. Navigation/redo metadata
+survives restart. Rewriting dialogue and fork preserve selection and historical
+message refs without publishing rollback or copying shared HTML/JSON identities.
+Origin-chat deletion and CAS collection retain historical snapshots and bindings.
+
+`shared HTML:`, HTML runtime/replay and resource chat-lifecycle checks cover this
+host-neutral slice. Windows/Office/WebView2 and Playwright layout qualification
+remain open; indexed discovery and independent Markdown are separate slices.
 
 ### Implemented working-set links — 2026-09-08
 
-The user requested unlinking before the remaining HTML/Markdown ownership move.
-This dependency-safe slice applies only to document-owned originals and Plans;
-it does not predeclare their future owners or complete all of slices 3–4.
+The original working-set slice covered document-owned originals and Plans.
+The shared HTML slice extends the same contract to HTML and authored JSON files;
+it does not complete independent Markdown or all of discovery slices 3–4.
 
 `ChatSession.ArtifactLinks` is append-only-event-backed chat membership: one
 logical resource identity, exact attached snapshot and detached flag per decision.
@@ -91,19 +132,19 @@ message refs establish membership. Explicit detach overrides all message refs fo
 that logical resource. Attached refs are reachability roots independent of messages.
 
 **«Убрать» / «Убрать из этого чата»** removes a working-set link and, for the selected
-Plan, clears its selection. It excludes that resource from library heads, the next
+Plan or HTML, clears its selection. It excludes that resource from library heads, the next
 bounded prompt manifest and new compaction reference collection. It preserves
 historical messages/checkpoints, exact resource reads, other chats and document
 CAS. It is neither a document tombstone nor an access revocation. History rewrite
 and fork preserve explicit decisions; clearing the entire chat clears membership.
 
 The **«Ресурсы» → «Из документа…»** picker remains available in an empty chat. It
-lists metadata for current Plans and originals, supports title search and returns
+lists metadata for current Plans/HTML and ordinary document files, supports title search and returns
 50 items per page with a cursor bound to the chat revision, document, query and
 ordered collection. Duplicate names remain separate exact resources; continuation
 cannot silently skip a changed catalog. A click attaches an original or selects the
-exact displayed Plan. Detach is also available beside eligible working-set rows.
-HTML/independent MD and run/system resources have no link controls in this slice.
+exact displayed Plan/HTML. Detach is also available beside eligible working-set rows.
+Independent MD authoring and run/system resources are outside this slice.
 
 `ArtifactWorkingSetService` owns validation and document-lease coordination; the
 typed `listDocumentArtifacts`/`changeArtifactLink` bridge carries an explicit chat,
@@ -133,7 +174,7 @@ layout qualification remain open.
 
 After working-set commit `5bf9aba1`, a separate dependency-safe correction closes
 chat reconstruction and picker failures caused by an individual missing/corrupt
-metadata record. It precedes the shared HTML/Markdown owner move.
+metadata record. That recovery mechanism also serves the implemented HTML owner move.
 
 `DocumentArtifactStore.InspectMetadata` produces an explicit reference-only
 `AvailabilityIssue=metadata_unavailable` projection. The runtime validates owner,
@@ -296,13 +337,13 @@ The HTML owner cutover must reuse the Resource MASTER's three canonical contract
 `IResourceAuthorityStore`, `IResourceRevisionStore` and CAS. A partial source file
 is not a new physical store, but duplicating registration/read rules by artifact
 kind is still unnecessary. Its common `RetainRecord` / `ReadRecordSnapshot` path
-now serves Plan metadata and bodies; the former Plan-only record implementation
-is removed. Existing Plan record view, provenance fields and publication barriers
-are retained. No HTML identity, format or ownership is activated by this refactor.
+serves Plan and authored HTML/JSON metadata and bodies; the former Plan-only record
+implementation is removed. Existing Plan record view, provenance fields and
+publication barriers are retained. HTML publication uses this common path.
 
 The discarded, unconnected `DocumentArtifactStore.Html.cs` draft must not return
-as an independent HTML metadata/read/receipt subsystem. For the following HTML
-slice:
+as an independent HTML metadata/read/receipt subsystem. The HTML slice follows
+these boundaries:
 
 - Keep aggregate assembly and binding semantics in the HTML domain owner. Retain
   its immutable artifact record through the common facade, with `PayloadRef` and
@@ -318,17 +359,17 @@ slice:
   with parent/restored-from provenance. Changing a chat selection or editing/forking
   dialogue must not publish a rollback of a shared resource head.
 
-The drift was confined to an unregistered draft and is removed. Shared HTML and
-independent Markdown still require the complete owner/tools/consumer cutover below.
+The unregistered draft is removed. Shared HTML now uses the common owner, tools
+and consumers above. Independent Markdown and indexed discovery remain open.
 
 ### Required implementation slices and acceptance
 
-HTML/Markdown cutover audit (2026-09-08): switch these remaining assumptions
+HTML/Markdown cutover audit (2026-09-08): the shared HTML slice switches these assumptions
 together with the domain owner, not ahead of it:
 
 - `ChatArtifactResourceProvider.ResolveIdentity` must preserve the exact resource's
   owner when constructing a member URI; its current `session.Id` construction is
-  valid only for the still chat-owned HTML domain. Check member round-trip from a
+  was valid only for chat-owned HTML; HTML now preserves document ownership. Check member round-trip from a
   second chat of the same document.
 - Extend `DocumentArtifactStore.Owns` to HTML/independent Markdown only when their
   document publication/read owners are active. Fork/history rebase consumes this
@@ -360,7 +401,7 @@ are removed. `html actions:` harness checks and
 `tests/web/html-workspace-actions.test.js` cover refusal before dispatch, typed
 transport, duplicate clicks, navigation ABA, local edits and stale export cleanup.
 Production controller/document switching and WebView layout still need Windows
-qualification. HTML remains chat-owned in this slice.
+qualification. This guard prerequisite preceded the implemented HTML ownership move.
 
 | Order | Owner and replacement | Required evidence |
 |---|---|---|

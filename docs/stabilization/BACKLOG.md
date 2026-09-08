@@ -10,6 +10,16 @@
 Новые product features заморожены. Запись в этом файле не разрешает начать работу
 до её явного включения в текущую фазу.
 
+## Resource prompt test expectation — 2026-09-08
+
+During the shared HTML slice, `artifacts: historical attachments stay reference-only`
+fails only at its old unquoted `target=attachment: Untitled` assertion. The committed
+`ChatResourcePromptIndex` already emits a quoted complete semantic target; neither
+that formatter nor this test changed in the HTML slice. Owner: resource context /
+harness. Reconcile the assertion with the canonical complete-target contract in
+the next resource-context slice; retain the no-historical-body/no-runtime-URI checks.
+The other 27 tests in the `artifact` filter pass. This is not Windows evidence.
+
 ## Structural debt
 
 Рефакторинг начинается только вместе с конкретным изменением, которое он упрощает.

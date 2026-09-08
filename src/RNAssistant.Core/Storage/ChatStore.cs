@@ -493,43 +493,6 @@ namespace RNAssistant.Core.Storage
             return HydrateArtifact(artifact);
         }
 
-        public bool TryActivateHtmlWorkspaceRevision(ChatSession session, string artifactId, out string error)
-        {
-            error = null;
-            if (session == null || string.IsNullOrWhiteSpace(artifactId))
-            {
-                error = "HTML workspace revision is required.";
-                return false;
-            }
-            var artifact = FindHtmlArtifact(session, artifactId);
-            if (artifact == null)
-            {
-                error = "HTML workspace revision metadata was not found.";
-                return false;
-            }
-            if (!HydrateArtifact(artifact))
-            {
-                error = "HTML workspace revision body is missing, corrupt, or cannot be decrypted.";
-                return false;
-            }
-            if (ParseWorkspaceSnapshot(artifact) == null)
-            {
-                error = "HTML workspace revision body is invalid.";
-                return false;
-            }
-
-            session.ActiveHtmlArtifactId = artifact.Id;
-            RebuildHtmlWorkspaceProjection(session);
-            if (session.HtmlWorkspaceRecovery == null || !session.HtmlWorkspaceRecovery.CanMutate)
-            {
-                error = session.HtmlWorkspaceRecovery == null
-                    ? "HTML workspace revision could not be projected."
-                    : session.HtmlWorkspaceRecovery.Message;
-                return false;
-            }
-            return true;
-        }
-
         public void LoadArtifactBodies(ChatSession session, IEnumerable<string> artifactIds)
         {
             if (session == null || artifactIds == null) return;

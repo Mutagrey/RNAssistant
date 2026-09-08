@@ -358,6 +358,7 @@ namespace RNAssistant.Office.Tools
             data.Name = normalizedName;
             var artifact = new ChatArtifact
             {
+                Id = "artifact_" + Guid.NewGuid().ToString("N"), DocumentAuthorityId = session.DocumentAuthorityId,
                 Kind = ChatArtifactKinds.File, Title = normalizedName + ".json",
                 MimeType = "application/json", InlineText = json ?? "{}", Revision = 1
             };
@@ -408,60 +409,6 @@ namespace RNAssistant.Office.Tools
             NormalizeWorkspace(session.HtmlWorkspace);
             HtmlWorkspaceArtifactService.CaptureCurrent(session, "HTML data deleted: " + data.Name);
             return data;
-        }
-
-        public static HtmlWorkspaceSnapshot RestoreSnapshot(ChatSession session, string snapshotId)
-        {
-            if (session == null)
-            {
-                throw new InvalidOperationException("Chat session is required.");
-            }
-
-            session.HtmlWorkspace = NormalizeWorkspace(session.HtmlWorkspace);
-            var snapshot = string.IsNullOrWhiteSpace(snapshotId)
-                ? session.HtmlWorkspace.History.OrderByDescending(h => h.CreatedUtc).FirstOrDefault()
-                : session.HtmlWorkspace.History.FirstOrDefault(h => h != null && string.Equals(h.Id, snapshotId, StringComparison.OrdinalIgnoreCase));
-            if (snapshot == null)
-            {
-                throw new InvalidOperationException("HTML workspace snapshot was not found.");
-            }
-
-            if (!HtmlWorkspaceArtifactService.Restore(session, snapshot.Id))
-            {
-                throw new InvalidOperationException("HTML workspace artifact could not be restored.");
-            }
-            return snapshot;
-        }
-
-        public static HtmlWorkspaceSnapshot RedoSnapshot(ChatSession session, string snapshotId)
-        {
-            if (session == null)
-            {
-                throw new InvalidOperationException("Chat session is required.");
-            }
-
-            session.HtmlWorkspace = NormalizeWorkspace(session.HtmlWorkspace);
-            var branches = HtmlWorkspaceNavigationService.GetRedoBranches(session);
-            if (string.IsNullOrWhiteSpace(snapshotId) && branches.Count > 1)
-            {
-                throw new InvalidOperationException("HTML workspace redo has multiple branches; an explicit snapshot id is required.");
-            }
-            var branch = string.IsNullOrWhiteSpace(snapshotId)
-                ? branches.SingleOrDefault()
-                : branches.FirstOrDefault(item => string.Equals(item.Id, snapshotId, StringComparison.OrdinalIgnoreCase));
-            if (branch == null)
-            {
-                throw new InvalidOperationException("HTML workspace redo snapshot was not found.");
-            }
-
-            if (!HtmlWorkspaceArtifactService.Restore(session, branch.Id))
-            {
-                throw new InvalidOperationException("HTML workspace artifact could not be restored.");
-            }
-            var restored = HtmlWorkspaceCopyService.CaptureSnapshot(session.HtmlWorkspace, branch.Label);
-            restored.Id = branch.Id;
-            restored.CreatedUtc = branch.CreatedUtc;
-            return restored;
         }
 
         private static string WorkspaceMutationJson(ChatSession session, string itemType, string itemId)

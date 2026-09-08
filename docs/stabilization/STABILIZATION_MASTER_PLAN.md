@@ -2248,8 +2248,10 @@ endpoint.
    discovery completeness is unchanged. A further prerequisite replaces unversioned
    HTML UI controls with captured chat/snapshot/session guards, checks the bound
    document before dispatch and discards late UI responses while retaining drafts.
-   Shared HTML, independent Markdown and the remaining indexed discovery/recovery
-   work remain open. Windows/target-model gates are unchanged.
+   Shared HTML/JSON publication and second-chat selection/editing now pass
+   host-neutral owner, conflict, restore/redo, origin deletion and CAS checks through
+   the same Resource Fabric. Independent Markdown and indexed discovery/recovery
+   remain open. Windows/target-model gates are unchanged.
 5. **11T — typed Office tools и удаление legacy host dispatch — admitted:**
    - [x] 11T0/7D — done host-neutral: один атомарный production change связывает exact выбранный workbook с
      `ExcelDocumentSession`, переключает factories и typed Excel read/write на прямой

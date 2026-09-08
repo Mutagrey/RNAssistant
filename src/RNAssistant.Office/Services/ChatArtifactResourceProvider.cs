@@ -4,6 +4,7 @@ using System.Linq;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
 using RNAssistant.Core.Models;
+using RNAssistant.Core.Storage;
 using RNAssistant.Core.Services;
 
 namespace RNAssistant.Office.Services
@@ -32,7 +33,7 @@ namespace RNAssistant.Office.Services
         {
             _loadArtifactBody = loadArtifactBody;
             _readAttachmentText = readAttachmentText;
-            _htmlResources = new ChatHtmlResourceCatalog(loadArtifactBody, payloads);
+            _htmlResources = new ChatHtmlResourceCatalog(LoadWorkspaceBody, payloads);
             _readAttachmentBytes = readAttachmentBytes;
             _payloads = payloads;
             _documentArtifacts = documentArtifacts;
@@ -416,10 +417,10 @@ namespace RNAssistant.Office.Services
 
         private string ReadText(ChatSession session, ChatArtifact artifact, int maxChars)
         {
-            if (artifact.Kind == ChatArtifactKinds.PlanDocument && artifact.DocumentAuthorityId == session.DocumentAuthorityId &&
+            if ((artifact.Kind == ChatArtifactKinds.PlanDocument || DocumentArtifactStore.IsAuthored(session, ChatResourceUri.CreateArtifactRevision(session, artifact))) && artifact.DocumentAuthorityId == session.DocumentAuthorityId &&
                 !string.IsNullOrWhiteSpace(artifact.DocumentAuthorityId))
             {
-                if (_documentArtifacts == null) throw new ResourceRequestException("The document Plan owner is unavailable.", "RESOURCE_SNAPSHOT_UNAVAILABLE", false);
+                if (_documentArtifacts == null) throw new ResourceRequestException("The document artifact owner is unavailable.", "RESOURCE_SNAPSHOT_UNAVAILABLE", false);
                 var exactBody = ReadDocumentArtifact(session, ChatResourceUri.CreateArtifactRevision(session, artifact)).InlineText;
                 return exactBody.Length <= maxChars ? exactBody : exactBody.Substring(0, maxChars);
             }
@@ -646,7 +647,7 @@ namespace RNAssistant.Office.Services
             if (ResourceUri.Parse(exact.Uri).Segments[0] != address.Segments[0])
                 throw new ResourceRequestException("The artifact identity does not match its owner.", "RESOURCE_ACCESS_DENIED", false);
             if (address.Segments.Count == 3) return exact;
-            return new ResourceRef(ResourceUri.Create(ProviderName, session.Id, "artifact", artifact.Id, "revision",
+            return new ResourceRef(ResourceUri.Create(ProviderName, artifact.DocumentAuthorityId ?? session.Id, "artifact", artifact.Id, "revision",
                 exact.Revision, address.Segments[3], address.Segments[4], address.Segments[5]), exact.Revision);
         }
 
@@ -669,6 +670,18 @@ namespace RNAssistant.Office.Services
             { throw new ResourceRequestException(ex.Message, "RESOURCE_SNAPSHOT_UNAVAILABLE", false); }
         }
 
+        private bool LoadWorkspaceBody(ChatSession session, string artifactId)
+        {
+            var artifact = (session.Artifacts ?? new List<ChatArtifact>()).SingleOrDefault(item => item.Id == artifactId);
+            if (!string.IsNullOrEmpty(artifact?.DocumentAuthorityId))
+            {
+                if (_documentArtifacts == null) throw new ResourceRequestException("The document artifact owner is unavailable.", "RESOURCE_SNAPSHOT_UNAVAILABLE", false);
+                artifact.InlineText = ReadDocumentArtifact(session, ChatResourceUri.CreateArtifactRevision(session, artifact)).InlineText;
+                return artifact.InlineText != null;
+            }
+            return _loadArtifactBody?.Invoke(session, artifactId) == true;
+        }
+
         private ChatArtifact ReadDocumentArtifact(ChatSession session, ResourceRef exact)
         {
             try { return _documentArtifacts.Read(session, exact); }
@@ -687,7 +700,7 @@ namespace RNAssistant.Office.Services
                 int revision;
                 originals = ChatResourceUri.TryParseArtifactRevision(new ResourceRef(exactUri), out owner, out id, out revision) &&
                     owner == session.DocumentAuthorityId
-                    ? new[] { _documentArtifacts.Read(session, new ResourceRef(exactUri, revision.ToString(System.Globalization.CultureInfo.InvariantCulture))) }
+                    ? new[] { _documentArtifacts.Read(session, ChatResourceUri.ArtifactSnapshot(new ResourceRef(exactUri))) }
                     : new ChatArtifact[0];
             }
             return new ChatSession
@@ -770,12 +783,17 @@ namespace RNAssistant.Office.Services
                 .ToList();
         }
 
-        private static IEnumerable<ChatArtifact> OrderedArtifacts(ChatSession session)
+        private IEnumerable<ChatArtifact> OrderedArtifacts(ChatSession session)
         {
             var currentPlans = new HashSet<string>(Artifacts(session)
                 .Where(item => item.Kind == ChatArtifactKinds.PlanDocument && !string.IsNullOrWhiteSpace(item.DocumentAuthorityId))
                 .GroupBy(PlanDocumentService.PlanId).Select(group => group.OrderByDescending(item => item.Revision).First().Id), StringComparer.Ordinal);
+            var currentHtml = new HashSet<string>(Artifacts(session).Where(item => item.Kind == ChatArtifactKinds.HtmlWorkspace && !string.IsNullOrEmpty(item.DocumentAuthorityId))
+                .Select(item => HtmlWorkspaceIdentity.LogicalId(item.Id)).Distinct().Select(id =>
+                    _documentArtifacts?.CurrentSnapshot(session, HtmlWorkspaceIdentity.Identity(session, id))?.Uri).Where(uri => uri != null));
             return Artifacts(session)
+                .Where(item => item.Kind != ChatArtifactKinds.HtmlWorkspace || string.IsNullOrEmpty(item.DocumentAuthorityId) ||
+                    currentHtml.Contains(ChatResourceUri.CreateArtifactRevisionUri(session, item)))
                 .Where(item => item.Kind != ChatArtifactKinds.PlanDocument || string.IsNullOrWhiteSpace(item.DocumentAuthorityId) || currentPlans.Contains(item.Id))
                 .Where(item => !PlanDocumentService.IsRemoved(session, item))
                 .OrderByDescending(item => string.Equals(item.Id, session == null ? null : session.ActiveHtmlArtifactId, StringComparison.OrdinalIgnoreCase))
