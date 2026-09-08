@@ -159,7 +159,7 @@ tests.push(["waiting and running are not replaced by previous failed attempts", 
 }]);
 vm.runInContext(fs.readFileSync(path.join(__dirname, "../../web/js/app-agent-activity.js"), "utf8"), context);
 tests.push(["semantic target is visible and unknown effect takes precedence over conflict wording", () => {
-  const activity = { Kind: "tool", ToolId: "common.resources_read", Title: "Resource read", ProgressTitle: "Working", Subtitle: "Продажи!A1:D120", Status: "running" };
+  const activity = { Kind: "tool", ToolId: "common.resources_read", Display: { action: "Чтение ресурса", runningAction: "Читаю ресурс", operation: "Read" }, Title: "Resource read", ProgressTitle: "Working", Subtitle: "Продажи!A1:D120", Status: "running" };
   const row = context.renderActivityRow(activity, true, false, null);
   assert.match(row.textContent, /Читаю ресурс/);
   assert.match(row.textContent, /Продажи!A1:D120/);
@@ -170,7 +170,7 @@ tests.push(["semantic target is visible and unknown effect takes precedence over
 }]);
 
 tests.push(["tool rows preserve action target and result without rewriting model data", () => {
-  const activity = { Kind: "tool", ToolId: "common.capabilities_read", Subtitle: "excel.write_range", Status: "completed",
+  const activity = { Kind: "tool", ToolId: "common.capabilities_read", Display: { action: "Изучение", runningAction: "Изучаю", operation: "Learn" }, Subtitle: "excel.write_range", Status: "completed",
     ArgumentsJson: '{"id":"excel.write_range"}', DataJson: '{"kind":"tool-schema","catalogRevision":"private-revision","complete":true}',
     ResultMessage: "Capability loaded with catalogRevision=private-revision" };
   const before = JSON.stringify(activity);
@@ -181,7 +181,7 @@ tests.push(["tool rows preserve action target and result without rewriting model
   assert.doesNotMatch(row.textContent, /catalogRevision|private-revision|Capability loaded/);
   assert.equal(JSON.stringify(activity), before, "presentation leaves exact arguments and results unchanged");
   const longTarget = "Документ / " + "Раздел с длинным названием / ".repeat(8) + "Конец";
-  const write = { Kind: "tool", ToolId: "word.replace_text", Subtitle: longTarget, Status: "completed",
+  const write = { Kind: "tool", ToolId: "word.replace_text", Display: { action: "Замена текста", operation: "Write" }, Subtitle: longTarget, Status: "completed",
     ExecutionEvidence: { Effect: "VerifiedChange", Dispatch: "MayHaveDispatched" } };
   const changed = context.renderActivityRow(write, false, false, null);
   assert.match(changed.textContent, /Замена текста/);
@@ -248,6 +248,23 @@ tests.push(["result representations work for new tools without identity-specific
   activity.ExecutionEvidence.Effect = "VerifiedChange";
   assert.equal(context.activityDisplayResult(activity), "Изменения подтверждены");
 }]);
+tests.push(["catalog display works for arbitrary ids while zero-action history stays hidden", () => {
+  const item = { Kind: "tool", ToolId: "new.opaque_id", Status: "running", Subtitle: "Отчёт за май",
+    Display: { action: "Пересчёт отчёта", runningAction: "Пересчитываю отчёт", operation: "Write" } };
+  assert.equal(context.activityPrimaryText(item), "Пересчитываю отчёт");
+  assert.equal(context.activityOperation(item), "write");
+  item.Status = "completed";
+  assert.equal(context.activityPrimaryText(item), "Пересчёт отчёта");
+  const notice = context.normalizeProgressActivity({ phase: "thinking" });
+  const row = context.renderActivityRow(notice, true, false, { hideIcon: true });
+  assert.match(row.textContent, /Думаю/);
+  assert.doesNotMatch(row.textContent, /thinking|working/);
+  const noCalls = renderFinal(view("clean"));
+  assert.equal(walk(noCalls).filter(node => /agent-run-overview/.test(node.className)).length, 0);
+  const uncertain = renderFinal(view("unknown", { unknown: 1 }));
+  assert.equal(walk(uncertain).filter(node => /agent-run-overview/.test(node.className)).length, 0);
+  assertVisibleEvidence(uncertain, "unknown");
+}]);
 tests.push(["localized failures and operation icons remain independent of model wording", () => {
   const failure = { Kind: "tool", ToolId: "common.capabilities_read", Status: "failed", ErrorCode: "capability_not_found",
     ResultMessage: "Missing tool. RUNTIME_CONTEXT.capabilities catalogRevision=abc" };
@@ -258,8 +275,8 @@ tests.push(["localized failures and operation icons remain independent of model 
   assert.match(context.activityDisplayResult(failure), /не подтверждён/);
   assert.equal(context.activityPresentationState(failure), "unknown");
   const types = ["common.resources_find", "common.resources_read", "excel.write_range", "common.capabilities_read", "common.questions_ask", "common.vba_delete"];
-  assert.deepEqual(types.map(ToolId => context.activityOperation({ Kind: "tool", ToolId })), ["search", "read", "write", "learn", "question", "delete"]);
-  assert.equal(new Set(types.map(ToolId => context.activityOperationIcon({ Kind: "tool", ToolId }))).size, types.length);
+  assert.deepEqual(types.map((ToolId, index) => context.activityOperation({ Kind: "tool", ToolId, Display: { operation: ["Search", "Read", "Write", "Learn", "Question", "Delete"][index] } })), ["search", "read", "write", "learn", "question", "delete"]);
+  assert.equal(new Set(types.map((ToolId, index) => context.activityOperationIcon({ Kind: "tool", ToolId, Display: { operation: ["Search", "Read", "Write", "Learn", "Question", "Delete"][index] } }))).size, types.length);
 }]);
 
 context.appendActivityArtifacts = () => {};

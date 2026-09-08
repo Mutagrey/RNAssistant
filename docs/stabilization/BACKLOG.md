@@ -88,23 +88,16 @@ Remaining bounded follow-ups:
   correlated target/inspection evidence. Do not infer resolution from model prose
   or later unrelated success. Native counts/history and unknown-effect warnings
   remain intact. Owner: kernel/evidence projection in a separately scoped slice.
-- **Catalog-owned tool presentation (reviewed 2026-09-08):** owner Tool catalog /
-  ToolRuntime projection / AgentTranscript. Current UI has a common outer JSON-type
-  fallback plus source-checked Resource/Capability captions; action/target maps still
-  exist. Next bounded slice should carry localized action and semantic-target display
-  hints in catalog-owned metadata and produce a typed UI summary before transcript
-  budgeting, separately from model `message/data/resources`. Use a small presentation
-  vocabulary (text/code, JSON, table, resource/media reference, empty/unsupported),
-  source-owned completeness and existing dispatch/effect evidence. No arbitrary
-  business-JSON introspection, provider-specific UI renderer per new tool, model-written
-  status or second result store. VBA String remains ordinary business output, with a
-  neutral fallback when metadata is absent; text claiming a mutation is not read-back.
-  MIME and advertised representations select existing viewers; no generic promise
-  that arbitrary audio/video/binary is previewable or model-readable. Acceptance:
-  remove the replaced ID/name/argument label heuristics atomically; prove new custom
-  tools work without web edits, media/text/partial reads remain distinct, summary
-  survives budgeting/replay, and model wire/effect evidence stay unchanged. This is a
-  design follow-up, not a newly introduced descriptor or migration contract.
+- **Typed result summaries before budgeting:** owner domain result producers /
+  ToolRunResult materialization / AgentTranscript. Catalog-owned action/icon/target
+  metadata is implemented; web tool-name dictionaries are removed. Remaining work
+  is a typed result summary before transcript truncation, replacing the four
+  source-checked Resource/Capability JSON caption branches atomically. Preserve
+  representation, coverage and next-request media preparation independently of model
+  `message/data/resources` and effect evidence. No arbitrary business-field parsing,
+  second result store or promise that every binary format is previewable. Acceptance:
+  large results and replay retain accurate summaries; exact model wire, body refs,
+  partial coverage and mutation uncertainty stay unchanged.
 - **Full Issue Center:** source/build/catalog/qualification aggregation and
   redacted issue export remain the existing Phase 11 scope. The current journal
   cause cards derive only from loaded correlated rows; no additional issue store

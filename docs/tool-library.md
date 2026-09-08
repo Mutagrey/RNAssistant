@@ -56,6 +56,31 @@ capture one complete `ToolPackageSource` v1. Its deterministic content revision 
 separate from the manifest package version and is pinned with the native handler in
 the accepted run. Library actions return typed result v1 with status, source revision,
 dispatch and effect evidence; PascalCase/legacy result fallbacks are unsupported.
+Tool entries can also carry optional typed `display` metadata, separately from the
+VBA manifest and execution descriptor: `action`, optional `runningAction`, an
+`operation` icon category and optional ordered `targetArguments` (up to eight exact
+scalar parameter names). For example, `display: {"action":"Пересчёт отчёта",
+"runningAction":"Пересчитываю отчёт","operation":"Command",
+"targetArguments":["report"]}` works for any custom id whose schema declares the
+scalar `report` argument. Labels are single-line text up to 200 characters, never
+Markdown/HTML or runtime status. An explicit empty selector list disables target
+argument selection. Omitting `display` on update preserves it; supplying the object
+replaces its hints, with missing `runningAction` defaulting to `action`.
+The model authoring `common.tools_upsert` schema and typed Library mutations both
+support it. Library edits preserve it even without a dedicated form control.
+
+`ToolDisplayCatalog` owns the shipped localized defaults; unknown entries use their
+catalog name and typed policy for a neutral default. `ConversationKernelAdapter`
+captures immutable display metadata alongside the accepted local invocation;
+`AgentTranscript` emits it to activity projections and renders selected scalar
+arguments. Events, confirmation replacement and chat forks retain that captured
+value. The web renderer consumes labels and icon category, without tool-id/English
+verb dictionaries or per-custom-tool renderers. Display-only updates participate in
+Library revision/read-back checks, but do not alter execution fingerprints, model
+`ToolDescriptor` or the serialized invocation. Existing source-owned Office target
+formatters remain for built-ins without explicit target selectors. Result/effect
+presentation remains governed by [Conversation protocol](conversation-protocol.md#effect-mapping-and-ui-projection).
+
 Model and Library upsert paths both carry `components` as one native `JArray` of
 component `JObject` values into `ToolAuthoringService`; they never serialize and
 reparse that argument. A quoted/stringified array is an `invalid_arguments` failure

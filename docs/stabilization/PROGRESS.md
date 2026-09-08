@@ -1,5 +1,18 @@
 # Stabilization progress
 
+Latest catalog-display and compact-chat slice (2026-09-08): optional immutable
+ToolDisplayMetadata is retained by catalog storage, model/Library authoring,
+accepted invocation projection, confirmation replacement and chat forks. Shipped
+labels are catalog-owned; web id/verb dictionaries are removed. Custom scalar
+target selectors require no web changes. Display-only edits participate in Library
+revision/read-back but not execution authority or model invocation serialization.
+Chat progress hides raw phase names; zero-call overviews disappear while runtime
+warnings remain. Actions have a divider and 6 px answer gap; assistant controls are
+left-aligned before metadata, user controls right-aligned. Targeted metadata,
+replay, Web and Chromium layout checks pass; Windows/Office/WebView2 qualification
+remains open. Typed result summaries before budgeting remain the bounded follow-up.
+
+
 Latest result-presentation refinement (2026-09-08): action/icon/target/outcome use
 one muted color except failed outcomes; literal code-style targets wrap safely.
 All tools have a bounded outer JSON-type fallback without a custom renderer.

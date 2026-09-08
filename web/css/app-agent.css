@@ -121,10 +121,15 @@
   min-width: 0;
 }
 
-.agent-model-step + .agent-model-step,
-.agent-final-step {
-  margin-top: 22px;
+.agent-model-step + .agent-model-step { margin-top: 12px; }
+
+.agent-run-actions.has-actions {
+  padding-bottom: 6px;
+  border-bottom: 1px solid var(--line);
 }
+
+.agent-run-wrap > .agent-final-step { margin-top: 6px; }
+.agent-run-wrap > .agent-final-step:first-child { margin-top: 0; }
 
 .agent-step-message {
   color: var(--text);

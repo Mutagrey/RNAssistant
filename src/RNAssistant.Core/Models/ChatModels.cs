@@ -203,6 +203,8 @@ namespace RNAssistant.Core.Models
         public string StepMessage { get; set; }
         public string Kind { get; set; }
         public string Title { get; set; }
+        [JsonProperty(NullValueHandling = NullValueHandling.Ignore)]
+        public RNAssistant.Core.Tools.ToolDisplayMetadata Display { get; set; }
         public string Subtitle { get; set; }
         public string Status { get; set; }
         public string ExecutionStatus { get; set; }

@@ -172,23 +172,9 @@ function activityOperation(activity) {
   if (kind === "diagnostic") return "diagnostic";
   if (kind === "step" || kind === "notice" || kind === "compaction") return "status";
 
-  var toolId = String(activityToolId(activity) || "").toLowerCase();
-  // Custom tool names are identities, not declarations of their behavior.
-  if (!/^(common|excel|word|powerpoint|outlook)\./.test(toolId)) return "command";
-  var operationId = toolId.replace(/[.\-]/g, "_");
-  if (toolId === "common.capabilities_read") return "learn";
-  if (toolId === "common.questions_ask") return "question";
-  if (/(^|_)(search|find)($|_)/.test(operationId)) return "search";
-  if (/(^|_)(delete|remove|clear)($|_)/.test(operationId)) return "delete";
-  if (/(^|_)(export|download)($|_)/.test(operationId)) return "export";
-  if (/(^|_)(plan|task_list)($|_)/.test(operationId)) return "plan";
-  if (/(^|_)(chart)($|_)/.test(operationId)) return "chart";
-  if (/(^|_)(install|package)($|_)/.test(operationId)) return "package";
-  if (/(^|_)(validate|check)($|_)/.test(operationId)) return "check";
-  if (/(^|_)(read|inspect|list|resolve|get)($|_)/.test(operationId)) return "read";
-  if (/(^|_)(write|upsert|update|patch|format|create|add|set|rename|restore|bind|refresh|freeze|save|replace|sort|filter|insert|move|copy|duplicate)($|_)/.test(operationId)) return "write";
-  if (/(^|_)(run|execute|command|macro)($|_)/.test(operationId)) return "command";
-  return kind === "tool" || kind === "control" ? "command" : "status";
+  var display = activityValue(activity, "Display", "display", null);
+  var operation = String(activityValue(display, "Operation", "operation", "command")).toLowerCase();
+  return ["command", "read", "search", "write", "delete", "export", "learn", "question", "plan", "chart", "package", "check"].indexOf(operation) >= 0 ? operation : "command";
 }
 
 function activityOperationIcon(activity) {
@@ -213,22 +199,14 @@ function activityOperationIcon(activity) {
 }
 
 function activityPrimaryText(activity) {
-  var toolTitle = activityToolLabel(activityToolId(activity), activityStatus(activity) === "running");
-  if (toolTitle) return toolTitle;
   if (activityToolId(activity)) {
-    var description = activityTitle(activity);
-    if (description !== activityToolId(activity) && /[А-Яа-яЁё]/.test(description)) return description;
-    var named = activityNamedToolLabel(activityToolId(activity), activityStatus(activity) === "running");
-    if (named) return named;
-    var operationLabels = {
-      search: ["Поиск", "Ищу"], read: ["Чтение", "Читаю"], write: ["Изменение", "Вношу изменения"],
-      delete: ["Удаление", "Удаляю"], export: ["Экспорт", "Экспортирую"],
-      plan: ["Обновление плана", "Обновляю план"], chart: ["Работа с диаграммой", "Обрабатываю диаграмму"],
-      package: ["Работа с пакетом", "Обрабатываю пакет"], check: ["Проверка", "Проверяю"],
-      command: ["Вызов инструмента", "Вызываю инструмент"]
-    };
-    var labels = operationLabels[activityOperation(activity)] || operationLabels.command;
-    return labels[activityStatus(activity) === "running" ? 1 : 0];
+    var display = activityValue(activity, "Display", "display", null);
+    var action = activityStatus(activity) === "running"
+      ? activityValue(display, "RunningAction", "runningAction", "") : activityValue(display, "Action", "action", "");
+    if (action) return String(action);
+    var title = activityTitle(activity);
+    if (title !== activityToolId(activity) && /[А-Яа-яЁё]/.test(title)) return title;
+    return activityStatus(activity) === "running" ? "Вызываю инструмент" : "Вызов инструмента";
   }
   var progressTitle = typeof activityProgressTitle === "function" ? activityProgressTitle(activity) : "";
   if (progressTitle && !activityToolId(activity)) {
@@ -261,84 +239,6 @@ function activityPrimaryText(activity) {
     diagnostic: "Ошибка ответа агента"
   };
   return labels[activityKind(activity)] || toolId || title || "Выполняю шаг";
-}
-
-function activityToolLabel(toolId, running) {
-  var labels = {
-    "common.resources_find": ["Поиск ресурсов", "Ищу ресурсы"],
-    "common.resources_read": ["Чтение ресурса", "Читаю ресурс"],
-    "common.capabilities_search": ["Поиск инструментов и навыков", "Ищу подходящие инструменты"],
-    "common.capabilities_read": ["Изучение", "Изучаю"],
-    "common.questions_ask": ["Уточнение задачи", "Готовлю уточнение"],
-    "common.task_list_set": ["Обновление шагов задачи", "Обновляю шаги задачи"],
-    "common.plan_doc_save": ["Сохранение плана", "Сохраняю план"],
-    "common.plan_doc_restore": ["Восстановление плана", "Восстанавливаю план"],
-    "common.plan_doc_delete": ["Удаление плана", "Удаляю план"],
-    "common.vba_write": ["Запись VBA-модуля", "Записываю VBA-модуль"],
-    "common.vba_patch": ["Изменение VBA-модуля", "Изменяю VBA-модуль"],
-    "common.vba_rename": ["Переименование VBA-модуля", "Переименовываю VBA-модуль"],
-    "common.vba_delete": ["Удаление VBA-модуля", "Удаляю VBA-модуль"],
-    "common.vba_restore": ["Восстановление VBA-модуля", "Восстанавливаю VBA-модуль"],
-    "common.office_run_macro": ["Выполнение макроса", "Выполняю макрос"],
-    "common.html_workspace_write_file": ["Запись файла страницы", "Записываю файл страницы"],
-    "common.html_workspace_apply_patch": ["Изменение файла страницы", "Изменяю файл страницы"],
-    "common.html_workspace_delete": ["Удаление файла или данных страницы", "Удаляю файл или данные страницы"],
-    "common.html_data_write": ["Запись данных страницы", "Записываю данные страницы"],
-    "common.html_data_bind": ["Подключение данных к странице", "Подключаю данные к странице"],
-    "common.html_data_refresh": ["Обновление данных страницы", "Обновляю данные страницы"],
-    "common.html_data_freeze": ["Сохранение снимка данных", "Сохраняю снимок данных"],
-    "word.inspect": ["Проверка структуры документа", "Проверяю структуру документа"],
-    "word.insert_page_break": ["Вставка разрыва страницы", "Вставляю разрыв страницы"],
-    "powerpoint.duplicate_slide": ["Копирование слайда", "Копирую слайд"],
-    "outlook.create_draft": ["Создание черновика письма", "Создаю черновик письма"],
-    "excel.inspect": ["Проверка структуры книги", "Проверяю структуру книги"],
-    "excel.add_sheet": ["Создание листа", "Создаю лист"],
-    "excel.rename_sheet": ["Переименование листа", "Переименовываю лист"],
-    "excel.write_range": ["Запись диапазона", "Записываю диапазон"],
-    "excel.format_range": ["Форматирование диапазона", "Оформляю диапазон"],
-    "excel.clear_range": ["Очистка диапазона", "Очищаю диапазон"],
-    "excel.sort_range": ["Сортировка диапазона", "Сортирую диапазон"],
-    "excel.filter_range": ["Фильтрация диапазона", "Фильтрую диапазон"],
-    "excel.add_table": ["Создание таблицы", "Создаю таблицу"],
-    "excel.upsert_chart": ["Обновление диаграммы", "Обновляю диаграмму"],
-    "excel.delete_chart": ["Удаление диаграммы", "Удаляю диаграмму"],
-    "excel.create_chat_chart": ["Создание диаграммы в чате", "Создаю диаграмму в чате"],
-    "excel.find_cells": ["Поиск ячеек", "Ищу ячейки"],
-    "excel.replace_cells": ["Замена содержимого ячеек", "Заменяю содержимое ячеек"]
-  };
-  var label = labels[toolId];
-  return label ? label[running ? 1 : 0] : "";
-}
-
-function activityNamedToolLabel(toolId, running) {
-  if (!/^(excel|word|powerpoint|outlook)\./.test(String(toolId || ""))) return "";
-  var parts = String(toolId || "").split(".").pop().split("_");
-  var verbs = {
-    add: ["Создание", "Создаю"], create: ["Создание", "Создаю"],
-    read: ["Чтение", "Читаю"], get: ["Получение", "Получаю"],
-    write: ["Запись", "Записываю"], set: ["Изменение", "Меняю"], update: ["Обновление", "Обновляю"],
-    insert: ["Вставка", "Вставляю"], replace: ["Замена", "Заменяю"],
-    delete: ["Удаление", "Удаляю"], remove: ["Удаление", "Удаляю"],
-    rename: ["Переименование", "Переименовываю"], copy: ["Копирование", "Копирую"], move: ["Перемещение", "Перемещаю"],
-    format: ["Форматирование", "Оформляю"], find: ["Поиск", "Ищу"], search: ["Поиск", "Ищу"],
-    export: ["Экспорт", "Экспортирую"], save: ["Сохранение", "Сохраняю"],
-    list: ["Просмотр списка", "Смотрю список"]
-  };
-  // Inflected subjects keep unfamiliar Office actions specific without exposing technical arguments.
-  var subjects = {
-    sheet: ["листа", "лист"], sheets: ["листов", "листы"],
-    object: ["объекта", "объект"], objects: ["объектов", "объекты"], comment: ["комментария", "комментарий"], range: ["диапазона", "диапазон"], cells: ["ячеек", "ячейки"],
-    text: ["текста", "текст"], table: ["таблицы", "таблицу"], tables: ["таблиц", "таблицы"],
-    slide: ["слайда", "слайд"], slides: ["слайдов", "слайды"], shape: ["фигуры", "фигуру"],
-    shapes: ["фигур", "фигуры"], paragraph: ["абзаца", "абзац"], content: ["содержимого", "содержимое"],
-    document: ["документа", "документ"], presentation: ["презентации", "презентацию"],
-    message: ["сообщения", "сообщение"], mail: ["письма", "письмо"], folder: ["папки", "папку"],
-    attachment: ["вложения", "вложение"], image: ["изображения", "изображение"],
-    bookmark: ["закладки", "закладку"], hyperlink: ["ссылки", "ссылку"], notes: ["заметок", "заметки"]
-  };
-  if (parts.length !== 2 || !verbs[parts[0]] || !subjects[parts[1]]) return "";
-  var form = running && parts[0] !== "list" ? 1 : 0;
-  return verbs[parts[0]][running ? 1 : 0] + " " + subjects[parts[1]][form];
 }
 
 function activityResultCaption(activity) {
@@ -426,6 +326,7 @@ function activityDisplayResult(activity) {
       resource_view_invalid: "Этот формат чтения не поддерживается",
       capability_not_found: "Инструмент или навык не найден",
       invalid_arguments: "Нужно уточнить параметры действия",
+      tool_display_invalid: "Поля цели не соответствуют параметрам инструмента",
       resource_target_required: "Нужно указать ресурс",
       resource_target_runtime_owned: "Нужно указать понятное имя ресурса",
       resource_view_unsupported: "Этот формат чтения не поддерживается",
@@ -452,11 +353,12 @@ function activityDisplayResult(activity) {
 }
 
 function activityCommentText(activity) {
+  if (activityKind(activity) === "notice" && !activityToolId(activity)) return "";
   var toolId = activityToolId(activity);
   var subtitle = activityValue(activity, "Subtitle", "subtitle", "");
   if (!subtitle || subtitle === toolId) {
     // Keep unknown/custom calls identifiable even when no semantic target was supplied.
-    return toolId && !activityToolLabel(toolId, false) && !activityNamedToolLabel(toolId, false) ? toolId : "";
+    return toolId || "";
   }
   subtitle = String(subtitle).replace(/[\r\n\t]+/g, " ").trim();
   return subtitle;

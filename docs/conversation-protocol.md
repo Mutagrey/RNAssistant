@@ -683,13 +683,13 @@ Every tool also has a generic representation fallback: JSON object/scalar, JSON
 string, array with its actual length, separately retained result or bounded journal
 preview. This fallback does not inspect arbitrary business fields or infer effects.
 Large/invalid JSON is left to the existing details instead of eagerly parsing it.
-New custom tool names outside built-in namespaces receive a neutral operation icon;
-Russian descriptions take precedence over name-derived built-in labels. VBA package
-String output remains available as the tool message, with JSON in the same existing
-viewer. No custom renderer is required for a new result. Raw errors and protocol
-metadata stay in the expandable diagnostic details. Built-in action/target label
-maps still exist; catalog-owned localization/target metadata is a separately scoped
-follow-up, not an implemented universal descriptor contract.
+Captured typed catalog `Display` metadata supplies action/running labels and icon
+category for every tool, including new custom ids. The renderer no longer translates
+ids or guesses an operation from English verbs. Missing metadata receives a neutral
+label/icon. Source-owned Office target formatters remain; optional catalog scalar
+selectors support custom targets without web changes. See [Tool Library](tool-library.md).
+VBA String output remains available as the tool message, with JSON in the existing
+viewer. Raw errors and protocol metadata stay in expandable diagnostic details.
 
 These captions are UI-only: they do not replace or rewrite tool arguments, durable
 results or the model-facing result projection. Details label their JSON as journal
@@ -704,7 +704,12 @@ nested calls and completed earlier steps. Only technical details use individual
 disclosures. The current running action owns the text shimmer; an icon-free thinking
 status appears between calls, without a separate count or duplicate running status.
 Waiting typed lifecycles keep the feed open. Only a terminal run folds the complete
-process into `Действия · N`. Changed live units retain explicit detail-disclosure
+process into `Действия · N`; a zero-call run emits no empty overview. Independent
+runtime warnings remain visible. Progress phase names (`thinking`, `working`) are
+not target captions. A nonempty action block ends with a thin divider and a 6 px
+gap before the answer. Assistant footer buttons start at the left, with copy first
+and message count/usage immediately after the buttons; user footer buttons stay
+on the right. DOM order matches the visual and keyboard order. Changed live units retain explicit detail-disclosure
 state by identity. Persisted mid-run messages and live replay share one visible
 run matched by exact RunId and activity identity; durable terminal call results win
 over stale progress, while newly received calls remain visible. A final persisted

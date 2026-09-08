@@ -164,6 +164,7 @@ namespace RNAssistant.Office
             {
                 Kind = string.IsNullOrWhiteSpace(kind) ? "tool" : kind,
                 Title = title,
+                Display = command == null ? null : command.Display,
                 Subtitle = ActivityTarget(command),
                 Status = ToActivityStatus(result),
                 ExecutionStatus = executionStatus,
@@ -198,6 +199,16 @@ namespace RNAssistant.Office
                 return command.Arguments.TryGetValue(key, out value) && value is string
                     ? BoundText((string)value, 240).Replace("\r", " ").Replace("\n", " ") : string.Empty;
             };
+            if (command.Display != null && command.Display.TargetArguments != null)
+                return string.Join(" · ", command.Display.TargetArguments.Select(key =>
+                {
+                    object value;
+                    if (!command.Arguments.TryGetValue(key, out value) || value == null) return string.Empty;
+                    if (value is string) return text(key);
+                    if (value is bool || value is int || value is long || value is double || value is decimal)
+                        return Convert.ToString(value, System.Globalization.CultureInfo.InvariantCulture);
+                    return string.Empty; // Never dump arrays, objects, guards or full bodies into a caption.
+                }).Where(value => !string.IsNullOrWhiteSpace(value)));
             if (command.ToolId == "common.resources_find")
                 return string.Join(" · ", new[] { text("query"), ResourceCaption(text("scope")) }.Where(value => !string.IsNullOrWhiteSpace(value)));
             if (command.ToolId == "common.resources_read")

@@ -687,7 +687,8 @@
 }
 
 .message.assistant .message-footer {
-  max-width: 94%;
+  max-width: 100%;
+  justify-content: flex-start;
 }
 
 .message.assistant.is-activity-message .message-footer {
@@ -706,12 +707,20 @@
   align-items: center;
   min-width: 0;
   gap: 6px;
-  margin-right: auto;
+  margin-right: 0;
+  overflow: hidden;
   color: var(--muted);
   font-size: 11px;
   font-weight: var(--meta-font-weight);
   white-space: nowrap;
   opacity: 0.78;
+}
+
+.message-footer-meta .message-outcome {
+  margin: 0;
+  padding: 0;
+  border: 0;
+  font: inherit;
 }
 
 .message-usage {
@@ -753,6 +762,7 @@
 
 .message-actions {
   display: inline-flex;
+  flex: none;
   align-items: center;
   gap: 6px;
   opacity: 1;

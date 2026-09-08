@@ -206,6 +206,7 @@ namespace RNAssistant.Office.Tools
                 ["host"] = tool.Host ?? "Common",
                 ["name"] = tool.Name ?? tool.Id ?? string.Empty,
                 ["description"] = tool.Description ?? string.Empty,
+                ["display"] = tool.Display,
                 ["parameters"] = tool.ArgumentSchemaJson ?? string.Empty,
                 ["executor"] = "vba",
                 ["components"] = new JArray((tool.Components ??

@@ -483,8 +483,7 @@
       var card = document.createElement("div");
       card.className = "rn-run-journal-issue";
       var toolId = value(row, "ToolId", "toolId", "");
-      var title = typeof activityToolLabel === "function" ? activityToolLabel(toolId, false) : "";
-      appendText(card, "strong", "", title || titleLabel(row));
+      appendText(card, "strong", "", titleLabel(row) + (toolId ? " · " + boundedText(toolId, 128) : ""));
       var target = value(row, "Target", "target", "");
       if (target) appendText(card, "div", "rn-run-journal-target", target);
       appendText(card, "p", "", displayCause(row) || rowNote(row) || statusLabel(rowStatus(row)));

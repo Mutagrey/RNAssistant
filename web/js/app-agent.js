@@ -300,13 +300,14 @@ function appendAgentRunSummaryState(summary, status) {
 }
 
 function appendAgentRunOverview(parent, steps, timeline, stats) {
+  var actionCount = agentToolCallCount(timeline);
+  if (!actionCount) return null;
   var details = document.createElement("details");
   details.className = "agent-run-history agent-run-overview status-" + stats.status;
   details.setAttribute("data-disclosure-key", "overview");
 
   var summary = document.createElement("summary");
   summary.className = "agent-run-history-summary";
-  var actionCount = agentToolCallCount(timeline);
   var title = document.createElement("span");
   title.className = "agent-run-history-title";
   title.textContent = agentRunSummaryTitle(stats.status, stats.elapsed, stats.runViewState) + " · " + actionCount;
@@ -357,7 +358,7 @@ function agentRunOutcomeReason(activity) {
 }
 
 function appendAgentRunOutcome(parent, activity, overview) {
-  if (!activity) return;
+  if (!activity || !overview) return;
   var status = activityStatus(activity);
   var outcome = document.createElement("button");
   outcome.type = "button";
@@ -438,6 +439,8 @@ function renderAgentRunArticle(run) {
 
   var body = document.createElement("div");
   body.className = "agent-run-wrap";
+  var process = document.createElement("div");
+  process.className = "agent-run-actions" + (agentToolCallCount(timeline) ? " has-actions" : "");
   var expanded = run.live || (runViewState && ["running", "awaiting_user", "awaiting_confirmation"].indexOf(runViewState.lifecycle) >= 0);
   if (expanded) {
     steps.forEach(function (step, stepIndex) {
@@ -445,15 +448,16 @@ function renderAgentRunArticle(run) {
       section.className = "agent-model-step";
       appendAgentStepMessage(section, step.message);
       appendLiveAgentStep(section, step, stepIndex === steps.length - 1);
-      body.appendChild(section);
+      process.appendChild(section);
     });
   } else {
-    var overview = appendAgentRunOverview(body, steps, timeline, stats);
+    var overview = appendAgentRunOverview(process, steps, timeline, stats);
     var currentStatus = stats.current ? activityStatus(stats.current) : "";
     if (!finalMessage && (currentStatus === "failed" || currentStatus === "cancelled")) {
-      appendAgentRunOutcome(body, stats.current, overview);
+      appendAgentRunOutcome(process, stats.current, overview);
     }
   }
+  if (process.childNodes.length) body.appendChild(process);
   // This warning is outside collapsed trace and never derived from the model's prose.
   if (!run.live) appendAgentRunViewState(body, runViewState, agentRunId(items, finalMessage));
   if (finalMessage) {
@@ -493,22 +497,23 @@ function appendAgentRunFooter(node, items, finalMessage) {
   var last = finalMessage || items[items.length - 1];
   var historyActionsBlocked = !!currentActiveSend() || hasActiveMessageEdit() ||
     (typeof pendingAgentApprovalActivity === "function" && !!pendingAgentApprovalActivity());
+  actions.appendChild(smallIconButton(finalMessage ? "Копировать итоговый ответ" : "Копировать ход работы", "copy", function () {
+    copyText(finalMessage ? messageContent(finalMessage.message) : agentRunText(items));
+    log(finalMessage ? "Итоговый ответ скопирован." : "Ход работы скопирован.");
+  }));
   if (!historyActionsBlocked) {
     actions.appendChild(smallIconButton("Ответвить чат отсюда", "branch", function () {
       forkChatAtMessage(last.message, last.index);
     }));
   }
-  actions.appendChild(smallIconButton(finalMessage ? "Копировать итоговый ответ" : "Копировать ход работы", "copy", function () {
-    copyText(finalMessage ? messageContent(finalMessage.message) : agentRunText(items));
-    log(finalMessage ? "Итоговый ответ скопирован." : "Ход работы скопирован.");
-  }));
+
   if (!historyActionsBlocked) {
     actions.appendChild(smallIconButton("Удалить сообщения запуска", "trash", function () {
       deleteAgentRun(items, finalMessage);
     }));
   }
 
-  footer.appendChild(footerMeta);
   footer.appendChild(actions);
+  footer.appendChild(footerMeta);
   node.appendChild(footer);
 }

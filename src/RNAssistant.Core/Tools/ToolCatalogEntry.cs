@@ -10,6 +10,8 @@ namespace RNAssistant.Core.Tools
         public string Id { get; set; }
         public string Host { get; set; }
         public string Name { get; set; }
+        [JsonProperty(NullValueHandling = NullValueHandling.Ignore)]
+        public ToolDisplayMetadata Display { get; set; }
         public string Description { get; set; }
         public string ArgumentSchemaJson { get; set; }
         public string Executor { get; set; }

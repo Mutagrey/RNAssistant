@@ -188,6 +188,7 @@ namespace RNAssistant.Core.Storage
                 Host = string.IsNullOrWhiteSpace(tool.Host) ? "Common" : tool.Host,
                 Name = string.IsNullOrWhiteSpace(tool.Name) ? tool.Id : tool.Name,
                 Description = tool.Description ?? string.Empty,
+                Display = tool.Display,
                 ArgumentSchemaJson = tool.ArgumentSchemaJson,
                 Executor = "vba",
                 RequiresConfirmation = tool.RequiresConfirmation,
