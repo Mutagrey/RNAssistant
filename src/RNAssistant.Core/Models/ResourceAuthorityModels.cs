@@ -299,12 +299,35 @@ namespace RNAssistant.Core.Models
         }
     }
 
+    // Runtime-owned lexicographic ranges into the existing head projection.
+    public sealed class ResourceHeadRange
+    {
+        public string Start { get; private set; }
+        public string End { get; private set; }
+        public ResourceHeadRange(string start, string end)
+        {
+            if (start == null || end == null || string.CompareOrdinal(start, end) >= 0) throw new ArgumentException("Invalid head range.");
+            Start = start; End = end;
+        }
+    }
+
+    public sealed class ResourceHeadPage
+    {
+        public IReadOnlyList<ResourceHeadState> Items { get; private set; }
+        public long Generation { get; private set; }
+        public int Total { get; private set; }
+        public int? NextOffset { get; private set; }
+        public ResourceHeadPage(IReadOnlyList<ResourceHeadState> items, long generation, int total, int? nextOffset)
+        { Items = items; Generation = generation; Total = total; NextOffset = nextOffset; }
+    }
+
     public interface IResourceAuthorityStore
     {
         event EventHandler<ResourceAuthorityChangedEventArgs> Changed;
         ResourceAuthoritySnapshot Capture(ResourceAuthorityScopeId scope);
         ResourceAuthoritySnapshotSet CaptureMany(IReadOnlyList<ResourceAuthorityScopeId> scopes);
         ResourceHeadState GetHead(ResourceAuthorityScopeId scope, ResourceIdentity identity);
+        ResourceHeadPage ReadHeads(ResourceAuthorityScopeId scope, IReadOnlyList<ResourceHeadRange> ranges, int offset, int limit);
         AuthorityCommitResult Publish(ResourceAuthorityCommit commit);
     }
 

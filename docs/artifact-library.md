@@ -43,9 +43,9 @@ Missing metadata/extraction fails explicitly, with no origin-chat/body fallback;
 foreign document references are refused. Existing chat-local records are not
 silently migrated. The remaining ownership seam and removal gate are tracked in
 [MIGRATION_MAP](stabilization/MIGRATION_MAP.md#document-artifact-ownership--active-slices).
-Exact reads load one metadata record. Model discovery now selects current snapshots
-from one authority capture before reading their metadata (see below); picker/history
-enumeration still scans retained metadata. Bounded indexed discovery remains slice 3.
+Exact reads load one metadata record. Model discovery pages current roots from the
+existing ordered authority projection before reading metadata (see below). Picker/
+history enumeration and content indexing remain separate slice-3 work.
 
 ### Implemented Plan publication slice
 
@@ -251,7 +251,7 @@ metadata return, unknown head and fork. Real WebView qualification remains open.
 
 ### Implemented partial current discovery — 2026-09-08
 
-`DocumentArtifactStore.InspectCurrentMetadata` builds a disposable result from one
+`DocumentArtifactStore.InspectCurrentMetadata` builds a disposable source page at one
 captured authority generation. The provider reads only the exact current Plan,
 HTML and authored Markdown metadata selected by logical-head dependencies, plus
 originals and other retained artifact roots. Historical metadata is loaded by
@@ -267,19 +267,43 @@ candidate remains. `availabilityHint` gives a runtime-owned recovery route;
 existing specific provider errors (including a changed live document) are preserved.
 Exact retained reads remain independent of unrelated collection damage.
 
-Root and HTML-member continuation fingerprints include document authority generation
-and observed availability as well as descriptors. A changed generation or recovered
-metadata invalidates continuation instead of silently mixing pages. No resource
-head is published during discovery or metadata recovery. An unavailable authority
-capture is still a whole-provider failure; the projection does not reconstruct it.
+### Implemented bounded document discovery pages — 2026-09-08
 
-This replaces model discovery's strict all-history metadata load and per-entry
-live head recapture. It does not introduce another store or index. Head enumeration,
-current-record hydration and the picker still need bounded source pagination;
-section/content indexing, richer compiler context and authority-journal recovery
-remain open. Host-neutral `resources: document discovery` and the generic incomplete
-coverage test cover partial matches/negatives, metadata recovery, missing bodies,
-current-vs-history selection, unknown heads and continuation drift.
+`ResourceAuthorityStore.ReadHeads` reads bounded identity ranges from the existing
+ordered `Heads` projection under its usual lock. It does not copy a full authority
+snapshot/commit list per page. `DocumentArtifactStore` selects logical Plan/HTML/MD
+heads and original/authored-file roots; history and operation-receipt ranges are
+skipped before metadata IO. Currentness still comes from exact head dependencies.
+No second durable index, resource store, or publication protocol is introduced.
+
+The chat provider hydrates at most 50 source slots per list page. Filtering,
+unavailable metadata and removed entries consume their slots without shifting
+continuation. `totalIsExact=false` distinguishes the unfiltered source-slot count
+from an exact filtered result count. Empty filtered pages may have continuation;
+Gateway consumes at most 20 pages per plan, even with zero matches. Artifact search
+also examines at most 20 source pages while preserving existing character/result
+budgets. Any unexamined remainder stays incomplete and cannot prove absence or
+uniqueness. Search reaches later pages without loading all metadata in advance.
+
+Root continuation binds chat, document authority generation and local projection;
+its offset addresses source slots, not healthy-result positions. Generation drift
+invalidates the cursor. Metadata recovery at the same generation does not shift
+those slots: previously omitted entries are recovered by a fresh discovery, and
+Gateway preserves any earlier page's unavailable status through the current scan.
+This supersedes the prior all-collection availability fingerprint, which required
+rehydrating the library before every continuation. HTML-member discovery reads only
+the exact selected current workspace; missing/stale selection stays explicit.
+Direct immutable snapshot identity resolution reads its own head and one metadata
+record, removing the final all-history load from the provider identity path.
+
+`Heads` remains a replayed in-memory projection of the append-only journal. Cold
+replay, ordered insertion and explicit full-authority/history consumers still scale
+with journal size; this slice does not claim bounded startup or write allocation.
+The working-set picker/history scans, section/content index, richer compiler context,
+authority-journal recovery and Windows/layout qualification remain open.
+Host-neutral coverage includes a 73-resource library with 1000 unrelated receipts,
+per-page metadata IO, no full capture on the provider path, point identity reads,
+complete traversal/search, source-page ceilings, unavailable metadata and writer drift.
 
 ### Ownership and user behavior
 

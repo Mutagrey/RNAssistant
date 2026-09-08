@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Text;
@@ -14,6 +15,85 @@ namespace RNAssistant.Harness
 {
     internal static partial class Program
     {
+        private static void DocumentDiscoveryPagesBoundMetadata()
+        {
+            WithTempExecutor(FakeOfficeAdapter.ForHost("Word"), (executor, adapter) =>
+            {
+                var session = NewSession(adapter); session.DocumentAuthorityId = DocumentAuthorityId.Create().Id;
+                var paths = FixturePaths.Value;
+                var chats = new ChatStore(paths);
+                var ingestion = new ChatResourceIngestionService(new AttachmentStore(paths), chats.DocumentArtifacts);
+                for (var index = 0; index < 73; index++)
+                {
+                    var draft = ingestion.Stage(session, "Reference " + index + ".md", "text/markdown", Encoding.UTF8.GetBytes("# Section " + index));
+                    var message = new ChatMessage { Role = "user", Attachments = ingestion.LoadDrafts(session, new[] { draft.Id }).ToList() };
+                    session.Messages.Add(message); ingestion.CommitAndLink(session, message, session.Messages.Count - 1);
+                }
+                var scope = ResourceAuthorityScopeId.Document(new DocumentAuthorityId(session.DocumentAuthorityId));
+                var authority = new ResourceAuthorityStore(paths);
+                var generation = authority.Capture(scope).Generation;
+                var unrelated = Enumerable.Range(0, 1000).Select(index => {
+                    var identity = new ResourceIdentity(ResourceUri.Create("state", scope.Kind, scope.Id, "plan-operation-fixture-" + index));
+                    return new ResourceHeadChange(identity, null, ResourceHeadState.Unknown(identity, generation + 1, "test-receipt"));
+                }).ToArray();
+                authority.Publish(ResourceAuthorityCommit.Create(scope, generation, null, unrelated, AuthorityCommitReason.DerivedPublication));
+                var noOwner = new ResourceGatewayService(new[] { new ChatArtifactResourceProvider() }).Find(session, null, "document");
+                AssertTrue(noOwner.Partial && !noOwner.Empty, "missing document owner cannot invent an empty catalog");
+                var counted = new DiscoveryPageStore(authority);
+                var owner = new DocumentArtifactStore(counted, counted, executor.Payloads);
+                var provider = new ChatArtifactResourceProvider(payloads: executor.Payloads, documentArtifacts: owner);
+                var page = provider.List(session, "document-artifact", null, 5);
+                AssertEqual(5, page.Items.Count, "one provider page hydrates only its requested source slots");
+                AssertTrue(counted.ViewReads <= 10 && counted.HeadPages == 1, "no all-library metadata scan or full authority capture before a small page");
+                AssertTrue(page.Total == 73 && !page.TotalIsExact && page.NextCursor != null, "root count is explicitly distinguished from filtered result total");
+                var beforeIdentity = counted.ViewReads;
+                AssertEqual(page.Items[0].Reference.Uri, provider.ResolveIdentity(session, page.Items[0].Reference.Identity).Uri,
+                    "an exact snapshot identity resolves by its own authority head");
+                AssertEqual(1, counted.ViewReads - beforeIdentity, "identity resolution reads one record without scanning the document");
+                var ids = new HashSet<string>(page.Items.Select(item => item.Reference.Uri), StringComparer.Ordinal);
+                while (page.NextCursor != null)
+                {
+                    var reads = counted.ViewReads;
+                    page = provider.List(session, "document-artifact", page.NextCursor, 5);
+                    AssertTrue(counted.ViewReads - reads <= 10, "each continuation repeats only bounded metadata IO");
+                    foreach (var item in page.Items) AssertTrue(ids.Add(item.Reference.Uri), "source pages never duplicate a resource");
+                }
+                AssertTrue(ids.Count == 73 && !page.Truncated, "all roots are reachable without scanning receipt history");
+                AssertEqual(73, new DocumentArtifactStore(new ResourceAuthorityStore(paths), new ResourceAuthorityStore(paths), executor.Payloads)
+                    .InspectCurrentMetadata(session, 70, 5).Total, "cold replay rebuilds the same ordered authority projection");
+                var gateway = new ResourceGatewayService(new[] { provider });
+                var target = ResourceGatewayService.IntentTarget(provider.List(session, "document-artifact", null, 1).Items.Single());
+                var search = gateway.Find(session, "Section 72", "document");
+                AssertTrue(search.Items.Any(item => item.Title == "Reference 72.md"), "content search crosses source page boundaries");
+                AssertTrue(gateway.ResolveIntentTarget(session, target).Reference != null, "complete paged discovery still resolves a semantic target");
+                var beforeChange = provider.List(session, "document-artifact", null, 5);
+                var current = authority.Capture(scope);
+                var extra = new ResourceIdentity(ResourceUri.Create("state", scope.Kind, scope.Id, "new-observation"));
+                authority.Publish(ResourceAuthorityCommit.Create(scope, current.Generation, null,
+                    new[] { new ResourceHeadChange(extra, null, ResourceHeadState.Unknown(extra, current.Generation + 1, "test-drift")) }, AuthorityCommitReason.DerivedPublication));
+                AssertEqual("resource_revision_changed", RuntimeThrows<ResourceRequestException>(() => provider.List(session,
+                    "document-artifact", beforeChange.NextCursor, 5)).ErrorCode, "another writer invalidates continuation even without changing selected roots");
+            });
+        }
+
+        private sealed class DiscoveryPageStore : IResourceAuthorityStore, IResourceRevisionStore
+        {
+            private readonly ResourceAuthorityStore _inner;
+            internal int ViewReads; internal int HeadPages;
+            internal DiscoveryPageStore(ResourceAuthorityStore inner) { _inner = inner; }
+            public event EventHandler<ResourceAuthorityChangedEventArgs> Changed { add { _inner.Changed += value; } remove { _inner.Changed -= value; } }
+            public ResourceAuthoritySnapshot Capture(ResourceAuthorityScopeId scope) { throw new InvalidOperationException("Discovery must not copy the full authority."); }
+            public ResourceAuthoritySnapshotSet CaptureMany(IReadOnlyList<ResourceAuthorityScopeId> scopes) { throw new InvalidOperationException("Discovery must not copy the full authority."); }
+            public ResourceHeadState GetHead(ResourceAuthorityScopeId scope, ResourceIdentity identity) { return _inner.GetHead(scope, identity); }
+            public ResourceHeadPage ReadHeads(ResourceAuthorityScopeId scope, IReadOnlyList<ResourceHeadRange> ranges, int offset, int limit)
+            { HeadPages++; return _inner.ReadHeads(scope, ranges, offset, limit); }
+            public AuthorityCommitResult Publish(ResourceAuthorityCommit commit) { return _inner.Publish(commit); }
+            public void RegisterRevision(ResourceAuthorityScopeId scope, ResourceRevisionMetadata revision) { _inner.RegisterRevision(scope, revision); }
+            public ResourceRevisionMetadata GetRevision(ResourceAuthorityScopeId scope, ResourceRef reference) { return _inner.GetRevision(scope, reference); }
+            public void RegisterView(ResourceAuthorityScopeId scope, ResourceRevisionView view) { _inner.RegisterView(scope, view); }
+            public ResourceRevisionView GetView(ResourceAuthorityScopeId scope, ResourceRef reference, string view) { ViewReads++; return _inner.GetView(scope, reference, view); }
+        }
+
         private static void DocumentDiscoveryCurrentHeads()
         {
             WithTempExecutor(FakeOfficeAdapter.ForHost("Word"), (executor, adapter) =>
@@ -98,7 +178,14 @@ namespace RNAssistant.Harness
                 var bytes = File.ReadAllBytes(path);
                 File.Delete(path);
                 var page = executor.ResourceGateway.List(otherChat, "chat", "document-artifact", null, 1);
-                AssertEqual(1, page.UnavailableResources, "one bad metadata record is isolated");
+                var observed = page.UnavailableResources;
+                var continuation = page;
+                while (continuation.NextCursor != null)
+                {
+                    continuation = executor.ResourceGateway.List(otherChat, "chat", "document-artifact", continuation.NextCursor, 1);
+                    observed += continuation.UnavailableResources;
+                }
+                AssertEqual(1, observed, "one bad metadata record is isolated on its source page");
                 AssertTrue(page.NextCursor != null, "healthy descriptors still paginate");
                 var found = executor.ResourceGateway.Find(otherChat, "Healthy", "document");
                 AssertTrue(found.Items.Any(item => item.Title == "Healthy.md") && found.Partial && !found.Complete && !found.Empty,
@@ -114,8 +201,10 @@ namespace RNAssistant.Harness
                 var healthyRef = ChatResourceUri.CreateArtifactRevision(session, healthy);
                 AssertTrue(executor.ResourceGateway.Resolve(otherChat, healthyRef.Uri).Resource.Title == "Healthy.md", "exact reference ignores unrelated metadata loss");
                 var generation = authority.Capture(scope).Generation;
+                page = executor.ResourceGateway.List(otherChat, "chat", "document-artifact", null, 1);
                 File.WriteAllBytes(path, bytes);
-                RuntimeThrows<ResourceRequestException>(() => executor.ResourceGateway.List(otherChat, "chat", "document-artifact", page.NextCursor, 1));
+                AssertTrue(executor.ResourceGateway.List(otherChat, "chat", "document-artifact", page.NextCursor, 1) != null,
+                    "metadata recovery cannot shift generation-bound source slots or replay omitted earlier slots");
                 AssertEqual(generation, authority.Capture(scope).Generation, "metadata recovery does not publish a replacement head");
                 AssertEqual(healthyRef.Uri, executor.ResourceGateway.ResolveIntentTarget(otherChat, target).Reference.Uri, "recovered scope resolves the same target");
                 var recovered = executor.ResourceGateway.Find(otherChat, "absent-needle", "document");

@@ -34,12 +34,16 @@ ToolRuntime now passes its existing prepared state to the handler and observer
 prepare/read-back calls while preserving the kernel execution identity and persisted
 event format. No session-level MD store is used.
 
-Model collection discovery now consumes `InspectCurrentMetadata` over one authority
-capture. Its strict all-history metadata load and per-entry live head selection are
-removed from list/search; exact/history callers retain their dedicated paths. Typed
-availability counts reach model completeness and target guards. Continuations bind
-generation and availability. No temporary adapter; bounded source paging and indexing
-remain the removal gate for full head enumeration/current-record hydration.
+Model collection discovery now consumes bounded `InspectCurrentMetadata` source
+pages over `ResourceAuthorityStore.ReadHeads` and the same ordered Heads projection.
+Full snapshot copies, all-library metadata hydration and per-entry live-head selection
+are removed from model list/search. Provider identity resolution now reads one exact
+head/record, removing its all-history load. HTML member discovery uses only its
+selected exact current workspace; the old standalone inline test fixture uses the
+production Gateway/owner. Source cursors bind generation and preserve unavailable
+slots; fresh scans recover earlier omissions. Gateway/search page ceilings avoid
+unbounded filtered scans. No temporary adapter or durable index; picker/history,
+content indexing and cold replay/write allocation remain open.
 
 HTML UI action seam removed (2026-09-08): the typed bridge passes complete
 `HtmlWorkspaceActionPayload` guards to addressed/reserved controller actions.

@@ -2259,7 +2259,10 @@ endpoint.
    A reported Excel document-read failure is corrected host-neutral: exact document
    targets bypass unrelated catalog enumeration; bounded Excel name/table discovery
    and metadata search preserve incompleteness. Named point reads remain strict.
-   Bounded source indexing, authority recovery and Windows/target-model gates remain open.
+   Model document discovery now pages current roots through the existing ordered
+   authority projection with bounded metadata IO and source-page ceilings. Direct
+   identities read one record; picker/history paging, content indexing, cold replay,
+   authority recovery and Windows/target-model gates remain open.
 5. **11T — typed Office tools и удаление legacy host dispatch — admitted:**
    - [x] 11T0/7D — done host-neutral: один атомарный production change связывает exact выбранный workbook с
      `ExcelDocumentSession`, переключает factories и typed Excel read/write на прямой

@@ -1,6 +1,22 @@
 # Stabilization progress
 
-Current correction (2026-09-08), after `ff47c276`: **incomplete Excel catalogs no
+Current slice (2026-09-08), after `cf309b64`: **bounded document discovery pages**
+are implemented host-neutral. Existing authority Heads now support ordered bounded
+range reads. Model list/search hydrates current roots in pages without copying full
+authority snapshots or reading all library metadata. History/receipt ranges are
+excluded; exact snapshot identities resolve directly. Source offsets preserve holes
+from unavailable/filtered entries; generation changes reject continuation. Metadata
+recovery at unchanged generation needs a fresh scan for previously omitted slots.
+Gateway/search source-page ceilings preserve honest incomplete results; filtered
+counts are explicitly distinguished from source-slot totals. No new durable store.
+Checks: resources 23/23 (including source paging), HTML 33/33, shared Markdown 4/4,
+Plan 2/2, originals 2/2, atomic authority replay and Excel regression pass.
+Version-format validation and diff checks pass.
+Next: content/section indexing and richer shared context; picker/history paging and
+cold replay/write allocation remain open. Windows/Office, upstream HTTP 502, layout
+and target-model qualification are not closed. See [bounded discovery](../artifact-library.md#implemented-bounded-document-discovery-pages--2026-09-08).
+
+Previous correction (2026-09-08), after `ff47c276`: **incomplete Excel catalogs no
 longer block document reads**. The reported `document:` read enumerated all document
 catalogs and failed on bounded defined-name capture. Resolution now uses the live
 document provider's exact kind/title and bound-session guards. Names/tables list

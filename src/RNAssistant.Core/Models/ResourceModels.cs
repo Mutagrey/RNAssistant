@@ -207,6 +207,8 @@ namespace RNAssistant.Core.Models
 
     public sealed class ResourceListPage
     {
+        [Newtonsoft.Json.JsonProperty("totalIsExact")]
+        public bool TotalIsExact { get; set; } = true;
         [Newtonsoft.Json.JsonProperty("unavailableResources")]
         public int UnavailableResources { get; set; }
         [Newtonsoft.Json.JsonProperty("provider")]

@@ -336,8 +336,10 @@ namespace RNAssistant.Office.Services
                 try
                 {
                     var cursor = string.Empty;
+                    var sourcePages = 0;
                     do
                     {
+                        if (sourcePages++ >= 20) { truncated = true; break; }
                         var page = List(session, plan.Provider.Id, plan.Kind, cursor, IntentPageSize);
                         // A normal page is completed by its continuation. Terminal
                         // truncation is missing source coverage, not a finished catalog.

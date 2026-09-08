@@ -6,6 +6,7 @@ using Newtonsoft.Json.Linq;
 using RNAssistant.Core.Models;
 using RNAssistant.Core.Storage;
 using RNAssistant.Core.Services;
+using RNAssistant.Core.Tools;
 
 namespace RNAssistant.Office.Services
 {
@@ -70,43 +71,30 @@ namespace RNAssistant.Office.Services
 
         public ResourceListPage List(ChatSession session, string kind, string cursor, int limit)
         {
-            var discovery = ProjectDiscovery(session);
-            session = discovery.Session;
+            var binding = ResourceReadCursor.ListBinding(ProviderName, kind);
+            var position = ResourceReadCursor.ParseRevisionBound(cursor, binding);
             if (ChatHtmlResourceCatalog.SupportsKind(kind))
             {
-                return _htmlResources.List(session, kind, cursor, limit, discovery.SourceRevision, discovery.UnavailableResources);
+                var members = ProjectHtmlDiscovery(session);
+                return _htmlResources.List(members.Session, kind, cursor, limit, members.SourceRevision, members.UnavailableResources);
             }
             limit = Math.Max(1, Math.Min(MaximumListItems, limit <= 0 ? 20 : limit));
-            var filtered = OrderedArtifacts(session)
-                .Where(item => string.IsNullOrWhiteSpace(kind) ||
-                    kind == DocumentArtifactKind && !string.IsNullOrWhiteSpace(item.DocumentAuthorityId) ||
-                    string.Equals(item.Kind, kind, StringComparison.OrdinalIgnoreCase))
-                .ToList();
+            var discovery = ProjectDiscovery(session, position.Offset, limit);
+            ResourceReadCursor.ValidateContinuation(position, discovery.SourceRevision);
             var descriptors = new List<ResourceDescriptor>();
-            foreach (var artifact in filtered)
+            foreach (var artifact in OrderedArtifacts(discovery.Session).Where(item => string.IsNullOrWhiteSpace(kind) ||
+                kind == DocumentArtifactKind && !string.IsNullOrWhiteSpace(item.DocumentAuthorityId) ||
+                string.Equals(item.Kind, kind, StringComparison.OrdinalIgnoreCase)))
             {
-                try { descriptors.Add(Describe(session, artifact, true)); }
+                try { descriptors.Add(Describe(discovery.Session, artifact, true)); }
                 catch (Exception ex) when (IsDiscoveryUnavailable(ex)) { discovery.UnavailableResources++; }
             }
-            var cursorBinding = ResourceReadCursor.ListBinding(ProviderName, kind);
-            var position = ResourceReadCursor.ParseRevisionBound(cursor, cursorBinding);
-            var collectionRevision = ResourceReadCursor.CollectionRevision(descriptors, discovery.SourceRevision + ":" + discovery.UnavailableResources);
-            ResourceReadCursor.ValidateContinuation(position, collectionRevision);
-            ResourceReadCursor.ValidateCollectionOffset(position, descriptors.Count);
-            var offset = position.Offset;
-            var items = descriptors.Skip(offset).Take(limit).ToArray();
-            var nextOffset = offset + items.Length;
-            return new ResourceListPage
-            {
-                Items = items.ToList(),
-                Total = descriptors.Count,
-                Cursor = ResourceReadCursor.CreateRevisionBound(offset, collectionRevision, cursorBinding),
-                NextCursor = nextOffset < descriptors.Count
-                    ? ResourceReadCursor.CreateRevisionBound(nextOffset, collectionRevision, cursorBinding)
-                    : null,
-                Truncated = nextOffset < descriptors.Count,
-                UnavailableResources = discovery.UnavailableResources
-            };
+            return new ResourceListPage {
+                Items = descriptors, Total = discovery.Total,
+                TotalIsExact = position.Offset == 0 && discovery.NextOffset == null && descriptors.Count == discovery.Total,
+                Cursor = ResourceReadCursor.CreateRevisionBound(position.Offset, discovery.SourceRevision, binding),
+                NextCursor = discovery.NextOffset.HasValue ? ResourceReadCursor.CreateRevisionBound(discovery.NextOffset.Value, discovery.SourceRevision, binding) : null,
+                Truncated = discovery.NextOffset.HasValue, UnavailableResources = discovery.UnavailableResources };
         }
 
         public ResourceDescriptor Resolve(ChatSession session, string resourceUri)
@@ -149,7 +137,8 @@ namespace RNAssistant.Office.Services
             int maxCharsPerMatch)
         {
             query = (query ?? string.Empty).Trim();
-            var discovery = ProjectDiscovery(session);
+            var sourceSession = session;
+            var discovery = ProjectHtmlDiscovery(session);
             session = discovery.Session;
             if (query.Length == 0) throw new InvalidOperationException("Resource search query is required.");
             limit = Math.Max(1, Math.Min(MaximumSearchResults, limit <= 0 ? 10 : limit));
@@ -170,71 +159,88 @@ namespace RNAssistant.Office.Services
                 scanTruncated = html.ScanTruncated;
             }
 
-            foreach (var artifact in OrderedArtifacts(session))
+            var unavailable = discovery.UnavailableResources;
+            var sourceOffset = 0;
+            string sourceRevision = null;
+            for (var sourcePage = 0; sourcePage < 20; sourcePage++)
             {
-                if (!string.IsNullOrWhiteSpace(kind) &&
-                    !(kind == DocumentArtifactKind && !string.IsNullOrWhiteSpace(artifact.DocumentAuthorityId)) &&
-                    !string.Equals(artifact.Kind, kind, StringComparison.OrdinalIgnoreCase)) continue;
-                if (matches.Count >= limit)
+                discovery = ProjectDiscovery(sourceSession, sourceOffset, 50);
+                if (sourceRevision != null && sourceRevision != discovery.SourceRevision)
+                    throw new ResourceRequestException("The document changed during search; rediscover the source.", "resource_revision_changed", true);
+                sourceRevision = discovery.SourceRevision;
+                session = discovery.Session;
+                foreach (var artifact in OrderedArtifacts(session))
                 {
-                    scanTruncated = true;
-                    break;
+                    if (!string.IsNullOrWhiteSpace(kind) &&
+                        !(kind == DocumentArtifactKind && !string.IsNullOrWhiteSpace(artifact.DocumentAuthorityId)) &&
+                        !string.Equals(artifact.Kind, kind, StringComparison.OrdinalIgnoreCase)) continue;
+                    if (matches.Count >= limit)
+                    {
+                        scanTruncated = true;
+                        break;
+                    }
+
+                    try
+                    {
+                        var metadata = string.Join(" ", new[]
+                        {
+                            artifact.Id,
+                            artifact.Kind,
+                            artifact.Title,
+                            artifact.MimeType,
+                            artifact.MetadataJson
+                        }.Where(value => !string.IsNullOrWhiteSpace(value)).ToArray());
+                        var metadataIndex = metadata.IndexOf(query, StringComparison.OrdinalIgnoreCase);
+                        if (metadataIndex >= 0)
+                        {
+                            matches.Add(SearchMatch(session, artifact, "metadata", metadata, metadataIndex, query.Length, maxCharsPerMatch));
+                        }
+                        else
+                        {
+                            if (string.Equals(artifact.Kind, ChatArtifactKinds.HtmlWorkspace, StringComparison.OrdinalIgnoreCase))
+                            {
+                                continue;
+                            }
+                            var remaining = MaximumSearchCharacters - scannedCharacters;
+                            if (remaining <= 0)
+                            {
+                                scanTruncated = true;
+                                break;
+                            }
+                            var readLimit = Math.Min(MaximumSearchCharactersPerArtifact, remaining);
+                            // Probe one additional character: a bounded prefix is not a
+                            // complete negative search over the resource.
+                            var text = ReadText(session, artifact, readLimit + 1);
+                            if (text == null)
+                            {
+                                var source = FindExactAttachment(session, artifact);
+                                if (HasTextHint(artifact, source) || source == null && !string.IsNullOrWhiteSpace(AttachmentId(artifact)))
+                                    scanTruncated = true;
+                                continue;
+                            }
+                            var attachment = FindExactAttachment(session, artifact);
+                            if (attachment != null && attachment.TextTruncated) scanTruncated = true;
+                            if (text.Length > readLimit)
+                            {
+                                scanTruncated = true;
+                                text = text.Substring(0, readLimit);
+                            }
+                            scannedCharacters += text.Length;
+                            var textIndex = text.IndexOf(query, StringComparison.OrdinalIgnoreCase);
+                            if (textIndex >= 0)
+                            {
+                                matches.Add(SearchMatch(session, artifact, "text", text, textIndex, query.Length, maxCharsPerMatch));
+                            }
+                        }
+                    }
+                    catch (Exception ex) when (IsDiscoveryUnavailable(ex)) { discovery.UnavailableResources++; }
                 }
 
-                try
-                {
-                    var metadata = string.Join(" ", new[]
-                    {
-                        artifact.Id,
-                        artifact.Kind,
-                        artifact.Title,
-                        artifact.MimeType,
-                        artifact.MetadataJson
-                    }.Where(value => !string.IsNullOrWhiteSpace(value)).ToArray());
-                    var metadataIndex = metadata.IndexOf(query, StringComparison.OrdinalIgnoreCase);
-                    if (metadataIndex >= 0)
-                    {
-                        matches.Add(SearchMatch(session, artifact, "metadata", metadata, metadataIndex, query.Length, maxCharsPerMatch));
-                    }
-                    else
-                    {
-                        if (string.Equals(artifact.Kind, ChatArtifactKinds.HtmlWorkspace, StringComparison.OrdinalIgnoreCase))
-                        {
-                            continue;
-                        }
-                        var remaining = MaximumSearchCharacters - scannedCharacters;
-                        if (remaining <= 0)
-                        {
-                            scanTruncated = true;
-                            break;
-                        }
-                        var readLimit = Math.Min(MaximumSearchCharactersPerArtifact, remaining);
-                        // Probe one additional character: a bounded prefix is not a
-                        // complete negative search over the resource.
-                        var text = ReadText(session, artifact, readLimit + 1);
-                        if (text == null)
-                        {
-                            var source = FindExactAttachment(session, artifact);
-                            if (HasTextHint(artifact, source) || source == null && !string.IsNullOrWhiteSpace(AttachmentId(artifact)))
-                                scanTruncated = true;
-                            continue;
-                        }
-                        var attachment = FindExactAttachment(session, artifact);
-                        if (attachment != null && attachment.TextTruncated) scanTruncated = true;
-                        if (text.Length > readLimit)
-                        {
-                            scanTruncated = true;
-                            text = text.Substring(0, readLimit);
-                        }
-                        scannedCharacters += text.Length;
-                        var textIndex = text.IndexOf(query, StringComparison.OrdinalIgnoreCase);
-                        if (textIndex >= 0)
-                        {
-                            matches.Add(SearchMatch(session, artifact, "text", text, textIndex, query.Length, maxCharsPerMatch));
-                        }
-                    }
-                }
-                catch (Exception ex) when (IsDiscoveryUnavailable(ex)) { discovery.UnavailableResources++; }
+                unavailable += discovery.UnavailableResources;
+                if (!discovery.NextOffset.HasValue) break;
+                if (sourcePage == 19 || matches.Count >= limit || scannedCharacters >= MaximumSearchCharacters)
+                { scanTruncated = true; break; }
+                sourceOffset = discovery.NextOffset.Value;
             }
 
             return new ResourceSearchResult
@@ -243,7 +249,7 @@ namespace RNAssistant.Office.Services
                 Matches = matches,
                 ScannedCharacters = scannedCharacters,
                 ScanTruncated = scanTruncated,
-                UnavailableResources = discovery.UnavailableResources
+                UnavailableResources = unavailable
             };
         }
 
@@ -654,11 +660,22 @@ namespace RNAssistant.Office.Services
 
         public ResourceRef ResolveIdentity(ChatSession session, ResourceIdentity identity)
         {
-            session = ProjectSession(session);
             var address = ResourceUri.Parse(identity.Uri);
             if (address.Provider != ProviderName || session == null || address.Segments.Count != 3 && address.Segments.Count != 6 ||
                 address.Segments[0] != session.Id && address.Segments[0] != session.DocumentAuthorityId || address.Segments[1] != "artifact")
                 throw new ResourceRequestException("The resource identity is outside this chat.", "RESOURCE_ACCESS_DENIED", false);
+            if (address.Segments[0] == session.DocumentAuthorityId)
+            {
+                if (_documentArtifacts == null) throw new ResourceRequestException("The document artifact owner is unavailable.", "RESOURCE_SNAPSHOT_UNAVAILABLE", false);
+                try
+                {
+                    var reference = _documentArtifacts.ResolveSnapshotIdentity(session,
+                        new ResourceIdentity(ResourceUri.Create(ProviderName, session.DocumentAuthorityId, "artifact", address.Segments[2])));
+                    session = ProjectDocumentSession(session, null, new[] { _documentArtifacts.Read(session, reference, false) });
+                }
+                catch (System.IO.InvalidDataException ex)
+                { throw new ResourceRequestException(ex.Message, "RESOURCE_SNAPSHOT_UNAVAILABLE", false); }
+            }
             var artifact = FindExactArtifact(session, address.Segments[2]);
             var exact = ChatResourceUri.CreateArtifactRevision(session, artifact);
             if (ResourceUri.Parse(exact.Uri).Segments[0] != address.Segments[0])
@@ -680,46 +697,96 @@ namespace RNAssistant.Office.Services
             return artifact;
         }
 
-        private ArtifactDiscoveryProjection ProjectDiscovery(ChatSession session)
+        private ArtifactDiscoveryProjection ProjectDiscovery(ChatSession session, int offset = 0, int limit = 50)
         {
-            try { return BuildDiscoveryProjection(session); }
+            try { return BuildDiscoveryProjection(session, offset, limit); }
             catch (System.IO.InvalidDataException ex)
             { throw new ResourceRequestException(ex.Message, "RESOURCE_SNAPSHOT_UNAVAILABLE", false); }
+            catch (ArgumentException ex)
+            { throw new ResourceRequestException(ex.Message, "resource_revision_changed", true); }
         }
 
-        private ArtifactDiscoveryProjection BuildDiscoveryProjection(ChatSession session)
+        private ArtifactDiscoveryProjection BuildDiscoveryProjection(ChatSession session, int offset, int limit)
         {
+            if (_documentArtifacts == null && !string.IsNullOrWhiteSpace(session?.DocumentAuthorityId))
+                throw new ResourceRequestException("The document artifact owner is unavailable.", "RESOURCE_SNAPSHOT_UNAVAILABLE", false);
+            var local = Artifacts(session).Where(item => string.IsNullOrWhiteSpace(item.DocumentAuthorityId)).ToList();
+            var localPage = local.Skip(offset).Take(limit).ToList();
+            var documentOffset = Math.Max(0, offset - local.Count);
             var retained = _documentArtifacts != null && !string.IsNullOrWhiteSpace(session?.DocumentAuthorityId)
-                ? _documentArtifacts.InspectCurrentMetadata(session) : null;
-            var projected = retained == null ? session : ProjectDocumentSession(session, null, retained.Items);
+                ? _documentArtifacts.InspectCurrentMetadata(session, documentOffset, limit - localPage.Count) : null;
+            var total = local.Count + (retained?.Total ?? 0);
+            if (offset > total) throw new ArgumentException("The discovery page exceeds its source.");
+            var next = retained == null ? offset + localPage.Count
+                : local.Count + (retained.NextOffset ?? retained.Total);
+            if (offset < local.Count && localPage.Count == limit) next = offset + localPage.Count;
+            var projected = CopyDiscoverySession(session, localPage.Concat(retained?.Items ?? new ChatArtifact[0]).ToList());
+            var localRevision = TextPatternEngine.Sha256(string.Join("\n", local.Select(item =>
+                JsonConvert.SerializeObject(new { item.Id, item.Revision, item.Title, item.CreatedUtc, item.MetadataJson, item.AvailabilityIssue }))));
             var result = new ArtifactDiscoveryProjection { Session = projected,
-                UnavailableResources = retained?.UnavailableResources ?? 0,
-                SourceRevision = retained == null ? null : session.DocumentAuthorityId + ":" + retained.Generation };
-            // HTML member discovery already requires its immutable aggregate body.
-            // Isolate a missing aggregate before handing the healthy projection to that catalog.
+                UnavailableResources = retained?.UnavailableResources ?? 0, Total = total, NextOffset = next < total ? (int?)next : null,
+                SourceRevision = TextPatternEngine.Sha256(session?.Id + ":" + session?.DocumentAuthorityId + ":" + retained?.Generation + ":" + localRevision) };
+            FilterDiscoveryAvailability(result);
+            return result;
+        }
+
+        private ArtifactDiscoveryProjection ProjectHtmlDiscovery(ChatSession session)
+        {
+            var artifact = Artifacts(session).SingleOrDefault(item => item.Id == session?.ActiveHtmlArtifactId);
+            var result = new ArtifactDiscoveryProjection { Session = CopyDiscoverySession(session, new List<ChatArtifact>()) };
+            if (artifact == null)
+            {
+                if (!string.IsNullOrWhiteSpace(session?.ActiveHtmlArtifactId)) result.UnavailableResources = 1;
+                return result;
+            }
+            try
+            {
+                if (!string.IsNullOrWhiteSpace(artifact.DocumentAuthorityId))
+                {
+                    if (_documentArtifacts == null) throw new System.IO.InvalidDataException("The document artifact owner is unavailable.");
+                    var generation = _documentArtifacts.InspectCurrentMetadata(session, 0, 0).Generation;
+                    var current = _documentArtifacts.CurrentSnapshot(session, HtmlWorkspaceIdentity.Identity(session, HtmlWorkspaceIdentity.LogicalId(artifact.Id)));
+                    if (current?.Uri != ChatResourceUri.CreateArtifactRevisionUri(session, artifact))
+                        throw new System.IO.InvalidDataException("Refresh the selected HTML workspace before discovering members.");
+                    artifact = _documentArtifacts.Read(session, current, false);
+                    if (_documentArtifacts.InspectCurrentMetadata(session, 0, 0).Generation != generation)
+                        throw new ResourceRequestException("The document changed during member discovery.", "resource_revision_changed", true);
+                    result.SourceRevision = session.DocumentAuthorityId + ":" + generation;
+                }
+                result.Session.Artifacts.Add(artifact);
+                FilterDiscoveryAvailability(result);
+            }
+            catch (Exception ex) when (IsDiscoveryUnavailable(ex)) { result.UnavailableResources++; }
+            return result;
+        }
+
+        private static ChatSession CopyDiscoverySession(ChatSession session, List<ChatArtifact> artifacts)
+        {
+            return new ChatSession { Id = session?.Id, DocumentAuthorityId = session?.DocumentAuthorityId,
+                Artifacts = artifacts, Messages = session?.Messages, HtmlWorkspace = session?.HtmlWorkspace,
+                HtmlWorkspaceRecovery = session?.HtmlWorkspaceRecovery, ActiveHtmlArtifactId = session?.ActiveHtmlArtifactId,
+                ActivePlanDocumentArtifactId = session?.ActivePlanDocumentArtifactId, ActiveTaskListArtifactId = session?.ActiveTaskListArtifactId };
+        }
+
+        private void FilterDiscoveryAvailability(ArtifactDiscoveryProjection result)
+        {
             var healthy = new List<ChatArtifact>();
-            foreach (var artifact in Artifacts(projected))
+            foreach (var artifact in result.Session.Artifacts)
             {
                 try
                 {
-                    if (artifact.AvailabilityIssue != null || !_htmlResources.IsReadableRevision(projected, artifact))
+                    if (artifact.AvailabilityIssue != null || !_htmlResources.IsReadableRevision(result.Session, artifact))
                     { result.UnavailableResources++; continue; }
                     healthy.Add(artifact);
                 }
                 catch (Exception ex) when (IsDiscoveryUnavailable(ex)) { result.UnavailableResources++; }
             }
-            if (projected == session)
-                result.Session = new ChatSession { Id = session?.Id, DocumentAuthorityId = session?.DocumentAuthorityId,
-                    Artifacts = healthy, Messages = session?.Messages, HtmlWorkspace = session?.HtmlWorkspace,
-                    HtmlWorkspaceRecovery = session?.HtmlWorkspaceRecovery, ActiveHtmlArtifactId = session?.ActiveHtmlArtifactId,
-                    ActivePlanDocumentArtifactId = session?.ActivePlanDocumentArtifactId, ActiveTaskListArtifactId = session?.ActiveTaskListArtifactId };
-            else projected.Artifacts = healthy;
-            return result;
+            result.Session.Artifacts = healthy;
         }
 
         private static bool IsDiscoveryUnavailable(Exception ex)
         {
-            return ex is System.IO.IOException || ex is JsonException || ex is UnauthorizedAccessException ||
+            return ex is System.IO.InvalidDataException || ex is System.IO.IOException || ex is JsonException || ex is UnauthorizedAccessException ||
                 ex is ResourceRequestException;
         }
 
@@ -728,9 +795,11 @@ namespace RNAssistant.Office.Services
             internal ChatSession Session;
             internal string SourceRevision;
             internal int UnavailableResources;
+            internal int Total;
+            internal int? NextOffset;
         }
 
-        private ChatSession ProjectSession(ChatSession session, string exactUri = null)
+        private ChatSession ProjectSession(ChatSession session, string exactUri)
         {
             try { return ProjectDocumentSession(session, exactUri); }
             catch (System.IO.InvalidDataException ex)
@@ -760,7 +829,7 @@ namespace RNAssistant.Office.Services
         {
             if (_documentArtifacts == null || string.IsNullOrWhiteSpace(session?.DocumentAuthorityId)) return session;
             IEnumerable<ChatArtifact> originals;
-            if (exactUri == null) originals = discovered ?? _documentArtifacts.List(session);
+            if (exactUri == null) originals = discovered ?? throw new ArgumentException("An exact discovery selection is required.");
             else
             {
                 string owner, id;

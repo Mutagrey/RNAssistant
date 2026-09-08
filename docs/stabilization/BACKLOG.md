@@ -70,15 +70,16 @@ transport alone does not qualify source allocation.
 
 ## Document artifact discovery/recovery — remaining authorized slices
 
-- Artifact resource owner / slice 3: model discovery now selects current snapshots
-  through one existing authority projection before reading metadata. Authority-head
-  enumeration/current metadata hydration and the working-set picker remain unbounded
-  at source. Add bounded pagination/indexing in the existing owner; verify large
-  libraries and source allocation. No parallel durable library/search store.
+- Artifact resource owner / slice 3: model discovery now pages current roots through
+  the existing ordered authority Heads projection, with bounded metadata hydration
+  and generation guards. Working-set picker/history still need paging. Cold replay,
+  ordered insertion and full-authority consumers still scale with journal size.
+  Content/section indexing and allocation qualification remain open; no parallel
+  durable library/search store.
 - Partial model discovery is implemented host-neutral (2026-09-08): missing/corrupt
   current metadata, bodies and unknown heads preserve healthy matches with explicit
   incomplete coverage. No uniqueness/negative inference from unavailable scopes;
-  generation and metadata recovery invalidate page continuation. Exact reads stay
+  generation drift invalidates continuation; same-generation metadata recovery is visible to a fresh scan without shifting existing source slots. Exact reads stay
   strict. Section/content indexing and richer shared context remain open.
 - Resource authority / journal recovery: whole-authority capture failure or invalid
   runtime identity still fails explicitly. Per-resource projections cannot invent

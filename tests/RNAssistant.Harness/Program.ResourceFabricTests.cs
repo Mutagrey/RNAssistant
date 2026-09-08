@@ -253,6 +253,11 @@ namespace RNAssistant.Harness
             AssertTrue(partial.Items.Count == 1 && partial.Partial && !partial.Complete, "later healthy pages cannot erase an earlier unavailable resource");
             AssertEqual("resource_scope_incomplete", RuntimeThrows<ResourceRequestException>(() =>
                 gateway.ResolveIntentTarget(session, partial.Items.Single().Target)).ErrorCode, "partial healthy pages cannot prove uniqueness");
+            provider.ListPage = cursor => new ResourceListPage { NextCursor = "next", Truncated = true };
+            var beforePages = provider.ListCalls;
+            var bounded = gateway.Find(session, null, "conversation");
+            AssertTrue(provider.ListCalls - beforePages == 20 && !bounded.Complete && !bounded.Empty && bounded.RefineQuery,
+                "empty filtered source pages cannot drive an unbounded scan or a complete negative");
             provider.SearchTruncated = true;
             AssertTrue(!gateway.Find(session, "missing", "conversation").Empty, "an incomplete content scan cannot prove absence either");
         }

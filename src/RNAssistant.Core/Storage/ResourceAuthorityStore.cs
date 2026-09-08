@@ -71,6 +71,47 @@ namespace RNAssistant.Core.Storage
             }
         }
 
+        public ResourceHeadPage ReadHeads(ResourceAuthorityScopeId scope, IReadOnlyList<ResourceHeadRange> ranges, int offset, int limit)
+        {
+            if (scope == null || ranges == null || ranges.Count == 0 || ranges.Count > 16 || ranges.Any(range => range == null) || offset < 0 || limit < 0 || limit > 100)
+                throw new ArgumentException("A bounded head page is required.");
+            lock (_sync)
+            using (AcquireLock())
+            {
+                var state = Load(scope);
+                var spans = ranges.OrderBy(range => range.Start, StringComparer.Ordinal).ToArray();
+                for (var index = 1; index < spans.Length; index++)
+                    if (string.CompareOrdinal(spans[index - 1].End, spans[index].Start) > 0) throw new ArgumentException("Head ranges overlap.");
+                var items = new List<ResourceHeadState>();
+                var total = 0;
+                foreach (var range in spans)
+                {
+                    var start = LowerBound(state.Heads.Keys, range.Start);
+                    var end = LowerBound(state.Heads.Keys, range.End);
+                    var skip = Math.Max(0, offset - total);
+                    if (skip < end - start)
+                        for (var index = start + skip; index < end && items.Count < limit; index++)
+                            items.Add(state.Heads.Values[index]);
+                    total += end - start;
+                }
+                if (offset > total) throw new ArgumentException("The head page offset exceeds its collection.");
+                var next = offset + items.Count;
+                return new ResourceHeadPage(items.AsReadOnly(), state.Generation, total, next < total ? (int?)next : null);
+            }
+        }
+
+        private static int LowerBound(IList<string> keys, string value)
+        {
+            var low = 0; var high = keys.Count;
+            while (low < high)
+            {
+                var middle = low + (high - low) / 2;
+                if (string.CompareOrdinal(keys[middle], value) < 0) low = middle + 1;
+                else high = middle;
+            }
+            return low;
+        }
+
         public AuthorityCommitResult Publish(ResourceAuthorityCommit commit)
         {
             if (commit == null) throw new ArgumentNullException(nameof(commit));
@@ -431,8 +472,8 @@ namespace RNAssistant.Core.Storage
             internal string HighWaterCommitId;
             internal long EffectHighWaterMark;
             internal readonly List<ResourceAuthorityCommit> Commits = new List<ResourceAuthorityCommit>();
-            internal readonly Dictionary<string, ResourceHeadState> Heads =
-                new Dictionary<string, ResourceHeadState>(StringComparer.Ordinal);
+            internal readonly SortedList<string, ResourceHeadState> Heads =
+                new SortedList<string, ResourceHeadState>(StringComparer.Ordinal);
             internal readonly HashSet<string> CommitIds = new HashSet<string>(StringComparer.Ordinal);
             internal readonly Dictionary<string, string> MutationAttemptCommits =
                 new Dictionary<string, string>(StringComparer.Ordinal);

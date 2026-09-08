@@ -46,6 +46,12 @@ result clipping and bound-document refusal. Use `excel names:`, `excel tables:`,
 `excel read:` and `resources:` for affected consumers. Live workbook/502 qualification
 requires the reported Windows/server environment.
 
+`resources: document discovery bounds source pages` uses 73 resources and 1000
+unrelated receipts to verify per-page metadata IO, no full authority capture on
+provider discovery, exact point identities, complete traversal/search, cold index
+rebuild and writer drift. The generic incomplete-coverage test also bounds empty
+source-page loops. Startup and ordered-insertion allocation remain qualification gaps.
+
 `resources: document discovery` verifies healthy partial results with missing/corrupt
 current metadata, body loss, exact reads, metadata recovery, current-head selection
 without historical fallback, unknown original/logical heads and continuation drift.

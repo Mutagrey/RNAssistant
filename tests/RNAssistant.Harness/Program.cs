@@ -756,6 +756,7 @@ namespace RNAssistant.Harness
                 Test("resources: discovery preserves incomplete source coverage", ResourceIntentDiscoveryPreservesCoverage),
                 Test("resources: document discovery isolates unavailable resources", DocumentDiscoveryPartialResources),
                 Test("resources: document discovery follows exact current heads", DocumentDiscoveryCurrentHeads),
+                Test("resources: document discovery bounds source pages", DocumentDiscoveryPagesBoundMetadata),
                 Test("resources: hard cutover artifact tools", ResourceToolsHardCutoverArtifactTools),
                 Test("chart: default config", ChartArtifactBuildsDefaultConfig),
                 Test("chart: requested type truncates", ChartArtifactHonorsRequestedTypeAndTruncates),
