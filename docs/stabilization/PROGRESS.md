@@ -1,6 +1,21 @@
 # Stabilization progress
 
-Current slice (2026-09-08), after `cf309b64`: **bounded document discovery pages**
+Current slice (2026-09-08), after `62ec1f8e`: **exact text discovery views** are
+implemented host-neutral for document Markdown/Plans. A deterministic section/chunk
+view reuses existing revision journal/CAS; current search reaches late content,
+retains source offsets and exposes bounded heading context plus authored descriptions.
+Derived-byte loss rebuilds only from the same exact body; missing sources remain
+unavailable. Search checks generation after its last page, including indexing races.
+No new store, authority publication or whole-read evidence. Cold indexing reads a
+bounded source; this is not an inverted full-text index.
+Checks: resources 25/25, HTML 33/33, shared Markdown 4/4 and Plan 2/2 pass.
+Version-format validation and diff checks pass.
+Next: extend existing views to uploaded extracted text/HTML members and useful
+section reads. Picker/history paging, richer compiler context, cold allocation,
+Windows/Office, upstream HTTP 502, layout and target-model qualification stay open.
+See [text discovery](../artifact-library.md#implemented-exact-text-discovery-views--2026-09-08).
+
+Previous slice (2026-09-08), after `cf309b64`: **bounded document discovery pages**
 are implemented host-neutral. Existing authority Heads now support ordered bounded
 range reads. Model list/search hydrates current roots in pages without copying full
 authority snapshots or reading all library metadata. History/receipt ranges are

@@ -52,6 +52,13 @@ provider discovery, exact point identities, complete traversal/search, cold inde
 rebuild and writer drift. The generic incomplete-coverage test also bounds empty
 source-page loops. Startup and ordered-insertion allocation remain qualification gaps.
 
+`resources: document text index` verifies late cross-chat Markdown matches, exact
+cross-part/CRLF/Unicode offsets, fenced-heading exclusion, model section context,
+bounded negatives, derived-byte repair, restart, current versus historical indexes,
+missing source refusal and last-page writer drift. The existing discovery-coverage
+test also checks descriptions/section context for search-only candidates. Use
+`resources:`, `shared Markdown:`, `document Plan:` and `html` for affected consumers.
+
 `resources: document discovery` verifies healthy partial results with missing/corrupt
 current metadata, body loss, exact reads, metadata recovery, current-head selection
 without historical fallback, unknown original/logical heads and continuation drift.

@@ -45,7 +45,8 @@ silently migrated. The remaining ownership seam and removal gate are tracked in
 [MIGRATION_MAP](stabilization/MIGRATION_MAP.md#document-artifact-ownership--active-slices).
 Exact reads load one metadata record. Model discovery pages current roots from the
 existing ordered authority projection before reading metadata (see below). Picker/
-history enumeration and content indexing remain separate slice-3 work.
+history enumeration and uploaded-content indexing remain separate slice-3 work;
+Markdown/Plan text views are implemented below.
 
 ### Implemented Plan publication slice
 
@@ -155,14 +156,15 @@ and CAS collection retain published revisions.
 `shared Markdown:` covers cross-chat read/write, concurrent and prepared stale
 writers, duplicate titles, same-step independent calls, restore, immutable uploads,
 failed link publication, foreign documents, metadata-only restart, fork, unlink,
-GC and the complete agent execution/event-replay cycle. Indexed/partial discovery, richer shared context, explicit independent-copy
-UX and Windows/Office/WebView2/layout qualification remain separate open work.
+GC and the complete agent execution/event-replay cycle. Partial discovery and
+Markdown/Plan text views are implemented below. Richer compiler context, explicit
+independent-copy UX and Windows/Office/WebView2/layout qualification remain open.
 
 ### Implemented working-set links — 2026-09-08
 
 The original working-set slice covered document-owned originals and Plans.
 The shared HTML slice extends the same contract to HTML and authored JSON files;
-Markdown now extends it too; indexed discovery slices 3–4 remain open.
+Markdown now extends it too; remaining discovery/recovery work in slices 3–4 stays open.
 
 `ChatSession.ArtifactLinks` is append-only-event-backed chat membership: one
 logical resource identity, exact attached snapshot and detached flag per decision.
@@ -304,6 +306,43 @@ authority-journal recovery and Windows/layout qualification remain open.
 Host-neutral coverage includes a 73-resource library with 1000 unrelated receipts,
 per-page metadata IO, no full capture on the provider path, point identity reads,
 complete traversal/search, source-page ceilings, unavailable metadata and writer drift.
+
+### Implemented exact text discovery views — 2026-09-08
+
+Document Markdown and Plan content search now uses `artifact-text-index-v1`, a
+deterministic `ResourceRevisionView` over the exact published body. Its manifest
+and 32,000-character text parts live in the existing CAS/revision journal, using
+the same retention/GC edges. It publishes no heads, observation or read guard and
+introduces no library database or second currentness projection.
+
+First materialization reads one exact source bounded to 2 million characters;
+subsequent searches read retained parts under the existing 1-million-character
+query budget. Authored Markdown/Plans no longer stop at the old per-artifact
+128,000-character prefix. This is a section/chunk view, not an inverted full-text
+index: an uncached build reads the bounded source and negative queries scan parts.
+One occurrence per resource suffices for discovery; a budget-limited negative
+remains incomplete. Matches spanning parts preserve exact UTF-16 source offsets,
+including CRLF and surrogate pairs.
+
+`sectionTitle` supplies the nearest preceding recognized ATX Markdown heading,
+excluding fenced code, with up to 200 characters plus an omission marker. This
+bounded outline recognizes at most 4096 headings; it supplies no title after an
+omitted heading. It is not a complete Markdown AST or section-read contract.
+Search-only Gateway candidates now retain the authored description too. Both
+fields are untrusted discovery context; snippets are source excerpts, not proof of
+whole-source inspection or mutation eligibility.
+
+A missing/corrupt derived manifest or part is recreated once from the same exact
+body; immutable view registration rejects conflicting derivations. Missing source
+bytes stay unavailable. Current search selects current heads, while an explicitly
+requested historical snapshot keeps its own index. Generation is checked after
+the last source page as well as between pages, so a write during materialization
+cannot produce an apparently current mixed-generation result.
+
+Uploaded extracted text and HTML members retain their existing bounded search
+paths. Their indexing, semantic section reads, picker/history pagination, richer
+compiler decision context and cold allocation/Windows/layout qualification remain
+open. No model-generated synopsis or embedding publication is added.
 
 ### Ownership and user behavior
 

@@ -552,6 +552,7 @@ namespace RNAssistant.Office.Services
                     new List<string>()).ToList(),
                 Usage = IntentUsage(state.Type, state.Descriptor),
                 MatchRepresentation = match == null ? null : match.Representation,
+                SectionTitle = match == null ? null : match.SectionTitle,
                 Snippet = match == null ? null : match.Snippet,
                 Evidence = match == null ? null : match.Evidence,
                 Reference = new ResourceRef(
@@ -657,6 +658,7 @@ namespace RNAssistant.Office.Services
                 Title = match.Title
             };
             if (match.DocumentScoped) descriptor.Metadata["scope"] = "document";
+            if (match.Description != null) descriptor.Metadata["description"] = match.Description;
             ResourceAddress address;
             if (match.Reference != null &&
                 ResourceUri.TryParse(match.Reference.Uri, out address))
@@ -877,6 +879,8 @@ namespace RNAssistant.Office.Services
 
     internal sealed class ResourceIntentCandidate
     {
+        [Newtonsoft.Json.JsonProperty("sectionTitle", NullValueHandling = Newtonsoft.Json.NullValueHandling.Ignore)]
+        public string SectionTitle { get; set; }
         [Newtonsoft.Json.JsonProperty("description", NullValueHandling = Newtonsoft.Json.NullValueHandling.Ignore)]
         public string Description { get; set; }
         [Newtonsoft.Json.JsonIgnore]

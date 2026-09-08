@@ -2261,7 +2261,9 @@ endpoint.
    and metadata search preserve incompleteness. Named point reads remain strict.
    Model document discovery now pages current roots through the existing ordered
    authority projection with bounded metadata IO and source-page ceilings. Direct
-   identities read one record; picker/history paging, content indexing, cold replay,
+   identities read one record. Markdown/Plan section/chunk views now reuse exact
+   revision/CAS retention and preserve source/heading context with last-page drift
+   validation; uploaded text/HTML indexing, section reads, picker/history paging, cold replay,
    authority recovery and Windows/target-model gates remain open.
 5. **11T — typed Office tools и удаление legacy host dispatch — admitted:**
    - [x] 11T0/7D — done host-neutral: один атомарный production change связывает exact выбранный workbook с

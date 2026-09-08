@@ -216,9 +216,15 @@ namespace RNAssistant.Harness
                 Kind = "test",
                 Title = "Hidden",
                 Representation = ResourceRepresentations.Text,
+                Description = "Purpose retained from the searched revision",
+                SectionTitle = "Relevant section",
                 Snippet = "needle"
             };
             var hidden = gateway.Find(session, "needle", "conversation");
+            AssertEqual("Purpose retained from the searched revision", hidden.Items.Single(item => item.Title == "Hidden").Description,
+                "search-only descriptors preserve authored descriptions without listing metadata");
+            AssertEqual("Relevant section", hidden.Items.Single(item => item.Title == "Hidden").SectionTitle,
+                "search-only candidates retain section context");
             AssertTrue(hidden.Items.Any(item => item.Target == "conversation resource: Hidden"),
                 "provider search result beyond the bounded listing remains discoverable");
             AssertEqual("7", hidden.Items.Single(item => item.Target == "conversation resource: Hidden").Reference.Revision,

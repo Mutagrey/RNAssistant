@@ -74,13 +74,15 @@ transport alone does not qualify source allocation.
   the existing ordered authority Heads projection, with bounded metadata hydration
   and generation guards. Working-set picker/history still need paging. Cold replay,
   ordered insertion and full-authority consumers still scale with journal size.
-  Content/section indexing and allocation qualification remain open; no parallel
-  durable library/search store.
+  Markdown/Plan section/chunk views now use existing revision/CAS retention.
+  Uploaded extracted text/HTML member indexing, semantic section reads and allocation
+  qualification remain open; no parallel durable library/search store.
 - Partial model discovery is implemented host-neutral (2026-09-08): missing/corrupt
   current metadata, bodies and unknown heads preserve healthy matches with explicit
   incomplete coverage. No uniqueness/negative inference from unavailable scopes;
   generation drift invalidates continuation; same-generation metadata recovery is visible to a fresh scan without shifting existing source slots. Exact reads stay
-  strict. Section/content indexing and richer shared context remain open.
+  strict. Markdown/Plan search now supplies bounded heading context and preserves
+  search-only descriptions; richer compiler context remains open.
 - Resource authority / journal recovery: whole-authority capture failure or invalid
   runtime identity still fails explicitly. Per-resource projections cannot invent
   lost authority records. Reconcile only from validated durable evidence; no latest

@@ -207,6 +207,17 @@ namespace RNAssistant.Office.Services
                                 scanTruncated = true;
                                 break;
                             }
+                            if (!string.IsNullOrWhiteSpace(artifact.DocumentAuthorityId) &&
+                                (artifact.Kind == ChatArtifactKinds.Markdown || artifact.Kind == ChatArtifactKinds.PlanDocument))
+                            {
+                                var indexed = _documentArtifacts.SearchText(session, ChatResourceUri.CreateArtifactRevision(session, artifact),
+                                    query, remaining, maxCharsPerMatch);
+                                foreach (var match in indexed.Matches) match.Description = ArtifactDescription(artifact);
+                                matches.AddRange(indexed.Matches);
+                                scannedCharacters += indexed.ScannedCharacters;
+                                scanTruncated |= indexed.ScanTruncated;
+                                continue;
+                            }
                             var readLimit = Math.Min(MaximumSearchCharactersPerArtifact, remaining);
                             // Probe one additional character: a bounded prefix is not a
                             // complete negative search over the resource.
@@ -243,6 +254,10 @@ namespace RNAssistant.Office.Services
                 sourceOffset = discovery.NextOffset.Value;
             }
 
+            // Includes writes while reading/indexing the LAST source page. A
+            // page-to-page check alone cannot detect that race.
+            if (sourceRevision != ProjectDiscovery(sourceSession, 0, 0).SourceRevision)
+                throw new ResourceRequestException("The document changed during search; rediscover the source.", "resource_revision_changed", true);
             return new ResourceSearchResult
             {
                 Query = query,
@@ -500,12 +515,19 @@ namespace RNAssistant.Office.Services
                 DocumentScoped = !string.IsNullOrWhiteSpace(artifact.DocumentAuthorityId),
                 Kind = artifact.Kind ?? "artifact",
                 Title = artifact.Title ?? string.Empty,
+                Description = ArtifactDescription(artifact),
                 Representation = representation,
                 MatchOffset = index,
                 MatchLength = queryLength,
                 SnippetOffset = start,
                 Snippet = source.Substring(start, length)
             };
+        }
+
+        private static string ArtifactDescription(ChatArtifact artifact)
+        {
+            return artifact.Kind == ChatArtifactKinds.Markdown
+                ? (string)JObject.Parse(artifact.MetadataJson ?? "{}")["description"] : null;
         }
 
         private static bool HasTextHint(ChatArtifact artifact, ChatAttachment attachment)

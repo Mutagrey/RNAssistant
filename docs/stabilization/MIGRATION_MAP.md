@@ -14,6 +14,16 @@ gates; active tool compatibility adapter отсутствует. Windows/Office 
 
 ## Document artifact ownership — active slices
 
+Exact text discovery (2026-09-08): `DocumentArtifactStore.SearchText` owns the
+deterministic Markdown/Plan text view over existing revision/CAS ports. The chat
+provider uses it instead of the old 128k prefix scan for these document resources;
+Gateway projects heading context and preserves search-only authored descriptions.
+Original extracted text, local artifacts and HTML members keep their distinct
+existing source paths until their own indexing slice. No temporary adapter or new
+durable store; read guards still require the normal evidence path. Last-page
+generation validation closes the indexing/read race. See the canonical
+[text view contract](../artifact-library.md#implemented-exact-text-discovery-views--2026-09-08).
+
 | Seam | Owner and consumers | Removal gate |
 |---|---|---|
 | Transient `ChatArtifact` projection over document-owned originals/Plans/HTML/Markdown | `DocumentArtifactStore` owns new originals, Plan, HTML/JSON and authored Markdown snapshots in existing authority/CAS; native Plan binding v3 and mutation observer publish per-Plan document heads. Ingestion, Gateway/provider, viewers, chat projection and fork consume document refs. Plan conversation-head publication and direct local-action mutation bypass are removed. No second store or document-ref fallback; old chat Plans are explicitly rejected for mutation | HTML identity/head/tools and working-set consumers are switched through the same record path and mutation observer; independent Markdown now uses the same authored-record path with prepared exact intent and no active singleton; slices 3–4 finish indexed discovery/recovery and remove remaining chat-only ownership. Individual metadata loss now uses transient unavailable projections; partial model discovery now isolates per-resource failures; bounded indexing and authority-wide recovery remain open. Originals/Plan/HTML/Markdown explicit selection/refresh/unlink now use `ArtifactWorkingSetService` and chat-event-backed `ArtifactLinks`; prompt/library/compaction, fork and clear consume these decisions. Incompatible stream handling stays explicit, without deleting user data. Windows delivery remains open |
@@ -42,8 +52,9 @@ head/record, removing its all-history load. HTML member discovery uses only its
 selected exact current workspace; the old standalone inline test fixture uses the
 production Gateway/owner. Source cursors bind generation and preserve unavailable
 slots; fresh scans recover earlier omissions. Gateway/search page ceilings avoid
-unbounded filtered scans. No temporary adapter or durable index; picker/history,
-content indexing and cold replay/write allocation remain open.
+unbounded filtered scans. No temporary adapter or separate durable index;
+picker/history, remaining uploaded/HTML indexing and cold replay/write allocation
+remain open. Markdown/Plan retained text views are described above.
 
 HTML UI action seam removed (2026-09-08): the typed bridge passes complete
 `HtmlWorkspaceActionPayload` guards to addressed/reserved controller actions.
