@@ -117,8 +117,8 @@ clicks, ignore late responses and never retry mutations automatically.
 
 Chat reconstruction reads Plan metadata before optional active-body hydration.
 A missing body therefore does not block unlink; an explicit body read still fails.
-Missing/corrupt metadata and unknown logical heads retain explicit failure, with
-recovery and bounded indexed enumeration tracked in the stabilization backlog.
+Per-resource metadata recovery is implemented below; bounded indexed enumeration
+and model-facing partial discovery remain tracked in the stabilization backlog.
 Enumeration still scans document revision metadata; a 50-item response does not
 claim bounded source allocation.
 
@@ -128,6 +128,46 @@ competing document lease, foreign scope, duplicate-title paging and stale cursor
 `artifact-working-set.test.js` covers empty-chat access, request ordering, captured
 writes, duplicate clicks and navigation races. Windows/Office/WebView2 and real
 layout qualification remain open.
+
+### Unavailable metadata recovery — 2026-09-08
+
+After working-set commit `5bf9aba1`, a separate dependency-safe correction closes
+chat reconstruction and picker failures caused by an individual missing/corrupt
+metadata record. It precedes the shared HTML/Markdown owner move.
+
+`DocumentArtifactStore.InspectMetadata` produces an explicit reference-only
+`AvailabilityIssue=metadata_unavailable` projection. The runtime validates owner,
+snapshot ID and revision; Plan logical identity is derived from its canonical
+runtime-generated snapshot ID. It does not invent a title, body, MIME, provenance,
+creation time or current head. This issue is transient (`JsonIgnore`), document
+artifact projections remain excluded from chat events, and strict resource reads
+still require their exact retained record/body. The previous scan-based selected
+Plan lookup is replaced by exact runtime snapshot addressing.
+
+Chats retain their selected unavailable snapshot instead of hiding the chat,
+creating another resource or silently choosing latest. Originals/Plan picker
+inspection isolates individual failures, labels unavailable entries and keeps
+healthy entries. For an unknown logical Plan head it displays a retained snapshot
+as `head_unavailable`, with selection disabled; it does not advertise that snapshot
+as current. Snapshot availability participates in the continuation fingerprint.
+Unlink checks that the logical resource actually belongs to the chat working set,
+then persists only the link decision under the existing revision/lease guards.
+
+Typed chat/library/picker DTOs carry availability. Cards with missing metadata
+cannot open a viewer, while the picker and eligible resource rows expose unlink.
+The next model manifest reports unavailable counts and a recovery action without
+creating guessed semantic targets. Fork preserves the issue and exact message
+refs; attachment linking never reconstructs unavailable owner metadata from a
+message. Restoring the exact metadata removes the issue on a fresh load but never
+reattaches a previously detached link.
+
+This does not repair lost authority journals, invent missing references, revoke
+historical bytes or make strict `common.resources_*` enumeration partially complete.
+Those failures remain explicit; indexed/partial model discovery is a separate
+remaining slice. No second store, user-data deletion or resource-head publication
+is introduced. `artifact recovery:` verifies deleted Plan metadata, corrupted
+original metadata, healthy picker entries, forbidden selection/read, durable unlink,
+metadata return, unknown head and fork. Real WebView qualification remains open.
 
 ### Ownership and user behavior
 

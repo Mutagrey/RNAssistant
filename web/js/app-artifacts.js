@@ -14,7 +14,7 @@
     var kind = String(value(artifact, "DisplayKind", "displayKind", value(artifact, "Kind", "kind", "file")) || "file").toLowerCase();
     return kind === "plan_document" ? "plan" : kind;
   }
-  function artifactTitle(artifact) { return value(artifact, "Title", "title", "Артефакт") || "Артефакт"; }
+  function artifactTitle(artifact) { if (value(artifact, "AvailabilityIssue", "availabilityIssue", "") === "metadata_unavailable") return "Недоступный ресурс"; return value(artifact, "Title", "title", "Артефакт") || "Артефакт"; }
   function artifactRevision(artifact) { return Number(value(artifact, "Revision", "revision", 1) || 1); }
 
   function artifactRemoved(artifact) {
@@ -473,7 +473,7 @@
   }
 
   function openArtifactResource(artifact, galleryArtifacts, gallerySource) {
-    if (!artifact) return false;
+    if (!artifact || value(artifact, "AvailabilityIssue", "availabilityIssue", "") === "metadata_unavailable") return false;
     var kind = artifactKind(artifact);
     if (isImageArtifact(artifact)) {
       createImageGalleryContext(
@@ -506,6 +506,7 @@
   function artifactCard(artifact) {
     var kind = artifactKind(artifact);
     var removed = artifactRemoved(artifact);
+    var unavailable = value(artifact, "AvailabilityIssue", "availabilityIssue", "") === "metadata_unavailable";
     var card = document.createElement("button");
     card.type = "button";
     card.className = "chat-artifact-card kind-" + kind + " category-" + kindCategory(artifact);
@@ -541,7 +542,12 @@
     arrow.setAttribute("aria-hidden", "true");
     arrow.textContent = removed ? "×" : "›";
     card.appendChild(arrow);
-    if (!removed) card.addEventListener("click", function () { openArtifactResource(artifact); });
+    if (unavailable) {
+      card.disabled = true;
+      card.title = "Метаданные ресурса недоступны. Ссылку можно убрать через «Ресурсы».";
+      card.setAttribute("aria-label", card.title);
+    }
+    if (!removed && !unavailable) card.addEventListener("click", function () { openArtifactResource(artifact); });
     return card;
   }
 
@@ -843,7 +849,8 @@
         var row = document.createElement("button");
         row.type = "button";
         row.className = "chat-resource-row category-" + category;
-        row.title = "Открыть во вкладке «Артефакты»";
+        row.disabled = value(artifact, "AvailabilityIssue", "availabilityIssue", "") === "metadata_unavailable";
+        row.title = row.disabled ? "Метаданные ресурса недоступны" : "Открыть во вкладке «Артефакты»";
         var icon = document.createElement("span");
         icon.className = "artifact-type-icon";
         icon.innerHTML = iconSvg(artifactKind(artifact));
@@ -920,9 +927,11 @@
         var label = document.createElement("span");
         label.className = "chat-resource-row-copy";
         label.textContent = item.title + (item.kind === "plan_document" ? " · v" + item.revision : " · оригинал") +
-          (item.selected ? " · выбран" : item.linked ? " · в чате" : "");
+          (item.selected ? " · выбран" : item.linked ? " · в чате" : "") +
+          (item.availabilityIssue === "metadata_unavailable" ? " · метаданные недоступны" :
+           item.availabilityIssue ? " · текущая версия неизвестна" : "");
         row.appendChild(label);
-        if (!item.linked || item.kind === "plan_document" && !item.selected) {
+        if (!item.availabilityIssue && (!item.linked || item.kind === "plan_document" && !item.selected)) {
           var attach = document.createElement("button");
           attach.type = "button";
           attach.className = "link-button";

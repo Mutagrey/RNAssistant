@@ -375,6 +375,7 @@ namespace RNAssistant.Office.Services
                 SourceMessageId = artifact.SourceMessageId,
                 DocumentAuthorityId = artifact.DocumentAuthorityId,
                 OriginalAttachment = CloneAttachment(artifact.OriginalAttachment),
+                AvailabilityIssue = artifact.AvailabilityIssue,
                 RunId = artifact.RunId,
                 Revision = artifact.Revision,
                 ParentArtifactId = artifact.ParentArtifactId,

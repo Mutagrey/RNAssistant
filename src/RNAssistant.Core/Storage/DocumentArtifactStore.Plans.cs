@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using Newtonsoft.Json;
+using System.Text.RegularExpressions;
 using RNAssistant.Core.Models;
 using RNAssistant.Core.Services;
 
@@ -11,6 +12,43 @@ namespace RNAssistant.Core.Storage
     public sealed partial class DocumentArtifactStore
     {
         private const string PlanRecordView = "artifact-plan-record";
+
+        // The snapshot id is runtime-generated; recovery never guesses a title,
+        // body or current head from it.
+        public static string PlanIdFromArtifact(ChatArtifact artifact)
+        {
+            return ParsePlanSnapshotId(artifact.Id, artifact.Revision);
+        }
+
+        public static string PlanIdFromSnapshot(ResourceRef reference)
+        {
+            string owner, id;
+            int revision;
+            if (!ChatResourceUri.TryParseArtifactRevision(reference, out owner, out id, out revision))
+                throw new InvalidDataException("An exact Plan snapshot reference is required.");
+            return ParsePlanSnapshotId(id, revision);
+        }
+
+        private static string ParsePlanSnapshotId(string id, int revision)
+        {
+            var match = Regex.Match(id ?? string.Empty, @"^(plan_doc_[0-9a-f]{64})_r([1-9][0-9]*)_[0-9a-f]{8}$",
+                RegexOptions.CultureInvariant, TimeSpan.FromMilliseconds(100));
+            if (!match.Success || match.Groups[2].Value != revision.ToString(System.Globalization.CultureInfo.InvariantCulture))
+                throw new InvalidDataException("The Plan snapshot identity is invalid.");
+            return match.Groups[1].Value;
+        }
+
+        public static ResourceRef PlanSelectionReference(ChatSession session, string artifactId)
+        {
+            var marker = (artifactId ?? string.Empty).LastIndexOf("_r", StringComparison.Ordinal);
+            var end = (artifactId ?? string.Empty).LastIndexOf('_');
+            int revision;
+            if (marker < 0 || end <= marker + 2 || !int.TryParse(artifactId.Substring(marker + 2, end - marker - 2), out revision))
+                throw new InvalidDataException("The selected Plan identity is invalid.");
+            ParsePlanSnapshotId(artifactId, revision);
+            return ChatResourceUri.CreateArtifactRevision(session, new ChatArtifact
+                { Id = artifactId, Revision = revision, DocumentAuthorityId = Scope(session).Id });
+        }
 
         public static ResourceIdentity PlanIdentity(ChatSession session, string planId)
         {
@@ -133,11 +171,7 @@ namespace RNAssistant.Core.Storage
 
         public ChatArtifact ReadPlanSelection(ChatSession session, string artifactId, bool includeBody = true)
         {
-            var references = _authority.Capture(Scope(session)).Heads.Values
-                .Where(head => head.Knowledge == HeadKnowledge.Known && IsPlan(session, head.Revision))
-                .Select(head => head.Revision).Where(reference => ResourceUri.Parse(reference.Uri).Segments[2] == artifactId).Take(2).ToArray();
-            if (references.Length != 1) throw new InvalidDataException("The selected document Plan snapshot is unavailable or ambiguous.");
-            return ReadPlan(session, references[0], includeBody);
+            return ReadPlan(session, PlanSelectionReference(session, artifactId), includeBody);
         }
 
         private static ResourceIdentity PlanOperationIdentity(ChatSession session, string operationKey)

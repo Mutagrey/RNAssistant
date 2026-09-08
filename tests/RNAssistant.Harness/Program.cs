@@ -502,6 +502,7 @@ namespace RNAssistant.Harness
                 Test("artifacts: prompt uses bounded working set", ArtifactPromptUsesBoundedWorkingSet),
                 Test("resources: artifact search reports incomplete scans", ArtifactSearchReportsIncompleteScans),
                 Test("artifacts: historical attachments stay reference-only", HistoricalAttachmentsStayReferenceOnly),
+                Test("artifact recovery: missing metadata and unknown head", ArtifactWorkingSetMetadataRecovery),
                 Test("artifact working set: Plan lifecycle and missing body", ArtifactWorkingSetPlanLifecycle),
                 Test("artifact working set: stale selection session and writer races", ArtifactWorkingSetRejectsRaces),
                 Test("artifact working set: original links and clear", ArtifactWorkingSetOriginalLifecycle),

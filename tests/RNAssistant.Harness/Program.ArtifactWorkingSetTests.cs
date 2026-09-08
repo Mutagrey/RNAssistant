@@ -14,6 +14,102 @@ namespace RNAssistant.Harness
 {
     internal static partial class Program
     {
+        private static void ArtifactWorkingSetMetadataRecovery()
+        {
+            WithTempExecutor(FakeOfficeAdapter.ForHost("Excel"), (executor, adapter) =>
+            {
+                var paths = FixturePaths.Value;
+                var chats = new ChatStore(paths);
+                var authority = new ResourceAuthorityStore(paths);
+                var blobs = new ChatBlobStore(paths);
+                var links = new ArtifactWorkingSetService(chats.DocumentArtifacts, new ResourceMutationJournal(paths));
+                var tools = OfficeToolCatalog.ForHost(adapter.HostName).Concat(executor.GetControllerTools()).ToList();
+                var a = NewSession(adapter);
+                AssertTrue(executor.ExecuteManual(Command(PlanDocumentToolCatalog.SaveToolId,
+                    "title", "Lost metadata Plan", "markdown", "# Exact retained body", "status", "draft"),
+                    tools, new AppSettings(), false, false, a).Success, "publish recovery subject");
+                var artifact = a.Artifacts.Single(item => item.Id == a.ActivePlanDocumentArtifactId);
+                var exact = ChatResourceUri.CreateArtifactRevision(a, artifact);
+                a.Messages.Add(new ChatMessage { Role = "assistant", Content = "Plan saved", ResourceRefs = new List<ResourceRef> { exact } });
+                chats.Save(a);
+                var b = NewSession(adapter);
+                b.DocumentAuthorityId = a.DocumentAuthorityId;
+                links.Change(b, LinkRequest(b, exact.Uri, false), chats.Save);
+                var ingestion = new ChatResourceIngestionService(new AttachmentStore(paths), chats.DocumentArtifacts);
+                var draft = ingestion.Stage(a, "Healthy original.md", "text/markdown", Encoding.UTF8.GetBytes("# Healthy original"));
+                var message = new ChatMessage { Role = "user", Content = "Healthy original", Attachments = ingestion.LoadDrafts(a, new[] { draft.Id }).ToList() };
+                a.Messages.Add(message);
+                ingestion.CommitAndLink(a, message, a.Messages.Count - 1);
+                chats.Save(a);
+                var original = message.ResourceRefs.Single();
+                var scope = ResourceAuthorityScopeId.Document(new DocumentAuthorityId(a.DocumentAuthorityId));
+                var metadata = authority.GetView(scope, exact, "artifact-plan-record").Payload;
+                var metadataPath = blobs.PathFor(metadata.Sha256);
+                var retainedBytes = File.ReadAllBytes(metadataPath);
+                File.Delete(metadataPath);
+                a = new ChatStore(paths).Load(a.Id);
+                b = new ChatStore(paths).Load(b.Id);
+                AssertTrue(a != null && b != null, "missing Plan metadata no longer hides its origin or linked chat");
+                var missing = a.Artifacts.Single(item => item.Id == artifact.Id);
+                AssertEqual("metadata_unavailable", missing.AvailabilityIssue, "recovery is an explicit unavailable projection");
+                AssertTrue(missing.Title == null && missing.MetadataJson == null && missing.InlineText == null && missing.ContentSha256 == null,
+                    "recovery invents no durable metadata or body");
+                AssertEqual(artifact.Id, b.ActivePlanDocumentArtifactId, "selection is retained as unavailable, not replaced or silently reset");
+                AssertEqual("metadata_unavailable", ChatArtifactDto.From(b).Single().AvailabilityIssue, "typed UI projection carries the issue");
+                var prompt = ChatResourcePromptIndex.Build(a, 1000);
+                AssertContains(prompt, "unavailable=1", "model gets an actionable availability summary");
+                AssertTrue(!prompt.Contains("Lost metadata Plan"), "missing metadata cannot become a guessed semantic target");
+                var catalog = links.List(a, new DocumentArtifactListRequest { ChatId = a.Id });
+                AssertTrue(catalog.Items.Count == 2 && catalog.Items.Any(item => item.Title == "Healthy original.md" && item.AvailabilityIssue == null),
+                    "one unavailable Plan does not block other document picker entries");
+                RuntimeThrows<InvalidDataException>(() => links.Change(b, LinkRequest(b, exact.Uri, false), chats.Save));
+                RuntimeThrows<InvalidDataException>(() => chats.DocumentArtifacts.Read(a, exact));
+                var unchangedHead = authority.Capture(scope).Generation;
+                links.Change(b, LinkRequest(b, exact.Uri, true), chats.Save);
+                AssertEqual(unchangedHead, authority.Capture(scope).Generation, "unlink does not repair or replace resource authority");
+                AssertTrue(new ChatStore(paths).Load(b.Id).ActivePlanDocumentArtifactId == null, "unavailable Plan can be unlinked durably");
+                AssertEqual(exact.Uri, a.Messages.First().ResourceRefs.Single().Uri, "historical provenance survives metadata loss");
+                File.WriteAllBytes(metadataPath, retainedBytes);
+                a = new ChatStore(paths).Load(a.Id);
+                AssertTrue(a.Artifacts.Single(item => item.Id == artifact.Id).AvailabilityIssue == null, "restored exact metadata removes disposable issue on reload");
+                b = new ChatStore(paths).Load(b.Id);
+                AssertTrue(!links.List(b, new DocumentArtifactListRequest { ChatId = b.Id }).Items.Single(item => item.ResourceUri == exact.Uri).Linked,
+                    "metadata recovery does not silently reattach a removed link");
+
+                var identity = DocumentArtifactStore.PlanIdentity(a, DocumentArtifactStore.PlanIdFromSnapshot(exact));
+                var before = authority.Capture(scope);
+                authority.Publish(ResourceAuthorityCommit.Create(scope, before.Generation, null,
+                    new[] { new ResourceHeadChange(identity, before.GetHead(identity), ResourceHeadState.Unknown(identity, before.Generation + 1, "test-lost-readback")) },
+                    AuthorityCommitReason.DerivedPublication));
+                var unknown = links.List(a, new DocumentArtifactListRequest { ChatId = a.Id });
+                AssertEqual("head_unavailable", unknown.Items.Single(item => item.ResourceUri == exact.Uri).AvailabilityIssue,
+                    "unknown current head is explicit rather than a latest-snapshot substitution");
+                AssertEqual(2, unknown.Items.Count, "unknown head does not prevent listing unrelated originals");
+                RuntimeThrows<InvalidDataException>(() => links.Change(a, LinkRequest(a, exact.Uri, false), chats.Save));
+                links.Change(a, LinkRequest(a, exact.Uri, true), chats.Save);
+                AssertEqual("# Exact retained body", chats.DocumentArtifacts.Read(a, exact).InlineText, "unknown currentness preserves exact historical reads");
+
+                var originalMetadata = authority.GetView(scope, original, "artifact-original-record").Payload;
+                File.WriteAllText(blobs.PathFor(originalMetadata.Sha256), "corrupt metadata");
+                a = new ChatStore(paths).Load(a.Id);
+                AssertTrue(a != null && a.Artifacts.Single(item => item.Id.StartsWith("attachment_", StringComparison.Ordinal)).AvailabilityIssue != null,
+                    "corrupt original metadata does not hide the chat");
+                links.Change(a, LinkRequest(a, original.Uri, true), chats.Save);
+                AssertTrue(!ArtifactLibraryProjectionService.Project(new ChatStore(paths).Load(a.Id)).Heads.Any(),
+                    "corrupt original can be unlinked without deleting its source message");
+                var fork = NewSession(adapter);
+                fork.DocumentAuthorityId = a.DocumentAuthorityId;
+                fork.ParentSessionId = a.Id;
+                fork.Messages = ChatCloneService.CloneMessages(a.Messages);
+                ChatCloneService.PrepareForkResources(a, fork, chats.LoadArtifactBody,
+                    new ResourceForkService(executor.ResourceAuthority, executor.Payloads));
+                AssertTrue(fork.Artifacts.Any(item => item.AvailabilityIssue == "metadata_unavailable") &&
+                    fork.Messages.Last().ResourceRefs.Single().Uri == original.Uri,
+                    "fork keeps explicit unavailable state and exact provenance without rebuilding metadata from messages");
+
+            });
+        }
+
         private static ArtifactLinkChangeRequest LinkRequest(ChatSession session, string uri, bool detached)
         {
             return new ArtifactLinkChangeRequest { ChatId = session.Id, ResourceUri = uri,

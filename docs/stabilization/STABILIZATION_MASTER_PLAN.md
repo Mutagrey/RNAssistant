@@ -2243,7 +2243,9 @@ endpoint.
    implemented host-neutral (slices 1a/1b). The user's 2026-09-08 unlink request
    admits the dependency-safe originals/Plan working-set slice before HTML/MD:
    explicit attach/select/unlink now uses chat events, exact snapshot guards and
-   document leases. Shared HTML, independent Markdown and the remaining indexed
+   document leases. A following dependency-safe correction isolates individual
+   metadata failures for chat/picker reconstruction and unlink; strict model
+   discovery completeness is unchanged. Shared HTML, independent Markdown and the remaining indexed
    discovery/recovery work remain open. Windows/target-model gates are unchanged.
 5. **11T — typed Office tools и удаление legacy host dispatch — admitted:**
    - [x] 11T0/7D — done host-neutral: один атомарный production change связывает exact выбранный workbook с

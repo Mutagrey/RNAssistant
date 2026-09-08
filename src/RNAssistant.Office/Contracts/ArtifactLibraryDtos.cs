@@ -36,6 +36,7 @@ namespace RNAssistant.Office.Contracts
     public sealed class ArtifactLibraryHeadDto
     {
         [JsonProperty("canDetach")] public bool CanDetach { get; set; }
+        [JsonProperty("availabilityIssue")] public string AvailabilityIssue { get; set; }
         [JsonProperty("artifactId")] public string ArtifactId { get; set; }
         [JsonProperty("logicalId")] public string LogicalId { get; set; }
         [JsonProperty("resourceClass")] public string ResourceClass { get; set; }

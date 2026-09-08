@@ -89,11 +89,11 @@ namespace RNAssistant.Core.Storage
                     .Where(reference => DocumentArtifactStore.Owns(session, reference))
                     .GroupBy(reference => reference.Uri, StringComparer.Ordinal).Select(group => group.First());
                 foreach (var reference in references)
-                    session.Artifacts.Add(DocumentArtifacts.Read(session, reference, false));
+                    session.Artifacts.Add(DocumentArtifacts.InspectMetadata(session, reference));
                 if (!string.IsNullOrWhiteSpace(session.ActivePlanDocumentArtifactId) &&
                     !session.Artifacts.Any(item => item.Id == session.ActivePlanDocumentArtifactId))
                 {
-                    session.Artifacts.Add(DocumentArtifacts.ReadPlanSelection(session, session.ActivePlanDocumentArtifactId, false));
+                    session.Artifacts.Add(DocumentArtifacts.InspectMetadata(session, DocumentArtifactStore.PlanSelectionReference(session, session.ActivePlanDocumentArtifactId)));
                 }
             }
             if (rebuildDerivedProjections)

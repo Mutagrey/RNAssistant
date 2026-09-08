@@ -25,7 +25,8 @@ namespace RNAssistant.Core.Services
                 throw new InvalidDataException("The artifact is not owned by this document.");
             if (artifact.Kind == ChatArtifactKinds.PlanDocument)
             {
-                return DocumentArtifactStore.PlanIdentity(session, PlanId(artifact));
+                return DocumentArtifactStore.PlanIdentity(session,
+                    DocumentArtifactStore.PlanIdFromSnapshot(ChatResourceUri.CreateArtifactRevision(session, artifact)));
             }
             if (!artifact.Id.StartsWith("attachment_", StringComparison.Ordinal))
                 throw new InvalidDataException("This artifact has no document working-set owner yet.");

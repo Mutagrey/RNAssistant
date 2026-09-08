@@ -39,6 +39,10 @@ version check still apply.
 
 ## Test map
 
+`artifact recovery:` verifies per-resource metadata loss/corruption, unavailable
+Plan heads, healthy picker entries, strict reads, durable unlink, metadata return
+and fork. Run with the working-set tests when changing reference-only recovery.
+
 `artifact working set:` covers chat-local link persistence, document Plan selection
 and native editing from an empty second chat, unlink/fork/history/clear, missing
 body reads, stale chat and Plan versions, document lease conflicts, foreign scope,

@@ -198,6 +198,8 @@ namespace RNAssistant.Office.Services
                     throw new InvalidOperationException("Attachment artifact identity is ambiguous: " + id);
                 }
                 var artifact = matches.Count == 1 ? matches[0] : null;
+                // Keep existing exact provenance; unavailable metadata cannot be rebuilt from a message.
+                if (artifact != null && !string.IsNullOrEmpty(artifact.AvailabilityIssue)) continue;
                 var expectedKind = string.Equals(attachment.Kind, "image", StringComparison.OrdinalIgnoreCase)
                     ? ChatArtifactKinds.Image
                     : ChatArtifactKinds.Attachment;

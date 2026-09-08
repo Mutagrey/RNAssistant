@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Globalization;
+using System.IO;
 using Newtonsoft.Json;
 using RNAssistant.Core.Tools;
 using RNAssistant.Core.Models;
@@ -38,7 +39,7 @@ namespace RNAssistant.Office.Services
                     .OrderByDescending(item => item.CreatedUtc).ThenBy(item => item.Id, StringComparer.Ordinal)
                     .ToList();
                 var stamp = TextPatternEngine.Sha256(JsonConvert.SerializeObject(new object[]
-                    { session.Id, session.DocumentAuthorityId, session.Revision, query, items.Select(item => item.Id).ToArray() }));
+                    { session.Id, session.DocumentAuthorityId, session.Revision, query, items.Select(item => item.Id + ":" + item.AvailabilityIssue).ToArray() }));
                 var offset = 0;
                 if (!string.IsNullOrEmpty(request.Cursor))
                 {
@@ -55,7 +56,8 @@ namespace RNAssistant.Office.Services
                     Items = items.Skip(offset).Take(MaximumItems).Select(item => new DocumentArtifactLinkDto
                     {
                         ResourceUri = ChatResourceUri.CreateArtifactRevisionUri(session, item),
-                        Title = item.Title, Kind = item.Kind, Revision = item.Revision,
+                        Title = string.IsNullOrEmpty(item.AvailabilityIssue) ? item.Title : item.Title ?? "Недоступный ресурс",
+                        AvailabilityIssue = item.AvailabilityIssue, Kind = item.Kind, Revision = item.Revision,
                         Linked = ArtifactWorkingSet.IsLinked(session, item),
                         Selected = item.Id == session.ActivePlanDocumentArtifactId
                     }).ToArray()
@@ -65,13 +67,30 @@ namespace RNAssistant.Office.Services
 
         private IEnumerable<ChatArtifact> CurrentItems(ChatSession session)
         {
-            foreach (var group in _artifacts.List(session).GroupBy(item => ArtifactWorkingSet.Identity(session, item)))
+            foreach (var group in _artifacts.InspectMetadataList(session)
+                .Concat((session.Artifacts ?? new List<ChatArtifact>()).Where(item => !string.IsNullOrEmpty(item.AvailabilityIssue)))
+                .GroupBy(item => item.Id, StringComparer.Ordinal).Select(items => items.First())
+                .GroupBy(item => ArtifactWorkingSet.Identity(session, item)))
             {
                 var first = group.First();
                 if (first.Kind != ChatArtifactKinds.PlanDocument) { yield return group.Single(); continue; }
-                var current = _artifacts.CurrentPlan(session, ArtifactWorkingSet.PlanId(first));
-                var item = group.SingleOrDefault(candidate => ChatResourceUri.CreateArtifactRevisionUri(session, candidate) == current?.Uri);
-                if (item != null && !PlanDocumentService.IsTombstone(item)) yield return item;
+                ResourceRef current = null;
+                var unavailableHead = false;
+                try { current = _artifacts.CurrentPlan(session, DocumentArtifactStore.PlanIdFromArtifact(first)); }
+                catch (InvalidDataException) { unavailableHead = true; }
+                catch (IOException) { unavailableHead = true; }
+                if (current == null) unavailableHead = true;
+                if (unavailableHead)
+                {
+                    var retained = group.FirstOrDefault(item => item.Id == session.ActivePlanDocumentArtifactId) ??
+                        group.OrderByDescending(item => item.Revision).First();
+                    retained.AvailabilityIssue = "head_unavailable";
+                    yield return retained;
+                    continue;
+                }
+                var currentItem = group.SingleOrDefault(candidate => ChatResourceUri.CreateArtifactRevisionUri(session, candidate) == current.Uri)
+                    ?? _artifacts.InspectMetadata(session, current);
+                if (currentItem != null && !PlanDocumentService.IsTombstone(currentItem)) yield return currentItem;
             }
         }
 
@@ -92,7 +111,10 @@ namespace RNAssistant.Office.Services
             if (reference.Uri != request.ResourceUri) throw new InvalidOperationException("Требуется точная ссылка ресурса.");
             using (_mutations.AcquireScope(Scope(session)))
             {
-                var artifact = _artifacts.Read(session, reference, false);
+                var artifact = request.Detached.Value
+                    ? _artifacts.InspectMetadata(session, reference) : _artifacts.Read(session, reference, false);
+                if (request.Detached.Value && !ArtifactWorkingSet.IsLinked(session, artifact))
+                    throw new InvalidOperationException("В этом чате нет такой подключённой ссылки.");
                 if (!request.Detached.Value && artifact.Kind == ChatArtifactKinds.PlanDocument &&
                     (PlanDocumentService.IsTombstone(artifact) ||
                      _artifacts.CurrentPlan(session, ArtifactWorkingSet.PlanId(artifact))?.Uri != reference.Uri))

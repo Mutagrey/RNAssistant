@@ -68,7 +68,10 @@ const answer = (chatId, revision, title = "Shared Plan") => ({ chatId, sessionRe
   elements.documentArtifactsPicker.handlers.toggle();
   const second = requests.shift();
   const data = answer("b", 8); data.items[0].linked = true; data.items[0].selected = true;
+  data.items[0].availabilityIssue = "metadata_unavailable";
   second.resolve(data); await flush();
+  assert.ok(elements.documentArtifactsList.textContent.includes("метаданные недоступны"));
+  assert.equal(rowButton("Выбрать Plan"), undefined, "unavailable resource exposes unlink but no selection action");
   rowButton("Убрать").handlers.click();
   const detach = requests.shift();
   assert.equal(detach.payload.chatId, "b");

@@ -77,6 +77,9 @@ namespace RNAssistant.Core.Models
         public string MimeType { get; set; }
         public string SourceMessageId { get; set; }
         public string DocumentAuthorityId { get; set; }
+        // Disposable reference-only recovery state, never durable artifact metadata.
+        [Newtonsoft.Json.JsonIgnore]
+        public string AvailabilityIssue { get; set; }
         [Newtonsoft.Json.JsonIgnore]
         public ChatAttachment OriginalAttachment { get; set; }
         public string RunId { get; set; }

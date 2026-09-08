@@ -101,13 +101,14 @@ namespace RNAssistant.Office.Services
             return new ArtifactLibraryHeadDto
             {
                 CanDetach = RNAssistant.Core.Storage.DocumentArtifactStore.Owns(session, ChatResourceUri.CreateArtifactRevision(session, head)),
+                AvailabilityIssue = head.AvailabilityIssue,
                 ArtifactId = head.Id,
                 LogicalId = logicalId,
                 ResourceClass = resourceClass,
                 Group = Group(head, resourceClass),
                 Kind = NormalizeKind(head.Kind),
                 DisplayKind = DisplayKind(head),
-                Title = head.Title,
+                Title = string.IsNullOrEmpty(head.AvailabilityIssue) ? head.Title : "Недоступный ресурс",
                 MimeType = head.MimeType,
                 ContentByteLength = head.ContentByteLength,
                 Revision = Math.Max(1, head.Revision),
@@ -208,7 +209,9 @@ namespace RNAssistant.Office.Services
             if (string.Equals(kind, ChatArtifactKinds.HtmlWorkspace, StringComparison.OrdinalIgnoreCase))
                 return "html_workspace";
             if (string.Equals(kind, ChatArtifactKinds.PlanDocument, StringComparison.OrdinalIgnoreCase))
-                return MetadataText(artifact, "planId") ?? LineageRoot(artifact, kind, byId);
+                return !string.IsNullOrWhiteSpace(artifact.DocumentAuthorityId)
+                    ? RNAssistant.Core.Storage.DocumentArtifactStore.PlanIdFromArtifact(artifact)
+                    : MetadataText(artifact, "planId") ?? LineageRoot(artifact, kind, byId);
             if (string.Equals(kind, ChatArtifactKinds.TaskList, StringComparison.OrdinalIgnoreCase))
                 return MetadataText(artifact, "taskListId") ?? LineageRoot(artifact, kind, byId);
             if (string.Equals(kind, ChatArtifactKinds.Markdown, StringComparison.OrdinalIgnoreCase))

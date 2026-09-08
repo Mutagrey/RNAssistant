@@ -499,6 +499,7 @@ namespace RNAssistant.Office.Contracts
 
     public sealed class ChatArtifactDto
     {
+        [JsonProperty("availabilityIssue")] public string AvailabilityIssue { get; set; }
         [JsonProperty("id")] public string Id { get; set; }
         [JsonProperty("kind")] public string Kind { get; set; }
         [JsonProperty("title")] public string Title { get; set; }
@@ -549,6 +550,7 @@ namespace RNAssistant.Office.Contracts
                 var bounded = includeInline && inline.Length > 24000 ? inline.Substring(0, 24000) : includeInline ? inline : null;
                 result.Add(new ChatArtifactDto
                 {
+                    AvailabilityIssue = artifact.AvailabilityIssue,
                     Id = artifact.Id,
                     Kind = artifact.Kind,
                     Title = artifact.Title,

@@ -42,12 +42,16 @@ transport alone does not qualify source allocation.
   picker still scan committed revision metadata. Response paging is bounded, source
   enumeration is not. Replace the scan with the existing authority projection/index
   when implementing indexed discovery; verify large libraries and continuation drift.
-- Artifact resource owner / metadata recovery: missing/corrupt published metadata or
-  an unknown Plan logical head can prevent reconstruction/catalog listing. Body-free
-  working-set reads solve missing bodies only. Add an explicit unavailable-resource
-  projection/reconciliation path with unlink-by-retained-identity, without inventing
-  metadata, silently selecting latest or hiding unavailable entries. Verify opening
-  the affected chat, listing unaffected resources and preserving historical evidence.
+- Gateway/provider / partial model discovery: chat and document-picker inspection
+  now isolates missing/corrupt per-resource metadata and unknown Plan heads, retaining
+  an explicit unavailable projection and unlink. Strict `common.resources_*`
+  collection discovery still fails explicitly on unavailable metadata. Add typed
+  partial discovery with correct completeness before returning healthy subsets;
+  verify no unique-target or complete-negative inference from incomplete catalogs.
+- Resource authority / journal recovery: whole-authority capture failure or invalid
+  runtime identity still fails explicitly. Per-resource projections cannot invent
+  lost authority records. Reconcile only from validated durable evidence; no latest
+  fallback, automatic mutation replay or data deletion.
 
 ## Existing defects outside the completed cutover
 

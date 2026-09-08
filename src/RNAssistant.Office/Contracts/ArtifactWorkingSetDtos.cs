@@ -27,6 +27,7 @@ namespace RNAssistant.Office.Contracts
         [JsonProperty("revision")] public int Revision { get; set; }
         [JsonProperty("linked")] public bool Linked { get; set; }
         [JsonProperty("selected")] public bool Selected { get; set; }
+        [JsonProperty("availabilityIssue")] public string AvailabilityIssue { get; set; }
     }
 
     public sealed class ArtifactLinkChangeRequest

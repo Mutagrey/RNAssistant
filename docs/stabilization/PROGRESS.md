@@ -1,6 +1,17 @@
 # Stabilization progress
 
-Current slice (2026-09-08): originals/Plan working-set links implemented in isolated
+Current correction (2026-09-08), after working-set commit `5bf9aba1`: per-resource
+metadata loss no longer hides a chat or blocks healthy document-picker entries.
+Exact reference-only projections carry a transient availability issue; typed UI
+shows unavailable metadata/head and permits unlink without guessing a current
+version. Strict reads/selection still fail, model manifests omit guessed targets
+and explain recovery, restored metadata clears the issue without reattaching links.
+Focused recovery, working-set, Plan/original, bridge/projection and UI checks cover
+this slice. Shared HTML/Markdown remains the next ownership move; bounded/partial
+model discovery and authority-journal recovery are separate open work. Windows/
+Office/WebView2 and Playwright layout gates remain open.
+
+Previous slice (2026-09-08): originals/Plan working-set links implemented in isolated
 `stab/11-artifact-working-set`. Typed document picker attaches originals and selects
 an exact current Plan in any chat of the document; «Убрать» removes only that chat
 link and selection, preserving historical refs and shared resources. Membership is
@@ -10,7 +21,7 @@ optimistic save and document mutation lease reject stale or competing changes;
 UI ignores late navigation responses. Host-neutral working-set, document Plan,
 bridge, projection and browser checks cover this slice.
 Next ownership slice: shared HTML and independent authored Markdown; they have no
-link controls yet. Full indexed enumeration/metadata recovery and Windows/Office/
+link controls yet. Full indexed/partial model enumeration and Windows/Office/
 WebView2 qualification stay open. Playwright layout is still unavailable locally.
 See [canonical artifact contract](../artifact-library.md#implemented-working-set-links--2026-09-08).
 

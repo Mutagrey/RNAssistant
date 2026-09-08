@@ -113,6 +113,36 @@ namespace RNAssistant.Core.Storage
                 .OrderBy(item => item.CreatedUtc).ThenBy(item => item.Id, StringComparer.Ordinal).ToArray();
         }
 
+        public IReadOnlyList<ChatArtifact> InspectMetadataList(ChatSession session)
+        {
+            // Failure to capture the authority itself is not a per-resource issue.
+            var snapshot = _authority.Capture(Scope(session));
+            return snapshot.Heads.Values.Where(head => Owns(session, head.Revision))
+                .Select(head => InspectMetadata(session, head.Revision)).ToArray();
+        }
+
+        public ChatArtifact InspectMetadata(ChatSession session, ResourceRef reference)
+        {
+            if (!Owns(session, reference)) throw new InvalidDataException("The artifact belongs to another document.");
+            string owner, id;
+            int revision;
+            ChatResourceUri.TryParseArtifactRevision(reference, out owner, out id, out revision);
+            if (IsPlan(session, reference)) PlanIdFromSnapshot(reference);
+            try { return Read(session, reference, false); }
+            catch (InvalidDataException) { }
+            catch (IOException) { }
+            catch (JsonException) { }
+            catch (UnauthorizedAccessException) { }
+            // Explicit reference-only projection. No recovered title, metadata,
+            // body, timestamp or writable head is asserted or persisted.
+            return new ChatArtifact
+            {
+                Id = id, DocumentAuthorityId = owner, Revision = revision,
+                Kind = IsPlan(session, reference) ? ChatArtifactKinds.PlanDocument : ChatArtifactKinds.File,
+                CreatedUtc = default(DateTime), AvailabilityIssue = "metadata_unavailable"
+            };
+        }
+
         public ChatArtifact Read(ChatSession session, ResourceRef reference, bool includeBody = true)
         {
             if (IsPlan(session, reference)) return ReadPlan(session, reference, includeBody);
