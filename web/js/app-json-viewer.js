@@ -387,6 +387,8 @@
       formatted: null,
       mode: options.mode || "tree",
       domRows: 0,
+      embeddedChars: 0,
+      embeddedNodes: 0,
       copyVersion: 0
     };
     var root = element("section", "rn-json-viewer");
@@ -453,6 +455,8 @@
     function render() {
       body.replaceChildren();
       state.domRows = 0;
+      state.embeddedChars = 0;
+      state.embeddedNodes = 0;
       modeState(treeButton, "tree", !state.document.ok);
       modeState(prettyButton, "pretty", !state.formatted || !state.formatted.ok);
       modeState(rawButton, "raw", false);
@@ -508,15 +512,34 @@
       return count + " " + pluralRu(count, "повтор ключа", "повтора ключей", "повторов ключей");
     }
 
-    function renderNode(node, entry, level, open) {
-      if (node.type !== "object" && node.type !== "array") return renderScalar(node, entry, level);
+    function renderNode(node, entry, level, open, sourceDocument, keyDocument, encodedNode) {
+      sourceDocument = sourceDocument || state.document;
+      open = open || (options.expandedPaths || []).indexOf(node.path) >= 0;
+      keyDocument = keyDocument || sourceDocument;
+      if (node.type === "string" && options.expandJsonStrings !== false &&
+          level < limits.maxDepth && /^[\s]*[\[{]/.test(node.value) &&
+          state.embeddedChars + node.value.length <= limits.maxChars &&
+          state.embeddedNodes < limits.maxNodes) {
+        state.embeddedChars += node.value.length;
+        var nested = parse(node.value, {
+          maxChars: limits.maxChars, maxDepth: limits.maxDepth - level,
+          maxNodes: limits.maxNodes - state.embeddedNodes
+        });
+        state.embeddedNodes += nested.nodeCount;
+        if (nested.ok) {
+          assignPaths(nested.root, node.path + "::<json>");
+          return renderNode(nested.root, entry, level, open, nested, keyDocument,
+            { node: node, document: sourceDocument });
+        }
+      }
+      if (node.type !== "object" && node.type !== "array") return renderScalar(node, entry, level, sourceDocument);
       var details = element("details", "rn-json-node rn-json-container");
       details.open = !!open;
       var summary = element("summary", "rn-json-row");
       summary.setAttribute("role", "treeitem");
       summary.setAttribute("aria-level", level);
       summary.setAttribute("aria-expanded", details.open ? "true" : "false");
-      appendKey(summary, entry);
+      appendKey(summary, entry, keyDocument);
       var bracket = node.type === "object" ? "{" : "[";
       var close = node.type === "object" ? "}" : "]";
       var count = node.type === "object" ? node.entries.length : node.items.length;
@@ -524,9 +547,11 @@
       summary.appendChild(element("span", "rn-json-punctuation", bracket));
       summary.appendChild(element("span", "rn-json-count", itemCountLabel(count)));
       summary.appendChild(element("span", "rn-json-punctuation rn-json-container-close", close));
-      appendNodeActions(summary, node);
+      if (encodedNode) summary.appendChild(element("span", "rn-json-count", "JSON в строке"));
+      appendNodeActions(summary, encodedNode ? encodedNode.node : node,
+        encodedNode ? encodedNode.document : sourceDocument);
       details.appendChild(summary);
-      var children = element("div", "rn-json-children" + (level >= 3 ? " rn-json-deep" : ""));
+      var children = element("div", "rn-json-children");
       details.appendChild(children);
       if (count > 0) details.appendChild(renderClosingRow(close));
       var loaded = 0;
@@ -536,8 +561,8 @@
         var target = Math.min(list.length, loaded + limits.childPageSize);
         while (loaded < target && state.domRows < limits.maxDomRows) {
           var child = list[loaded++];
-          children.appendChild(renderNode(child.node, child.entry, level + 1, false));
           state.domRows += 1;
+          children.appendChild(renderNode(child.node, child.entry, level + 1, false, sourceDocument));
         }
         if (moreButton && moreButton.parentNode) moreButton.parentNode.removeChild(moreButton);
         moreButton = null;
@@ -570,25 +595,25 @@
       return node.entries.map(function (entry) { return { node: entry.value, entry: entry }; });
     }
 
-    function renderScalar(node, entry, level) {
+    function renderScalar(node, entry, level, sourceDocument) {
       var row = element("div", "rn-json-row rn-json-scalar-row");
       row.setAttribute("role", "treeitem");
       row.setAttribute("aria-level", level);
-      appendKey(row, entry);
-      var exact = raw(state.document, node);
+      appendKey(row, entry, sourceDocument);
+      var exact = raw(sourceDocument, node);
       var visible = exact;
       if (visible.length > limits.maxInlineStringChars) {
         visible = visible.slice(0, limits.maxInlineStringChars) + "… [" + exact.length + " chars]";
       }
       row.appendChild(element("span", "rn-json-value rn-json-" + node.type, visible));
-      appendNodeActions(row, node);
+      appendNodeActions(row, node, sourceDocument);
       return row;
     }
 
-    function appendKey(row, entry) {
+    function appendKey(row, entry, sourceDocument) {
       if (!entry) return;
       if (entry.key) {
-        row.appendChild(element("span", "rn-json-key", raw(state.document, entry.key)));
+        row.appendChild(element("span", "rn-json-key", raw(sourceDocument, entry.key)));
         if (entry.duplicateCount > 1) {
           row.appendChild(element("span", "rn-json-duplicate", "повтор " + entry.occurrence + "/" + entry.duplicateCount));
         }
@@ -598,12 +623,12 @@
       row.appendChild(element("span", "rn-json-punctuation", ":"));
     }
 
-    function appendNodeActions(row, node) {
+    function appendNodeActions(row, node, sourceDocument) {
       var actions = element("details", "rn-json-node-actions");
       var menu = element("summary", "rn-json-copy-menu", "⋯");
       menu.setAttribute("aria-label", "Копирование значения или пути");
       actions.appendChild(menu);
-      actions.appendChild(button("Узел", "rn-json-copy", function () { requestCopy(raw(state.document, node), "node", node); }));
+      actions.appendChild(button("Узел", "rn-json-copy", function () { requestCopy(raw(sourceDocument, node), "node", node); }));
       actions.appendChild(button("Путь", "rn-json-copy", function () { requestCopy(node.path, "path", node); }));
       if (node.type === "string") {
         actions.appendChild(button("Текст строки", "rn-json-copy", function () { requestCopy(node.value, "string-value", node); }));

@@ -194,4 +194,26 @@ assert.ok(page.indexOf("app-viewer-registry.js") < page.indexOf("app-json-viewer
 assert.ok(page.indexOf("app-json-viewer.js") < page.indexOf("app-trajectory.js"));
 console.log("PASS json viewer: registry is allowlisted, UI-only and replaces mounted controllers");
 
-console.log("OK 7/7");
+
+
+{
+  const embedded = '{"n":9007199254740993123456789,"n":[1,2],"bad":"{oops"}';
+  const source = JSON.stringify({ payload: embedded, scalar: "123", broken: "{oops" });
+  const copied = [];
+  const nested = viewer.create({ text: source, onCopy(text) { copied.push(text); } });
+  assert.match(nested.element.textContent, /JSON в строке/);
+  const payload = nested.element.querySelectorAll(".rn-json-container")[1];
+  payload.open = true; payload.dispatch("toggle");
+  assert.match(payload.textContent, /9007199254740993123456789/);
+  assert.match(payload.textContent, /повтор 1\/2/);
+  findByText(payload, "button", "Узел").click();
+  assert.equal(copied.at(-1), JSON.stringify(embedded));
+  findByText(nested.element, "button", "Копировать всё").click();
+  assert.equal(copied.at(-1), source);
+  assert.match(nested.element.textContent, /"123"/);
+  const bounded = viewer.create({ text: source, limits: { maxNodes: 12, maxDepth: 2 } });
+  assert.doesNotMatch(bounded.element.textContent, /JSON в строке/);
+  console.log("PASS json viewer: nested JSON strings preserve duplicate keys, large numbers, exact copy and depth bounds");
+}
+
+console.log("OK 8/8");

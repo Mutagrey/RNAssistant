@@ -54,7 +54,6 @@
 
   function normalizeNodes(input, options) {
     var resolved = limits(options && options.limits);
-    var selectedKey = String(options && options.selectedKey || "");
     var seen = Object.create(null);
     var count = 0;
     var domSequence = 0;
@@ -86,7 +85,7 @@
           title: clippedText(inputNode.title, resolved.maxTitleChars),
           tooltip: clippedText(inputNode.tooltip || inputNode.title, resolved.maxTooltipChars),
           expanded: expanded,
-          selected: key === selectedKey,
+          selected: false,
           unselectable: !itemType,
           classes: groupKey ? "rn-tree-group-row" : "rn-tree-item-row",
           icon: iconClass(inputNode.iconKind),
@@ -216,7 +215,7 @@
       if (!meta) {
         meta = document.createElement("span");
         meta.className = "rn-tree-meta";
-        nodeElement.appendChild(meta);
+        title.appendChild(meta);
       }
       meta.textContent = data.rnMeta;
       meta.title = data.rnMeta;
@@ -284,7 +283,7 @@
       element: root,
       source: normalized.nodes,
       header: false,
-      rowHeightPx: 32,
+      rowHeightPx: 44,
       adjustHeight: true,
       checkbox: false,
       selectMode: "single",

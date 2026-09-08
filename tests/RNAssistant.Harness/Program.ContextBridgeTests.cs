@@ -248,6 +248,13 @@ namespace RNAssistant.Harness
                 AssertEqual("result-" + resultMessage.Role, resultMessage.ToolCallId, "fork preserves runtime call identity");
                 AssertEqual(resultMessage.ToolCallId, (string)body["tool_call_id"], "fork preserves wire call correlation");
             }
+            var sharedDto = ChatArtifactDto.From(new[] {
+                new ChatArtifact { Id = "shared", Kind = ChatArtifactKinds.File, DocumentAuthorityId = "document-one" },
+                new ChatArtifact { Id = "local", Kind = ChatArtifactKinds.HtmlWorkspace }
+            });
+            AssertTrue(sharedDto[0].DocumentScoped, "document publication is visibly shared");
+            AssertTrue(!sharedDto[1].DocumentScoped, "chat HTML is not advertised as shared");
+            AssertTrue(JObject.FromObject(sharedDto[0]).Value<bool>("documentScoped"), "ownership uses a typed bridge field");
             var dto = ChatArtifactDto.From(artifacts);
             AssertTrue(string.IsNullOrEmpty(dto.First(item => item.Id == "html-2").InlineText), "bridge omits heavyweight html snapshot body");
             AssertEqual("{}", dto.First(item => item.Id == "plan-1").InlineText, "bridge includes bounded plan payload");

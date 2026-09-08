@@ -186,6 +186,18 @@
     return artifact && artifactRevision(artifact) === identity.revision ? artifact : null;
   }
 
+  function artifactScopeLabel(artifact) {
+    return value(artifact, "DocumentScoped", "documentScoped", false)
+      ? "Общий для чатов документа" : "Только этот чат";
+  }
+
+  function artifactLogicalKey(artifact) {
+    var head = libraryHeadForArtifact(artifact);
+    var logicalId = value(head, "LogicalId", "logicalId", "");
+    return logicalId ? artifactResourceClass(artifact) + ":" + artifactKind(artifact) + ":" + logicalId
+      : String(artifactId(artifact) || "").toLowerCase();
+  }
+
   function artifactCollectionLabel(collectionId) {
     return {
       "artifact-plans": "Планы",
@@ -436,10 +448,10 @@
     if (artifactRemoved(artifact)) return "Ресурс удалён";
     var kind = artifactKind(artifact);
     var versionLabel = artifactVersionLabel(artifact);
-    if (kind === "plan") return [planMeta(artifact), versionLabel].filter(Boolean).join(" · ");
+    if (kind === "plan") return [artifactScopeLabel(artifact), planMeta(artifact), versionLabel].filter(Boolean).join(" · ");
     var mimeType = value(artifact, "MimeType", "mimeType", "") || "";
     var bytes = formatBytes(value(artifact, "ContentByteLength", "contentByteLength", 0));
-    var parts = [kindLabel(kind)];
+    var parts = [artifactScopeLabel(artifact), kindLabel(kind)];
     if (versionLabel) {
       parts.push(versionLabel);
     } else if (bytes) {
@@ -664,19 +676,23 @@
   }
 
   function collectRunArtifacts(items, finalMessage) {
-    var seen = {};
+    var positions = Object.create(null);
     var artifacts = [];
     var messages = (items || []).map(function (item) { return item && item.message; });
     if (finalMessage && finalMessage.message) messages.push(finalMessage.message);
     messages.filter(Boolean).forEach(function (message) {
       messageArtifacts(message).forEach(function (artifact) {
-        var key = String(artifactId(artifact) || "").toLowerCase();
-        if (!key || seen[key]) return;
-        seen[key] = true;
-        artifacts.push(artifact);
+        var key = artifactLogicalKey(artifact);
+        if (!key) return;
+        if (positions[key] === undefined) {
+          positions[key] = artifacts.length;
+          artifacts.push(artifact);
+        } else if (artifactRevision(artifact) > artifactRevision(artifacts[positions[key]])) {
+          artifacts[positions[key]] = artifact;
+        }
       });
     });
-    return artifactResourceHeads(artifacts);
+    return artifacts;
   }
 
   function visibleRunArtifacts(artifacts) {
@@ -915,6 +931,7 @@
     libraryHead: libraryHeadForArtifact,
     resourceClass: artifactResourceClass,
     versionLabel: artifactVersionLabel,
+    scopeLabel: artifactScopeLabel,
     removed: artifactRemoved
   };
   window.artifactResourceHeads = artifactResourceHeads;

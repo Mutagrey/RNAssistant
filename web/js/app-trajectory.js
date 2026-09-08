@@ -14,6 +14,9 @@
   var journalStateChatId = "";
   var activeExport = null;
   var activePayload = null;
+  var detailData = null;
+  var detailEvidence = null;
+  var detailPayload = null;
 
   function readPayload(chatId, eventId, signal, isCurrent) {
     return window.RNAssistantTrajectoryPayload.read(chatId, eventId, {
@@ -32,69 +35,50 @@
     catch (error) { return JSON.stringify({ displayError: "Typed projection cannot be serialized." }); }
   }
 
-  function mountTrajectoryJson(targetId, text, completeness, mode) {
-    var registry = window.RNAssistantViewerRegistry;
-    if (!registry || !registry.has("json")) throw new Error("JSON viewer is unavailable.");
-    return registry.mount("json", $(targetId), {
-      text: text === null || text === undefined ? "" : String(text),
-      completeness: completeness || "full",
-      mode: mode || "tree",
-      onCopy: window.copyTextResult
-    });
+  function setDetailData(text, completeness) {
+    detailData = { text: text, completeness: completeness || "full" };
   }
 
   function unmountTrajectoryJson(targetId) {
     if (window.RNAssistantViewerRegistry) window.RNAssistantViewerRegistry.unmount($(targetId));
   }
 
+  function jsonFragment(text, complete) {
+    var parsed = complete && window.RNAssistantJsonViewer.parse(text);
+    return parsed && parsed.ok ? text : jsonText(text);
+  }
+
+  function renderDetail() {
+    if (!detailData) return;
+    var fields = ['"data":' + jsonFragment(detailData.text, detailData.completeness === "full")];
+    if (detailEvidence) fields.push('"evidence":' + jsonText(detailEvidence));
+    if (detailPayload) {
+      fields.push('"payload":' + jsonFragment(detailPayload.text,
+        !detailPayload.truncated && isJsonContentType(detailPayload.contentType)));
+      fields.push('"payloadInfo":' + jsonText({ contentType: detailPayload.contentType,
+        completeness: detailPayload.error ? "unavailable" : detailPayload.truncated ? "preview" : "full" }));
+    }
+    var registry = window.RNAssistantViewerRegistry;
+    registry.mount("json", $("trajectoryEventData"), {
+      text: "{" + fields.join(",") + "}", mode: "tree", expandedPaths: ['$["data"]', '$["payload"]'],
+      completeness: detailPayload && detailPayload.error ? "unavailable" :
+        detailData.completeness !== "full" || detailPayload && detailPayload.truncated ? "preview" : "full",
+      onCopy: window.copyTextResult
+    });
+  }
+
   function showEvidence(valueToShow) {
-    var details = $("trajectoryEvidenceDetails");
-    details.open = false;
-    details.classList.remove("hidden");
-    mountTrajectoryJson("trajectoryEvidenceData", jsonText(valueToShow), "full", "tree");
+    detailEvidence = valueToShow;
+    renderDetail();
   }
 
   function hideEvidence() {
-    var details = $("trajectoryEvidenceDetails");
-    details.open = false;
-    details.classList.add("hidden");
-    unmountTrajectoryJson("trajectoryEvidenceData");
+    detailData = detailEvidence = detailPayload = null;
   }
 
   function isJsonContentType(contentType) {
     var mediaType = String(contentType || "").split(";", 1)[0].trim().toLowerCase();
     return mediaType === "application/json" || /\+json$/.test(mediaType);
-  }
-
-  function showTextPayload(target, text, contentType, truncated) {
-    if (window.RNAssistantViewerRegistry) window.RNAssistantViewerRegistry.unmount(target);
-    else target.replaceChildren();
-    var root = document.createElement("section");
-    root.className = "trajectory-text-viewer";
-    var toolbar = document.createElement("div");
-    toolbar.className = "trajectory-text-toolbar";
-    var status = document.createElement("span");
-    status.textContent = (contentType || "text/plain") + (truncated ? " · ограниченный preview" : " · полный payload");
-    var copy = document.createElement("button");
-    copy.type = "button";
-    copy.className = "secondary";
-    copy.textContent = truncated ? "Копировать preview" : "Копировать всё";
-    copy.addEventListener("click", function () {
-      copy.disabled = true;
-      window.copyTextResult(text).then(function () {
-        status.textContent = "Скопировано";
-      }, function () {
-        status.textContent = "Не удалось скопировать";
-      }).then(function () { copy.disabled = false; });
-    });
-    var pre = document.createElement("pre");
-    pre.className = "trajectory-text-content";
-    pre.textContent = text;
-    toolbar.appendChild(status);
-    toolbar.appendChild(copy);
-    root.appendChild(toolbar);
-    root.appendChild(pre);
-    target.appendChild(root);
   }
 
   function bytesLabel(bytes) {
@@ -136,9 +120,8 @@
     detailRequestId += 1;
     if (activePayload) activePayload.abort();
     activePayload = null;
-    unmountTrajectoryJson("trajectoryEventPayload");
-    $("trajectoryEventPayload").replaceChildren();
-    $("trajectoryEventPayload").classList.add("hidden");
+    detailPayload = null;
+    detailEvidence = null;
     $("trajectoryVbaDiff").replaceChildren();
     $("trajectoryVbaDiff").classList.add("hidden");
     $("loadTrajectoryPayloadButton").classList.add("hidden");
@@ -297,7 +280,7 @@
       costUsd === null ? "" : "cost=$" + costUsd,
       "sources=" + sourceSeqs.length + "/" + sourceIds.length
     ].filter(Boolean).join(" · ");
-    mountTrajectoryJson("trajectoryEventData", value(item, "DataJson", "dataJson", "{}"),
+    setDetailData(value(item, "DataJson", "dataJson", "{}"),
       value(item, "DataTruncated", "dataTruncated", false) ? "preview" : "full");
     showEvidence({
       sourceEventSeqs: sourceSeqs,
@@ -328,7 +311,7 @@
       "components=" + value(item, "ComponentCount", "componentCount", 0),
       value(item, "ErrorCode", "errorCode", "")
     ].filter(Boolean).join(" · ");
-    mountTrajectoryJson("trajectoryEventData", jsonText(item), "full");
+    setDetailData(jsonText(item), "full");
     showEvidence({
       sessionId: value(item, "SessionId", "sessionId", null),
       mutationId: mutationId(item),
@@ -384,7 +367,7 @@
       hash ? "hash=" + hash : "",
       payloadSize === null ? "" : "payload=" + bytesLabel(payloadSize)
     ].filter(Boolean).join(" · ");
-    mountTrajectoryJson("trajectoryEventData", value(item, "DataJson", "dataJson", ""),
+    setDetailData(value(item, "DataJson", "dataJson", ""),
       value(item, "DataTruncated", "dataTruncated", false) ? "preview" : "full");
     showEvidence({
       schemaVersion: value(item, "SchemaVersion", "schemaVersion", null),
@@ -850,7 +833,6 @@
     var chatId = trajectoryChatId || state.activeChatId;
     if (!chatId) return;
     var button = $("loadTrajectoryPayloadButton");
-    var target = $("trajectoryEventPayload");
     var selectedId = eventId(selected);
     var requestId = ++detailRequestId;
     if (activePayload) activePayload.abort();
@@ -863,23 +845,21 @@
     try {
       button.disabled = true;
       button.textContent = "Загружаю…";
+      button.title = "";
       var response = await readPayload(chatId, selectedId, operation.signal, isCurrent);
       if (!isCurrent()) return;
       var text = value(response, "Text", "text", "");
       var truncated = value(response, "TextTruncated", "textTruncated", false);
       var contentType = value(response, "ContentType", "contentType", "");
-      if (isJsonContentType(contentType)) {
-        mountTrajectoryJson("trajectoryEventPayload", text, truncated ? "preview" : "full");
-      } else {
-        showTextPayload(target, text, contentType, truncated);
-      }
-      target.classList.remove("hidden");
-      button.textContent = "Payload загружен";
+      detailPayload = { text: text, truncated: truncated, contentType: contentType };
+      renderDetail();
+      button.textContent = "Обновить содержимое";
     } catch (error) {
       if (!isCurrent()) return;
-      unmountTrajectoryJson("trajectoryEventPayload");
-      showTextPayload(target, "Не удалось загрузить содержимое: " + error.message, "text/plain", false);
-      target.classList.remove("hidden");
+      detailPayload = { text: "Не удалось загрузить содержимое: " + error.message,
+        contentType: "text/plain", truncated: false, error: true };
+      renderDetail();
+      button.title = detailPayload.text;
       button.textContent = "Повторить";
     } finally {
       if (activePayload === operation) activePayload = null;

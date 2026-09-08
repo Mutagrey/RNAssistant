@@ -905,8 +905,9 @@
                 </div>
                 <div class="trajectory-correlation-bar hidden" id="trajectoryCorrelationBar"><div class="trajectory-correlation-actions" id="trajectoryCorrelationActions"></div><button class="secondary hidden" id="clearTrajectoryCorrelationButton" type="button">Сбросить переход</button></div>
                 <div class="trajectory-status-row"><div class="trajectory-status" id="trajectoryStatus">Нажмите «Обновить», чтобы прочитать текущий event stream.</div><button class="secondary hidden" id="loadMoreTrajectoryButton" type="button">Старше</button></div>
-                <div class="trajectory-workspace hidden" id="trajectoryWorkspace">
+                <div class="trajectory-workspace split-layout hidden" id="trajectoryWorkspace" data-split-key="trajectory" data-default-ratio="0.32" data-min-left="160" data-max-ratio="0.6">
                   <div class="trajectory-events" id="trajectoryEvents" role="listbox" aria-label="События траектории"></div>
+                  <div class="splitter" role="separator" aria-label="Ширина списка событий" aria-orientation="vertical"></div>
                   <div class="trajectory-detail">
                     <div class="trajectory-detail-head">
                       <strong id="trajectoryEventTitle">Событие не выбрано</strong>
@@ -914,11 +915,6 @@
                     </div>
                     <div class="trajectory-meta" id="trajectoryEventMeta"></div>
                     <div class="trajectory-json-host" id="trajectoryEventData"></div>
-                    <details class="trajectory-evidence hidden" id="trajectoryEvidenceDetails">
-                      <summary>Источник и связи</summary>
-                      <div class="trajectory-json-host trajectory-evidence-json" id="trajectoryEvidenceData"></div>
-                    </details>
-                    <div class="trajectory-payload hidden" id="trajectoryEventPayload"></div>
                     <div class="trajectory-vba-diff hidden" id="trajectoryVbaDiff"></div>
                   </div>
                 </div>

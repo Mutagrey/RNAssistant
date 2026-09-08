@@ -1,5 +1,17 @@
 # Stabilization progress
 
+Latest artifact/diagnostic UI correction (2026-09-08): run cards now collapse
+referenced revisions by Library logical identity without changing exact message
+refs or merging independent same-name files. Typed `documentScoped` labels expose
+implemented document/chat ownership; shared HTML and working-set selection remain
+open. Tree titles/metadata use separate lines and one active selection. Markdown
+has one source toggle; technical events use a draggable split and one JSON viewer
+for data/evidence/lazy payload. The shared viewer renders bounded embedded JSON
+strings as nested trees while retaining exact source/copy, duplicates and numbers.
+Focused Web regressions, a real Chromium layout/drag check and the host-neutral
+clone/DTO ownership check pass. Replaced diagnostic panels/styles are removed.
+Windows/Office/WebView2 and target-model gates remain open; Phase 12 is not started.
+
 Latest tool-result correction (2026-09-08): resource-read model projection now
 preserves the entire `ResourceTableBatch` payload, including user columns and
 nested keys named `id`, `customerId`, `revision`, `hash`, `uri` or `offset`.

@@ -156,7 +156,7 @@ function settle() { return new Promise(resolve => setImmediate(resolve)); }
   const rendered = markdownHost.querySelector(".rn-markdown-viewer-rendered");
   assert.ok(rendered);
   assert.match(rendered.innerHTML, /&lt;script>/);
-  button(markdownHost, "Источник").click();
+  button(markdownHost, "Показать Markdown").click();
   assert.equal(markdownHost.querySelector(".rn-text-viewer-content").textContent, "# Safe\n<script>x</script>");
   console.log("PASS artifact Markdown viewer: sanitized rendered view and exact Source share one controller");
 

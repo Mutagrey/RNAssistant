@@ -114,4 +114,25 @@ function ref(id, revision) {
   console.log("PASS chat resource cards: HTML-only run still exposes the workspace artifact");
 }
 
-console.log("OK 2/2");
+{
+  const old = { id: "html-r1", kind: "html_workspace", title: "index.html", revision: 1 };
+  const current = { id: "html-r3", kind: "html_workspace", title: "index.html", revision: 3 };
+  const independent = { id: "other-html", kind: "html_workspace", title: "index.html", revision: 1 };
+  context.state.artifacts.push(old, current, independent);
+  context.state.artifactLibrary.heads = [{ artifactId: "html-r3", logicalId: "workspace-one",
+    resourceClass: "versioned_aggregate", history: [
+      { artifactId: "html-r1", revision: 1 }, { artifactId: "html-r3", revision: 3 }
+    ] }];
+  const parent = new Element("div");
+  const messages = [current, old, independent].map(item => ({ message: { resourceRefs: [ref(item.id, item.revision)] } }));
+  context.appendAgentRunResourceCards(parent, messages, null);
+  assert.deepEqual(parent.querySelectorAll(".chat-artifact-card").map(node => node.dataset.artifactId),
+    ["html-r3", "other-html"]);
+  assert.equal(messages[1].message.resourceRefs[0].uri, ref(old.id, 1).uri);
+  assert.match(parent.textContent, /Только этот чат/);
+  current.documentScoped = true;
+  assert.equal(context.RNAssistantArtifactVisuals.scopeLabel(current), "Общий для чатов документа");
+  console.log("PASS chat resource cards: logical versions collapse, independent same-name files and pinned refs survive");
+}
+
+console.log("OK 3/3");

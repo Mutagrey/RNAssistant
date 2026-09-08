@@ -129,7 +129,7 @@ const normalized = adapter.normalize([{ key: "g", title: malicious, groupKey: "g
 ]}], { selectedKey: "item::file::1", limits: { maxNodes: 999999, maxDepth: 999999 } });
 assert.equal(normalized.count, 2);
 assert.equal(normalized.nodes[0].title, malicious);
-assert.equal(normalized.nodes[0].children[0].selected, true);
+assert.equal(normalized.nodes[0].children[0].selected, false);
 assert.equal(normalized.limits.maxNodes, 2500);
 assert.equal(normalized.limits.maxDepth, 16);
 assert.notEqual(adapter.normalize([{ key: "other", title: "Other" }]).nodes[0].rnDomId, normalized.nodes[0].rnDomId);

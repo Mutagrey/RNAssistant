@@ -10,10 +10,10 @@
   --wb-active-border-color: color-mix(in srgb, var(--accent) 28%, transparent);
   --wb-active-color-grayscale: color-mix(in srgb, var(--accent) 9%, transparent);
   --wb-active-border-color-grayscale: transparent;
-  --wb-row-outer-height: 32px;
-  --wb-row-inner-height: 30px;
+  --wb-row-outer-height: 44px;
+  --wb-row-inner-height: 42px;
   --wb-icon-outer-height: 30px;
-  --wb-icon-outer-width: 24px;
+  --wb-icon-outer-width: 18px;
   --wb-icon-height: 16px;
   --wb-icon-width: 16px;
   --rn-tree-purple: #7c3aed;
@@ -61,34 +61,24 @@ html[data-theme="dark"] .html-workspace-tree.wunderbaum {
 
 .html-workspace-tree.wunderbaum .wb-title {
   padding: 0 4px;
-  line-height: 30px;
-}
-
-.html-workspace-tree.wunderbaum .rn-tree-has-meta .wb-title {
-  padding-right: 76px;
+  line-height: 22px;
+  text-align: left;
 }
 
 .html-workspace-tree.wunderbaum .rn-tree-has-action .wb-title {
-  padding-right: 104px;
+  padding-right: 28px;
 }
 
 .html-workspace-tree.wunderbaum .rn-tree-meta {
-  position: absolute;
-  top: 7px;
-  right: 7px;
-  max-width: 68px;
+  display: block;
+  max-width: 100%;
   overflow: hidden;
   color: var(--muted);
   font-size: 9.5px;
-  font-style: normal;
   font-weight: var(--meta-font-weight);
   line-height: 16px;
   text-overflow: ellipsis;
   white-space: nowrap;
-}
-
-.html-workspace-tree.wunderbaum .rn-tree-has-action .rn-tree-meta {
-  right: 34px;
 }
 
 .html-workspace-tree.wunderbaum .rn-tree-action {

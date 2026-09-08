@@ -39,6 +39,11 @@ version check still apply.
 
 ## Test map
 
+`tests/web/artifact-diagnostics-layout.test.js` checks actual Chromium geometry for
+artifact names/metadata, single selection, inline JSON values, left-aligned events
+and split dragging. Use the bundled Playwright through `NODE_PATH`; optionally set
+`BROWSER_EXECUTABLE` and `LAYOUT_SCREENSHOT`. This is not Office/WebView2 qualification.
+
 `resource cutover: two chat mutations` covers three outcomes through separate
 executors/shared document authority, native Excel read/write, persisted read facts
 and the next actual model request: no-op keeps evidence, verified change without

@@ -61,9 +61,9 @@ vm.runInContext(source, context, { filename: "app-artifacts.js" });
   assert.equal(context.RNAssistantArtifactVisuals.category(heads[0]), "authored");
   assert.equal(context.RNAssistantArtifactVisuals.category(heads[1]), "files");
   assert.equal(context.RNAssistantArtifactVisuals.category(heads[2]), "generated");
-  assert.equal(context.RNAssistantArtifactVisuals.meta(heads[0]), "Готов · v2");
-  assert.equal(context.RNAssistantArtifactVisuals.meta(heads[1]), "Файл · Оригинал");
-  assert.equal(context.RNAssistantArtifactVisuals.meta(heads[3]), "Диаграмма");
+  assert.equal(context.RNAssistantArtifactVisuals.meta(heads[0]), "Только этот чат · Готов · v2");
+  assert.equal(context.RNAssistantArtifactVisuals.meta(heads[1]), "Только этот чат · Файл · Оригинал");
+  assert.equal(context.RNAssistantArtifactVisuals.meta(heads[3]), "Только этот чат · Диаграмма");
   console.log("PASS artifact library: UI consumes server-owned classes, order and labels");
 }
 
