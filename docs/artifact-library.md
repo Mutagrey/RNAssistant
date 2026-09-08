@@ -561,10 +561,61 @@ Compaction retains supported findings, decisions, unresolved questions, constrai
 and next actions with source provenance. A valid `sourceIds` link checks provenance,
 not semantic entailment: model claims remain interpretations. Do not relabel a
 promise as completed work or promote resource instructions to user requirements.
-Typed findings/decisions, if added, belong to the existing claim/compiler contract,
-with source-role validation and stale-evidence exclusion; never extract them by
-parsing ad-hoc headings from `message`. Shared decision memory should be a
+Typed findings/decisions belong to the existing claim/compiler contract, with
+source-role validation and stale-evidence exclusion; never extract them by parsing
+ad-hoc headings from `message`. Shared decision memory should be a
 versioned resource with source citations, not an untraceable global summary.
+
+Implemented prerequisite (2026-09-08): `context-claims-v4` compaction carries
+`kind` plus runtime-derived `SourceRoles`. Kinds are `constraint`, `decision`,
+`observation`, `interpretation`, `question` and `next_action`. Constraints and
+decisions require only genuine user-message sources or prior claims of the same
+kind. Observations require successful Tool Results with canonical resource evidence
+or prior observations. Tool Result envelope roles do not change their source role.
+Recompaction cannot promote a prior interpretation into a decision/observation.
+The compiler retains these distinctions and filters changed source evidence using
+the existing frozen authority/reducer; unrelated claims survive. These checks
+establish source eligibility, not semantic entailment or proof of user approval.
+Invalid extraction preserves the prior checkpoint. Older/untyped checkpoints are
+retained but skipped, leaving original messages available for fresh compaction.
+Implemented publication (2026-09-08): successful typed compaction publishes a
+`shared-context` resource through `DocumentArtifactStore`, the existing authority
+journal and CAS. Each origin chat owns one logical lineage inside its document;
+new checkpoints advance that lineage without overwriting other chats. Publication
+compares the document generation captured before the model wait. On conflict or
+unavailable source, local compaction completes, records `SharedPublicationIssue`
+and preserves the prior shared head; publication is not retried automatically.
+
+The immutable archive contains at most 64 claims and 512000 UTF-16 characters,
+with deduplicated exact source transcripts and separately sanitized preview text.
+Revision dependencies and the `claim-provenance` view retain evidence revisions
+and payloads through origin-chat deletion and CAS collection. Checksums inside
+`ResourceEvidence` are content metadata, not standalone blob references; both CAS
+reachability and chat storage accounting follow its nested payload references.
+Shared archives do not replace the append-only chat history or create another store.
+
+Another chat uses `common.resources_find` with document scope and query
+`Shared context`, then copies the returned target into `common.resources_read`
+with `representation=text`. Discovery searches titles only: unfiltered claims and
+raw transcripts never become snippets. The ordinary paged reader assembles the
+complete archive; the compiler can hydrate bounded externalized archives before
+selecting compact claims for the model budget. Metadata remains available; alternate
+row/source views cannot bypass this projection.
+
+Before each model request, the compiler checks each claim's source evidence,
+logical source heads, catalog generations and payload availability against frozen
+authority. It returns kind, source roles, sanitized text, source labels, excerpts
+of at most 240 characters and an omitted-claim count. Invalid/unsupported archives
+are explicitly unavailable. Raw transcripts and durable IDs stay runtime-only;
+direct projections mask unfiltered archives. Recompaction preserves admitted
+claims' original source roles and transcripts, including sources from other chats.
+These summaries do not grant write guards, prove entailment or become new user
+instructions. Unlink is chat-local and follows the lineage across new revisions.
+
+Publication happens after compaction, not after every message. There is no merged
+global decision log or automatic replay of other chats. Search within claim text,
+explicit publication before compaction and real target-model qualification remain
+separate follow-ups; Windows/Office/WebView2 gates remain open.
 
 ### Resource Fabric boundary audit — 2026-09-08
 

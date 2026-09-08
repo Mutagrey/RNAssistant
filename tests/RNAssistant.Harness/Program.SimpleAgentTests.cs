@@ -2677,7 +2677,93 @@ namespace RNAssistant.Harness
             var match = System.Text.RegularExpressions.Regex.Match(FlattenSimple(messages), "\"sourceId\":\"([^\"]+)\"");
             AssertTrue(match.Success, "compaction supplies runtime source provenance");
             return new LlmCompletionResult { Content = new JObject { ["claims"] = new JArray(new JObject {
-                ["text"] = text, ["sourceIds"] = new JArray(match.Groups[1].Value) }) }.ToString() };
+                ["kind"] = "interpretation", ["text"] = text, ["sourceIds"] = new JArray(match.Groups[1].Value) }) }.ToString() };
+        }
+
+        private static void CompactionPreservesClaimKindsAndRoles()
+        {
+            var scope = new ResourceAuthorityScopeId("document", "claim-fixture");
+            var reference = new ResourceRef("rna://vba/claim-fixture/module", "r1");
+            var sourceAuthority = new ModelAuthoritySnapshot(new ResourceAuthoritySnapshotSet(new[] {
+                new ResourceAuthoritySnapshot(scope, 1, null, 0, new[] { ResourceHeadState.Known(reference, 1) }) }),
+                "tools", new SkillCatalogSnapshot(null), new SchemaRegistrySnapshot(null), 0);
+            Func<ChatSession> fresh = () =>
+            {
+                var session = new ChatSession();
+                for (var i = 0; i < 8; i++) session.Messages.Add(new ChatMessage {
+                    Role = i % 2 == 0 ? "user" : "assistant", Content = i % 2 == 0 ? "Keep original formatting." : "I propose a simplified layout." });
+                return session;
+            };
+            Func<ChatSession, string, string, ContextCheckpoint> compact = (session, kind, selector) =>
+            {
+                LlmCompletionDelegate completion = (settings, messages, options, stream, cancellationToken) =>
+                {
+                    var sources = messages.SelectMany(entry => (entry.Content ?? "").Split('\n'))
+                        .Where(line => line.StartsWith("{\"sourceId\":", StringComparison.Ordinal)).Select(JObject.Parse).ToList();
+                    var source = sources.FirstOrDefault(item => (string)item["role"] == selector || (string)item["kind"] == selector);
+                    AssertTrue(source != null, "compaction includes selected source " + selector + ": " + string.Join(",", sources.Select(item => (string)item["role"] ?? (string)item["kind"])));
+                    return Task.FromResult(new LlmCompletionResult { Content = new JObject { ["claims"] = new JArray(new JObject {
+                        ["kind"] = kind, ["text"] = "Preserve the layout constraint.", ["sourceIds"] = new JArray(source["sourceId"]) }) }.ToString() });
+                };
+                return new ContextCompactionService(completion).EnsureWithinBudgetAsync(session, new AppSettings(), null, true, null, CancellationToken.None,
+                    authoritySnapshot: sourceAuthority).GetAwaiter().GetResult();
+            };
+            var user = fresh();
+            var saved = compact(user, "constraint", "user");
+            AssertEqual("constraint", saved.Claims.Single().Kind, "user constraint retains its type");
+            AssertEqual("user", saved.Claims.Single().SourceRoles.Single(), "source roles come from runtime transcript");
+            var toolSession = fresh();
+            var invocation = new ToolInvocation { ToolCallId = "claim-call", ToolId = "test.claim_source" };
+            var toolCall = new ChatMessage { Role = "assistant", ProtocolMessage = true,
+                RunId = "claim-run",
+                ToolCallId = invocation.ToolCallId, ToolName = invocation.ToolId,
+                ToolCalls = new List<LlmToolCall> { new LlmToolCall { Id = invocation.ToolCallId, Name = invocation.ToolId, Type = "function", ArgumentsJson = "{}" } } };
+            var toolResult = AgentJsonProtocol.CreateToolResultMessage(invocation,
+                new ToolResultMaterialization(RNAssistant.Core.Tools.Contracts.ToolResult.Ok("Observed data", "{\"value\":1}"),
+                    resourceEvidence: new[] { new ResourceEvidence("claim-evidence", scope, reference, "text", ResourceCoverage.Whole(), true, 1) }),
+                int.MaxValue, ToolResultRoles.Developer);
+            toolResult.RunId = toolCall.RunId;
+            toolSession.Messages.InsertRange(0, new[] { toolCall, toolResult });
+            var roleFailure = RuntimeThrows<InvalidOperationException>(() => compact(toolSession, "decision", "tool"));
+            AssertContains(roleFailure.Message, "Claim kind", "tool result in a developer envelope cannot support a user decision");
+            var observation = compact(toolSession, "observation", "tool");
+            AssertEqual("tool", observation.Claims.Single().SourceRoles.Single(), "wire envelope does not determine source role");
+            AssertEqual(reference.Revision, observation.Claims.Single().Evidence.Single().Resource.Revision, "observation preserves exact evidence");
+            observation.Claims.Single().Text = "Observed source result.";
+            var advanced = new ModelAuthoritySnapshot(new ResourceAuthoritySnapshotSet(new[] {
+                new ResourceAuthoritySnapshot(scope, 2, null, 0, new[] { ResourceHeadState.Known(new ResourceRef(reference.Uri, "r2"), 2) }) }),
+                "tools", new SkillCatalogSnapshot(null), new SchemaRegistrySnapshot(null), 0);
+            var afterChange = new ModelContextCompiler().Compile(advanced, new ChatMessage[0], new[] {
+                new ChatMessage { Role = "assistant", ContextClaims = new List<StructuredContextClaim> { saved.Claims.Single(), observation.Claims.Single() } } },
+                null, new ToolCatalogEntry[0], new AppSettings(), 1024);
+            AssertTrue(!afterChange.Messages.Single().Content.Contains("Observed source result."), "source revision advance excludes the observation claim");
+            AssertContains(afterChange.Messages.Single().Content, "\"kind\":\"constraint\"", "unrelated user constraint survives source revision advance");
+            foreach (var kind in new[] { "constraint", "decision", "observation", "unsupported" })
+            {
+                var session = fresh();
+                var failure = RuntimeThrows<InvalidOperationException>(() => compact(session, kind, "assistant"));
+                if (kind != "unsupported") AssertContains(failure.Message, "Claim kind", "source-role rejection is explicit");
+                AssertEqual(0, session.ContextCheckpoints.Count, "unsupported source promotion publishes no checkpoint");
+            }
+            var interpreted = fresh();
+            var original = compact(interpreted, "interpretation", "user");
+            interpreted.Messages.AddRange(fresh().Messages);
+            RuntimeThrows<InvalidOperationException>(() => compact(interpreted, "decision", "interpretation"));
+            AssertEqual(original.Id, interpreted.ActiveContextCheckpointId, "recompaction cannot upgrade a prior interpretation or replace the last valid checkpoint");
+            var typed = JsonConvert.DeserializeObject<StructuredContextClaim>(JsonConvert.SerializeObject(saved.Claims.Single()));
+            var authority = new ModelAuthoritySnapshot(new ResourceAuthoritySnapshotSet(new ResourceAuthoritySnapshot[0]),
+                "tools", new SkillCatalogSnapshot(null), new SchemaRegistrySnapshot(null), 0);
+            var message = new ChatMessage { Role = "assistant", ContextClaims = new List<StructuredContextClaim> { typed } };
+            var compiled = new ModelContextCompiler().Compile(authority, new ChatMessage[0], new[] { message }, null,
+                new ToolCatalogEntry[0], new AppSettings(), 1024);
+            AssertContains(compiled.Messages.Single().Content, "\"kind\":\"constraint\"", "model projection preserves type after persistence");
+            AssertTrue(!compiled.Messages.Single().Content.Contains(typed.SourceMessageIds.Single()), "durable source ids remain runtime-owned");
+            typed.Kind = null;
+            var rejected = new ModelContextCompiler().Compile(authority, new ChatMessage[0], new[] { message }, null,
+                new ToolCatalogEntry[0], new AppSettings(), 1024);
+            AssertTrue(!rejected.Messages.Single().Content.Contains(typed.Text), "untyped claims cannot replay as current context");
+            saved.PromptVersion = "context-claims-v3";
+            AssertTrue(ContextCompactionService.ActiveCheckpoint(user) == null, "old checkpoint is preserved but skipped");
         }
 
         private static void CompactionUsesStructuredSourceClaims()

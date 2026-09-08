@@ -785,6 +785,7 @@ namespace RNAssistant.Office.Services
             var kind = (descriptor.Kind ?? string.Empty).Trim().ToLowerInvariant();
             switch (kind)
             {
+                case RNAssistant.Core.Storage.DocumentArtifactStore.SharedContextKind: return "shared context";
                 case ContextResourceProvider.DataKind: return "context data";
                 case ContextResourceProvider.ObservationKind: return "Office observation";
                 case "catalog": return "catalog";

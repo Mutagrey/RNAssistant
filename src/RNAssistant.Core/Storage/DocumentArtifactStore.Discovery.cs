@@ -30,11 +30,12 @@ namespace RNAssistant.Core.Storage
             var roots = ResourceUri.Create("state", scope.Kind, scope.Id) + "/";
             var artifacts = ResourceUri.Create("chat", scope.Id, "artifact") + "/";
             var ranges = new List<ResourceHeadRange>();
-            foreach (var prefix in new[] { roots + "plan_doc_", roots + "html_ws_", roots + "artifact_md_", artifacts + "attachment_" })
+            foreach (var prefix in new[] { roots + "plan_doc_", roots + "html_ws_", roots + "artifact_md_", roots + "artifact_ctx_", artifacts + "attachment_" })
                 ranges.Add(new ResourceHeadRange(prefix, prefix + "\uffff"));
             // Authored file roots share artifact_; MD snapshots are represented by
             // their logical head above, never enumerated again as history.
-            ranges.Add(new ResourceHeadRange(artifacts + "artifact_", artifacts + "artifact_md_"));
+            ranges.Add(new ResourceHeadRange(artifacts + "artifact_", artifacts + "artifact_ctx_"));
+            ranges.Add(new ResourceHeadRange(artifacts + "artifact_ctx_\uffff", artifacts + "artifact_md_"));
             ranges.Add(new ResourceHeadRange(artifacts + "artifact_md_\uffff", artifacts + "artifact_\uffff"));
             var page = _authority.ReadHeads(scope, ranges, offset, limit);
             var items = new List<ChatArtifact>();
@@ -58,7 +59,7 @@ namespace RNAssistant.Core.Storage
                         string owner, id; int version;
                         if (!ChatResourceUri.TryParseArtifactRevision(reference, out owner, out id, out version) ||
                             (IsPlan(session, reference) ? PlanIdFromSnapshot(reference)
-                                : HtmlWorkspaceIdentity.LogicalId(id) ?? MarkdownDocumentIdentity.LogicalId(id)) != logicalId)
+                                : HtmlWorkspaceIdentity.LogicalId(id) ?? MarkdownDocumentIdentity.LogicalId(id) ?? ContextLogicalId(id)) != logicalId)
                             throw new InvalidDataException("The artifact head points to a different lineage.");
                     }
                     if (!IsSnapshotReference(reference)) continue;

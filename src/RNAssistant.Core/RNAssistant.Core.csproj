@@ -186,6 +186,7 @@
     <Compile Include="Storage\DocumentArtifactStore.Plans.cs" />
     <Compile Include="Storage\DocumentArtifactStore.Records.cs" />
     <Compile Include="Storage\DocumentArtifactStore.Text.cs" />
+    <Compile Include="Storage\DocumentArtifactStore.Claims.cs" />
     <Compile Include="Services\MarkdownHeadingScanner.cs" />
     <Compile Include="Storage\ChatStore.Caching.cs" />
     <Compile Include="Storage\ChatStore.EventLog.cs" />

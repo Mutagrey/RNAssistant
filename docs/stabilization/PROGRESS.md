@@ -35,6 +35,38 @@ Checks: VBA 100/100, batch overwrite regression 1/1, managed write batch 1/1,
 confirmation correlation/replay 2/2 and diff checks pass host-neutral.
 See [incident evidence and next step](RISK_REGISTER.md#vba-patch-incident--2026-09-08).
 
+Current slice (2026-09-08), after `66da27f5`: **document-owned shared context**
+is implemented through existing DocumentArtifactStore/authority/CAS. Successful
+compaction publishes a separate versioned lineage per origin chat; another chat
+explicitly discovers and reads it. Frozen authority filters claims individually;
+source roles, safe citations and inherited provenance survive recompaction.
+Writer drift preserves the old shared head and records a local publication issue.
+Origin deletion/CAS retention pass, including externalized paged archives in a
+native run with a deterministic model stub. The CAS scanner and header accounting
+now distinguish evidence checksums from actual payload references.
+Checks: shared context 2/2, compaction 4/4 (one shared-context overlap), resources
+29/29, CAS 7/7 and storage headers 1/1 pass. `ValidateVersionFormat` and diff
+checks pass.
+No separate store, automatic cross-chat instructions or protocol/schema change.
+Next: explicit pre-compaction publication/claim-text search require a bounded
+follow-up; performance measurement remains deferred. Windows/Office/WebView2,
+target-model, layout and previously recorded inventory/search gaps remain open.
+Version remains `16.1.0-dev`.
+
+Current slice (2026-09-08), after `b01babf2`: **typed claim provenance prerequisite**
+is implemented in existing compaction/compiler. `context-claims-v4` preserves
+constraint/decision/observation/interpretation/question/next_action and attaches
+source roles in runtime. Source-role checks reject assistant/tool instructions as
+user decisions and prevent interpretation promotion during recompaction. Frozen
+authority still excludes changed evidence per claim. Invalid extraction leaves
+the previous checkpoint intact; older/untyped checkpoints are skipped, not deleted.
+This does not publish shared memory yet. Next: document-owned versioned publication
+and explicit cross-chat discovery/read of claims through existing Resource Fabric,
+including source retention, origin deletion and stale-read qualification. Performance
+measurement remains deferred; Windows/Office/WebView2/target-model gates stay open.
+Checks: focused compaction 3/3 and historical attachment reference-only 1/1 pass;
+`ValidateVersionFormat` and diff checks pass. Version remains `16.1.0-dev`.
+
 Current slice (2026-09-08), after `d29b1f58`: resource decision context now keeps
 document/conversation scope, a concrete read representation and bounded optional
 Markdown purpose beside complete targets. Historical working-set snapshots are

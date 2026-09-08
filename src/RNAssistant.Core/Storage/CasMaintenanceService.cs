@@ -403,7 +403,8 @@ namespace RNAssistant.Core.Storage
             {
                 AddPair(root, "Sha256", "ByteLength", null, sourceType, sourceId, location);
                 AddPair(root, "sha256", "byteLength", "contentType", sourceType, sourceId, location);
-                AddPair(root, "ContentSha256", "ContentByteLength", "MimeType", sourceType, sourceId, location);
+                if (!IsEvidenceContentHash(root))
+                    AddPair(root, "ContentSha256", "ContentByteLength", "MimeType", sourceType, sourceId, location);
                 AddPair(root, "ExtractedTextSha256", "ExtractedTextByteLength", null, sourceType, sourceId, location);
             }
             foreach (var child in token.Children())
@@ -411,6 +412,16 @@ namespace RNAssistant.Core.Storage
                 AddTokenReferences(child, sourceType, sourceId,
                     string.IsNullOrWhiteSpace(child.Path) ? location : location + "." + child.Path);
             }
+        }
+
+        // Evidence checksums describe observed content; only its nested Payload is a CAS reference.
+        internal static bool IsEvidenceContentHash(JObject value)
+        {
+            if (value["ContentByteLength"] != null || value["EvidenceId"]?.Type != JTokenType.String ||
+                !(value["Resource"] is JObject) || !(value["ScopeId"] is JObject)) return false;
+            try { return value.ToObject<ResourceEvidence>() != null; }
+            catch (Newtonsoft.Json.JsonException) { return false; }
+            catch (ArgumentException) { return false; }
         }
 
         public void AddSourceIssue(string kind, string sourceType, string sourceId, string message)

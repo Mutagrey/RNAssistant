@@ -22,16 +22,12 @@ This gate remains failed; it is not Windows qualification.
 
 ## Resource context fixture drift — 2026-09-08
 
-Owner: resource context / harness. The stale unquoted target assertion in
-`artifacts: historical attachments stay reference-only` is reconciled with the
-existing quoted-target contract. Its reference-only/body/URI assertions now pass,
-but a later compaction fixture fails with `Context compaction response contains
-unexpected fields`; review against the current compaction schema separately.
-On the `d29b1f58` branch, unchanged provider search also fails the existing
+Owner: resource context / harness. On the `d29b1f58` branch, unchanged provider
+search fails the existing
 `artifacts: prompt uses bounded working set` raw-metadata exclusion assertion
 (`runtime-secret-id` is searchable). Reconcile with the parallel projection fixes
-before declaring this integration gate closed. Neither failure is changed by the
-working-set purpose/read-hint implementation. These are not Windows evidence.
+before declaring this integration gate closed. This failure is not changed by the
+working-set purpose/read-hint implementation. This is not Windows evidence.
 
 ## Plan/HTML operation identity in batches — 2026-09-08
 

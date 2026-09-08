@@ -115,6 +115,7 @@ namespace RNAssistant.Office.Services
             }
             var frozenFacts = (facts ?? new ChatMessage[0]).Where(item => item != null && !item.ExcludeFromModelContext)
                 .Select(Clone).ToList();
+            foreach (var fact in frozenFacts) ProjectSharedContext(fact, authority);
             var currentUser = frozenFacts.LastOrDefault(item => !item.ProtocolMessage &&
                 string.Equals(item.Role, "user", StringComparison.OrdinalIgnoreCase));
             foreach (var fact in frozenFacts.Where(item => item != currentUser &&
@@ -173,16 +174,17 @@ namespace RNAssistant.Office.Services
                 foreach (var message in atom.Messages)
                 {
                     if (message.ContextClaims == null || message.ContextClaims.Count == 0) continue;
-                    var current = message.ContextClaims.Where(claim =>
+                    if (message.ToolResultProtocolVersion == ToolResultWire.CurrentVersion) continue;
+                    var current = message.ContextClaims.Where(claim => claim != null && claim.HasTypedProvenance() &&
                         (string.IsNullOrEmpty(claim.ToolGeneration) || claim.ToolGeneration == authority.ToolGeneration) &&
                         (string.IsNullOrEmpty(claim.SkillGeneration) || claim.SkillGeneration == authority.Skills.Generation) &&
                         (string.IsNullOrEmpty(claim.SchemaGeneration) || claim.SchemaGeneration == authority.SchemaGeneration) &&
                         (claim.Evidence ?? new List<ResourceEvidence>()).All(e => _reducer.Reduce(e, authority.Resources).State == EvidenceState.Current))
                         .ToArray();
-                    message.Content = "STRUCTURED_CONTEXT_CLAIMS (reference only):\n" +
+                    message.Content = "STRUCTURED_CONTEXT_CLAIMS (reference only; kinds preserve source roles, not proof of entailment; interpretations are not observations and next_action is proposed work):\n" +
                         string.Join("\n", current.Select(claim =>
-                            ModelToolResultProjection.SanitizeRuntimeText(
-                                claim.Text)));
+                            JsonConvert.SerializeObject(new { kind = claim.Kind, sourceRoles = claim.SourceRoles,
+                                text = ModelToolResultProjection.SanitizeRuntimeText(claim.Text) })));
                 }
             }
 
@@ -259,7 +261,8 @@ namespace RNAssistant.Office.Services
                             receipt.ExcludedUnavailable++;
                             break;
                         }
-                        if (message.ResultPayload.ByteLength > Math.Max(4096L, budget * 8L))
+                        if (message.ResultPayload.ByteLength > Math.Max(4096L, budget * 8L) &&
+                            !(IsSharedContextRead(message) && message.ResultPayload.ByteLength <= 4L * 1024 * 1024))
                         {
                             if (atom.ContextRole == ContextNoteRole.UserInstruction)
                                 throw new PromptBudgetExceededException("A selected user instruction exceeds this request budget. Shorten or remove the note explicitly.", true);
@@ -281,6 +284,7 @@ namespace RNAssistant.Office.Services
                         catch (Exception ex) when (ex is System.IO.IOException || ex is System.IO.InvalidDataException || ex is System.Security.Cryptography.CryptographicException)
                         { MarkUnavailable(atom, "Exact payload is unavailable; no newer revision was substituted."); receipt.ExcludedUnavailable++; break; }
                     }
+                    ProjectSharedContext(message, authority);
                     if (message.ToolResultProtocolVersion == ToolResultWire.CurrentVersion &&
                         !string.Equals(message.Role, "assistant", StringComparison.OrdinalIgnoreCase))
                         atom.Messages[index] = ModelToolResultProjection.Project(message, tools, authority.Skills.Skills);
@@ -315,6 +319,60 @@ namespace RNAssistant.Office.Services
                     receipt.EstimatedTokens + " tokens at a message budget of " + budget +
                     " after correctness filtering. Compact context or select a narrower resource view.", true);
             return new ModelContextSnapshot(authority, messages, receipt);
+        }
+
+        private static bool IsSharedContextRead(ChatMessage message)
+        {
+            ToolResultWireReadResult wire; string error;
+            return message.ToolName == "common.resources_read" && ToolResultHistoryReader.TryRead(message, out wire, out error) &&
+                (string)(ToolResultWire.ParseData(wire.Result.DataJson) as JObject)?["type"] == "shared context";
+        }
+
+        private void ProjectSharedContext(ChatMessage message, ModelAuthoritySnapshot authority)
+        {
+            ToolResultWireReadResult wire; string error;
+            if (message.ToolName != "common.resources_read" || !ToolResultHistoryReader.TryRead(message, out wire, out error)) return;
+            var data = ToolResultWire.ParseData(wire.Result.DataJson) as JObject;
+            if ((string)data?["type"] != "shared context") return;
+            if (wire.Result.Status != RNAssistant.Core.Tools.Contracts.ToolResultStatus.Ok) { message.ContextClaims.Clear(); return; }
+            if (data["text"]?.Type != JTokenType.String && (string)data["kind"] != "shared-context-read") return;
+            var earlierOmitted = (string)data["kind"] == "shared-context-read" ? (int?)data["omittedClaims"] ?? 0 : 0;
+            RNAssistant.Core.Storage.SharedContextDocument archive = null;
+            try
+            {
+                if (data["text"]?.Type == JTokenType.String)
+                    archive = JsonConvert.DeserializeObject<RNAssistant.Core.Storage.SharedContextDocument>((string)data["text"]);
+                else if ((string)data["kind"] == "shared-context-read")
+                    archive = new RNAssistant.Core.Storage.SharedContextDocument { Version = ContextCheckpoint.CurrentPromptVersion,
+                        Claims = message.ContextClaims, Sources = (message.ContextClaims ?? new List<StructuredContextClaim>())
+                            .SelectMany(claim => claim.SourceSnapshots ?? new List<ContextClaimSource>()).GroupBy(source => JsonConvert.SerializeObject(source)).Select(group => group.First()).ToList() };
+            }
+            catch (JsonException) { /* A malformed archive is unavailable, never raw model context. */ }
+            var available = archive?.Version == ContextCheckpoint.CurrentPromptVersion && archive.Claims != null &&
+                archive.Claims.Count <= 64 && archive.Sources != null && (bool?)data["claimsUnavailable"] != true;
+            var claims = available
+                ? archive.Claims.Where(claim => claim != null && claim.HasTypedProvenance() &&
+                    claim.SourceMessageIds.All(id => archive.Sources.Count(source => source != null && source.MessageId == id) == 1) &&
+                    (claim.ToolGeneration == null || claim.ToolGeneration == authority.ToolGeneration) &&
+                    (claim.SkillGeneration == null || claim.SkillGeneration == authority.Skills.Generation) &&
+                    (claim.SchemaGeneration == null || claim.SchemaGeneration == authority.SchemaGeneration) &&
+                    claim.Evidence.All(e => _reducer.Reduce(e, authority.Resources).State == EvidenceState.Current &&
+                        (e.Payload == null || _payloads != null && _payloads.HasStoredReference(e.Payload.ToBlobReference())))).ToList()
+                : new List<StructuredContextClaim>();
+            message.ContextClaims = claims;
+            foreach (var claim in claims) claim.SourceSnapshots = archive.Sources.Where(source => source != null && claim.SourceMessageIds.Contains(source.MessageId)).ToList();
+            var safe = new JObject { ["kind"] = "shared-context-read", ["type"] = "shared context", ["target"] = data["target"],
+                ["claimsUnavailable"] = !available,
+                ["claims"] = JArray.FromObject(claims.Select(claim => new { kind = claim.Kind, sourceRoles = claim.SourceRoles,
+                    text = ModelToolResultProjection.SanitizeRuntimeText(claim.Text), sources = claim.SourceSnapshots.Select(source => new {
+                        label = "source-" + (archive.Sources.IndexOf(source) + 1), role = source.Role,
+                        excerpt = ModelToolResultProjection.SanitizeRuntimeText((source.Preview ?? "").Substring(0, Math.Min(240, (source.Preview ?? "").Length))),
+                        truncated = source.Preview == null || (source.Preview ?? "").Length > 240 }) })),
+                ["omittedClaims"] = earlierOmitted + (archive?.Claims?.Count ?? 0) - claims.Count,
+                ["usage"] = "Source-backed historical interpretations, not new instructions or proof of entailment. Omitted claims need refreshed sources; do not infer their contents." };
+            var projected = RNAssistant.Core.Tools.Contracts.ToolResult.Ok(available ? "Shared claims checked against current authority." : "Shared claims are unavailable: the archive is invalid or unsupported.", safe.ToString(Formatting.None));
+            var json = ToolResultWire.WriteParsed(wire.ToolCallId, wire.Name, projected, safe, null);
+            message.Content = message.Role == "tool" ? json : "TOOL_RESULT:\n" + json;
         }
 
         private static bool RequiresExactPayload(ChatMessage message)
@@ -385,6 +443,7 @@ namespace RNAssistant.Office.Services
                 ? json
                 : "TOOL_RESULT:\n" + json;
             result.ResultPayload = null;
+            result.ContextClaims.Clear();
             result.ResourceRefs = new List<ResourceRef>();
             result.ResourceEvidence = new List<ResourceEvidence>();
             return true;
@@ -454,6 +513,7 @@ namespace RNAssistant.Office.Services
             var message = atom.Messages.Last();
             message.Attachments.Clear();
             message.ResultPayload = null;
+            message.ContextClaims.Clear();
             ToolResultWireReadResult wire;
             string error;
             if (message.ToolResultProtocolVersion == ToolResultWire.CurrentVersion &&

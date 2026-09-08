@@ -560,7 +560,11 @@ Cycles, missing/unpublished dependencies and size/depth bounds fail before publi
 `ConversationModelSession` freezes history/high-water, resource authority, tool pack,
 skills and schemas before `ModelContextCompiler`. Normal requests, protocol repair,
 compaction and Inspector use that compiler; compilation does not consult COM,
-mutable files/catalogs or another chat's transcript.
+mutable files/catalogs or another chat's live transcript. Explicit shared-context
+reads use immutable CAS archives published by the existing DocumentArtifactStore
+facet, with source revisions/payloads retained by the same authority graph.
+The compiler derives per-claim currentness; see
+[shared context](artifact-library.md#discovery-descriptions-and-model-context).
 
 `EvidenceStateReducer` classifies Current/Superseded/Unknown/Unavailable against
 frozen authority. Correctness filtering, terminal-write collapse and deduplication
