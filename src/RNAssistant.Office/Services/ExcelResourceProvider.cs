@@ -74,8 +74,11 @@ namespace RNAssistant.Office.Services
 
         public ResourceSearchResult Search(ChatSession session, string query, string kind, int limit, int maxCharsPerMatch)
         {
-            var items = List(session, kind, null, 50).Items.Where(item => item.Title.IndexOf(query ?? "", StringComparison.OrdinalIgnoreCase) >= 0);
-            return new ResourceSearchResult { Query = query, Matches = items.Take(Math.Max(1, Math.Min(20, limit)))
+            var page = List(session, kind, null, 50);
+            var items = page.Items.Where(item => item.Title.IndexOf(query ?? "", StringComparison.OrdinalIgnoreCase) >= 0).ToList();
+            var maximum = Math.Max(1, Math.Min(20, limit));
+            return new ResourceSearchResult { Query = query, ScanTruncated = page.Truncated || items.Count > maximum,
+                Matches = items.Take(maximum)
                 .Select(item => new ResourceSearchMatch { Reference = item.Reference, Title = item.Title, Kind = item.Kind, Representation = "metadata" }).ToList() };
         }
 

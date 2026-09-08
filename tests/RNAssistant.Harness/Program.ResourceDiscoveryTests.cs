@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Text;
@@ -14,6 +15,269 @@ namespace RNAssistant.Harness
 {
     internal static partial class Program
     {
+        private static void OriginalTextIndexSearch()
+        {
+            WithTempExecutor(FakeOfficeAdapter.ForHost("Word"), (executor, adapter) =>
+            {
+                var session = NewSession(adapter); session.DocumentAuthorityId = DocumentAuthorityId.Create().Id;
+                var paths = FixturePaths.Value;
+                var chats = new ChatStore(paths);
+                var ingestion = new ChatResourceIngestionService(new AttachmentStore(paths), chats.DocumentArtifacts);
+                var text = new string('x', 145000) + "\r\n## Uploaded section\r\nuploaded-late-marker";
+                foreach (var name in new[] { "Reference.md", "Literal.txt" })
+                {
+                    var draft = ingestion.Stage(session, name, name.EndsWith(".md") ? "text/markdown" : "text/plain", Encoding.UTF8.GetBytes(text));
+                    var message = new ChatMessage { Role = "user", Attachments = ingestion.LoadDrafts(session, new[] { draft.Id }).ToList() };
+                    session.Messages.Add(message); ingestion.CommitAndLink(session, message, session.Messages.Count - 1);
+                }
+                var other = NewSession(adapter); other.DocumentAuthorityId = session.DocumentAuthorityId;
+                var authority = new ResourceAuthorityStore(paths);
+                var scope = ResourceAuthorityScopeId.Document(new DocumentAuthorityId(session.DocumentAuthorityId));
+                var owner = new DocumentArtifactStore(authority, authority, executor.Payloads);
+                var provider = new ChatArtifactResourceProvider(payloads: executor.Payloads, documentArtifacts: owner);
+                var found = provider.Search(other, "uploaded-late-marker", "document-artifact", 20, 600);
+                AssertTrue(found.Matches.Count == 2 && !found.ScanTruncated && found.UnavailableResources == 0, "late uploaded text is searchable from another empty chat");
+                var markdown = found.Matches.Single(item => item.Title == "Reference.md");
+                AssertEqual("Uploaded section", markdown.SectionTitle, "uploaded Markdown uses its own heading context");
+                AssertEqual(null, found.Matches.Single(item => item.Title == "Literal.txt").SectionTitle, "plain text hash marks are not Markdown headings");
+                var selected = provider.Read(other, new ResourceReadRequest { Reference = markdown.Reference, Representation = "text",
+                    Cursor = ResourceReadCursor.CreateImmutable(markdown.SnippetOffset, ResourceReadCursor.ReadBinding(markdown.Reference.Uri, "text")), MaxChars = markdown.Snippet.Length });
+                AssertEqual(markdown.Snippet, selected.Result.Text, "uploaded search snippet round-trips through the exact resource read");
+                var view = authority.GetView(scope, markdown.Reference, "artifact-extracted-text-index-v1");
+                var original = owner.Read(other, markdown.Reference, false).OriginalAttachment;
+                AssertEqual(original.ExtractedTextSha256, view.ContentSha256, "index binds the retained extracted representation");
+                File.Delete(executor.Payloads.PathFor(view.Payload.Sha256));
+                AssertEqual(2, provider.Search(other, "uploaded-late-marker", "document-artifact", 20, 600).Matches.Count, "derived manifest repair uses original extraction");
+                File.WriteAllText(executor.Payloads.PathFor(view.Parts[0].Sha256), "corrupt text part");
+                AssertEqual(2, provider.Search(other, "uploaded-late-marker", "document-artifact", 20, 600).Matches.Count, "derived part repair preserves uploaded text");
+                var gc = CasService(paths, chats, new VbaJournalStore(paths), () => StorageProtector.None).Collect();
+                AssertTrue(gc.Completed && gc.Health.MissingBlobCount == 0, "published originals and text views have complete GC retention edges");
+                var restarted = new ResourceAuthorityStore(paths);
+                AssertEqual(1, new DocumentArtifactStore(restarted, restarted, executor.Payloads)
+                    .SearchText(other, markdown.Reference, "uploaded-late-marker", 1000000, 600).Matches.Count, "derived text survives GC and restart");
+                File.Delete(executor.Payloads.PathFor(original.ExtractedTextSha256));
+                found = provider.Search(other, "uploaded-late-marker", "document-artifact", 20, 600);
+                AssertTrue(found.UnavailableResources > 0 && found.Matches.Count == 0, "a warm index cannot conceal missing extraction shared by both originals");
+                AssertTrue(provider.List(other, "document-artifact", null, 50).Items.Count == 2, "missing text never removes original metadata from discovery");
+            });
+        }
+
+        private static void OriginalTextIndexPreservesCoverage()
+        {
+            WithTempExecutor(FakeOfficeAdapter.ForHost("Word"), (executor, adapter) =>
+            {
+                var session = NewSession(adapter); session.DocumentAuthorityId = DocumentAuthorityId.Create().Id;
+                var authority = new ResourceAuthorityStore(FixturePaths.Value);
+                var owner = new DocumentArtifactStore(authority, authority, executor.Payloads);
+                var scope = ResourceAuthorityScopeId.Document(new DocumentAuthorityId(session.DocumentAuthorityId));
+                foreach (var explicitTruncation in new[] { true, false })
+                {
+                    var text = "# This is extracted PDF text\npartial-marker";
+                    var raw = executor.Payloads.StoreBytes(new byte[] { 0, 1, 2, 3 }, "application/pdf");
+                    var extracted = executor.Payloads.StoreText(text, "text/plain; charset=utf-8");
+                    var original = new ChatAttachment { FileName = "Extracted.pdf", Kind = "pdf", ContentType = "application/pdf",
+                        ContentSha256 = raw.Sha256, ContentByteLength = raw.ByteLength,
+                        ExtractedTextSha256 = extracted.Sha256, ExtractedTextByteLength = extracted.ByteLength, ExtractedCharCount = text.Length,
+                        TextTruncated = explicitTruncation, PageCount = explicitTruncation ? 1 : 3, PageTextLengths = new List<int> { text.Length } };
+                    var artifact = owner.PublishOriginal(session, new ChatArtifact { Id = "attachment_" + original.Id, Revision = 1,
+                        Kind = ChatArtifactKinds.File, Title = original.FileName, MimeType = original.ContentType,
+                        ContentSha256 = raw.Sha256, ContentByteLength = raw.ByteLength }, original);
+                    var reference = ChatResourceUri.CreateArtifactRevision(session, artifact);
+                    var found = owner.SearchText(session, reference, "partial-marker", 1000000, 600);
+                    AssertTrue(found.ScanTruncated && found.Matches.Count == 1, "explicit truncation or omitted PDF pages remain partial even on a hit");
+                    AssertEqual(null, found.Matches.Single().SectionTitle, "PDF extraction does not invent Markdown section semantics");
+                    var view = authority.GetView(scope, reference, "artifact-extracted-text-index-v1");
+                    AssertTrue(view.ContentSha256 == extracted.Sha256 && view.ContentSha256 != raw.Sha256, "extraction hash cannot be confused with the binary source hash");
+                    AssertTrue(view.Coverage.Kind == ResourceCoverageKinds.CharacterRange && view.Coverage.End == text.Length,
+                        "a bounded extraction is not retained as whole-source coverage");
+                    var negative = owner.SearchText(session, reference, new string('q', text.Length + 1), 1000000, 600);
+                    AssertTrue(negative.ScanTruncated && negative.Matches.Count == 0, "even a length-rejected query cannot prove absence in an incomplete extraction");
+                }
+                var provider = new ChatArtifactResourceProvider(payloads: executor.Payloads, documentArtifacts: owner);
+                var result = new ResourceGatewayService(new[] { provider }).Find(session, "absent-from-extraction", "document");
+                AssertTrue(!result.Empty && !result.Complete && result.RefineQuery, "model receives an incomplete negative with rediscovery guidance");
+            });
+        }
+
+        private static void DocumentTextIndexSearch()
+        {
+            WithTempExecutor(FakeOfficeAdapter.ForHost("Word"), (executor, adapter) =>
+            {
+                var session = NewSession(adapter);
+                var definition = executor.GetControllerTools().Single(item => item.Id == MarkdownDocumentToolCatalog.SaveToolId);
+                var runtime = executor.CreateNativeRuntime(session, new[] { definition }, new AppSettings(), ChatModes.Agent, false);
+                var text = "# Guide\r\n";
+                text += new string('x', 31994 - text.Length) + "boundary-needle\n";
+                text += new string('x', 63999 - text.Length) + "😀ПоискГраницы\n";
+                text += new string('x', 145000 - text.Length) + "\n## Late section\r\nlate-content-marker\n```markdown\n# Not a section\ncode-marker\n```\n";
+                var args = new Newtonsoft.Json.Linq.JObject { ["title"] = "Guide.md", ["description"] = "Purpose and complete document scope", ["markdown"] = text };
+                var call = new ToolCall("text-index-first", definition.Id, args.ToString(Newtonsoft.Json.Formatting.None));
+                var published = ExecuteNative(runtime, call, runtime.Describe(call));
+                AssertEqual(ToolExecutionOutcome.Ok, published.Outcome, "long document published");
+                var reference = published.Result.Resources.Single(item => DocumentArtifactStore.Owns(session, item));
+                var other = NewSession(adapter); other.DocumentAuthorityId = session.DocumentAuthorityId;
+                var paths = FixturePaths.Value;
+                var authority = new ResourceAuthorityStore(paths);
+                var scope = ResourceAuthorityScopeId.Document(new DocumentAuthorityId(session.DocumentAuthorityId));
+                var owner = new DocumentArtifactStore(authority, authority, executor.Payloads);
+                var provider = new ChatArtifactResourceProvider(payloads: executor.Payloads, documentArtifacts: owner);
+                var generation = authority.Capture(scope).Generation;
+                var found = provider.Search(other, "late-content-marker", "document-artifact", 20, 600);
+                var match = found.Matches.Single();
+                AssertTrue(match.MatchOffset > 128000 && !found.ScanTruncated && found.UnavailableResources == 0, "indexed search reaches late content from another empty chat");
+                AssertEqual("Late section", match.SectionTitle, "relevant heading accompanies the exact source snippet");
+                AssertEqual(text.Substring(match.SnippetOffset, match.Snippet.Length), match.Snippet, "snippet offsets round-trip to original CRLF source");
+                AssertEqual(generation, authority.Capture(scope).Generation, "derived index does not publish authority heads");
+                foreach (var query in new[] { "boundary-needle", "😀поискграницы", "code-marker" })
+                {
+                    match = owner.SearchText(other, reference, query, 1000000, 600).Matches.Single();
+                    AssertEqual(text.IndexOf(query, StringComparison.OrdinalIgnoreCase), match.MatchOffset, "cross-part Unicode and case-insensitive offsets remain exact");
+                    AssertEqual(query == "code-marker" ? "Late section" : "Guide", match.SectionTitle, "fenced headings are not document sections");
+                }
+                var limited = owner.SearchText(other, reference, "late-content-marker", 128000, 600);
+                AssertTrue(limited.ScanTruncated && limited.Matches.Count == 0 && limited.ScannedCharacters == 128000, "budget-limited negative is explicitly incomplete");
+                var negative = owner.SearchText(other, reference, "definitely absent", 1000000, 600);
+                AssertTrue(!negative.ScanTruncated && negative.ScannedCharacters == text.Length, "full indexed negative preserves source coverage");
+                var gateway = new ResourceGatewayService(new[] { provider });
+                var candidate = gateway.Find(other, "late-content-marker", "document").Items.Single();
+                AssertEqual("Late section", candidate.SectionTitle, "model receives useful section context");
+                AssertEqual("Purpose and complete document scope", candidate.Description, "description survives discovery projection");
+                AssertTrue(candidate.Evidence == null || candidate.Evidence.Count == 0, "search snippet does not grant whole-read evidence");
+
+                var view = authority.GetView(scope, reference, "artifact-text-index-v1");
+                File.Delete(executor.Payloads.PathFor(view.Payload.Sha256));
+                AssertEqual(1, provider.Search(other, "late-content-marker", "document-artifact", 20, 600).Matches.Count, "missing index is reconstructed from the same source");
+                File.WriteAllText(executor.Payloads.PathFor(view.Parts[0].Sha256), "corrupt part");
+                AssertEqual(1, provider.Search(other, "boundary-needle", "document-artifact", 20, 600).Matches.Count, "corrupt derived part is repaired without replacing source");
+                var restarted = new ResourceAuthorityStore(paths);
+                var restartedOwner = new DocumentArtifactStore(restarted, restarted, executor.Payloads);
+                AssertEqual(1, restartedOwner.SearchText(other, reference, "late-content-marker", 1000000, 600).Matches.Count, "retained index survives restart");
+                var bodyPath = executor.Payloads.PathFor(authority.GetRevision(scope, reference).Payload.Sha256);
+                var bodyBytes = File.ReadAllBytes(bodyPath);
+                File.Delete(bodyPath);
+                found = provider.Search(other, "late-content-marker", "document-artifact", 20, 600);
+                AssertTrue(found.Matches.Count == 0 && found.UnavailableResources == 1, "warm index cannot conceal missing current source bytes");
+                File.WriteAllBytes(bodyPath, bodyBytes);
+
+                args["target"] = (string)Newtonsoft.Json.Linq.JObject.Parse(published.Result.DataJson)["target"];
+                args["markdown"] = "# Replacement\ncurrent-content-marker";
+                call = new ToolCall("text-index-second", definition.Id, args.ToString(Newtonsoft.Json.Formatting.None));
+                AssertEqual(ToolExecutionOutcome.Ok, ExecuteNative(runtime, call, runtime.Describe(call)).Outcome, "new revision published");
+                AssertEqual(0, provider.Search(other, "late-content-marker", "document-artifact", 20, 600).Matches.Count, "current search cannot reuse an old revision's index");
+                AssertEqual(1, owner.SearchText(other, reference, "late-content-marker", 1000000, 600).Matches.Count, "exact historical index remains addressable");
+                File.Delete(bodyPath);
+                RuntimeThrows<InvalidDataException>(() => owner.SearchText(other, reference, "late-content-marker", 1000000, 600));
+            });
+        }
+
+        private static void DocumentTextIndexRejectsLastPageDrift()
+        {
+            WithTempExecutor(FakeOfficeAdapter.ForHost("Word"), (executor, adapter) =>
+            {
+                var session = NewSession(adapter);
+                var definition = executor.GetControllerTools().Single(item => item.Id == MarkdownDocumentToolCatalog.SaveToolId);
+                var runtime = executor.CreateNativeRuntime(session, new[] { definition }, new AppSettings(), ChatModes.Agent, false);
+                var call = new ToolCall("index-race", definition.Id, "{\"title\":\"Race.md\",\"description\":\"Race fixture\",\"markdown\":\"# Source\\nneedle\"}");
+                AssertEqual(ToolExecutionOutcome.Ok, ExecuteNative(runtime, call, runtime.Describe(call)).Outcome, "race fixture published");
+                var authority = new ResourceAuthorityStore(FixturePaths.Value);
+                var counted = new DiscoveryPageStore(authority);
+                counted.ViewRegistered = view =>
+                {
+                    if (view.View != "artifact-text-index-v1") return;
+                    counted.ViewRegistered = null;
+                    var scope = ResourceAuthorityScopeId.Document(new DocumentAuthorityId(session.DocumentAuthorityId));
+                    var before = authority.Capture(scope);
+                    var identity = new ResourceIdentity(ResourceUri.Create("state", scope.Kind, scope.Id, "test-index-drift"));
+                    authority.Publish(ResourceAuthorityCommit.Create(scope, before.Generation, null,
+                        new[] { new ResourceHeadChange(identity, null, ResourceHeadState.Unknown(identity, before.Generation + 1, "test-drift")) }, AuthorityCommitReason.DerivedPublication));
+                };
+                var owner = new DocumentArtifactStore(counted, counted, executor.Payloads);
+                var provider = new ChatArtifactResourceProvider(payloads: executor.Payloads, documentArtifacts: owner);
+                RuntimeThrows<ResourceRequestException>(() => provider.Search(session, "needle", "document-artifact", 20, 600));
+                AssertEqual(1, provider.Search(session, "needle", "document-artifact", 20, 600).Matches.Count, "fresh search succeeds after last-page generation drift");
+            });
+        }
+
+        private static void DocumentDiscoveryPagesBoundMetadata()
+        {
+            WithTempExecutor(FakeOfficeAdapter.ForHost("Word"), (executor, adapter) =>
+            {
+                var session = NewSession(adapter); session.DocumentAuthorityId = DocumentAuthorityId.Create().Id;
+                var paths = FixturePaths.Value;
+                var chats = new ChatStore(paths);
+                var ingestion = new ChatResourceIngestionService(new AttachmentStore(paths), chats.DocumentArtifacts);
+                for (var index = 0; index < 73; index++)
+                {
+                    var draft = ingestion.Stage(session, "Reference " + index + ".md", "text/markdown", Encoding.UTF8.GetBytes("# Section " + index));
+                    var message = new ChatMessage { Role = "user", Attachments = ingestion.LoadDrafts(session, new[] { draft.Id }).ToList() };
+                    session.Messages.Add(message); ingestion.CommitAndLink(session, message, session.Messages.Count - 1);
+                }
+                var scope = ResourceAuthorityScopeId.Document(new DocumentAuthorityId(session.DocumentAuthorityId));
+                var authority = new ResourceAuthorityStore(paths);
+                var generation = authority.Capture(scope).Generation;
+                var unrelated = Enumerable.Range(0, 1000).Select(index => {
+                    var identity = new ResourceIdentity(ResourceUri.Create("state", scope.Kind, scope.Id, "plan-operation-fixture-" + index));
+                    return new ResourceHeadChange(identity, null, ResourceHeadState.Unknown(identity, generation + 1, "test-receipt"));
+                }).ToArray();
+                authority.Publish(ResourceAuthorityCommit.Create(scope, generation, null, unrelated, AuthorityCommitReason.DerivedPublication));
+                var noOwner = new ResourceGatewayService(new[] { new ChatArtifactResourceProvider() }).Find(session, null, "document");
+                AssertTrue(noOwner.Partial && !noOwner.Empty, "missing document owner cannot invent an empty catalog");
+                var counted = new DiscoveryPageStore(authority);
+                var owner = new DocumentArtifactStore(counted, counted, executor.Payloads);
+                var provider = new ChatArtifactResourceProvider(payloads: executor.Payloads, documentArtifacts: owner);
+                var page = provider.List(session, "document-artifact", null, 5);
+                AssertEqual(5, page.Items.Count, "one provider page hydrates only its requested source slots");
+                AssertTrue(counted.ViewReads <= 10 && counted.HeadPages == 1, "no all-library metadata scan or full authority capture before a small page");
+                AssertTrue(page.Total == 73 && !page.TotalIsExact && page.NextCursor != null, "root count is explicitly distinguished from filtered result total");
+                var beforeIdentity = counted.ViewReads;
+                AssertEqual(page.Items[0].Reference.Uri, provider.ResolveIdentity(session, page.Items[0].Reference.Identity).Uri,
+                    "an exact snapshot identity resolves by its own authority head");
+                AssertEqual(1, counted.ViewReads - beforeIdentity, "identity resolution reads one record without scanning the document");
+                var ids = new HashSet<string>(page.Items.Select(item => item.Reference.Uri), StringComparer.Ordinal);
+                while (page.NextCursor != null)
+                {
+                    var reads = counted.ViewReads;
+                    page = provider.List(session, "document-artifact", page.NextCursor, 5);
+                    AssertTrue(counted.ViewReads - reads <= 10, "each continuation repeats only bounded metadata IO");
+                    foreach (var item in page.Items) AssertTrue(ids.Add(item.Reference.Uri), "source pages never duplicate a resource");
+                }
+                AssertTrue(ids.Count == 73 && !page.Truncated, "all roots are reachable without scanning receipt history");
+                AssertEqual(73, new DocumentArtifactStore(new ResourceAuthorityStore(paths), new ResourceAuthorityStore(paths), executor.Payloads)
+                    .InspectCurrentMetadata(session, 70, 5).Total, "cold replay rebuilds the same ordered authority projection");
+                var gateway = new ResourceGatewayService(new[] { provider });
+                var target = ResourceGatewayService.IntentTarget(provider.List(session, "document-artifact", null, 1).Items.Single());
+                var search = gateway.Find(session, "Section 72", "document");
+                AssertTrue(search.Items.Any(item => item.Title == "Reference 72.md"), "content search crosses source page boundaries");
+                AssertTrue(gateway.ResolveIntentTarget(session, target).Reference != null, "complete paged discovery still resolves a semantic target");
+                var beforeChange = provider.List(session, "document-artifact", null, 5);
+                var current = authority.Capture(scope);
+                var extra = new ResourceIdentity(ResourceUri.Create("state", scope.Kind, scope.Id, "new-observation"));
+                authority.Publish(ResourceAuthorityCommit.Create(scope, current.Generation, null,
+                    new[] { new ResourceHeadChange(extra, null, ResourceHeadState.Unknown(extra, current.Generation + 1, "test-drift")) }, AuthorityCommitReason.DerivedPublication));
+                AssertEqual("resource_revision_changed", RuntimeThrows<ResourceRequestException>(() => provider.List(session,
+                    "document-artifact", beforeChange.NextCursor, 5)).ErrorCode, "another writer invalidates continuation even without changing selected roots");
+            });
+        }
+
+        private sealed class DiscoveryPageStore : IResourceAuthorityStore, IResourceRevisionStore
+        {
+            private readonly ResourceAuthorityStore _inner;
+            internal int ViewReads; internal int HeadPages;
+            internal Action<ResourceRevisionView> ViewRegistered;
+            internal DiscoveryPageStore(ResourceAuthorityStore inner) { _inner = inner; }
+            public event EventHandler<ResourceAuthorityChangedEventArgs> Changed { add { _inner.Changed += value; } remove { _inner.Changed -= value; } }
+            public ResourceAuthoritySnapshot Capture(ResourceAuthorityScopeId scope) { throw new InvalidOperationException("Discovery must not copy the full authority."); }
+            public ResourceAuthoritySnapshotSet CaptureMany(IReadOnlyList<ResourceAuthorityScopeId> scopes) { throw new InvalidOperationException("Discovery must not copy the full authority."); }
+            public ResourceHeadState GetHead(ResourceAuthorityScopeId scope, ResourceIdentity identity) { return _inner.GetHead(scope, identity); }
+            public ResourceHeadPage ReadHeads(ResourceAuthorityScopeId scope, IReadOnlyList<ResourceHeadRange> ranges, int offset, int limit)
+            { HeadPages++; return _inner.ReadHeads(scope, ranges, offset, limit); }
+            public AuthorityCommitResult Publish(ResourceAuthorityCommit commit) { return _inner.Publish(commit); }
+            public void RegisterRevision(ResourceAuthorityScopeId scope, ResourceRevisionMetadata revision) { _inner.RegisterRevision(scope, revision); }
+            public ResourceRevisionMetadata GetRevision(ResourceAuthorityScopeId scope, ResourceRef reference) { return _inner.GetRevision(scope, reference); }
+            public void RegisterView(ResourceAuthorityScopeId scope, ResourceRevisionView view) { _inner.RegisterView(scope, view); ViewRegistered?.Invoke(view); }
+            public ResourceRevisionView GetView(ResourceAuthorityScopeId scope, ResourceRef reference, string view) { ViewReads++; return _inner.GetView(scope, reference, view); }
+        }
+
         private static void DocumentDiscoveryCurrentHeads()
         {
             WithTempExecutor(FakeOfficeAdapter.ForHost("Word"), (executor, adapter) =>
@@ -98,7 +362,14 @@ namespace RNAssistant.Harness
                 var bytes = File.ReadAllBytes(path);
                 File.Delete(path);
                 var page = executor.ResourceGateway.List(otherChat, "chat", "document-artifact", null, 1);
-                AssertEqual(1, page.UnavailableResources, "one bad metadata record is isolated");
+                var observed = page.UnavailableResources;
+                var continuation = page;
+                while (continuation.NextCursor != null)
+                {
+                    continuation = executor.ResourceGateway.List(otherChat, "chat", "document-artifact", continuation.NextCursor, 1);
+                    observed += continuation.UnavailableResources;
+                }
+                AssertEqual(1, observed, "one bad metadata record is isolated on its source page");
                 AssertTrue(page.NextCursor != null, "healthy descriptors still paginate");
                 var found = executor.ResourceGateway.Find(otherChat, "Healthy", "document");
                 AssertTrue(found.Items.Any(item => item.Title == "Healthy.md") && found.Partial && !found.Complete && !found.Empty,
@@ -114,8 +385,10 @@ namespace RNAssistant.Harness
                 var healthyRef = ChatResourceUri.CreateArtifactRevision(session, healthy);
                 AssertTrue(executor.ResourceGateway.Resolve(otherChat, healthyRef.Uri).Resource.Title == "Healthy.md", "exact reference ignores unrelated metadata loss");
                 var generation = authority.Capture(scope).Generation;
+                page = executor.ResourceGateway.List(otherChat, "chat", "document-artifact", null, 1);
                 File.WriteAllBytes(path, bytes);
-                RuntimeThrows<ResourceRequestException>(() => executor.ResourceGateway.List(otherChat, "chat", "document-artifact", page.NextCursor, 1));
+                AssertTrue(executor.ResourceGateway.List(otherChat, "chat", "document-artifact", page.NextCursor, 1) != null,
+                    "metadata recovery cannot shift generation-bound source slots or replay omitted earlier slots");
                 AssertEqual(generation, authority.Capture(scope).Generation, "metadata recovery does not publish a replacement head");
                 AssertEqual(healthyRef.Uri, executor.ResourceGateway.ResolveIntentTarget(otherChat, target).Reference.Uri, "recovered scope resolves the same target");
                 var recovered = executor.ResourceGateway.Find(otherChat, "absent-needle", "document");

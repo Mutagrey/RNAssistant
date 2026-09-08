@@ -39,6 +39,33 @@ version check still apply.
 
 ## Test map
 
+`excel discovery:` reproduces the reported document-read failure with 201 defined
+names. It verifies independent document/A1 reads, strict point-name admission,
+partial discovery/negative search, terminal paging, coverage-only cursor drift,
+result clipping and bound-document refusal. Use `excel names:`, `excel tables:`,
+`excel read:` and `resources:` for affected consumers. Live workbook/502 qualification
+requires the reported Windows/server environment.
+
+`resources: document discovery bounds source pages` uses 73 resources and 1000
+unrelated receipts to verify per-page metadata IO, no full authority capture on
+provider discovery, exact point identities, complete traversal/search, cold index
+rebuild and writer drift. The generic incomplete-coverage test also bounds empty
+source-page loops. Startup and ordered-insertion allocation remain qualification gaps.
+
+`resources: document text index` verifies late cross-chat Markdown matches, exact
+cross-part/CRLF/Unicode offsets, fenced-heading exclusion, model section context,
+bounded negatives, derived-byte repair, restart, current versus historical indexes,
+missing source refusal and last-page writer drift. The existing discovery-coverage
+test also checks descriptions/section context for search-only candidates. Use
+`resources:`, `shared Markdown:`, `document Plan:` and `html` for affected consumers.
+
+`resources: original text index` covers late uploaded Markdown/plain-text matches
+from another chat, exact snippet reads, source-versus-extraction hashes, heading
+semantics, derived-byte repair, GC/restart and missing extraction. It also checks
+explicit truncation/omitted PDF pages on positive and negative queries, including
+model-facing incomplete negatives. Use `resources:`, `document originals:` and
+`document Plan:` for this extension; no PDF/Office rendering is involved.
+
 `resources: document discovery` verifies healthy partial results with missing/corrupt
 current metadata, body loss, exact reads, metadata recovery, current-head selection
 without historical fallback, unknown original/logical heads and continuation drift.

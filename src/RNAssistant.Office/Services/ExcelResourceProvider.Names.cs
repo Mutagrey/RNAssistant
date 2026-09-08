@@ -24,7 +24,10 @@ namespace RNAssistant.Office.Services
         }
 
         private ResourceListPage ListNames(ChatSession session, string cursor, int limit)
-        { return PageNamedResources(CaptureNameCatalog().Names.Select(name => DescribeName(session, name)).ToList(), NameKind, cursor, limit); }
+        {
+            var snapshot = _reader.CaptureStructure("names");
+            return PageNamedResources(snapshot.Names.Select(name => DescribeName(session, name)).ToList(), NameKind, cursor, limit, snapshot.Truncated);
+        }
 
         private ExcelNameSnapshot FindName(string key)
         {

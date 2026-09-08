@@ -52,7 +52,64 @@ of enumerating unrelated Excel catalogs. Focused projection/budget, Excel read a
 resource-discovery checks pass host-neutral. Windows/Office/WebView2 and
 target-model qualification remain open.
 
-Current slice (2026-09-08), after `2598e224`: **partial current artifact discovery**
+Current slice (2026-09-08), after `4729c101`: **uploaded text discovery views** are
+implemented host-neutral through the same revision/CAS text index owner. Original
+search binds the exact retained extraction hash, finds late content across chats,
+and preserves bounded extraction/PDF page coverage. Only Markdown gets heading
+context. Derived-byte repair, exact snippet reads, GC/restart and missing-extraction
+refusal are covered; no alternate store/extractor or read-evidence changes.
+Checks: resources 27/27, document originals 2/2 and document Plan 2/2 pass.
+Version-format validation and diff checks pass.
+Next: HTML member text views, then semantic section reads. Picker/history paging,
+richer compiler context, cold allocation and Windows/Office/layout/target-model
+qualification remain open; the reported upstream HTTP 502 is not resolved here.
+See [uploaded text discovery](../artifact-library.md#implemented-uploaded-text-discovery-views--2026-09-08).
+
+Previous slice (2026-09-08), after `62ec1f8e`: **exact text discovery views** are
+implemented host-neutral for document Markdown/Plans. A deterministic section/chunk
+view reuses existing revision journal/CAS; current search reaches late content,
+retains source offsets and exposes bounded heading context plus authored descriptions.
+Derived-byte loss rebuilds only from the same exact body; missing sources remain
+unavailable. Search checks generation after its last page, including indexing races.
+No new store, authority publication or whole-read evidence. Cold indexing reads a
+bounded source; this is not an inverted full-text index.
+Checks: resources 25/25, HTML 33/33, shared Markdown 4/4 and Plan 2/2 pass.
+Version-format validation and diff checks pass.
+Next: extend existing views to uploaded extracted text/HTML members and useful
+section reads. Picker/history paging, richer compiler context, cold allocation,
+Windows/Office, upstream HTTP 502, layout and target-model qualification stay open.
+See [text discovery](../artifact-library.md#implemented-exact-text-discovery-views--2026-09-08).
+
+Previous slice (2026-09-08), after `cf309b64`: **bounded document discovery pages**
+are implemented host-neutral. Existing authority Heads now support ordered bounded
+range reads. Model list/search hydrates current roots in pages without copying full
+authority snapshots or reading all library metadata. History/receipt ranges are
+excluded; exact snapshot identities resolve directly. Source offsets preserve holes
+from unavailable/filtered entries; generation changes reject continuation. Metadata
+recovery at unchanged generation needs a fresh scan for previously omitted slots.
+Gateway/search source-page ceilings preserve honest incomplete results; filtered
+counts are explicitly distinguished from source-slot totals. No new durable store.
+Checks: resources 23/23 (including source paging), HTML 33/33, shared Markdown 4/4,
+Plan 2/2, originals 2/2, atomic authority replay and Excel regression pass.
+Version-format validation and diff checks pass.
+Next: content/section indexing and richer shared context; picker/history paging and
+cold replay/write allocation remain open. Windows/Office, upstream HTTP 502, layout
+and target-model qualification are not closed. See [bounded discovery](../artifact-library.md#implemented-bounded-document-discovery-pages--2026-09-08).
+
+Previous correction (2026-09-08), after `ff47c276`: **incomplete Excel catalogs no
+longer block document reads**. The reported `document:` read enumerated all document
+catalogs and failed on bounded defined-name capture. Resolution now uses the live
+document provider's exact kind/title and bound-session guards. Names/tables list
+captured metadata with honest terminal truncation; point name/table reads still
+require complete identity evidence. Excel search preserves page/source/result
+truncation and coverage changes invalidate continuation. No limit increase/store.
+Checks: 201-name reproduction 1/1, Excel names 2/2, tables 2/2, reads 5/5 and
+resources 22/22 pass host-neutral. Windows/Office retest of the reported workbook
+and the separately observed upstream HTTP 502 remain open.
+Next: resume bounded source enumeration/content indexing and richer shared context.
+See [Excel discovery contract](../resource-fabric.md#excel-catalog-discovery-and-document-reads).
+
+Previous slice (2026-09-08), after `2598e224`: **partial current artifact discovery**
 is implemented host-neutral. One authority capture chooses exact current Plan/HTML/MD
 snapshots before metadata reads. Missing historical records no longer poison current
 search; missing current metadata/body or unknown heads preserve healthy results with

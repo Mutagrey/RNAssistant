@@ -18,6 +18,59 @@ namespace RNAssistant.Harness
 {
     internal static partial class Program
     {
+        private static void ExcelDiscoveryDoesNotBlockDocumentReads()
+        {
+            WithTempExecutor(FakeOfficeAdapter.ForHost("Excel"), (executor, adapter) =>
+            {
+                var session = NewSession(adapter);
+                var gateway = executor.ResourceGateway;
+                for (var index = 0; index <= ExcelReadService.MaxInspectItems; index++)
+                    adapter.ExcelNamesForTest.Add(new ExcelNameSnapshot { Name = "Name" + index, RefersTo = "=42" });
+                var root = gateway.List(session, LiveDocumentResourceProvider.ProviderName,
+                    LiveDocumentResourceProvider.DocumentKind, null, 20).Items.Single();
+                var target = ResourceGatewayService.IntentTarget(root);
+                var found = gateway.Find(session, "Name", "document");
+                AssertTrue(found.Items.Count > 0 && !found.Complete && found.RefineQuery && !found.Partial,
+                    "large name catalog remains bounded discovery, not provider unavailability");
+                AssertTrue(!gateway.Find(session, "missing-name", "document").Empty,
+                    "bounded Excel discovery never proves absence");
+                var calls = adapter.ExcelBackendCalls.Count(item => item == FakeOfficeAdapter.ExcelInspectOperation);
+                var read = executor.ExecuteManual(Command(ResourceToolCatalog.ReadToolId, "target", target, "representation", "text"),
+                    executor.GetControllerTools().ToList(), new AppSettings(), false, false, session);
+                AssertTrue(read.Success, "document text read survives a large unrelated name catalog: " + read.Message);
+                AssertEqual(calls, adapter.ExcelBackendCalls.Count(item => item == FakeOfficeAdapter.ExcelInspectOperation),
+                    "document resolution does not enumerate Excel names, tables or sheets");
+                AssertEqual("resource_target_not_found", RuntimeThrows<ResourceRequestException>(() =>
+                    gateway.ResolveIntentTarget(session, target + " stale")).ErrorCode, "document title is still validated exactly");
+                AssertEqual("RESOURCE_SNAPSHOT_TOO_LARGE", RuntimeThrows<ResourceRequestException>(() =>
+                    gateway.ResolveIntentTarget(session, "Excel name: Name0")).ErrorCode, "individual name resolution still requires complete identity evidence");
+                var range = executor.ExecuteManual(Command(ResourceToolCatalog.ReadToolId, "target", "Excel range: Data!A1:B2", "representation", "text"),
+                    executor.GetControllerTools().ToList(), new AppSettings(), false, false, session);
+                AssertTrue(range.Success, "explicit sheet ranges remain readable independently of catalog size");
+                var first = gateway.List(session, "excel", ExcelResourceProvider.NameKind, null, 50);
+                var page = first; var total = page.Items.Count;
+                while (page.NextCursor != null)
+                {
+                    page = gateway.List(session, "excel", ExcelResourceProvider.NameKind, page.NextCursor, 50);
+                    total += page.Items.Count;
+                }
+                AssertTrue(total == ExcelReadService.MaxInspectItems && page.Truncated,
+                    "terminal page preserves the source bound after all visible pages");
+                var search = gateway.Search(session, "excel", "Name199", ExcelResourceProvider.NameKind, 20, 600);
+                AssertTrue(search.Matches.Count == 0 && search.ScanTruncated, "single-page metadata search cannot claim a complete negative beyond its page");
+                adapter.ExcelNamesForTest.RemoveAt(adapter.ExcelNamesForTest.Count - 1);
+                AssertEqual("resource_revision_changed", RuntimeThrows<ResourceRequestException>(() => gateway.List(session,
+                    "excel", ExcelResourceProvider.NameKind, first.NextCursor, 50)).ErrorCode,
+                    "coverage-only changes invalidate continuation even with unchanged captured descriptors");
+                adapter.ExcelNamesForTest.RemoveRange(25, adapter.ExcelNamesForTest.Count - 25);
+                search = gateway.Search(session, "excel", "Name", ExcelResourceProvider.NameKind, 20, 600);
+                AssertTrue(search.Matches.Count == 20 && search.ScanTruncated, "result clipping cannot masquerade as complete source search");
+                var foreign = NewSession(adapter); foreign.DocumentKey = "another-document";
+                AssertEqual("active_document_changed", RuntimeThrows<ResourceRequestException>(() =>
+                    gateway.ResolveIntentTarget(foreign, target)).ErrorCode, "domain routing preserves bound-document checks");
+            });
+        }
+
         private static void ExcelReadUsesExactNativeOwnership()
         {
             WithTempExecutor(FakeOfficeAdapter.ForHost("Excel"), delegate(OfficeToolExecutor executor, FakeOfficeAdapter adapter)
@@ -300,7 +353,7 @@ namespace RNAssistant.Harness
                     if (defect == "truncated")
                     {
                         adapter.QueueExcelInspectSnapshot(new ExcelInspectSnapshot { Kind = "tables", Tables = tables, ReturnedCount = tables.Count, Truncated = true });
-                        RuntimeThrows<ResourceRequestException>(() => gateway.List(session, "excel", ExcelResourceProvider.TableKind, null, 20));
+                        AssertTrue(gateway.List(session, "excel", ExcelResourceProvider.TableKind, null, 20).Truncated, "bounded table discovery retains explicit incomplete coverage");
                     }
                 }
                 var foreign = NewSession(adapter); foreign.DocumentKey = "foreign-workbook";
@@ -426,8 +479,8 @@ namespace RNAssistant.Harness
                 adapter.ExcelNamesForTest.Clear();
                 for (var index = 0; index <= ExcelReadService.MaxInspectItems; index++)
                     adapter.ExcelNamesForTest.Add(new ExcelNameSnapshot { Name = "Name" + index, RefersTo = "=42" });
-                AssertEqual("RESOURCE_SNAPSHOT_TOO_LARGE", RuntimeThrows<ResourceRequestException>(() => gateway.List(session,
-                    "excel", ExcelResourceProvider.NameKind, null, 20)).ErrorCode, "incomplete name catalog is never advertised as complete");
+                AssertTrue(gateway.List(session, "excel", ExcelResourceProvider.NameKind, null, 20).Truncated,
+                    "incomplete name catalog is never advertised as complete");
                 var foreign = NewSession(adapter); foreign.DocumentKey = "foreign-workbook";
                 RuntimeThrows<InvalidOperationException>(() => gateway.Read(foreign, new ResourceReadRequest { Reference = reference, Representation = "text" }));
             });

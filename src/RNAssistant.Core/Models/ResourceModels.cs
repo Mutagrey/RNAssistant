@@ -207,6 +207,8 @@ namespace RNAssistant.Core.Models
 
     public sealed class ResourceListPage
     {
+        [Newtonsoft.Json.JsonProperty("totalIsExact")]
+        public bool TotalIsExact { get; set; } = true;
         [Newtonsoft.Json.JsonProperty("unavailableResources")]
         public int UnavailableResources { get; set; }
         [Newtonsoft.Json.JsonProperty("provider")]
@@ -241,6 +243,10 @@ namespace RNAssistant.Core.Models
 
     public sealed class ResourceSearchMatch
     {
+        [Newtonsoft.Json.JsonProperty("sectionTitle", NullValueHandling = Newtonsoft.Json.NullValueHandling.Ignore)]
+        public string SectionTitle { get; set; }
+        [Newtonsoft.Json.JsonProperty("description", NullValueHandling = Newtonsoft.Json.NullValueHandling.Ignore)]
+        public string Description { get; set; }
         [Newtonsoft.Json.JsonIgnore]
         public bool DocumentScoped { get; set; }
         [Newtonsoft.Json.JsonProperty("createdUtc", NullValueHandling = Newtonsoft.Json.NullValueHandling.Ignore)]

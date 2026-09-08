@@ -138,7 +138,11 @@ the whole-index token budget; shown counts reflect admitted rows and omitted
 resources have a `common.resources_find` recovery route.
 The generic semantic-target resolver refuses incomplete enumeration with
 `resource_scope_incomplete` rather than assuming the observed name is unique.
-Explicit domain-owned target resolution and already pinned exact reads are unchanged.
+A `document: <title>` target is resolved against the live document provider's
+explicit document kind; the exact returned target/title and bound-session guards
+still apply. It no longer enumerates unrelated Excel names/tables or artifact
+catalogs to establish document identity. Other domain-owned target resolution and
+already pinned exact reads retain their own admission rules.
 A mutable semantic
 target captures its current head on the first read, then pins all internal pages
 to that exact revision; it cannot get stuck on discovery's previous observation.
@@ -265,6 +269,28 @@ parts. No second JSON store or fallback to the former address is introduced.
 Historical exact reads/projections need no table lookup or Office I/O; missing CAS
 does not read the current table. Native bound-STA/closed-workbook behavior is checked
 with fakes; real Windows ListObject/model/WebView2 qualification remains open.
+
+### Excel catalog discovery and document reads
+
+Name/table discovery returns the bounded captured metadata (up to 200 entries)
+with terminal `Truncated=true` when the backend capture is incomplete. Visible
+pages do not close that source gap. Collection fingerprints include completeness,
+so a coverage change invalidates continuation even if the captured descriptors
+are identical. Duplicate catalog identities still fail explicitly.
+
+Excel metadata search scans one list page (up to 50 items) and returns at most 20
+matches. It propagates both source/page truncation and result clipping. Filtering
+to zero matches cannot claim complete absence. This uses existing completeness
+fields and bounded capture, without raising limits or adding a catalog store.
+Point reads of a named table/name still require complete unambiguous identity
+evidence; explicit A1 range and `document:` reads do not depend on that catalog.
+
+The user's 2026-09-08 failure (`RESOURCE_SNAPSHOT_TOO_LARGE`, incomplete defined-name
+catalog during `document:` text read) is covered by a host-neutral 201-name fixture:
+model-facing document/range reads succeed, strict name reads still refuse incomplete
+identity, and terminal/search coverage remains honest. The workbook itself has not
+been retested on Windows/Office. The separately reported upstream HTTP 502 is not
+resolved by this resource-routing correction.
 
 ### Excel Defined Names
 

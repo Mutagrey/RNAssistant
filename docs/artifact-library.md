@@ -43,9 +43,10 @@ Missing metadata/extraction fails explicitly, with no origin-chat/body fallback;
 foreign document references are refused. Existing chat-local records are not
 silently migrated. The remaining ownership seam and removal gate are tracked in
 [MIGRATION_MAP](stabilization/MIGRATION_MAP.md#document-artifact-ownership--active-slices).
-Exact reads load one metadata record. Model discovery now selects current snapshots
-from one authority capture before reading their metadata (see below); picker/history
-enumeration still scans retained metadata. Bounded indexed discovery remains slice 3.
+Exact reads load one metadata record. Model discovery pages current roots from the
+existing ordered authority projection before reading metadata (see below). Picker/
+history enumeration remain separate slice-3 work; authored and uploaded text views
+are implemented below.
 
 ### Implemented Plan publication slice
 
@@ -155,14 +156,15 @@ and CAS collection retain published revisions.
 `shared Markdown:` covers cross-chat read/write, concurrent and prepared stale
 writers, duplicate titles, same-step independent calls, restore, immutable uploads,
 failed link publication, foreign documents, metadata-only restart, fork, unlink,
-GC and the complete agent execution/event-replay cycle. Indexed/partial discovery, richer shared context, explicit independent-copy
-UX and Windows/Office/WebView2/layout qualification remain separate open work.
+GC and the complete agent execution/event-replay cycle. Partial discovery and
+Markdown/Plan text views are implemented below. Richer compiler context, explicit
+independent-copy UX and Windows/Office/WebView2/layout qualification remain open.
 
 ### Implemented working-set links — 2026-09-08
 
 The original working-set slice covered document-owned originals and Plans.
 The shared HTML slice extends the same contract to HTML and authored JSON files;
-Markdown now extends it too; indexed discovery slices 3–4 remain open.
+Markdown now extends it too; remaining discovery/recovery work in slices 3–4 stays open.
 
 `ChatSession.ArtifactLinks` is append-only-event-backed chat membership: one
 logical resource identity, exact attached snapshot and detached flag per decision.
@@ -251,7 +253,7 @@ metadata return, unknown head and fork. Real WebView qualification remains open.
 
 ### Implemented partial current discovery — 2026-09-08
 
-`DocumentArtifactStore.InspectCurrentMetadata` builds a disposable result from one
+`DocumentArtifactStore.InspectCurrentMetadata` builds a disposable source page at one
 captured authority generation. The provider reads only the exact current Plan,
 HTML and authored Markdown metadata selected by logical-head dependencies, plus
 originals and other retained artifact roots. Historical metadata is loaded by
@@ -267,19 +269,105 @@ candidate remains. `availabilityHint` gives a runtime-owned recovery route;
 existing specific provider errors (including a changed live document) are preserved.
 Exact retained reads remain independent of unrelated collection damage.
 
-Root and HTML-member continuation fingerprints include document authority generation
-and observed availability as well as descriptors. A changed generation or recovered
-metadata invalidates continuation instead of silently mixing pages. No resource
-head is published during discovery or metadata recovery. An unavailable authority
-capture is still a whole-provider failure; the projection does not reconstruct it.
+### Implemented bounded document discovery pages — 2026-09-08
 
-This replaces model discovery's strict all-history metadata load and per-entry
-live head recapture. It does not introduce another store or index. Head enumeration,
-current-record hydration and the picker still need bounded source pagination;
-section/content indexing, richer compiler context and authority-journal recovery
-remain open. Host-neutral `resources: document discovery` and the generic incomplete
-coverage test cover partial matches/negatives, metadata recovery, missing bodies,
-current-vs-history selection, unknown heads and continuation drift.
+`ResourceAuthorityStore.ReadHeads` reads bounded identity ranges from the existing
+ordered `Heads` projection under its usual lock. It does not copy a full authority
+snapshot/commit list per page. `DocumentArtifactStore` selects logical Plan/HTML/MD
+heads and original/authored-file roots; history and operation-receipt ranges are
+skipped before metadata IO. Currentness still comes from exact head dependencies.
+No second durable index, resource store, or publication protocol is introduced.
+
+The chat provider hydrates at most 50 source slots per list page. Filtering,
+unavailable metadata and removed entries consume their slots without shifting
+continuation. `totalIsExact=false` distinguishes the unfiltered source-slot count
+from an exact filtered result count. Empty filtered pages may have continuation;
+Gateway consumes at most 20 pages per plan, even with zero matches. Artifact search
+also examines at most 20 source pages while preserving existing character/result
+budgets. Any unexamined remainder stays incomplete and cannot prove absence or
+uniqueness. Search reaches later pages without loading all metadata in advance.
+
+Root continuation binds chat, document authority generation and local projection;
+its offset addresses source slots, not healthy-result positions. Generation drift
+invalidates the cursor. Metadata recovery at the same generation does not shift
+those slots: previously omitted entries are recovered by a fresh discovery, and
+Gateway preserves any earlier page's unavailable status through the current scan.
+This supersedes the prior all-collection availability fingerprint, which required
+rehydrating the library before every continuation. HTML-member discovery reads only
+the exact selected current workspace; missing/stale selection stays explicit.
+Direct immutable snapshot identity resolution reads its own head and one metadata
+record, removing the final all-history load from the provider identity path.
+
+`Heads` remains a replayed in-memory projection of the append-only journal. Cold
+replay, ordered insertion and explicit full-authority/history consumers still scale
+with journal size; this slice does not claim bounded startup or write allocation.
+The working-set picker/history scans, section/content index, richer compiler context,
+authority-journal recovery and Windows/layout qualification remain open.
+Host-neutral coverage includes a 73-resource library with 1000 unrelated receipts,
+per-page metadata IO, no full capture on the provider path, point identity reads,
+complete traversal/search, source-page ceilings, unavailable metadata and writer drift.
+
+### Implemented exact text discovery views — 2026-09-08
+
+Document Markdown and Plan content search now uses `artifact-text-index-v1`, a
+deterministic `ResourceRevisionView` over the exact published body. Its manifest
+and 32,000-character text parts live in the existing CAS/revision journal, using
+the same retention/GC edges. It publishes no heads, observation or read guard and
+introduces no library database or second currentness projection.
+
+First materialization reads one exact source bounded to 2 million characters;
+subsequent searches read retained parts under the existing 1-million-character
+query budget. Authored Markdown/Plans no longer stop at the old per-artifact
+128,000-character prefix. This is a section/chunk view, not an inverted full-text
+index: an uncached build reads the bounded source and negative queries scan parts.
+One occurrence per resource suffices for discovery; a budget-limited negative
+remains incomplete. Matches spanning parts preserve exact UTF-16 source offsets,
+including CRLF and surrogate pairs.
+
+`sectionTitle` supplies the nearest preceding recognized ATX Markdown heading,
+excluding fenced code, with up to 200 characters plus an omission marker. This
+bounded outline recognizes at most 4096 headings; it supplies no title after an
+omitted heading. It is not a complete Markdown AST or section-read contract.
+Search-only Gateway candidates now retain the authored description too. Both
+fields are untrusted discovery context; snippets are source excerpts, not proof of
+whole-source inspection or mutation eligibility.
+
+A missing/corrupt derived manifest or part is recreated once from the same exact
+body; immutable view registration rejects conflicting derivations. Missing source
+bytes stay unavailable. Current search selects current heads, while an explicitly
+requested historical snapshot keeps its own index. Generation is checked after
+the last source page as well as between pages, so a write during materialization
+cannot produce an apparently current mixed-generation result.
+
+Uploaded extracted text now uses the extension below. HTML member indexing,
+semantic section reads, picker/history pagination, richer
+compiler decision context and cold allocation/Windows/layout qualification remain
+open. No model-generated synopsis or embedding publication is added.
+
+### Implemented uploaded text discovery views — 2026-09-08
+
+`DocumentArtifactStore.SearchText` also indexes the original's retained extraction
+through `artifact-extracted-text-index-v1`. The exact resource still identifies the
+immutable upload; the view hash binds its **extracted text**, independently of the
+original binary payload hash. The existing manifest/parts/CAS mechanism, source
+bounds, source-page generation guards and repair path are reused. There is no
+second extractor, source-chat fallback or new store. Original search no longer
+uses the per-resource 128k prefix path; local resources keep their existing path.
+
+Materialization validates the retained extraction character count. Uploaded
+Markdown receives ATX heading context; PDF/plain-text hash marks do not become
+Markdown headings. Snippet offsets address the retained text representation and
+round-trip through the existing exact resource read. No read-evidence contract
+changes. If text extraction bytes are missing, text search stays unavailable even
+with a warm index; the original's metadata remains discoverable. Missing derived
+bytes are rebuilt from that exact extraction, and normal CAS GC retains the view.
+
+`TextTruncated`, or PDF page metadata showing unextracted pages, keeps search
+incomplete even on a hit or a query longer than the retained text. These views
+record character-range coverage instead of whole coverage. A complete text scan
+refers to the retained text representation; it does not inspect images or prove
+full visual coverage of a PDF. Semantic section reads and HTML member indexing
+remain subsequent work.
 
 ### Ownership and user behavior
 

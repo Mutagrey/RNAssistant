@@ -14,6 +14,17 @@ gates; active tool compatibility adapter отсутствует. Windows/Office 
 
 ## Document artifact ownership — active slices
 
+Exact text discovery (2026-09-08): `DocumentArtifactStore.SearchText` owns the
+deterministic Markdown/Plan text view over existing revision/CAS ports. The chat
+provider uses it instead of the old 128k prefix scan for these document resources;
+Gateway projects heading context and preserves search-only authored descriptions.
+Original extracted text now uses the same owner with an extraction-bound revision
+view and explicit partial coverage; its 128k provider search prefix path is removed.
+Local artifacts and HTML members keep their existing source paths. No temporary adapter or new
+durable store; read guards still require the normal evidence path. Last-page
+generation validation closes the indexing/read race. See the canonical
+[text view contract](../artifact-library.md#implemented-exact-text-discovery-views--2026-09-08).
+
 | Seam | Owner and consumers | Removal gate |
 |---|---|---|
 | Transient `ChatArtifact` projection over document-owned originals/Plans/HTML/Markdown | `DocumentArtifactStore` owns new originals, Plan, HTML/JSON and authored Markdown snapshots in existing authority/CAS; native Plan binding v3 and mutation observer publish per-Plan document heads. Ingestion, Gateway/provider, viewers, chat projection and fork consume document refs. Plan conversation-head publication and direct local-action mutation bypass are removed. No second store or document-ref fallback; old chat Plans are explicitly rejected for mutation | HTML identity/head/tools and working-set consumers are switched through the same record path and mutation observer; independent Markdown now uses the same authored-record path with prepared exact intent and no active singleton; slices 3–4 finish indexed discovery/recovery and remove remaining chat-only ownership. Individual metadata loss now uses transient unavailable projections; partial model discovery now isolates per-resource failures; bounded indexing and authority-wide recovery remain open. Originals/Plan/HTML/Markdown explicit selection/refresh/unlink now use `ArtifactWorkingSetService` and chat-event-backed `ArtifactLinks`; prompt/library/compaction, fork and clear consume these decisions. Incompatible stream handling stays explicit, without deleting user data. Windows delivery remains open |
@@ -34,12 +45,17 @@ ToolRuntime now passes its existing prepared state to the handler and observer
 prepare/read-back calls while preserving the kernel execution identity and persisted
 event format. No session-level MD store is used.
 
-Model collection discovery now consumes `InspectCurrentMetadata` over one authority
-capture. Its strict all-history metadata load and per-entry live head selection are
-removed from list/search; exact/history callers retain their dedicated paths. Typed
-availability counts reach model completeness and target guards. Continuations bind
-generation and availability. No temporary adapter; bounded source paging and indexing
-remain the removal gate for full head enumeration/current-record hydration.
+Model collection discovery now consumes bounded `InspectCurrentMetadata` source
+pages over `ResourceAuthorityStore.ReadHeads` and the same ordered Heads projection.
+Full snapshot copies, all-library metadata hydration and per-entry live-head selection
+are removed from model list/search. Provider identity resolution now reads one exact
+head/record, removing its all-history load. HTML member discovery uses only its
+selected exact current workspace; the old standalone inline test fixture uses the
+production Gateway/owner. Source cursors bind generation and preserve unavailable
+slots; fresh scans recover earlier omissions. Gateway/search page ceilings avoid
+unbounded filtered scans. No temporary adapter or separate durable index;
+picker/history, remaining HTML indexing and cold replay/write allocation
+remain open. Markdown/Plan retained text views are described above.
 
 HTML UI action seam removed (2026-09-08): the typed bridge passes complete
 `HtmlWorkspaceActionPayload` guards to addressed/reserved controller actions.
@@ -62,6 +78,7 @@ paths or prerequisites merely because they could be improved.
 | Replaced/pending contour | Canonical owner | Consumers / removal gate | State |
 |---|---|---|---|
 | Intent discovery drops terminal provider truncation and treats zero observed matches as absence | Existing Gateway intent enumeration/search → common.resources_find/read | Model/manual discovery and generic semantic-target resolution | Fixed host-neutral: full pagination remains complete; terminal source truncation survives filtering and later providers. Incomplete scans cannot report true empty, and incomplete enumeration cannot prove a unique target. Existing completeness fields and typed refusal are reused; no fallback or additional discovery store. Explicit domain resolvers/exact reads are unchanged; Windows qualification remains open |
+| `document:` resolution scans every document catalog; bounded Excel names/tables fail discovery and metadata search loses truncation | Live document provider's exact kind → Gateway target validation; existing ExcelResourceProvider bounded list/search | Model/manual document reads and resource discovery | Replaced host-neutral: unrelated catalog availability no longer gates document identity; table/name discovery preserves terminal source coverage and coverage-bound continuation. Search preserves source/page/result clipping. Name/table point admission remains strict. No fallback, store or limit increase; reported workbook Windows retest remains open |
 | Excel tables discoverable only as inspect metadata, with consumers binding fixed A1 ranges | Existing ExcelResourceProvider → typed table metadata/range capture → Gateway/CAS | Generic model/manual discovery/read and HTML named-table bindings | Switched host-neutral for ListObjects: bound workbook/name identity survives relocation/resize; extent is part of exact snapshot bytes. Shared text/formulas/profile and records at $.values, historical no-I/O, bounded unambiguous lookup and no former-address fallback. Ordinary explicit A1 resources remain distinct supported targets. Defined Names use the same owner below; finer coverage and real Windows qualification remain open |
 | Defined Names available only as inspect metadata with unverified target sheet/address | Existing ExcelResourceProvider → typed name classification/range capture → Gateway/CAS | Generic model/manual discovery/read and HTML name bindings | Switched host-neutral: exact qualified name identity; only positive bound-workbook/single-area proof admits cell reads. Other targets remain metadata-only, without formula parsing or local-address fallback. Definition and extent participate in exact snapshots; records use $.range.values; retained reads survive live removal without Office I/O. No extra reader/store; real COM classifier, dynamic/external/multi-area behavior and finer impact/coverage qualification remain open |
 | `excel.find_cells` direct adapter read and hash/full-cell output | ExcelSearchResourceService → existing Excel provider/Gateway/CAS → pure domain matching | Native/manual workbook/sheet/range/selection searches and exact source reads | Replaced host-neutral: complete bounded cell captures, zero-match drift, historical no-I/O, invalid/oversized capture refusal and bound-STA/closed-workbook checks. Shared paging retained; direct search method removed. Replacement owner unchanged; real Windows qualification remains open |

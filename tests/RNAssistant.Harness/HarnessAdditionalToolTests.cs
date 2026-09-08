@@ -198,7 +198,7 @@ namespace RNAssistant.Harness
                 drySession.HtmlWorkspace.Files = null;
                 drySession.HtmlWorkspace.DataSources = null;
                 drySession.HtmlWorkspace.UpdatedUtc = default(DateTime);
-                var dryResources = new ResourceGatewayService()
+                var dryResources = executor.ResourceGateway
                     .List(drySession, ChatArtifactResourceProvider.ProviderName, ChatHtmlResourceCatalog.FileKind, null, 10);
                 AssertEqual(0, dryResources.Items.Count, "empty html workspace has no file resources");
                 AssertTrue(drySession.HtmlWorkspace.Files == null, "html dry run does not normalize files in place");
@@ -229,7 +229,7 @@ namespace RNAssistant.Harness
                 AssertTrue(dataResult.Success, "html workspace data save succeeds");
                 AssertEqual(1, session.HtmlWorkspace.DataSources.Count, "html data count");
 
-                var gateway = new ResourceGatewayService();
+                var gateway = executor.ResourceGateway;
                 var dataResource = gateway
                     .List(session, ChatArtifactResourceProvider.ProviderName, ChatHtmlResourceCatalog.DataKind, null, 10)
                     .Items.Single(item => item.Title == "rows");

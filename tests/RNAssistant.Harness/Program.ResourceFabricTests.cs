@@ -216,9 +216,15 @@ namespace RNAssistant.Harness
                 Kind = "test",
                 Title = "Hidden",
                 Representation = ResourceRepresentations.Text,
+                Description = "Purpose retained from the searched revision",
+                SectionTitle = "Relevant section",
                 Snippet = "needle"
             };
             var hidden = gateway.Find(session, "needle", "conversation");
+            AssertEqual("Purpose retained from the searched revision", hidden.Items.Single(item => item.Title == "Hidden").Description,
+                "search-only descriptors preserve authored descriptions without listing metadata");
+            AssertEqual("Relevant section", hidden.Items.Single(item => item.Title == "Hidden").SectionTitle,
+                "search-only candidates retain section context");
             AssertTrue(hidden.Items.Any(item => item.Target == "conversation resource: Hidden"),
                 "provider search result beyond the bounded listing remains discoverable");
             AssertEqual("7", hidden.Items.Single(item => item.Target == "conversation resource: Hidden").Reference.Revision,
@@ -253,6 +259,11 @@ namespace RNAssistant.Harness
             AssertTrue(partial.Items.Count == 1 && partial.Partial && !partial.Complete, "later healthy pages cannot erase an earlier unavailable resource");
             AssertEqual("resource_scope_incomplete", RuntimeThrows<ResourceRequestException>(() =>
                 gateway.ResolveIntentTarget(session, partial.Items.Single().Target)).ErrorCode, "partial healthy pages cannot prove uniqueness");
+            provider.ListPage = cursor => new ResourceListPage { NextCursor = "next", Truncated = true };
+            var beforePages = provider.ListCalls;
+            var bounded = gateway.Find(session, null, "conversation");
+            AssertTrue(provider.ListCalls - beforePages == 20 && !bounded.Complete && !bounded.Empty && bounded.RefineQuery,
+                "empty filtered source pages cannot drive an unbounded scan or a complete negative");
             provider.SearchTruncated = true;
             AssertTrue(!gateway.Find(session, "missing", "conversation").Empty, "an incomplete content scan cannot prove absence either");
         }

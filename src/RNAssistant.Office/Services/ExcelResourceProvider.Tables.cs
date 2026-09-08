@@ -16,23 +16,23 @@ namespace RNAssistant.Office.Services
 
         private ResourceListPage ListTables(ChatSession session, string cursor, int limit)
         {
-            var snapshot = CaptureTableCatalog();
+            var snapshot = _reader.CaptureStructure("tables");
             var items = snapshot.Tables.Select(table => DescribeTable(session, table)).ToList();
-            return PageNamedResources(items, TableKind, cursor, limit);
+            return PageNamedResources(items, TableKind, cursor, limit, snapshot.Truncated);
         }
 
-        private ResourceListPage PageNamedResources(System.Collections.Generic.List<ResourceDescriptor> items, string kind, string cursor, int limit)
+        private ResourceListPage PageNamedResources(System.Collections.Generic.List<ResourceDescriptor> items, string kind, string cursor, int limit, bool sourceTruncated = false)
         {
             if (items.Select(item => item.Reference.Uri).Distinct(StringComparer.Ordinal).Count() != items.Count)
                 throw Error("RESOURCE_TARGET_AMBIGUOUS", "The resource catalog contains duplicate names.");
             var binding = ResourceReadCursor.ListBinding(Id, kind);
             var position = ResourceReadCursor.ParseRevisionBound(cursor, binding);
-            var revision = ResourceReadCursor.CollectionRevision(items);
+            var revision = ResourceReadCursor.CollectionRevision(items, sourceTruncated ? "incomplete" : null);
             ResourceReadCursor.ValidateContinuation(position, revision);
             ResourceReadCursor.ValidateCollectionOffset(position, items.Count);
             var selected = items.Skip(position.Offset).Take(Math.Max(1, Math.Min(50, limit))).ToList();
             var next = position.Offset + selected.Count;
-            return new ResourceListPage { Items = selected, Total = items.Count, Truncated = next < items.Count,
+            return new ResourceListPage { Items = selected, Total = items.Count, Truncated = sourceTruncated || next < items.Count,
                 NextCursor = next < items.Count ? ResourceReadCursor.CreateRevisionBound(next, revision, binding) : null };
         }
 

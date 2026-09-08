@@ -273,7 +273,7 @@ namespace RNAssistant.Office.Services
             var truncated = false;
             var scope = IntentTargetScope(target);
             var states = EnumerateIntentResources(
-                session, IntentPlansForScope(scope), unavailable, failures, ref truncated);
+                session, IntentPlansForTarget(scope, target), unavailable, failures, ref truncated);
             var searchConfirmedTarget = false;
             var searchIncomplete = false;
             if (truncated)
@@ -369,8 +369,10 @@ namespace RNAssistant.Office.Services
                 try
                 {
                     var cursor = string.Empty;
+                    var sourcePages = 0;
                     do
                     {
+                        if (sourcePages++ >= 20) { truncated = true; break; }
                         var page = List(session, plan.Provider.Id, plan.Kind, cursor, IntentPageSize);
                         // A normal page is completed by its continuation. Terminal
                         // truncation is missing source coverage, not a finished catalog.
@@ -510,6 +512,16 @@ namespace RNAssistant.Office.Services
             }
         }
 
+        private IEnumerable<ResourceIntentPlan> IntentPlansForTarget(string scope, string target)
+        {
+            // The document target belongs to the live document provider. Unrelated
+            // name/table/artifact catalogs cannot prove or disprove its identity.
+            if (target.StartsWith("document: ", StringComparison.Ordinal))
+                return _registry.All().OfType<LiveDocumentResourceProvider>()
+                    .Select(provider => new ResourceIntentPlan(provider, LiveDocumentResourceProvider.DocumentKind, "document"));
+            return IntentPlansForScope(scope);
+        }
+
         private IEnumerable<ResourceIntentPlan> IntentPlansForScope(string scope)
         {
             foreach (var plan in IntentListPlans())
@@ -573,6 +585,7 @@ namespace RNAssistant.Office.Services
                     new List<string>()).ToList(),
                 Usage = IntentUsage(state.Type, state.Descriptor),
                 MatchRepresentation = match == null ? null : match.Representation,
+                SectionTitle = match == null ? null : match.SectionTitle,
                 Snippet = match == null ? null : match.Snippet,
                 Evidence = match == null ? null : match.Evidence,
                 Reference = new ResourceRef(
@@ -678,6 +691,7 @@ namespace RNAssistant.Office.Services
                 Title = match.Title
             };
             if (match.DocumentScoped) descriptor.Metadata["scope"] = "document";
+            if (match.Description != null) descriptor.Metadata["description"] = match.Description;
             ResourceAddress address;
             if (match.Reference != null &&
                 ResourceUri.TryParse(match.Reference.Uri, out address))
@@ -898,6 +912,8 @@ namespace RNAssistant.Office.Services
 
     internal sealed class ResourceIntentCandidate
     {
+        [Newtonsoft.Json.JsonProperty("sectionTitle", NullValueHandling = Newtonsoft.Json.NullValueHandling.Ignore)]
+        public string SectionTitle { get; set; }
         [Newtonsoft.Json.JsonProperty("description", NullValueHandling = Newtonsoft.Json.NullValueHandling.Ignore)]
         public string Description { get; set; }
         [Newtonsoft.Json.JsonIgnore]
