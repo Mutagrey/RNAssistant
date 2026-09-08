@@ -227,6 +227,8 @@ namespace RNAssistant.Office.Tools
             IDictionary<string, object> arguments, Func<T> action, IReadOnlyList<ResourceMutationReadBack> preparedReadBack = null,
             Action validateBeforeDispatch = null)
         {
+            if (PlanDocumentToolCatalog.Owns(operation))
+                throw new InvalidOperationException("Document Plan mutations require the native Plan handler and its prepared logical identity.");
             var historyMutation = ConversationResourceMutationDomain.IsHistoryMutation(operation);
             if (session == null || action == null || ConversationResourceMutationDomain.StateName(operation) == null && !historyMutation)
                 throw new ArgumentException("An explicit local resource mutation is required.");

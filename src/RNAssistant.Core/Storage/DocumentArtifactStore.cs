@@ -8,9 +8,9 @@ using RNAssistant.Core.Services;
 
 namespace RNAssistant.Core.Storage
 {
-    // Publication owner for committed originals. The record is a retained resource
-    // view in the existing authority journal/CAS, not a second library database.
-    public sealed class DocumentArtifactStore
+    // Owns originals and retained Plan snapshots in the existing authority/CAS.
+    // Plan head publication stays with the mutation observer; no library database.
+    public sealed partial class DocumentArtifactStore
     {
         private const string RecordView = "artifact-original-record";
         private const int MaximumRecordBytes = 512 * 1024;
@@ -109,13 +109,15 @@ namespace RNAssistant.Core.Storage
             var snapshot = _authority.Capture(scope);
             return snapshot.Heads.Values.Where(head => head.Knowledge == HeadKnowledge.Known &&
                 Owns(session, head.Revision))
-                .Select(head => Read(session, head.Revision)).OrderBy(item => item.CreatedUtc).ThenBy(item => item.Id, StringComparer.Ordinal).ToArray();
+                .Select(head => IsPlan(session, head.Revision) ? ReadPlan(session, head.Revision, false) : Read(session, head.Revision))
+                .OrderBy(item => item.CreatedUtc).ThenBy(item => item.Id, StringComparer.Ordinal).ToArray();
         }
 
         public ChatArtifact Read(ChatSession session, ResourceRef reference)
         {
+            if (IsPlan(session, reference)) return ReadPlan(session, reference, true);
             var scope = Scope(session);
-            if (!Owns(session, reference)) throw new InvalidDataException("The original belongs to another document.");
+            if (!Owns(session, reference)) throw new InvalidDataException("The artifact belongs to another document.");
             var head = _authority.GetHead(scope, reference.Identity);
             if (head?.Knowledge != HeadKnowledge.Known || head.Revision.Uri != reference.Uri || head.Revision.Revision != reference.Revision)
                 throw new InvalidDataException("The original has not crossed its publication barrier or is unavailable.");
@@ -138,7 +140,8 @@ namespace RNAssistant.Core.Storage
             int revision;
             return !string.IsNullOrWhiteSpace(session?.DocumentAuthorityId) &&
                 ChatResourceUri.TryParseArtifactRevision(reference, out owner, out id, out revision) &&
-                owner == session.DocumentAuthorityId && id.StartsWith("attachment_", StringComparison.Ordinal);
+                owner == session.DocumentAuthorityId && (id.StartsWith("attachment_", StringComparison.Ordinal) ||
+                    id.StartsWith("plan_doc_", StringComparison.Ordinal));
         }
 
         private OriginalRecord ReadRecord(ResourceRevisionView view)
@@ -155,7 +158,7 @@ namespace RNAssistant.Core.Storage
         private static ResourceAuthorityScopeId Scope(ChatSession session)
         {
             if (string.IsNullOrWhiteSpace(session?.DocumentAuthorityId))
-                throw new InvalidOperationException("A bound logical document identity is required for original publication.");
+                throw new InvalidOperationException("A bound logical document identity is required for artifact access.");
             return ResourceAuthorityScopeId.Document(new DocumentAuthorityId(session.DocumentAuthorityId));
         }
 

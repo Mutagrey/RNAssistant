@@ -2239,6 +2239,10 @@ endpoint.
    library. Origin-chat deletion, concurrent writes, exact history and CAS retention
    must pass before claiming cross-chat editing. The initial discovery/context
    correction does not move ownership or close Windows/target-model gates.
+   Sent-original ownership and Plan snapshot/logical-head publication are now
+   implemented host-neutral (slices 1a/1b). Shared HTML, independent Markdown and
+   explicit working-set selection remain open; inherited Plan selections already
+   use the document head guard. Windows/target-model gates remain unchanged.
 5. **11T — typed Office tools и удаление legacy host dispatch — admitted:**
    - [x] 11T0/7D — done host-neutral: один атомарный production change связывает exact выбранный workbook с
      `ExcelDocumentSession`, переключает factories и typed Excel read/write на прямой

@@ -24,7 +24,7 @@ namespace RNAssistant.Office.Tools
         internal static IEnumerable<ToolCatalogEntry> GetTools()
         {
             yield return Projection(SaveToolId,
-                "Plan document: Save the complete active Markdown plan. Runtime creates it when absent and otherwise appends an exactly guarded linear revision.",
+                "Plan document: Save the complete selected document-owned Markdown plan. Runtime creates an independent plan when none is selected; otherwise it appends a revision only if the selected base is still current across all document chats.",
                 SaveSchema(), "plan_doc_save", 0);
             yield return Projection(RestoreToolId,
                 "Plan document: On explicit request, restore one user-visible historical version as a new exactly guarded linear head without modifying history.",

@@ -32,13 +32,13 @@ namespace RNAssistant.Office.Tools
         {
             if (string.Equals(toolId, PlanDocumentToolCatalog.SaveToolId,
                 StringComparison.Ordinal))
-                return new ToolBinding("conversation.plan.document.save.intent.v2");
+                return new ToolBinding("document.plan.save.intent.v3");
             if (string.Equals(toolId, PlanDocumentToolCatalog.RestoreToolId,
                 StringComparison.Ordinal))
-                return new ToolBinding("conversation.plan.document.restore.intent.v2");
+                return new ToolBinding("document.plan.restore.intent.v3");
             if (string.Equals(toolId, PlanDocumentToolCatalog.DeleteToolId,
                 StringComparison.Ordinal))
-                return new ToolBinding("conversation.plan.document.delete.intent.v2");
+                return new ToolBinding("document.plan.delete.intent.v3");
             return null;
         }
 
@@ -73,7 +73,7 @@ namespace RNAssistant.Office.Tools
                     ToolArgumentReader.String(context.Arguments, "title", string.Empty),
                     ToolArgumentReader.String(context.Arguments, "markdown", string.Empty),
                     ToolArgumentReader.String(context.Arguments, "status", "draft"),
-                    context.MarkDispatchPossible);
+                    context.MarkDispatchPossible, PlanDocumentService.CreationId(_session, context.Execution));
             }
             if (string.Equals(_toolId, PlanDocumentToolCatalog.RestoreToolId,
                 StringComparison.Ordinal))
@@ -116,6 +116,7 @@ namespace RNAssistant.Office.Tools
                     ErrorData("plan_verification_failed", false)),
                     ToolEffectEvidence.Unknown);
 
+            mutation.Artifact.RunId = context.Execution.RunId;
             var payload = Payload(mutation.PlanId, mutation.Status,
                 mutation.Artifact);
             if (!string.IsNullOrWhiteSpace(mutation.RestoredFromArtifactId))

@@ -89,12 +89,14 @@ namespace RNAssistant.Core.Storage
 
         // A live mutation owns this short scope lease after confirmation and until
         // publication. Process death releases it; recovery never races a live writer.
-        public IDisposable AcquireScope(ResourceAuthorityScopeId scope)
+        public IDisposable AcquireScope(ResourceAuthorityScopeId scope, bool waitForOwner = false)
         {
             var directory = Path.GetDirectoryName(_path);
             StorageFileSystem.EnsureRegularDirectory(directory);
-            return new FileStream(Path.Combine(directory, "mutation-" +
-                RNAssistant.Core.Tools.TextPatternEngine.Sha256(scope.ToString()) + ".lck"),
+            var path = Path.Combine(directory, "mutation-" +
+                RNAssistant.Core.Tools.TextPatternEngine.Sha256(scope.ToString()) + ".lck");
+            if (waitForOwner) return StorageFileSystem.AcquireWriteLock(path);
+            return new FileStream(path,
                 FileMode.OpenOrCreate, FileAccess.ReadWrite, FileShare.None);
         }
 

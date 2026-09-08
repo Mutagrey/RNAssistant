@@ -26,7 +26,13 @@ hold links only. `ChatArtifactResourceProvider` projects these records for Gatew
 discovery and exact viewers independently of the origin chat. Historical `chat`
 in the URI provider namespace does not imply conversation ownership: these refs
 carry `DocumentAuthorityId` as owner, and descriptors expose document scope.
-Authored workspace/Plan ownership remains pending under
+New Plan snapshots and per-Plan logical heads are also document-owned (2026-09-08).
+The existing mutation observer prepares the selected exact base and publishes
+snapshot/head read-backs together; chat persistence follows publication and keeps
+selection only. Current reads depend on the logical Plan head. Native binding v3
+rejects stale selection before dispatch; chat clear/fork no longer publishes a
+conversation Plan head. Authored workspace/independent Markdown ownership and
+working-set selection remain pending under
 [Artifact Library](artifact-library.md#authorized-document-ownership-cutover--2026-09-07).
 
 `ResourceIdentity` is logical identity; `ResourceRef` adds an exact revision.

@@ -374,7 +374,7 @@ namespace RNAssistant.Office.Services
                     StringComparison.OrdinalIgnoreCase))
                 {
                     yield return new ResourceIntentPlan(provider, null, "conversation");
-                    yield return new ResourceIntentPlan(provider, ChatArtifactResourceProvider.DocumentOriginalKind, "document");
+                    yield return new ResourceIntentPlan(provider, ChatArtifactResourceProvider.DocumentArtifactKind, "document");
                     yield return new ResourceIntentPlan(provider, ChatHtmlResourceCatalog.FileKind, "html");
                     yield return new ResourceIntentPlan(provider, ChatHtmlResourceCatalog.DataKind, "html");
                 }

@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using Newtonsoft.Json.Linq;
+using RNAssistant.Core.ModelProtocol;
 using RNAssistant.Core.Models;
 using RNAssistant.Core.Services;
 using RNAssistant.Core.Storage;
@@ -1361,17 +1362,20 @@ namespace RNAssistant.Harness
                     () => HtmlWorkspaceToolService.UpsertFile(session, "index.html", "html", "<p>one</p>", true));
                 executor.MutateLocalResources(session, "common.html_workspace_bind_data", null,
                     () => HtmlWorkspaceToolService.UpsertDataSource(session, "data", "{\"count\":1}"));
-                executor.MutateLocalResources(session, "common.plan_doc_save", null,
-                    () => new PlanDocumentService().Save(session, "Plan", "# Plan", "draft", () => { }));
+                var planResult = executor.ExecuteManual(Command(PlanDocumentToolCatalog.SaveToolId,
+                    "title", "Plan", "markdown", "# Plan", "status", "draft"),
+                    OfficeToolCatalog.ForHost(adapter.HostName).Concat(executor.GetControllerTools()).ToList(), new AppSettings(), false, false, session);
+                AssertTrue(planResult.Success, "Plan uses its native document publication owner");
                 executor.MutateLocalResources(session, "common.task_list_set", null,
                     () => new TaskListService().Set(session, "Goal", new[] { "Read", "Change", "Verify" }
                         .Select(text => new ChatTaskStep { Text = text }).ToList(), () => { }));
                 var scope = executor.ResourceAuthority.Scope(session, false);
                 var html = ResourceStateProvider.Identity(scope, "html-workspace");
-                var plan = ResourceStateProvider.Identity(scope, "plan-document");
+                var planScope = executor.ResourceAuthority.Scope(session, true);
+                var plan = DocumentArtifactStore.PlanIdentity(session, PlanDocumentService.PlanId(session.Artifacts.Single(item => item.Id == session.ActivePlanDocumentArtifactId)));
                 var tasks = ResourceStateProvider.Identity(scope, "task-list");
                 var first = store.GetHead(scope, html).Revision;
-                var planBefore = store.GetHead(scope, plan).Revision;
+                var planBefore = store.GetHead(planScope, plan).Revision;
                 var tasksBefore = store.GetHead(scope, tasks).Revision;
                 session.Messages.Add(new ChatMessage { Role = "user", Content = "Start" });
                 session.Messages.Add(new ChatMessage { Role = "assistant", Content = "Ready", ResourceRefs = new List<ResourceRef> {
@@ -1392,7 +1396,7 @@ namespace RNAssistant.Harness
                 var metadata = store.GetRevision(scope, restored);
                 AssertEqual(first.Revision, metadata.RestoredFrom.Revision, "edit has exact restore origin");
                 AssertEqual(second.Revision, metadata.Parent.Revision, "edit advances, never rewinds, logical lineage");
-                AssertEqual(planBefore.Revision, store.GetHead(scope, plan).Revision.Revision, "unchanged plan has no spurious revision");
+                AssertEqual(planBefore.Revision, store.GetHead(planScope, plan).Revision.Revision, "chat edit cannot change the document Plan head");
                 AssertEqual(tasksBefore.Revision, store.GetHead(scope, tasks).Revision.Revision, "unchanged task list has no spurious revision");
                 AssertEqual("Replay", chats.Load(session.Id).Messages.Last().Content, "rewritten history is durable before return");
 
@@ -1414,7 +1418,7 @@ namespace RNAssistant.Harness
                 var forkScope = executor.ResourceAuthority.Scope(fork, false);
                 var forkHead = store.GetHead(forkScope, ResourceStateProvider.Identity(forkScope, "html-workspace")).Revision;
                 AssertEqual(1L, store.Capture(forkScope).Generation, "all fork heads are published in one commit");
-                AssertEqual(4, store.Capture(forkScope).Commits.Single().HeadChanges.Count, "fork atomically publishes workspace, plan, tasks and membership");
+                AssertEqual(3, store.Capture(forkScope).Commits.Single().HeadChanges.Count, "fork publishes workspace, tasks and membership without copying the document Plan head");
                 AssertEqual(session.DocumentAuthorityId, fork.DocumentAuthorityId, "chat fork keeps the same live document authority");
                 AssertTrue(forkHead.Uri != restored.Uri && forkHead.Revision != restored.Revision, "fork has its own logical resource identity/revision");
                 executor.MutateChatResources(fork, new ChatResourceMutationIntent(ChatResourceMutationKind.Edit, target.Id, text: "Replay"), () => true);
@@ -1975,9 +1979,73 @@ namespace RNAssistant.Harness
             AssertTrue(!text.Contains(r1.Uri), "stale evidence marker hides runtime-owned resource identity");
             AssertEqual(2, compiled.Messages.Count, "causal call/result pair retained");
             AssertEqual(1, compiled.Receipt.ExcludedSuperseded, "receipt explains exclusion");
+            ToolResultWireReadResult staleWire;
+            string staleError;
+            AssertTrue(ToolResultHistoryReader.TryRead(
+                    compiled.Messages[1], out staleWire, out staleError),
+                "stale request projection remains a strict Tool Result: " + staleError);
+            AssertEqual(RNAssistant.Core.Tools.Contracts.ToolResultStatus.Error,
+                staleWire.Result.Status,
+                "stale evidence is not presented to the model as a successful read");
+            AssertEqual("resource_evidence_stale",
+                (string)JObject.Parse(staleWire.Result.DataJson)["code"],
+                "stale evidence exposes the exact reread reason");
             var changed = compiled.Messages;
             changed[0].Content = "mutated";
             AssertTrue(compiled.Messages[0].Content != "mutated", "request projection is detached from frozen snapshot");
+
+            var currentEvidence = new ResourceEvidence("read", scope, r2,
+                "source", ResourceCoverage.Whole(), true, 2);
+            var oversizedCommand = new ToolInvocation
+            {
+                ToolId = "common.resources_read",
+                ToolCallId = "call2"
+            };
+            var oversizedResult = AgentJsonProtocol.CreateToolResultMessage(
+                oversizedCommand,
+                new ToolResultMaterialization(
+                    RNAssistant.Core.Tools.Contracts.ToolResult.Ok("read",
+                        new JObject
+                        {
+                            ["target"] = "VBA module: Module1",
+                            ["text"] = "CURRENT_BODY" + new string('y', 50000)
+                        }.ToString(), new[] { r2 }),
+                    resourceEvidence: new[] { currentEvidence }),
+                int.MaxValue, "tool");
+            var oversizedCall = new ChatMessage
+            {
+                Role = "assistant",
+                ProtocolMessage = true,
+                ToolCallId = "call2",
+                ToolName = oversizedCommand.ToolId,
+                ToolCalls = new List<RNAssistant.Core.Llm.LlmToolCall>
+                {
+                    new RNAssistant.Core.Llm.LlmToolCall
+                    {
+                        Id = "call2",
+                        Name = oversizedCommand.ToolId,
+                        Type = "function",
+                        ArgumentsJson = "{}"
+                    }
+                }
+            };
+            var oversized = new ModelContextCompiler().Compile(authority,
+                new ChatMessage[0], new[] { oversizedCall, oversizedResult },
+                null, new ToolCatalogEntry[0], new AppSettings(), 1024);
+            ToolResultWireReadResult oversizedWire;
+            string oversizedError;
+            AssertTrue(ToolResultHistoryReader.TryRead(
+                    oversized.Messages[1], out oversizedWire, out oversizedError),
+                "oversized resource projection remains a strict Tool Result: " + oversizedError);
+            AssertEqual(RNAssistant.Core.Tools.Contracts.ToolResultStatus.Error,
+                oversizedWire.Result.Status,
+                "oversized exact resource evidence cannot remain a partial success");
+            AssertEqual("resource_evidence_context_too_large",
+                (string)JObject.Parse(oversizedWire.Result.DataJson)["code"],
+                "oversized resource evidence exposes the exact narrower-view recovery");
+            AssertEqual(RNAssistant.Core.Tools.Contracts.ToolResultStatus.Ok,
+                ToolResultWire.Read(oversizedResult.Content).Result.Status,
+                "request-local resource admission does not rewrite durable evidence");
         }
 
         private static void DocumentAuthoritySurvivesSaveAsAndSeparatesCopy()

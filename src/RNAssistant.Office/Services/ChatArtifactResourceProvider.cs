@@ -11,7 +11,7 @@ namespace RNAssistant.Office.Services
     internal sealed class ChatArtifactResourceProvider : IResourceProvider, IResourceMemberResolver, IResourceIdentityResolver, IResourceRawSource
     {
         public const string ProviderName = "chat";
-        internal const string DocumentOriginalKind = "document-original";
+        internal const string DocumentArtifactKind = "document-artifact";
         private const int MaximumListItems = 50;
         private const int MaximumSearchResults = 20;
         private const int MaximumSearchCharacters = 1000000;
@@ -78,7 +78,7 @@ namespace RNAssistant.Office.Services
             var filtered = OrderedArtifacts(session)
                 .Where(item => _htmlResources.IsReadableRevision(session, item))
                 .Where(item => string.IsNullOrWhiteSpace(kind) ||
-                    kind == DocumentOriginalKind && !string.IsNullOrWhiteSpace(item.DocumentAuthorityId) ||
+                    kind == DocumentArtifactKind && !string.IsNullOrWhiteSpace(item.DocumentAuthorityId) ||
                     string.Equals(item.Kind, kind, StringComparison.OrdinalIgnoreCase))
                 .ToList();
             var descriptors = filtered.Select(item => Describe(session, item, true)).ToList();
@@ -162,7 +162,7 @@ namespace RNAssistant.Office.Services
                 _htmlResources.IsReadableRevision(session, item)))
             {
                 if (!string.IsNullOrWhiteSpace(kind) &&
-                    !(kind == DocumentOriginalKind && !string.IsNullOrWhiteSpace(artifact.DocumentAuthorityId)) &&
+                    !(kind == DocumentArtifactKind && !string.IsNullOrWhiteSpace(artifact.DocumentAuthorityId)) &&
                     !string.Equals(artifact.Kind, kind, StringComparison.OrdinalIgnoreCase)) continue;
                 if (matches.Count >= limit)
                 {
@@ -416,6 +416,13 @@ namespace RNAssistant.Office.Services
 
         private string ReadText(ChatSession session, ChatArtifact artifact, int maxChars)
         {
+            if (artifact.Kind == ChatArtifactKinds.PlanDocument && artifact.DocumentAuthorityId == session.DocumentAuthorityId &&
+                !string.IsNullOrWhiteSpace(artifact.DocumentAuthorityId))
+            {
+                if (_documentArtifacts == null) throw new ResourceRequestException("The document Plan owner is unavailable.", "RESOURCE_SNAPSHOT_UNAVAILABLE", false);
+                var exactBody = ReadDocumentArtifact(session, ChatResourceUri.CreateArtifactRevision(session, artifact)).InlineText;
+                return exactBody.Length <= maxChars ? exactBody : exactBody.Substring(0, maxChars);
+            }
             if (artifact == null || maxChars <= 0) return null;
             var attachment = FindExactAttachment(session, artifact);
             if (attachment == null && !string.IsNullOrWhiteSpace(AttachmentId(artifact))) return null;
@@ -657,6 +664,20 @@ namespace RNAssistant.Office.Services
 
         private ChatSession ProjectSession(ChatSession session, string exactUri = null)
         {
+            try { return ProjectDocumentSession(session, exactUri); }
+            catch (System.IO.InvalidDataException ex)
+            { throw new ResourceRequestException(ex.Message, "RESOURCE_SNAPSHOT_UNAVAILABLE", false); }
+        }
+
+        private ChatArtifact ReadDocumentArtifact(ChatSession session, ResourceRef exact)
+        {
+            try { return _documentArtifacts.Read(session, exact); }
+            catch (System.IO.InvalidDataException ex)
+            { throw new ResourceRequestException(ex.Message, "RESOURCE_SNAPSHOT_UNAVAILABLE", false); }
+        }
+
+        private ChatSession ProjectDocumentSession(ChatSession session, string exactUri)
+        {
             if (_documentArtifacts == null || string.IsNullOrWhiteSpace(session?.DocumentAuthorityId)) return session;
             IEnumerable<ChatArtifact> originals;
             if (exactUri == null) originals = _documentArtifacts.List(session);
@@ -751,7 +772,11 @@ namespace RNAssistant.Office.Services
 
         private static IEnumerable<ChatArtifact> OrderedArtifacts(ChatSession session)
         {
+            var currentPlans = new HashSet<string>(Artifacts(session)
+                .Where(item => item.Kind == ChatArtifactKinds.PlanDocument && !string.IsNullOrWhiteSpace(item.DocumentAuthorityId))
+                .GroupBy(PlanDocumentService.PlanId).Select(group => group.OrderByDescending(item => item.Revision).First().Id), StringComparer.Ordinal);
             return Artifacts(session)
+                .Where(item => item.Kind != ChatArtifactKinds.PlanDocument || string.IsNullOrWhiteSpace(item.DocumentAuthorityId) || currentPlans.Contains(item.Id))
                 .Where(item => !PlanDocumentService.IsRemoved(session, item))
                 .OrderByDescending(item => string.Equals(item.Id, session == null ? null : session.ActiveHtmlArtifactId, StringComparison.OrdinalIgnoreCase))
                 .ThenByDescending(item => string.Equals(item.Id, session == null ? null : session.ActiveTaskListArtifactId, StringComparison.OrdinalIgnoreCase))

@@ -16,7 +16,7 @@ gates; active tool compatibility adapter отсутствует. Windows/Office 
 
 | Seam | Owner and consumers | Removal gate |
 |---|---|---|
-| Transient `ChatArtifact` projection over document-owned originals alongside chat-owned authored artifacts | `DocumentArtifactStore` owns new originals in existing authority/CAS; ingestion, Gateway/provider, viewers, chat projection and fork consume exact document refs. New original lookup no longer requires origin messages. No second store or document-ref fallback; old chat records are not migrated | Slices 1b–2 switch mutable HTML/Plan/Markdown identity, heads and tools; slices 3–4 switch working-set Library/lifecycle and remove chat-only artifact ownership. Incompatible stream handling remains explicit, without deleting user data. Windows delivery remains open |
+| Transient `ChatArtifact` projection over document-owned originals/Plans alongside chat-owned HTML/Markdown | `DocumentArtifactStore` owns new originals and Plan snapshots in existing authority/CAS; native Plan binding v3 and mutation observer publish per-Plan document heads. Ingestion, Gateway/provider, viewers, chat projection and fork consume document refs. Plan conversation-head publication and direct local-action mutation bypass are removed. No second store or document-ref fallback; old chat Plans are explicitly rejected for mutation | Remaining slices 1b–2 switch HTML/independent Markdown identity, heads and tools; slices 3–4 add working-set selection/current-version refresh and remove remaining chat-only ownership. Incompatible stream handling stays explicit, without deleting user data. Windows delivery remains open |
 
 ## Unified resource cutover — completed host-neutral removal records
 

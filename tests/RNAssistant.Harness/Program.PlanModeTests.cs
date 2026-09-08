@@ -22,6 +22,129 @@ namespace RNAssistant.Harness
 {
     internal static partial class Program
     {
+        private static void DocumentPlanSharedPublication()
+        {
+            WithTempExecutor(FakeOfficeAdapter.ForHost("Excel"), (executor, adapter) =>
+            {
+                var a = NewSession(adapter);
+                a.Mode = ChatModes.Plan;
+                var tools = OfficeToolCatalog.ForHost(adapter.HostName).Concat(executor.GetControllerTools()).ToList();
+                var create = executor.ExecuteManual(Command(PlanDocumentToolCatalog.SaveToolId,
+                    "title", "Shared plan", "markdown", "# Shared\nFirst exact body.", "status", "draft"), tools, new AppSettings(), false, false, a);
+                AssertTrue(create.Success, "document Plan is published by the production runtime");
+                var first = a.Artifacts.Single(item => item.Id == a.ActivePlanDocumentArtifactId);
+                var planId = PlanDocumentService.PlanId(first);
+                var exact = ChatResourceUri.CreateArtifactRevision(a, first);
+                var chats = new ChatStore(FixturePaths.Value);
+                chats.Save(a);
+                var reopened = new ChatStore(FixturePaths.Value).Load(a.Id);
+                AssertEqual(first.Id, reopened.ActivePlanDocumentArtifactId, "selection survives even before an origin message is linked");
+                AssertEqual(first.InlineText, reopened.Artifacts.Single(item => item.Id == first.Id).InlineText, "snapshot reload uses the document owner");
+
+                var fork = NewSession(adapter);
+                fork.DocumentAuthorityId = a.DocumentAuthorityId;
+                fork.ParentSessionId = a.Id;
+                ChatCloneService.PrepareForkResources(a, fork, chats.LoadArtifactBody,
+                    new ResourceForkService(executor.ResourceAuthority, executor.Payloads));
+                AssertEqual(first.Id, fork.ActivePlanDocumentArtifactId, "fork keeps the selected document Plan independently of message history");
+                AssertEqual(exact.Uri, ChatResourceUri.CreateArtifactRevision(fork, fork.Artifacts.Single(item => item.Id == first.Id)).Uri,
+                    "fork keeps the same Plan snapshot rather than a copied identity");
+
+                var b = ChatCloneService.CloneSessionSnapshot(a);
+                b.Id = Guid.NewGuid().ToString("N");
+                b.Messages.Clear();
+                var empty = NewSession(adapter);
+                empty.DocumentAuthorityId = a.DocumentAuthorityId;
+                var discovery = executor.ResourceGateway.List(empty, "chat", null, null, 50);
+                AssertTrue(discovery.Items.Any(item => item.Reference.Uri == exact.Uri), "empty second chat discovers the Plan");
+                AssertEqual(first.InlineText, executor.ResourceGateway.Read(empty, new ResourceReadRequest {
+                    Reference = exact, Representation = "text", MaxChars = 32000 }).Result.Text, "another chat reads the exact Plan");
+                var update = executor.ExecuteManual(Command(PlanDocumentToolCatalog.SaveToolId,
+                    "title", "Shared plan", "markdown", "# Shared\nChanged in B.", "status", "ready"), tools, new AppSettings(), false, false, b);
+                AssertTrue(update.Success, "second chat updates the selected shared Plan");
+                var stale = executor.ExecuteManual(Command(PlanDocumentToolCatalog.SaveToolId,
+                    "title", "Shared plan", "markdown", "# stale", "status", "draft"), tools, new AppSettings(), false, false, a);
+                AssertEqual("stale_plan_revision", stale.ErrorCode, "first chat cannot overwrite the newer document head");
+                AssertEqual(2, chats.DocumentArtifacts.PlanHistory(a, planId).Count, "stale call adds no revision");
+                AssertEqual(first.InlineText, executor.ResourceGateway.Read(empty, new ResourceReadRequest {
+                    Reference = exact, Representation = "text", MaxChars = 32000 }).Result.Text, "old references retain their exact body");
+
+                var c = ChatCloneService.CloneSessionSnapshot(b);
+                c.Id = Guid.NewGuid().ToString("N");
+                var writers = new[] { b, c }.Select((session, index) => Task.Run(() => executor.ExecuteManual(
+                    Command(PlanDocumentToolCatalog.SaveToolId, "title", "Shared plan", "markdown", "# writer " + index, "status", "draft"),
+                    tools, new AppSettings(), false, false, session))).ToArray();
+                Task.WaitAll(writers);
+                AssertEqual(1, writers.Count(task => task.Result.Success), "concurrent writers sharing one base publish one child");
+                AssertEqual(1, writers.Count(task => task.Result.ErrorCode == "stale_plan_revision"), "the competing writer is rejected before dispatch: " +
+                    string.Join(" | ", writers.Select(task => task.Result.ErrorCode + ": " + task.Result.Message)));
+                AssertEqual(3, chats.DocumentArtifacts.PlanHistory(a, planId).Count, "document lineage remains linear");
+
+                var independent = executor.ExecuteManual(Command(PlanDocumentToolCatalog.SaveToolId,
+                    "title", "Independent plan", "markdown", "# Separate", "status", "draft"), tools, new AppSettings(), false, false, empty);
+                AssertTrue(independent.Success, "another chat can create an independent Plan in the same document");
+                AssertEqual(3, chats.DocumentArtifacts.PlanHistory(a, planId).Count, "independent Plan does not replace the first lineage");
+                var winner = new[] { b, c }.Single(session => session.Artifacts.Single(item => item.Id == session.ActivePlanDocumentArtifactId).Revision == 3);
+                var independentWriters = new[] { winner, empty }.Select((session, index) => Task.Run(() => executor.ExecuteManual(
+                    Command(PlanDocumentToolCatalog.SaveToolId, "title", "Independent edit " + index, "markdown", "# Independent " + index, "status", "draft"),
+                    tools, new AppSettings(), false, false, session))).ToArray();
+                Task.WaitAll(independentWriters);
+                AssertTrue(independentWriters.All(task => task.Result.Success), "concurrent edits to different Plans do not conflict on document generation");
+                chats.Delete(a.Host, a.DocumentKey, a.Id);
+                var gc = CasService(FixturePaths.Value, new ChatStore(FixturePaths.Value), new VbaJournalStore(FixturePaths.Value),
+                    () => StorageProtector.None).Collect();
+                AssertTrue(gc.Completed && gc.Health.MissingBlobCount == 0, "document Plan metadata and bodies survive GC");
+                var fresh = new ChatStore(FixturePaths.Value);
+                AssertEqual(first.InlineText, fresh.DocumentArtifacts.Read(empty, exact).InlineText, "origin deletion and a fresh store preserve historical Plan bytes");
+                var foreign = NewSession(adapter);
+                foreign.DocumentAuthorityId = DocumentAuthorityId.Create().Id;
+                RuntimeThrows<System.IO.InvalidDataException>(() => fresh.DocumentArtifacts.Read(foreign, exact));
+                System.IO.File.Delete(executor.Payloads.PathFor(first.ContentSha256));
+                AssertEqual("RESOURCE_SNAPSHOT_UNAVAILABLE", RuntimeThrows<ResourceRequestException>(() =>
+                    executor.ResourceGateway.Read(empty, new ResourceReadRequest { Reference = exact, Representation = "text", MaxChars = 32000 })).ErrorCode,
+                    "missing Plan body is explicit and never reconstructed from chat prose");
+            });
+        }
+
+        private static void DocumentPlanFailedChatLink()
+        {
+            WithTempPaths(paths =>
+            {
+                var adapter = FakeOfficeAdapter.ForHost("Word");
+                var executor = new OfficeToolExecutor(adapter, new VbaJournalStore(paths), new SkillStore(paths), paths: paths,
+                    persistResourceFacts: saved => { throw new System.IO.IOException("Injected Plan chat-link failure."); });
+                var session = NewSession(adapter);
+                session.Mode = ChatModes.Plan;
+                var definition = executor.GetControllerTools().Single(item => item.Id == PlanDocumentToolCatalog.SaveToolId);
+                var runtime = executor.CreateNativeRuntime(session, new[] { definition }, new AppSettings(), ChatModes.Plan, false);
+                var call = new ToolCall("plan-link-failure", PlanDocumentToolCatalog.SaveToolId,
+                    "{\"title\":\"Retained plan\",\"markdown\":\"# Retained\",\"status\":\"draft\"}");
+                RuntimeThrows<System.IO.IOException>(() => ExecuteNative(runtime, call, runtime.Describe(call)));
+                var fresh = new ChatStore(paths);
+                var artifact = fresh.DocumentArtifacts.List(session).Single(item => item.Kind == ChatArtifactKinds.PlanDocument);
+                AssertEqual("# Retained", fresh.DocumentArtifacts.Read(session, ChatResourceUri.CreateArtifactRevision(session, artifact)).InlineText,
+                    "resource publication survives a subsequent failed chat save");
+                var linkedRetry = ExecuteNative(runtime, call, runtime.Describe(call));
+                AssertContains(linkedRetry.Result.DataJson, "plan_attempt_already_published", "retained selection cannot turn a replayed create into an update");
+                session.ActivePlanDocumentArtifactId = null;
+                session.Artifacts.Clear();
+                var retry = ExecuteNative(runtime, call, runtime.Describe(call));
+                AssertEqual(ToolDispatchEvidence.NotDispatched, retry.Evidence.Dispatch, "same creation attempt is not replayed");
+                AssertContains(retry.Result.DataJson, "plan_attempt_already_published", "recovery identifies the retained publication");
+                AssertEqual(1, fresh.DocumentArtifacts.List(session).Count, "failed chat-link recovery creates no duplicate Plan");
+                session.Artifacts.Add(fresh.DocumentArtifacts.Read(session, ChatResourceUri.CreateArtifactRevision(session, artifact)));
+                session.ActivePlanDocumentArtifactId = artifact.Id;
+                var update = new ToolCall("plan-update-link-failure", PlanDocumentToolCatalog.SaveToolId,
+                    "{\"title\":\"Retained plan\",\"markdown\":\"# Updated\",\"status\":\"ready\"}");
+                RuntimeThrows<System.IO.IOException>(() => ExecuteNative(runtime, update, runtime.Describe(update)));
+                session.Artifacts.Clear();
+                session.ActivePlanDocumentArtifactId = null;
+                var updateRetry = ExecuteNative(runtime, update, runtime.Describe(update));
+                AssertContains(updateRetry.Result.DataJson, "plan_attempt_already_published", "a failed update cannot replay as creation after selection is lost");
+                AssertEqual(2, fresh.DocumentArtifacts.List(session).Count, "only the two committed snapshots remain");
+            });
+        }
+
         private static void PlanModeFiltersMutationsAndKeepsPlanningTools()
         {
             AssertEqual(ChatModes.Plan, ChatModes.Normalize("PLAN"), "plan mode normalizes");
@@ -364,9 +487,11 @@ namespace RNAssistant.Harness
                     "markdown", "# must not append",
                     "status", "draft"),
                     tools, new AppSettings(), false, false, session);
-                AssertEqual("plan_lineage_conflict", conflict.ErrorCode, "non-linear lineage is rejected");
-                AssertEqual(artifactCount, session.Artifacts.Count, "lineage rejection does not append a revision");
-                AssertEqual(secondId, session.ActivePlanDocumentArtifactId, "lineage rejection keeps the exact current head");
+                AssertTrue(conflict.Success, "disposable lineage is rebuilt from the document owner before saving");
+                AssertEqual(artifactCount, session.Artifacts.Count, "the invented revision is replaced by one committed child");
+                AssertTrue(!session.Artifacts.Any(item => item.Id == planId + "_r4_conflict"), "unpublished projection cannot become lineage");
+                AssertEqual(secondId, session.Artifacts.Single(item => item.Id == session.ActivePlanDocumentArtifactId).ParentArtifactId,
+                    "new revision extends the exact committed head");
             });
         }
 
@@ -399,6 +524,7 @@ namespace RNAssistant.Harness
 
                 var store = new ChatStore(FixturePaths.Value);
                 store.Save(session);
+                store.LoadArtifactBody(session, firstId);
                 var first = session.Artifacts.Single(item => item.Id == firstId);
                 var firstUri = ChatResourceUri.CreateArtifactRevisionUri(session, first);
                 var restoreCommand = Command(PlanDocumentToolCatalog.RestoreToolId,
@@ -414,6 +540,14 @@ namespace RNAssistant.Harness
                 AssertEqual(first.Title, third.Title, "restore copies the selected title");
                 AssertEqual(firstId, (string)JObject.Parse(third.MetadataJson)["restoredFromArtifactId"],
                     "restore records exact provenance");
+                var authorityScope = executor.ResourceAuthority.Scope(session, true);
+                var logicalPlan = DocumentArtifactStore.PlanIdentity(session, planId);
+                var logicalHead = executor.ResourceAuthority.Store.GetHead(authorityScope, logicalPlan);
+                var logicalMetadata = executor.ResourceAuthority.Revisions.GetRevision(authorityScope, logicalHead.Revision);
+                AssertTrue(logicalMetadata.RestoredFrom != null && logicalMetadata.RestoredFrom.Identity.Equals(logicalPlan),
+                    "logical restore points to the original logical Plan revision");
+                AssertTrue(executor.ResourceAuthority.Revisions.GetRevision(authorityScope, logicalMetadata.RestoredFrom).Dependencies
+                    .Any(dependency => dependency.Resource.Uri == firstUri), "restore authority identifies the selected historical snapshot");
                 var restoreMessage = AgentTranscript.CreateLocalResultMessage(restoreCommand, restored);
                 session.Messages.Add(restoreMessage);
                 ChatResourceReferenceService.LinkMessageResources(session, 2);
@@ -482,24 +616,25 @@ namespace RNAssistant.Harness
                 var rewound = ChatCloneService.CloneSessionSnapshot(loaded);
                 rewound.Messages.RemoveAll(message => message.Id == deleteMessage.Id);
                 ChatResourceReferenceService.PruneUnreachable(rewound);
-                AssertTrue(!rewound.Artifacts.Any(item => item.Id == tombstoneId),
-                    "history rewind before the removal drops its model-linked tombstone");
-                AssertEqual(thirdId, rewound.ActivePlanDocumentArtifactId,
-                    "history rewind restores the prior exact Plan head");
+                AssertTrue(rewound.Artifacts.Any(item => item.Id == tombstoneId),
+                    "history rewind preserves the document-owned tombstone");
+                AssertTrue(string.IsNullOrEmpty(rewound.ActivePlanDocumentArtifactId),
+                    "history rewind cannot restore a removed document Plan");
                 var forkMessages = ChatCloneService.CloneMessages(loaded.Messages
                     .Where(message => message.Id != deleteMessage.Id));
                 var fork = new ChatSession
                 {
+                    DocumentAuthorityId = loaded.DocumentAuthorityId,
                     Id = "plan_fork",
                     Messages = forkMessages,
                     Artifacts = ChatCloneService.CloneArtifactsForMessages(loaded.Artifacts, forkMessages)
                 };
                 ChatResourceReferenceService.LinkMessageResources(fork, 0);
                 ChatResourceReferenceService.RestoreActivePlanDocumentFromMessages(fork);
-                AssertTrue(!fork.Artifacts.Any(item => item.Id == tombstoneId),
-                    "fork before removal excludes its model-linked tombstone");
-                AssertEqual(thirdId, fork.ActivePlanDocumentArtifactId,
-                    "fork before removal restores the prior exact Plan head");
+                AssertTrue(fork.Artifacts.Any(item => item.Id == tombstoneId),
+                    "fork before removal preserves the document-owned tombstone");
+                AssertTrue(string.IsNullOrEmpty(fork.ActivePlanDocumentArtifactId),
+                    "fork cannot restore a removed document Plan");
 
                 var manual = ChatCloneService.CloneSessionSnapshot(loaded);
                 manual.Artifacts.Single(item => item.Id == tombstoneId).SourceMessageId = null;
@@ -546,8 +681,8 @@ namespace RNAssistant.Harness
             var operationTypes = ((JArray)commit.Data["Operations"])
                 .Select(item => (string)item["Type"])
                 .ToList();
-            AssertTrue(operationTypes.Contains(SessionOperationTypes.ArtifactRevisionCreated),
-                operation + " appends an artifact revision event");
+            AssertTrue(!operationTypes.Contains(SessionOperationTypes.ArtifactRevisionCreated),
+                operation + " keeps document snapshots out of the chat event store");
             AssertTrue(!operationTypes.Contains(SessionOperationTypes.ArtifactRemove),
                 operation + " never appends artifact.remove");
         }

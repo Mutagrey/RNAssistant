@@ -552,6 +552,8 @@ namespace RNAssistant.Harness
                 Test("plan mode: plan document revisions and questions", PlanModePersistsMarkdownAndAwaitsAnswers),
                 Test("plan mode: native question pauses kernel", PlanModeNativeQuestionPausesKernel),
                 Test("plan document: verified native runtime", PlanDocumentUsesVerifiedNativeRuntime),
+                Test("document Plan: shared publication and competing writers", DocumentPlanSharedPublication),
+                Test("document Plan: publication survives failed chat link", DocumentPlanFailedChatLink),
                 Test("plan document: exact whole-content guard and linear revisions", PlanDocumentPreservesExactMarkdownAndLinearHead),
                 Test("plan document: restore and removal stay append-only", PlanDocumentRestoreAndRemovalStayAppendOnly),
 

@@ -26,6 +26,7 @@ namespace RNAssistant.Office.Services
 
         internal static ResourceAuthorityScopeId Scope(ResourceAuthorityService authority, ChatSession session, string operation)
         {
+            if (PlanDocumentToolCatalog.Owns(operation)) return authority.Scope(session, true);
             if (new CatalogResourceMutationDomain().Owns(operation)) return new ResourceAuthorityScopeId("catalog", "local");
             return authority.Scope(session, !new ConversationResourceMutationDomain().Owns(operation) && !ResourceDefinitionToolHandler.Owns(operation));
         }
@@ -124,7 +125,7 @@ namespace RNAssistant.Office.Services
             {
                 if (operation == "common.chat_fork" && snapshot.Generation != 0)
                     throw new InvalidOperationException("Fork publication requires an unpublished target authority.");
-                foreach (var name in new[] { "html-workspace", "plan-document", "task-list", "artifacts" })
+                foreach (var name in new[] { "html-workspace", "task-list", "artifacts" })
                     yield return new ResourceImpact(ResourceStateProvider.Identity(scope, name), ResourceImpactRelation.ContainerMembership);
                 // Clear removes active conversation-owned definitions as well, but never
                 // deletes retained exact revisions or changes document/catalog authority.

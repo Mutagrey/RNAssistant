@@ -156,8 +156,7 @@ namespace RNAssistant.Office.Services
                 return Scope(session, true);
             if (address?.Provider == "context" || address?.Provider == "state")
             {
-                if (address.Segments.Count != 3 || address.Segments[0] != "conversation" &&
-                    (address.Provider != "context" || address.Segments[0] != "document"))
+                if (address.Segments.Count != 3 || address.Segments[0] != "conversation" && address.Segments[0] != "document")
                     throw new ResourceRequestException("The embedded authority scope is invalid.", "RESOURCE_ACCESS_DENIED", false);
                 var scope = Scope(session, address.Segments[0] == "document");
                 if (address.Segments[1] != scope.Id)
@@ -318,11 +317,18 @@ namespace RNAssistant.Office.Services
                 result.NextCursor = ResourceReadCursor.CreateRevisionBound(continuation.Offset, exact.Revision, cursorBinding);
             if (!live)
             {
+                if (DocumentArtifactStore.IsPlan(session, exact) && _payloads != null)
+                {
+                    var plan = new DocumentArtifactStore(_authority, _revisions, _payloads).Read(session, exact);
+                    var logical = snapshot.GetHead(DocumentArtifactStore.PlanIdentity(session, PlanDocumentService.PlanId(plan)));
+                    if (logical?.Knowledge == HeadKnowledge.Known && _revisions.GetRevision(scope, logical.Revision)?.Dependencies
+                        .Any(dependency => dependency.Kind == "immutable-snapshot" && dependency.Resource.Uri == exact.Uri && dependency.Resource.Revision == exact.Revision) == true)
+                        result.Resource.Dependencies.Add(new ResourceDependency(logical.Revision, "text", ResourceCoverage.Whole(), "current-state"));
+                }
                 string artifactId;
                 if (ChatResourceUri.TryGetCurrentArtifactId(session, exact, out artifactId))
                 {
                     var name = artifactId == session.ActiveHtmlArtifactId ? "html-workspace" :
-                        artifactId == session.ActivePlanDocumentArtifactId ? "plan-document" :
                         artifactId == session.ActiveTaskListArtifactId ? "task-list" : null;
                     if (name != null)
                     {
@@ -332,6 +338,7 @@ namespace RNAssistant.Office.Services
                     }
                 }
             }
+            result.ContentSha256 = contentSha256;
             result.Resource.ContentSha256 = contentSha256;
             result.Resource.Coverage = result.Coverage ?? CoverageFor(result);
             result.Coverage = result.Resource.Coverage;
@@ -387,6 +394,7 @@ namespace RNAssistant.Office.Services
             new Dictionary<string, MutationAttempt>(StringComparer.Ordinal);
         private readonly object _sync = new object();
         private readonly Dictionary<string, IDisposable> _leases = new Dictionary<string, IDisposable>(StringComparer.Ordinal);
+        private readonly Dictionary<string, string> _planOperationKeys = new Dictionary<string, string>(StringComparer.Ordinal);
 
         internal ResourceMutationAuthorityObserver(ResourceAuthorityService authority,
             ResourceMutationJournal journal, ChatSession session, ChatBlobStore payloads,
@@ -405,15 +413,24 @@ namespace RNAssistant.Office.Services
         {
             var scope = ResourceMutationDomains.Scope(_authority, _session, context.Call.Name);
             var expected = StringArgument(arguments, "expectedRevision");
-            var lease = _journal.AcquireScope(scope);
+            var lease = _journal.AcquireScope(scope, RNAssistant.Office.Tools.PlanDocumentToolCatalog.Owns(context.Call.Name));
             try
             {
                 var snapshot = _authority.CaptureMany(new[] { scope }).Get(scope);
-                var impacts = ResourceMutationDomains.Impacts(scope, context.Call.Name, arguments, snapshot);
+                var impacts = RNAssistant.Office.Tools.PlanDocumentToolCatalog.Owns(context.Call.Name)
+                    ? PreparePlan(context, arguments)
+                    : ResourceMutationDomains.Impacts(scope, context.Call.Name, arguments, snapshot);
                 var target = impacts[0].Identity;
+                if (RNAssistant.Office.Tools.PlanDocumentToolCatalog.Owns(context.Call.Name))
+                    expected = snapshot.GetHead(target)?.Revision?.Revision;
                 var payload = PayloadRef.FromBlob(_payloads.StoreText(context.Call.ArgumentsJson, "application/json"));
                 var attempt = _journal.Prepare(scope, context.Call.Name, target, expected, payload, intendedImpacts: impacts);
-                lock (_sync) { _attempts[attempt.AttemptId] = attempt; _leases[attempt.AttemptId] = lease; }
+                lock (_sync)
+                {
+                    _attempts[attempt.AttemptId] = attempt; _leases[attempt.AttemptId] = lease;
+                    if (RNAssistant.Office.Tools.PlanDocumentToolCatalog.Owns(context.Call.Name))
+                        _planOperationKeys[attempt.AttemptId] = PlanDocumentService.CreationId(_session, context);
+                }
                 return attempt.AttemptId;
             }
             catch { lease.Dispose(); throw; }
@@ -425,19 +442,93 @@ namespace RNAssistant.Office.Services
             lock (_sync) _attempts[attemptId] = next;
         }
 
+        private IReadOnlyList<ResourceImpact> PreparePlan(ToolExecutionContext context, IDictionary<string, object> arguments)
+        {
+            try { return PrepareDocumentPlan(context, arguments); }
+            catch (System.IO.InvalidDataException ex)
+            { throw new ToolMutationPreparationException("plan_snapshot_unavailable", ex.Message); }
+        }
+
+        private IReadOnlyList<ResourceImpact> PrepareDocumentPlan(ToolExecutionContext context, IDictionary<string, object> arguments)
+        {
+            var owner = new DocumentArtifactStore(_authority.Store, _authority.Revisions, _payloads);
+            if (owner.FindPlanOperation(_session, PlanDocumentService.CreationId(_session, context)) != null)
+                throw new ToolMutationPreparationException("plan_attempt_already_published", "This Plan operation is already published; recover its exact resource without replaying the mutation.");
+            var candidates = (_session.Artifacts ?? new List<ChatArtifact>()).Where(item => item != null && item.Id == _session.ActivePlanDocumentArtifactId).Take(2).ToArray();
+            if (candidates.Length > 1) throw new ToolMutationPreparationException("plan_active_revision_invalid", "The selected Plan projection is ambiguous; reload its exact document snapshot.");
+            var selected = candidates.SingleOrDefault();
+            string planId;
+            if (string.IsNullOrWhiteSpace(_session.ActivePlanDocumentArtifactId))
+            {
+                if (context.Call.Name != RNAssistant.Office.Tools.PlanDocumentToolCatalog.SaveToolId)
+                    throw new ToolMutationPreparationException("plan_not_found", "Select a document Plan before restoring or removing it.");
+                planId = PlanDocumentService.CreationId(_session, context);
+                if (owner.CurrentPlan(_session, planId) != null)
+                    throw new ToolMutationPreparationException("plan_attempt_already_published", "This Plan creation attempt is already published; recover its exact resource without repeating the mutation.");
+            }
+            else
+            {
+                if (selected == null || selected.DocumentAuthorityId != _session.DocumentAuthorityId)
+                    throw new ToolMutationPreparationException("plan_active_revision_invalid", "The selected Plan is not document-owned or is unavailable; start a new Plan explicitly. Old chats are not migrated.");
+                planId = PlanDocumentService.PlanId(selected);
+                var current = owner.CurrentPlan(_session, planId);
+                var expected = ChatResourceUri.CreateArtifactRevision(_session, selected);
+                if (current == null || current.Uri != expected.Uri || current.Revision != expected.Revision)
+                    throw new ToolMutationPreparationException("stale_plan_revision", "The selected Plan changed in another chat. Read and select its current revision before editing; the stale write was not dispatched.");
+                var history = owner.PlanHistory(_session, planId, false).ToList();
+                var bodyVersion = context.Call.Name == RNAssistant.Office.Tools.PlanDocumentToolCatalog.RestoreToolId
+                    ? RNAssistant.Office.Tools.ToolArgumentReader.Int32(arguments, "version") : selected.Revision;
+                for (var index = 0; index < history.Count; index++)
+                    if (history[index].Revision == bodyVersion)
+                        history[index] = owner.Read(_session, ChatResourceUri.CreateArtifactRevision(_session, history[index]));
+                _session.Artifacts.RemoveAll(item => PlanDocumentService.PlanId(item) == planId);
+                _session.Artifacts.AddRange(history);
+            }
+            return new[] { new ResourceImpact(DocumentArtifactStore.PlanIdentity(_session, planId), ResourceImpactRelation.Exact) };
+        }
+
         public ResourceAuthorityCommit Complete(string attemptId, ToolExecutionRecord record)
         {
             MutationAttempt attempt;
+            string planOperationKey;
             lock (_sync)
             {
                 if (!_attempts.TryGetValue(attemptId, out attempt))
                     throw new InvalidOperationException("Mutation authority attempt is missing.");
+                _planOperationKeys.TryGetValue(attemptId, out planOperationKey);
             }
             if (attempt.State != MutationAttemptState.DispatchMayHaveOccurred)
                 throw new InvalidOperationException("A dispatched mutation lacks its durable dispatch marker.");
             try
             {
                 var readBack = record.ResourceReadBack.ToList();
+                if (RNAssistant.Office.Tools.PlanDocumentToolCatalog.Owns(attempt.Operation))
+                {
+                    if (record.Evidence?.Effect == ToolEffectEvidence.VerifiedChange)
+                    {
+                        var planId = ResourceUri.Parse(attempt.Target.Uri).Segments.Last();
+                        var artifact = (_session.Artifacts ?? new List<ChatArtifact>())
+                            .Where(item => PlanDocumentService.PlanId(item) == planId).OrderByDescending(item => item.Revision).FirstOrDefault();
+                        ResourceRef restoredFrom = null;
+                        if (attempt.Operation == RNAssistant.Office.Tools.PlanDocumentToolCatalog.RestoreToolId)
+                        {
+                            var sourceId = (string)Newtonsoft.Json.Linq.JObject.Parse(artifact.MetadataJson)["restoredFromArtifactId"];
+                            restoredFrom = ChatResourceUri.CreateArtifactRevision(_session, _session.Artifacts.Single(item => item.Id == sourceId));
+                        }
+                        readBack.AddRange(new DocumentArtifactStore(_authority.Store, _authority.Revisions, _payloads)
+                            .RetainPlan(_session, planId, artifact, attempt.AttemptId, planOperationKey,
+                                PlanDocumentService.IsTombstone(artifact), restoredFrom));
+                    }
+                    ResourceAuthorityCommit publication = null;
+                    for (var retry = 0; retry < 8; retry++)
+                    {
+                        try { publication = PublishAttempt(_authority, _journal, attempt, record, readBack); break; }
+                        catch (ResourceAuthorityConflictException) when (retry < 7)
+                        { /* Only retry authority publication after an unrelated generation change. */ }
+                    }
+                    if (record.Evidence?.Effect == ToolEffectEvidence.VerifiedChange) _persistResources?.Invoke(_session);
+                    return publication;
+                }
                 if (attempt.ScopeId.Kind == "catalog" && record.Evidence?.Effect == ToolEffectEvidence.VerifiedChange)
                 {
                     if (_captureCatalog == null) throw new InvalidOperationException("Catalog publication requires its typed read-back owner.");
@@ -476,9 +567,9 @@ namespace RNAssistant.Office.Services
                         dependencies: references.Select(reference => new ResourceDependency(reference, kind: "member")));
                     continue;
                 }
-                if (name != "html-workspace" && name != "plan-document" && name != "task-list") continue;
+                if (name != "html-workspace" && name != "task-list") continue;
                 var artifactId = name == "html-workspace" ? _session.ActiveHtmlArtifactId :
-                    name == "plan-document" ? _session.ActivePlanDocumentArtifactId : _session.ActiveTaskListArtifactId;
+                    _session.ActiveTaskListArtifactId;
                 if (string.IsNullOrWhiteSpace(artifactId))
                 {
                     yield return new ResourceMutationReadBack(impact.Identity, false);
@@ -518,6 +609,9 @@ namespace RNAssistant.Office.Services
             var prior = authority.Store.Capture(attempt.ScopeId).Commits.FirstOrDefault(item => item.MutationAttemptId == attempt.AttemptId);
             if (prior != null) { journal.Resolve(attempt.AttemptId, prior.CommitId); return prior; }
             var snapshot = authority.Store.Capture(attempt.ScopeId);
+            if (RNAssistant.Office.Tools.PlanDocumentToolCatalog.Owns(attempt.Operation) &&
+                snapshot.GetHead(attempt.Target)?.Revision?.Revision != attempt.ExpectedRevision)
+                throw new InvalidOperationException("The prepared Plan head changed before publication; reconcile the retained attempt without replay.");
             var outcome = Outcome(record);
             if (outcome == ResourceEffectOutcome.VerifiedChanged && (attempt.Operation == "common.vba_restore_backup" ||
                 attempt.Operation == "common.plan_doc_restore" || attempt.Operation == "common.html_workspace_restore" ||
@@ -601,6 +695,7 @@ namespace RNAssistant.Office.Services
                 IDisposable lease;
                 if (_leases.TryGetValue(attemptId, out lease)) { _leases.Remove(attemptId); lease.Dispose(); }
                 _attempts.Remove(attemptId);
+                _planOperationKeys.Remove(attemptId);
             }
         }
 

@@ -20,8 +20,9 @@ introduce another artifact transport or store.
 
 Status: slice **1a, sent originals, implemented host-neutral**. Newly sent files
 belong to the document and are discoverable/readable from its other chats.
-Authored HTML/Markdown/Plan still use the chat-owned lifecycle below; shared
-editing and the Library working-set UI are not implemented. This section owns
+Slice **1b, Plan publication, is implemented host-neutral (2026-09-08)**: new Plans
+also belong to the document. Authored HTML and independent Markdown documents
+still use the earlier owners; Library selection UI is not implemented. This section owns
 the artifact-specific decision, not a second resource architecture.
 
 `DocumentArtifactStore` publishes immutable original metadata as a retained view
@@ -40,13 +41,56 @@ foreign document references are refused. Existing chat-local records are not
 silently migrated. The remaining ownership seam and removal gate are tracked in
 [MIGRATION_MAP](stabilization/MIGRATION_MAP.md#document-artifact-ownership--active-slices).
 Exact reads load one metadata record; library enumeration still scans committed
-original metadata. Bounded indexed discovery remains slice 3.
+original/Plan revision metadata. Bounded indexed discovery remains slice 3.
+
+### Implemented Plan publication slice
+
+`PlanDocumentService` applies domain rules to a disposable selected projection.
+`ResourceMutationAuthorityObserver` prepares the logical Plan under the existing
+document mutation lease, compares the selected exact snapshot with the document
+head, and hydrates committed lineage before dispatch. Only current/restore-source
+bodies are loaded. Contending Plan writers wait within the existing bounded storage
+lock policy; no lease spans a model/user wait. Stale, missing or ambiguous selection
+is a typed pre-dispatch rejection, not a successful write or a replay instruction.
+
+`DocumentArtifactStore.RetainPlan` retains metadata, exact Markdown and origin
+chat/run/attempt provenance in the existing revision journal/CAS. The mutation
+observer publishes the immutable snapshot, per-Plan logical head and stable
+operation receipt together in one document authority commit. The receipt checks
+repeated runtime operations without scanning the library or loading bodies.
+Only authority-generation conflicts retry that
+publication; the mutation is not rerun. Restore records both snapshot and logical
+restore origins. The subsequent chat save persists links/selection, not another
+copy of the Plan metadata/body/head. A failed chat save does not remove the
+published resource; repeating the same runtime operation is refused with
+the retained-publication recovery route.
+
+Gateway lists/searches current document Plans and reads exact historical snapshots
+from any chat of that document. Reads of a current snapshot carry its logical-head
+dependency. Chat deletion and GC preserve history; chat fork retains the selected
+snapshot without copying its identity. A document tombstone survives removal of
+its origin message or a dialogue rewind. Discovery omits the removed Plan; retained
+exact bytes remain available for historical reads.
+
+This is the Plan storage/tool slice, not complete cross-chat UX. A new chat can
+create a separate Plan; a fork can edit its inherited selection. Selecting or
+refreshing an existing Plan in an arbitrary chat still needs the working-set
+selector. No implicit current-head replacement, old-chat migration, independent
+MD authoring, or shared HTML editing is introduced by this slice.
 
 ### Ownership and user behavior
 
 The durable owner is the existing `DocumentAuthorityId`, independent of a chat,
 window, current path or open runtime session. The library is a projection of that
 owner's committed resources. It does not become another writable inventory.
+
+The operation actor remains the exact addressed `chatId`; shared ownership never
+switches that actor to the mutable active chat. Background HTML/Markdown/Plan
+controllers must require an explicit chat id and use `LoadAddressedSession`, not
+the activating `LoadSession`. An addressed load must preserve the stored document
+authority and locator. Office mutations additionally validate the current bound
+document before dispatch; resource sharing does not grant access to another live
+Office document. The native Plan handler/observer use their captured session.
 
 | Object | Owner / behavior |
 |---|---|
@@ -156,6 +200,21 @@ versioned resource with source citations, not an untraceable global summary.
 
 ### Required implementation slices and acceptance
 
+HTML/Markdown cutover audit (2026-09-08): switch these remaining assumptions
+together with the domain owner, not ahead of it:
+
+- `ChatArtifactResourceProvider.ResolveIdentity` must preserve the exact resource's
+  owner when constructing a member URI; its current `session.Id` construction is
+  valid only for the still chat-owned HTML domain. Check member round-trip from a
+  second chat of the same document.
+- Extend `DocumentArtifactStore.Owns` to HTML/independent Markdown only when their
+  document publication/read owners are active. Fork/history rebase consumes this
+  predicate; verify that shared references survive without copying or rebasing.
+- Switch remaining activating HTML controller loads (Get, PrepareExport, Delete,
+  SetActive, Restore, Redo and OpenResourceData) to explicit addressed loads.
+  Verify the current bound document before mutation, and test delayed requests
+  across chat/document switches. No active-chat or chat-local-head fallback.
+
 | Order | Owner and replacement | Required evidence |
 |---|---|---|
 | 1 | Core resource authority/revision storage + artifact domain owner: move durable artifact identity, original metadata and head publication out of `ChatSession` | Two chats and fresh store instances read one resource; concurrent stale write rejected; commit/link crash reconciliation; restart and CAS retention |
@@ -201,7 +260,7 @@ articles. No remote runtime or cross-document memory service is introduced.
 | Preparing | Not yet | Pending user turn; draft remains recoverable until the durable save succeeds | None | Failure returns the same draft to retry state |
 | Committed | Yes | Message card and Artifact Library entry appear from one revisioned post-commit projection | Exact reference plus bounded current-turn materialization | Explicit message/resource operation only |
 | Run failed or cancelled after commit | Yes | The committed user turn and resources remain visible; model failure never rolls them back | Available to later turns through resources | Same as any committed resource |
-| Removed | Append-only tombstone/projection change | Placeholder remains where history cited the resource; it is absent from new library heads | No new working-set admission; exact reads report removal | CAS GC only after verified reachability proves no live reference |
+| Removed | Append-only tombstone/projection change | Placeholder remains where history cited the resource; it is absent from new library heads | No new working-set admission; document Plan exact snapshots remain readable historically, other domains retain their removal contract | CAS GC only after verified reachability proves no live reference |
 
 Paste, drag-and-drop and the paperclip use the same staging action. Pasting
 ordinary text remains composer text; only clipboard file/media items create
@@ -394,6 +453,12 @@ are preview frames, never child artifacts or independently durable revisions.
   owners of their formats. `application/vnd.rnassistant.chart+json` artifacts
   render the ECharts chart viewer in Preview and keep the exact JSON payload in
   Details; if the domain viewer is unavailable, the safe JSON fallback remains.
+  Message-backed chart controls capture the source chat/message identity when the
+  viewer is created. A delayed save or Excel refresh persists only to that chat and
+  never rewrites whichever chat becomes active while the operation is in flight.
+  The refresh tool call carries that same exact chat through the typed bridge;
+  manual tool execution without a chat owner is rejected instead of falling back
+  to the currently selected chat.
   Agent run resource cards do not count a supporting HTML workspace as a second
   visible resource when the same run also exposes a chart artifact; HTML-only runs
   still expose the workspace.
@@ -566,21 +631,24 @@ Only domain-owned mutable resources expose Save/Delete:
 - Immutable uploads/snapshots have no in-place editor. `Create editable copy` or
   `Import` creates a related resource and leaves the original unchanged.
 
-`Office.Services.PlanDocumentService` owns the complete Plan lifecycle lineage.
+`Office.Services.PlanDocumentService` owns Plan domain rules; the document
+authority owns durable lineage as specified in the implemented slice above.
 `common.plan_doc_save` validates non-empty title/Markdown/status without normalizing
 the Markdown: leading/trailing whitespace and hard-break spaces are stored exactly.
 The service creates a plan when absent; otherwise it resolves the active exact
-artifact and appends `vN+1` as its linear child. Duplicate, skipped or branched state
-fails closed. `common.plan_doc_restore` accepts only a user-visible version; the
+artifact and appends `vN+1` as its linear child. Committed duplicate, skipped or
+branched lineage fails closed; disposable chat metadata is rebuilt from that owner.
+`common.plan_doc_restore` accepts only a user-visible version; the
 service binds the same exact-current guard, resolves one exact non-tombstone revision
 and appends it as `vN+1` with `restoredFromArtifactId` provenance. Argument-free
 `common.plan_doc_delete` resolves the exact current head and appends a `removed:true`
 child revision while clearing the active pointer. Runtime-only ids/guards remain in
 durable evidence and are removed from the model projection. Historical `ResourceRef`
-values are never rewritten; Library and the new working set omit the removed Plan,
-while exact resolve/read returns
-`resource_removed`. A model-linked tombstone follows its source message during
-history editing/forking; a direct UI deletion is session-level.
+values are never rewritten. Discovery and the new working set omit the removed
+Plan; document-owned historical exact snapshots remain readable. Its tombstone
+is document-owned, independent of origin-message removal and dialogue forks.
+The older chat-local format is not migrated and cannot be mutated by the new
+native Plan binding.
 
 Draft discard deletes only staging data. `Hide from library` is a UI preference and
 does not alter history or model references. Destructive removal of a committed

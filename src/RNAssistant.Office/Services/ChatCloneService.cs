@@ -112,7 +112,7 @@ namespace RNAssistant.Office.Services
                 .Select(item => item.Id), System.StringComparer.OrdinalIgnoreCase);
             var applicableTombstones = artifactList
                 .Where(PlanDocumentService.IsTombstone)
-                .Where(item => string.IsNullOrWhiteSpace(item.SourceMessageId) || messageIds.Contains(item.SourceMessageId))
+                .Where(item => !string.IsNullOrWhiteSpace(item.DocumentAuthorityId) || string.IsNullOrWhiteSpace(item.SourceMessageId) || messageIds.Contains(item.SourceMessageId))
                 .Select(item => item.Id)
                 .ToList();
             return ChatResourceReferenceService.ReachableForMessages(
@@ -136,6 +136,10 @@ namespace RNAssistant.Office.Services
                 throw new InvalidOperationException("An explicit source and unpublished child chat are required.");
             var checkpoint = HtmlWorkspaceArtifactService.CheckpointAtOrBefore(source, fork.Messages, fork.Messages.Count - 1);
             var additional = new List<string>();
+            var selectedDocumentPlan = (source.Artifacts ?? new List<ChatArtifact>()).SingleOrDefault(item =>
+                item.Id == source.ActivePlanDocumentArtifactId && item.Kind == ChatArtifactKinds.PlanDocument &&
+                !string.IsNullOrWhiteSpace(item.DocumentAuthorityId) && item.DocumentAuthorityId == source.DocumentAuthorityId);
+            if (selectedDocumentPlan != null) additional.Add(selectedDocumentPlan.Id);
             if (string.IsNullOrWhiteSpace(checkpoint))
             {
                 if (source.HtmlWorkspaceRecovery != null && !source.HtmlWorkspaceRecovery.CanMutate)
@@ -169,6 +173,8 @@ namespace RNAssistant.Office.Services
             ChatResourceReferenceService.LinkMessageResources(fork, 0);
             ChatResourceReferenceService.RestoreActiveTaskListFromMessages(fork);
             ChatResourceReferenceService.RestoreActivePlanDocumentFromMessages(fork);
+            if (selectedDocumentPlan != null && !PlanDocumentService.IsRemoved(fork, selectedDocumentPlan))
+                fork.ActivePlanDocumentArtifactId = selectedDocumentPlan.Id;
             return plan;
         }
 
