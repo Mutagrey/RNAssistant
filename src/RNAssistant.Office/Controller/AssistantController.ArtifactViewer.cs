@@ -28,6 +28,19 @@ namespace RNAssistant.Office
             });
         }
 
+        public RunChangesDto ReadRunChanges(RunChangesRequest request)
+        {
+            if (request == null || string.IsNullOrWhiteSpace(request.RunId))
+                throw new ArgumentException("An exact run is required.");
+            var session = LoadArtifactViewerSession(request.ChatId);
+            return new RunChangesService(
+                artifact => RunChangesService.ReadRetainedSource(session, artifact,
+                    _chatStore.LoadArtifactBody, _toolExecutor.ResourceGateway),
+                query => _vbaJournalStore.QueryMutations(session.Host, session.DocumentKey, query),
+                id => _vbaJournalStore.GetMutationDetail(session.Host, session.DocumentKey, id,
+                    RunChangesService.MaximumSourceCharacters)).Read(session, request.RunId);
+        }
+
         public ArtifactViewerPageDto ReadArtifactViewerPage(
             string chatId,
             string resourceUri,

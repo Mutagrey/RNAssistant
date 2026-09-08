@@ -868,3 +868,29 @@
   font-size: .8571rem;
   line-height: 1.5;
 }
+
+/* Retained text changes, shared source formatter with VBA previews/journal. */
+.run-changes-slot { min-width: 0; }
+.run-changes { margin: 12px 0 4px; border: 1px solid var(--line); border-radius: 12px; overflow: hidden; background: var(--panel); }
+.run-changes-summary, .run-change-file-summary { cursor: pointer; padding: 10px 12px; display: flex; align-items: center; gap: 10px; min-width: 0; }
+.run-changes-summary { font-size: 13px; font-weight: 600; }
+.run-changes-summary::before, .run-change-file-summary::before { content: "›"; color: var(--muted); flex: 0 0 8px; }
+.run-changes[open] > summary::before, .run-change-file[open] > summary::before { transform: rotate(90deg); }
+.run-changes summary::-webkit-details-marker { display: none; }
+.run-change-counts { display: inline-flex; gap: 7px; margin-left: auto; white-space: nowrap; font: 12px ui-monospace, Consolas, monospace; }
+.run-change-added { color: #21834b; }
+.run-change-removed { color: #c63a48; }
+.run-change-file { border-top: 1px solid var(--line); }
+.run-change-labels { display: flex; flex-direction: column; gap: 3px; min-width: 0; flex: 1; }
+.run-change-title { font: 12px ui-monospace, Consolas, monospace; overflow-wrap: anywhere; }
+.run-change-scope, .run-changes-caption { color: var(--muted); font-size: 11px; font-weight: 400; }
+.run-changes-caption { margin: 0; padding: 2px 12px 9px; }
+.run-change-extra { display: none; }
+.run-changes.show-all .run-change-extra { display: block; }
+.run-changes-more { width: 100%; border: 0; border-top: 1px solid var(--line); padding: 10px 12px; color: var(--muted); background: transparent; text-align: left; cursor: pointer; font-size: 12px; }
+.run-change-diff { max-height: 420px; overflow: auto; border-top: 1px solid var(--line); font: 11px/1.5 ui-monospace, Consolas, monospace; }
+.run-change-diff .vba-diff-line { grid-template-columns: 18px 32px 32px minmax(max-content, 1fr); }
+.run-change-diff .vba-diff-summary { padding: 7px 12px; position: sticky; left: 0; }
+.text-diff-newline { color: var(--muted); font-size: 10px; }
+html[data-theme="dark"] .run-change-added { color: #72cb8f; }
+html[data-theme="dark"] .run-change-removed { color: #f0828d; }

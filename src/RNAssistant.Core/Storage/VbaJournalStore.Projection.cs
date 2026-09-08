@@ -44,7 +44,7 @@ namespace RNAssistant.Core.Storage
             };
         }
 
-        public VbaMutationDetail GetMutationDetail(string host, string documentKey, string mutationId)
+        public VbaMutationDetail GetMutationDetail(string host, string documentKey, string mutationId, int maximumCodeCharacters = int.MaxValue)
         {
             mutationId = (mutationId ?? string.Empty).Trim();
             if (mutationId.Length == 0) throw new ArgumentException("mutationId is required.", "mutationId");
@@ -54,10 +54,10 @@ namespace RNAssistant.Core.Storage
             var packageRecords = ProjectPackageMutations(events);
             var module = moduleRecords.FirstOrDefault(item => item.Prepared != null &&
                 string.Equals(item.Prepared.MutationId, mutationId, StringComparison.OrdinalIgnoreCase));
-            if (module != null) return BuildMutationDetail(module, related);
+            if (module != null) return BuildMutationDetail(module, related, maximumCodeCharacters);
             var package = packageRecords.FirstOrDefault(item => item.Prepared != null &&
                 string.Equals(item.Prepared.MutationId, mutationId, StringComparison.OrdinalIgnoreCase));
-            if (package != null) return BuildPackageMutationDetail(package, related);
+            if (package != null) return BuildPackageMutationDetail(package, related, maximumCodeCharacters);
             throw new VbaJournalException("VBA mutation was not found: " + mutationId + ".");
         }
 
@@ -180,7 +180,9 @@ namespace RNAssistant.Core.Storage
         private static bool MatchesMutationQuery(VbaMutationQueryRow row, VbaMutationQueryRequest request)
         {
             if (!MatchesValue(request.Kind, row.Kind) || !MatchesValue(request.Status, row.Status) ||
-                !MatchesValue(request.RunId, row.RunId) || !MatchesValue(request.TurnId, row.TurnId) ||
+                (!MatchesValue(request.RunId, row.RunId) &&
+                    !(request.CorrelatedToolCallIds ?? new string[0]).Contains(row.ToolCallId, StringComparer.OrdinalIgnoreCase)) ||
+                !MatchesValue(request.TurnId, row.TurnId) ||
                 !MatchesValue(request.StepId, row.StepId) || !MatchesValue(request.ToolCallId, row.ToolCallId))
             {
                 return false;
@@ -197,7 +199,7 @@ namespace RNAssistant.Core.Storage
             return terms.All(term => text.IndexOf(term, StringComparison.OrdinalIgnoreCase) >= 0);
         }
 
-        private VbaMutationDetail BuildMutationDetail(VbaMutationRecord record, IReadOnlyList<VbaJournalEvent> events)
+        private VbaMutationDetail BuildMutationDetail(VbaMutationRecord record, IReadOnlyList<VbaJournalEvent> events, int maximumCodeCharacters)
         {
             var prepared = record.Prepared;
             var terminal = record.Terminal;
@@ -222,11 +224,11 @@ namespace RNAssistant.Core.Storage
                 BeforeExists = prepared.BeforeExists,
                 BeforeComponentType = prepared.BeforeExists ? prepared.ComponentType : null,
                 BeforeCodeSha256 = prepared.BeforeCodeSha256,
-                BeforeCode = ReadMutationCode(prepared.BeforeExists, prepared.BeforeCodeReference, prepared.MutationId, prepared.ModuleName, "before"),
+                BeforeCode = ReadMutationCode(prepared.BeforeExists, prepared.BeforeCodeReference, prepared.MutationId, prepared.ModuleName, "before", maximumCodeCharacters),
                 IntendedAfterExists = prepared.IntendedAfterExists,
                 IntendedAfterComponentType = prepared.IntendedAfterExists ? prepared.ComponentType : null,
                 IntendedAfterCodeSha256 = prepared.IntendedAfterCodeSha256,
-                IntendedAfterCode = ReadMutationCode(prepared.IntendedAfterExists, prepared.IntendedAfterCodeReference, prepared.MutationId, prepared.ModuleName, "intended-after"),
+                IntendedAfterCode = ReadMutationCode(prepared.IntendedAfterExists, prepared.IntendedAfterCodeReference, prepared.MutationId, prepared.ModuleName, "intended-after", maximumCodeCharacters),
                 BackupId = prepared.BackupId,
                 CanRestore = prepared.BeforeExists && !string.IsNullOrWhiteSpace(prepared.BackupId),
                 ActualExists = terminal == null ? (bool?)null : terminal.ActualExists,
@@ -244,7 +246,7 @@ namespace RNAssistant.Core.Storage
             return detail;
         }
 
-        private VbaMutationDetail BuildPackageMutationDetail(VbaPackageMutationRecord record, IReadOnlyList<VbaJournalEvent> events)
+        private VbaMutationDetail BuildPackageMutationDetail(VbaPackageMutationRecord record, IReadOnlyList<VbaJournalEvent> events, int maximumCodeCharacters)
         {
             var prepared = record.Prepared;
             var terminal = record.Terminal;
@@ -283,11 +285,11 @@ namespace RNAssistant.Core.Storage
                     BeforeExists = component.BeforeExists,
                     BeforeComponentType = component.BeforeComponentType,
                     BeforeCodeSha256 = component.BeforeCodeSha256,
-                    BeforeCode = ReadMutationCode(component.BeforeExists, component.BeforeCodeReference, prepared.MutationId, component.ModuleName, "before"),
+                    BeforeCode = ReadMutationCode(component.BeforeExists, component.BeforeCodeReference, prepared.MutationId, component.ModuleName, "before", maximumCodeCharacters),
                     IntendedAfterExists = component.IntendedAfterExists,
                     IntendedAfterComponentType = component.IntendedAfterComponentType,
                     IntendedAfterCodeSha256 = component.IntendedAfterCodeSha256,
-                    IntendedAfterCode = ReadMutationCode(component.IntendedAfterExists, component.IntendedAfterCodeReference, prepared.MutationId, component.ModuleName, "intended-after"),
+                    IntendedAfterCode = ReadMutationCode(component.IntendedAfterExists, component.IntendedAfterCodeReference, prepared.MutationId, component.ModuleName, "intended-after", maximumCodeCharacters),
                     BackupId = component.BackupId,
                     CanRestore = component.BeforeExists && !string.IsNullOrWhiteSpace(component.BackupId),
                     ActualExists = assessment == null ? (bool?)null : assessment.ActualExists,
@@ -339,10 +341,14 @@ namespace RNAssistant.Core.Storage
             };
         }
 
-        private string ReadMutationCode(bool exists, ChatBlobReference reference, string mutationId, string moduleName, string side)
+        private string ReadMutationCode(bool exists, ChatBlobReference reference, string mutationId, string moduleName, string side, int maximumCodeCharacters)
         {
             if (!exists) return null;
+            if (reference != null && reference.ByteLength > (long)maximumCodeCharacters * 4)
+                throw new VbaJournalException("VBA source exceeds the comparison limit.");
             var code = _blobs.ReadText(reference);
+            if (code != null && code.Length > maximumCodeCharacters)
+                throw new VbaJournalException("VBA source exceeds the comparison limit.");
             if (code == null)
             {
                 throw new VbaJournalException("VBA " + side + " source is missing, corrupt, or protected with another key for mutation " +

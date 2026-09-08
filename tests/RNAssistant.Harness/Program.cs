@@ -508,6 +508,8 @@ namespace RNAssistant.Harness
                 Test("artifact working set: Plan lifecycle and missing body", ArtifactWorkingSetPlanLifecycle),
                 Test("artifact working set: stale selection session and writer races", ArtifactWorkingSetRejectsRaces),
                 Test("artifact working set: original links and clear", ArtifactWorkingSetOriginalLifecycle),
+                Test("run changes: retained sources and workspace members", RunChangesRetainedSources),
+                Test("run changes: durable VBA evidence", RunChangesVbaEvidence),
                 Test("artifact library: immutable classes and labels", ArtifactLibraryProjectsImmutableClasses),
                 Test("artifact library: exact heads and branch history", ArtifactLibraryProjectsExactHeadsAndHistory),
                 Test("artifact library: derived resources stay separate", ArtifactLibraryProjectsDerivedResources),

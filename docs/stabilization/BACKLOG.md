@@ -33,6 +33,15 @@ Evidence: `AgentKernel.LoopAsync`, `PlanDocumentService.CreationId`,
 `HtmlWorkspacePublication.OperationKey`. This records a false-refusal risk, not a
 verified lost write or permission to replay unknown effects.
 
+## Web cache-key assertions — 2026-09-08
+
+Owner: Web tests. `tests/web/run-view-state.test.js` already expects
+`app-agent-model.js?v=run-replay-20260907-1` on baseline `0becf772`, while that
+baseline ships `catalog-display-chat-20260908-1`. The behavioral assertions before
+it pass; the stale key assertion fails. Update brittle cache-key expectations in a
+separate Web-test maintenance slice, with current asset-version checks. This does
+not close Windows/WebView2 delivery qualification.
+
 ## Structural debt
 
 Рефакторинг начинается только вместе с конкретным изменением, которое он упрощает.

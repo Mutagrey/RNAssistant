@@ -1017,3 +1017,10 @@ branch lineage replay exactly; removed resources do not silently resolve; viewer
 respect bounds, MIME allowlists, clipboard/download failure and zero-network rules.
 Real WebView2 image/PDF/clipboard/lifecycle behavior remains a Windows qualification
 gate; host-neutral image behavior is implemented but does not close that gate.
+
+## Run change presentation
+
+Completed chat runs can compare retained authored text revisions and individual
+HTML-workspace files. This uses existing lineage/CAS and does not alter Library
+heads or resource authority. Scope, source fidelity and limits are defined in
+[Conversation protocol — Run text changes](conversation-protocol.md#run-text-changes).

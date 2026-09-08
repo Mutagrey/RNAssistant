@@ -947,7 +947,7 @@
       card.appendChild(meta);
       card.appendChild(diff);
       target.appendChild(card);
-      window.RNAssistantVbaDiff.render(diff, window.RNAssistantVbaDiff.format(before, after));
+      window.RNAssistantTextDiff.render(diff, window.RNAssistantTextDiff.format(before, after));
     });
     if (!components.length) target.textContent = "Mutation не содержит компонентов.";
     target.classList.remove("hidden");

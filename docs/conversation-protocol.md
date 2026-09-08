@@ -580,6 +580,51 @@ Missing/duplicate results, altered pending arguments or missing evidence fail
 closed. A pending run without kernel evidence cannot resume: cancel it or start
 a new chat. No backfill or fallback loop exists.
 
+## Run text changes
+
+The completed-run UI requests `getRunChanges` with an explicit chat/run. The typed
+`RunChangesDto` is a disposable projection owned by `RunChangesService`; it does not
+add durable events, a second store, model fields, execution authority or live Office
+reads. Empty results have no card. The compact card shows three entries initially,
+expandable files/modules, signed line counts and lazy, inert source rows.
+
+Included sources are authored HTML-workspace members (HTML, CSS, JS, JSON, Markdown
+and other text members), Markdown/Plan artifacts and text/JSON/XML/YAML/JavaScript
+`file` artifacts. Workspace binding metadata/data-source snapshots, uploads,
+extracted PDF/Office content, binary/media, tool-result payloads and prose/code fences
+in model answers do not count as authored source changes. Tools/skills/prompts lacking
+retained before/after source pairs are outside this projection; success alone cannot
+produce a diff. It is a run history view, not a document-wide working-tree tracker.
+
+Artifact comparisons follow exact parent lineage, never matching by title or newest
+Library head. A linear chain within the run compares its first baseline to its final
+revision. Branches stay separate. HTML compares stable member IDs, including empty
+files, creation, deletion and path rename; the serialized workspace envelope is not
+counted. Missing/corrupt/oversized source stays explicitly unavailable, never an empty
+baseline. Chat-owned source must match the retained CAS hash and byte length;
+document-owned source uses exact existing gateway reads and retains removal rules.
+
+VBA uses the addressed document journal and exact chat/run correlation. Accepted
+protocol-call IDs also locate preparations belonging to an earlier confirmation run;
+the current call run owns the display. Only terminal exact actual/intended source-hash
+agreement permits an after text. Comparable-hash agreement or an open/unknown record
+cannot promote planned code to actual code. Verified no-ops disappear, continuous
+source pairs collapse, and interrupted/discontinuous evidence remains separate.
+Identity-preserving rename shows old → new without fabricated added/deleted code.
+Only CodeOnly UserForm source is included; Designer/FRX and opaque macro side effects
+without captured source are not inferred.
+
+`app-text-diff.js` replaces the old VBA-only formatter for all three consumers:
+editor preview, mutation journal and run card. Its bounded Myers line projection is
+presentation, not mutation evidence or an authoritative unified-diff contract.
+CR/LF formatting is explicit and excluded from line counts; final-newline and
+whitespace edits remain visible. Bounds: 100 entries/mutations, 128k characters per
+source, 512k transmitted source characters, 40k lines/500k algorithm work units and
+600 rendered rows per comparison. Missing or work-limited comparisons have no line
+count; omitted entries and partial totals are labelled. Read-only cache entries are
+bounded and keyed by chat/run/projection revision; stale/detached responses do not
+render. Windows/Office/WebView2 delivery qualification remains open.
+
 ## Effect mapping and UI projection
 
 `ToolRuntime` classifies each native invocation from a captured typed policy and

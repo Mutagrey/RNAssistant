@@ -123,7 +123,7 @@ const context = vm.createContext({
   Blob: function () {},
   confirm: () => false,
   alert() {},
-  RNAssistantVbaDiff: { render() {}, format() { return []; } }
+  RNAssistantTextDiff: { render() {}, format() { return []; } }
 });
 context.window = context;
 get("trajectoryViewInput").value = "raw";

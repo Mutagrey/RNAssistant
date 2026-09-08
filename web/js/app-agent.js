@@ -425,6 +425,9 @@ function renderAgentRunArticle(run) {
   if (!run.live && typeof appendAgentRunResourceCards === "function") {
     appendAgentRunResourceCards(body, items, finalMessage);
   }
+  if (!expanded && typeof appendRunChanges === "function") {
+    appendRunChanges(body, state.activeChatId, agentRunId(items, finalMessage));
+  }
   node.appendChild(body);
 
   if (!run.live) {

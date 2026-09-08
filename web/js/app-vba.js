@@ -73,7 +73,7 @@ function applyVbaMode() {
 }
 
 function renderVbaDiff(diff) {
-  window.RNAssistantVbaDiff.render($("vbaDiffOutput"), diff);
+  window.RNAssistantTextDiff.render($("vbaDiffOutput"), diff);
 }
 
 function previewVbaDiff() {
@@ -83,7 +83,7 @@ function previewVbaDiff() {
     return;
   }
 
-  renderVbaDiff(window.RNAssistantVbaDiff.format(vbaModuleCode(module), vbaEditorCode()));
+  renderVbaDiff(window.RNAssistantTextDiff.format(vbaModuleCode(module), vbaEditorCode()));
   $("vbaStatus").textContent = "Сравнение готово.";
 }
 

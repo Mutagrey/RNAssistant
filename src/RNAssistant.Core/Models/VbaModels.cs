@@ -263,6 +263,9 @@ namespace RNAssistant.Core.Models
         public string StepId { get; set; }
         public string ToolCallId { get; set; }
 
+        // Runtime correlation after confirmation may differ from the prepared journal run.
+        public IReadOnlyList<string> CorrelatedToolCallIds { get; set; }
+
         public VbaMutationQueryRequest()
         {
             PageSize = 100;

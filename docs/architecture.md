@@ -307,7 +307,7 @@ See [conversation-protocol.md](conversation-protocol.md).
 - `web/js/app-chat-session.js`: chat/document CRUD, bridge initialization, and navigation synchronization; composer rendering/input state lives in `app-chat-composer.js`, send/retry/cancel, run tracking, and Agent tool decisions in `app-chat-run.js`, while `app-chat.js` keeps chat-level actions and bindings.
 - `web/js/app-model-render.js`: model info/status coordination; catalog selects and the composer picker live in `app-model-picker.js`, while editable capability overrides live in `app-model-capabilities.js`.
 - `web/js/app-tools.js`: tool catalog and editor state; schema/run-argument editors live in `app-tools-structured.js`, while save/run and VBA package bridge calls live in `app-tools-actions.js`.
-- `web/js/app-vba.js`: VBA editor modes and UI bindings; the separate project tree and lazy module loading live in `app-vba-project.js`, diff calculation/rendering in `app-vba-diff.js`, and save/delete/restore/run bridge calls in `app-vba-actions.js`.
+- `web/js/app-vba.js`: VBA editor modes and UI bindings; the separate project tree and lazy module loading live in `app-vba-project.js`, shared text diff calculation/rendering in `app-text-diff.js`, and save/delete/restore/run bridge calls in `app-vba-actions.js`.
 - `web/js/app-agent.js`: Agent run grouping and article composition; individual activity rendering lives in `app-agent-activity.js`, while pending-confirmation traversal and the approval dock live in `app-agent-approval.js`.
 - Other `web/js` files remain static feature modules; no agent routing or business rules.
 - `web/js/app-trajectory.js`: read-only diagnostics projection over session events and external payloads.

@@ -81,6 +81,13 @@ and `artifact library:` when changing shared ownership/projection. The UI compan
 is `node tests/web/artifact-working-set.test.js`; real WebView/layout remains a
 separate qualification gate.
 
+`run changes:` checks retained CAS fidelity, parent-chain/HTML member pairing,
+missing baselines, durable VBA read-back/no-op/unknown evidence, source bounds and
+confirmation-call attribution. `tests/web/text-diff.test.js` checks exact line
+counts against an independent LCS oracle; `run-changes-layout.test.js` exercises
+the completed-run renderer, narrow/wide Chromium layout and stale chat delivery
+with the same Playwright environment variables as the checks below.
+
 `tests/web/agent-activity-layout.test.js` checks action/target/result wrapping at
 wide and narrow chat widths, shipped Markdown line breaks/lists/code/sanitization,
 single diagnostic bodies, zero-action failures and the addressed context-inspector

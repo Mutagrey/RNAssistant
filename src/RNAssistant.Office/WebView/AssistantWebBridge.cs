@@ -392,6 +392,11 @@ namespace RNAssistant.Office.WebView
                     case "getVbaMutations":
                         responsePayload = _controller.GetVbaMutations(Payload<VbaMutationQueryPayload>(payload));
                         break;
+                    case "getRunChanges":
+                        responsePayload = await RunBridgeWorkAsync(
+                            () => _controller.ReadRunChanges(Payload<RunChangesRequest>(payload)),
+                            cancellationToken).ConfigureAwait(false);
+                        break;
                     case "getVbaMutationDetail":
                         responsePayload = _controller.GetVbaMutationDetail(
                             Payload<VbaMutationDetailPayload>(payload).MutationId);

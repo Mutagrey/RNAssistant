@@ -96,6 +96,14 @@ remain visible. Distinct calls, model narration and stored/model data are retain
 Focused Web and real Chromium Markdown/narrow-layout checks pass. Windows/Office/
 WebView2 qualification remains open; no runtime/model contract changed.
 
+Latest user-approved run-diff slice (2026-09-08): completed runs expose retained
+VBA/module and authored text/HTML-member comparisons with compact signed totals,
+expandable source rows and explicit unavailable/unknown bounds. Exact parent/call
+correlation survives replay and confirmation; one shared formatter replaces the
+VBA-only changed-span path. Focused retained-CAS/VBA and Web/Chromium checks pass.
+The pre-existing run-view-state cache-key assertion failure is recorded in BACKLOG.
+Windows/Office/WebView2/controller delivery remains open; Phase 12 is not started.
+
 Latest catalog-display and compact-chat slice (2026-09-08): optional immutable
 ToolDisplayMetadata is retained by catalog storage, model/Library authoring,
 accepted invocation projection, confirmation replacement and chat forks. Shipped
