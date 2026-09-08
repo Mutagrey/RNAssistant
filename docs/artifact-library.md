@@ -339,8 +339,8 @@ requested historical snapshot keeps its own index. Generation is checked after
 the last source page as well as between pages, so a write during materialization
 cannot produce an apparently current mixed-generation result.
 
-Uploaded extracted text now uses the extension below. HTML member indexing,
-semantic section reads, picker/history pagination, richer
+Uploaded text and HTML members now use the extensions below. Semantic section
+reads, picker/history pagination, richer
 compiler decision context and cold allocation/Windows/layout qualification remain
 open. No model-generated synopsis or embedding publication is added.
 
@@ -366,8 +366,36 @@ bytes are rebuilt from that exact extraction, and normal CAS GC retains the view
 incomplete even on a hit or a query longer than the retained text. These views
 record character-range coverage instead of whole coverage. A complete text scan
 refers to the retained text representation; it does not inspect images or prove
-full visual coverage of a PDF. Semantic section reads and HTML member indexing
-remain subsequent work.
+full visual coverage of a PDF. HTML member indexing is implemented below;
+semantic section reads remain subsequent work.
+
+### Implemented HTML member discovery views — 2026-09-08
+
+`ChatHtmlResourceCatalog` resolves/serializes members from the exact selected HTML
+aggregate. `DocumentArtifactStore.SearchMemberText` reuses the existing text-view
+engine and CAS retention, under the exact published parent revision with view key
+`artifact-member-text-index-v1:member/{type}/{key}`. Member character coverage is
+scoped by that path; it never claims whole-parent coverage or publishes new heads.
+The common text materialization/repair path replaces the document-member 128k
+prefix scan. Legacy chat-local member search retains its existing bounded path.
+
+File content is source code; data-member content is its serialized binding, not
+the resource behind that binding. Search does not execute HTML, fetch bound data,
+or interpret source as Markdown. Returned references and offsets address the exact
+member representation, and model scope remains `html` despite document ownership.
+CAS protection metadata is preserved for retained member payloads. Missing/corrupt
+derived views are regenerated from the same aggregate; a missing parent stays
+unavailable. Retained parts survive ordinary GC and owner restart.
+
+Search validates selected artifact and authority generation after member scanning,
+including member-only requests. Combined search also checks its initial document
+generation and preserves member failures in `unavailableResources`. A changed
+selection/current head requires refresh; exact historical reads still work.
+
+The catalog still loads/parses the complete bounded aggregate for member discovery,
+including warm-index searches. This slice does not establish metadata-only HTML
+discovery or bounded cold-start allocation. Semantic section reads, picker/history
+pagination and Windows/Office/WebView2/layout qualification remain open.
 
 ### Ownership and user behavior
 

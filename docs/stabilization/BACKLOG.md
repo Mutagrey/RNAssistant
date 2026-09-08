@@ -75,8 +75,10 @@ transport alone does not qualify source allocation.
   and generation guards. Working-set picker/history still need paging. Cold replay,
   ordered insertion and full-authority consumers still scale with journal size.
   Markdown/Plan and uploaded extracted-text section/chunk views now use existing
-  revision/CAS retention. HTML member indexing, semantic section reads and allocation
-  qualification remain open; no parallel durable library/search store.
+  revision/CAS retention. HTML member views now reuse the same engine beneath exact
+  parent revisions. Semantic section reads and allocation qualification remain open;
+  HTML discovery still loads/parses its bounded aggregate even with a warm index.
+  No parallel durable library/search store.
 - Partial model discovery is implemented host-neutral (2026-09-08): missing/corrupt
   current metadata, bodies and unknown heads preserve healthy matches with explicit
   incomplete coverage. No uniqueness/negative inference from unavailable scopes;
