@@ -59,7 +59,7 @@ namespace RNAssistant.Office.Services
             var name = NormalizeTableName(table.Name);
             if (table.Sheet.Length > 128 || table.Sheet.Any(char.IsControl))
                 throw Error("RESOURCE_TARGET_INVALID", "The table sheet name is invalid.");
-            var descriptor = Describe(session, table.Sheet.ToUpperInvariant(), NormalizeAddress(table.Range));
+            var descriptor = Describe(session, NormalizeSheetName(table.Sheet), NormalizeAddress(table.Range));
             descriptor.Reference = new ResourceRef(ResourceUri.Create(Id, _scope.DocumentToken(session), "table", name));
             descriptor.Kind = TableKind; descriptor.Title = table.Name;
             descriptor.Metadata["table"] = table.Name;

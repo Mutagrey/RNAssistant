@@ -133,7 +133,6 @@ namespace RNAssistant.Core.Agent
 
                 for (var index = 0; index < response.ToolCalls.Count; index++)
                 {
-                    var unknownBefore = state.UnknownEffectObserved;
                     var result = await ExecuteOneAsync(state, response.ToolCalls[index], policies[index], stepId,
                         false, 0, null, cancellationToken).ConfigureAwait(false);
                     if (result != null)
@@ -144,13 +143,6 @@ namespace RNAssistant.Core.Agent
                             await RecordNotDispatchedAsync(state, response.ToolCalls[rest], policies[rest], stepId,
                                 "Run ended before dispatch.").ConfigureAwait(false);
                         return await FinishAsync(state, result.Lifecycle, result.Reason, result.AssistantMessage).ConfigureAwait(false);
-                    }
-                    if (!unknownBefore && state.UnknownEffectObserved && index + 1 < response.ToolCalls.Count)
-                    {
-                        for (var rest = index + 1; rest < response.ToolCalls.Count; rest++)
-                            await RecordNotDispatchedAsync(state, response.ToolCalls[rest], policies[rest], stepId,
-                                "A prior batch mutation has an unknown effect; the remaining batch was not dispatched.").ConfigureAwait(false);
-                        break;
                     }
                 }
             }
@@ -209,15 +201,6 @@ namespace RNAssistant.Core.Agent
             {
                 await RecordNotDispatchedAsync(state, call, policy, stepId, "Tool step limit reached.", confirmed).ConfigureAwait(false);
                 return state.Summary(RunLifecycle.Failed, "tool_step_limit", "Tool step limit reached.");
-            }
-            if (state.UnknownEffectObserved && policy.MayHaveSideEffects)
-            {
-                await RecordNotDispatchedAsync(state, call, policy, stepId,
-                    "A prior tool may have changed the document; another mutation is blocked in this run.",
-                    confirmed).ConfigureAwait(false);
-                return state.Summary(RunLifecycle.Failed,
-                    "mutation_blocked_after_unknown_effect",
-                    "A prior tool has an unknown effect. Inspect the current state before starting a new run.");
             }
             var callSignature = call.Name + "\n" + call.ArgumentsJson;
             if (!confirmed && (state.ErrorCallSignatures.Contains(callSignature) ||

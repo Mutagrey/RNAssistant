@@ -1,5 +1,57 @@
 # Stabilization progress
 
+Current correction (2026-09-08): Excel semantic range targets now preserve exact
+worksheet names and accept Excel-quoted sheet names such as
+`Excel range: 'новый лист (2)'!A1:A2`. Discovery returns the preserved sheet name
+instead of an upper-cased target, so the model can copy the advertised target or
+provide the quoted form directly. Focused Excel read harness checks pass
+host-neutral; Windows/Office/WebView2 qualification remains open.
+
+Current correction (2026-09-08): unknown side-effecting tool results no longer
+stop the current Agent run or close the remaining managed-mutation batch members.
+The uncertainty is still retained in cumulative execution health, final status and
+duplicate-call protection for the exact same unknown call. HTML ancestor recovery
+now renders as a warning while the active revision remains mutable, and uses the
+red blocked state only when recovery disables mutation. Focused kernel and HTML
+harness checks pass host-neutral; Windows/Office/WebView2 qualification remains open.
+
+Current correction (2026-09-08): every current Tool Result now fails closed on
+malformed wire and removes all exact resource references plus runtime `rna://`
+values from generic model projections; switched result prose uses the same boundary.
+Completed mutation folding consumes that same projection instead of durable result
+prose/effect labels. Compaction checkpoint artifacts are excluded from model resource
+index/discovery and only authority-filtered claims are replayed. Semantic artifact
+search no longer builds snippets from raw runtime metadata. User data fields
+and non-runtime URIs remain intact; `RUNTIME_CONTEXT.active_plan` no longer exposes
+its internal Plan id. Compaction uses request-local source aliases, omits durable
+message/claim/tool-call IDs, and sanitizes retained claims again on replay.
+Focused projection, causal-folding, Plan-context and budget checks pass host-neutral;
+Windows/Office/WebView2 and target-model qualification remain open.
+
+Current correction (2026-09-08): model-facing `common.tools_upsert` is now a true
+create-or-update operation without model-selected existence modes. Tool-manifest
+schema failures name the authored `parameters` field, authoring guidance includes
+its exact strict outer shape and forbids replacing a failed executable tool with a
+skill. Failed action rows expose the stable error code beside the localized status.
+Focused authoring/parser and web activity checks pass host-neutral;
+Windows/Office/WebView2 and target-model qualification remain open.
+
+Current correction (2026-09-08): HTML authored workspace operation receipts are
+now keyed by exact tool call id in addition to chat/run/step. Multiple HTML/CSS/JS
+writes emitted in one model batch no longer collide after the first publication
+as `html_attempt_already_published`; true replay of the same call remains blocked
+before dispatch. Focused HTML batch/shared-publication, VBA mutation/effect and
+kernel cumulative-health checks pass host-neutral. Windows/Office/WebView2 and
+target-model qualification remain open.
+
+Current correction (2026-09-08): externalized generic/chart tool results retain
+their exact `relation=result` reference only in durable runtime evidence; every
+model projection removes it while preserving distinct produced resources. Current
+`document:`/`selection:` reads now resolve their live singleton directly instead
+of enumerating unrelated Excel catalogs. Focused projection/budget, Excel read and
+resource-discovery checks pass host-neutral. Windows/Office/WebView2 and
+target-model qualification remain open.
+
 Current slice (2026-09-08), after `2598e224`: **partial current artifact discovery**
 is implemented host-neutral. One authority capture chooses exact current Plan/HTML/MD
 snapshots before metadata reads. Missing historical records no longer poison current

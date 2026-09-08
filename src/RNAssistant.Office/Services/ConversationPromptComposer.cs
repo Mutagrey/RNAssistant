@@ -205,19 +205,16 @@ namespace RNAssistant.Office.Services
                 StringComparison.OrdinalIgnoreCase)) return null;
             var artifact = matches[0];
             var status = "draft";
-            var planId = string.Empty;
             try
             {
                 var metadata = JObject.Parse(artifact.MetadataJson ?? "{}");
                 status = (string)metadata["status"] ?? status;
-                planId = (string)metadata["planId"] ?? string.Empty;
             }
             catch (JsonException)
             {
             }
             return new JObject
             {
-                ["id"] = planId,
                 ["status"] = status,
                 ["title"] = artifact.Title ?? string.Empty
             };

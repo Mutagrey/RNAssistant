@@ -185,11 +185,10 @@ namespace RNAssistant.Office.Services
                 {
                     var metadata = string.Join(" ", new[]
                     {
-                        artifact.Id,
                         artifact.Kind,
                         artifact.Title,
                         artifact.MimeType,
-                        artifact.MetadataJson
+                        SearchDescription(artifact)
                     }.Where(value => !string.IsNullOrWhiteSpace(value)).ToArray());
                     var metadataIndex = metadata.IndexOf(query, StringComparison.OrdinalIgnoreCase);
                     if (metadataIndex >= 0)
@@ -523,6 +522,13 @@ namespace RNAssistant.Office.Services
                  string.Equals(artifact.Kind, ChatArtifactKinds.Chart, StringComparison.OrdinalIgnoreCase));
         }
 
+        private static string SearchDescription(ChatArtifact artifact)
+        {
+            if (artifact == null || MarkdownDocumentIdentity.LogicalId(artifact.Id) == null)
+                return null;
+            return (string)JObject.Parse(artifact.MetadataJson ?? "{}")["description"];
+        }
+
         private static string TextRepresentationSha256(ChatArtifact artifact, ChatAttachment attachment)
         {
             return attachment != null
@@ -853,12 +859,23 @@ namespace RNAssistant.Office.Services
         private IEnumerable<ChatArtifact> OrderedArtifacts(ChatSession session)
         {
             return Artifacts(session)
+                .Where(IsDiscoverableArtifact)
                 .Where(item => !PlanDocumentService.IsRemoved(session, item))
                 .OrderByDescending(item => string.Equals(item.Id, session == null ? null : session.ActiveHtmlArtifactId, StringComparison.OrdinalIgnoreCase))
                 .ThenByDescending(item => string.Equals(item.Id, session == null ? null : session.ActiveTaskListArtifactId, StringComparison.OrdinalIgnoreCase))
                 .ThenByDescending(item => string.Equals(item.Id, session == null ? null : session.ActivePlanDocumentArtifactId, StringComparison.OrdinalIgnoreCase))
                 .ThenByDescending(item => item.CreatedUtc)
                 .ThenBy(item => item.Id, StringComparer.OrdinalIgnoreCase);
+        }
+
+        internal static bool IsDiscoverableArtifact(ChatArtifact artifact)
+        {
+            // Compaction checkpoints are runtime replay state. Their structured
+            // claims are projected separately after authority filtering.
+            return artifact != null && !string.Equals(
+                artifact.Kind,
+                ChatArtifactKinds.Compaction,
+                StringComparison.OrdinalIgnoreCase);
         }
 
         private static void EnsureNotRemoved(ChatSession session, ChatArtifact artifact, string resourceUri)

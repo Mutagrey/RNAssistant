@@ -288,9 +288,9 @@ namespace RNAssistant.Harness
             var result = await f.RunAsync();
 
             AssertEqual(RunLifecycle.Failed, result.Summary.Lifecycle,
-                "a possible effect blocks later mutations in the same run");
-            AssertEqual("mutation_blocked_after_unknown_effect", result.Summary.Reason,
-                "unknown effect has a distinct terminal reason");
+                "the exact same possible effect remains non-repeatable");
+            AssertEqual("repeated_failed_tool_call", result.Summary.Reason,
+                "unknown write repeat uses the bounded duplicate-call guard");
             AssertEqual(2, f.Tools.Calls.Count,
                 "intervening success does not redispatch the unknown write");
         }
@@ -355,11 +355,11 @@ namespace RNAssistant.Harness
             }
         }
 
-        private static async Task KernelUnknownBatchMutationClosesTail()
+        private static async Task KernelUnknownBatchMutationContinuesTail()
         {
             var f = new KernelFixture(
                 KernelResponse(KernelCall("write", "{\"order\":1}"), KernelCall("write", "{\"order\":2}")),
-                KernelResponse(KernelCall("read")), KernelResponse());
+                KernelResponse());
             var outcomes = new Queue<ToolExecutionOutcome>(new[]
             {
                 ToolExecutionOutcome.Unknown,
@@ -370,16 +370,16 @@ namespace RNAssistant.Harness
             var result = await f.RunAsync();
 
             AssertEqual(RunLifecycle.Completed, result.Summary.Lifecycle,
-                "model may inspect after the unknown batch member");
-            AssertEqual(2, f.Tools.Calls.Count, "unknown write stops its batch tail but permits a later read step");
-            AssertEqual("write,read", string.Join(",", f.Tools.Calls.Select(call => call.Call.Name)),
-                "second accepted write was not dispatched");
-            AssertTrue(result.AcceptedMessages.Any(message => message.Kind == AgentMessageKind.ToolResult &&
-                    message.Execution.Outcome == ToolExecutionOutcome.NotDispatched &&
-                    message.ToolCallId == "call_2"),
-                "undispatched tail remains explicitly closed in accepted history");
+                "unknown batch member no longer stops the current run");
+            AssertEqual(2, f.Tools.Calls.Count, "unknown write does not stop its batch tail");
+            AssertEqual("1,2", string.Join(",", f.Tools.Calls.Select(call =>
+                JObject.Parse(call.Call.ArgumentsJson).Value<int>("order"))),
+                "second accepted write is dispatched in order");
+            AssertTrue(!result.AcceptedMessages.Any(message => message.Kind == AgentMessageKind.ToolResult &&
+                    message.Execution.Outcome == ToolExecutionOutcome.NotDispatched),
+                "batch tail is not closed as not-dispatched");
             AssertEqual(ExecutionHealth.Unknown, result.Summary.ExecutionHealth,
-                "later inspection does not erase unknown mutation evidence");
+                "later success does not erase unknown mutation evidence");
         }
 
         private static async Task KernelRejectsAllocationCollisions(bool acrossSteps)
@@ -631,22 +631,29 @@ namespace RNAssistant.Harness
             AssertEqual(RunLifecycle.AwaitingConfirmation, paused.Summary.Lifecycle, "pause snapshot immutable");
         }
 
-        private static async Task KernelBlocksConfirmationAfterUnknownEffect()
+        private static async Task KernelAllowsConfirmationAfterUnknownEffect()
         {
             var f = new KernelFixture(
                 KernelResponse(KernelCall()),
                 KernelResponse(KernelCall("confirm")));
+            var outcomes = new Queue<ToolExecutionOutcome>(new[]
+            {
+                ToolExecutionOutcome.Unknown,
+                ToolExecutionOutcome.AwaitingConfirmation
+            });
             f.Tools.OnExecute = (context, token) => Task.FromResult(
-                KernelRecord(context, ToolExecutionOutcome.Unknown));
+                KernelRecord(context, outcomes.Dequeue()));
 
             var result = await f.RunAsync();
 
-            AssertEqual(RunLifecycle.Failed, result.Summary.Lifecycle,
-                "unknown effect prevents a later confirmation flow");
-            AssertEqual("mutation_blocked_after_unknown_effect", result.Summary.Reason,
-                "confirmation cannot bypass the unknown-effect mutation gate");
-            AssertEqual(1, f.Tools.Calls.Count,
-                "later confirmation-required mutation never enters runtime");
+            AssertEqual(RunLifecycle.AwaitingConfirmation, result.Summary.Lifecycle,
+                "unknown effect does not prevent a later confirmation flow");
+            AssertEqual("confirmation_required", result.Summary.Reason,
+                "confirmation keeps its ordinary runtime-owned gate");
+            AssertEqual(2, f.Tools.Calls.Count,
+                "later confirmation-required mutation reaches runtime");
+            AssertEqual(ExecutionHealth.Unknown, result.Summary.ExecutionHealth,
+                "pending confirmation keeps prior unknown health visible");
         }
 
         private static async Task KernelRejectsAllocationCollisionAfterConfirmation()

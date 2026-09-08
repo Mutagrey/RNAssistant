@@ -14,8 +14,9 @@ draft, separate provider-native refusal, or typed failure. Model wording and
 `final` are never execution evidence.
 
 Prompt schema 29 permits ordered managed-mutation batches under current runtime
-policy, with per-call guards/verification/commit and tail stop after an unknown
-effect. Schema 28 made tool-turn `message` a concise operational summary linking
+policy, with per-call guards/verification/commit. Unknown mutation effects remain
+visible in cumulative run health and the terminal summary, but do not stop the
+current run by themselves. Schema 28 made tool-turn `message` a concise operational summary linking
 an observed finding (when present), the purpose of the actual upcoming calls and
 what their result will determine. It does not request private reasoning, introduce
 wire fields, or turn narrative into execution evidence. Saved custom prompts use
@@ -144,7 +145,7 @@ pending entry and rejects its original promise, including calls queued behind
 initialization. Other pending requests remain correlated. A send failure never
 triggers automatic replay or establishes a physical mutation outcome.
 
-A confirmed tool result always returns to the Agent loop, including `ok:false`, so the model can explain the failure, correct arguments, or choose another tool. Runtime failures carry a typed class (`RejectedNoEffect`, `ConflictNoEffect`, `BusyNoEffect` or `ToolDefect`) and retry policy (`None`, `Replan`, `RefreshRequired` or `RetryLater`); the model chooses the semantic next action, while runtime never automatically replays a tool. An immediate identical call after `error` is closed as not-dispatched and terminates the run with `repeated_failed_tool_call`; an intervening successful state-changing call permits the original operation again, while an ordinary read-only success does not. For `RefreshRequired`, only a successful complete whole-view read whose exact resource evidence satisfies the recovery contract permits the identical call again. Partial or unrelated reads leave it blocked. `Replan` requires a changed call. After a side-effecting call ends in `unknown`, all later mutations are blocked for that run; read-only inspection and the final response remain allowed. Chat tools never require confirmation. An explicit user cancellation is terminal for that run and does not invoke the model again. Fresh and confirmed controller invocations share one progress/checkpoint callback, success/failure finalizer and run-lease release path; targeted store recovery releases that ownership before canonical reload. The lease remains per chat. Global coordination and document-access gates are not held across model wait, and `ConversationRunService → AgentKernel` remains the single execution loop.
+A confirmed tool result always returns to the Agent loop, including `ok:false`, so the model can explain the failure, correct arguments, or choose another tool. Runtime failures carry a typed class (`RejectedNoEffect`, `ConflictNoEffect`, `BusyNoEffect` or `ToolDefect`) and retry policy (`None`, `Replan`, `RefreshRequired` or `RetryLater`); the model chooses the semantic next action, while runtime never automatically replays a tool. An immediate identical call after `error` is closed as not-dispatched and terminates the run with `repeated_failed_tool_call`; an intervening successful state-changing call permits the original operation again, while an ordinary read-only success does not. For `RefreshRequired`, only a successful complete whole-view read whose exact resource evidence satisfies the recovery contract permits the identical call again. Partial or unrelated reads leave it blocked. `Replan` requires a changed call. After a side-effecting call ends in `unknown`, the uncertainty is retained in run health and final status; later calls in the same run are still governed by their own policy, confirmation and guard checks. Chat tools never require confirmation. An explicit user cancellation is terminal for that run and does not invoke the model again. Fresh and confirmed controller invocations share one progress/checkpoint callback, success/failure finalizer and run-lease release path; targeted store recovery releases that ownership before canonical reload. The lease remains per chat. Global coordination and document-access gates are not held across model wait, and `ConversationRunService → AgentKernel` remains the single execution loop.
 
 The skill entries in the unified capability catalog are metadata only. When the user names a skill or a summary clearly matches, the model calls `common.capabilities_read` with that exact public id. Its model result contains `kind:"skill"`, id, readable metadata/version, complete `bodyMarkdown`, and explicit loaded/complete flags, but no package revision. Runtime validates the hidden exact revision before every projection and replaces stale evidence with `capability_evidence_stale`. Each tool named by the skill still needs its own schema read unless already callable. Oversized evidence becomes explicit `capability_evidence_context_too_large`; compaction or stale evidence requires another read.
 
@@ -337,7 +338,7 @@ The exact Agent-only `common.tools_upsert` and `common.tools_delete` authoring
 operations execute through native ToolRuntime handlers. Existing implementation is
 inspected through [published tool-source resources](tool-library.md#model-source-reads),
 not a separate file reader. Upsert accepts only the semantic tool id,
-existence policy, complete ordered VBA components and human documentation; the VBA
+complete ordered VBA components and human documentation; the VBA
 manifest owns callable metadata/schema while runtime assigns conservative authority
 and validates the complete effective definition before any write. Separate
 model-facing `common.tools_validate`, list mode, executor, storage names and
@@ -347,6 +348,8 @@ rejects drift before dispatch. Storage writes are marked before the possible eff
 and verified by exact effective-definition/absence read-back. A matching upsert is
 verified no-change and does not dispatch. Authoring never changes the immutable
 catalog already captured for the accepted run.
+The model-facing operation always resolves create versus update from current state;
+existence policy remains internal to revision-guarded Library mutations.
 
 ## ModelProtocol boundary (Phase 2)
 
@@ -462,10 +465,12 @@ TOOL_RESULT:
 ```
 
 All five root fields shown are required. `data` may be any JSON
-value, including null. The optional `resources` array contains exact `rna://`
-URI/revision references; at most one has `relation:"result"` for full externalized
-data. Neither a resource `kind` nor CAS hash/internal artifact ID is a second
-transport. The strict reader rejects aliases, extra fields, duplicate keys,
+value, including null. The durable optional `resources` array contains exact
+`rna://` URI/revision references; at most one has `relation:"result"` for full
+externalized data. Every model projection omits the complete array; produced
+resources and full externalized results are rediscovered by semantic target.
+Neither a resource `kind` nor CAS hash/internal artifact ID is a second transport.
+The strict reader rejects aliases, extra fields, duplicate keys,
 comments, trailing content and unsupported statuses; ISO and literal strings are
 not date-converted. Writer, probes and all replay roles use the same contract.
 
@@ -478,6 +483,17 @@ it correlates the already accepted call and result. It is never present in tool
 arguments or generated by the model. Exact public tool/skill ids may remain only as
 stable semantic catalog identities; descriptor/package revisions and admission
 guards do not enter model context after their R61 family cutover.
+`RUNTIME_CONTEXT.active_plan` likewise contains only user-visible title/status;
+the internal Plan id and exact revision remain runtime-owned.
+Retained structured claims and compaction input reapply the same runtime-URI
+sanitization, so an older current-format claim cannot bypass the request projection.
+Compaction uses request-local source aliases and strips durable message/claim and
+tool-call IDs from its text transcript; exact provenance is reattached locally.
+Compaction checkpoint artifacts are runtime replay state: they are absent from the
+model resource index and semantic resource discovery. Only their authority-filtered
+structured claims enter a later request.
+Semantic artifact search indexes public title/type/MIME/description only; raw
+artifact metadata, storage ids and provenance cannot become a returned snippet.
 
 For `common.resources_read`, the root `data.table` is a `ResourceTableBatch`
 containing columns, rows and totalRows. Both `table` and `records` representations
@@ -521,7 +537,7 @@ explicit review/reset. Built-in prompt authoring requires only model call
 name/arguments and assigns IDs to runtime (R31); matching `status=ok` alone does not
 prove that a document changed.
 
-`message` is bounded before it enters model context. Each accepted terminal result is parsed once into a strict detached token; externalization and semantic media selection reuse that raw representation, while sanitization and every request-budget candidate reuse one separate model projection. The immutable durable wire is built once after that projection fits. Eligible oversized generic `data` up to 2,000,000 characters is stored completely as a CAS-backed `tool_result` artifact before the next model dispatch. Durable materialization retains the exact `relation:"result"` reference; until their own family cutover, generic/producing tool results keep that current relation, while subsequent resource calls find and read the semantic target rather than accepting its URI. Resource/capability read evidence is provider-bounded and is neither rewrapped as an untrusted artifact nor silently truncated by transport; its model projection has no exact relation. A specialized chart payload is materialized once at the result boundary and follows the same current unswitched-producing-family rule. After the durable tool-result checkpoint, the controller queues that complete revisioned artifact projection before later progress or the next model step, including confirmation continuation; progress itself carries no artifact authority. Before every conversation model request, including initial dispatch, format repair and continuation after confirmation, ModelProtocol verifies the same messages + options + applicable repair + continuation calculation and stops with a visible diagnostic instead of sending an oversized request.
+`message` is bounded before it enters model context. Each accepted terminal result is parsed once into a strict detached token; externalization and semantic media selection reuse that raw representation, while sanitization and every request-budget candidate reuse one separate model projection. The immutable durable wire is built once after that projection fits. Eligible oversized generic `data` up to 2,000,000 characters is stored completely as a CAS-backed `tool_result` artifact before the next model dispatch. Durable materialization retains the exact `relation:"result"` reference, but every model projection removes all exact resource references; subsequent resource calls find and read semantic targets rather than accepting a URI. Generic/producing tool results also remove runtime `rna://` values from their model message/data while preserving ordinary business fields and non-runtime URIs. Resource/capability read evidence is provider-bounded and is neither rewrapped as an untrusted artifact nor silently truncated by transport; its model projection has no exact relation. Completed mutation folding consumes this same model projection rather than durable result prose/effect labels. A specialized chart payload is materialized once at the result boundary and follows the same durable-reference/model-projection separation. After the durable tool-result checkpoint, the controller queues that complete revisioned artifact projection before later progress or the next model step, including confirmation continuation; progress itself carries no artifact authority. Before every conversation model request, including initial dispatch, format repair and continuation after confirmation, ModelProtocol verifies the same messages + options + applicable repair + continuation calculation and stops with a visible diagnostic instead of sending an oversized request.
 
 Chat-local plan/HTML mutations are serialized by the per-chat lease. Manual library checks and VBA-editor reads use an isolated session snapshot, so they do not advance observations visible only to the running model. Effective safety metadata allows read-only library tools to run while that chat is active; document/local-state mutations return `manual_tool_chat_busy` until the chat stops. Since 11O3 the model-facing HTML family is seven exact Agent-only verified-write intents: separate whole-file and JSON-data writes, exact patch, semantic delete, bind, refresh and freeze. Static inspection and active preview selection are internal UI/runtime operations. Bind accepts only a data name plus optional transform/header choices and consumes the latest successful eligible accepted Office read from the same Agent run; its exact public source-tool id, schema-valid arguments and complete result evidence remain runtime-owned. Refresh accepts an optional data name, while preview policy stays internal. Stored bindings revalidate the exact captured source schema and refresh under the same document gate as live providers, call only the typed bound backend, and never fall through to generic host dispatch; source failure keeps the last good JSON. Model Tool Results remove resource references, URI/revision/hash, source identity and internal selection state, while durable evidence and workspace lineage retain them. Document and shared-local-state mutations are serialized by effective safety metadata. Live `document`/`vba` provider calls use the shared gate so reads and journal reconciliation cannot cross an in-flight mutation; chat/CAS resource reads do not acquire it. Waiting for another mutation is bounded and returns retryable `tool_mutation_busy`. If an unexpected exception occurs after mutation execution may have started, the result is `tool_effect_uncertain`, is not automatically retried, and tells the model/user to inspect state first.
 

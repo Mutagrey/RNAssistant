@@ -65,6 +65,18 @@ namespace RNAssistant.Harness
                 new VbaToolManifestParser().Parse(
                     "RNA_Echo", arrayParameterType).ErrorCode,
                 "non-scalar VBA parameter schema fails without throwing");
+            var missingRequired = tool.Code.Replace(
+                "\"required\":[\"text\",\"count\",\"ratio\"]",
+                "\"required\":{}");
+            var schemaFailure = new VbaToolManifestParser().Parse(
+                "RNA_Echo", missingRequired);
+            AssertEqual("parameters_schema", schemaFailure.ErrorCode,
+                "invalid manifest parameter schema keeps its stable code");
+            AssertContains(schemaFailure.ErrorMessage,
+                "parameters.required", "manifest errors name the authored field");
+            AssertTrue(schemaFailure.ErrorMessage.IndexOf(
+                    "argumentSchemaJson", StringComparison.Ordinal) < 0,
+                "manifest errors do not expose the storage field name");
 
             var rawManifest = tool.Code.Replace("' <RNAssistantTool>",
                     "<RNAssistantTool>")

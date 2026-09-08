@@ -30,10 +30,15 @@ namespace RNAssistant.Office.Services
             projected.ResourceRefs = new List<ResourceRef>();
             projected.ResultPayload = null;
             projected.HtmlWorkspaceCheckpoint = null;
-            if (!IsSwitchedResult(source))
+            if (source.ToolResultProtocolVersion != ToolResultWire.CurrentVersion)
             {
-                if (source.ToolResultProtocolVersion != ToolResultWire.CurrentVersion)
-                    projected.Content = source.Content;
+                projected.Content = source.Content;
+                return projected;
+            }
+            if (string.Equals(source.Role, "assistant",
+                StringComparison.OrdinalIgnoreCase))
+            {
+                projected.Content = SanitizeRuntimeText(source.Content);
                 return projected;
             }
 
@@ -41,13 +46,15 @@ namespace RNAssistant.Office.Services
             string error;
             if (!ToolResultHistoryReader.TryRead(source, out wire, out error))
             {
-                return InvalidSwitchedResult(projected, source);
+                return InvalidCurrentResult(projected, source);
             }
 
             var data = ToolResultWire.ParseData(wire.Result.DataJson);
             var materialized = new ToolResultMaterialization(
                 wire.Result, resultResource: wire.ResultResource, data: data);
-            var model = ForModel(wire.Name, materialized, tools, skills);
+            var model = IsSwitchedResult(source)
+                ? ForModel(wire.Name, materialized, tools, skills)
+                : GenericForModel(materialized);
             var json = ToolResultWire.WriteParsed(
                 wire.ToolCallId,
                 wire.Name,
@@ -58,6 +65,67 @@ namespace RNAssistant.Office.Services
                 ? json
                 : Prefix + json;
             return projected;
+        }
+
+        private static ToolResultMaterialization GenericForModel(
+            ToolResultMaterialization source)
+        {
+            var data = source.Data.DeepClone();
+            RemoveRuntimeResourceValues(data, source.Result.Resources);
+            var objectData = data as JObject;
+            if (objectData != null && source.ResultResource != null)
+            {
+                objectData["hint"] =
+                    "The complete result is stored durably. Find its semantic target with common.resources_find before reading it; do not use runtime resource references.";
+            }
+            var result = new RNAssistant.Core.Tools.Contracts.ToolResult(
+                source.Result.Status,
+                RemoveRuntimeResourceValues(
+                    source.Result.Message, source.Result.Resources),
+                data.ToString(Formatting.None),
+                new ResourceRef[0]);
+            return new ToolResultMaterialization(
+                result, source.ModelAttachments, data: data);
+        }
+
+        private static void RemoveRuntimeResourceValues(
+            JToken token,
+            IEnumerable<ResourceRef> references)
+        {
+            if (token == null) return;
+            var value = token as JValue;
+            if (value != null)
+            {
+                if (value.Type == JTokenType.String)
+                    value.Value = RemoveRuntimeResourceValues(
+                        (string)value.Value, references);
+                return;
+            }
+            foreach (var child in token.Children())
+                RemoveRuntimeResourceValues(child, references);
+        }
+
+        private static string RemoveRuntimeResourceValues(
+            string value,
+            IEnumerable<ResourceRef> references)
+        {
+            var result = value ?? string.Empty;
+            foreach (var uri in (references ?? new ResourceRef[0])
+                .Where(item => item != null && !string.IsNullOrWhiteSpace(item.Uri))
+                .Select(item => item.Uri)
+                .Distinct(StringComparer.Ordinal)
+                .OrderByDescending(item => item.Length))
+            {
+                result = result.Replace(uri, "[runtime resource]");
+            }
+            return Regex.Replace(result,
+                "rna://[^\\s\\\"'<>]+", "[runtime resource]",
+                RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
+        }
+
+        internal static string SanitizeRuntimeText(string value)
+        {
+            return RemoveRuntimeResourceValues(value, null);
         }
 
         internal static ToolResultMaterialization ForModel(
@@ -106,6 +174,10 @@ namespace RNAssistant.Office.Services
                 RemoveCapabilityRuntimeState(data);
             }
 
+            // Result prose is operational metadata, not resource content. Apply the
+            // same exact-reference boundary as data for every switched family.
+            message = RemoveRuntimeResourceValues(message, source.Result.Resources);
+
             var result = new RNAssistant.Core.Tools.Contracts.ToolResult(
                 status,
                 message,
@@ -115,11 +187,11 @@ namespace RNAssistant.Office.Services
                 result, source.ModelAttachments, data: data);
         }
 
-        private static ChatMessage InvalidSwitchedResult(
+        private static ChatMessage InvalidCurrentResult(
             ChatMessage projected,
             ChatMessage source)
         {
-            var name = CanonicalSwitchedName(source == null ? null : source.ToolName);
+            var name = source == null ? null : source.ToolName;
             var callId = source == null ? null : source.ToolCallId;
             if (string.IsNullOrWhiteSpace(name) || string.IsNullOrWhiteSpace(callId))
             {

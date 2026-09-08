@@ -21,6 +21,7 @@ namespace RNAssistant.Office.Services
                     .GroupBy(item => item.Id, StringComparer.OrdinalIgnoreCase)
                     .Where(group => group.Count() == 1)
                     .Select(group => group.Single())
+                    .Where(ChatArtifactResourceProvider.IsDiscoverableArtifact)
                     .Where(item => !PlanDocumentService.IsRemoved(session, item) && !ArtifactWorkingSet.IsDetached(session, item))
                     .ToList();
             var unavailable = artifacts.Count(item => !string.IsNullOrEmpty(item.AvailabilityIssue));
@@ -31,7 +32,6 @@ namespace RNAssistant.Office.Services
             AddPreferred(preferredIds, session.ActiveHtmlArtifactId);
             AddPreferred(preferredIds, session.ActiveTaskListArtifactId);
             AddPreferred(preferredIds, session.ActivePlanDocumentArtifactId);
-            AddPreferred(preferredIds, session.ActiveContextCheckpointId);
             foreach (var message in (session.Messages ?? new List<ChatMessage>())
                 .Where(message => message != null)
                 .OrderByDescending(message => message.CreatedUtc)

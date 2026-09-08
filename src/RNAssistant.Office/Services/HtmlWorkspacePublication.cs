@@ -17,7 +17,11 @@ namespace RNAssistant.Office.Services
     {
         internal static bool Owns(string operation) { return operation.StartsWith("common.html_", StringComparison.Ordinal); }
         internal static string OperationKey(ChatSession session, ToolExecutionContext context)
-        { return PlanDocumentService.CreationId(session, context).Replace("plan_doc_", "html_operation_"); }
+        {
+            using (var hash = System.Security.Cryptography.SHA256.Create())
+                return "html_operation_" + BitConverter.ToString(hash.ComputeHash(System.Text.Encoding.UTF8.GetBytes(
+                    session.Id + "\n" + context.RunId + "\n" + context.StepId + "\n" + context.Call.Id))).Replace("-", "").ToLowerInvariant();
+        }
 
         internal static ResourceIdentity OperationIdentity(ChatSession session, string key)
         { return new ResourceIdentity(ResourceUri.Create("state", "document", session.DocumentAuthorityId, key)); }

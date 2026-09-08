@@ -149,8 +149,8 @@ typed recovery; oversized current source still requires a complete
 `common.resources_read`. Multiple edits derived from one snapshot should remain one
 ordered patch array when that is the natural single mutation. Distinct managed
 mutations may also share a sequential model batch: each call rechecks its own live
-guard and commits separately, and an unknown result prevents dispatch of the
-remaining batch. Confirmation-required or opaque VBA actions remain singleton.
+guard and commits separately, and an unknown result remains cumulative run
+evidence. Confirmation-required or opaque VBA actions remain singleton.
 
 Live-source validation also rejects export-only headers, unclosed string literals,
 C/JSON-style backslash quote escaping, common C-style operators/braces and

@@ -162,6 +162,39 @@ namespace RNAssistant.Office.Services
                     "resource_target_runtime_owned",
                     true);
             }
+            if (target.StartsWith("document: ", StringComparison.Ordinal) ||
+                target.StartsWith("selection: ", StringComparison.Ordinal))
+            {
+                var provider = _registry.All()
+                    .OfType<LiveDocumentResourceProvider>().SingleOrDefault();
+                if (provider == null)
+                    throw new ResourceRequestException(
+                        "Live document resource provider is unavailable.",
+                        "RESOURCE_PROVIDER_UNAVAILABLE", false);
+                var singleton = target.StartsWith(
+                    "selection: ", StringComparison.Ordinal)
+                        ? "selection"
+                        : "root";
+                var descriptor = WithProvider(provider, session,
+                    () => provider.ResolveSingleton(session, singleton));
+                if (!string.Equals(IntentTarget(descriptor), target,
+                    StringComparison.Ordinal))
+                {
+                    throw new ResourceRequestException(
+                        "Resource target is no longer available: " + target +
+                        ". Use the current target from RUNTIME_CONTEXT.",
+                        "resource_target_not_found", true);
+                }
+                var type = IntentType(descriptor);
+                return new ResourceIntentTarget
+                {
+                    Target = target,
+                    Type = type,
+                    Scope = IntentScope(descriptor, type),
+                    Descriptor = descriptor,
+                    Reference = descriptor.Reference.Copy()
+                };
+            }
             if (target.StartsWith("Word search scope: ", StringComparison.Ordinal))
             {
                 var word = _registry.All().OfType<LiveDocumentResourceProvider>().SingleOrDefault();

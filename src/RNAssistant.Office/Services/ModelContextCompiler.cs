@@ -180,7 +180,9 @@ namespace RNAssistant.Office.Services
                         (claim.Evidence ?? new List<ResourceEvidence>()).All(e => _reducer.Reduce(e, authority.Resources).State == EvidenceState.Current))
                         .ToArray();
                     message.Content = "STRUCTURED_CONTEXT_CLAIMS (reference only):\n" +
-                        string.Join("\n", current.Select(claim => claim.Text));
+                        string.Join("\n", current.Select(claim =>
+                            ModelToolResultProjection.SanitizeRuntimeText(
+                                claim.Text)));
                 }
             }
 
@@ -193,20 +195,27 @@ namespace RNAssistant.Office.Services
                 string error;
                 var result = atom.Messages[1];
                 if (!ToolResultHistoryReader.TryRead(result, out wire, out error)) continue;
+                var modelResult = ModelToolResultProjection.Project(
+                    result, tools, authority.Skills.Skills);
+                ToolResultWireReadResult modelWire;
+                if (!ToolResultHistoryReader.TryRead(
+                    modelResult, out modelWire, out error)) continue;
                 var effect = result.ResourceEffect;
                 atom.Kind = "terminal-mutation";
                 atom.Messages = new List<ChatMessage> { new ChatMessage {
                     Id = result.Id, Role = "assistant", ProtocolMessage = true,
                     Content = "TOOL_INTERACTION (completed causal frame):\n" + JsonConvert.SerializeObject(new {
-                        tool = wire.Name, outcome = wire.Result.Status.ToString(), message = wire.Result.Message,
+                        tool = modelWire.Name, outcome = modelWire.Result.Status.ToString(), message = modelWire.Result.Message,
                         effect = effect == null ? null : new {
                             operation = effect.Operation,
                             outcome = effect.Outcome.ToString(),
-                            verification = effect.Verification,
+                            verification = ModelToolResultProjection.SanitizeRuntimeText(
+                                effect.Verification),
                             impacts = effect.Impacts.Select(impact => new {
                                 relation = impact.Relation.ToString(),
                                 coverage = impact.Coverage,
-                                changeKind = impact.ChangeKind
+                                changeKind = ModelToolResultProjection.SanitizeRuntimeText(
+                                    impact.ChangeKind)
                             })
                         } }) } };
             }

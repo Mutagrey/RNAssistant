@@ -109,6 +109,12 @@ inheriting their availability. Provider descriptors retain canonical record path
 as runtime-owned routing. Model and HTML structured reads omit `path` for those
 targets; runtime applies the canonical value, while a conflicting explicit value
 is a no-effect `Replan` rejection.
+Current `document:` and `selection:` targets are singleton point lookups too; their
+resolution does not enumerate Excel ranges, tables or defined names. All exact Tool
+Result resource references, including produced resources and `relation=result`,
+remain durable/runtime evidence and are removed from every model projection.
+Generic result prose/data also cannot carry runtime `rna://` values into the model;
+semantic discovery is the only continuation path.
 Gateway publishes each captured view through the shared authority before binding
 bounded match evidence to that exact logical revision. Zero-match scans therefore
 publish observed drift too. Complete captures stay in the existing CAS for historical
