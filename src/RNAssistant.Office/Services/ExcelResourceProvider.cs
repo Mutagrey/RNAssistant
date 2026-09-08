@@ -29,7 +29,7 @@ namespace RNAssistant.Office.Services
             {
                 var match = Regex.Match(target ?? "", @"\A(?:Excel range: )?(?<sheet>[^!]{1,128})!(?<address>\$?[A-Za-z]{1,3}\$?[1-9][0-9]{0,6}(?::\$?[A-Za-z]{1,3}\$?[1-9][0-9]{0,6})?)\z");
                 if (!match.Success) throw Error("RESOURCE_TARGET_INVALID", "Use an explicit sheet!A1:B10 range.");
-                var sheet = match.Groups["sheet"].Value.Trim().Trim('\'').Replace("''", "'").ToUpperInvariant();
+                var sheet = NormalizeSheetName(match.Groups["sheet"].Value);
                 var address = NormalizeAddress(match.Groups["address"].Value);
                 return Describe(session, sheet, address);
             });
@@ -43,7 +43,7 @@ namespace RNAssistant.Office.Services
                 if (kind == NameKind) return ListNames(session, cursor, limit);
                 var structure = _reader.CaptureStructure("sheets");
                 var items = (structure.Sheets ?? new List<ExcelSheetSnapshot>()).Where(item => !string.IsNullOrWhiteSpace(item.UsedRange))
-                    .Select(item => Describe(session, item.Name.ToUpperInvariant(), NormalizeAddress(item.UsedRange))).ToList();
+                    .Select(item => Describe(session, NormalizeSheetName(item.Name), NormalizeAddress(item.UsedRange))).ToList();
                 if (kind == SearchKind)
                 {
                     items = new List<ResourceDescriptor> { DescribeSearch(session, new ExcelCellScopeRequest { Scope = "workbook" }),
@@ -158,6 +158,24 @@ namespace RNAssistant.Office.Services
                 throw Error("RESOURCE_TARGET_INVALID", "A bounded A1 rectangle is required.");
             CellCount(value);
             return value;
+        }
+
+        private static string NormalizeSheetName(string value)
+        {
+            value = (value ?? string.Empty).Trim();
+            if (value.Length >= 2 && value[0] == '\'' && value[value.Length - 1] == '\'')
+                value = value.Substring(1, value.Length - 2).Replace("''", "'");
+            else if (value.Length >= 2 && IsDoubleSheetQuote(value[0]) && IsDoubleSheetQuote(value[value.Length - 1]))
+                value = value.Substring(1, value.Length - 2);
+            if (string.IsNullOrWhiteSpace(value) || value.Length > 128 ||
+                value.IndexOf('!') >= 0 || value.Any(char.IsControl))
+                throw Error("RESOURCE_TARGET_INVALID", "Use an explicit sheet!A1:B10 range.");
+            return value;
+        }
+
+        private static bool IsDoubleSheetQuote(char value)
+        {
+            return value == '"' || value == '\u201c' || value == '\u201d';
         }
 
         private static long CellCount(string value)

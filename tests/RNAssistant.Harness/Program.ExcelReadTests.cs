@@ -149,6 +149,13 @@ namespace RNAssistant.Harness
                 AssertEqual(0, adapter.ExcelBackendCalls.Count(call =>
                     call == FakeOfficeAdapter.ExcelInspectOperation),
                     "an exact range lookup does not scan unrelated document catalogs");
+                adapter.SetExcelCellForTest("новый лист (2)", "A1", "first");
+                adapter.SetExcelCellForTest("новый лист (2)", "A2", "second");
+                var quoted = gateway.Find(session, "'новый лист (2)'!A1:A2", "document");
+                AssertTrue(quoted.Complete && !quoted.Partial && quoted.Items.Count == 1,
+                    "quoted sheet names with spaces are exact point lookups");
+                AssertEqual("Excel range: новый лист (2)!A1:A2", quoted.Items.Single().Target,
+                    "range target preserves the actual sheet name");
                 adapter.SetExcelCellForTest("Data", "A1", new string('a', 20000));
                 adapter.SetExcelCellForTest("Data", "B1", new string('b', 20000));
                 var first = ExecuteHtmlNative(runtime, ResourceToolCatalog.ReadToolId,
@@ -161,6 +168,15 @@ namespace RNAssistant.Harness
                 AssertTrue(text.Length > 32000, "fixture exercises internally pinned continuation");
                 AssertEqual(1, adapter.ExcelBackendCalls.Count(call => call == FakeOfficeAdapter.ExcelRangeReadOperation),
                     "all profile pages share one bounded physical capture");
+                var quotedRead = ExecuteHtmlNative(runtime, ResourceToolCatalog.ReadToolId,
+                    new JObject { ["target"] = "Excel range: 'новый лист (2)'!A1:A2", ["representation"] = "text" });
+                AssertEqual(ToolExecutionOutcome.Ok, quotedRead.Outcome,
+                    "model-facing read accepts Excel-quoted sheet names");
+                var quotedText = JArray.Parse((string)JObject.Parse(quotedRead.Result.DataJson)["text"]);
+                AssertEqual("first", (string)quotedText[0][0],
+                    "quoted range reads the intended sheet");
+                AssertEqual("second", (string)quotedText[1][0],
+                    "quoted range preserves the requested address");
                 adapter.SetExcelCellForTest("Data", "B2", 999);
                 var next = ExecuteHtmlNative(runtime, ResourceToolCatalog.ReadToolId,
                     new JObject { ["target"] = "Excel range: Data!A1:B4", ["representation"] = "structure" });

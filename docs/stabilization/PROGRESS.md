@@ -1,5 +1,12 @@
 # Stabilization progress
 
+Current correction (2026-09-08): Excel semantic range targets now preserve exact
+worksheet names and accept Excel-quoted sheet names such as
+`Excel range: 'новый лист (2)'!A1:A2`. Discovery returns the preserved sheet name
+instead of an upper-cased target, so the model can copy the advertised target or
+provide the quoted form directly. Focused Excel read harness checks pass
+host-neutral; Windows/Office/WebView2 qualification remains open.
+
 Current correction (2026-09-08): unknown side-effecting tool results no longer
 stop the current Agent run or close the remaining managed-mutation batch members.
 The uncertainty is still retained in cumulative execution health, final status and
