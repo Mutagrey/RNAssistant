@@ -418,14 +418,12 @@ namespace RNAssistant.Harness
                 AssertEqual("body", (string)readData["text"], "read returns complete content without caller page size");
                 AssertTrue(readData["nextCursor"] == null && readData["resource"] == null,
                     "read data hides cursor and exact resource plumbing");
-                HtmlWorkspaceToolService.UpsertFile(
-                    session,
-                    "nested/report.html",
-                    "html",
-                    "<main>Resolved through native tool</main>",
-                    true);
+                executor.MutateLocalResources(session, "common.html_workspace_write_file", null,
+                    () => HtmlWorkspaceToolService.UpsertFile(session, "nested/report.html", "html",
+                        "<main>Resolved through native tool</main>", true));
                 var htmlFind = execute(ResourceToolCatalog.FindToolId,
                     "{\"query\":\"nested/report.html\",\"scope\":\"html\"}");
+                AssertEqual(ToolExecutionOutcome.Ok, htmlFind.Outcome, "published HTML discovery succeeds: " + htmlFind.Message);
                 AssertTrue(((string)JObject.Parse(htmlFind.Result.DataJson)
                         .SelectToken("items[0].target")).StartsWith(
                             "HTML file: nested/report.html [created ",

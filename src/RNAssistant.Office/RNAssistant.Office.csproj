@@ -306,6 +306,7 @@
     <Compile Include="Services\HtmlNetworkService.cs" />
     <Compile Include="Services\HtmlWorkspaceArtifactService.cs" />
     <Compile Include="Services\HtmlWorkspacePublication.cs" />
+    <Compile Include="Services\MarkdownDocumentService.cs" />
     <Compile Include="Services\HtmlWorkspaceActionGuard.cs" />
     <Compile Include="Services\HtmlWorkspaceExportService.cs" />
     <Compile Include="Services\UploadedHtmlResourceService.cs" />
@@ -357,6 +358,8 @@
     <Compile Include="Tools\TaskListToolCatalog.cs" />
     <Compile Include="Tools\TaskListToolHandler.cs" />
     <Compile Include="Tools\PlanDocumentToolCatalog.cs" />
+    <Compile Include="Tools\MarkdownDocumentToolCatalog.cs" />
+    <Compile Include="Tools\MarkdownDocumentToolHandler.cs" />
     <Compile Include="Tools\PlanDocumentToolHandler.cs" />
     <Compile Include="Tools\UserQuestionToolCatalog.cs" />
     <Compile Include="Tools\UserQuestionToolHandler.cs" />

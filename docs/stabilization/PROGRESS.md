@@ -1,6 +1,28 @@
 # Stabilization progress
 
-Current slice (2026-09-08), after `c077ab38`: **shared authored HTML is implemented
+Current slice (2026-09-08), after `b9d434ec`: **independent Markdown is implemented
+host-neutral in Agent mode**. The common authored-record/CAS path retains complete
+MD and purpose/contents metadata. Native save/restore uses typed prepared intent,
+exact semantic targets, document head guards and atomic publication/receipts.
+No active-MD singleton, Plan/HTML embedding or additional store is introduced.
+Another chat can find/read/edit MD or attach/refresh its exact link through the
+existing picker. Multiple MDs (including equal titles), same-step calls, new-revision
+restore, historical refs, missing-body unlink, fork and origin deletion/GC are covered.
+Chat reopening loads MD history metadata only. The runtime supplies prepared intent
+consistently to handler and observer prepare/read-back, preserving kernel execution
+identity and event format. Chat mode remains read-only.
+Checks: shared Markdown 4/4 (including full agent/event replay), runtime 15/15,
+HTML 33/33, agent confirmation replay, R61 inventory, source inclusion, document
+Plan 2/2, working set 3/3 and viewers 3/3 pass. Working-set/library/Plan browser
+checks, version-format validation and diff checks pass. The earlier unrelated
+prompt-target assertion remains open as recorded below.
+Next: indexed/partial discovery and richer shared resource context. The pre-existing
+Plan/HTML operation-key collision in multi-call model steps is recorded separately
+in [backlog](BACKLOG.md#planhtml-operation-identity-in-batches--2026-09-08); Markdown includes call identity.
+Windows/Office/WebView2, target-model and Playwright layout gates remain open.
+See [Markdown contract](../artifact-library.md#implemented-independent-markdown--2026-09-08).
+
+Previous slice (2026-09-08), after `c077ab38`: **shared authored HTML is implemented
 host-neutral** through the common `DocumentArtifactStore` record path and existing
 mutation observer/authority/CAS. Workspace, authored JSON, logical head and operation
 receipt publish under the document lease; the chat persists selection/links only.
@@ -14,8 +36,8 @@ Checks: HTML 33/33, chat lifecycle 2/2, logical restore and fork refusal, docume
 Plan 2/2, originals 2/2 and source inclusion pass. Artifact filter: 27/28; the
 unchanged unquoted prompt-target assertion is tracked in [backlog](BACKLOG.md#resource-prompt-test-expectation--2026-09-08).
 Working-set, library, Plan and HTML-action browser checks pass.
-Next: independent authored Markdown, then bounded indexed discovery/recovery and
-richer resource context. Windows/Office/WebView2, target-model and Playwright layout
+The later Markdown slice above closes independent MD authoring; indexed
+discovery/recovery and richer resource context remain open. Windows/Office/WebView2, target-model and Playwright layout
 gates remain open. See [HTML contract](../artifact-library.md#implemented-shared-html-publication--2026-09-08).
 
 Previous correction (2026-09-08), after metadata recovery commit `bd7a43b1`:

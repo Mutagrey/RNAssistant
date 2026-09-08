@@ -39,6 +39,7 @@ namespace RNAssistant.Office.Tools
                 return VbaToolHandler.BindingFor(toolId);
             if (string.Equals(toolId, UserQuestionToolCatalog.AskToolId,
                 StringComparison.Ordinal)) return UserQuestionToolHandler.Binding;
+            if (MarkdownDocumentToolCatalog.Owns(toolId)) return MarkdownDocumentToolCatalog.BindingFor(toolId);
             if (PlanDocumentToolCatalog.Owns(toolId))
                 return PlanDocumentToolHandler.BindingFor(toolId);
             if (TaskListToolCatalog.Owns(toolId))

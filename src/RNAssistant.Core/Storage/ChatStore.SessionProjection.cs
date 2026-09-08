@@ -99,8 +99,9 @@ namespace RNAssistant.Core.Storage
             }
             if (rebuildDerivedProjections && !string.IsNullOrEmpty(session.DocumentAuthorityId))
             {
-                var logicalId = HtmlWorkspaceIdentity.LogicalId(session.ActiveHtmlArtifactId);
-                if (logicalId != null)
+                var logicalIds = session.Artifacts.Select(item => MarkdownDocumentIdentity.LogicalId(item.Id))
+                    .Concat(new[] { HtmlWorkspaceIdentity.LogicalId(session.ActiveHtmlArtifactId) }).Where(id => id != null).Distinct().ToArray();
+                foreach (var logicalId in logicalIds)
                     foreach (var artifact in DocumentArtifacts.SnapshotHistory(session, logicalId))
                         if (!session.Artifacts.Any(item => item.Id == artifact.Id)) session.Artifacts.Add(artifact);
             }

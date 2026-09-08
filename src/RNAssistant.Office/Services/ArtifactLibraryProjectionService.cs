@@ -215,7 +215,7 @@ namespace RNAssistant.Office.Services
             if (string.Equals(kind, ChatArtifactKinds.TaskList, StringComparison.OrdinalIgnoreCase))
                 return MetadataText(artifact, "taskListId") ?? LineageRoot(artifact, kind, byId);
             if (string.Equals(kind, ChatArtifactKinds.Markdown, StringComparison.OrdinalIgnoreCase))
-                return MetadataText(artifact, "documentId", "logicalId") ?? LineageRoot(artifact, kind, byId);
+                return MarkdownDocumentIdentity.LogicalId(artifact.Id) ?? MetadataText(artifact, "documentId", "logicalId") ?? LineageRoot(artifact, kind, byId);
             return artifact == null ? string.Empty : artifact.Id;
         }
 

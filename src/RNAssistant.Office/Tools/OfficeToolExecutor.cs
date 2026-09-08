@@ -40,6 +40,7 @@ namespace RNAssistant.Office.Tools
         private readonly PowerPointToolAdapter _powerPointAdapter;
         private readonly OutlookToolAdapter _outlookAdapter;
         private readonly HtmlWorkspaceToolService _htmlWorkspaceService;
+        private readonly MarkdownDocumentService _markdownDocuments;
         private readonly IReadOnlyList<ToolCatalogEntry> _controllerTools;
         private readonly ISet<string> _controllerToolIds;
         private readonly HostRuntime _hostRuntime;
@@ -106,6 +107,7 @@ namespace RNAssistant.Office.Tools
                 readAttachmentText,
                 BeginLiveOfficeRead,
                 _resourceAuthority, _catalogPublication, readAttachmentBytes);
+            _markdownDocuments = new MarkdownDocumentService(_resourceGateway, new DocumentArtifactStore(_resourceAuthority.Store, _resourceAuthority.Revisions, Payloads));
             _capabilityCatalogService = new CapabilityCatalogService(adapter, _catalogPublication.CaptureSkills, _resourceGateway);
             var excelBackends = _adapter as IExcelBackendProvider;
             _excelReadAdapter = excelBackends == null || excelBackends.ExcelReadBackend == null
@@ -160,6 +162,7 @@ namespace RNAssistant.Office.Tools
                 TaskListToolCatalog.GetTools());
             RegisterControllerTools(controllerTools,
                 PlanDocumentToolCatalog.GetTools());
+            RegisterControllerTools(controllerTools, MarkdownDocumentToolCatalog.GetTools());
             RegisterControllerTools(controllerTools,
                 UserQuestionToolCatalog.GetTools());
             _controllerTools = controllerTools.ToArray();
@@ -210,7 +213,7 @@ namespace RNAssistant.Office.Tools
                     ? null
                     : new ResourceMutationAuthorityObserver(
                         _resourceAuthority, _resourceMutationJournal, session, Payloads, _persistResourceFacts,
-                        _catalogPublication.CaptureReadBack));
+                        _catalogPublication.CaptureReadBack), _markdownDocuments);
         }
 
         // Explicit UI resource commands share the mutation journal/commit owner.

@@ -23,8 +23,9 @@ belong to the document and are discoverable/readable from its other chats.
 Slice **1b, Plan publication, is implemented host-neutral (2026-09-08)**: new Plans
 also belong to the document. Shared authored HTML workspaces and their authored
 JSON resources are implemented host-neutral (2026-09-08), using the same retained
-artifact-record path, revision journal and CAS. Independent Markdown authoring is
-still open. Originals/Plan/HTML selection and chat-local unlink are implemented. This section owns
+artifact-record path, revision journal and CAS. Independent Markdown creation,
+revision and restore are implemented host-neutral in Agent mode (2026-09-08).
+Originals/Plan/HTML/Markdown working-set links and chat-local unlink are implemented. This section owns
 the artifact-specific decision, not a second resource architecture.
 
 `DocumentArtifactStore` publishes immutable original metadata as a retained view
@@ -117,13 +118,50 @@ Origin-chat deletion and CAS collection retain historical snapshots and bindings
 
 `shared HTML:`, HTML runtime/replay and resource chat-lifecycle checks cover this
 host-neutral slice. Windows/Office/WebView2 and Playwright layout qualification
-remain open; indexed discovery and independent Markdown are separate slices.
+remain open; indexed discovery is a separate slice.
+
+### Implemented independent Markdown — 2026-09-08
+
+Agent mode exposes `common.markdown_save` and `common.markdown_restore`. Save
+requires a title, a grounded description of purpose/contents, and the complete
+Markdown (up to 200,000 characters). Omitting `target` creates an independent
+logical document. Supplying the exact semantic target returned by common resource
+discovery replaces that document's current revision; titles alone are not targets.
+An uploaded `.md` remains immutable. Ordinary Markdown replies remain messages.
+Chat mode stays read-only; this slice does not change Plan mode's workflow.
+
+`MarkdownDocumentService` prepares a typed runtime intent with exact base and
+optional restore source. `ToolRuntime` supplies the same prepared state to the
+handler and mutation observer through preparation and read-back, including automatic
+execution. The kernel execution identity and persisted event format are unchanged.
+The existing document lease rechecks the base before dispatch. The common
+`DocumentArtifactStore` authored-record path then retains complete text and
+metadata; snapshot, logical head, operation receipt and effect publish atomically.
+Receipts include the runtime call identity so two creations in one model step
+remain distinct. A failed chat-link save does not lose bytes or authorize replay.
+Restore creates a new causal revision and preserves exact source provenance.
+
+There is no global active Markdown slot. The existing picker attaches or refreshes
+an exact Markdown link (**«Подключить MD»**); each logical document has independent
+history and membership. The same shared Gateway provides find/read and the existing
+sanitized Markdown/source viewer. Discovery and the bounded prompt index expose the
+authored description as untrusted metadata. Full text is read on demand, through
+bounded exact pages; reopening a chat reconstructs history metadata without loading
+all Markdown bodies. Fork and dialogue changes preserve shared identities/history.
+Unlink is chat-local and still works with missing body bytes; origin-chat deletion
+and CAS collection retain published revisions.
+
+`shared Markdown:` covers cross-chat read/write, concurrent and prepared stale
+writers, duplicate titles, same-step independent calls, restore, immutable uploads,
+failed link publication, foreign documents, metadata-only restart, fork, unlink,
+GC and the complete agent execution/event-replay cycle. Indexed/partial discovery, richer shared context, explicit independent-copy
+UX and Windows/Office/WebView2/layout qualification remain separate open work.
 
 ### Implemented working-set links — 2026-09-08
 
 The original working-set slice covered document-owned originals and Plans.
 The shared HTML slice extends the same contract to HTML and authored JSON files;
-it does not complete independent Markdown or all of discovery slices 3–4.
+Markdown now extends it too; indexed discovery slices 3–4 remain open.
 
 `ChatSession.ArtifactLinks` is append-only-event-backed chat membership: one
 logical resource identity, exact attached snapshot and detached flag per decision.
@@ -139,12 +177,12 @@ CAS. It is neither a document tombstone nor an access revocation. History rewrit
 and fork preserve explicit decisions; clearing the entire chat clears membership.
 
 The **«Ресурсы» → «Из документа…»** picker remains available in an empty chat. It
-lists metadata for current Plans/HTML and ordinary document files, supports title search and returns
+lists metadata for current Plans/HTML/Markdown and ordinary document files, supports title search and returns
 50 items per page with a cursor bound to the chat revision, document, query and
 ordered collection. Duplicate names remain separate exact resources; continuation
 cannot silently skip a changed catalog. A click attaches an original or selects the
-exact displayed Plan/HTML. Detach is also available beside eligible working-set rows.
-Independent MD authoring and run/system resources are outside this slice.
+exact displayed Plan/HTML or refreshes a Markdown link. Detach is also available
+beside eligible working-set rows. Run/system resources are outside this slice.
 
 `ArtifactWorkingSetService` owns validation and document-lease coordination; the
 typed `listDocumentArtifacts`/`changeArtifactLink` bridge carries an explicit chat,
@@ -360,7 +398,7 @@ these boundaries:
   dialogue must not publish a rollback of a shared resource head.
 
 The unregistered draft is removed. Shared HTML now uses the common owner, tools
-and consumers above. Independent Markdown and indexed discovery remain open.
+and consumers above. Markdown uses that path too; indexed discovery remains open.
 
 ### Required implementation slices and acceptance
 

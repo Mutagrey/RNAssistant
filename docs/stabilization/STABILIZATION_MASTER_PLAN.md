@@ -2250,8 +2250,10 @@ endpoint.
    document before dispatch and discards late UI responses while retaining drafts.
    Shared HTML/JSON publication and second-chat selection/editing now pass
    host-neutral owner, conflict, restore/redo, origin deletion and CAS checks through
-   the same Resource Fabric. Independent Markdown and indexed discovery/recovery
-   remain open. Windows/target-model gates are unchanged.
+   the same Resource Fabric. Independent Markdown save/restore, exact cross-chat
+   targets, working-set links and complete CAS text now also pass host-neutral.
+   This does not change Chat/Plan mode permissions. Indexed discovery/recovery and
+   Windows/target-model gates remain open.
 5. **11T — typed Office tools и удаление legacy host dispatch — admitted:**
    - [x] 11T0/7D — done host-neutral: один атомарный production change связывает exact выбранный workbook с
      `ExcelDocumentSession`, переключает factories и typed Excel read/write на прямой

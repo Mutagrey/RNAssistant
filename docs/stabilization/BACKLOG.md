@@ -20,6 +20,19 @@ harness. Reconcile the assertion with the canonical complete-target contract in
 the next resource-context slice; retain the no-historical-body/no-runtime-URI checks.
 The other 27 tests in the `artifact` filter pass. This is not Windows evidence.
 
+## Plan/HTML operation identity in batches — 2026-09-08
+
+Owner: document artifact mutation domain. `PlanDocumentService.CreationId` hashes
+chat/run/step; HTML derives its receipt key from it. AgentKernel gives independent
+calls within a batch the same model step, so a second Plan/HTML mutation can be
+refused as already published. This is outside the new Markdown owner: its operation
+key includes runtime call id and has same-step regression coverage. Next approved
+artifact-authority slice must include call identity for Plan/HTML and explicitly
+handle already prepared/persisted operations; do not silently change replay keys.
+Evidence: `AgentKernel.LoopAsync`, `PlanDocumentService.CreationId`,
+`HtmlWorkspacePublication.OperationKey`. This records a false-refusal risk, not a
+verified lost write or permission to replay unknown effects.
+
 ## Structural debt
 
 Рефакторинг начинается только вместе с конкретным изменением, которое он упрощает.

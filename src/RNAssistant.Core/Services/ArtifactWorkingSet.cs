@@ -23,6 +23,8 @@ namespace RNAssistant.Core.Services
         {
             if (artifact == null || string.IsNullOrWhiteSpace(session?.DocumentAuthorityId) || artifact.DocumentAuthorityId != session.DocumentAuthorityId)
                 throw new InvalidDataException("The artifact is not owned by this document.");
+            if (MarkdownDocumentIdentity.LogicalId(artifact.Id) != null)
+                return MarkdownDocumentIdentity.Identity(session, MarkdownDocumentIdentity.LogicalId(artifact.Id));
             if (artifact.Kind == ChatArtifactKinds.HtmlWorkspace)
                 return HtmlWorkspaceIdentity.Identity(session, HtmlWorkspaceIdentity.LogicalId(artifact.Id));
             if (artifact.Kind == ChatArtifactKinds.PlanDocument)

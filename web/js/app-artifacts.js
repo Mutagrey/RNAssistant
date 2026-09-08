@@ -926,16 +926,16 @@
         row.className = "artifact-link-entry";
         var label = document.createElement("span");
         label.className = "chat-resource-row-copy";
-        label.textContent = item.title + (item.kind === "plan_document" || item.kind === "html_workspace" ? " · v" + item.revision : " · ресурс") +
+        label.textContent = item.title + (item.kind === "plan_document" || item.kind === "html_workspace" || item.kind === "markdown" ? " · v" + item.revision : " · ресурс") +
           (item.selected ? " · выбран" : item.linked ? " · в чате" : "") +
           (item.availabilityIssue === "metadata_unavailable" ? " · метаданные недоступны" :
            item.availabilityIssue ? " · текущая версия неизвестна" : "");
         row.appendChild(label);
-        if (!item.availabilityIssue && (!item.linked || (item.kind === "plan_document" || item.kind === "html_workspace") && !item.selected)) {
+        if (!item.availabilityIssue && (!item.linked || (item.kind === "plan_document" || item.kind === "html_workspace" || item.kind === "markdown") && !item.selected)) {
           var attach = document.createElement("button");
           attach.type = "button";
           attach.className = "link-button";
-          attach.textContent = item.kind === "plan_document" ? "Выбрать Plan" : item.kind === "html_workspace" ? "Выбрать HTML" : "В чат";
+          attach.textContent = item.kind === "plan_document" ? "Выбрать Plan" : item.kind === "html_workspace" ? "Выбрать HTML" : item.kind === "markdown" ? "Подключить MD" : "В чат";
           attach.addEventListener("click", function () {
             changeDocumentArtifactLink(chatId, response.sessionRevision, item.resourceUri, false, attach);
           });

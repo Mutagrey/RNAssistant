@@ -148,10 +148,13 @@ namespace RNAssistant.Office.Runtime
                 }
             }
 
+            // Keep the kernel's execution identity intact; preparation is runtime evidence.
+            var preparedState = context.PreparedStateJson ?? preparation?.PreparedStateJson;
+
             string mutationAttemptId = null;
             if (policy.MayHaveSideEffects && _mutationObserver != null)
             {
-                try { mutationAttemptId = _mutationObserver.Prepare(context, arguments); }
+                try { mutationAttemptId = _mutationObserver.Prepare(context, arguments, preparedState); }
                 catch (ToolMutationPreparationException ex)
                 {
                     return Record(context, ToolExecutionOutcome.Error, ToolResult.Error(ex.Message, Code(ex.Code)), false,
@@ -162,13 +165,13 @@ namespace RNAssistant.Office.Runtime
             var publicationAttempted = false;
             ToolHandlerContext handlerContext = null;
             handlerContext = new ToolHandlerContext(context, arguments,
-                context.PreparedStateJson ?? (preparation == null ? null : preparation.PreparedStateJson),
+                preparedState,
                 mutationAttemptId == null ? (Action)null : () =>
                     _mutationObserver.MarkDispatchMayHaveOccurred(mutationAttemptId), completed =>
                     {
                         if (publicationAttempted) throw new InvalidOperationException("Mutation terminal was published twice.");
                         publicationAttempted = true;
-                        publishedTerminal = CompleteMutation(mutationAttemptId, FromHandler(context, policy, handlerContext, completed));
+                        publishedTerminal = CompleteMutation(mutationAttemptId, FromHandler(context, policy, handlerContext, completed), preparedState);
                     });
             ToolExecutionRecord terminal;
             try
@@ -199,7 +202,7 @@ namespace RNAssistant.Office.Runtime
                         result, handlerContext.MayHaveDispatched, unknown ? ToolEffectEvidence.Unknown : ToolEffectEvidence.None);
                 }
             }
-            return publishedTerminal ?? CompleteMutation(mutationAttemptId, terminal);
+            return publishedTerminal ?? CompleteMutation(mutationAttemptId, terminal, preparedState);
         }
 
         private ToolPolicySnapshot EffectivePolicy(ToolHandlerRegistry.RegisteredTool tool)
@@ -212,11 +215,11 @@ namespace RNAssistant.Office.Runtime
                     policy.IndependentLocalRead, policy.AllowedModes, policy.RiskLevel));
         }
 
-        private ToolExecutionRecord CompleteMutation(string attemptId, ToolExecutionRecord record)
+        private ToolExecutionRecord CompleteMutation(string attemptId, ToolExecutionRecord record, string preparedStateJson)
         {
             if (string.IsNullOrWhiteSpace(attemptId) || _mutationObserver == null) return record;
             if (record != null && record.MayHaveDispatched)
-                return record.WithAuthorityCommit(_mutationObserver.Complete(attemptId, record));
+                return record.WithAuthorityCommit(_mutationObserver.Complete(attemptId, record, preparedStateJson));
             else
                 _mutationObserver.AbandonBeforeDispatch(attemptId);
             return record;

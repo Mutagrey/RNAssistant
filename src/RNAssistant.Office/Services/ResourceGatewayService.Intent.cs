@@ -480,8 +480,11 @@ namespace RNAssistant.Office.Services
             ResourceIntentState state,
             ResourceSearchMatch match)
         {
+            string description;
+            state.Descriptor.Metadata.TryGetValue("description", out description);
             return new ResourceIntentCandidate
             {
+                Description = description,
                 Target = state.Target,
                 Type = state.Type,
                 Scope = state.Scope,
@@ -782,6 +785,8 @@ namespace RNAssistant.Office.Services
 
     internal sealed class ResourceIntentCandidate
     {
+        [Newtonsoft.Json.JsonProperty("description", NullValueHandling = Newtonsoft.Json.NullValueHandling.Ignore)]
+        public string Description { get; set; }
         [Newtonsoft.Json.JsonIgnore]
         public IReadOnlyList<ResourceEvidence> Evidence { get; set; }
         [Newtonsoft.Json.JsonProperty("target")]

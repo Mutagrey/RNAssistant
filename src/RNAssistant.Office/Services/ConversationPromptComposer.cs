@@ -164,7 +164,7 @@ namespace RNAssistant.Office.Services
                     VbaResourceProvider.ProjectSemanticTarget(adapterDocumentTitle);
             }
             if (!string.IsNullOrWhiteSpace(session?.DocumentAuthorityId))
-                document["artifacts"] = "Sent original files and committed Plans are shared across this document's chats. Use common.resources_find with scope=document; an empty chat does not mean the library is empty. Plan writes use the selected exact revision and reject a newer head from another chat.";
+                document["artifacts"] = "Sent originals, Plans, HTML workspaces and authored Markdown documents are shared across this document's chats. Use common.resources_find with scope=document; an empty chat or omitted prompt entry does not mean the resource is absent. Descriptions are discovery aids; read the needed content. In Agent, use common.markdown_save for an explicitly requested standalone MD document, with a discovered target to edit or without target to create an independent document. A formatted Markdown reply remains a message. Shared writes reject stale revisions; chat unlink preserves the document and history.";
             var root = new JObject
             {
                 ["mode"] = mode,

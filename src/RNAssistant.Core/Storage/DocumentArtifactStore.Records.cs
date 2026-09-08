@@ -15,7 +15,7 @@ namespace RNAssistant.Core.Storage
         public ResourceMutationReadBack RetainAuthoredSnapshot(ChatSession session, ChatArtifact artifact,
             string attemptId, string operationKey, ResourceRef restoredFrom = null, IEnumerable<ResourceDependency> dependencies = null)
         {
-            if (artifact == null || artifact.Kind != ChatArtifactKinds.HtmlWorkspace && artifact.Kind != ChatArtifactKinds.File ||
+            if (artifact == null || artifact.Kind != ChatArtifactKinds.HtmlWorkspace && artifact.Kind != ChatArtifactKinds.File && artifact.Kind != ChatArtifactKinds.Markdown ||
                 artifact.DocumentAuthorityId != Scope(session).Id || !IsAuthored(session, ChatResourceUri.CreateArtifactRevision(session, artifact)))
                 throw new InvalidDataException("A document-owned authored snapshot is required.");
             return RetainRecord(session, artifact, artifact.InlineText, AuthoredRecordView,

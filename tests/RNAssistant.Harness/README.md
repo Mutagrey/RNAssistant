@@ -39,6 +39,14 @@ version check still apply.
 
 ## Test map
 
+`shared Markdown:` verifies independent document ownership, exact text and metadata,
+cross-chat discovery/editing, prepared stale guards, same-step call identities,
+restore, immutable uploaded MD, missing-body unlink, failed link save, fork, GC
+and the full agent execution/event-replay cycle.
+Use `tool runtime:`, `tools: R61 built-in contract inventory`, `artifact working set:`
+and `artifact viewer:` for these consumers. The existing working-set browser test
+also covers MD attachment/refresh and late navigation responses.
+
 `shared HTML:` covers document publication, failed chat-link replay refusal,
 second-chat selection/edit/restart, member URI round-trip, concurrent stale writers,
 new-revision undo/redo, shared fork, origin deletion/GC, independent workspaces and

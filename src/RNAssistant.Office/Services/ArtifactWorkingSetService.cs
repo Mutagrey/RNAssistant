@@ -59,7 +59,8 @@ namespace RNAssistant.Office.Services
                         Title = string.IsNullOrEmpty(item.AvailabilityIssue) ? item.Title : item.Title ?? "Недоступный ресурс",
                         AvailabilityIssue = item.AvailabilityIssue, Kind = item.Kind, Revision = item.Revision,
                         Linked = ArtifactWorkingSet.IsLinked(session, item),
-                        Selected = item.Id == session.ActivePlanDocumentArtifactId || item.Id == session.ActiveHtmlArtifactId
+                        Selected = item.Id == session.ActivePlanDocumentArtifactId || item.Id == session.ActiveHtmlArtifactId ||
+                            MarkdownDocumentIdentity.LogicalId(item.Id) != null && session.ArtifactLinks.Any(link => !link.Detached && link.Reference.Uri == ChatResourceUri.CreateArtifactRevisionUri(session, item))
                     }).ToArray()
                 };
             }
@@ -73,12 +74,12 @@ namespace RNAssistant.Office.Services
                 .GroupBy(item => ArtifactWorkingSet.Identity(session, item)))
             {
                 var first = group.First();
-                if (first.Kind != ChatArtifactKinds.PlanDocument && first.Kind != ChatArtifactKinds.HtmlWorkspace) { yield return group.Single(); continue; }
+                if (first.Kind != ChatArtifactKinds.PlanDocument && first.Kind != ChatArtifactKinds.HtmlWorkspace && MarkdownDocumentIdentity.LogicalId(first.Id) == null) { yield return group.Single(); continue; }
                 ResourceRef current = null;
                 var unavailableHead = false;
                 try { current = first.Kind == ChatArtifactKinds.PlanDocument
                     ? _artifacts.CurrentPlan(session, DocumentArtifactStore.PlanIdFromArtifact(first))
-                    : _artifacts.CurrentSnapshot(session, HtmlWorkspaceIdentity.Identity(session, HtmlWorkspaceIdentity.LogicalId(first.Id))); }
+                    : _artifacts.CurrentSnapshot(session, ArtifactWorkingSet.Identity(session, first)); }
                 catch (InvalidDataException) { unavailableHead = true; }
                 catch (IOException) { unavailableHead = true; }
                 if (current == null) unavailableHead = true;
@@ -121,9 +122,9 @@ namespace RNAssistant.Office.Services
                     (PlanDocumentService.IsTombstone(artifact) ||
                      _artifacts.CurrentPlan(session, ArtifactWorkingSet.PlanId(artifact))?.Uri != reference.Uri))
                     throw new InvalidOperationException("Версия Plan изменилась или удалена. Обновите список и выберите актуальную версию.");
-                if (!request.Detached.Value && artifact.Kind == ChatArtifactKinds.HtmlWorkspace &&
-                    _artifacts.CurrentSnapshot(session, HtmlWorkspaceIdentity.Identity(session, HtmlWorkspaceIdentity.LogicalId(artifact.Id)))?.Uri != reference.Uri)
-                    throw new InvalidOperationException("Версия HTML изменилась. Выберите актуальную версию из документа.");
+                if (!request.Detached.Value && (artifact.Kind == ChatArtifactKinds.HtmlWorkspace || MarkdownDocumentIdentity.LogicalId(artifact.Id) != null) &&
+                    _artifacts.CurrentSnapshot(session, ArtifactWorkingSet.Identity(session, artifact))?.Uri != reference.Uri)
+                    throw new InvalidOperationException("Версия ресурса изменилась. Выберите актуальную версию из документа.");
                 ChatSession selectedHtml = null;
                 if (!request.Detached.Value && artifact.Kind == ChatArtifactKinds.HtmlWorkspace)
                 {

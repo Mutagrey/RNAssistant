@@ -48,7 +48,7 @@ namespace RNAssistant.Office.Services
             var revision = NextRevision(session);
             var artifact = new ChatArtifact
             {
-                Id = HtmlWorkspaceIdentity.SnapshotId(logicalId, revision),
+                Id = ChatResourceUri.CreateSnapshotId(logicalId, revision),
                 DocumentAuthorityId = session.DocumentAuthorityId,
                 Kind = ChatArtifactKinds.HtmlWorkspace,
                 Title = snapshot.Label,

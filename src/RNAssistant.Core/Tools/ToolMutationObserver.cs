@@ -10,9 +10,9 @@ namespace RNAssistant.Core.Tools
     }
     public interface IToolMutationObserver
     {
-        string Prepare(ToolExecutionContext context, IDictionary<string, object> arguments);
+        string Prepare(ToolExecutionContext context, IDictionary<string, object> arguments, string preparedStateJson = null);
         void MarkDispatchMayHaveOccurred(string attemptId);
-        RNAssistant.Core.Models.ResourceAuthorityCommit Complete(string attemptId, ToolExecutionRecord record);
+        RNAssistant.Core.Models.ResourceAuthorityCommit Complete(string attemptId, ToolExecutionRecord record, string preparedStateJson = null);
         void AbandonBeforeDispatch(string attemptId);
         void ReleaseUnresolved(string attemptId);
     }

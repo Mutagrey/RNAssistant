@@ -73,7 +73,9 @@ namespace RNAssistant.Office.Services
                     (artifact.ContentByteLength.HasValue ? " | bytes=" + artifact.ContentByteLength.Value : string.Empty) +
                     (parent == null ? string.Empty : " | parentTarget=" + Newtonsoft.Json.JsonConvert.SerializeObject(
                         ResourceGatewayService.IntentTarget(descriptors[parent.Id]))) +
-                    " | reps=" + RepresentationHints(artifact);
+                    " | reps=" + RepresentationHints(artifact) +
+                    (MarkdownDocumentIdentity.LogicalId(artifact.Id) == null ? string.Empty : " | description=" +
+                        Newtonsoft.Json.JsonConvert.SerializeObject((string)Newtonsoft.Json.Linq.JObject.Parse(artifact.MetadataJson ?? "{}")["description"]));
                 rows.Add(line);
                 if (ModelContextBudget.EstimateTextTokens(Render(rows, artifacts.Count, unavailable), settings) > maxTokens)
                     rows.RemoveAt(rows.Count - 1);

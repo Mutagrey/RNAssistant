@@ -334,7 +334,7 @@ namespace RNAssistant.Core.Storage
 
         private static bool ShouldHydrateForActiveSession(ChatArtifact artifact)
         {
-            if (artifact == null || string.Equals(artifact.Kind, ChatArtifactKinds.HtmlWorkspace, StringComparison.OrdinalIgnoreCase))
+            if (artifact == null || MarkdownDocumentIdentity.LogicalId(artifact.Id) != null || string.Equals(artifact.Kind, ChatArtifactKinds.HtmlWorkspace, StringComparison.OrdinalIgnoreCase))
             {
                 return false;
             }

@@ -362,6 +362,8 @@ namespace RNAssistant.Office.Services
                 CreatedUtc = artifact.CreatedUtc
             };
             if (!string.IsNullOrWhiteSpace(artifact.DocumentAuthorityId)) result.Metadata["scope"] = "document";
+            if (MarkdownDocumentIdentity.LogicalId(artifact.Id) != null)
+                result.Metadata["description"] = (string)JObject.Parse(artifact.MetadataJson ?? "{}")["description"];
             if (_payloads != null)
             {
                 result.ViewCapabilities.AddRange(ArtifactViewerService.BinaryViewCapabilities(artifact, attachment, _readAttachmentBytes != null));
@@ -791,7 +793,11 @@ namespace RNAssistant.Office.Services
             var currentHtml = new HashSet<string>(Artifacts(session).Where(item => item.Kind == ChatArtifactKinds.HtmlWorkspace && !string.IsNullOrEmpty(item.DocumentAuthorityId))
                 .Select(item => HtmlWorkspaceIdentity.LogicalId(item.Id)).Distinct().Select(id =>
                     _documentArtifacts?.CurrentSnapshot(session, HtmlWorkspaceIdentity.Identity(session, id))?.Uri).Where(uri => uri != null));
+            var currentMarkdown = new HashSet<string>(Artifacts(session).Where(item => MarkdownDocumentIdentity.LogicalId(item.Id) != null)
+                .Select(item => MarkdownDocumentIdentity.LogicalId(item.Id)).Distinct().Select(id =>
+                    _documentArtifacts?.CurrentSnapshot(session, MarkdownDocumentIdentity.Identity(session, id))?.Uri).Where(uri => uri != null));
             return Artifacts(session)
+                .Where(item => MarkdownDocumentIdentity.LogicalId(item.Id) == null || currentMarkdown.Contains(ChatResourceUri.CreateArtifactRevisionUri(session, item)))
                 .Where(item => item.Kind != ChatArtifactKinds.HtmlWorkspace || string.IsNullOrEmpty(item.DocumentAuthorityId) ||
                     currentHtml.Contains(ChatResourceUri.CreateArtifactRevisionUri(session, item)))
                 .Where(item => item.Kind != ChatArtifactKinds.PlanDocument || string.IsNullOrWhiteSpace(item.DocumentAuthorityId) || currentPlans.Contains(item.Id))

@@ -24,6 +24,12 @@ namespace RNAssistant.Core.Services
                 revision);
         }
 
+        public static string CreateSnapshotId(string logicalId, int revision)
+        {
+            if (string.IsNullOrWhiteSpace(logicalId) || revision < 1) throw new InvalidOperationException("A logical identity and positive revision are required.");
+            return logicalId + "_r" + revision.ToString(CultureInfo.InvariantCulture) + "_" + Guid.NewGuid().ToString("N").Substring(0, 8);
+        }
+
         public static ResourceRef ArtifactSnapshot(ResourceRef reference)
         {
             string owner, id; int revision;

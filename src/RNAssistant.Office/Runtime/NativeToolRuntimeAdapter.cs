@@ -69,7 +69,7 @@ namespace RNAssistant.Office.Runtime
             ToolPackSnapshot snapshot, AppSettings settings, string mode,
             Func<ToolExecutionContext, ToolPreparationResult, string> pendingRegistrar = null,
             bool trace = true,
-            IToolMutationObserver mutationObserver = null)
+            IToolMutationObserver mutationObserver = null, MarkdownDocumentService markdownDocuments = null)
         {
             if (snapshot == null) throw new ArgumentNullException(nameof(snapshot));
             var registry = new ToolHandlerRegistry();
@@ -187,6 +187,10 @@ namespace RNAssistant.Office.Runtime
                 {
                     handler = new UserQuestionToolHandler();
                 }
+                else if (MarkdownDocumentToolCatalog.Owns(registration.Descriptor.Id))
+                {
+                    handler = new MarkdownDocumentToolHandler(markdownDocuments, session);
+                }
                 else if (PlanDocumentToolCatalog.Owns(
                     registration.Descriptor.Id))
                 {
@@ -284,7 +288,7 @@ namespace RNAssistant.Office.Runtime
                 OutlookToolIds.Owns(toolId) || VbaToolCatalog.Owns(toolId) ||
                 string.Equals(toolId, UserQuestionToolCatalog.AskToolId,
                     StringComparison.Ordinal) ||
-                PlanDocumentToolCatalog.Owns(toolId) ||
+                MarkdownDocumentToolCatalog.Owns(toolId) || PlanDocumentToolCatalog.Owns(toolId) ||
                 TaskListToolCatalog.Owns(toolId) ||
                 HtmlWorkspaceToolCatalog.Owns(toolId) ||
                 CapabilityToolCatalog.Owns(toolId) ||

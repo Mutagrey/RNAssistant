@@ -24,9 +24,12 @@ namespace RNAssistant.Office.Services
             new ResourceDefinitionMutationDomain(),
             new ConversationResourceMutationDomain(), new OfficeResourceMutationDomain() };
 
+        internal static bool IsDocumentArtifactOperation(string operation)
+        { return PlanDocumentToolCatalog.Owns(operation) || HtmlWorkspacePublication.Owns(operation) || MarkdownDocumentToolCatalog.Owns(operation); }
+
         internal static ResourceAuthorityScopeId Scope(ResourceAuthorityService authority, ChatSession session, string operation)
         {
-            if (PlanDocumentToolCatalog.Owns(operation) || HtmlWorkspacePublication.Owns(operation)) return authority.Scope(session, true);
+            if (IsDocumentArtifactOperation(operation)) return authority.Scope(session, true);
             if (new CatalogResourceMutationDomain().Owns(operation)) return new ResourceAuthorityScopeId("catalog", "local");
             return authority.Scope(session, !new ConversationResourceMutationDomain().Owns(operation) && !ResourceDefinitionToolHandler.Owns(operation));
         }
