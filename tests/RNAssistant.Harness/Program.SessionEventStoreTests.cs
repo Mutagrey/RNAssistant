@@ -774,6 +774,37 @@ namespace RNAssistant.Harness
             AssertTrue(!terminalRan, "terminal write is skipped after an earlier persistence failure");
             queue.EnqueueAndDrain("session-failure", () => terminalRan = true);
             AssertTrue(terminalRan, "an idle failed queue can be retried by a later request");
+
+            var releaseFailure = new ManualResetEventSlim(false);
+            queue.Enqueue("session-concurrent-failure", () =>
+            {
+                releaseFailure.Wait();
+                throw new InvalidOperationException("concurrent-write-failed");
+            });
+            var afterFailureRan = false;
+            Func<Task<bool>> waitForFailure = () => Task.Run(() =>
+            {
+                try
+                {
+                    queue.EnqueueAndDrain("session-concurrent-failure", () => afterFailureRan = true);
+                    return false;
+                }
+                catch (InvalidOperationException ex)
+                {
+                    return ex.Message == "concurrent-write-failed";
+                }
+            });
+            var firstWaiter = waitForFailure();
+            var secondWaiter = waitForFailure();
+            var bothQueued = SpinWait.SpinUntil(() => queue.PendingCount("session-concurrent-failure") == 3,
+                TimeSpan.FromSeconds(2));
+            releaseFailure.Set();
+            AssertTrue(bothQueued, "both terminal barriers are queued behind the failed write");
+            AssertTrue(Task.WaitAll(new Task[] { firstWaiter, secondWaiter }, TimeSpan.FromSeconds(2)),
+                "both terminal waiters complete");
+            AssertTrue(firstWaiter.Result && secondWaiter.Result,
+                "each terminal waiter receives its own failed write outcome");
+            AssertTrue(!afterFailureRan, "later terminal writes remain skipped after failure");
             AssertEqual(0, queue.QueueCount, "drained per-session queues are evicted");
         }
 

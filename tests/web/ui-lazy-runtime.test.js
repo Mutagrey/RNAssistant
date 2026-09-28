@@ -15,11 +15,11 @@ assert.equal(index.includes('<script src="js/vendor/echarts.min.js"></script>'),
 assert.match(index, /app-echarts-sandbox-runtime\.js\?v=ui-lazy-20260903-1/);
 ["app-messages.js", "app-context.js", "app-model-render.js", "app-html-workspace-editor.js"].forEach(asset => {
   const version = asset === "app-html-workspace-editor.js" ? "preview-reuse-20260907-1" :
-    (asset === "app-messages.js" ? "run-replay-20260907-1" : "ui-lazy-20260903-1");
+    (asset === "app-messages.js" ? "chat-message-cleanup-20260908-1" : "ui-lazy-20260903-1");
   assert.ok(index.includes(asset + "?v=" + version), asset + " uses the current UI cache key");
 });
 assert.ok(index.includes("app-html-workspace.js?v=html-read-20260906-1"), "HTML workspace uses the resource source cache key");
-assert.ok(index.includes("app-chat-session.js?v=startup-secondary-lazy-20260907-1"), "chat session uses the secondary lazy cache key");
+assert.ok(index.includes("app-chat-session.js?v=chat-sync-poll-20260928-1"), "chat session uses the current cache key");
 assert.ok(index.includes("app.js?v=startup-secondary-lazy-20260907-1"), "app boot uses the secondary lazy cache key");
 assert.doesNotMatch(app, /initializeCodeEditors\(\);/,
   "hidden CodeMirror editors must not be created during DOMContentLoaded");

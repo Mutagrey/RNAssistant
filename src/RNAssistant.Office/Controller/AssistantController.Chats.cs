@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
@@ -312,13 +313,30 @@ namespace RNAssistant.Office
 
         public ChatStateResponse ListChats()
         {
+            var timer = Stopwatch.StartNew();
             var session = _chatSessions.GetActiveSessionForOfficeState();
-            return ChatCatalogState(session);
+            var loadMs = timer.ElapsedMilliseconds;
+            var response = ChatCatalogState(session);
+            if (timer.ElapsedMilliseconds >= 250)
+                RNAssistant.Office.Diagnostics.RuntimeLog.Info(
+                    "Chat catalog timing: active=" + loadMs + "ms, catalog=" +
+                    (timer.ElapsedMilliseconds - loadMs) + "ms, chats=" +
+                    (response.Chats == null ? 0 : response.Chats.Count) + ".");
+            return response;
         }
 
         public ChatStateResponse GetChatState(string chatId = null)
         {
-            return ChatState(LoadAddressedSession(chatId));
+            var timer = Stopwatch.StartNew();
+            var session = LoadAddressedSession(chatId);
+            var loadMs = timer.ElapsedMilliseconds;
+            var response = ChatState(session);
+            if (timer.ElapsedMilliseconds >= 250)
+                RNAssistant.Office.Diagnostics.RuntimeLog.Info(
+                    "Chat detail timing: load=" + loadMs + "ms, projection=" +
+                    (timer.ElapsedMilliseconds - loadMs) + "ms, messages=" +
+                    (session.Messages == null ? 0 : session.Messages.Count) + ".");
+            return response;
         }
 
         public ChatStateResponse CreateChat(string title)
@@ -341,9 +359,19 @@ namespace RNAssistant.Office
 
         public ChatStateResponse SelectChat(string chatId)
         {
+            var timer = Stopwatch.StartNew();
             var session = LoadSession(chatId);
+            var loadMs = timer.ElapsedMilliseconds;
             _chatSessions.SetActiveSession(session);
-            return ChatState(session);
+            var selectionMs = timer.ElapsedMilliseconds - loadMs;
+            var response = ChatState(session);
+            if (timer.ElapsedMilliseconds >= 250)
+                RNAssistant.Office.Diagnostics.RuntimeLog.Info(
+                    "Chat select timing: load=" + loadMs + "ms, selection=" + selectionMs +
+                    "ms, projection=" + (timer.ElapsedMilliseconds - loadMs - selectionMs) +
+                    "ms, messages=" + (session.Messages == null ? 0 : session.Messages.Count) +
+                    ", artifacts=" + (session.Artifacts == null ? 0 : session.Artifacts.Count) + ".");
+            return response;
         }
 
         public OpenDocumentResponse OpenDocument(string chatId)

@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.IO;
 using System.Linq;
 using RNAssistant.Core.Models;
@@ -635,7 +636,10 @@ namespace RNAssistant.Office.Services
 
         public IReadOnlyList<ChatSessionSummary> GetChatSummaries(string activeId)
         {
-            var summaries = _conversations.ListHeaders().Select(ToSummary).ToList();
+            var timer = Stopwatch.StartNew();
+            var headers = _conversations.ListHeaders();
+            var headerMs = timer.ElapsedMilliseconds;
+            var summaries = headers.Select(ToSummary).ToList();
             foreach (var running in RunSessionsProvider == null ? new ChatSession[0] : RunSessionsProvider())
             {
                 var runningId = running.Id;
@@ -659,6 +663,11 @@ namespace RNAssistant.Office.Services
                 summaries.Insert(0, ToSummary(_activeSession));
             }
 
+            if (timer.ElapsedMilliseconds >= 250)
+                RNAssistant.Office.Diagnostics.RuntimeLog.Info(
+                    "Chat headers timing: scan=" + headerMs + "ms, summaries=" +
+                    (timer.ElapsedMilliseconds - headerMs) + "ms, chats=" + headers.Count +
+                    ", jsonlBytes=" + headers.Sum(item => item.JsonlByteLength) + ".");
             return summaries;
         }
 

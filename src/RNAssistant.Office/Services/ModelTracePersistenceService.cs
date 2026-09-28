@@ -1,4 +1,5 @@
 using System;
+using System.Diagnostics;
 using RNAssistant.Core.Llm;
 using RNAssistant.Core.Models;
 using RNAssistant.Core.Persistence;
@@ -95,7 +96,15 @@ namespace RNAssistant.Office.Services
                 _queue.Enqueue(session.Id, append);
                 return;
             }
-            _queue.EnqueueAndDrain(session.Id, append);
+            var timer = Stopwatch.StartNew();
+            try { _queue.EnqueueAndDrain(session.Id, append); }
+            finally
+            {
+                if (timer.ElapsedMilliseconds >= 250)
+                    RNAssistant.Office.Diagnostics.RuntimeLog.Info(
+                        "Model trace timing: stage=" + descriptor.Kind + ", persist=" +
+                        timer.ElapsedMilliseconds + "ms.");
+            }
         }
 
         private static SessionEventDescriptor Descriptor(string type)

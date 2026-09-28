@@ -86,6 +86,13 @@ Mandatory runtime acceptance, execution and request/response storage still fail
 closed. Owner: ModelProtocol + ModelTracePersistenceService. This fixes optional
 parser-trace availability, not persistent storage corruption or queue contention.
 
+Trace queue concurrent-waiter fix (2026-09-28): each scheduled write now carries
+its own failure outcome. Previously the first terminal waiter could clear the
+shared queue failure after all writes completed, letting a second terminal waiter
+report success although its write was skipped. Both waiters now receive the failed
+write outcome; a later request can retry only after the failed queue drains. This
+is a host-neutral fix; live model/Windows behavior remains unqualified.
+
 Chat navigation / persistence contention (2026-09-07, partially contained): user reports freezes
 while streaming, loading artifacts and switching chats. `ChatStore.PersistenceSync`
 is static across chats; `SaveInternalLocked` performs artifact externalization,
@@ -107,6 +114,28 @@ candidate before assigning the dominant cause. The host-neutral stream UI fix
 removes repeated history serialization/DOM detachment and batches background
 sidebar paints; bridge worker dispatch contains UI starvation but does not close
 this storage/navigation gate.
+
+Navigation follow-up (2026-09-28): `SelectChat` now records load, active-selection and
+full-projection durations above 250 ms in the runtime log; the WebView console
+records bridge versus render duration for slow chat switches and exact HTML source
+load duration above 250 ms. Full chat-state updates retain an already loaded HTML
+source for the same exact revision and file metadata; a bounded in-memory exact
+source cache avoids another download when revisiting a chat.
+Follow-up inspection found that the 15-second focused WebView poll scans all chat
+headers and reloads the active projection. For a chat exceeding the per-entry
+projection cache limit (about 4 million characters), each load can validate and
+replay the complete JSONL. Skill source selection also loads the addressed chat
+before opening the small source; the editor evicts clean text from other skills,
+so switching back reopens it. A model request trace synchronously waits for CAS
+storage and a durable event append before HTTP dispatch, and these writes share
+the static persistence lock with session saves. The background poll now skips an
+active send; explicit refresh remains available. Runtime timings above 250 ms now
+separate catalog active load, header scan, full chat detail, skill chat/open and
+model trace persistence. These are code-path findings, not a measured Windows root
+cause. The existing model diagnostics UI already separates preparation, response
+headers and first chunk; compare those stages with trace persistence and WebView
+bridge/render timing on the affected Windows host before changing storage cache
+limits or replay rules.
 
 Resource cutover / catalog freeze (2026-09-07, fixed host-neutral): the generation
 captured by `UseInput` is carried into the model session and compared against its

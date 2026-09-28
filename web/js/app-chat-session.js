@@ -62,8 +62,18 @@ async function selectChat(id) {
 
   var navigationVersion = beginChatNavigation();
   state.pendingChatSelectionId = id;
+  var startedAt = window.performance && window.performance.now ? window.performance.now() : Date.now();
   try {
-    applyChatNavigationState(await send("selectChat", { chatId: id }), navigationVersion);
+    var response = await send("selectChat", { chatId: id });
+    var bridgeMs = (window.performance && window.performance.now ? window.performance.now() : Date.now()) - startedAt;
+    var applied = applyChatNavigationState(response, navigationVersion);
+    var renderMs = (window.performance && window.performance.now ? window.performance.now() : Date.now()) - startedAt - bridgeMs;
+    if (applied && bridgeMs + renderMs >= 250 && window.console && window.console.info) {
+      window.console.info("RNAssistant chat select timing", {
+        bridgeMs: Math.round(bridgeMs), renderMs: Math.round(renderMs),
+        messages: (state.messages || []).length
+      });
+    }
     clearSendError();
     log("Чат открыт.");
   } catch (error) {
@@ -479,7 +489,7 @@ async function loadChatState(chatIdValue) {
 }
 
 async function synchronizeChatState(force) {
-  if (state.bridgeUnavailable || (!force && (document.hidden || !document.hasFocus()))) return;
+  if (state.bridgeUnavailable || (!force && (document.hidden || !document.hasFocus() || currentActiveSend()))) return;
   if (state.chatSyncPromise) {
     var pendingSync = state.chatSyncPromise;
     if (!force) return pendingSync;

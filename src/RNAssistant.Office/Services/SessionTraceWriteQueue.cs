@@ -130,7 +130,7 @@ namespace RNAssistant.Office.Services
             private readonly object _sync = new object();
             private readonly SemaphoreSlim _slots;
             private readonly Action _idle;
-            private Task _tail = Task.FromResult(0);
+            private Task<Exception> _tail = Task.FromResult<Exception>(null);
             private Exception _failure;
             private int _pending;
 
@@ -156,7 +156,7 @@ namespace RNAssistant.Office.Services
                 }
             }
 
-            public Task Schedule(Action write)
+            public Task<Exception> Schedule(Action write)
             {
                 if (write == null) throw new ArgumentNullException("write");
                 _slots.Wait();
@@ -173,23 +173,21 @@ namespace RNAssistant.Office.Services
                 }
             }
 
-            public void WaitAndThrow(Task scheduled)
+            public void WaitAndThrow(Task<Exception> scheduled)
             {
-                scheduled.GetAwaiter().GetResult();
-                Exception failure;
+                var failure = scheduled.GetAwaiter().GetResult();
                 lock (_sync)
                 {
-                    failure = _failure;
                     if (_pending == 0) _failure = null;
                 }
                 if (failure != null) ExceptionDispatchInfo.Capture(failure).Throw();
             }
 
-            private void Execute(Action write)
+            private Exception Execute(Action write)
             {
+                Exception failure = null;
                 try
                 {
-                    Exception failure;
                     lock (_sync) failure = _failure;
                     if (failure == null) write();
                 }
@@ -198,6 +196,7 @@ namespace RNAssistant.Office.Services
                     lock (_sync)
                     {
                         if (_failure == null) _failure = ex;
+                        failure = _failure;
                     }
                 }
                 finally
@@ -211,6 +210,7 @@ namespace RNAssistant.Office.Services
                     _slots.Release();
                     if (idle && _idle != null) _idle();
                 }
+                return failure;
             }
         }
     }

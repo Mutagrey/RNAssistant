@@ -127,17 +127,17 @@ function state(runId, lifecycle = "completed", health = "clean", pending = null)
   ["app-utils.js", "app-run-view-state.js", "app-agent-model.js", "app-agent-approval.js"].forEach(asset => {
     assert.ok(index.includes(asset + "?v=" + (["app-utils.js", "app-agent-approval.js"].includes(asset) ? "run-view-state-20260830-1" : asset === "app-agent-model.js" ? "catalog-display-chat-20260908-1" : "chat-message-cleanup-20260908-1")), asset + " uses the atomic cutover cache key");
   });
-  assert.ok(index.includes("app-agent.js?v=chat-message-cleanup-20260908-1"),
-    "agent outcome uses the diagnostics cache key");
-  assert.ok(index.includes("app-chat-session.js?v=startup-secondary-lazy-20260907-1"), "chat session uses the current cache key");
+  assert.ok(index.includes("app-agent.js?v=run-diff-20260908-1"),
+    "agent outcome uses the current cache key");
+  assert.ok(index.includes("app-chat-session.js?v=chat-sync-poll-20260928-1"), "chat session uses the current cache key");
   assert.ok(index.includes("app-core.js?v=bridge-transport-20260908-1"), "core uses the bridge transport cache key");
-  assert.ok(index.includes("app-chat-state.js?v=chat-activity-order-20260908-1"), "chat state uses the current cache key");
+  assert.ok(index.includes("app-chat-state.js?v=html-source-reuse-20260928-1"), "chat state uses the current cache key");
   assert.ok(index.includes("app-messages.js?v=chat-message-cleanup-20260908-1"), "messages uses the transcript incremental cache key");
   assert.equal(/function updateEstimatedContextUsage\(\)[\s\S]*?state\.messages\.forEach/.test(chatState), false,
     "context meter does not scan and encode the whole transcript");
   assert.match(chatState, /localDeltaTokens/, "context meter exposes presentation-only local delta");
   ["app-chat.css", "app-agent.css"].forEach(asset => {
-    assert.ok(index.includes(asset + "?v=" + (asset === "app-agent.css" ? "chat-message-cleanup-20260908-1" : "catalog-display-chat-20260908-1")), asset + " uses the current layout cache key");
+    assert.ok(index.includes(asset + "?v=" + (asset === "app-agent.css" ? "typed-step-results-20260908-1" : "catalog-display-chat-20260908-1")), asset + " uses the current layout cache key");
   });
   assert.ok(index.indexOf("app-run-view-state.js") < index.indexOf("app-chat-state.js"));
   assert.ok(index.indexOf("app-run-view-state.js") < index.indexOf("app-agent-model.js"));

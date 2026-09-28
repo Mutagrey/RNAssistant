@@ -70,10 +70,35 @@ vm.runInContext(fs.readFileSync(path.join(root, "web/js/app-chat-state.js"), "ut
 }
 
 {
+  const source = { uri: "rna://chat/chat-a/artifact/html-r1/revision/1/member/file/index", revision: "1" };
+  const file = { id: "index.html", path: "index.html", kind: "html", source,
+    characters: 18, byteLength: 18, sha256: "a".repeat(64), content: "<main>ready</main>",
+    sourceReadKey: source.uri + "@" + source.revision };
+  const workspace = { revisionArtifactId: "html-r1", activeFileId: file.id, files: [file], dataSources: [] };
+  ui.state.htmlWorkspace = workspace;
+  ui.state.activeHtmlArtifactId = "html-r1";
+  ui.applyChatState({ activeChatId: "chat-a", sessionRevision: 5, activeHtmlArtifactId: "html-r1",
+    htmlWorkspace: { revisionArtifactId: "html-r1", activeFileId: file.id,
+      files: [{ id: file.id, path: file.path, kind: file.kind, source: { ...source },
+        characters: file.characters, byteLength: file.byteLength, sha256: file.sha256 }],
+      dataSources: [{ name: "current" }] } });
+  assert.equal(ui.state.htmlWorkspace, workspace, "same exact snapshot keeps in-flight workspace identity");
+  assert.equal(ui.state.htmlWorkspace.files[0], file, "verified source stays loaded");
+  assert.equal(ui.state.htmlWorkspace.dataSources[0].name, "current", "fresh binding metadata still applies");
+  const conflicting = { revisionArtifactId: "html-r1", files: [{ ...file, sha256: "b".repeat(64) }] };
+  assert.equal(ui.retainHtmlWorkspaceSources(workspace, conflicting), conflicting,
+    "changed source metadata cannot reuse a verified body");
+  ui.applyChatState({ activeChatId: "chat-a", sessionRevision: 6, activeHtmlArtifactId: "html-r2",
+    htmlWorkspace: { revisionArtifactId: "html-r2", files: [{ ...file, sourceReadKey: undefined, content: undefined }] } });
+  assert.notEqual(ui.state.htmlWorkspace, workspace, "new revision cannot borrow old source");
+  console.log("PASS artifact commit: unchanged HTML source survives full chat projections");
+}
+
+{
   const draft = { revisionArtifactId: "html-old", files: [{ content: "unsaved" }] };
   ui.state.htmlWorkspace = draft; ui.state.htmlWorkspaceDirty = true;
   ui.applyPushedChatState({ type: "chatState", scope: "full", payload: {
-    activeChatId: "chat-a", sessionRevision: 5, activeHtmlArtifactId: "html-new",
+    activeChatId: "chat-a", sessionRevision: 7, activeHtmlArtifactId: "html-new",
     htmlWorkspace: { revisionArtifactId: "html-new", files: [{ source: { uri: "exact-new", revision: "2" } }] }
   } });
   assert.equal(ui.state.activeHtmlArtifactId, "html-new", "published head advances normally");
@@ -99,8 +124,8 @@ vm.runInContext(fs.readFileSync(path.join(root, "web/js/app-chat-state.js"), "ut
   assert.match(attachments, /committed:\s*"Оригинал"/);
   const index = fs.readFileSync(path.join(root, "web/index.html"), "utf8");
   assert.ok(index.includes("app-core.js?v=bridge-transport-20260908-1"), "core has the bridge transport cache key");
-  assert.ok(index.includes("app-chat-state.js?v=chat-activity-order-20260908-1"), "chat state has the context usage cache key");
-  assert.ok(index.includes("app-messages.js?v=run-replay-20260907-1"), "messages have the transcript incremental cache key");
+  assert.ok(index.includes("app-chat-state.js?v=html-source-reuse-20260928-1"), "chat state has the HTML source reuse cache key");
+  assert.ok(index.includes("app-messages.js?v=chat-message-cleanup-20260908-1"), "messages have the current cache key");
   assert.ok(index.includes("app-attachments.js?v=vba-upload-20260906-1"),
     "attachment staging has the current pre-dispatch barrier cache key");
   console.log("PASS artifact commit: production boundary and lifecycle labels are wired atomically");
@@ -125,4 +150,4 @@ vm.runInContext(fs.readFileSync(path.join(root, "web/js/app-chat-state.js"), "ut
   console.log("PASS artifact commit: tool-result artifacts publish before terminal response");
 }
 
-console.log("OK 5/5");
+console.log("OK 6/6");

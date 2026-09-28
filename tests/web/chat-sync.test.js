@@ -45,7 +45,7 @@ function createSyncContext() {
   context.chatCasMissingBlobCount = () => 0;
   context.chatCasReferenceIssueCount = () => 0;
   context.chatStorageWarningLevel = () => "none";
-  context.currentActiveSend = () => null;
+  context.currentActiveSend = () => context.activeSend || null;
   context.applyChatCatalogState = response => {
     catalogStates.push(response);
     context.state.chats = response.chats || response.Chats || [];
@@ -70,6 +70,17 @@ function createSyncContext() {
 }
 
 (async function () {
+  {
+    const { context, calls } = createSyncContext();
+    context.activeSend = { requestId: "running" };
+    await context.synchronizeChatState(false);
+    assert.equal(calls.length, 0, "background catalog scan waits for the active send");
+    context.nextCatalog = { activeChatId: "chat-a", chats: context.state.chats, documents: context.state.documents };
+    await context.synchronizeChatState(true);
+    assert.deepEqual(calls.map(call => call.type), ["listChats"], "explicit refresh still runs");
+    console.log("PASS chat sync: background poll skips active send");
+  }
+
   {
     const { context, calls, catalogStates, fullStates } = createSyncContext();
     context.nextCatalog = {
@@ -139,8 +150,8 @@ function createSyncContext() {
   ["app-chat-run.js", "app-chat-edit.js"].forEach(asset => {
     assert.ok(index.includes(asset + "?v=chat-sync-20260903-1"), asset + " cache key was bumped");
   });
-  assert.ok(index.includes("app-chat-session.js?v=startup-secondary-lazy-20260907-1"), "chat session startup lazy cache key was bumped");
-  console.log("OK 4/4");
+  assert.ok(index.includes("app-chat-session.js?v=chat-sync-poll-20260928-1"), "chat session cache key was bumped");
+  console.log("OK 5/5");
 }()).catch(error => {
   console.error(error.stack || error);
   process.exitCode = 1;

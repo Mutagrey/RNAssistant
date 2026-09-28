@@ -105,6 +105,10 @@ reconstruct one snapshot in chat projection; member refs do not create duplicate
 artifact records. Current reads carry the shared logical-head dependency. Exact
 bindings retain exact dependency evidence; supported `head` bindings remain dynamic
 identities resolved through the existing Gateway/data plane at read/export time.
+The WebView keeps already loaded source objects across full chat-state updates only
+when the selected revision and every file's exact ref, size and SHA-256 agree. A
+bounded in-memory cache (3 million UTF-16 characters) reuses verified exact source
+on chat revisit; new revisions and explicit source reloads obtain fresh source.
 Uploaded HTML remains an immutable original; authored JSON is an ordinary file
 artifact. Export requires a saved document snapshot and does not create a revision.
 

@@ -5,6 +5,30 @@
 
   function create(options) {
     var state = options.state, pending = null;
+    var maxCachedCharacters = 3000000, cachedCharacters = 0, sourceCache = new Map();
+    function cacheKey(file) {
+      return file && file.source && state.activeChatId + "|" + key(file) + "|" +
+        file.sha256 + "|" + file.byteLength + "|" + file.characters;
+    }
+    function restoreCached(wanted) {
+      wanted.forEach(function (file) {
+        if (ready(file) || file.sourceError) return;
+        var identity = cacheKey(file), content = sourceCache.get(identity);
+        if (content === undefined) return;
+        sourceCache.delete(identity); sourceCache.set(identity, content);
+        file.content = content; file.sourceReadKey = key(file);
+      });
+    }
+    function remember(file, content) {
+      if (content.length > maxCachedCharacters) return;
+      var identity = cacheKey(file), previous = sourceCache.get(identity);
+      if (previous !== undefined) { cachedCharacters -= previous.length; sourceCache.delete(identity); }
+      sourceCache.set(identity, content); cachedCharacters += content.length;
+      while (cachedCharacters > maxCachedCharacters) {
+        var oldest = sourceCache.keys().next().value;
+        cachedCharacters -= sourceCache.get(oldest).length; sourceCache.delete(oldest);
+      }
+    }
     function currentWorkspace(workspace) {
       return !state.bridgeUnavailable && state.htmlWorkspace === workspace &&
         typeof workspace.revisionArtifactId === "string" && workspace.revisionArtifactId === state.activeHtmlArtifactId;
@@ -38,7 +62,7 @@
     function demandKey(workspace, wanted) { return workspace.revisionArtifactId + ":" + wanted.map(key).join("|"); }
     function start(workspace, wanted, isCurrent, exporting) {
       var job = { workspace: workspace, chatId: state.activeChatId, key: demandKey(workspace, wanted),
-        abort: new AbortController(), exporting: exporting, notify: true };
+        abort: new AbortController(), exporting: exporting, notify: true, startedAt: Date.now() };
       function current() { return pending === job && !job.abort.signal.aborted && state.activeChatId === job.chatId &&
         currentWorkspace(workspace) && job.key === demandKey(workspace, wanted) && isCurrent(); }
       function active() { if (!current()) throw new Error("RESOURCE_SOURCE_CANCELLED"); }
@@ -47,6 +71,7 @@
         var file;
         try {
           validate(workspace, wanted);
+          restoreCached(wanted);
           for (var index = 0; index < wanted.length; index++) {
             file = wanted[index]; active();
             if (ready(file)) continue;
@@ -65,6 +90,7 @@
             if (text.length !== file.characters) throw new Error("RESOURCE_SOURCE_INCOMPLETE");
             await close(job); active();
             file.content = text; file.sourceReadKey = key(file); delete file.sourceError;
+            remember(file, text);
           }
           return true;
         } catch (error) {
@@ -76,6 +102,14 @@
         } finally {
           await close(job);
           if (pending === job) pending = null;
+          var elapsedMs = Date.now() - job.startedAt;
+          if (elapsedMs >= 250 && window.console && window.console.info) {
+            window.console.info("RNAssistant HTML source timing", {
+              elapsedMs: elapsedMs, files: wanted.length,
+              characters: wanted.reduce(function (total, item) { return total + (item && Number.isInteger(item.characters) ? item.characters : 0); }, 0),
+              status: job.abort.signal.aborted ? "cancelled" : (job.error ? "failed" : "loaded")
+            });
+          }
           if (job.notify) options.changed();
         }
       }());
@@ -84,6 +118,7 @@
     function ensure(wanted) {
       var workspace = state.htmlWorkspace || {};
       if (!currentWorkspace(workspace) || state.htmlWorkspaceExportPending || !wanted.length) { if (pending && !pending.exporting) cancel(false); return !wanted.length; }
+      restoreCached(wanted);
       if (pending && (pending.workspace !== workspace || pending.key !== demandKey(workspace, wanted))) { cancel(true); return false; }
       if (wanted.every(ready)) return true;
       if (pending || wanted.some(function (file) { return file.sourceError; })) return false;
@@ -102,7 +137,7 @@
       return error ? "Исходник не загружен: " + error.sourceError + ". Нажмите «Исходники ↻»." : "Загрузка исходников…";
     }
     return { ensure: ensure, ready: ready, current: currentWorkspace, exportSources: exportSources,
-      message: message, release: function () { cancel(false); } };
+      message: message, release: function () { cancel(false); sourceCache.clear(); cachedCharacters = 0; } };
   }
   window.RNAssistantHtmlWorkspaceSource = { create: create, ready: ready };
 }());

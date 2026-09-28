@@ -58,7 +58,19 @@ function fixture(texts = ["\ufeff<main>\r\n" + "я".repeat(140000) + "😀</main
     assert.equal(f.opens().length, 3); assert.equal(f.closes().length, 3); assert.equal(f.source.ready(f.files[1]), true);
     assert.equal(f.files[1].content, "");
     f.files[0].content = "local draft"; assert.equal(f.source.ensure(f.files), true); assert.equal(f.files[0].content, "local draft");
-    console.log("PASS HTML source: selected-only hydration, bounded exact bytes, empty file and one workspace cache");
+    f.state.activeChatId = "other"; f.state.htmlWorkspace = { revisionArtifactId: "other", files: [] };
+    const revisited = f.files.map(file => ({ id: file.id, path: file.path, kind: file.kind,
+      source: { ...file.source }, characters: file.characters, byteLength: file.byteLength, sha256: file.sha256 }));
+    f.state.activeChatId = "chat-a"; f.state.htmlWorkspace = { revisionArtifactId: "html-r1", files: revisited };
+    assert.equal(f.source.ensure(revisited), true, "revisited exact chat source is available without a download");
+    assert.equal(f.opens().length, 3); assert.ok(revisited.every(f.source.ready));
+    assert.equal(revisited[0].content, f.buffers[0].toString("utf8"), "cache retains verified bytes, not an unsaved draft");
+    f.source.release();
+    const explicitReload = { ...revisited[0], content: undefined, sourceReadKey: undefined };
+    f.state.htmlWorkspace = { revisionArtifactId: "html-r1", files: [explicitReload] };
+    await f.load([explicitReload]);
+    assert.equal(f.opens().length, 4, "explicit source reload bypasses the in-memory cache");
+    console.log("PASS HTML source: selected-only hydration, bounded exact bytes and revisited chat cache");
   }
   {
     for (const type of ["corrupt", "foreign", "oversized", "inline"]) {
@@ -134,13 +146,15 @@ function fixture(texts = ["\ufeff<main>\r\n" + "я".repeat(140000) + "😀</main
   ["source", "model", "editor", "actions"].map(part => "app-html-workspace-" + part + ".js")
     .forEach(file => {
       const version = file === "app-html-workspace-editor.js" ? "preview-reuse-20260907-1" :
-        file === "app-html-workspace-actions.js" ? "html-action-guard-20260908-1" : "html-read-20260906-1";
+        file === "app-html-workspace-actions.js" ? "html-action-guard-20260908-1" :
+        file === "app-html-workspace-source.js" ? "html-source-timing-20260928-1" : "html-read-20260906-1";
       assert.ok(index.includes(file + "?v=" + version), file);
     });
   assert.ok(index.includes("app-html-workspace-preview.js?v=binary-chunks-20260906-1"));
+  assert.ok(index.includes("app-html-workspace-source.js?v=html-source-timing-20260928-1"));
   assert.ok(index.includes("app-html-workspace.js?v=html-read-20260906-1"));
-  assert.ok(index.includes("app-chat-state.js?v=chat-activity-order-20260908-1"));
-  assert.ok(index.includes("app-chat-session.js?v=startup-secondary-lazy-20260907-1"));
+  assert.ok(index.includes("app-chat-state.js?v=html-source-reuse-20260928-1"));
+  assert.ok(index.includes("app-chat-session.js?v=chat-sync-poll-20260928-1"));
   assert.ok(index.includes('id="reloadHtmlWorkspaceSourceButton"'));
   assert.ok(index.indexOf("app-resource-download.js?v=") < index.indexOf("app-html-workspace-source.js?v="));
   console.log("PASS HTML source: source/editor/preview/export and lifecycle delivery graph is switched together");

@@ -1,6 +1,7 @@
 using RNAssistant.Core.Tools;
 using System;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
@@ -150,11 +151,21 @@ namespace RNAssistant.Office
         {
             if (payload == null || string.IsNullOrWhiteSpace(payload.ChatId))
                 throw new InvalidOperationException("RESOURCE_ACCESS_DENIED: an explicit chat is required.");
+            var timer = Stopwatch.StartNew();
             var session = LoadAddressedSession(payload.ChatId);
+            var loadMs = timer.ElapsedMilliseconds;
             var source = new ChatSession { Id = session.Id, Host = session.Host, DocumentKey = session.DocumentKey,
                 DocumentAuthorityId = session.DocumentAuthorityId };
-            return Task.Run(() => new SkillEditorResourceService(_toolExecutor.ResourceGateway, _resourceData, _skillCatalog)
-                .Open(source, payload, token), token);
+            return Task.Run(() =>
+            {
+                var response = new SkillEditorResourceService(_toolExecutor.ResourceGateway, _resourceData, _skillCatalog)
+                    .Open(source, payload, token);
+                if (timer.ElapsedMilliseconds >= 250)
+                    RNAssistant.Office.Diagnostics.RuntimeLog.Info(
+                        "Skill source timing: chat=" + loadMs + "ms, open=" +
+                        (timer.ElapsedMilliseconds - loadMs) + "ms.");
+                return response;
+            }, token);
         }
 
         public async Task<SkillReferenceResponse> SaveSkillReferenceAsync(SkillMutationWriteRequest payload, CancellationToken token)

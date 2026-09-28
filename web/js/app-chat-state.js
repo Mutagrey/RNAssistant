@@ -187,6 +187,36 @@ function applyLibraryCatalogState(response) {
   return changed;
 }
 
+function retainHtmlWorkspaceSources(current, incoming) {
+  if (!current || !incoming) return incoming;
+  var currentRevision = current.revisionArtifactId || current.RevisionArtifactId || "";
+  var incomingRevision = incoming.revisionArtifactId || incoming.RevisionArtifactId || "";
+  if (!currentRevision || currentRevision !== incomingRevision) return incoming;
+  var currentFiles = current.files || current.Files || [];
+  var incomingFiles = incoming.files || incoming.Files || [];
+  if (currentFiles.length !== incomingFiles.length) return incoming;
+  for (var index = 0; index < currentFiles.length; index += 1) {
+    var oldFile = currentFiles[index], newFile = incomingFiles[index];
+    var oldSource = oldFile && oldFile.source, newSource = newFile && newFile.source;
+    if (!oldFile || !newFile || oldFile.id !== newFile.id || oldFile.path !== newFile.path ||
+        oldFile.kind !== newFile.kind || oldFile.characters !== newFile.characters ||
+        oldFile.byteLength !== newFile.byteLength || oldFile.sha256 !== newFile.sha256 ||
+        !oldSource || !newSource || oldSource.uri !== newSource.uri ||
+        oldSource.revision !== newSource.revision) return incoming;
+  }
+  // Keep the same workspace and file objects so an in-flight exact read remains current.
+  Object.assign(current, incoming);
+  current.files = currentFiles;
+  current.dataSources = incoming.dataSources || incoming.DataSources || [];
+  current.history = incoming.history || incoming.History || [];
+  current.redoHistory = incoming.redoHistory || incoming.RedoHistory || [];
+  current.redoBranches = incoming.redoBranches || incoming.RedoBranches || current.redoHistory;
+  current.activeFileId = incoming.activeFileId || incoming.ActiveFileId || "";
+  current.recovery = incoming.recovery || incoming.Recovery || {};
+  current.revisionArtifactId = incomingRevision;
+  return current;
+}
+
 function applyChatState(response) {
   response = response || {};
   var previousChatId = state.activeChatId || "";
@@ -276,7 +306,8 @@ function applyChatState(response) {
     syncTokenEstimateCalibrationFromUsage();
   }
   if ((response.htmlWorkspace || response.HtmlWorkspace) && (chatChanged || !state.htmlWorkspaceDirty)) {
-    state.htmlWorkspace = response.htmlWorkspace || response.HtmlWorkspace || { activeFileId: "", files: [], dataSources: [], history: [], redoHistory: [], redoBranches: [], recovery: { status: "empty", canMutate: true, candidates: [] } };
+    var nextWorkspace = response.htmlWorkspace || response.HtmlWorkspace;
+    state.htmlWorkspace = chatChanged ? nextWorkspace : retainHtmlWorkspaceSources(state.htmlWorkspace, nextWorkspace);
     state.htmlWorkspaceDirty = false;
   }
   if (chatChanged) {
