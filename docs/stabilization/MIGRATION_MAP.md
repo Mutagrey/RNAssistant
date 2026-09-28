@@ -1,5 +1,11 @@
 # Current-to-target migration map
 
+Историческая карта завершённого host-neutral переноса и оставшихся постоянных
+границ. Открытое Windows evidence не превращает удалённые пути в активные.
+Обычной разработкой теперь управляют [development-rules](../development-rules.md)
+и краткий [PROGRESS](PROGRESS.md); новые временные adapters добавляются сюда только
+с owner, consumers и условием удаления.
+
 ModelProtocol работает на v5; старые streams требуют explicit new/reset, pipelines отключены. Phase 3B2 подключает
 `AgentKernel` к production start/confirmation через Office model/tool/store ports.
 Новый summary replay проверен на существующих events; старый loop, builder,

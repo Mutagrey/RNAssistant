@@ -1,5 +1,41 @@
 # Stabilization progress
 
+## Current operating status — 2026-09-28
+
+The maintainer accepts the completed host-neutral architecture migration as a
+**working baseline** for continued development. RNAssistant runs, edits code and
+executes agent tasks; remaining reliability defects are ordinary prioritized bug
+work. This is a conditional operational status, not signed exact-build Windows/Office
+qualification or a published stable/beta/RC release. Product metadata remains
+`16.1.0-dev` until a separate release decision. No tag or release evidence is
+created by this status decision. The repository snapshot at the decision is commit
+`0f8e5ce8`; in-flight working-tree edits are not part of that snapshot. The
+maintainer's manual checks were not tied here to an exact binary or signed manifest.
+
+Default development is sequential work on `main`, without a task branch for each
+change. Existing in-flight branches and uncommitted edits are preserved and
+integrated deliberately. Transition: review the current in-flight change, bring it
+to `main` when ready, and stop opening `stab/*` branches by default; do not force a
+checkout or stash a dirty tree. The former Phase 11 → WQ → Phase 12 queue and general
+feature freeze are retired for ordinary work; the master plan is historical.
+New features need explicit scope and owner, with reliability and data safety ahead
+of breadth. Targeted checks follow the changed behavior. Missing Windows/Office,
+WebView2 and live-provider evidence stays open and is required when qualifying a
+formal release or claiming those environments are verified.
+
+Immediate priorities: resolve the reported Agent loop/missing-change incident with
+causal evidence (R78); fix demonstrated no-effect/false-success and repeated-call
+risks; measure reported chat/navigation stalls on the actual host before optimizing
+storage; reconcile known host-neutral test drift. Detailed risks remain in the
+entries below and [RISK_REGISTER](RISK_REGISTER.md) / [BACKLOG](BACKLOG.md).
+Qualification scenarios retain the [Windows runbook](WINDOWS_QUALIFICATION_RUNBOOK.md),
+independently of daily work.
+
+## Implementation log — includes current in-flight work and earlier entries
+
+Entries below may say “current” or “next” relative to their own date. Only the
+operating status above controls today's work.
+
 Current build correction (2026-09-08): the existing read-only CAS presence check
 used by shared-context claim filtering is now public across the Core/Office assembly
 boundary. This fixes the reported `CS0122` in `ModelContextCompiler`; the downstream
@@ -277,7 +313,7 @@ checks, version-format validation and diff checks pass. The earlier unrelated
 prompt-target assertion remains open as recorded below.
 Next: indexed/partial discovery and richer shared resource context. The pre-existing
 Plan/HTML operation-key collision in multi-call model steps is recorded separately
-in [backlog](BACKLOG.md#planhtml-operation-identity-in-batches--2026-09-08); Markdown includes call identity.
+in [backlog](BACKLOG.md#plan-operation-identity-edge-case--2026-09-08); Markdown includes call identity.
 Windows/Office/WebView2, target-model and Playwright layout gates remain open.
 See [Markdown contract](../artifact-library.md#implemented-independent-markdown--2026-09-08).
 
@@ -630,12 +666,12 @@ Latest correction (2026-09-07): the user-reported high Agent failure count is se
 
 Latest correction (2026-09-07): user-reported Excel search-scope metadata reads no longer fail with `An immutable revision view was changed`. Whole-read assembly preserves absent text instead of inventing an empty CAS body during evidence retention. Repeated native metadata reads retain the same revision without cell capture; the extended Excel search snapshot test and existing Gateway read/search/page test pass host-neutral. Windows/Excel qualification remains open.
 
-Current target: 16.1.0
-Current phase: Milestone WQ — обязательный Phase 11 existing-tool migration route и final active-legacy cleanup через 11T10 завершены host-neutral; Phase 12 ещё не начат
-Current task: user-authorized unified Resource Architecture direct cutover is complete host-neutral on `stab/11-resource-direct-cutover`, including final consumer/legacy cleanup (2026-09-07). The user-requested post-cutover performance hardening and 11E chat/diagnostics presentation slices are limited to dependency-safe host-neutral changes that consume the completed Resource architecture and do not close Windows qualification. The dependency order remains [Resource MASTER](resource-cutover/MASTER.md): [URF](resource-cutover/UNIVERSAL_RESOURCE_FABRIC.md) → [Authority](resource-cutover/RESOURCE_AUTHORITY.md) → [Evidence/Compiler](resource-cutover/EVIDENCE_CONTEXT_COMPILER.md). This is one replacement workstream, not three parallel implementations. Explicitly deferred source allocation and all real Windows qualification remain open.
-Execution mode: mandatory host-neutral route 0–11T10, WQ-A1–A5, R61/11O0–11O7, the separately approved D05.1–D05.6 slices and R65–R70 corrections завершены. WQ0 не блокировал implementation: текущий `RuntimeKey` exact bound Excel/Word/PowerPoint/Outlook object or window принят как lifetime assumption. Накопленные Windows gates по §16.1 теперь квалифицируют только итоговый post-cutover catalog/UI; до их evidence Phase 12 remains blocked.
+Historical target (2026-09-07): 16.1.0
+Historical phase: Milestone WQ — обязательный Phase 11 existing-tool migration route и final active-legacy cleanup через 11T10 завершены host-neutral; Phase 12 тогда ещё не начат.
+Historical task: user-authorized unified Resource Architecture direct cutover is complete host-neutral on `stab/11-resource-direct-cutover`, including final consumer/legacy cleanup (2026-09-07). The user-requested post-cutover performance hardening and 11E chat/diagnostics presentation slices were limited to dependency-safe host-neutral changes that consume the completed Resource architecture and do not close Windows qualification. The dependency order was [Resource MASTER](resource-cutover/MASTER.md): [URF](resource-cutover/UNIVERSAL_RESOURCE_FABRIC.md) → [Authority](resource-cutover/RESOURCE_AUTHORITY.md) → [Evidence/Compiler](resource-cutover/EVIDENCE_CONTEXT_COMPILER.md). This was one replacement workstream, not three parallel implementations. Explicitly deferred source allocation and all real Windows qualification remained open.
+Historical execution mode: mandatory host-neutral route 0–11T10, WQ-A1–A5, R61/11O0–11O7, the separately approved D05.1–D05.6 slices and R65–R70 corrections завершены. WQ0 не блокировал implementation: текущий `RuntimeKey` exact bound Excel/Word/PowerPoint/Outlook object or window принят как lifetime assumption. Накопленные Windows gates по §16.1 квалифицировали итоговый post-cutover catalog/UI; Phase 12 тогда оставался заблокирован.
 
-Next step for tools: run the accumulated post-cutover Windows/Office/WebView2 qualification on the final candidate; see [MASTER acceptance reconciliation](../resource-fabric.md#master-acceptance-reconciliation--2026-09-07). Host-neutral cleanup is closed. Outlook MailItem.Body source allocation remains unresolved in [BACKLOG](BACKLOG.md#user-deferred-source-allocation--2026-09-07); Inspector pre-truncation serialization is fixed host-neutral, while real WebView2 qualification remains open. No further provider expansion, finer Excel coverage or cold-replay/checkpoint optimization is scheduled. Phase 12 remains blocked.
+Historical next step: run the accumulated post-cutover Windows/Office/WebView2 qualification on the final candidate; see [MASTER acceptance reconciliation](../resource-fabric.md#master-acceptance-reconciliation--2026-09-07). Host-neutral cleanup was closed. Outlook MailItem.Body source allocation remained unresolved in [BACKLOG](BACKLOG.md#user-deferred-source-allocation--2026-09-07); Inspector pre-truncation serialization was fixed host-neutral, while real WebView2 qualification remained open. No further provider expansion, finer Excel coverage or cold-replay/checkpoint optimization was scheduled under that route.
 Latest slice (2026-09-07): repeat-report chat duplication is reproduced through the real reducer/grouping/DOM pipeline: two saved steps plus replayed markers rendered four steps, and differing inline/CAS argument bodies duplicated calls. Call identity now excludes payload representation; replayed markers reuse the existing step, repeated results update one row, final text/reasoning replay is suppressed and distinct transcript segments have separate DOM keys. The new integrated regression covers active-chat restoration and final delivery; browser QA shows one run, two steps and four calls, then one final answer. Previous synthetic overlap coverage missed these paths. Windows/Office/WebView2 delivery qualification remains open.
 
 Previous slice (2026-09-07): duplicate persisted/live run blocks are merged by exact runtime identity in the transient chat projection. Durable terminal results retain precedence over stale progress, new calls stay visible, resource provenance is retained and final snapshots retire live replay. Regression checks cover overlap, separate runs and unchanged streaming-history retention. Tool-row spacing is reduced to 2 px within a step. Windows/Office/WebView2 delivery qualification remains open.

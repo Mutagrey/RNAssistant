@@ -1,6 +1,8 @@
 # Artifact Library and Viewers
 
-Status: Phase 11 target contract. 11A1 and 11A2 implement the host-neutral commit-time
+Status: current artifact/viewer contract with open Windows delivery evidence. The
+11A–11D labels below record implementation history, not the current work queue.
+11A1 and 11A2 implement the host-neutral commit-time
 boundary, explicit draft/preparing/committed labels and exact Library head/history
 projection. 11B1–11B3 complete the host-neutral Plan domain owner, exact whole-Markdown
 lineage, restore/removal UX and ready handoff by pinned URI. 11C1–11C3 complete the

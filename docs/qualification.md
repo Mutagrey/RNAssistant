@@ -3,7 +3,9 @@
 Статус: WQ-A1–A5 реализованы host-neutral. UI показывает versioned packs и
 проверенное состояние detached signed exact-build evidence. Реальный WQ0 и остальные
 live suites остаются открытыми до Windows/Office/provider прогона; без полного
-evidence `release.candidate` недоступен.
+evidence `release.candidate` недоступен. Этот gate относится к формальному релизу
+и заявлениям о проверенной Office-доставке, а не к ежедневному исправлению ошибок
+рабочего baseline.
 
 ## 1. Назначение
 
@@ -323,9 +325,9 @@ Coverage registry связывает каждый mandatory invariant/risk/capab
    evidence остаются gate Milestone WQ.
    [Evidence](stabilization/WQ_A5_BUILD_EVIDENCE.md).
 
-Каждый этап — отдельный commit. Host-neutral tests не закрывают Windows gates; один
-pack/host failure исправляется у его owner и повторяет только затронутый scenario,
-затем общий smoke перед release.
+Исторические WQ-A этапы выполнялись отдельными commits. Host-neutral tests не
+закрывают Windows gates; один pack/host failure исправляется у его owner и повторяет
+только затронутый scenario, затем общий smoke перед release.
 
 ## 11. Phase 11 Issue Center
 

@@ -2,10 +2,9 @@
 
 ## Status and scope
 
-This is a deferred Phase 11 target contract, prioritized after the admitted 11T
-local typed-tool verticals, Artifact Workbench, Issue Center and read-only Tool
-Inspector. It does not change the current WQ-A, WQ or Phase 12 route and does not
-qualify existing Office/COM behavior.
+This is a deferred product target contract, not part of the working baseline or a
+prerequisite for ordinary bug fixes. It requires an explicit user scope and owner;
+the design does not qualify existing Office/COM behavior.
 
 The goal is one RNAssistant window, opened from any supported Office host, that can
 list and select documents/items owned by other running Excel, Word, PowerPoint and
@@ -115,7 +114,7 @@ Microsoft references:
 - [Runtimes in Office Add-ins](https://learn.microsoft.com/en-us/office/dev/add-ins/testing/runtimes)
 - [Considerations for unattended automation of Office](https://learn.microsoft.com/en-us/office/client-developer/integration/considerations-unattended-automation-office-microsoft-365-for-unattended-rpa)
 
-## Phase 11 slices and gates
+## Deferred implementation slices (historical Phase 11 plan)
 
 1. Contracts only: endpoint/target/lease DTOs, protocol versioning and fail-closed
    target pinning; no transport or UI switch.

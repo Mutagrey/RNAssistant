@@ -993,8 +993,9 @@ Finite closure status:
    or Office validation. Conservative retention roots are already implemented;
    checkpoints/finer coverage are optional improvements, not unfinished migration.
 5. **Remaining required qualification — Windows/Office/WebView2.** Accumulated
-   live-provider, COM/lifetime, model and UI gates remain open before Phase 12 or
-   beta/RC/release claims. No new provider kinds, universal raw expansion or generic
+   live-provider, COM/lifetime, model and UI evidence remains open before formal
+   release or claims that those environments are qualified. No new provider kinds,
+   universal raw expansion or generic
    cleanup workstream is scheduled. The unrelated ToolStore leading-U+FEFF defect
    remains explicitly recorded in BACKLOG, not silently fixed or declared closed.
 
@@ -1003,4 +1004,4 @@ Finite closure status:
 MASTER waves are one dependency-ordered implementation: shared foundation →
 mutation/evidence → frozen compiler → reference-first HTML/viewers → schema/derived/
 catalog/retention cleanup. Host-neutral checks do not close real Windows x64 +
-Office x64 + VS 2022/WebView2 qualification, Phase 12 or any release gate.
+Office x64 + VS 2022/WebView2 qualification or any release gate.

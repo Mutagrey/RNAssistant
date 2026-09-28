@@ -1,7 +1,8 @@
 # Exact-build qualification evidence
 
 Status: WQ-A5 host-neutral contract and admission are implemented. Real evidence is
-created only on the Windows x64 + Office x64 release workstation.
+created only on the Windows x64 + Office x64 release workstation. A maintainer-accepted
+working baseline needs no signed manifest; it does not acquire release admission.
 
 ## Why the manifest is detached
 

@@ -1,16 +1,16 @@
 # RNAssistant backlog
 
 Здесь находится только незавершённая отложенная работа. Это не текущий план:
-активный подэтап и gates находятся в [PROGRESS](PROGRESS.md), порядок стабилизации —
-в [master plan](STABILIZATION_MASTER_PLAN.md), действующие риски — в
+рабочий baseline, приоритеты и открытое evidence находятся в [PROGRESS](PROGRESS.md),
+исторический порядок миграции — в [master plan](STABILIZATION_MASTER_PLAN.md),
+действующие риски — в
 [RISK_REGISTER](RISK_REGISTER.md), временные adapters — в
 [MIGRATION_MAP](MIGRATION_MAP.md). Завершённые этапы остаются в phase/WQ evidence и
 сюда не копируются.
 
-Новые product features заморожены. Запись в этом файле не разрешает начать работу
-до её явного включения в текущую фазу.
-
-## Built-in inventory drift — 2026-09-08
+Общий feature freeze завершён. Запись здесь сама по себе не означает приоритет:
+новая возможность требует явной задачи, scope и owner; дефекты работающей системы
+приоритетнее расширения без конкретного пользовательского результата.
 
 ## Outlook attachment follow-ups — 2026-09-08
 
@@ -46,18 +46,16 @@ search fails the existing
 before declaring this integration gate closed. This failure is not changed by the
 working-set purpose/read-hint implementation. This is not Windows evidence.
 
-## Plan/HTML operation identity in batches — 2026-09-08
+## Plan operation identity edge case — 2026-09-08
 
 Owner: document artifact mutation domain. `PlanDocumentService.CreationId` hashes
-chat/run/step; HTML derives its receipt key from it. AgentKernel gives independent
-calls within a batch the same model step, so a second Plan/HTML mutation can be
-refused as already published. This is outside the new Markdown owner: its operation
-key includes runtime call id and has same-step regression coverage. Next approved
-artifact-authority slice must include call identity for Plan/HTML and explicitly
-handle already prepared/persisted operations; do not silently change replay keys.
-Evidence: `AgentKernel.LoopAsync`, `PlanDocumentService.CreationId`,
-`HtmlWorkspacePublication.OperationKey`. This records a false-refusal risk, not a
-verified lost write or permission to replay unknown effects.
+chat/run/step without call id. The current in-flight singleton-mutation boundary
+rejects multiple model mutations in one response before dispatch, removing the
+reported Agent/Plan batch route. HTML receipts already include call id; the former
+combined Plan/HTML statement is stale. Before admitting another same-step Plan
+caller or changing batch policy, make Plan operation identity call-scoped and
+explicitly handle prepared/persisted receipts without replaying unknown effects.
+This is a bounded future guard, not a verified lost write in the current model path.
 
 ## Web cache-key assertions — 2026-09-08
 
@@ -195,8 +193,8 @@ Remaining bounded follow-ups:
 
 ## Deferred product decisions
 
-Эти пункты требуют отдельного решения после stable core; они не являются Phase 12
-prerequisites.
+Эти пункты требуют отдельной пользовательской задачи и prioritization; они не
+становятся обязательными из-за старого Phase 12 плана.
 
 - **Storage lifecycle:** retention/pruning для chats, payloads, artifacts, VBA
   snapshots и exports; явный re-key; VBA-journal export. Любое удаление остаётся

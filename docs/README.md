@@ -5,22 +5,24 @@
 
 ## Минимальный контекст задачи
 
-1. Прочитай только начало [PROGRESS](stabilization/PROGRESS.md): текущую работу,
-   следующий шаг, gates и required context.
-2. По таблице ниже выбери один canonical document области и нужный раздел в нём.
-3. Раздел [master plan](stabilization/STABILIZATION_MASTER_PLAN.md) открывай только
-   когда изменение затрагивает scope, порядок или gate текущей стабилизации.
+1. Прочитай краткий текущий статус в начале [PROGRESS](stabilization/PROGRESS.md),
+   если задача зависит от приоритета или открытого риска.
+2. По таблице ниже выбери canonical document области и нужный раздел в нём.
+3. [Старый master plan](stabilization/STABILIZATION_MASTER_PLAN.md) и phase reports
+   читай как историю переноса архитектуры, только когда нужна причина решения или
+   точная прежняя проверка. Они не задают очередь обычных изменений.
 
 [Правила разработки](development-rules.md) нужны для cross-cutting responsibility,
 testing или migration; [архитектура](architecture.md) — для изменения layers,
 owners или dependencies. Не читай оба документа автоматически для каждой задачи.
 Старые phase reports и ADR не являются текущим контрактом.
 
-Для текущего единого Resource direct cutover сначала прочитай
-[Resource MASTER](stabilization/resource-cutover/MASTER.md), затем его три
-нормативных документа в заданном порядке. [Resource Fabric](resource-fabric.md)
-содержит карту владельцев, завершённую host-neutral замену consumers и открытые
-qualification gates, а не отдельную реализацию.
+[Resource Fabric](resource-fabric.md) — действующий контракт ресурсов.
+[Resource MASTER](stabilization/resource-cutover/MASTER.md) и три спецификации
+direct cutover объясняют порядок уже выполненной миграции; они не запускают её
+повторно. Текущий режим работы и веток задан в [правилах разработки](development-rules.md).
+Причина перехода к рабочему baseline зафиксирована в
+[ADR-0011](decisions/ADR-0011-working-baseline-and-trunk-development.md).
 
 ## Канонические документы
 
@@ -49,13 +51,13 @@ qualification gates, а не отдельную реализацию.
 | Информация | Место |
 |---|---|
 | Точное текущее поведение одной области | Владеющий canonical document выше |
-| Общее инженерное правило | `development-rules.md` |
-| Текущий подэтап, следующий шаг, открытый gate | Начало `stabilization/PROGRESS.md` |
+| Общее инженерное правило и workflow | `development-rules.md` |
+| Рабочий baseline, текущий приоритет и открытое evidence | Начало `stabilization/PROGRESS.md` |
 | Риск, который уже влияет на текущую систему | `stabilization/RISK_REGISTER.md` |
 | Временный adapter, его consumers и removal gate | `stabilization/MIGRATION_MAP.md` |
 | Отложенная ограниченная работа или product decision | `stabilization/BACKLOG.md` |
 | Причина архитектурного решения | Новый ADR в `decisions/` |
-| Команды и evidence сложного завершённого этапа | Phase/WQ report в `stabilization/` |
+| Команды и evidence завершённой миграции или release qualification | Phase/WQ report в `stabilization/` |
 | Установка и пользовательский обзор | Корневой `README.md` |
 
 ## Что не создавать

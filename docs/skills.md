@@ -3,8 +3,9 @@
 ## Status and boundary
 
 The progressive skill read contract is implemented. Immutable custom package
-history, import/export provenance and restore/delete UX are a deferred Phase 11
-Skills authoring contour. They do not expand WQ-A, WQ or Phase 12.
+history, import/export provenance and restore/delete UX remain deferred product
+work. They require a concrete scope and owner; they are not prerequisites for
+ordinary bug fixes or proof of existing release qualification.
 
 An installed skill is a trusted instruction capability, not a `ChatArtifact` and
 not an executable tool. It is global or host-scoped, can affect many document chats
@@ -208,7 +209,7 @@ identity. Rename is an explicit create-new-id plus tombstone-old operation witho
 aliases. Delete appends a package tombstone and removes the skill from future
 catalogs; physical bodies are retained until fail-closed reachability permits GC.
 
-The Phase 11 store must be append-only for package facts and content-addressed for
+Any future package store must be append-only for package facts and content-addressed for
 immutable bodies. It is separate from document chat streams because skill ownership
 is global/host-scoped, but it cannot become a second chat store. Any shared CAS GC
 must include every validated skill package journal as a reachability source; an
@@ -227,7 +228,7 @@ may be downloaded or attached as a normal artifact. Editing that exported artifa
 does not mutate the installed package; re-import is explicit and guarded. A skill
 created directly in Library has no artificial source artifact.
 
-## Phase 11 slices and gates
+## Deferred package scope (historical Phase 11 slices)
 
 1. Contract/store: immutable package journal/bodies, replayed head, tombstone and
    no flat-store dual write.

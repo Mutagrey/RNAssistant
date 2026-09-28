@@ -1,7 +1,9 @@
 # Release process
 
-Only for an explicitly approved release milestone. Ordinary commits and Phase 0
-must not invoke this workflow or create tags.
+Only for an explicitly approved release milestone. Ordinary commits and the working
+baseline decision do not invoke this workflow or create tags. Development uses `main`
+by default; alpha, beta and RC may be prepared from the selected clean `main` commit.
+An existing integration branch may still be selected deliberately during transition.
 
 ## Milestones and qualification
 
@@ -24,14 +26,15 @@ Prerequisites: PowerShell 5.1+ or PowerShell 7, Git, the .NET SDK used by the ha
 clean tree/index (including untracked files), configured/reachable `origin`, an RSA
 certificate in `Cert:\CurrentUser\My`, and substantive user-visible notes under
 `CHANGELOG.md` → `[Unreleased]`. Record the lowercase SHA-256 of the certificate DER.
-Choose `stabilization/16.1` or `main` explicitly; scripts never switch branches.
+Choose the current `main` or existing `stabilization/16.1` branch explicitly;
+scripts never switch branches. The branch name does not confer a quality level.
 
-Example for a future qualified milestone; do not run during Phase 0:
+Example for a future qualified milestone; this is not a working-baseline step:
 
 ```powershell
 ./tools/Prepare-Release.ps1 `
   -Version 16.1.0-rc.1 `
-  -Branch stabilization/16.1 `
+  -Branch main `
   -BuildNumber 1 `
   -BuildEvidenceSignerSha256 <lowercase-certificate-der-sha256>
 ```
@@ -67,7 +70,7 @@ and run `release.candidate`. Only after it passes, finalize:
 ```powershell
 ./tools/Prepare-Release.ps1 `
   -Version 16.1.0-rc.1 `
-  -Branch stabilization/16.1 `
+  -Branch main `
   -BuildNumber 1 `
   -BuildEvidenceSignerSha256 <lowercase-certificate-der-sha256> `
   -Finalize `
@@ -104,9 +107,9 @@ same tag, commit and manifest hash; never recreate, move or force it.
 No automatic reset, rollback, tag deletion or write retry occurs.
 Remote inspection failures fail closed, including when credentials/network are unavailable.
 
-## Phase 0 validation boundary
+## Current validation boundary
 
-The PowerShell release workflow is added but not executed in Phase 0.
+The PowerShell release workflow has not been executed for the current working baseline.
 This Mac has no `pwsh`; execution on the release workstation and Office/VSTO
 qualification remain unverified. Targeted harness tests exercise the MSBuild gates
 with disposable local repositories/remotes, without contacting or tagging this repository's origin.

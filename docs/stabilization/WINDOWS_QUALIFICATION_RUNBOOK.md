@@ -1,8 +1,10 @@
 # Windows qualification runbook
 
-Этот runbook проверяет один собранный `16.1.0-dev` qualification candidate после
-host-neutral миграции. Он не заменяет targeted tests подэтапов и не превращает
-непроверенный build в beta/RC/stable.
+Этот runbook проверяет один exact build для формального release qualification и
+отдельных заявлений о Windows/Office/WebView2 доставке. Он сохраняет накопленные
+сценарии миграции; рабочий baseline и обычные bugfix не требуют прохождения всей
+матрицы перед каждым изменением. Непроверенный build нельзя называть
+квалифицированным beta/RC/stable release.
 
 ## 1. Что подготовить
 

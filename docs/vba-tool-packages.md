@@ -85,7 +85,7 @@ End Function
 
 Normalization/hash rules теперь принадлежат `Core.Tools.VbaTextCanonicalizer`, а не manifest parser. `NormalizePackageCode`/`PackageCodeSha256` сохраняют прежнее исключение export headers/ownership markers; `PackageComparableCodeSha256` дополнительно использует прежние VBE-comparable правила. Source/transport и raw CAS bytes не переписываются; [представления текста](vba-mutation-journal.md#text-representations) разделены. 6A не меняет install/run/remove или journal protocol.
 
-## Граница стабилизации package lifecycle
+## Историческая граница package lifecycle
 
 По [аудиту 6H](stabilization/PHASE_6H_VBA_PACKAGE_SCOPE.md) исполнение уже
 существующих global/document-local VBA tools, временный install/run/cleanup,

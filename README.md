@@ -29,8 +29,8 @@ The documentation entry point and placement rules are in
 [`docs/README.md`](docs/README.md). Canonical engineering rules are in
 [`docs/development-rules.md`](docs/development-rules.md); current architecture and
 ownership are in [`docs/architecture.md`](docs/architecture.md).
-`AGENTS.md` adds the active stabilization and environment-specific instructions;
-current phase and gates are tracked in
+`AGENTS.md` adds the current development and environment-specific instructions;
+working status and open qualification evidence are tracked in
 [`docs/stabilization/PROGRESS.md`](docs/stabilization/PROGRESS.md).
 
 ## In-process VBA Quick Start
@@ -153,7 +153,16 @@ The add-in projects use the VSTO project flavor (`ProjectTypeGuids`) so Visual S
 
 ## Versioning
 
-Commit is not a release. The stabilization branch is `stabilization/16.1`, with historical baseline `v16.0.4` and development target `16.1.0-dev`. Ordinary commits neither change the product version nor create Git tags. New product features are frozen; follow the current phase in the mandatory [stabilization master plan](docs/stabilization/STABILIZATION_MASTER_PLAN.md) and [progress record](docs/stabilization/PROGRESS.md).
+Commit is not a release. The completed architecture migration is the working
+baseline; ordinary bug fixes and scoped development use `main` by default without a
+new task branch each time. Historical release baseline is `v16.0.4`; current product
+metadata is `16.1.0-dev`, identified by commit SHA. The maintainer considers the
+system usable for continued development while reliability defects and Windows/Office
+qualification remain open. This working status creates no release tag and does not
+claim a signed stable/beta/RC build. See the current [status](docs/stabilization/PROGRESS.md)
+and [development rules](docs/development-rules.md); the former
+[stabilization master plan](docs/stabilization/STABILIZATION_MASTER_PLAN.md) is retained
+as migration history.
 
 The product version comes from `RNAssistantVersionPrefix` and `RNAssistantVersionSuffix` in `Directory.Build.props`. Build identity adds the commit SHA without changing that product version. Assembly compatibility, numeric file/application versions and protocol versions are separate; see [VERSIONING.md](docs/operations/VERSIONING.md). Every ordinary build validates format and derived metadata, without comparing against `HEAD` or requiring a clean tree. The same check runs without compiling:
 
@@ -161,7 +170,12 @@ The product version comes from `RNAssistantVersionPrefix` and `RNAssistantVersio
 dotnet msbuild tests/RNAssistant.Harness/RNAssistant.Harness.csproj -t:ValidateVersionFormat -nologo -v:minimal
 ```
 
-Product version changes and annotated tags belong only to qualified release milestones. Release checks are separate from ordinary builds; the explicit release workflow is [RELEASE_PROCESS.md](docs/operations/RELEASE_PROCESS.md). Never move or reuse a tag, and never tag an ordinary commit. Internal refactoring does not justify a major bump. User-visible changes go into [CHANGELOG.md](CHANGELOG.md); internal stabilization work goes into `PROGRESS.md`.
+Product version changes and annotated tags belong only to explicit release
+milestones. Release checks are separate from ordinary builds; the explicit release
+workflow is [RELEASE_PROCESS.md](docs/operations/RELEASE_PROCESS.md). Never move or
+reuse a tag, and never tag an ordinary commit. Internal refactoring does not justify
+a major bump. User-visible changes go into [CHANGELOG.md](CHANGELOG.md); current
+priority or qualification changes go into `PROGRESS.md`.
 
 ## Visual Studio Debug
 

@@ -134,9 +134,6 @@ try {
         return
     }
     if ($Push) { throw "-Push is accepted only together with -Finalize." }
-    if ($Branch -eq "main" -and $versionSuffix -ne "" -and -not $versionSuffix.StartsWith("rc.")) {
-        throw "main accepts only stable or release-candidate code; prepare alpha/beta on stabilization/16.1."
-    }
     $startingCommit = (Invoke-Checked -Command "git" -Arguments @("rev-parse", "HEAD") | Out-String).Trim()
     Invoke-ReleaseCheck -Target "ValidateVersionFormat"
     Invoke-ReleaseCheck -Target "ValidateTagDoesNotExist"

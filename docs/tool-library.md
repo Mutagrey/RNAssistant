@@ -2,7 +2,7 @@
 
 ## Status and boundary
 
-This is the Phase 11 target contract for tool visibility and authoring. It does not
+This is the current contract for tool visibility and authoring. It does not
 change the current `ToolRuntime`, `ToolPackSnapshot`, confirmation or execution
 policy, and it does not add dynamic authoring to the `16.1.0` release scope.
 
@@ -416,9 +416,10 @@ qualification remains open.
 7. Qualify the final exact catalog with live providers and Windows WebView2/Office.
    Earlier evidence for a changed schema/catalog cannot close WQ-PACK or release.
 
-R61 is a stabilization correction and a Phase 12 prerequisite explicitly requested
-on 2026-09-02. It follows the currently reported Windows rebuild, but final
-Milestone WQ evidence must be collected against the post-cutover catalog.
+R61 was completed host-neutral during the migration. Formal release qualification
+must use the exact current catalog; evidence for a changed schema/catalog does not
+carry forward. This is no longer a Phase 12 work-order prerequisite for ordinary
+bug fixes.
 
 ## Read-only Tool Inspector first
 

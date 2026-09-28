@@ -155,7 +155,7 @@ Installed skills are capability-library entities rather than chat artifacts. An
 uploaded Markdown/package remains untrusted resource content and cannot appear in
 the capability catalog until an explicit validated install. Agent authoring changes
 the catalog only at a later run boundary; the accepted step keeps its immutable
-catalog. Phase 11 package history, tombstone, restore/import and Library UX are
+catalog. Deferred package history, tombstone, restore/import and Library UX are
 defined in [Skill Library](skills.md) without changing the exact
 `common.capabilities_read` model transport.
 

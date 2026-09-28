@@ -2,8 +2,9 @@
 
 ## Status and boundary
 
-This is a deferred post-stable optional program, split into independently admitted
-Phase 11 features. It is not part of WQ-A, WQ or the first stable core.
+This is a deferred optional proposal, not part of the working baseline or the
+release qualification of existing behavior. Any implementation needs a concrete
+user scope, owner and separate safety review; old Phase 11 ordering is historical.
 
 The existing Agent mode remains the conversation loop. Local automation adds a new
 target scope and typed tool packages; it does not create a second planner or let

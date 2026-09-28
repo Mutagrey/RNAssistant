@@ -1,14 +1,20 @@
 # Versioning
 
-Status: accepted for Phase 0. Decision: [ADR-0007](../decisions/ADR-0007-release-only-versioning.md).
-Requirements: [master plan, section 13](../stabilization/STABILIZATION_MASTER_PLAN.md#13-версионирование-новая-обязательная-политика).
+Status: active product/build version policy. Original rationale:
+[ADR-0007](../decisions/ADR-0007-release-only-versioning.md). The old
+[master plan, section 13](../stabilization/STABILIZATION_MASTER_PLAN.md#13-версионирование-новая-обязательная-политика)
+is migration history; this document owns the current policy.
 
 ## Policy
 
 - Commit is not release. No version bump, Git tag or automatic push per ordinary commit.
 - Historical baseline is `v16.0.4` (`225a05bb44dd7701892b5f8c98ea2e3b342274a7`); do not create another baseline tag.
-- The development target is set once to `16.1.0-dev` on `stabilization/16.1`.
-- Product version changes only at an explicitly approved, qualified release milestone.
+- The current working baseline keeps `16.1.0-dev` and exact commit identity; it is
+  accepted for ordinary maintenance, not a tagged distribution or formal quality
+  claim. Development continues on `main` by default, without per-task branches.
+- Product version changes only at an explicit release milestone. Open Windows/Office
+  evidence does not block ordinary changes; it remains visible and must be resolved
+  for any release whose declared qualification requires it.
 - Internal refactoring, class moves, parser changes and internal protocol changes do
   not justify `17.0.0`. Major requires an intentional incompatible change to a
   published bridge/API, tool package, durable storage, CLI, automation or integration
