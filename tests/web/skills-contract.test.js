@@ -111,7 +111,7 @@ function library(skills) {
 }
 
 {
-  assert.ok(index.includes("app-skills.js?v=skill-upload-20260906-1"));
+  assert.ok(index.includes("app-skills.js?v=skill-source-timing-20260928-1"));
   assert.equal(/StoragePath|storagePath|response\s*\|\|\s*\[\]/.test(source), false);
   assert.match(source, /expectedPackageRevision/);
   assert.match(source, /skillLibraryMutationRequestType/);

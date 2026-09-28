@@ -87,5 +87,5 @@ document.addEventListener("DOMContentLoaded", function () {
   });
 
   initialize();
-  state.syncTimer = window.setInterval(synchronizeChatState, 15000);
+  state.syncTimer = window.setInterval(synchronizeChatState, 60000);
 });

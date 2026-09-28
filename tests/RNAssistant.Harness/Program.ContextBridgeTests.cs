@@ -608,6 +608,15 @@ namespace RNAssistant.Harness
             var token = BridgeToken(bridge);
 
             AssertTrue(!string.IsNullOrWhiteSpace(token), "bridge token returned");
+            var timing = JObject.Parse(bridge.HandleMessageAsync(
+                "{\"id\":\"timing\",\"type\":\"reportClientTiming\",\"bridgeToken\":\"" + token +
+                "\",\"payload\":{\"kind\":\"startup\",\"bridgeMs\":600,\"renderMs\":200,\"messages\":12}}")
+                .GetAwaiter().GetResult());
+            AssertTrue(timing["ok"].Value<bool>(), "slow client timing uses the authorized typed bridge");
+            var unauthorizedTiming = JObject.Parse(bridge.HandleMessageAsync(
+                "{\"id\":\"timing-denied\",\"type\":\"reportClientTiming\",\"payload\":{\"kind\":\"startup\"}}")
+                .GetAwaiter().GetResult());
+            AssertTrue(!unauthorizedTiming["ok"].Value<bool>(), "client timing requires the bridge token");
         }
 
         private static void BridgeTransportFailureIsTypedAndCorrelated()

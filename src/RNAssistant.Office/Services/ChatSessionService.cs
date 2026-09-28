@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
 using System.Linq;
+using System.Threading;
 using RNAssistant.Core.Models;
 using RNAssistant.Core.Persistence;
 using RNAssistant.Core.Services;
@@ -30,6 +31,7 @@ namespace RNAssistant.Office.Services
         private string _aliasReconciledRuntimeDocumentKey;
         private string _aliasReconciledDocumentPath;
         private bool _aliasReconciliationPending;
+        private long _lastSlowHeaderLogTicks;
         internal Func<string, ChatRunSnapshot> RunStateProvider { get; set; }
         internal Func<IReadOnlyList<ChatSession>> RunSessionsProvider { get; set; }
         internal Func<string, bool> RunOwnershipProvider { get; set; }
@@ -639,13 +641,17 @@ namespace RNAssistant.Office.Services
             var timer = Stopwatch.StartNew();
             var headers = _conversations.ListHeaders();
             var headerMs = timer.ElapsedMilliseconds;
-            var summaries = headers.Select(ToSummary).ToList();
+            var currentHost = _adapter.HostName;
+            var currentDocumentKey = _adapter.DocumentKey;
+            var currentDocumentMs = timer.ElapsedMilliseconds - headerMs;
+            var summaries = headers.Select(header => ToSummary(header, currentHost, currentDocumentKey)).ToList();
+            var summaryMs = timer.ElapsedMilliseconds - headerMs - currentDocumentMs;
             foreach (var running in RunSessionsProvider == null ? new ChatSession[0] : RunSessionsProvider())
             {
                 var runningId = running.Id;
                 var storedIndex = summaries.FindIndex(item =>
                     string.Equals(item.Id, runningId, StringComparison.OrdinalIgnoreCase));
-                var runningSummary = ToSummary(running);
+                var runningSummary = ToSummary(running, currentHost, currentDocumentKey);
                 if (storedIndex >= 0)
                 {
                     CopyStorageUsage(summaries[storedIndex], runningSummary);
@@ -660,23 +666,29 @@ namespace RNAssistant.Office.Services
                 string.Equals(_activeSession.Id, activeId, StringComparison.OrdinalIgnoreCase) &&
                 summaries.All(item => !string.Equals(item.Id, activeId, StringComparison.OrdinalIgnoreCase)))
             {
-                summaries.Insert(0, ToSummary(_activeSession));
+                summaries.Insert(0, ToSummary(_activeSession, currentHost, currentDocumentKey));
             }
 
-            if (timer.ElapsedMilliseconds >= 250)
+            var nowTicks = DateTime.UtcNow.Ticks;
+            var lastLogTicks = Interlocked.Read(ref _lastSlowHeaderLogTicks);
+            if (timer.ElapsedMilliseconds >= 250 &&
+                nowTicks - lastLogTicks >= TimeSpan.TicksPerMinute &&
+                Interlocked.CompareExchange(ref _lastSlowHeaderLogTicks, nowTicks, lastLogTicks) == lastLogTicks)
                 RNAssistant.Office.Diagnostics.RuntimeLog.Info(
-                    "Chat headers timing: scan=" + headerMs + "ms, summaries=" +
-                    (timer.ElapsedMilliseconds - headerMs) + "ms, chats=" + headers.Count +
+                    "Chat headers timing: scan=" + headerMs + "ms, currentDocument=" +
+                    currentDocumentMs + "ms, summaries=" + summaryMs + "ms, running=" +
+                    (timer.ElapsedMilliseconds - headerMs - currentDocumentMs - summaryMs) +
+                    "ms, chats=" + headers.Count +
                     ", jsonlBytes=" + headers.Sum(item => item.JsonlByteLength) + ".");
             return summaries;
         }
 
-        private ChatSessionSummary ToSummary(ChatSession session)
+        private ChatSessionSummary ToSummary(ChatSession session, string currentHost, string currentDocumentKey)
         {
-            return ToSummary(ChatSessionHeaderFactory.Create(session));
+            return ToSummary(ChatSessionHeaderFactory.Create(session), currentHost, currentDocumentKey);
         }
 
-        private ChatSessionSummary ToSummary(ChatSessionHeader header)
+        private ChatSessionSummary ToSummary(ChatSessionHeader header, string currentHost, string currentDocumentKey)
         {
             var id = header.Id;
             return new ChatSessionSummary
@@ -698,7 +710,8 @@ namespace RNAssistant.Office.Services
                 UpdatedUtc = header.UpdatedUtc,
                 LastActivityUtc = header.LastActivityUtc,
                 MessageCount = header.MessageCount,
-                IsCurrentDocument = IsCurrentDocument(header.Host, header.DocumentKey),
+                IsCurrentDocument = string.Equals(header.Host, currentHost, StringComparison.OrdinalIgnoreCase) &&
+                    string.Equals(header.DocumentKey, currentDocumentKey, StringComparison.OrdinalIgnoreCase),
                 RunViewState = header.RunViewState,
                 JsonlByteLength = header.JsonlByteLength,
                 CasBlobCount = header.CasBlobCount,

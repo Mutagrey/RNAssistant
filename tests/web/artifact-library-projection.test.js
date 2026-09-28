@@ -110,7 +110,7 @@ vm.runInContext(source, context, { filename: "app-artifacts.js" });
   const index = fs.readFileSync(path.join(root, "web/index.html"), "utf8");
   assert.ok(index.includes("app-core.js?v=bridge-transport-20260908-1"), "core has the bridge transport cache key");
   assert.ok(index.includes("app-chat-state.js?v=html-source-reuse-20260928-1"), "chat state has the current cache key");
-  assert.ok(index.includes("app-chat-session.js?v=chat-sync-poll-20260928-1"), "chat session has the current cache key");
+  assert.ok(index.includes("app-chat-session.js?v=startup-timing-20260928-1"), "chat session has the current cache key");
   assert.ok(index.includes("app-artifacts.js?v=shared-markdown-20260908-1"), "artifact cards have the working-set cache key");
   assert.ok(index.includes("app-html-workspace-model.js?v=html-read-20260906-1"), "artifact selection model has the gallery cache key");
   assert.ok(index.includes("app-html-workspace.js?v=html-read-20260906-1"), "artifact actions have the current resource cache key");

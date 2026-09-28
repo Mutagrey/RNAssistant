@@ -617,9 +617,17 @@ namespace RNAssistant.Office
                 return;
             }
 
+            var timer = Stopwatch.StartNew();
             RunViewStateProjector.StampCurrentRun(session);
+            var runViewMs = timer.ElapsedMilliseconds;
             _conversationStore.Save(session);
+            var storageMs = timer.ElapsedMilliseconds - runViewMs;
             _chatSessions.NotifySaved(session);
+            if (timer.ElapsedMilliseconds >= 500)
+                RNAssistant.Office.Diagnostics.RuntimeLog.Info(
+                    "Chat save timing: chat=" + session.Id + ", runView=" + runViewMs + "ms, storage=" + storageMs +
+                    "ms, notify=" + (timer.ElapsedMilliseconds - runViewMs - storageMs) +
+                    "ms, messages=" + (session.Messages == null ? 0 : session.Messages.Count) + ".");
         }
 
         private static bool HasCompletedExchange(ChatSession session)

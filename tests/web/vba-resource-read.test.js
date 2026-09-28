@@ -109,7 +109,7 @@ function fixture(text = "Sub Main()\r\n'😀\r\nEnd Sub\r\n") {
     });
     ["app-chat-state.js", "app-chat-session.js"].forEach(file => {
       assert.ok(page.includes(file + "?v=" +
-        (file === "app-chat-state.js" ? "html-source-reuse-20260928-1" : "chat-sync-poll-20260928-1")));
+        (file === "app-chat-state.js" ? "html-source-reuse-20260928-1" : "startup-timing-20260928-1")));
     });
     console.log("PASS VBA resource read: cancellation aborts active transfer and is wired to owner lifecycle");
   }

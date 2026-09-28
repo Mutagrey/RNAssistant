@@ -130,7 +130,7 @@ function fixture(loadPrompts = true) {
   {
     ["app-prompts.js", "app-settings.js", "app-chat-state.js", "app-chat-session.js"].forEach(file => assert.ok(read("index.html").includes(file + "?v=" +
       (file === "app-chat-state.js" ? "html-source-reuse-20260928-1" :
-       file === "app-chat-session.js" ? "chat-sync-poll-20260928-1" : "prompt-source-20260906-1"))));
+       file === "app-chat-session.js" ? "startup-timing-20260928-1" : "prompt-source-20260906-1"))));
     assert.ok(read("js/app-prompts.js").includes("fetch: window.fetch.bind(window)"));
     assert.ok(!read("js/app-settings.js").includes("readPromptSettings")); console.log("PASS direct-cutover delivery keys and retired form reader removal");
   }

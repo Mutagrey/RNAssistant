@@ -34,6 +34,20 @@ namespace RNAssistant.Office
 
         private void ReportModelRequestDiagnostics(LlmRequestDiagnosticUpdate update)
         {
+            if (update != null && update.TotalMs.GetValueOrDefault() >= 1000)
+            {
+                var headerWaitMs = update.ResponseHeadersMs.HasValue && update.PreparationMs.HasValue
+                    ? update.ResponseHeadersMs.Value - update.PreparationMs.Value : -1;
+                var firstDataWaitMs = update.FirstChunkMs.HasValue && update.ResponseHeadersMs.HasValue
+                    ? update.FirstChunkMs.Value - update.ResponseHeadersMs.Value : -1;
+                RuntimeLog.Info("Model request timing: id=" + update.RequestId + ", prepare=" +
+                    (update.PreparationMs.HasValue ? update.PreparationMs.Value : -1) +
+                    "ms, headersWait=" + headerWaitMs + "ms, firstDataWait=" +
+                    firstDataWaitMs + "ms, total=" + update.TotalMs.Value +
+                    "ms, requestBytes=" + (update.RequestBytes.HasValue ? update.RequestBytes.Value : -1) +
+                    ", http=" + (update.StatusCode.HasValue ? update.StatusCode.Value : -1) +
+                    ", phase=" + update.Phase + ".");
+            }
             var handler = ModelRequestDiagnostics;
             if (handler != null) handler(update);
         }

@@ -147,10 +147,11 @@ function createSyncContext() {
 
   const index = fs.readFileSync(path.join(root, "web/index.html"), "utf8");
   assert.ok(index.includes("app-core.js?v=bridge-transport-20260908-1"), "app-core.js cache key was bumped");
-  ["app-chat-run.js", "app-chat-edit.js"].forEach(asset => {
-    assert.ok(index.includes(asset + "?v=chat-sync-20260903-1"), asset + " cache key was bumped");
-  });
-  assert.ok(index.includes("app-chat-session.js?v=chat-sync-poll-20260928-1"), "chat session cache key was bumped");
+  assert.ok(index.includes("app-chat-run.js?v=response-render-timing-20260928-1"), "chat run cache key was bumped");
+  assert.ok(index.includes("app-chat-edit.js?v=chat-sync-20260903-1"), "chat edit cache key was bumped");
+  assert.ok(index.includes("app-chat-session.js?v=startup-timing-20260928-1"), "chat session cache key was bumped");
+  assert.ok(fs.readFileSync(path.join(root, "web/js/app.js"), "utf8")
+    .includes("window.setInterval(synchronizeChatState, 60000)"), "background catalog scan is limited to once per minute");
   console.log("OK 5/5");
 }()).catch(error => {
   console.error(error.stack || error);

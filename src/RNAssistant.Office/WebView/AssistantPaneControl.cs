@@ -24,6 +24,7 @@ namespace RNAssistant.Office.WebView
         private readonly System.Threading.CancellationTokenSource _lifetimeCancellation;
         private WebView2 _webView;
         private CoreWebView2Controller _webViewController;
+        private Stopwatch _initialNavigationTimer;
         private string _trustedDocumentUri;
         private bool _webContentWantsKeyboard;
         private bool _resourcesDisposed;
@@ -107,12 +108,14 @@ namespace RNAssistant.Office.WebView
             var cancellationToken = _lifetimeCancellation.Token;
             cancellationToken.ThrowIfCancellationRequested();
             RuntimeLog.Info("WebView2 initialization started. WebRoot=" + _webRoot);
+            var startupTimer = Stopwatch.StartNew();
             var errors = new StringBuilder();
             var candidates = BuildEnvironmentCandidates();
             for (var i = 0; i < candidates.Count; i++)
             {
                 cancellationToken.ThrowIfCancellationRequested();
                 var candidate = candidates[i];
+                var candidateStartMs = startupTimer.ElapsedMilliseconds;
                 try
                 {
                     if (i > 0)
@@ -123,10 +126,18 @@ namespace RNAssistant.Office.WebView
                     Directory.CreateDirectory(candidate.UserDataFolder);
                     RuntimeLog.Info("WebView2 candidate=" + candidate.Name + ", userData=" + candidate.UserDataFolder);
                     var environment = await CoreWebView2Environment.CreateAsync(candidate.BrowserFolder, candidate.UserDataFolder).ConfigureAwait(true);
+                    var environmentMs = startupTimer.ElapsedMilliseconds - candidateStartMs;
                     cancellationToken.ThrowIfCancellationRequested();
                     await _webView.EnsureCoreWebView2Async(environment).ConfigureAwait(true);
+                    var controlMs = startupTimer.ElapsedMilliseconds - candidateStartMs - environmentMs;
                     cancellationToken.ThrowIfCancellationRequested();
                     ConfigureInitializedWebView();
+                    var candidateMs = startupTimer.ElapsedMilliseconds - candidateStartMs;
+                    if (startupTimer.ElapsedMilliseconds >= 500)
+                        RuntimeLog.Info("WebView startup timing: total=" + startupTimer.ElapsedMilliseconds +
+                            "ms, attempts=" + (i + 1) + ", candidate=" + candidate.Name +
+                            ", environment=" + environmentMs + "ms, control=" + controlMs +
+                            "ms, configure=" + (candidateMs - environmentMs - controlMs) + "ms.");
                     return;
                 }
                 catch (OperationCanceledException)
@@ -155,6 +166,7 @@ namespace RNAssistant.Office.WebView
             var core = _webView.CoreWebView2;
             core.WebMessageReceived += OnWebMessageReceived;
             core.NavigationStarting += OnNavigationStarting;
+            core.NavigationCompleted += OnNavigationCompleted;
             core.FrameNavigationStarting += OnFrameNavigationStarting;
             core.NewWindowRequested += OnNewWindowRequested;
             core.PermissionRequested += OnPermissionRequested;
@@ -180,7 +192,17 @@ namespace RNAssistant.Office.WebView
             }
 
             RuntimeLog.Info("WebView navigating to " + indexPath);
+            _initialNavigationTimer = Stopwatch.StartNew();
             _webView.Source = new Uri(indexPath);
+        }
+
+        private void OnNavigationCompleted(object sender, CoreWebView2NavigationCompletedEventArgs e)
+        {
+            var timer = _initialNavigationTimer;
+            _initialNavigationTimer = null;
+            if (timer != null && timer.ElapsedMilliseconds >= 500)
+                RuntimeLog.Info("WebView navigation timing: load=" + timer.ElapsedMilliseconds +
+                    "ms, success=" + e.IsSuccess + ".");
         }
 
         private async void OnResourceDataRequested(object sender, CoreWebView2WebResourceRequestedEventArgs e)
@@ -566,6 +588,7 @@ namespace RNAssistant.Office.WebView
                 {
                     core.WebMessageReceived -= OnWebMessageReceived;
                     core.NavigationStarting -= OnNavigationStarting;
+                    core.NavigationCompleted -= OnNavigationCompleted;
                     core.FrameNavigationStarting -= OnFrameNavigationStarting;
                     core.NewWindowRequested -= OnNewWindowRequested;
                     core.PermissionRequested -= OnPermissionRequested;

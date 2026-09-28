@@ -35,6 +35,9 @@ path/title, folder/mail id и selection reference. Долгоживущие COM-
   обновляют список. Пользователь явно меняет рабочий документ.
 - `Auto follow` — launcher activation сразу меняет выбранный target.
 
+Проверка foreground Office в `Auto follow` не запускается, пока фокус находится
+внутри окна RN Assistant.
+
 Уже принятый run закреплён за exact document session и не следует за фокусом.
 
 ## Safety and runtime limits
@@ -47,7 +50,7 @@ path/title, folder/mail id и selection reference. Долгоживущие COM-
 - COM calls проходят через `DispatchedOfficeApplicationAdapter` и выделенный STA.
 - WebView bridge не выполняет полную загрузку/проекцию чата или agent/tool run в
   Office UI callback. `listChats`, `getChatState`, `selectChat`, `sendChat`,
-  `confirmAgentTool` и `runTool` сначала переходят на cancellable worker boundary;
+  `init`, `confirmAgentTool` и `runTool` сначала переходят на cancellable worker boundary;
   Office-owned действия внутри них по-прежнему маршалятся через bound dispatcher.
   Поэтому долгий run не блокирует доставку cancel и chat-navigation команд.
 - Bridge request разбирается один раз как typed envelope. Любая terminal response,
@@ -59,7 +62,9 @@ path/title, folder/mail id и selection reference. Долгоживущие COM-
   `listChats`: summaries чатов/документов, active id и run view. Полный transcript,
   context, artifacts и HTML workspace загружаются только через `init`, явный выбор
   или действие чата, либо через `getChatState`, когда требуется обновить более
-  новую revision активного чата.
+  новую revision активного чата. При фокусе/возврате вкладки проверка запускается
+  сразу; обычный фоновый опрос идёт раз в минуту и пропускается во время активной
+  отправки сообщения.
 - WebView не рендерит скрытые transcript, Artifact Library/HTML workspace и
   Library surfaces при применении состояния. CodeMirror создаётся только при
   первом открытии владеющей вкладки; ECharts загружается только для фактической
@@ -78,6 +83,15 @@ Desktop не требует ClickOnce. `install-desktop-local.cmd` сохран�
 `RNASSISTANT_DESKTOP_EXE` в CurrentUser environment. Logs находятся в
 `%LOCALAPPDATA%\OfficeAssistant\logs`; fixed WebView2 fallback — в
 `vendor/webview2-runtime`.
+
+Для диагностики задержек Desktop log пишет `Attach timing`; runtime log
+`rnassistant.log` в каталоге данных приложения пишет медленные `WebView startup`,
+`WebView navigation`, `Startup`, `Chat headers`, `Chat model setup`,
+`Model request`, `Chat save`, `Chat turn completion`, `Skill source`,
+`Bridge response timing` и `WebView render timing`. Bridge разделяет выполнение
+запроса и сериализацию ответа; WebView передаёт только медленные замеры запуска,
+ответа чата и чтения/отрисовки Skill в тот же runtime log.
+Записи содержат время и размеры, без текста чата или запроса.
 
 Реальные multi-instance attach, Office modal/busy states и production STA/COM
 cleanup требуют Windows x64 + Office x64 + VS 2022 qualification.

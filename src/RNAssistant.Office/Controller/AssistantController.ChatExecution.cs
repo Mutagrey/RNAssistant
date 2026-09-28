@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
@@ -8,6 +9,7 @@ using RNAssistant.Core.Models;
 using RNAssistant.Core.Persistence;
 using RNAssistant.Core.Services;
 using RNAssistant.Office.Contracts;
+using RNAssistant.Office.Diagnostics;
 using RNAssistant.Office.Services;
 using RNAssistant.Office.Tools;
 
@@ -31,6 +33,7 @@ namespace RNAssistant.Office
             }
 
             var settings = _settingsService.Load();
+            var intakeTimer = Stopwatch.StartNew();
             var session = LoadAddressedSession(chatId);
             runId = string.IsNullOrWhiteSpace(runId) ? Guid.NewGuid().ToString("N") : runId;
             var attachments = _chatResourceIngestion.LoadDrafts(session, resourceDraftIds);
@@ -39,6 +42,10 @@ namespace RNAssistant.Office
             {
                 throw new InvalidOperationException(invalidAttachment.FileName + ": " + invalidAttachment.Error);
             }
+
+            if (intakeTimer.ElapsedMilliseconds >= 500)
+                RuntimeLog.Info("Chat send intake timing: sessionAndDrafts=" +
+                    intakeTimer.ElapsedMilliseconds + "ms.");
 
             return await ExecuteChatTurnAsync(
                 session,
@@ -409,6 +416,7 @@ namespace RNAssistant.Office
             string runId)
         {
             session = session ?? LoadAddressedSession(null);
+            var turnTimer = Stopwatch.StartNew();
             var sessionId = session.Id;
             runId = string.IsNullOrWhiteSpace(runId) ? Guid.NewGuid().ToString("N") : runId;
 
@@ -504,7 +512,9 @@ namespace RNAssistant.Office
                     {
                         ChatResourceReferenceService.LinkMessageResources(session, firstRunMessageIndex);
                     }
+                    var initialSaveStartMs = turnTimer.ElapsedMilliseconds;
                     _conversationStore.Save(session);
+                    var initialSaveMs = turnTimer.ElapsedMilliseconds - initialSaveStartMs;
                     preparedTurnPersisted = true;
                     causalTrace = RunCausalTrace.Begin(_eventStore, session);
                     RunCausalTrace.Record(new CausalTraceRecord(SessionEventKind.RunStartedObservation)
@@ -514,7 +524,9 @@ namespace RNAssistant.Office
                     _chatSessions.NotifySaved(session);
                     // The committed turn and exact resource revisions must reach the UI queue
                     // before attachment helpers or the primary model can start transport.
+                    var initialStateStartMs = turnTimer.ElapsedMilliseconds;
                     ReportExternalChatState(chatStateChanged, session);
+                    var initialStateMs = turnTimer.ElapsedMilliseconds - initialStateStartMs;
                     if (commitUserAttachments && appendedUserMessage != null)
                     {
                         _chatResourceIngestion.DeleteDrafts(appendedUserMessage);
@@ -525,6 +537,10 @@ namespace RNAssistant.Office
                     }
                     input.MessagesToDeleteAfterSave = null;
                     _chatRuns.UpdateSessionSnapshot(sessionId, runId, session);
+                    if (turnTimer.ElapsedMilliseconds >= 500)
+                        RuntimeLog.Info("Chat turn preparation timing: total=" +
+                            turnTimer.ElapsedMilliseconds + "ms, initialSave=" + initialSaveMs +
+                            "ms, statePush=" + initialStateMs + "ms.");
                 }
                 catch (Exception ex)
                 {
@@ -566,6 +582,7 @@ namespace RNAssistant.Office
                     var turnUserMessage = appendedUserMessage ?? (session.Messages ?? new List<ChatMessage>())
                         .LastOrDefault(message => message != null && !message.ProtocolMessage &&
                             string.Equals(message.Role, "user", StringComparison.OrdinalIgnoreCase));
+                    var setupStartMs = turnTimer.ElapsedMilliseconds;
                     var attachmentAnalysis = await _attachmentAnalysisService.EnsureAsync(
                         text,
                         session,
@@ -573,6 +590,7 @@ namespace RNAssistant.Office
                         attachmentRouting,
                         runProgress,
                         runCancellation.Token).ConfigureAwait(false);
+                    var attachmentMs = turnTimer.ElapsedMilliseconds - setupStartMs;
                     var primaryText = AttachmentAnalysisService.BuildPrimaryRequest(
                         text,
                         attachmentAnalysis);
@@ -606,6 +624,7 @@ namespace RNAssistant.Office
                             "Не удалось обновить сжатый контекст; продолжаю с сохранённой историей.", null, activity));
                         runProgress("compaction_failed", activity.ResultMessage, activity);
                     }
+                    var compactionMs = turnTimer.ElapsedMilliseconds - setupStartMs - attachmentMs;
                     var tools = (executionMode == ChatModes.Agent
                             ? _toolCatalog.GetFreshConversationTools()
                             : _toolCatalog.GetVisibleTools())
@@ -614,6 +633,10 @@ namespace RNAssistant.Office
                     var skills = executionMode != ChatModes.Chat
                         ? _skillCatalog.GetVisibleSkills().Where(skill => skill.Enabled).ToList()
                         : new List<SkillDefinition>();
+                    var catalogMs = turnTimer.ElapsedMilliseconds - setupStartMs - attachmentMs - compactionMs;
+                    if (attachmentMs + compactionMs + catalogMs >= 500)
+                        RuntimeLog.Info("Chat model setup timing: attachments=" + attachmentMs +
+                            "ms, compaction=" + compactionMs + "ms, catalogs=" + catalogMs + "ms.");
                     try
                     {
                         completion = await _conversationRunService.ExecuteAsync(
@@ -659,10 +682,17 @@ namespace RNAssistant.Office
                     ChatTitleBuilder.ApplyFallback(session, text, completion.AssistantText);
                 }
                 ReportProgress(runProgress, "saving", "Сохраняю историю чата...");
+                var finalStartMs = turnTimer.ElapsedMilliseconds;
                 FinalizeControllerRun(
                     session, firstRunMessageIndex, firstRunMessageIndex,
                     runId, completion, null);
+                var finalSaveMs = turnTimer.ElapsedMilliseconds - finalStartMs;
                 response = CreateSendChatResponse(session, settings, completion);
+                var finalResponseMs = turnTimer.ElapsedMilliseconds - finalStartMs - finalSaveMs;
+                if (finalSaveMs + finalResponseMs >= 500)
+                    RuntimeLog.Info("Chat turn completion timing: chat=" + session.Id + ", finalSave=" + finalSaveMs +
+                        "ms, responseProjection=" + finalResponseMs + "ms, messages=" +
+                        (session.Messages == null ? 0 : session.Messages.Count) + ".");
                 RunCausalTrace.Projected("SendChatResponse");
                 if (shouldGenerateLlmTitle)
                     assistantTitleSeed = ChatTitleBuilder.ResolveAssistantSeed(

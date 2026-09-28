@@ -130,7 +130,7 @@ async function settle() {
   const index = fs.readFileSync(path.join(root, "web/index.html"), "utf8");
   assert.ok(index.includes("app-attachments.js?v=vba-upload-20260906-1"), "attachment upload has the shared uploader cache key");
   assert.ok(index.includes("app-chat-composer.js?v=multi-chat-20260902-1"), "composer retains its unchanged cache key");
-  assert.ok(index.includes("app-chat-run.js?v=chat-sync-20260903-1"), "app-chat-run.js has the chat sync cache key");
+  assert.ok(index.includes("app-chat-run.js?v=response-render-timing-20260928-1"), "app-chat-run.js has the current cache key");
   console.log("PASS attachment staging: changed UI modules have current cache keys");
   console.log("OK 4/4");
 }()).catch(error => {

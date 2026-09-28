@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
@@ -61,6 +62,7 @@ namespace RNAssistant.Office.WebView
                 if (request == null) throw new InvalidOperationException("WebView bridge request is missing.");
                 id = request.Id;
                 var type = (request.Type ?? string.Empty).Trim();
+                var timer = Stopwatch.StartNew();
                 var payload = request.Payload ?? JValue.CreateNull();
                 if (RequiresBridgeToken(type) && !string.Equals(request.BridgeToken, _bridgeToken, StringComparison.Ordinal))
                 {
@@ -90,8 +92,25 @@ namespace RNAssistant.Office.WebView
 
                 switch (type)
                 {
+                    case "reportClientTiming":
+                        var clientTiming = Payload<ClientTimingPayload>(payload);
+                        if ((string.Equals(clientTiming.Kind, "startup", StringComparison.Ordinal) ||
+                                string.Equals(clientTiming.Kind, "chatResponse", StringComparison.Ordinal) ||
+                                string.Equals(clientTiming.Kind, "skillSource", StringComparison.Ordinal)) &&
+                            clientTiming.BridgeMs >= 0 && clientTiming.BridgeMs <= 600000 &&
+                            clientTiming.RenderMs >= 0 && clientTiming.RenderMs <= 600000 &&
+                            clientTiming.Messages >= 0 && clientTiming.Messages <= 100000 &&
+                            clientTiming.BridgeMs + clientTiming.RenderMs >=
+                                (string.Equals(clientTiming.Kind, "startup", StringComparison.Ordinal) ? 500 : 250))
+                            RuntimeLog.Info("WebView render timing: kind=" + clientTiming.Kind +
+                                ", bridge=" + clientTiming.BridgeMs + "ms, render=" +
+                                clientTiming.RenderMs + "ms, messages=" + clientTiming.Messages + ".");
+                        responsePayload = null;
+                        break;
                     case "init":
-                        responsePayload = WithBridgeToken(_controller.Initialize());
+                        responsePayload = await RunBridgeWorkAsync(
+                            () => WithBridgeToken(_controller.Initialize()),
+                            cancellationToken).ConfigureAwait(false);
                         break;
                     case "listChats":
                         responsePayload = await RunBridgeWorkAsync(
@@ -572,7 +591,17 @@ namespace RNAssistant.Office.WebView
                         throw new InvalidOperationException("Unknown bridge message: " + type);
                 }
 
-                return Success(id, responsePayload);
+                var handleMs = timer.ElapsedMilliseconds;
+                var serialized = Success(id, responsePayload);
+                var serializeMs = timer.ElapsedMilliseconds - handleMs;
+                if ((string.Equals(type, "init", StringComparison.OrdinalIgnoreCase) &&
+                        handleMs + serializeMs >= 500) ||
+                    (serializeMs >= 250 && (string.Equals(type, "sendChat", StringComparison.OrdinalIgnoreCase) ||
+                        string.Equals(type, "getChatState", StringComparison.OrdinalIgnoreCase) ||
+                        string.Equals(type, "selectChat", StringComparison.OrdinalIgnoreCase))))
+                    RuntimeLog.Info("Bridge response timing: type=" + type + ", handle=" + handleMs +
+                        "ms, serialize=" + serializeMs + "ms, chars=" + serialized.Length + ".");
+                return serialized;
             }
             catch (OperationCanceledException ex)
             {

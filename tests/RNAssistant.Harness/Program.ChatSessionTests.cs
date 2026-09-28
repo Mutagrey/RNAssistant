@@ -125,6 +125,16 @@ namespace RNAssistant.Harness
                 AssertEqual(created.AddHours(3), header.LastActivityUtc, "response advances activity after request");
                 AssertEqual(header.LastActivityUtc, ChatSessionHeaderFactory.Create(session).LastActivityUtc,
                     "live and cold header activity agree");
+
+                store.Create(adapter.HostName, adapter.DocumentKey, adapter.DocumentTitle, "Second");
+                var adapterReads = 0;
+                var countedAdapter = new ThreadRecordingOfficeAdapter(adapter, () => adapterReads++);
+                var countedService = new ChatSessionService(countedAdapter, ConversationStore(store));
+                var summaries = countedService.GetChatSummaries(session.Id);
+                AssertEqual(2, summaries.Count, "both chat headers are projected");
+                AssertEqual(2, adapterReads, "current Office identity is read once for the whole chat catalog");
+                AssertTrue(summaries.All(item => item.IsCurrentDocument),
+                    "captured document identity still marks each matching chat");
             });
         }
 

@@ -532,10 +532,17 @@ async function initialize() {
     return;
   }
   var navigationVersion = beginChatNavigation();
+  var startedAt = window.performance && window.performance.now ? window.performance.now() : Date.now();
   state.initializePromise = (async function () {
     try {
       var init = await send("init");
+      var bridgeMs = (window.performance && window.performance.now ? window.performance.now() : Date.now()) - startedAt;
       if (navigationVersion === state.chatNavigationVersion) applyInitState(init);
+      var renderMs = (window.performance && window.performance.now ? window.performance.now() : Date.now()) - startedAt - bridgeMs;
+      if (bridgeMs + renderMs >= 500) send("reportClientTiming", {
+        kind: "startup", bridgeMs: Math.round(bridgeMs), renderMs: Math.round(renderMs),
+        messages: (state.messages || []).length
+      }).catch(function () {});
     } catch (error) {
       if (navigationVersion === state.chatNavigationVersion) applyBridgeUnavailableState(error);
     } finally {

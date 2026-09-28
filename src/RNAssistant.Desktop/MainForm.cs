@@ -1,4 +1,5 @@
 using System;
+using System.Diagnostics;
 using System.Drawing;
 using System.Windows.Forms;
 using RNAssistant.Office;
@@ -35,7 +36,7 @@ namespace RNAssistant.Desktop
             _autoFollowTimer = new Timer { Interval = 750 };
             _autoFollowTimer.Tick += delegate
             {
-                if (_targetRegistry.Mode != TargetSelectionMode.AutoFollow)
+                if (_targetRegistry.Mode != TargetSelectionMode.AutoFollow || ContainsFocus)
                 {
                     return;
                 }
@@ -154,6 +155,7 @@ namespace RNAssistant.Desktop
 
             DispatchedOfficeApplicationAdapter adapter = null;
             AssistantRuntime runtime = null;
+            var attachTimer = Stopwatch.StartNew();
             try
             {
                 DesktopLog.Info("Attach requested. Target=" + entry.DisplayName + ", hwnd=" + entry.Target.Hwnd + ", pid=" + entry.Target.ProcessId);
@@ -162,10 +164,13 @@ namespace RNAssistant.Desktop
                 {
                     return _adapterProvider.Create(target.Host, target, dispatcher);
                 });
+                var adapterMs = attachTimer.ElapsedMilliseconds;
                 runtime = new AssistantRuntime(adapter);
+                var runtimeMs = attachTimer.ElapsedMilliseconds - adapterMs;
                 DisposeCurrentRuntime();
                 ClearContent();
                 DisposeCurrentAdapter();
+                var replaceMs = attachTimer.ElapsedMilliseconds - adapterMs - runtimeMs;
                 _runtime = runtime;
                 runtime = null;
                 _currentAdapter = adapter;
@@ -173,6 +178,7 @@ namespace RNAssistant.Desktop
                 var pane = _runtime.CreatePaneControl();
                 pane.Dock = DockStyle.Fill;
                 _content.Controls.Add(pane);
+                var paneMs = attachTimer.ElapsedMilliseconds - adapterMs - runtimeMs - replaceMs;
                 Text = "RN Assistant - " + _runtime.Controller.HostName;
                 if (!string.IsNullOrWhiteSpace(action))
                 {
@@ -182,6 +188,11 @@ namespace RNAssistant.Desktop
                 Show();
                 WindowState = FormWindowState.Normal;
                 Activate();
+                if (attachTimer.ElapsedMilliseconds >= 500)
+                    DesktopLog.Info("Attach timing: adapter=" + adapterMs + "ms, runtime=" +
+                        runtimeMs + "ms, replace=" + replaceMs + "ms, pane=" + paneMs +
+                        "ms, ui=" + (attachTimer.ElapsedMilliseconds - adapterMs - runtimeMs -
+                            replaceMs - paneMs) + "ms.");
             }
             catch (Exception ex)
             {

@@ -9,6 +9,21 @@ using RNAssistant.Core.Services;
 
 namespace RNAssistant.Office.Contracts
 {
+    public sealed class ClientTimingPayload
+    {
+        [JsonProperty("kind")]
+        public string Kind { get; set; }
+
+        [JsonProperty("bridgeMs")]
+        public int BridgeMs { get; set; }
+
+        [JsonProperty("renderMs")]
+        public int RenderMs { get; set; }
+
+        [JsonProperty("messages")]
+        public int Messages { get; set; }
+    }
+
     public sealed class ModelRequestDiagnosticsMessage
     {
         [JsonProperty("type")]

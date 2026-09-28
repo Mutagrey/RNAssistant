@@ -498,6 +498,7 @@ async function loadSelectedSkillSource(skill, path) {
   try {
     updateSkillSourceReadOnly();
     active();
+    var startedAt = window.performance && window.performance.now ? window.performance.now() : Date.now();
     var opening = send("readSkillSource", {
       type: "rnassistant.skillSourceRequest",
       contractVersion: skillLibraryContractVersion,
@@ -518,6 +519,7 @@ async function loadSelectedSkillSource(skill, path) {
     if (text.length !== typed.totalCharacters) throw new Error("Неполный снимок источника навыка.");
     await closeSkillSourceRead(operation);
     active();
+    var readMs = (window.performance && window.performance.now ? window.performance.now() : Date.now()) - startedAt;
     skill._sourceDrafts[path] = text;
     skill._sourceLoaded[path] = true;
     delete skill._sourceDirty[path];
@@ -526,6 +528,10 @@ async function loadSelectedSkillSource(skill, path) {
       setSkillEditorValue(skill._sourceDrafts[path]);
       renderSkillPreview();
     }
+    var renderMs = (window.performance && window.performance.now ? window.performance.now() : Date.now()) - startedAt - readMs;
+    if (readMs + renderMs >= 250) send("reportClientTiming", {
+      kind: "skillSource", bridgeMs: Math.round(readMs), renderMs: Math.round(renderMs), messages: 0
+    }).catch(function () {});
   } catch (error) {
     if (current()) log(error.detail || error.message, "error");
   } finally {

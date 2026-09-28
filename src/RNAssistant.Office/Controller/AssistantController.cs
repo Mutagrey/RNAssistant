@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
@@ -223,12 +224,25 @@ namespace RNAssistant.Office
 
         public InitResponse Initialize()
         {
+            var timer = Stopwatch.StartNew();
             var session = LoadSession(null);
+            var sessionMs = timer.ElapsedMilliseconds;
             var activeId = session.Id;
             var context = LoadContext(session);
             var settings = _settingsService.Load();
             var chatSettings = ResolveChatSettings(session, settings);
-            return new InitResponse
+            var contextMs = timer.ElapsedMilliseconds - sessionMs;
+            var officeContext = _officeContextCapture.CaptureOfficeContext();
+            var officeMs = timer.ElapsedMilliseconds - sessionMs - contextMs;
+            var chats = _chatSessions.GetChatSummaries(activeId);
+            var chatsMs = timer.ElapsedMilliseconds - sessionMs - contextMs - officeMs;
+            var documents = ListOpenDocuments();
+            var documentsMs = timer.ElapsedMilliseconds - sessionMs - contextMs - officeMs - chatsMs;
+            var prompts = _toolExecutor.GetPromptLibrary();
+            var tools = ToolLibraryResponse.From(_toolCatalog.GetVisibleTools());
+            var skills = GetSkills();
+            var librariesMs = timer.ElapsedMilliseconds - sessionMs - contextMs - officeMs - chatsMs - documentsMs;
+            var response = new InitResponse
             {
                 SessionRevision = session == null ? 0 : session.Revision,
                 RunViewState = RunViewStateProjector.Create(session),
@@ -236,21 +250,20 @@ namespace RNAssistant.Office
                 Host = _adapter.HostName,
                 DocumentKey = _adapter.DocumentKey,
                 Title = _adapter.DocumentTitle,
-                OfficeContext = _officeContextCapture.CaptureOfficeContext(),
+                OfficeContext = officeContext,
                 ActiveChatId = activeId,
                 ActiveChatModel = session == null ? string.Empty : session.Model,
                 ActiveChatMode = ChatModes.Normalize(session == null ? null : session.Mode),
                 ActiveChatReasoning = session != null && session.ReasoningEnabled,
-                Chats = _chatSessions.GetChatSummaries(activeId),
-                Documents = ListOpenDocuments(),
+                Chats = chats,
+                Documents = documents,
                 Settings = SettingsControlsDto.From(settings),
-                Prompts = _toolExecutor.GetPromptLibrary(),
+                Prompts = prompts,
                 HasApiKey = !string.IsNullOrWhiteSpace(_settingsService.LoadApiKey()),
                 HasHistorySecret = !string.IsNullOrWhiteSpace(_settingsService.LoadHistorySecret()),
-                Tools = ToolLibraryResponse.From(
-                    _toolCatalog.GetVisibleTools()),
+                Tools = tools,
                 ToolsPath = _paths.ToolsDirectory,
-                Skills = GetSkills(),
+                Skills = skills,
                 SkillsPath = _paths.SkillsDirectory,
                 Context = ChatCloneService.CloneContext(context),
                 Messages = ChatCloneService.CloneMessages(session.Messages),
@@ -264,6 +277,13 @@ namespace RNAssistant.Office
                 HtmlWorkspace = HtmlWorkspaceEditorResourceService.Metadata(session),
                 QuickAction = DequeueQuickAction()
             };
+            if (timer.ElapsedMilliseconds >= 500)
+                RuntimeLog.Info("Startup timing: session=" + sessionMs + "ms, context=" +
+                    contextMs + "ms, office=" + officeMs + "ms, chats=" + chatsMs +
+                    "ms, documents=" + documentsMs + "ms, libraries=" + librariesMs +
+                    "ms, projection=" + (timer.ElapsedMilliseconds - sessionMs - contextMs - officeMs -
+                        chatsMs - documentsMs - librariesMs) + "ms.");
+            return response;
         }
 
         internal IReadOnlyList<OpenOfficeDocumentDto> ListOpenDocuments()

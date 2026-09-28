@@ -44,8 +44,14 @@ async function sendChat(text, attachments, targetChatId) {
   renderChatSessions();
   try {
     var response = await request;
+    var applyStartedAt = window.performance && window.performance.now ? window.performance.now() : Date.now();
     if (state.activeChatId === sentChatId) applyChatState(response);
     else applyChatCatalogState(response);
+    var applyMs = (window.performance && window.performance.now ? window.performance.now() : Date.now()) - applyStartedAt;
+    if (applyMs >= 250) send("reportClientTiming", {
+      kind: "chatResponse", bridgeMs: 0, renderMs: Math.round(applyMs),
+      messages: (state.messages || []).length
+    }).catch(function () {});
     if (state.activeChatId === sentChatId) clearSendError();
     if (response.toolResults && response.toolResults.length) {
       logToolResults(response.toolResults);
