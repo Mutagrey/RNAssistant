@@ -41,6 +41,13 @@ namespace RNAssistant.Office.Tools
             // observed revision from discovery. Internal pages pin the first read.
             var reference = selected.Descriptor.Mutable ? new ResourceRef(selected.Reference.Uri) : selected.Reference;
             var representation = ToolArgumentReader.String(context.Arguments, "representation", "auto");
+            // The workspace root has a structure view, but its file members have
+            // source. A model may carry the root's view over to an exact file target.
+            // Negotiate this one read explicitly; the result still reports source.
+            var htmlFileStructureAsSource = representation == ResourceRepresentations.Structure &&
+                string.Equals(selected.Descriptor.Kind, ChatHtmlResourceCatalog.FileKind, StringComparison.Ordinal) &&
+                selected.Descriptor.Representations.Contains(ResourceRepresentations.Source);
+            if (htmlFileStructureAsSource) representation = ResourceRepresentations.Source;
             var structured = representation == "table" || representation == "records";
             var section = ToolArgumentReader.String(context.Arguments, "section", null);
             if (section != null && representation != "text")
@@ -67,7 +74,9 @@ namespace RNAssistant.Office.Tools
                 selected.Scope);
             projection.Section = section;
             var result = RuntimeResult.Ok(
-                section != null ? "Complete selected Markdown section read; coverage is limited to that section." : structured ? "Bounded exact structural view read." : "Complete resource representation read.",
+                htmlFileStructureAsSource
+                    ? "HTML file has no structure view; returned its complete source representation instead. The HTML workspace root has the structure view."
+                    : section != null ? "Complete selected Markdown section read; coverage is limited to that section." : structured ? "Bounded exact structural view read." : "Complete resource representation read.",
                 Serialize(projection),
                 selection.ResourceRefs);
             var attachments = selection.ModelAttachments ?? new ChatAttachment[0];

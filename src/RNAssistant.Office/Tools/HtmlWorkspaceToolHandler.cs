@@ -6,6 +6,7 @@ using System.Threading.Tasks;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
 using RNAssistant.Core.Models;
+using RNAssistant.Core.Services;
 using RNAssistant.Core.Tools;
 using RNAssistant.Office.Runtime;
 using RNAssistant.Office.Services;
@@ -90,22 +91,44 @@ namespace RNAssistant.Office.Tools
                 throw new InvalidOperationException("The current HTML artifact is unavailable.");
             var current = ChatHtmlResourceCatalog.FileReference(_session, artifact, file.Id);
             var hash = TextPatternEngine.Sha256(file.Content ?? string.Empty);
-            var observations = (accepted.ResourceEvidence ?? new List<ResourceEvidence>()).Where(evidence =>
-                evidence != null && evidence.Resource != null &&
-                evidence.Resource.Uri == current.Uri &&
-                evidence.Resource.Revision == current.Revision &&
-                evidence.View == ResourceRepresentations.Source &&
-                evidence.Coverage != null &&
-                string.Equals(evidence.ContentSha256, hash, StringComparison.OrdinalIgnoreCase)).ToArray();
-            if (HasCompleteSource(observations, (file.Content ?? string.Empty).Length)) return null;
+            var acceptedIndex = _session.Messages.IndexOf(accepted);
+            var priorInputs = _session.Messages.Take(acceptedIndex + 1).Where(message =>
+                message != null && message.Role == "assistant" &&
+                message.AcceptedCallOrigin != null && message.RunId == accepted.RunId);
+            // Accepted call evidence proves the complete source was actually shown
+            // to the model. Keep that proof for this run even if a later request
+            // compacts the read or another workspace member advances the root.
+            foreach (var input in priorInputs)
+            {
+                var observations = (input.ResourceEvidence ?? new List<ResourceEvidence>())
+                    .Where(evidence => MatchesCurrentFile(evidence, current, hash)).ToArray();
+                if (HasCompleteSource(observations, (file.Content ?? string.Empty).Length)) return null;
+            }
 
             return HtmlWorkspaceToolOutcome.Error(
-                "Existing HTML file was not read at its current revision: " + path +
-                ". Read its complete source with common.resources_find/read before replacing it, or use common.html_workspace_apply_patch for a focused change.",
+                "The model has not seen complete source for the current HTML file contents in this run: " + path +
+                ". Read its complete source with common.resources_find/read before replacing it, or use common.html_workspace_apply_patch for a focused change. A successful read omitted from model context does not authorize replacement.",
                 null, "html_source_observation_required", false,
                 new ToolRecoveryContract(ToolFailureKind.ConflictNoEffect,
                     ToolRetryPolicy.RefreshRequired, current.Identity,
                     ResourceRepresentations.Source, "HTML file: " + path));
+        }
+
+        private static bool MatchesCurrentFile(ResourceEvidence evidence, ResourceRef current, string hash)
+        {
+            if (evidence == null || evidence.Resource == null || evidence.Coverage == null ||
+                evidence.View != ResourceRepresentations.Source ||
+                !string.Equals(evidence.ContentSha256, hash, StringComparison.OrdinalIgnoreCase)) return false;
+            ResourceAddress observedAddress;
+            ResourceAddress currentAddress;
+            if (!ResourceUri.TryParse(evidence.Resource.Uri, out observedAddress) ||
+                !ResourceUri.TryParse(current.Uri, out currentAddress) ||
+                observedAddress.Provider != currentAddress.Provider ||
+                observedAddress.Segments.Count != 8 || currentAddress.Segments.Count != 8) return false;
+            return observedAddress.Segments[0] == currentAddress.Segments[0] &&
+                observedAddress.Segments[5] == "member" &&
+                observedAddress.Segments[6] == "file" &&
+                observedAddress.Segments[7] == currentAddress.Segments[7];
         }
 
         private static bool HasCompleteSource(IReadOnlyList<ResourceEvidence> evidence, int length)

@@ -424,11 +424,29 @@ namespace RNAssistant.Harness
                 var htmlFind = execute(ResourceToolCatalog.FindToolId,
                     "{\"query\":\"nested/report.html\",\"scope\":\"html\"}");
                 AssertEqual(ToolExecutionOutcome.Ok, htmlFind.Outcome, "published HTML discovery succeeds: " + htmlFind.Message);
-                AssertTrue(((string)JObject.Parse(htmlFind.Result.DataJson)
-                        .SelectToken("items[0].target")).StartsWith(
-                            "HTML file: nested/report.html [created ",
-                            StringComparison.Ordinal),
+                var htmlCandidate = JObject.Parse(htmlFind.Result.DataJson).SelectToken("items[0]");
+                var htmlTarget = (string)htmlCandidate["target"];
+                AssertTrue(htmlTarget.StartsWith(
+                        "HTML file: nested/report.html [created ",
+                        StringComparison.Ordinal),
                     "path resolution is internal to semantic HTML discovery");
+                AssertContains((string)htmlCandidate["usage"], "Read source",
+                    "HTML file discovery names its content view");
+                var htmlRead = execute(ResourceToolCatalog.ReadToolId,
+                    JsonConvert.SerializeObject(new { target = htmlTarget, representation = "structure" }));
+                AssertEqual(ToolExecutionOutcome.Ok, htmlRead.Outcome,
+                    "workspace structure selection on an exact HTML file does not stall the run");
+                AssertContains(htmlRead.Message, "returned its complete source",
+                    "representation negotiation is visible to the model");
+                var htmlReadData = JObject.Parse(htmlRead.Result.DataJson);
+                AssertEqual(ResourceRepresentations.Source, (string)htmlReadData["representation"],
+                    "read result reports actual source representation");
+                AssertEqual("<main>Resolved through native tool</main>", (string)htmlReadData["text"],
+                    "file read returns complete authored content");
+                AssertTrue(htmlRead.ResourceEvidence.Any(item =>
+                        item.View == ResourceRepresentations.Source &&
+                        item.Coverage.Kind == ResourceCoverageKinds.Whole),
+                    "negotiated read retains whole-source evidence for later HTML edits");
                 foreach (var retired in new[]
                 {
                     "common.resources_list",
@@ -1050,6 +1068,10 @@ namespace RNAssistant.Harness
                 ChatHtmlResourceCatalog.DataKind,
                 null,
                 10).Items.Single();
+            var dataCandidate = htmlGateway.Find(htmlSession, dataResource.Title, "html").Items
+                .Single(item => item.Type == "HTML data");
+            AssertContains(dataCandidate.Usage, "binding metadata",
+                "HTML data discovery distinguishes a binding from its source values");
             var binding = JsonConvert.DeserializeObject<HtmlWorkspaceDataBinding>(
                 ReadResource(htmlGateway, htmlSession, dataResource.Reference.Uri, ResourceRepresentations.Text, null, 32000).Result.Text);
             AssertTrue(binding.Resource.IsExact, "HTML data members expose exact binding metadata, not a second body");

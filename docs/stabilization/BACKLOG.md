@@ -37,6 +37,18 @@ in a separate approved slice before updating their baseline. The new
 `common.resources_read` section schema matches its reviewed inventory row.
 This gate remains failed; it is not Windows qualification.
 
+## Resource read prompt wording — 2026-09-28
+
+Owner: Agent/Chat prompt defaults and Resource Fabric. Current Chat instructions
+require `common.resources_find` before every read and forbid `offset`, although a
+semantic target may already be present in `RUNTIME_CONTEXT` and bounded
+`table`/`records` reads accept a row offset. Agent tool instructions say resource
+reads use only scope, target, representation and action, omitting the supported
+`section`, `limit`, `offset`, `fields` and `path` selectors. Correct both defaults
+in one prompt-schema change, then review/reset saved prompts through the existing
+explicit UI flow and run focused prompt/schema tests. Do not silently replace
+saved user instructions while fixing the HTML observation loop.
+
 ## Resource context fixture drift — 2026-09-08
 
 Owner: resource context / harness. On the `d29b1f58` branch, unchanged provider

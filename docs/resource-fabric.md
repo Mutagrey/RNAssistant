@@ -109,6 +109,15 @@ bytes retain that revision; historical LF/CRLF snapshots are never rewritten.
 Model discovery/read uses `common.resources_find/read` with runtime-resolved
 semantic targets and exact internal references/continuations. Live document/VBA
 search providers return typed, non-serialized scan captures independently of matches.
+For HTML, `structure` belongs to the workspace root and lists members; an exact
+`HTML file` target exposes complete `source`. If a model requests `structure` on
+that file target, the model-facing reader explicitly returns complete `source`
+and reports the actual representation. Other unsupported views still fail.
+Whole-file HTML replacement requires a complete source observation shown to the
+model in an accepted request of the same run. The guard checks the stable file
+member identity and exact content hash, so later context reduction or changes to
+other workspace files do not force another read. A changed file, another run's
+observation, or a read excluded from model context cannot authorize replacement.
 An exact domain target query such as `Sheet!A1:B20`, `Excel table: Sales`,
 `Excel name: Sales`, `Word range: 0:100`, or `PowerPoint slide: 2` is a point
 lookup: it resolves that target without scanning unrelated resource catalogs or

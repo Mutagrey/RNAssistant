@@ -615,6 +615,12 @@ namespace RNAssistant.Office.Services
             string type,
             ResourceDescriptor descriptor)
         {
+            if (type == "HTML file")
+                return "Read source for the complete file contents. Structure belongs to the HTML workspace root; a structure request on this file returns source explicitly.";
+            if (type == "HTML workspace")
+                return "Read structure for the file inventory, then find an exact HTML file target and read source for its contents.";
+            if (type == "HTML data")
+                return "Read text for the workspace's data binding metadata. To inspect the bound values, find and read the binding's source target; this member is not a copy of the data.";
             if (type == "Outlook mail")
                 return "Read structure for attachment metadata and targets without reading the mail body. Pass a copied attachment target to common.resources_find, then read its text or media.";
             if (type == "Outlook attachment")

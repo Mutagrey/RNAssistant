@@ -385,7 +385,122 @@ namespace RNAssistant.Harness
                     AssertEqual(ToolExecutionOutcome.Ok,
                         replace("chunked", "<main>third</main>", new[] { prefix, suffix }).Outcome,
                         "contiguous source chunks from one current revision authorize replacement");
+
+                    member = gateway.List(session, "chat", ChatHtmlResourceCatalog.FileKind,
+                        null, 10).Items.Single(item => item.Title == "index.html");
+                    read = gateway.Read(session, new ResourceReadRequest
+                    {
+                        Reference = member.Reference,
+                        Representation = ResourceRepresentations.Source,
+                        MaxChars = 32000
+                    }).Result;
+                    var earlierInput = gateway.Evidence(session, read).ToList();
+                    session.Messages.Add(new ChatMessage { Role = "assistant",
+                        RunId = "html_guard_run", ToolCallId = "later-read-step",
+                        AcceptedCallOrigin = new AcceptedToolCallOrigin("later-read-step", "attempt", 0),
+                        ResourceEvidence = earlierInput });
+                    executor.MutateLocalResources(session, HtmlWorkspaceToolCatalog.WriteFileToolId,
+                        null, () => HtmlWorkspaceToolService.UpsertFile(session, "app.js", "script", "run();", false));
+                    AssertEqual(ToolExecutionOutcome.Ok,
+                        replace("carried", "<main>fourth</main>", null).Outcome,
+                        "same-run complete source stays usable after an unrelated file changes the workspace root");
+                    AssertEqual("<main>fourth</main>", session.HtmlWorkspace.Files.Single(item => item.Path == "index.html").Content,
+                        "carried observation replaces only its matching file");
+                    member = gateway.List(session, "chat", ChatHtmlResourceCatalog.FileKind,
+                        null, 10).Items.Single(item => item.Title == "index.html");
+                    read = gateway.Read(session, new ResourceReadRequest
+                    {
+                        Reference = member.Reference,
+                        Representation = ResourceRepresentations.Source,
+                        MaxChars = 32000
+                    }).Result;
+                    session.Messages.Add(new ChatMessage { Role = "assistant",
+                        RunId = "another-run", ToolCallId = "foreign-read-step",
+                        AcceptedCallOrigin = new AcceptedToolCallOrigin("foreign-read-step", "attempt", 0),
+                        ResourceEvidence = gateway.Evidence(session, read).ToList() });
+                    AssertEqual(ToolExecutionOutcome.Error,
+                        replace("foreign", "<main>fifth</main>", null).Outcome,
+                        "a source observation from another run cannot authorize replacement");
                 });
+        }
+
+        private static void HtmlWorkspaceVisibleSourceReadAuthorizesNextWrite()
+        {
+            WithTempPaths(paths =>
+            {
+                var adapter = FakeOfficeAdapter.ForHost("Excel");
+                var settings = new AppSettings { ContextWindowOverrideTokens = 64000 };
+                var executor = new OfficeToolExecutor(adapter, new VbaJournalStore(paths),
+                    new SkillStore(paths), new ToolStore(paths), () => settings,
+                    value => settings = value, paths);
+                var session = NewSession(adapter);
+                session.Mode = ChatModes.Agent;
+                session.LastRun = new ChatRunRecord { RunId = "html-visible-run",
+                    TurnId = "html-visible-turn", ResponseProtocolVersion = ConversationResponse.ProtocolVersion };
+                executor.MutateLocalResources(session, HtmlWorkspaceToolCatalog.WriteFileToolId,
+                    null, () => HtmlWorkspaceToolService.UpsertFile(session, "index.html", "html", "<main>before</main>", true));
+                var catalogs = executor.CaptureCatalogs();
+                var tools = ConversationRunService.PrepareToolsForRun(executor.GetHostTools()
+                    .Concat(executor.GetControllerTools()).Concat(executor.CapturePublishedGlobalTools(catalogs)));
+                var skills = executor.CaptureSkills(catalogs);
+                var runtime = executor.CreateNativeRuntime(session, tools, settings, "agent", false);
+                var target = executor.ResourceGateway.Find(session, "index.html", "html").Items
+                    .Single(item => item.Type == "HTML file").Target;
+                var readCall = new ToolCall("html-visible-read", ResourceToolCatalog.ReadToolId,
+                    new JObject { ["target"] = target, ["representation"] = "source" }.ToString(Formatting.None));
+                var read = runtime.ExecuteAsync(new ToolExecutionContext(readCall, runtime.Describe(readCall),
+                    session.LastRun.RunId, session.LastRun.TurnId, "read-step", DateTime.UtcNow, false, 4),
+                    CancellationToken.None).GetAwaiter().GetResult();
+                AssertEqual(ToolExecutionOutcome.Ok, read.Outcome, "exact current HTML source is read");
+                var args = new Dictionary<string, object> { ["target"] = target, ["representation"] = "source" };
+                var acceptedRead = AgentJsonProtocol.CreateToolCallMessage(new AgentToolCall {
+                    Id = readCall.Id, Name = readCall.Name, Arguments = args }, "Read source.", null,
+                    settings.ToolResultRole, new AcceptedToolCallOrigin("read-step", "read-attempt", 0));
+                acceptedRead.RunId = session.LastRun.RunId;
+                var invocation = new ToolInvocation { ToolId = readCall.Name, ToolCallId = readCall.Id,
+                    Arguments = args };
+                var acceptedResult = AgentJsonProtocol.CreateToolResultMessage(invocation,
+                    new ToolResultMaterialization(read.Result, resourceEvidence: read.ResourceEvidence),
+                    settings.ToolResultRole);
+                acceptedResult.RunId = session.LastRun.RunId;
+                session.Messages.Add(new ChatMessage { Role = "user", Content = "Update the HTML page." });
+                session.Messages.Add(acceptedRead);
+                session.Messages.Add(acceptedResult);
+                var store = new ChatStore(paths);
+                store.Save(session);
+                using (var model = ConversationModelSession.CreateAsync(adapter, null, null,
+                    EventStore(store), ChatModes.Agent, "Update the HTML page.", session,
+                    NewContext(adapter), settings, tools, skills.Skills, null, false, null,
+                    CancellationToken.None, executor.ResourceAuthority, executor.Payloads,
+                    () => skills, catalogs.Authority.Generation).GetAwaiter().GetResult())
+                {
+                    var request = model.CreateRequest("write-step",
+                        new ModelProtocolCallContext(new string[0]));
+                    AssertTrue(request.AcceptedMessages.Any(item => item.ToolCallId == readCall.Id &&
+                        item.ResourceEvidence.Any(evidence => evidence.View == ResourceRepresentations.Source)),
+                        "complete read remains visible in the next model input");
+                    const string writeId = "html-visible-write";
+                    model.AppendToolCall(new AgentToolCall { Id = writeId,
+                        Name = HtmlWorkspaceToolCatalog.WriteFileToolId,
+                        Arguments = new Dictionary<string, object> { ["path"] = "index.html",
+                            ["content"] = "<main>after</main>" } }, "Update page.", null,
+                        new AcceptedToolCallOrigin("write-step", "write-attempt", 0));
+                    var accepted = session.Messages.Last();
+                    accepted.RunId = session.LastRun.RunId;
+                    AssertTrue(accepted.ResourceEvidence.Any(evidence =>
+                        evidence.View == ResourceRepresentations.Source),
+                        "accepted write keeps source evidence from its exact model request");
+                    var writeCall = new ToolCall(writeId, HtmlWorkspaceToolCatalog.WriteFileToolId,
+                        new JObject { ["path"] = "index.html", ["content"] = "<main>after</main>" }
+                            .ToString(Formatting.None));
+                    var written = runtime.ExecuteAsync(new ToolExecutionContext(writeCall,
+                        runtime.Describe(writeCall), session.LastRun.RunId, session.LastRun.TurnId,
+                        "write-step", DateTime.UtcNow, false, 4), CancellationToken.None)
+                        .GetAwaiter().GetResult();
+                    AssertEqual(ToolExecutionOutcome.Ok, written.Outcome,
+                        "visible complete source authorizes replacement without another read");
+                }
+            });
         }
 
         private static void AppendAcceptedHtmlSource(

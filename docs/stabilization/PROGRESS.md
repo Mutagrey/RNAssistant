@@ -36,6 +36,25 @@ independently of daily work.
 Entries below may say “current” or “next” relative to their own date. Only the
 operating status above controls today's work.
 
+HTML read correction (2026-09-28): screenshots show that freshly written
+`index.html`, `styles.css` and `app.js` were discoverable, but the model read each
+exact `HTML file` target with `structure`, which is a workspace-root view. The
+provider rejected the view, and an identical failed call stopped the run. The
+model-facing reader now explicitly returns the file's complete `source` for this
+one mismatched view and reports `source` in the result; discovery/HTML skill
+guidance distinguishes root `structure` from member `source`. Other unsupported
+views still fail. Native tool regression passes host-neutral; the reported
+Windows/target-model run remains unqualified.
+
+HTML observation follow-up (2026-09-28): a later screenshot shows complete
+`index.html` source read, unrelated reads, then another
+`html_source_observation_required` failure. The guard checked only evidence in
+the last model request. It now accepts a complete source observation shown to
+the model in any earlier accepted request of the same run while the file member
+and content hash remain unchanged. Changes to that file, a different run and a
+read never shown to the model still fail closed. Focused host-neutral guard and
+model-session checks pass; Windows/target-model reproduction remains open.
+
 Current user-requested mutation boundary (2026-09-28): Agent/Plan now accept only
 independent local reads in one model response; every mutation is a singleton.
 ModelProtocol rejects an unsafe batch before acceptance, and AgentKernel repeats
@@ -50,9 +69,8 @@ HTML overwrite follow-up (2026-09-28): screenshot shows differing repeated write
 to `index.html`/`styles.css` while Task List remains at 1/3. `write_file` replaced
 existing source without checking what the model saw; the context compiler reduced
 write results to short causal frames. Existing-file replacement now requires a
-complete source read of the exact current member revision in that accepted call's
-input. Accepted-call evidence is limited to successful resource reads visible in
-the current model request; write results include a bounded file inventory and
+complete source read shown to the model in the same run while that file's exact
+content remains unchanged; write results include a bounded file inventory and
 source hash. Three changed writes to the same conflict without a satisfying read
 end the run. Focused host-neutral replacement, compiler and kernel tests
 pass; the actual run trajectory and target-model loop behavior remain open.
