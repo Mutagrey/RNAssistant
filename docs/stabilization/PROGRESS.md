@@ -36,6 +36,27 @@ independently of daily work.
 Entries below may say “current” or “next” relative to their own date. Only the
 operating status above controls today's work.
 
+Current user-requested mutation boundary (2026-09-28): Agent/Plan now accept only
+independent local reads in one model response; every mutation is a singleton.
+ModelProtocol rejects an unsafe batch before acceptance, and AgentKernel repeats
+the check before dispatch. A later mutation sees the previous result; schema 30
+and format repair give the same rule. Focused host-neutral parser, kernel, protocol,
+Excel and VBA checks pass. This mitigates R78's same-response stale overwrite risk,
+but does not establish the reported incident's root cause or guarantee that a later
+model response uses current source. A redacted trajectory and real Windows/Office/
+WebView2/live-provider qualification remain open. No release gate is closed.
+
+HTML overwrite follow-up (2026-09-28): screenshot shows differing repeated writes
+to `index.html`/`styles.css` while Task List remains at 1/3. `write_file` replaced
+existing source without checking what the model saw; the context compiler reduced
+write results to short causal frames. Existing-file replacement now requires a
+complete source read of the exact current member revision in that accepted call's
+input. Accepted-call evidence is limited to successful resource reads visible in
+the current model request; write results include a bounded file inventory and
+source hash. Three changed writes to the same conflict without a satisfying read
+end the run. Focused host-neutral replacement, compiler and kernel tests
+pass; the actual run trajectory and target-model loop behavior remain open.
+
 Current build correction (2026-09-08): the existing read-only CAS presence check
 used by shared-context claim filtering is now public across the Core/Office assembly
 boundary. This fixes the reported `CS0122` in `ModelContextCompiler`; the downstream

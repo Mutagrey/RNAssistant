@@ -370,14 +370,13 @@ namespace RNAssistant.Harness
                 })
                 {
                     var result = parser.Parse(batch, new[] { read, tool }, new[] { read, tool }, new ModelProtocolCallContext(batchSafe));
-                    if (kind == "document" || kind == "local")
-                        AssertTrue(result.Success, kind + " managed mutation may be batched in either position");
-                    else
-                    {
-                        AssertTrue(!result.Success, kind + " cannot be batched, regardless of position");
-                        AssertContains(result.Error, "one at a time", "singleton diagnosis");
-                    }
+                    AssertTrue(!result.Success, kind + " cannot be batched, regardless of position");
+                    AssertContains(result.Error, "one at a time", "singleton diagnosis");
                 }
+                if (kind == "document" || kind == "local")
+                    AssertTrue(!parser.Parse(V4Envelope(V4Call(tool.Id), V4Call(tool.Id)),
+                        new[] { tool }, new[] { tool }, new ModelProtocolCallContext(new[] { tool.Id })).Success,
+                        kind + " cannot batch two mutations even with forged batch context");
                 AssertTrue(parser.Parse(V4Envelope(V4Call(name: tool.Id)), new[] { tool }, new[] { tool }, new ModelProtocolCallContext(batchSafe)).Success,
                     kind + " singleton is valid protocol, not execution permission");
             }
@@ -1973,6 +1972,23 @@ namespace RNAssistant.Harness
                     }.ToString(Formatting.None),
                     new JObject
                     {
+                        ["message"] = "Добавляю диагностику отдельным действием.",
+                        ["final"] = false,
+                        ["tool_calls"] = new JArray(new JObject { ["name"] = "common.vba_apply_patch", ["arguments"] = new JObject
+                        {
+                            ["moduleName"] = "Module1", ["patch"] = new JArray(new JObject
+                            { ["find"] = "Sub Main()", ["text"] = "Sub Main()\nDebug.Print \"started\"" })
+                        } })
+                    }.ToString(Formatting.None),
+                    new JObject
+                    {
+                        ["message"] = "Читаю текущий модуль после записи.",
+                        ["final"] = false,
+                        ["tool_calls"] = new JArray(new JObject { ["name"] = "common.resources_read", ["arguments"] = new JObject
+                        { ["target"] = "VBA module: Module1", ["representation"] = "source" } })
+                    }.ToString(Formatting.None),
+                    new JObject
+                    {
                         ["message"] = "Сохраняю заголовок вместе с прочитанной диагностикой.",
                         ["final"] = false,
                         ["tool_calls"] = new JArray(new JObject
@@ -1983,14 +1999,22 @@ namespace RNAssistant.Harness
                     }.ToString(Formatting.None),
                     "{\"message\":\"Проверка завершена.\",\"final\":true,\"tool_calls\":[]}"
                 });
+                var modelRequests = 0;
                 LlmCompletionDelegate completion = (settings, messages, options, stream, token) =>
                 {
-                    if (responses.Count == 2)
+                    modelRequests++;
+                    if (modelRequests == 4)
                     {
-                        AssertEqual(patched, adapter.VbaModuleCode, "stale batch overwrite preserves the patch");
+                        AssertEqual(before, adapter.VbaModuleCode, "rejected batch performs no VBA mutation");
+                        AssertEqual(0, adapter.CountVbaCalls(FakeVbaOperation.ReplaceModule),
+                            "protocol repair precedes every dispatch");
+                    }
+                    if (modelRequests == 5)
+                    {
+                        AssertEqual(patched, adapter.VbaModuleCode, "first singleton patch is applied before read");
                         AssertEqual(1, adapter.CountVbaCalls(FakeVbaOperation.ReplaceModule), "only the patch dispatched");
                         AssertEqual(1, journal.ListMutations(adapter.HostName, adapter.DocumentKey).Count,
-                            "rejected overwrite creates no second VBA preparation");
+                            "rejected batch creates no VBA preparation");
                     }
                     return Task.FromResult(new LlmCompletionResult { Content = responses.Dequeue() });
                 };
@@ -2001,13 +2025,8 @@ namespace RNAssistant.Harness
                     .GetAwaiter().GetResult();
                 var writes = result.ToolResults.Select(item => JObject.FromObject(item))
                     .Where(item => (string)item["toolId"] == "common.vba_write_module").ToList();
-                AssertEqual(2, writes.Count, "rejected stale call and newly authored write each produce a result");
-                var write = writes[0];
-                AssertEqual("error", (string)write["status"],
-                    "a read in the same response cannot authorize already-authored whole source");
-                AssertEqual("vba_snapshot_refresh_required", (string)write["errorCode"],
-                    "stale whole source requires a new model response after observation");
-                AssertEqual("ok", (string)writes[1]["status"], "next model response can use delivered source evidence");
+                AssertEqual(1, writes.Count, "rejected batch contributes no accepted write result");
+                AssertEqual("ok", (string)writes[0]["status"], "fresh response can use delivered source evidence");
                 AssertEqual("' Version 2\n" + patched, adapter.VbaModuleCode, "new write retains diagnostic code");
                 AssertEqual(2, adapter.CountVbaCalls(FakeVbaOperation.ReplaceModule), "only patch and fresh write dispatch");
                 var mutations = journal.ListMutations(adapter.HostName, adapter.DocumentKey);
@@ -2024,18 +2043,21 @@ namespace RNAssistant.Harness
                 var responses = new Queue<string>(new[]
                 {
                     LoadToolSchemaResponse("excel.add_sheet"),
-                    "{\"message\":\"Создаю два независимых листа.\",\"final\":false,\"tool_calls\":[" +
-                    "{\"name\":\"excel.add_sheet\",\"arguments\":{\"name\":\"First\"}}," +
+                    "{\"message\":\"Создаю первый лист.\",\"final\":false,\"tool_calls\":[" +
+                    "{\"name\":\"excel.add_sheet\",\"arguments\":{\"name\":\"First\"}}]}",
+                    "{\"message\":\"Первый лист создан; создаю второй.\",\"final\":false,\"tool_calls\":[" +
                     "{\"name\":\"excel.add_sheet\",\"arguments\":{\"name\":\"Second\"}}]}",
                     "{\"message\":\"Оба листа созданы.\",\"final\":true,\"tool_calls\":[]}"
                 });
-                IReadOnlyList<ChatMessage> secondTurn = null;
+                IReadOnlyList<ChatMessage> beforeSecondWrite = null;
+                IReadOnlyList<ChatMessage> finalRequest = null;
                 var progressActivities = new List<ChatActivity>();
                 var callCount = 0;
                 LlmCompletionDelegate completion = (completionSettings, messages, options, stream, cancellationToken) =>
                 {
                     callCount += 1;
-                    if (callCount == 3) secondTurn = messages.ToList();
+                    if (callCount == 3) beforeSecondWrite = messages.ToList();
+                    if (callCount == 4) finalRequest = messages.ToList();
                     return Task.FromResult(new LlmCompletionResult { Content = responses.Dequeue() });
                 };
                 var session = NewSession(adapter);
@@ -2050,12 +2072,14 @@ namespace RNAssistant.Harness
 
                 AssertEqual("Оба листа созданы.", result.AssistantText, "multi-tool final response");
                 AssertTrue(adapter.HasSheet("First") && adapter.HasSheet("Second"), "both tools executed");
-                AssertEqual(3, callCount, "schema read, one sequential write batch and final response");
+                AssertEqual(4, callCount, "schema read, two separate writes and final response");
                 AssertEqual(2, adapter.ExcelSheetRequests.Count(command => command.ToolId == "excel.add_sheet"), "each accepted write executes once");
                 AssertEqual("excel.add_sheet", adapter.ExcelSheetRequests[adapter.ExcelSheetRequests.Count - 2].ToolId, "first execution recorded");
                 AssertEqual("First", Convert.ToString(adapter.ExcelSheetRequests[adapter.ExcelSheetRequests.Count - 2].Arguments["name"]), "first call order");
                 AssertEqual("Second", Convert.ToString(adapter.ExcelSheetRequests[adapter.ExcelSheetRequests.Count - 1].Arguments["name"]), "second call order");
-                var replay = FlattenSimple(secondTurn);
+                AssertContains(FlattenSimple(beforeSecondWrite), "Added sheet: First",
+                    "first result reaches the model before the second write is authored");
+                var replay = FlattenSimple(finalRequest);
                 AssertEqual(2, replay.Split(new[] { "TOOL_INTERACTION (completed causal frame):" },
                     StringSplitOptions.None).Length - 1,
                     "both execution results are folded after schema admission");
@@ -2066,14 +2090,15 @@ namespace RNAssistant.Harness
                     .ToList();
                 AssertEqual(2, activities.Count, "two visible tool activities");
                 var executedIds = activities.Select(activity => activity.ToolCallId).ToArray();
-                AssertEqual(2, executedIds.Distinct().Count(), "batched writes receive different runtime IDs");
+                AssertEqual(2, executedIds.Distinct().Count(), "separate writes receive different runtime IDs");
                 AssertContains(replay, "Added sheet: First", "first committed mutation is folded into model history");
                 AssertContains(replay, "Added sheet: Second", "second committed mutation is folded into model history");
                 AssertTrue(!string.IsNullOrWhiteSpace(activities[0].StepId), "model step id stored");
-                AssertEqual(activities[0].StepId, activities[1].StepId, "batched writes belong to one accepted model step");
-                AssertEqual("Создаю два независимых листа.", activities[0].StepMessage, "accepted batch message is stored");
+                AssertTrue(activities[0].StepId != activities[1].StepId,
+                    "each write belongs to its own accepted model step");
+                AssertEqual("Создаю первый лист.", activities[0].StepMessage, "first step message is stored");
                 var marker = progressActivities.First(activity => activity.Kind == "step" &&
-                    string.Equals(activity.Title, "Создаю два независимых листа.", StringComparison.Ordinal));
+                    string.Equals(activity.Title, "Создаю первый лист.", StringComparison.Ordinal));
                 var running = progressActivities.First(activity => activity.Kind == "tool" && activity.Status == "running" &&
                     string.Equals(activity.ToolId, "excel.add_sheet", StringComparison.OrdinalIgnoreCase));
                 AssertEqual(marker.StepId, running.StepId, "live tool belongs to visible model step");

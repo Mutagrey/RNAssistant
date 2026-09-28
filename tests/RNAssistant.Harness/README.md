@@ -250,6 +250,8 @@ old argument. Existing Outlook tool cases also check bound-STA/closed-window sea
 | HTML whole-workspace revision lineage and branch recovery | `Program.HtmlArtifactStorageTests.cs`; replay/recovery in `Program.SessionEventStoreTests.cs` | `html lineage:`, `storage: html navigation`, `storage: html redo branches`, `storage: html recovery` |
 | Inert uploaded-HTML shared data-plane viewer and exact Gateway import | `Program.HtmlArtifactStorageTests.cs`, `Program.ContextBridgeTests.cs`; UI contracts in `tests/web/html-upload-import.test.js` and `tests/web/artifact-json-viewer.test.js` | `html import:`, `bridge: typed html import`, `artifact viewer:` |
 | Exact HTML binding checkpoint/recovery/refresh/export and typed bridge payload | `Program.HtmlArtifactStorageTests.cs`, `Program.HtmlWorkspaceToolTests.cs`, `HarnessAdditionalToolTests.cs`, `Program.ContextBridgeTests.cs`; UI/export contracts in `tests/web/html-workspace-export.test.js` and `tests/web/html-workspace-echarts.test.js` | `html export:`, `html tools: native ownership and typed binding`, `tools: html workspace updates session`, `bridge: typed html export` |
+| Existing HTML file replacement from the current model-visible source | `Program.HtmlWorkspaceToolTests.cs` | `html tools: replacement requires current source` |
+| Changed calls that repeat one source conflict without a refresh | `Program.AgentKernelTests.cs` | `kernel: changed conflicts without refresh stop` |
 | R61 HTML semantic schemas, accepted-read binding, automatic preflight and model-result/history isolation | `Program.HtmlWorkspaceToolTests.cs`, `HarnessAdditionalToolTests.cs`, `Program.ToolContractAuditTests.cs`; UI policy and standalone runtime checks in `tests/web/html-workspace-export.test.js` and `tests/web/html-workspace-echarts.test.js` | `html tools:`, `tools: html workspace updates session`, `tools: html source`, `tools: R61 built-in contract inventory` |
 | R61 Prompt/Tool/Skill semantic authoring, installed-package review and replay isolation | `Program.ChatSettingsTests.cs`, `Program.ToolStoreTests.cs`, `HarnessAdditionalToolTests.cs`, `Program.ToolContractAuditTests.cs` | `tools: authoring intents are semantic`, `tools: validate payload without saving`, `chat: prompt save preserves global model`, `tools: agent CRUD preserves omitted fields`, `skills: CRUD preserves omitted fields`, `tools: R61 built-in contract inventory` |
 | R61 VBA/macro semantic intents, runtime-owned patch/backup state and replay/result isolation | `Program.VbaPromptTests.cs`, `Program.AgentSafetyTests.cs`, `Program.ResourceGatewayTests.cs`, `Program.ToolStoreTests.cs`, `Program.ToolContractAuditTests.cs` | `vba: semantic intent contracts isolate runtime state`, `vba:`, `agent: exposes safe VBA editing tools`, `resources: live Office and VBA are bounded and guarded`, `tools: VBA facade is common across hosts`, `tools: R61 built-in contract inventory` |
@@ -421,10 +423,10 @@ protection and partial COM effects remain WQ-EXCEL gates. See
 
 ## Typed VBA mutation outcome (Phase 6D)
 
-`agent: VBA batch read` covers patch/read/stale whole write in one accepted model
-response: the sibling read cannot authorize the stale overwrite; the next response
-can use delivered source to write safely. Both real writes retain committed journal
-evidence. The existing `vba: queued guard` and `vba: confirmed mutation` checks cover
+`agent: VBA mutation batch` covers a proposed patch/read/stale whole-write batch being
+rejected before dispatch, followed by separate patch, read and corrected write
+responses. Both real writes retain committed journal evidence. The existing
+`vba: queued guard` and `vba: confirmed mutation` checks cover
 competing chats and stale confirmation guards.
 
 `vba: mutation` covers the typed service boundary and injected prepare, terminal,

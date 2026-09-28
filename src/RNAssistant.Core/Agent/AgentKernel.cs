@@ -175,16 +175,9 @@ namespace RNAssistant.Core.Agent
                     throw new InvalidOperationException("Exact execution policy is unavailable: " + call.Name);
                 policies.Add(policy);
             }
-            if (policies.Count > 1 && policies.Any(policy => !CanRunInSequentialBatch(policy)))
-                throw new InvalidOperationException("Only independent local reads and runtime-verified managed mutations can be batched; confirmation-required and opaque calls are singleton.");
+            if (policies.Count > 1 && policies.Any(policy => policy == null || !policy.IndependentLocalRead))
+                throw new InvalidOperationException("Only independent local reads can be batched; every mutation and other call must be returned alone.");
             return policies.ToArray();
-        }
-
-        private static bool CanRunInSequentialBatch(ToolPolicySnapshot policy)
-        {
-            return policy != null && !policy.RequiresConfirmation &&
-                (policy.IndependentLocalRead || policy.Policy != null &&
-                    policy.Policy.ExecutionClass == ToolExecutionClass.ManagedMutation);
         }
 
         private async Task<RunSummary> ExecuteOneAsync(State state, ToolCall call, ToolPolicySnapshot policy,
@@ -219,6 +212,7 @@ namespace RNAssistant.Core.Agent
                 stepId, toolContext: context)).ConfigureAwait(false);
             ToolExecutionRecord record;
             RunLifecycle? stop = null;
+            var repeatedUnrefreshedConflict = false;
             var enteredRuntime = false;
             try
             {
@@ -260,7 +254,18 @@ namespace RNAssistant.Core.Agent
                     record.Recovery.RetryPolicy != ToolRetryPolicy.RefreshRequired)
                     state.ErrorCallSignatures.Add(callSignature);
                 else
+                {
                     state.RefreshableErrorCallSignatures[callSignature] = record.Recovery;
+                    if (record.Recovery.FailureKind == ToolFailureKind.ConflictNoEffect &&
+                        record.Recovery.ResourceIdentity != null)
+                    {
+                        repeatedUnrefreshedConflict = state.RefreshableErrorCallSignatures.Values.Count(item =>
+                            item.FailureKind == ToolFailureKind.ConflictNoEffect &&
+                            item.ResourceIdentity != null &&
+                            item.ResourceIdentity.Equals(record.Recovery.ResourceIdentity) &&
+                            string.Equals(item.View, record.Recovery.View, StringComparison.Ordinal)) >= 3;
+                    }
+                }
             }
             else if (record.Outcome == ToolExecutionOutcome.Ok && policy.MayHaveSideEffects)
             {
@@ -287,6 +292,9 @@ namespace RNAssistant.Core.Agent
                 state.Messages.Add(AgentMessage.ToolResult(record));
             await AppendAsync(state, new AgentRunEvent(AgentRunEventKind.ToolCompleted, state.Summary(),
                 stepId, execution: record)).ConfigureAwait(false);
+            if (repeatedUnrefreshedConflict)
+                return state.Summary(RunLifecycle.Failed, "repeated_refresh_required_failure",
+                    "Three changed calls reached the same source conflict without a complete current resource read.");
             if (stop.HasValue || cancellationToken.IsCancellationRequested)
             {
                 if (state.Pending != null)

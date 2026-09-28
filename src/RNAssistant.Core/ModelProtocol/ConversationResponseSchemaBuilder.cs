@@ -38,7 +38,7 @@ namespace RNAssistant.Core.ModelProtocol
             {
                 ["type"] = "object",
                 ["description"] = "V5: only message/final/tool_calls and name/arguments. Runtime owns IDs, lifecycle and effects. " +
-                    "Ordered batches may contain independent local reads and runtime-verified managed mutations. Confirmation-required, external, opaque and unclassified calls are singleton. " +
+                    "Only independent local reads may be batched. Return every mutation and other call alone; wait for the result before proposing another mutation. " +
                     "final=true means the user-facing answer is ready; it is not execution evidence.",
                 ["properties"] = new JObject
                 {

@@ -289,6 +289,105 @@ namespace RNAssistant.Harness
                 });
         }
 
+        private static void HtmlWorkspaceReplacementRequiresCurrentSource()
+        {
+            WithTempExecutor(FakeOfficeAdapter.ForHost("Excel"),
+                delegate(OfficeToolExecutor executor, FakeOfficeAdapter adapter)
+                {
+                    var session = NewSession(adapter);
+                    var definitions = OfficeToolCatalog.ForHost(adapter.HostName)
+                        .Concat(executor.GetControllerTools()).ToList();
+                    var runtime = executor.CreateNativeRuntime(
+                        session, definitions, new AppSettings(), "agent", false);
+                    var created = ExecuteHtmlNative(runtime,
+                        HtmlWorkspaceToolCatalog.WriteFileToolId,
+                        new JObject { ["path"] = "index.html", ["content"] = "<main>first</main>" });
+                    AssertEqual(ToolExecutionOutcome.Ok, created.Outcome,
+                        "initial HTML file is created");
+                    AssertContains(created.Result.Message, "Current files (1): index.html",
+                        "next model step receives the saved workspace inventory");
+
+                    Func<string, string, IList<ResourceEvidence>, ToolExecutionRecord> replace =
+                        delegate(string step, string content, IList<ResourceEvidence> evidence)
+                        {
+                            var callId = "html_replace_" + step;
+                            var call = new ToolCall(callId, HtmlWorkspaceToolCatalog.WriteFileToolId,
+                                new JObject { ["path"] = "index.html", ["content"] = content }
+                                    .ToString(Formatting.None));
+                            session.Messages.Add(new ChatMessage
+                            {
+                                Id = "accepted_" + step,
+                                Role = "assistant",
+                                RunId = "html_guard_run",
+                                ToolCallId = callId,
+                                AcceptedCallOrigin = new AcceptedToolCallOrigin(step, "attempt_" + step, 0),
+                                ResourceEvidence = (evidence ?? new List<ResourceEvidence>()).ToList()
+                            });
+                            return runtime.ExecuteAsync(new ToolExecutionContext(
+                                    call, runtime.Describe(call), "html_guard_run", "html_guard_turn",
+                                    step, DateTime.UtcNow, false, 4), CancellationToken.None)
+                                .GetAwaiter().GetResult();
+                        };
+
+                    var original = session.ActiveHtmlArtifactId;
+                    var unseen = replace("unseen", "<main>unseen</main>", null);
+                    AssertEqual(ToolExecutionOutcome.Error, unseen.Outcome,
+                        "unobserved replacement is rejected");
+                    AssertEqual("<main>first</main>", session.HtmlWorkspace.Files.Single().Content,
+                        "rejected replacement keeps exact source");
+                    AssertEqual(original, session.ActiveHtmlArtifactId,
+                        "rejected replacement creates no HTML revision");
+
+                    var gateway = executor.ResourceGateway;
+                    var member = gateway.List(session, "chat", ChatHtmlResourceCatalog.FileKind,
+                        null, 10).Items.Single(item => item.Title == "index.html");
+                    var read = gateway.Read(session, new ResourceReadRequest
+                    {
+                        Reference = member.Reference,
+                        Representation = ResourceRepresentations.Source,
+                        MaxChars = 32000
+                    }).Result;
+                    var observed = gateway.Evidence(session, read).ToList();
+                    AssertEqual(ToolExecutionOutcome.Ok,
+                        replace("observed", "<main>second</main>", observed).Outcome,
+                        "replacement after current complete source read succeeds");
+                    AssertEqual("<main>second</main>", session.HtmlWorkspace.Files.Single().Content,
+                        "observed replacement changes source");
+                    AssertEqual(ToolExecutionOutcome.Error,
+                        replace("stale", "<main>stale</main>", observed).Outcome,
+                        "earlier source evidence cannot overwrite a later revision");
+                    AssertEqual("<main>second</main>", session.HtmlWorkspace.Files.Single().Content,
+                        "stale replacement keeps the newer source");
+
+                    member = gateway.List(session, "chat", ChatHtmlResourceCatalog.FileKind,
+                        null, 10).Items.Single(item => item.Title == "index.html");
+                    read = gateway.Read(session, new ResourceReadRequest
+                    {
+                        Reference = member.Reference,
+                        Representation = ResourceRepresentations.Source,
+                        MaxChars = 32000
+                    }).Result;
+                    var currentEvidence = gateway.Evidence(session, read).Single();
+                    var sourceLength = session.HtmlWorkspace.Files.Single().Content.Length;
+                    var prefix = new ResourceEvidence("prefix", currentEvidence.ScopeId,
+                        currentEvidence.Resource, ResourceRepresentations.Source,
+                        new ResourceCoverage(ResourceCoverageKinds.CharacterRange, start: 0, end: 8),
+                        false, currentEvidence.AuthorityGeneration,
+                        contentSha256: currentEvidence.ContentSha256);
+                    var suffix = new ResourceEvidence("suffix", currentEvidence.ScopeId,
+                        currentEvidence.Resource, ResourceRepresentations.Source,
+                        new ResourceCoverage(ResourceCoverageKinds.CharacterRange, start: 8, end: sourceLength),
+                        true, currentEvidence.AuthorityGeneration,
+                        contentSha256: currentEvidence.ContentSha256);
+                    AssertEqual(ToolExecutionOutcome.Error,
+                        replace("partial", "<main>partial</main>", new[] { suffix }).Outcome,
+                        "final source chunk alone does not authorize full replacement");
+                    AssertEqual(ToolExecutionOutcome.Ok,
+                        replace("chunked", "<main>third</main>", new[] { prefix, suffix }).Outcome,
+                        "contiguous source chunks from one current revision authorize replacement");
+                });
+        }
+
         private static void AppendAcceptedHtmlSource(
             ChatSession session,
             string runId,

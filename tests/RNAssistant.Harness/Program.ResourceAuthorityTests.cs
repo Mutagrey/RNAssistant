@@ -1642,6 +1642,16 @@ namespace RNAssistant.Harness
                     AssertContains(retained.Text, marker, "historical source remains available after invalidation");
                     AssertEqual(calls, adapter.ExcelBackendCalls.Count, "next compile and historical read perform no Office I/O or write replay");
                     AssertEqual(0, new ResourceMutationJournal(paths).Unresolved().Count, "completed outcome leaves no unresolved mutation attempt");
+                    model.AppendToolCall(new AgentToolCall
+                    {
+                        Id = "next-call-" + scenario,
+                        Name = "common.resources_find",
+                        Arguments = new Dictionary<string, object> { ["scope"] = "document", ["query"] = "Data" }
+                    }, "Continue.", null,
+                        new AcceptedToolCallOrigin("next-step-" + scenario, "next-attempt-" + scenario, 0));
+                    AssertEqual(scenario == "no-op",
+                        chatA.Messages.Last().ResourceEvidence.Any(item => item.EvidenceId == evidence.EvidenceId),
+                        "only source actually visible in the next model request authorizes its accepted call");
                 }
             });
         }
@@ -2049,6 +2059,8 @@ namespace RNAssistant.Harness
             AssertEqual("resource_evidence_context_too_large",
                 (string)JObject.Parse(oversizedWire.Result.DataJson)["code"],
                 "oversized resource evidence exposes the exact narrower-view recovery");
+            AssertEqual(0, oversized.Messages[1].ResourceEvidence.Count,
+                "a read omitted from the model request carries no accepted-call evidence");
             AssertEqual(RNAssistant.Core.Tools.Contracts.ToolResultStatus.Ok,
                 ToolResultWire.Read(oversizedResult.Content).Result.Status,
                 "request-local resource admission does not rewrite durable evidence");

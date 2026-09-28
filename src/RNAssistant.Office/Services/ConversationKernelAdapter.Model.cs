@@ -103,8 +103,7 @@ namespace RNAssistant.Office.Services
         private Task<ModelProtocolRequest> PrepareRequestAsync(string stepId, CancellationToken cancellationToken)
         {
             return _modelSession.PrepareRequestAsync(stepId,
-                new ModelProtocolCallContext(ConversationProtocolContext.SequentialBatchIds(
-                    _catalog, _input.Settings != null && _input.Settings.AutoConfirmToolActions)),
+                new ModelProtocolCallContext(ConversationProtocolContext.SequentialBatchIds(_catalog)),
                 cancellationToken);
         }
 

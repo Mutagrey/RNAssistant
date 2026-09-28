@@ -97,9 +97,17 @@ namespace RNAssistant.Office.Tools
                     mark();
                     var file = UpsertFile(session, path, string.Empty,
                         content, true);
+                    var files = session.HtmlWorkspace.Files.Where(item => item != null)
+                        .Select(item => item.Path).OrderBy(item => item, StringComparer.OrdinalIgnoreCase)
+                        .Take(12).ToArray();
                     return WithAutomaticPreflight(session,
                         HtmlWorkspaceToolOutcome.Ok(
-                            "HTML workspace file saved: " + file.Path,
+                            "HTML workspace file saved: " + file.Path +
+                            ". Current files (" + session.HtmlWorkspace.Files.Count + "): " +
+                            string.Join(", ", files) +
+                            (session.HtmlWorkspace.Files.Count > files.Length ? ", ..." : ".") +
+                            " Source SHA-256: " + TextPatternEngine.Sha256(file.Content) +
+                            ". Continue from this saved state; read current source before replacing an existing file.",
                             WorkspaceMutationJson(session, "file", file.Path),
                             HtmlWorkspaceEffect.VerifiedChange),
                         cancellationToken);

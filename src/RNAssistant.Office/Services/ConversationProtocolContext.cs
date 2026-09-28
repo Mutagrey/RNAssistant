@@ -15,15 +15,13 @@ namespace RNAssistant.Office.Services
     // are owned by AgentKernel; this adapter only reconstructs a validated continuation.
     internal static class ConversationProtocolContext
     {
-        internal static string[] SequentialBatchIds(IEnumerable<ToolCatalogEntry> catalog, bool autoConfirm)
+        internal static string[] SequentialBatchIds(IEnumerable<ToolCatalogEntry> catalog)
         {
             return (catalog ?? new ToolCatalogEntry[0])
                 .Where(tool => tool != null &&
                     !string.IsNullOrWhiteSpace(tool.Id) &&
                     tool.Policy != null &&
-                    (tool.Policy.IndependentLocalRead ||
-                        tool.Policy.ExecutionClass == ToolExecutionClass.ManagedMutation &&
-                        (!tool.Policy.RequiresConfirmation || autoConfirm)))
+                    tool.Policy.IndependentLocalRead)
                 .Select(tool => tool.Id).Distinct(StringComparer.Ordinal).ToArray();
         }
 

@@ -39,8 +39,8 @@ namespace RNAssistant.Core.ModelProtocol
                         : "Unknown tool: " + call.Name + ". Use an exact name from the current callable tools.");
                 }
                 if (parsed.Response.ToolCalls.Count > 1 && !CanRunInSequentialBatch(tool, batchSafeIds))
-                    return ConversationResponseParseResult.Fail("Only independent local reads and runtime-verified managed mutations may be returned in a sequential batch. " +
-                        "Confirmation-required, external, opaque or unclassified calls must be returned one at a time.");
+                    return ConversationResponseParseResult.Fail("Only independent local reads may be returned in a sequential batch. " +
+                        "Every mutation, confirmation-required, external, opaque or unclassified call must be returned one at a time; wait for its result before the next mutation.");
 
                 JObject schema;
                 string error;
@@ -56,10 +56,9 @@ namespace RNAssistant.Core.ModelProtocol
 
         private static bool CanRunInSequentialBatch(ToolCatalogEntry tool, ISet<string> batchSafeIds)
         {
-            if (tool == null || !batchSafeIds.Contains(tool.Id)) return false;
-            if (tool.Policy != null && tool.Policy.ExecutionClass == ToolExecutionClass.ManagedMutation)
-                return true;
-            return !tool.MutatesDocument && !tool.MutatesLocalState;
+            return tool != null && batchSafeIds.Contains(tool.Id) &&
+                !tool.MutatesDocument && !tool.MutatesLocalState && !tool.RequiresConfirmation &&
+                (tool.Policy == null || tool.Policy.IndependentLocalRead);
         }
     }
 }

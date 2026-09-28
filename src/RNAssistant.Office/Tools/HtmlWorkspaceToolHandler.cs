@@ -8,6 +8,7 @@ using Newtonsoft.Json.Linq;
 using RNAssistant.Core.Models;
 using RNAssistant.Core.Tools;
 using RNAssistant.Office.Runtime;
+using RNAssistant.Office.Services;
 using RuntimeResult = RNAssistant.Core.Tools.Contracts.ToolResult;
 
 namespace RNAssistant.Office.Tools
@@ -49,6 +50,12 @@ namespace RNAssistant.Office.Tools
             {
                 using (DocumentAccessGate.BeginOperation())
                 {
+                    if (_toolId == HtmlWorkspaceToolCatalog.WriteFileToolId)
+                    {
+                        var refusal = GuardExistingFile(context);
+                        if (refusal != null)
+                            return Task.FromResult(context.Complete(Project(refusal)));
+                    }
                     var outcome = _service.Execute(
                         _toolId, context.Arguments, _session,
                         context.MarkDispatchPossible, cancellationToken);
@@ -59,6 +66,64 @@ namespace RNAssistant.Office.Tools
             {
                 throw;
             }
+        }
+
+        private HtmlWorkspaceToolOutcome GuardExistingFile(ToolHandlerContext context)
+        {
+            var accepted = (_session.Messages ?? new List<ChatMessage>()).SingleOrDefault(message =>
+                message.AcceptedCallOrigin != null &&
+                message.ToolCallId == context.Execution.Call.Id);
+            if (accepted == null) return null; // Manual/editor writes have their own guard.
+            if (accepted.RunId != context.Execution.RunId ||
+                accepted.AcceptedCallOrigin.StepId != context.Execution.StepId)
+                throw new InvalidOperationException("HTML source observation belongs to another accepted execution.");
+
+            var path = HtmlWorkspaceToolService.NormalizeWorkspacePath(
+                ToolArgumentReader.String(context.Arguments, "path", string.Empty));
+            var file = (_session.HtmlWorkspace?.Files ?? new List<HtmlWorkspaceFile>())
+                .SingleOrDefault(item => item != null &&
+                    string.Equals(item.Path, path, StringComparison.OrdinalIgnoreCase));
+            if (file == null) return null;
+            var artifact = (_session.Artifacts ?? new List<ChatArtifact>())
+                .SingleOrDefault(item => item != null && item.Id == _session.ActiveHtmlArtifactId);
+            if (artifact == null)
+                throw new InvalidOperationException("The current HTML artifact is unavailable.");
+            var current = ChatHtmlResourceCatalog.FileReference(_session, artifact, file.Id);
+            var hash = TextPatternEngine.Sha256(file.Content ?? string.Empty);
+            var observations = (accepted.ResourceEvidence ?? new List<ResourceEvidence>()).Where(evidence =>
+                evidence != null && evidence.Resource != null &&
+                evidence.Resource.Uri == current.Uri &&
+                evidence.Resource.Revision == current.Revision &&
+                evidence.View == ResourceRepresentations.Source &&
+                evidence.Coverage != null &&
+                string.Equals(evidence.ContentSha256, hash, StringComparison.OrdinalIgnoreCase)).ToArray();
+            if (HasCompleteSource(observations, (file.Content ?? string.Empty).Length)) return null;
+
+            return HtmlWorkspaceToolOutcome.Error(
+                "Existing HTML file was not read at its current revision: " + path +
+                ". Read its complete source with common.resources_find/read before replacing it, or use common.html_workspace_apply_patch for a focused change.",
+                null, "html_source_observation_required", false,
+                new ToolRecoveryContract(ToolFailureKind.ConflictNoEffect,
+                    ToolRetryPolicy.RefreshRequired, current.Identity,
+                    ResourceRepresentations.Source, "HTML file: " + path));
+        }
+
+        private static bool HasCompleteSource(IReadOnlyList<ResourceEvidence> evidence, int length)
+        {
+            if (evidence.Any(item => item.Complete &&
+                item.Coverage.Kind == ResourceCoverageKinds.Whole)) return true;
+            var chunks = evidence.Where(item => item.Coverage.Kind == ResourceCoverageKinds.CharacterRange &&
+                    item.Coverage.Start.HasValue && item.Coverage.End.HasValue)
+                .OrderBy(item => item.Coverage.Start.Value).ToArray();
+            if (!chunks.Any(item => item.Complete && item.Coverage.End == length)) return false;
+            long covered = 0;
+            foreach (var chunk in chunks)
+            {
+                if (chunk.Coverage.Start < 0 || chunk.Coverage.End < chunk.Coverage.Start ||
+                    chunk.Coverage.End > length || chunk.Coverage.Start > covered) return false;
+                covered = Math.Max(covered, chunk.Coverage.End.Value);
+            }
+            return covered == length;
         }
 
         private static ToolHandlerResult Project(

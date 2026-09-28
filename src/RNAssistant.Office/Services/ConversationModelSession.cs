@@ -121,7 +121,8 @@ namespace RNAssistant.Office.Services
             var snapshot = _lastSnapshot;
             _noToolContinuation = null;
             _session.LastContextReceipt = snapshot.Receipt;
-            _responseEvidence = snapshot.Messages.SelectMany(item => item.ResourceEvidence ?? new List<ResourceEvidence>())
+            _responseEvidence = snapshot.Messages.Where(IsVisibleResourceRead)
+                .SelectMany(item => item.ResourceEvidence ?? new List<ResourceEvidence>())
                 .Where(item => new RNAssistant.Core.Services.EvidenceStateReducer().Reduce(item, snapshot.Authority.Resources).State == EvidenceState.Current)
                 .GroupBy(item => item.EvidenceId, StringComparer.Ordinal).Select(group => group.First()).ToList();
             var options = BuildRequestOptions(_mode, _settings.AgentResponseMode, activeTools, _session, _runCache);
@@ -137,6 +138,17 @@ namespace RNAssistant.Office.Services
                 CallContext = callContext,
                 Options = options
             };
+        }
+
+        private static bool IsVisibleResourceRead(ChatMessage message)
+        {
+            if (message == null || message.ToolName != ResourceToolCatalog.ReadToolId ||
+                message.ToolResultProtocolVersion != ToolResultWire.CurrentVersion)
+                return false;
+            ToolResultWireReadResult wire;
+            string error;
+            return ToolResultHistoryReader.TryRead(message, out wire, out error) &&
+                wire.Result.Status == RNAssistant.Core.Tools.Contracts.ToolResultStatus.Ok;
         }
 
         internal void RebindAuthority(IReadOnlyList<ToolCatalogEntry> catalog, SkillCatalogSnapshot skills,

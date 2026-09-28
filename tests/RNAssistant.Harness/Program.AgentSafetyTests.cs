@@ -462,24 +462,21 @@ namespace RNAssistant.Harness
             var write = OfficeToolCatalog.ForHost("Excel").Single(tool => tool.Id == "excel.add_sheet");
             var external = new ToolCatalogEntry { Id = "external.lookup", BuiltIn = true };
             var pipeline = new ToolCatalogEntry { Id = "pipeline.read", Executor = "pipeline" };
-            var scope = ConversationProtocolContext.SequentialBatchIds(new[] { read, write, external, pipeline }, false);
-            AssertTrue(scope.SequenceEqual(new[] { "excel.inspect", "excel.add_sheet" }),
-                "audited local reads and non-confirming managed mutations can batch; external/unclassified/pipelines stay singleton");
-            AssertTrue(ConversationProtocolContext.SequentialBatchIds(new[] { read, write, external, pipeline }, true)
-                    .SequenceEqual(new[] { "excel.inspect", "excel.add_sheet" }),
-                "auto-confirmed managed mutations join the ordered batch authority");
+            var scope = ConversationProtocolContext.SequentialBatchIds(new[] { read, write, external, pipeline });
+            AssertTrue(scope.SequenceEqual(new[] { "excel.inspect" }),
+                "only audited independent local reads can batch; mutations and other calls stay singleton");
             var renamedRead = read.Clone();
             renamedRead.Id = "fixture.explicit_read";
-            AssertTrue(ConversationProtocolContext.SequentialBatchIds(new[] { renamedRead }, false).SequenceEqual(new[] { renamedRead.Id }),
+            AssertTrue(ConversationProtocolContext.SequentialBatchIds(new[] { renamedRead }).SequenceEqual(new[] { renamedRead.Id }),
                 "declared policy, not a central name list, grants independent read batching");
             var untyped = new ToolCatalogEntry { Id = read.Id, BuiltIn = true };
-            AssertEqual(0, ConversationProtocolContext.SequentialBatchIds(new[] { untyped }, false).Length,
+            AssertEqual(0, ConversationProtocolContext.SequentialBatchIds(new[] { untyped }).Length,
                 "a known read name without source-owned policy is unclassified");
             var serialized = JsonConvert.SerializeObject(read);
             AssertTrue(serialized.IndexOf("Policy", StringComparison.Ordinal) < 0,
                 "source-owned authority is not a custom tool JSON field");
             var forged = JsonConvert.DeserializeObject<ToolCatalogEntry>("{\"Id\":\"external.fake\",\"BuiltIn\":true,\"Policy\":{\"Effect\":\"Read\",\"IndependentLocalRead\":true}}");
-            AssertEqual(0, ConversationProtocolContext.SequentialBatchIds(new[] { forged }, false).Length,
+            AssertEqual(0, ConversationProtocolContext.SequentialBatchIds(new[] { forged }).Length,
                 "serialized authority cannot forge independent local read permission");
             var originalFingerprint = ToolPackSnapshotFactory.ExecutionFingerprint(new[] { read }, read.Id);
             var changedPolicy = read.Clone();
@@ -493,8 +490,8 @@ namespace RNAssistant.Harness
                 changed.MutatesLocalState = kind == "local";
                 changed.RequiresConfirmation = kind == "confirmation";
                 changed.RiskLevel = kind == "risk" ? 3 : changed.RiskLevel;
-                var context = ConversationProtocolContext.SequentialBatchIds(new[] { changed, write }, false);
-                AssertTrue(context.SequenceEqual(new[] { changed.Id, write.Id }),
+                var context = ConversationProtocolContext.SequentialBatchIds(new[] { changed, write });
+                AssertTrue(context.SequenceEqual(new[] { changed.Id }),
                     "catalog projection cannot override source-owned policy: " + kind);
             }
             read.RequiresConfirmation = true;
@@ -502,7 +499,7 @@ namespace RNAssistant.Harness
             read.Policy = new ToolPolicy(ToolEffect.Read,
                 ToolVerification.None, false, false,
                 new[] { "agent" });
-            AssertTrue(!ConversationProtocolContext.SequentialBatchIds(new[] { read }, false).Contains("excel.inspect"),
+            AssertTrue(!ConversationProtocolContext.SequentialBatchIds(new[] { read }).Contains("excel.inspect"),
                 "new run/confirmation rebuilds batching from the current source-owned policy");
         }
 

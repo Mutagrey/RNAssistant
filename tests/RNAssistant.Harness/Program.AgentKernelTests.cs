@@ -138,6 +138,30 @@ namespace RNAssistant.Harness
                 "repeated accepted call is closed without dispatch");
         }
 
+        private static async Task KernelStopsChangedCallsWithoutRequiredRefresh()
+        {
+            var f = new KernelFixture(
+                KernelResponse(KernelCall("write", "{\"path\":\"index.html\",\"content\":\"first\"}")),
+                KernelResponse(KernelCall("write", "{\"path\":\"index.html\",\"content\":\"second\"}")),
+                KernelResponse(KernelCall("write", "{\"path\":\"index.html\",\"content\":\"third\"}")),
+                KernelResponse());
+            var recovery = new ToolRecoveryContract(ToolFailureKind.ConflictNoEffect,
+                ToolRetryPolicy.RefreshRequired,
+                new ResourceIdentity("rna://chat/document/artifact/current/member/file/index"),
+                ResourceRepresentations.Source, "HTML file: index.html");
+            f.Tools.OnExecute = (context, token) => Task.FromResult(KernelRecord(context,
+                ToolExecutionOutcome.Error, recovery: recovery));
+
+            var result = await f.RunAsync();
+
+            AssertEqual(RunLifecycle.Failed, result.Summary.Lifecycle,
+                "changed rejected writes to one source stop the run");
+            AssertEqual("repeated_refresh_required_failure", result.Summary.Reason,
+                "missing current source has an explicit stall reason");
+            AssertEqual(3, f.Tools.Calls.Count, "all three refusals are recorded once");
+            AssertEqual(3, f.Model.Requests.Count, "kernel does not request another rewrite");
+        }
+
         private static async Task KernelAllowsFailedCallAfterInterveningSuccess()
         {
             const string close = "{\"action\":\"close\",\"outcome\":\"completed\"}";
@@ -331,55 +355,35 @@ namespace RNAssistant.Harness
                 .Select(call => call.Id)), "accepted history retains the runtime correlation ids");
         }
 
-        private static async Task KernelAllowsManagedMutationBatches()
+        private static async Task KernelRejectsManagedMutationBatches()
         {
-            var allowed = new KernelFixture(KernelResponse(KernelCall("write", "{\"order\":1}"),
-                KernelCall("write", "{\"order\":2}")), KernelResponse());
-            var completed = await allowed.RunAsync();
-            AssertEqual(RunLifecycle.Completed, completed.Summary.Lifecycle,
-                "managed mutations complete as one ordered accepted batch");
-            AssertEqual("1,2", string.Join(",", allowed.Tools.Calls.Select(call =>
-                JObject.Parse(call.Call.ArgumentsJson).Value<int>("order"))),
-                "managed mutations dispatch sequentially in array order");
-            AssertEqual("0,0,2,0,0", KernelCounts(completed.Summary),
-                "each managed mutation retains individual accounting");
-
-            foreach (var tool in new[] { "external", "confirm", "unclassified" })
+            foreach (var calls in new[]
             {
-                var f = new KernelFixture(KernelResponse(KernelCall("read"), KernelCall(tool)));
+                new[] { KernelCall("write", "{\"order\":1}"), KernelCall("write", "{\"order\":2}") },
+                new[] { KernelCall("read"), KernelCall("write") },
+                new[] { KernelCall("write"), KernelCall("read") },
+                new[] { KernelCall("read"), KernelCall("external") },
+                new[] { KernelCall("read"), KernelCall("confirm") },
+                new[] { KernelCall("read"), KernelCall("unclassified") }
+            })
+            {
+                var f = new KernelFixture(KernelResponse(calls));
                 var result = await f.RunAsync();
                 AssertEqual(RunLifecycle.Failed, result.Summary.Lifecycle, "unsafe accepted response fails closed");
                 AssertEqual(0, f.Tools.Calls.Count, "whole response rejected before any dispatch");
                 AssertEqual(1, result.AcceptedMessages.Count, "rejected response absent from history");
                 AssertTrue(!f.Store.Events.Any(e => e.Kind == AgentRunEventKind.ResponseAccepted), "no rejected durable response");
             }
-        }
 
-        private static async Task KernelUnknownBatchMutationContinuesTail()
-        {
-            var f = new KernelFixture(
-                KernelResponse(KernelCall("write", "{\"order\":1}"), KernelCall("write", "{\"order\":2}")),
-                KernelResponse());
-            var outcomes = new Queue<ToolExecutionOutcome>(new[]
-            {
-                ToolExecutionOutcome.Unknown,
-                ToolExecutionOutcome.Ok
-            });
-            f.Tools.OnExecute = (context, token) => Task.FromResult(KernelRecord(context, outcomes.Dequeue()));
-
-            var result = await f.RunAsync();
-
-            AssertEqual(RunLifecycle.Completed, result.Summary.Lifecycle,
-                "unknown batch member no longer stops the current run");
-            AssertEqual(2, f.Tools.Calls.Count, "unknown write does not stop its batch tail");
-            AssertEqual("1,2", string.Join(",", f.Tools.Calls.Select(call =>
+            var sequential = new KernelFixture(KernelResponse(KernelCall("write", "{\"order\":1}")),
+                KernelResponse(KernelCall("write", "{\"order\":2}")), KernelResponse());
+            var completed = await sequential.RunAsync();
+            AssertEqual(RunLifecycle.Completed, completed.Summary.Lifecycle,
+                "separate model responses can complete two mutations");
+            AssertEqual("1,2", string.Join(",", sequential.Tools.Calls.Select(call =>
                 JObject.Parse(call.Call.ArgumentsJson).Value<int>("order"))),
-                "second accepted write is dispatched in order");
-            AssertTrue(!result.AcceptedMessages.Any(message => message.Kind == AgentMessageKind.ToolResult &&
-                    message.Execution.Outcome == ToolExecutionOutcome.NotDispatched),
-                "batch tail is not closed as not-dispatched");
-            AssertEqual(ExecutionHealth.Unknown, result.Summary.ExecutionHealth,
-                "later success does not erase unknown mutation evidence");
+                "the next mutation dispatches after the previous result reaches the model");
+            AssertEqual(3, sequential.Model.Requests.Count, "each mutation gets its own model response");
         }
 
         private static async Task KernelRejectsAllocationCollisions(bool acrossSteps)

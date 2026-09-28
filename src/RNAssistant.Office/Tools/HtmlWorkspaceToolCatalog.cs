@@ -49,7 +49,7 @@ namespace RNAssistant.Office.Tools
         {
             if (service == null) throw new ArgumentNullException(nameof(service));
             yield return Projection(WriteFileToolId,
-                "Workspace: Create or replace one complete HTML, CSS, or classic JavaScript file using root arguments path and content only. Runtime infers the kind, auto-injects workspace CSS/JS into the selected HTML entry, provides bundled ECharts when global echarts is referenced, and runs bounded static preflight. Do not add local link/script src tags or copy vendor bundles.",
+                "Workspace: Create one complete HTML, CSS, or classic JavaScript file with root path/content. Replacing an existing file requires a complete current source read in this model step's input; otherwise use common.html_workspace_apply_patch for focused edits. Runtime infers the kind, auto-injects CSS/JS, provides bundled ECharts, and runs static preflight. Do not add local link/script src tags or copy vendor bundles.",
                 HtmlWorkspaceToolService.WriteFileSchema(),
                 "html_workspace_write_file", true, 0);
             yield return Projection(WriteDataToolId,

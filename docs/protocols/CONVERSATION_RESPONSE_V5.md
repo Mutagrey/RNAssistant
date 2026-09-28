@@ -1,7 +1,7 @@
 # Conversation Response v5
 
 Status: **active R72 response-intent contract**. Response protocol is `5`;
-current prompt schema is `29` (`AppSettings.CurrentAgentPromptSchemaVersion`).
+current prompt schema is `30` (`AppSettings.CurrentAgentPromptSchemaVersion`).
 Product version is independent and unchanged by this switch. The
 [v4 specification](CONVERSATION_RESPONSE_V4.md) is historical, not a
 runtime compatibility path. This document records host-neutral behavior; Windows,
@@ -89,13 +89,13 @@ validation and before accepted persistence, confirmation or dispatch. Rejected
 responses execute nothing. Runtime ID allocation failures are infrastructure
 failures and are never repaired by regenerating model content.
 
-More than one call is accepted only when every member belongs to the current
-runtime-owned sequential-batch set: independent local reads or managed mutations
-whose confirmation is already satisfied. Calls execute in array order and every
-mutation has its own fresh guard, dispatch, verification and commit; the batch has
-no atomicity promise. An unknown mutation effect remains cumulative run evidence,
-but does not close the remaining accepted members by itself. Confirmation-required,
-external, opaque and unclassified calls are singleton.
+More than one call is accepted only when every member is an independent local read
+in the current runtime-owned sequential-batch set. Every mutation, confirmation-required,
+external, opaque and unclassified call is singleton. ModelProtocol rejects the whole
+unsafe response before acceptance; AgentKernel repeats the policy check before the
+first dispatch. The next mutation is proposed in a later model response, after the
+previous result has reached the model. An `unknown` effect remains cumulative run
+evidence and is not automatically retried.
 
 ## History And Prompts
 
