@@ -3005,6 +3005,9 @@ namespace RNAssistant.Harness
                 var store = new ChatStore(paths);
                 var session = store.Create("Word", "tail-doc", "Tail.docx", "Before tail");
                 var path = SessionEventFile(paths, session);
+                File.WriteAllText(path, File.ReadAllText(path).TrimEnd('\r', '\n') + " \n",
+                    new UTF8Encoding(false));
+                var validatedPrefix = File.ReadAllBytes(path);
                 File.AppendAllText(path, "{\"SchemaVersion\":1");
 
                 var loaded = store.Load(session.Host, session.DocumentKey, session.Id);
@@ -3013,6 +3016,47 @@ namespace RNAssistant.Harness
                 store.Save(loaded);
                 AssertEqual("After recovery", store.Load(loaded.Id).Title, "next commit removes incomplete tail");
                 AssertEqual(2, File.ReadAllLines(path).Length, "stream contains only valid records");
+                AssertTrue(File.ReadAllBytes(path).Take(validatedPrefix.Length).SequenceEqual(validatedPrefix),
+                    "tail repair preserves the exact validated prefix bytes");
+            });
+        }
+
+        private static void UnterminatedInvalidRecordsAreNotDiscarded()
+        {
+            WithTempPaths(paths =>
+            {
+                var store = new ChatStore(paths);
+                var fragments = new[]
+                {
+                    "{\"SchemaVersion\":4,\"Unexpected\":1}",
+                    "{\"SchemaVersion\":4,\"SchemaVersion\":4}",
+                    "{not-json}"
+                };
+                for (var index = 0; index < fragments.Length; index++)
+                {
+                    var session = store.Create("Word", "invalid-tail-" + index, "Tail.docx", "Before tail");
+                    var path = SessionEventFile(paths, session);
+                    File.AppendAllText(path, fragments[index]);
+                    var corrupted = File.ReadAllBytes(path);
+                    AssertTrue(store.Load(session.Id) == null,
+                        "complete invalid unterminated chat record is rejected: " + index);
+                    var rejected = false;
+                    try { store.Save(session); }
+                    catch (ChatConcurrencyException) { rejected = true; }
+                    AssertTrue(rejected, "append cannot erase invalid chat record: " + index);
+                    AssertTrue(File.ReadAllBytes(path).SequenceEqual(corrupted),
+                        "invalid chat bytes remain untouched: " + index);
+                }
+
+                var journal = new VbaJournalStore(paths);
+                journal.Save("Word", "invalid-vba-tail", "Tail.docx", "Module1", "StdModule", "Sub One()\nEnd Sub");
+                var journalPath = Path.Combine(paths.VbaJournalDirectory,
+                    AppDataPaths.SafeFileName("Word|invalid-vba-tail"), "mutations.events.jsonl");
+                File.AppendAllText(journalPath, "{\"SchemaVersion\":4,\"Unexpected\":1}");
+                var journalRejected = false;
+                try { journal.List("Word", "invalid-vba-tail"); }
+                catch (VbaJournalException) { journalRejected = true; }
+                AssertTrue(journalRejected, "complete invalid unterminated VBA record is rejected");
             });
         }
 

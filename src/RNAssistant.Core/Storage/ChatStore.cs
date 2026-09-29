@@ -885,10 +885,10 @@ namespace RNAssistant.Core.Storage
             {
                 throw new ChatConcurrencyException("Chat was changed by another RNAssistant instance. Reload the chat before saving again.");
             }
+            if (log != null && !log.IsStableSnapshot)
+                throw new ChatConcurrencyException("Chat storage changed while the event log was read.");
             if (log != null && log.HasIncompleteTail)
-            {
-                JsonlRecordWriter.RewriteAll(path, log.Events, Utf8);
-            }
+                JsonlRecordWriter.RepairTail(path, log.TailNextByteOffset, log.ByteLength);
 
             var protector = Protection();
             var appended = new List<SessionEvent>();

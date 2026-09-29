@@ -648,6 +648,8 @@ namespace RNAssistant.Core.Storage
         {
             public List<VbaJournalEvent> Events { get; private set; }
             public bool HasIncompleteTail { get; set; }
+            public long ByteLength { get; set; }
+            public long TailNextByteOffset { get; set; }
 
             public JournalReadResult()
             {

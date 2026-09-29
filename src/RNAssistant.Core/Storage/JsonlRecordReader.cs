@@ -1,5 +1,6 @@
 using System;
 using Newtonsoft.Json;
+using Newtonsoft.Json.Linq;
 
 namespace RNAssistant.Core.Storage
 {
@@ -63,7 +64,8 @@ namespace RNAssistant.Core.Storage
                     }
                     catch (JsonException ex)
                     {
-                        if (!line.Terminated && line.NextOffset == reader.Length)
+                        if (!line.Terminated && line.NextOffset == reader.Length &&
+                            IsIncompleteJson(line.Text, ex))
                         {
                             summary.HasIncompleteTail = true;
                             break;
@@ -81,6 +83,22 @@ namespace RNAssistant.Core.Storage
                 }
             }
             return summary;
+        }
+
+        private static bool IsIncompleteJson(string text, JsonException error)
+        {
+            // A complete JSON value rejected by the record contract (including duplicate or
+            // unknown fields) must never be treated as a torn write and erased on append.
+            if (!(error is JsonReaderException)) return false;
+            try
+            {
+                JToken.Parse(text);
+                return false;
+            }
+            catch (JsonReaderException syntaxError)
+            {
+                return syntaxError.LinePosition >= text.Length;
+            }
         }
     }
 }

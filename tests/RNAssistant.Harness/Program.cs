@@ -382,6 +382,7 @@ namespace RNAssistant.Harness
                 Test("storage: streaming frames use exact chunks", StreamingFramesAreBufferedAsExactChunks),
                 Test("storage: model request trace precedes dispatch", ModelRequestTracePrecedesDispatch),
                 Test("storage: incomplete event tail recovers", IncompleteEventTailRecovers),
+                Test("storage: unterminated invalid records are not discarded", UnterminatedInvalidRecordsAreNotDiscarded),
                 Test("storage: unterminated valid tail recovers", UnterminatedValidEventTailRecovers),
                 Test("storage: terminated corrupt tails are rejected", TerminatedCorruptTailsAreRejected),
                 Test("storage: corrupted artifact blob is safe", CorruptedArtifactBlobIsSafe),

@@ -49,7 +49,8 @@ namespace RNAssistant.Core.Storage
             string toolCallId,
             JToken data)
         {
-            if (log != null && log.HasIncompleteTail) JsonlRecordWriter.RewriteAll(path, log.Events, Utf8);
+            if (log != null && log.HasIncompleteTail)
+                JsonlRecordWriter.RepairTail(path, log.TailNextByteOffset, log.ByteLength);
             var previous = log == null || log.Events.Count == 0 ? null : log.Events[log.Events.Count - 1];
             var journalEvent = new VbaJournalEvent
             {
@@ -111,6 +112,8 @@ namespace RNAssistant.Core.Storage
                         result.Events.Add(journalEvent);
                     });
                 result.HasIncompleteTail = summary.HasIncompleteTail;
+                result.ByteLength = summary.ByteLength;
+                result.TailNextByteOffset = summary.TailNextByteOffset;
             }
             catch (JsonlRecordException ex)
             {
