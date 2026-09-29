@@ -316,12 +316,17 @@ namespace RNAssistant.Office
             var timer = Stopwatch.StartNew();
             var session = _chatSessions.GetActiveSessionForOfficeState();
             var loadMs = timer.ElapsedMilliseconds;
+            var fullReplays = _chatStore.HeaderFullReplayCount;
+            var incrementalReplays = _chatStore.HeaderIncrementalReplayCount;
             var response = ChatCatalogState(session);
             if (timer.ElapsedMilliseconds >= 250)
                 RNAssistant.Office.Diagnostics.RuntimeLog.Info(
                     "Chat catalog timing: active=" + loadMs + "ms, catalog=" +
                     (timer.ElapsedMilliseconds - loadMs) + "ms, chats=" +
-                    (response.Chats == null ? 0 : response.Chats.Count) + ".");
+                    (response.Chats == null ? 0 : response.Chats.Count) +
+                    ", headerFullReplays=" + (_chatStore.HeaderFullReplayCount - fullReplays) +
+                    ", headerIncrementalReplays=" + (_chatStore.HeaderIncrementalReplayCount - incrementalReplays) +
+                    ", casRefs=" + (response.Chats == null ? 0 : response.Chats.Sum(item => item.CasBlobCount)) + ".");
             return response;
         }
 

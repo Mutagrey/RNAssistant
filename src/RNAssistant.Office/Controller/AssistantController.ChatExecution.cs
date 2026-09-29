@@ -724,6 +724,8 @@ namespace RNAssistant.Office
             var toolsMs = timer.ElapsedMilliseconds;
             var skills = GetSkills();
             var skillsMs = timer.ElapsedMilliseconds - toolsMs;
+            var fullReplays = _chatStore.HeaderFullReplayCount;
+            var incrementalReplays = _chatStore.HeaderIncrementalReplayCount;
             var chats = _chatSessions.GetChatSummaries(activeId);
             var chatsMs = timer.ElapsedMilliseconds - toolsMs - skillsMs;
             var response = new SendChatResponse
@@ -760,7 +762,10 @@ namespace RNAssistant.Office
                 RuntimeLog.Info("Chat response projection timing: tools=" + toolsMs +
                     "ms, skills=" + skillsMs + "ms, chats=" + chatsMs +
                     "ms, state=" + (timer.ElapsedMilliseconds - toolsMs - skillsMs - chatsMs) +
-                    "ms, messages=" + (session.Messages == null ? 0 : session.Messages.Count) + ".");
+                    "ms, messages=" + (session.Messages == null ? 0 : session.Messages.Count) +
+                    ", headerFullReplays=" + (_chatStore.HeaderFullReplayCount - fullReplays) +
+                    ", headerIncrementalReplays=" + (_chatStore.HeaderIncrementalReplayCount - incrementalReplays) +
+                    ", casRefs=" + chats.Sum(item => item.CasBlobCount) + ".");
             return response;
         }
 
