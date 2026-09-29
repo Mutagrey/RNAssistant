@@ -163,6 +163,47 @@ namespace RNAssistant.Office.Domains.Outlook
             OutlookUpdateMailRequest request, Action markDispatchPossible);
     }
 
+    public sealed class OutlookArchiveScanRequest
+    {
+        public DateTime FromUtc { get; set; }
+        public DateTime ToUtc { get; set; }
+        public bool IncludePst { get; set; }
+        public string Cursor { get; set; }
+        public string ExpectedSourceSignature { get; set; }
+        public int MaxMessages { get; set; }
+    }
+
+    public sealed class OutlookArchiveMail
+    {
+        public string StoreId { get; set; }
+        public string EntryId { get; set; }
+        public string FolderPath { get; set; }
+        public string Subject { get; set; }
+        public string Sender { get; set; }
+        public DateTime ReceivedUtc { get; set; }
+        public string InternetMessageId { get; set; }
+        public string ConversationId { get; set; }
+        public int AttachmentCount { get; set; }
+        public string Body { get; set; }
+        public string Error { get; set; }
+    }
+
+    public sealed class OutlookArchiveScanBatch
+    {
+        public string SourceSignature { get; set; }
+        public string NextCursor { get; set; }
+        public bool Complete { get; set; }
+        public int ExaminedItems { get; set; }
+        public System.Collections.Generic.IReadOnlyList<OutlookArchiveMail> Messages { get; set; }
+        public System.Collections.Generic.IReadOnlyList<string> Errors { get; set; }
+    }
+
+    public interface IOutlookArchiveBackend
+    {
+        OutlookArchiveScanBatch ScanArchive(OutlookArchiveScanRequest request,
+            System.Threading.CancellationToken cancellationToken);
+    }
+
     public sealed class OutlookBackendException : InvalidOperationException
     {
         public string ErrorCode { get; private set; }

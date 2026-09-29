@@ -1,8 +1,10 @@
 using System;
 using System.Diagnostics;
 using System.Drawing;
+using System.Linq;
 using System.Windows.Forms;
 using RNAssistant.Office;
+using RNAssistant.Office.Contracts;
 using RNAssistant.OfficeHosts;
 
 namespace RNAssistant.Desktop
@@ -20,6 +22,8 @@ namespace RNAssistant.Desktop
         private Rectangle _restoreBounds;
         private FormWindowState _restoreWindowState;
         private bool _fullScreen;
+        private volatile OpenOfficeDocumentDto[] _openMailboxDocuments = new OpenOfficeDocumentDto[0];
+        private DateTime _nextMailboxRefreshUtc;
 
         public MainForm()
         {
@@ -36,6 +40,11 @@ namespace RNAssistant.Desktop
             _autoFollowTimer = new Timer { Interval = 750 };
             _autoFollowTimer.Tick += delegate
             {
+                if (DateTime.UtcNow >= _nextMailboxRefreshUtc)
+                {
+                    _nextMailboxRefreshUtc = DateTime.UtcNow.AddMinutes(1);
+                    RefreshMailboxTargets();
+                }
                 if (_targetRegistry.Mode != TargetSelectionMode.AutoFollow || ContainsFocus)
                 {
                     return;
@@ -53,6 +62,7 @@ namespace RNAssistant.Desktop
                 }
             };
             _autoFollowTimer.Start();
+            Shown += delegate { RefreshMailboxTargets(); };
             Controls.Add(_content);
             Controls.Add(_targetBar);
             _targetBar.UseActiveRequested += AttachForegroundOffice;
@@ -115,6 +125,11 @@ namespace RNAssistant.Desktop
 
             var entry = _targetRegistry.Upsert(activation.Target);
             var selected = _targetRegistry.SelectedTarget;
+            if (!forceSelect && string.IsNullOrWhiteSpace(activation.Action) &&
+                selected != null && selected.Target != null &&
+                !string.IsNullOrWhiteSpace(selected.Target.StoreId) &&
+                string.Equals(activation.Host, "Outlook", StringComparison.OrdinalIgnoreCase))
+                return;
             var shouldSwitch = forceSelect
                 || selected == null
                 || _targetRegistry.Mode == TargetSelectionMode.AutoFollow
@@ -166,6 +181,8 @@ namespace RNAssistant.Desktop
                 });
                 var adapterMs = attachTimer.ElapsedMilliseconds;
                 runtime = new AssistantRuntime(adapter);
+                runtime.Controller.ExternalDocumentsProvider = () => _openMailboxDocuments;
+                runtime.MailboxNavigationRequested = NavigateMailbox;
                 var runtimeMs = attachTimer.ElapsedMilliseconds - adapterMs;
                 DisposeCurrentRuntime();
                 ClearContent();
@@ -265,12 +282,73 @@ namespace RNAssistant.Desktop
             {
                 var host = _targetBar == null ? "All" : _targetBar.SelectedHost;
                 _targetRegistry.UpsertMany(_adapterProvider.ListOpenTargets(host));
+                RefreshMailboxTargets();
                 RefreshTargetUi("Open document list refreshed.");
             }
             catch (Exception ex)
             {
                 DesktopLog.Error("Could not refresh Office targets.", ex);
                 RefreshTargetUi("Refresh failed: " + ex.Message);
+            }
+        }
+
+        private void RefreshMailboxTargets()
+        {
+            _nextMailboxRefreshUtc = DateTime.UtcNow.AddMinutes(1);
+            try
+            {
+                var targets = _adapterProvider.ListOpenTargets("Outlook")
+                    .Where(item => !string.IsNullOrWhiteSpace(item.StoreId)).ToArray();
+                _targetRegistry.UpsertMany(targets);
+                if (_runtime == null && targets.Length > 0 && _targetRegistry.SelectedTarget == null)
+                {
+                    var first = _targetRegistry.Select(targets[0]);
+                    AttachTarget(first, null);
+                }
+                var selected = _targetRegistry.SelectedTarget;
+                _openMailboxDocuments = targets.Select(item => new OpenOfficeDocumentDto {
+                    Host = "Outlook", DocumentKey = item.DocumentKey, Title = item.Name,
+                    IsActive = _runtime != null &&
+                        string.Equals(_runtime.Controller.HostName, "Outlook", StringComparison.OrdinalIgnoreCase) &&
+                        selected != null && selected.Target != null &&
+                        string.Equals(selected.Target.DocumentKey, item.DocumentKey, StringComparison.Ordinal)
+                }).ToArray();
+                _runtime?.RefreshState();
+                RefreshTargetUi(null);
+            }
+            catch (Exception ex) { DesktopLog.Error("Outlook mailbox discovery failed.", ex); }
+        }
+
+        private void NavigateMailbox(string documentKey, string chatId, bool createNew)
+        {
+            if (InvokeRequired)
+            {
+                BeginInvoke(new Action(() => NavigateMailbox(documentKey, chatId, createNew)));
+                return;
+            }
+            try
+            {
+                var target = _adapterProvider.ListOpenTargets("Outlook").FirstOrDefault(item =>
+                    !string.IsNullOrWhiteSpace(item.StoreId) &&
+                    string.Equals(item.DocumentKey, documentKey, StringComparison.Ordinal));
+                if (target == null) throw new InvalidOperationException("Outlook mailbox is not connected.");
+                var entry = _targetRegistry.Upsert(target);
+                if (_runtime == null || !string.Equals(_targetRegistry.SelectedTargetId, entry.Id, StringComparison.OrdinalIgnoreCase))
+                {
+                    _targetRegistry.Select(entry.Id);
+                    AttachTarget(entry, null);
+                }
+                if (_runtime == null || !string.Equals(_runtime.Controller.HostName, "Outlook", StringComparison.OrdinalIgnoreCase))
+                    throw new InvalidOperationException("Outlook mailbox attachment failed.");
+                if (createNew) _runtime.Controller.CreateChat("Новый чат");
+                else if (!string.IsNullOrWhiteSpace(chatId)) _runtime.Controller.SelectChat(chatId);
+                _runtime.RefreshState();
+                RefreshMailboxTargets();
+            }
+            catch (Exception ex)
+            {
+                DesktopLog.Error("Outlook mailbox navigation failed.", ex);
+                MessageBox.Show(this, ex.Message, "RN Assistant", MessageBoxButtons.OK, MessageBoxIcon.Warning);
             }
         }
 
@@ -395,6 +473,7 @@ namespace RNAssistant.Desktop
                 Name = source.Name,
                 DocumentKey = source.DocumentKey,
                 EntryId = source.EntryId,
+                StoreId = source.StoreId,
                 FolderPath = source.FolderPath,
                 Selection = source.Selection,
                 Action = source.Action,

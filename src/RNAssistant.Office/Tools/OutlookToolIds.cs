@@ -5,19 +5,22 @@ namespace RNAssistant.Office.Tools
     internal static class OutlookToolIds
     {
         internal const string SearchMail = "outlook.search_mail";
+        internal const string IndexArchive = "outlook.index_archive";
         internal const string CreateDraft = "outlook.create_draft";
         internal const string UpdateMail = "outlook.update_mail";
 
         internal static bool Owns(string toolId)
         {
             return string.Equals(toolId, SearchMail, StringComparison.Ordinal) ||
+                string.Equals(toolId, IndexArchive, StringComparison.Ordinal) ||
                 string.Equals(toolId, CreateDraft, StringComparison.Ordinal) ||
                 string.Equals(toolId, UpdateMail, StringComparison.Ordinal);
         }
 
         internal static bool IsRead(string toolId)
         {
-            return string.Equals(toolId, SearchMail, StringComparison.Ordinal);
+            return string.Equals(toolId, SearchMail, StringComparison.Ordinal) ||
+                string.Equals(toolId, IndexArchive, StringComparison.Ordinal);
         }
 
         internal static bool IsMutation(string toolId)

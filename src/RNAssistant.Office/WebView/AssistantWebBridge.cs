@@ -24,6 +24,7 @@ namespace RNAssistant.Office.WebView
         private readonly Dictionary<string, ResourceChangedMessage> _resourceChanges = new Dictionary<string, ResourceChangedMessage>();
         private readonly Timer _resourceChangesTimer;
         private bool _resourceChangesDisposed;
+        public Action<string, string, bool> MailboxNavigationRequested { get; set; }
 
         public AssistantWebBridge(AssistantController controller, Action<string> postMessageJson)
         {
@@ -193,6 +194,14 @@ namespace RNAssistant.Office.WebView
                         break;
                     case "activateDocument":
                         responsePayload = _controller.ActivateDocument(Payload<DocumentPayload>(payload).DocumentKey);
+                        break;
+                    case "attachOutlookMailbox":
+                        var mailbox = Payload<OutlookMailboxNavigationPayload>(payload);
+                        if (MailboxNavigationRequested == null || string.IsNullOrWhiteSpace(mailbox.DocumentKey) ||
+                            !mailbox.DocumentKey.StartsWith("outlook-mailbox:", StringComparison.Ordinal))
+                            throw new InvalidOperationException("Outlook mailbox navigation is unavailable.");
+                        MailboxNavigationRequested(mailbox.DocumentKey, mailbox.ChatId, mailbox.CreateNew);
+                        responsePayload = new OutlookMailboxNavigationResponse { Scheduled = true };
                         break;
                     case "deleteDocument":
                         var deleteDocument = Payload<DocumentPayload>(payload);

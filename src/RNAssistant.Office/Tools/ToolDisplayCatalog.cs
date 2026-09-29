@@ -50,6 +50,7 @@ namespace RNAssistant.Office.Tools
             { "excel.write_range", new ToolDisplayMetadata("Запись диапазона", "Записываю диапазон", ToolDisplayOperation.Write) },
             { "outlook.create_draft", new ToolDisplayMetadata("Создание черновика письма", "Создаю черновик письма", ToolDisplayOperation.Write) },
             { "outlook.search_mail", new ToolDisplayMetadata("Поиск письма", "Ищу письмо", ToolDisplayOperation.Search) },
+            { "outlook.index_archive", new ToolDisplayMetadata("Индексирование архива Outlook", "Читаю письма архива", ToolDisplayOperation.Read) },
             { "outlook.update_mail", new ToolDisplayMetadata("Обновление письма", "Обновляю письмо", ToolDisplayOperation.Write) },
             { "powerpoint.add_object", new ToolDisplayMetadata("Создание объекта", "Создаю объект", ToolDisplayOperation.Write) },
             { "powerpoint.add_slide", new ToolDisplayMetadata("Создание слайда", "Создаю слайд", ToolDisplayOperation.Write) },

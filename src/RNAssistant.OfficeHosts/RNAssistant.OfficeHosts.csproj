@@ -112,6 +112,7 @@
     <Compile Include="OutlookAdapter.cs" />
     <Compile Include="Outlook\OutlookDocumentSession.cs" />
     <Compile Include="Outlook\OutlookInteropBackend.cs" />
+    <Compile Include="Outlook\OutlookInteropBackend.Archive.cs" />
     <Compile Include="PowerPointAdapter.cs" />
     <Compile Include="PowerPoint\PowerPointDocumentSession.cs" />
     <Compile Include="PowerPoint\PowerPointInteropBackend.cs" />

@@ -11,6 +11,7 @@ namespace RNAssistant.OfficeHosts
         public string Name { get; set; }
         public string DocumentKey { get; set; }
         public string EntryId { get; set; }
+        public string StoreId { get; set; }
         public string FolderPath { get; set; }
         public string Selection { get; set; }
         public string Action { get; set; }
@@ -24,6 +25,7 @@ namespace RNAssistant.OfficeHosts
                 return !string.IsNullOrWhiteSpace(FullName)
                     || !string.IsNullOrWhiteSpace(DocumentKey)
                     || !string.IsNullOrWhiteSpace(EntryId)
+                    || !string.IsNullOrWhiteSpace(StoreId)
                     || !string.IsNullOrWhiteSpace(FolderPath);
             }
         }

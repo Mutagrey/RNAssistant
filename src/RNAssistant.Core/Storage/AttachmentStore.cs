@@ -56,7 +56,7 @@ namespace RNAssistant.Core.Storage
                 throw new InvalidOperationException("Unsupported or binary attachment type. Use images, PDF, MP3, WAV or a text-based file.");
             }
 
-            contentType = NormalizeContentType(kind, contentType, bytes);
+            contentType = kind == "office" ? OfficeContentType(fileName) : NormalizeContentType(kind, contentType, bytes);
             var attachment = new ChatAttachment
             {
                 DraftChatId = draftChatId,
@@ -328,6 +328,12 @@ namespace RNAssistant.Core.Storage
                 SetExtractedText(attachment, path, text);
                 return;
             }
+            if (attachment.Kind == "office")
+            {
+                SetExtractedText(attachment, path,
+                    OfficeAttachmentTextExtractor.Extract(attachment.FileName, File.ReadAllBytes(path), MaxExtractedChars));
+                return;
+            }
             if (attachment.Kind != "pdf")
             {
                 return;
@@ -423,9 +429,10 @@ namespace RNAssistant.Core.Storage
             if (bytes == null || bytes.LongLength < 1 || bytes.LongLength > MaxFileBytes)
                 throw new InvalidOperationException("Attachment must be between 1 byte and 20 MB.");
             var kind = DetectKind(fileName, null, bytes);
-            if (kind != "text" && kind != "pdf" && kind != "image")
-                throw new InvalidOperationException("Only text, PDF and image attachments are supported.");
-            var result = new AttachmentContent { Kind = kind, ContentType = NormalizeContentType(kind, null, bytes) };
+            if (kind != "text" && kind != "pdf" && kind != "image" && kind != "office")
+                throw new InvalidOperationException("Only text, PDF, DOCX, XLSX, PPTX and image attachments are supported.");
+            var result = new AttachmentContent { Kind = kind, ContentType = kind == "office"
+                ? OfficeContentType(fileName) : NormalizeContentType(kind, null, bytes) };
             if (kind == "text")
             {
                 string text;
@@ -443,6 +450,8 @@ namespace RNAssistant.Core.Storage
                 if (pdf.PageTextLengths.Any(length => length < 20))
                     result.Warning = "Some PDF pages have little or no text; use the media representation with a vision model to inspect them.";
             }
+            if (kind == "office")
+                result.Text = OfficeAttachmentTextExtractor.Extract(fileName, bytes, MaxExtractedChars);
             if (result.Text != null && result.Text.Length > MaxExtractedChars)
                 throw new InvalidOperationException("Complete attachment text exceeds 1,000,000 characters.");
             return result;
@@ -451,6 +460,9 @@ namespace RNAssistant.Core.Storage
         private static string DetectKind(string name, string contentType, byte[] bytes)
         {
             var extension = Path.GetExtension(name).ToLowerInvariant();
+            if (extension == ".docx" || extension == ".xlsx" || extension == ".pptx")
+                return bytes.Length >= 4 && bytes[0] == 0x50 && bytes[1] == 0x4b &&
+                    bytes[2] == 0x03 && bytes[3] == 0x04 ? "office" : null;
             if (IsImageSignature(bytes)) return "image";
             if (bytes.Length >= 5 && Encoding.ASCII.GetString(bytes, 0, 5) == "%PDF-") return "pdf";
             if (IsWavSignature(bytes) || IsMp3Signature(bytes)) return "audio";
@@ -633,6 +645,14 @@ namespace RNAssistant.Core.Storage
             if (bytes[0] == 0x89) return "image/png";
             if (Encoding.ASCII.GetString(bytes, 0, 3) == "GIF") return "image/gif";
             return "image/webp";
+        }
+
+        private static string OfficeContentType(string fileName)
+        {
+            var extension = Path.GetExtension(fileName ?? string.Empty).ToLowerInvariant();
+            if (extension == ".docx") return "application/vnd.openxmlformats-officedocument.wordprocessingml.document";
+            if (extension == ".xlsx") return "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet";
+            return "application/vnd.openxmlformats-officedocument.presentationml.presentation";
         }
 
         private static string SafeDisplayName(string value)

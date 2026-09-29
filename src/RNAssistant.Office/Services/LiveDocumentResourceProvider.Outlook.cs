@@ -15,9 +15,12 @@ namespace RNAssistant.Office.Services
         internal const string OutlookMailKind = "outlook-mail";
         internal const string OutlookCollectionKind = "outlook-collection";
         internal const string OutlookSearchKind = "outlook-search-scope";
+        internal const string OutlookArchivePageKind = "outlook-archive-page";
+        internal const string OutlookArchiveMailKind = "outlook-archive-mail";
         private const string OutlookCollectionKey = "folder-collection";
         private readonly IOutlookBackend _outlook;
         internal bool IsOutlook { get { return string.Equals(_adapter.HostName, "Outlook", StringComparison.OrdinalIgnoreCase); } }
+        internal bool IsOutlookMailbox { get { return IsOutlook && (_adapter.DocumentKey ?? string.Empty).StartsWith("outlook-mailbox:", StringComparison.Ordinal); } }
 
         private OutlookService OutlookReader()
         {
@@ -149,6 +152,12 @@ namespace RNAssistant.Office.Services
 
         private string ReadOutlookSource(string target, string representation)
         {
+            string archiveId; int archivePage;
+            if (TryOutlookArchivePageKey(target, out archiveId, out archivePage))
+                return ReadOutlookArchivePage(archiveId, archivePage);
+            int archiveRow;
+            if (TryOutlookArchiveMailKey(target, out archiveId, out archivePage, out archiveRow))
+                return ReadOutlookArchiveMail(archiveId, archivePage, archiveRow);
             if (target == OutlookCollectionKey) return ReadOutlookCollection();
             if (IsOutlookSearch(target)) return ReadOutlookSearch(target);
             var snapshot = CaptureOutlookMail(target, representation != ResourceRepresentations.Structure);

@@ -111,6 +111,8 @@ namespace RNAssistant.Desktop
 
         private static string BuildId(OfficeTargetDescriptor target)
         {
+            if (!string.IsNullOrWhiteSpace(target.StoreId))
+                return Normalize(target.Host) + "|mailbox|" + Normalize(target.DocumentKey);
             return Normalize(target.Host) + "|" +
                 target.Hwnd + "|" +
                 target.ProcessId + "|" +
@@ -143,6 +145,7 @@ namespace RNAssistant.Desktop
                 Name = source.Name,
                 DocumentKey = source.DocumentKey,
                 EntryId = source.EntryId,
+                StoreId = source.StoreId,
                 FolderPath = source.FolderPath,
                 Selection = source.Selection,
                 Action = source.Action,

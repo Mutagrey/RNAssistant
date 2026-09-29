@@ -91,6 +91,23 @@ namespace RNAssistant.Harness
             AssertEqual(1, registry.ForHost("Word").Count, "word count");
         }
 
+        private static void TargetRegistryMailboxSurvivesWindowChanges()
+        {
+            var registry = new OfficeTargetRegistry();
+            var first = registry.Select(new OfficeTargetDescriptor {
+                Host = "Outlook", StoreId = "store-a", DocumentKey = "outlook-mailbox:abc",
+                Hwnd = 10, Name = "Account" });
+            var changedWindow = registry.Upsert(new OfficeTargetDescriptor {
+                Host = "Outlook", StoreId = "store-a", DocumentKey = "outlook-mailbox:abc",
+                Hwnd = 22, Name = "Renamed account" });
+            AssertEqual(first.Id, changedWindow.Id, "mailbox target survives window change");
+            AssertEqual(1, registry.Targets.Count, "mailbox is not duplicated");
+            AssertEqual("Renamed account", registry.SelectedTarget.Target.Name, "latest title is used");
+            var other = registry.Upsert(new OfficeTargetDescriptor {
+                Host = "Outlook", StoreId = "store-b", DocumentKey = "outlook-mailbox:def" });
+            AssertTrue(other.Id != first.Id, "distinct accounts stay distinct");
+        }
+
         private static void OfficeStaDispatcherRunsSta()
         {
             using (var dispatcher = new OfficeStaDispatcher())

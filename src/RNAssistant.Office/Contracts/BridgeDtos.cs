@@ -497,6 +497,24 @@ namespace RNAssistant.Office.Contracts
         public ChatStateResponse State { get; set; }
     }
 
+    public sealed class OutlookMailboxNavigationPayload
+    {
+        [JsonProperty("documentKey")]
+        public string DocumentKey { get; set; }
+
+        [JsonProperty("chatId")]
+        public string ChatId { get; set; }
+
+        [JsonProperty("createNew")]
+        public bool CreateNew { get; set; }
+    }
+
+    public sealed class OutlookMailboxNavigationResponse
+    {
+        [JsonProperty("scheduled")]
+        public bool Scheduled { get; set; }
+    }
+
     public sealed class ChatArtifactDto
     {
         [JsonProperty("availabilityIssue")] public string AvailabilityIssue { get; set; }

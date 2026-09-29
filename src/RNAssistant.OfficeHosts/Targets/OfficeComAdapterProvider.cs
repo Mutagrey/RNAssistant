@@ -65,7 +65,7 @@ namespace RNAssistant.OfficeHosts
                 var binding = ResolveOutlookBinding(application, target);
                 return new OutlookAdapter(
                     application, binding.Mail, binding.Folder,
-                    binding.Inspector, binding.Explorer, dispatcher);
+                    binding.Inspector, binding.Explorer, dispatcher, binding.Store);
             }
 
             throw new InvalidOperationException("Unsupported Office host: " + (host ?? string.Empty));
@@ -477,6 +477,19 @@ namespace RNAssistant.OfficeHosts
             if (application == null)
                 throw new InvalidOperationException(
                     "Outlook application is unavailable.");
+            if (target != null && !string.IsNullOrWhiteSpace(target.StoreId))
+            {
+                var expectedKey = OfficeTargetEnumerator.OutlookMailboxKey(
+                    SafeString(delegate { return application.Session.CurrentProfileName; }), target.StoreId);
+                if (!string.Equals(target.DocumentKey, expectedKey, StringComparison.Ordinal))
+                    throw new InvalidOperationException("Outlook mailbox target identity is invalid.");
+                foreach (Outlook.Store store in application.Session.Stores)
+                {
+                    if (string.Equals(store.StoreID, target.StoreId, StringComparison.Ordinal))
+                        return new OutlookBinding { Store = store };
+                }
+                throw new InvalidOperationException("The requested Outlook mailbox is not open.");
+            }
             if (target == null ||
                 (target.Hwnd == 0 &&
                  string.IsNullOrWhiteSpace(target.EntryId) &&
@@ -539,6 +552,7 @@ namespace RNAssistant.OfficeHosts
 
         private sealed class OutlookBinding
         {
+            public Outlook.Store Store { get; set; }
             public Outlook.MailItem Mail { get; set; }
             public Outlook.MAPIFolder Folder { get; set; }
             public Outlook.Inspector Inspector { get; set; }

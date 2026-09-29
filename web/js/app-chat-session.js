@@ -8,6 +8,22 @@ function applyChatNavigationState(response, version) {
   return applyChatState(response);
 }
 
+function isOutlookMailboxKey(key) {
+  return typeof key === "string" && key.indexOf("outlook-mailbox:") === 0;
+}
+
+function isCurrentOutlookMailbox(key) {
+  return (state.documents || []).some(function (item) {
+    return (item.documentKey || item.DocumentKey) === key && !!(item.isActive || item.IsActive);
+  });
+}
+
+async function attachOutlookMailbox(key, chatIdValue, createNew) {
+  await send("attachOutlookMailbox", {
+    documentKey: key, chatId: chatIdValue || "", createNew: !!createNew
+  });
+}
+
 async function createChat() {
   if (typeof confirmDiscardHtmlWorkspaceChanges === "function" &&
       !confirmDiscardHtmlWorkspaceChanges("Создать новый чат")) {
@@ -36,6 +52,10 @@ async function createDocumentChat(documentItem) {
   delete state.collapsedChatDocuments[documentItem.key];
   var navigationVersion = beginChatNavigation();
   try {
+    if (isOutlookMailboxKey(documentItem.documentKey)) {
+      await attachOutlookMailbox(documentItem.documentKey, "", true);
+      return;
+    }
     applyChatNavigationState(await send("createDocumentChat", {
       title: "Новый чат",
       host: documentItem.host,
@@ -64,6 +84,12 @@ async function selectChat(id) {
   state.pendingChatSelectionId = id;
   var startedAt = window.performance && window.performance.now ? window.performance.now() : Date.now();
   try {
+    var mailboxChat = (state.chats || []).find(function (chat) { return chatId(chat) === id; });
+    if (mailboxChat && isOutlookMailboxKey(chatDocumentKey(mailboxChat)) &&
+        !isCurrentOutlookMailbox(chatDocumentKey(mailboxChat))) {
+      await attachOutlookMailbox(chatDocumentKey(mailboxChat), id, false);
+      return;
+    }
     var response = await send("selectChat", { chatId: id });
     var bridgeMs = (window.performance && window.performance.now ? window.performance.now() : Date.now()) - startedAt;
     var applied = applyChatNavigationState(response, navigationVersion);
@@ -94,6 +120,11 @@ async function openActiveDocument(chatIdValue) {
   var navigationVersion = beginChatNavigation();
   setControlBusy("openDocumentButton", true);
   try {
+    var mailboxChat = (state.chats || []).find(function (chat) { return chatId(chat) === targetChatId; });
+    if (mailboxChat && isOutlookMailboxKey(chatDocumentKey(mailboxChat))) {
+      await attachOutlookMailbox(chatDocumentKey(mailboxChat), targetChatId, false);
+      return;
+    }
     var result = await send("openDocument", { chatId: targetChatId });
     var chatState = result && (result.state || result.State);
     if (chatState) {
@@ -116,6 +147,10 @@ async function activateDocument(documentKey) {
   }
   var navigationVersion = beginChatNavigation();
   try {
+    if (isOutlookMailboxKey(documentKey)) {
+      await attachOutlookMailbox(documentKey, "", false);
+      return;
+    }
     applyChatNavigationState(await send("activateDocument", { documentKey: documentKey }), navigationVersion);
     log("Документ активирован.");
   } catch (error) {

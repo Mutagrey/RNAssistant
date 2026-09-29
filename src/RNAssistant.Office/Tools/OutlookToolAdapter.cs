@@ -4,17 +4,30 @@ using System.Threading;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
 using RNAssistant.Office.Domains.Outlook;
+using RNAssistant.Office.Services;
 
 namespace RNAssistant.Office.Tools
 {
     internal sealed class OutlookToolAdapter
     {
         private readonly OutlookService _service;
+        private readonly IOutlookArchiveBackend _archiveBackend;
+        internal OutlookArchiveIndexService ArchiveIndex { get; private set; }
 
-        internal OutlookToolAdapter(IOutlookBackend backend)
+        internal OutlookToolAdapter(IOutlookBackend backend, OutlookArchiveIndexService archiveIndex = null)
         {
             _service = new OutlookService(
                 backend ?? throw new ArgumentNullException(nameof(backend)));
+            _archiveBackend = backend as IOutlookArchiveBackend;
+            ArchiveIndex = archiveIndex;
+        }
+
+        internal OutlookArchiveScanBatch ScanArchive(OutlookArchiveScanRequest request, CancellationToken token)
+        {
+            if (_archiveBackend == null || ArchiveIndex == null)
+                throw new OutlookBackendException("Outlook archive indexing is unavailable.",
+                    "outlook_archive_unavailable", false);
+            return _archiveBackend.ScanArchive(request, token);
         }
 
         internal OutlookOutcome Execute(

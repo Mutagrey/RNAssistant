@@ -139,7 +139,8 @@ namespace RNAssistant.Office.Tools
             var outlookBackend = _adapter as IOutlookBackendProvider;
             _outlookAdapter = outlookBackend == null ||
                 outlookBackend.OutlookBackend == null
-                ? null : new OutlookToolAdapter(outlookBackend.OutlookBackend);
+                ? null : new OutlookToolAdapter(outlookBackend.OutlookBackend,
+                    new OutlookArchiveIndexService(paths, Payloads));
             _htmlWorkspaceService = new HtmlWorkspaceToolService(
                 _resourceGateway);
             var controllerTools = new List<ToolCatalogEntry>();

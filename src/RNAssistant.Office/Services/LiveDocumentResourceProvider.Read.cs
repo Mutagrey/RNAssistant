@@ -91,6 +91,10 @@ namespace RNAssistant.Office.Services
                     MaximumSnippetCharacters,
                     maxCharsPerMatch <= 0 ? 600 : maxCharsPerMatch));
                 var result = new ResourceSearchResult { Query = query };
+                if (IsOutlookMailbox && kind == OutlookArchivePageKind)
+                    return SearchOutlookArchivePages(session, query, limit, maxCharsPerMatch);
+                if (IsOutlookMailbox && (string.IsNullOrWhiteSpace(kind) || kind == DocumentKind))
+                    return result;
                 string target;
                 string resultKind;
                 if (string.IsNullOrWhiteSpace(kind) ||
@@ -281,6 +285,14 @@ namespace RNAssistant.Office.Services
             if (value.Length == 0 || value == "auto") return ResourceRepresentations.Text;
             if (IsOutlook && IsOutlookSearch(target) && value != ResourceRepresentations.Text && value != ResourceRepresentations.Metadata)
                 throw new ResourceRequestException("Outlook search scopes expose exact text JSON.", "RESOURCE_VIEW_UNAVAILABLE", false);
+            string archiveId; int archivePage;
+            if (IsOutlook && TryOutlookArchivePageKey(target, out archiveId, out archivePage) &&
+                value != ResourceRepresentations.Text && value != ResourceRepresentations.Metadata)
+                throw new ResourceRequestException("Outlook archive pages expose exact text JSON.", "RESOURCE_VIEW_UNAVAILABLE", false);
+            int archiveRow;
+            if (IsOutlook && TryOutlookArchiveMailKey(target, out archiveId, out archivePage, out archiveRow) &&
+                value != ResourceRepresentations.Text && value != ResourceRepresentations.Metadata)
+                throw new ResourceRequestException("Outlook archive mail bodies expose text.", "RESOURCE_VIEW_UNAVAILABLE", false);
             if (IsPowerPoint && IsPowerPointSearch(target) && value != ResourceRepresentations.Text && value != ResourceRepresentations.Metadata)
                 throw new ResourceRequestException("PowerPoint search scopes expose exact text JSON.", "RESOURCE_VIEW_UNAVAILABLE", false);
             if (IsWord && IsWordSearch(target) && value != ResourceRepresentations.Text && value != ResourceRepresentations.Metadata)

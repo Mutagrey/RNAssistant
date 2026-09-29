@@ -13,6 +13,8 @@ namespace RNAssistant.OfficeHosts
         private readonly Outlook.MAPIFolder _folder;
         private readonly Outlook.Inspector _inspector;
         private readonly Outlook.Explorer _explorer;
+        private readonly Outlook.Store _store;
+        private readonly string _storeId;
         private readonly string _stableDocumentId;
 
         internal OutlookDocumentSession(
@@ -22,13 +24,14 @@ namespace RNAssistant.OfficeHosts
             Outlook.Inspector inspector,
             Outlook.Explorer explorer,
             string runtimeDocumentId,
-            IOfficeStaDispatcher dispatcher)
+            IOfficeStaDispatcher dispatcher,
+            Outlook.Store store = null)
         {
             _application = application ??
                 throw new ArgumentNullException(nameof(application));
-            if ((mail == null) == (folder == null))
+            if ((mail == null ? 0 : 1) + (folder == null ? 0 : 1) + (store == null ? 0 : 1) != 1)
                 throw new ArgumentException(
-                    "An Outlook session requires exactly one mail or folder target.");
+                    "An Outlook session requires exactly one mail, folder or mailbox target.");
             if (mail != null && inspector == null)
                 throw new ArgumentException(
                     "A mail-bound Outlook session requires its exact inspector.");
@@ -48,10 +51,14 @@ namespace RNAssistant.OfficeHosts
             _folder = folder;
             _inspector = inspector;
             _explorer = explorer;
+            _store = store;
+            _storeId = store == null ? null : store.StoreID;
             RuntimeDocumentId = runtimeDocumentId;
-            _stableDocumentId = mail != null
-                ? MailStableId(mail, runtimeDocumentId)
-                : FolderStableId(folder, runtimeDocumentId);
+            _stableDocumentId = store != null
+                ? OfficeTargetEnumerator.OutlookMailboxKey(
+                    SafeString(delegate { return application.Session.CurrentProfileName; }), _storeId)
+                : mail != null ? MailStableId(mail, runtimeDocumentId)
+                    : FolderStableId(folder, runtimeDocumentId);
             if (string.IsNullOrWhiteSpace(_stableDocumentId))
                 throw new InvalidOperationException(
                     "A stable Outlook target id is required.");
@@ -75,7 +82,7 @@ namespace RNAssistant.OfficeHosts
             get
             {
                 RequireOwnerAccess();
-                return (object)_mail ?? _folder;
+                return (object)_mail ?? _folder ?? _store;
             }
         }
 
@@ -86,6 +93,12 @@ namespace RNAssistant.OfficeHosts
                 RequireOwnerAccess();
                 try
                 {
+                    if (_store != null)
+                    {
+                        foreach (Outlook.Store current in _application.Session.Stores)
+                            if (string.Equals(current.StoreID, _storeId, StringComparison.Ordinal)) return true;
+                        return false;
+                    }
                     if (_mail != null)
                     {
                         if (ReadWindowHwnd(_inspector) == 0) return false;
@@ -101,6 +114,8 @@ namespace RNAssistant.OfficeHosts
         }
 
         internal bool IsMailTarget { get { return _mail != null; } }
+        internal bool IsMailboxTarget { get { return _store != null; } }
+        internal string StoreId { get { RequireOwnerAccess(); return _storeId; } }
         internal Outlook.Application Application
         {
             get { RequireOwnerAccess(); return _application; }
@@ -122,7 +137,7 @@ namespace RNAssistant.OfficeHosts
                     throw new OutlookBackendException(
                         "This Outlook runtime is bound to a mail inspector, not a folder.",
                         "outlook_folder_target_missing", true);
-                return _folder;
+                return _folder ?? _store.GetRootFolder();
             }
         }
 
@@ -130,6 +145,17 @@ namespace RNAssistant.OfficeHosts
         {
             RequireAlive();
             if (_mail != null) return _mail;
+            if (_store != null)
+            {
+                try
+                {
+                    var explorer = _application.ActiveExplorer();
+                    var selection = explorer == null ? null : explorer.Selection;
+                    var current = selection == null || selection.Count == 0 ? null : selection[1] as Outlook.MailItem;
+                    return current != null && MailBelongsToStore(current, _storeId) ? current : null;
+                }
+                catch { return null; }
+            }
             try
             {
                 var selection = _explorer.Selection;
@@ -145,6 +171,15 @@ namespace RNAssistant.OfficeHosts
             if (string.IsNullOrWhiteSpace(entryId)) return SelectedMail();
             if (_mail != null)
                 return string.Equals(_mail.EntryID, entryId, StringComparison.Ordinal) ? _mail : null;
+            if (_store != null)
+            {
+                try
+                {
+                    var found = _application.Session.GetItemFromID(entryId, _storeId) as Outlook.MailItem;
+                    return found != null && MailBelongsToStore(found, _storeId) ? found : null;
+                }
+                catch { return null; }
+            }
             try
             {
                 var storeId = _folder.StoreID;
@@ -170,12 +205,23 @@ namespace RNAssistant.OfficeHosts
             catch { return false; }
         }
 
+        private static bool MailBelongsToStore(Outlook.MailItem mail, string storeId)
+        {
+            try
+            {
+                var parent = mail.Parent as Outlook.MAPIFolder;
+                return parent != null && !string.IsNullOrWhiteSpace(storeId) &&
+                    string.Equals(parent.StoreID, storeId, StringComparison.Ordinal);
+            }
+            catch { return false; }
+        }
+
         internal string Title
         {
             get
             {
                 RequireAlive();
-                return _mail != null
+                return _store != null ? _store.DisplayName : _mail != null
                     ? SafeString(delegate { return _mail.Subject; })
                     : SafeString(delegate { return _folder.Name; });
             }
@@ -186,6 +232,7 @@ namespace RNAssistant.OfficeHosts
             get
             {
                 RequireAlive();
+                if (_store != null) return SafeString(delegate { return _store.GetRootFolder().FolderPath; });
                 if (_folder != null)
                     return SafeString(delegate { return _folder.FolderPath; });
                 try
@@ -203,6 +250,11 @@ namespace RNAssistant.OfficeHosts
             get
             {
                 RequireOwnerAccess();
+                if (_store != null)
+                {
+                    var active = _application.ActiveExplorer();
+                    return active == null ? 0 : ReadWindowHwnd(active);
+                }
                 return _inspector != null
                     ? ReadWindowHwnd(_inspector) : ReadWindowHwnd(_explorer);
             }
@@ -212,7 +264,12 @@ namespace RNAssistant.OfficeHosts
         {
             RequireAlive();
             if (_inspector != null) _inspector.Activate();
-            else _explorer.Activate();
+            else if (_explorer != null) _explorer.Activate();
+            else
+            {
+                var active = _application.ActiveExplorer();
+                if (active != null) active.Activate();
+            }
         }
 
         internal static string MailIdentity(Outlook.MailItem mail)

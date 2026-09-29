@@ -499,12 +499,14 @@ requires unique complete mail discovery (at most 500 folder items); open an Insp
 when folder discovery is incomplete. Attachment coverage does not gate other resource
 families. No mailbox-wide attachment-content search is introduced.
 
-`metadata` reads no file bytes; `text` reads text/CSV or extracted PDF text; `media`
+`metadata` reads no file bytes; `text` reads text/CSV or extracted PDF/OOXML text; `media`
 uses the existing model attachment/vision routing for images and PDFs. Auto selects
 media for images and PDFs with little/no page text. Explicit PDF text includes a warning
 when visual content is absent from extraction. No separate OCR, model protocol or UI is
-introduced. DOCX/XLSX/PPTX, archives, embedded messages and OLE attachments are outside
-this slice; unsupported/invalid content fails explicitly.
+introduced. DOCX/XLSX/PPTX now extract bounded OOXML text (Word paragraphs/tables,
+spreadsheet cells with sheet/address labels, slides and notes) without Office
+automation. Legacy DOC/XLS/PPT, archives, embedded messages and OLE attachments
+remain unsupported; malformed or protected content fails explicitly.
 
 `OutlookService.CaptureAttachment` validates the typed request/result. The bound
 `OutlookInteropBackend` saves only `olByValue` into a uniquely named temporary directory,
@@ -581,6 +583,27 @@ evidence and publish observed drift; historical reads do no Office I/O and missi
 payloads never fall forward. Inspector runtimes cannot search their parent folder.
 The old search-body duplicate field and unused folder-path snapshot field are removed.
 Real Windows/COM, OOM pre-materialization and WebView/model qualification remain open.
+
+### Outlook mailbox archive (host-neutral implementation; Windows COM open)
+
+Desktop offers stable mailbox chats keyed from StoreID. `outlook.index_archive`
+scans the selected mailbox and optionally attached PST stores for an inclusive UTC
+date range; each call persists up to 20 batches of 25 matching mails and may be
+repeated to resume. The backend walks folders, excludes recognised search folders,
+reads each matching body once, and records folder/read errors. A source signature
+checks folder identities and item counts between batches; unchanged counts do not
+prove that messages stayed unchanged during the scan. `refresh=true` explicitly
+starts a new scan. Large bodies have separate exact mail targets and are read through
+the normal resource cursor.
+
+CAS holds indexed bodies and pages; a pointer is a rebuildable cache checkpoint.
+CAS GC traverses its manifest/page/body references. `common.resources_find/read`
+exposes `Outlook archive page` text JSON with period, coverage, page/row source
+context, duplicate flags and attachment counts. Search over indexed page text is
+literal and reports unavailable pages. Attachment contents remain unexamined.
+Automatic multi-run classification/report coordination and direct extraction of
+attachments from archived PST rows are still open. Real Outlook 2013/2016 COM
+enumeration, binding, cancellation and WebView navigation need Windows qualification.
 
 ## Conversation loop
 

@@ -17,13 +17,16 @@ namespace RNAssistant.Office.Services
         private readonly IOfficeApplicationAdapter _adapter;
         private readonly LiveOfficeResourceScope _scope;
         private readonly RNAssistant.Core.Storage.ChatBlobStore _payloads;
+        private readonly OutlookArchiveIndexService _archiveIndex;
         private bool IsExactSource(string target) { return IsOutlook || IsWord || (IsPowerPoint && target != "selection"); }
 
-        public LiveDocumentResourceProvider(IOfficeApplicationAdapter adapter, RNAssistant.Core.Storage.ChatBlobStore payloads = null)
+        public LiveDocumentResourceProvider(IOfficeApplicationAdapter adapter, RNAssistant.Core.Storage.ChatBlobStore payloads = null,
+            OutlookArchiveIndexService archiveIndex = null)
         {
             _adapter = adapter ?? throw new ArgumentNullException("adapter");
             _scope = new LiveOfficeResourceScope(adapter);
             _payloads = payloads;
+            _archiveIndex = archiveIndex;
             if (IsOutlook) _outlook = (adapter as RNAssistant.Office.Domains.Outlook.IOutlookBackendProvider)?.OutlookBackend;
             if (IsPowerPoint) _powerPoint = (adapter as RNAssistant.Office.Domains.PowerPoint.IPowerPointBackendProvider)?.PowerPointBackend;
             if (IsWord) _word = (adapter as RNAssistant.Office.Domains.Word.IWordBackendProvider)?.WordBackend;
@@ -45,16 +48,17 @@ namespace RNAssistant.Office.Services
             return _scope.Read(session, delegate
             {
                 limit = Math.Max(1, Math.Min(MaximumItems, limit <= 0 ? 20 : limit));
-                if (IsOutlook && kind == OutlookAttachmentKind) return ListOutlookAttachments(session, cursor, limit);
-                if (IsOutlook && kind == OutlookMailKind) return ListOutlookMail(session, cursor, limit);
+                if (IsOutlook && kind == OutlookAttachmentKind && !IsOutlookMailbox) return ListOutlookAttachments(session, cursor, limit);
+                if (IsOutlook && kind == OutlookMailKind && !IsOutlookMailbox) return ListOutlookMail(session, cursor, limit);
+                if (IsOutlook && kind == OutlookArchivePageKind) return ListOutlookArchivePages(session, cursor, limit);
                 var items = new List<ResourceDescriptor>();
                 if (IsPowerPoint && kind == PowerPointSearchKind)
                     items.AddRange(new[] { "deck", "deck+notes" }.Select(scope => Describe(session, "search-" + scope)));
                 if (IsWord && kind == WordSearchKind)
                     items.AddRange(new[] { "main", "selection", "all" }.Select(scope => Describe(session, "stories-" + scope)));
-                if (IsOutlook && (string.IsNullOrWhiteSpace(kind) || kind == OutlookCollectionKind))
+                if (IsOutlook && !IsOutlookMailbox && (string.IsNullOrWhiteSpace(kind) || kind == OutlookCollectionKind))
                     items.Add(DescribeOutlookCollection(session));
-                if (IsOutlook && kind == OutlookSearchKind)
+                if (IsOutlook && !IsOutlookMailbox && kind == OutlookSearchKind)
                     items.AddRange(new[] { "search-latest-100", "search-latest-100+body" }.Select(key => DescribeOutlookSearch(session, key)));
                 if (string.IsNullOrWhiteSpace(kind) ||
                     string.Equals(kind, DocumentKind, StringComparison.OrdinalIgnoreCase))
@@ -104,6 +108,12 @@ namespace RNAssistant.Office.Services
             string attachmentMail; int attachmentIndex;
             if (IsOutlook && TryAttachmentKey(target, out attachmentMail, out attachmentIndex)) return DescribeAttachment(session, target);
             if (IsOutlook && target == OutlookCollectionKey) return DescribeOutlookCollection(session);
+            string archiveId; int archivePage;
+            if (IsOutlook && TryOutlookArchivePageKey(target, out archiveId, out archivePage))
+                return DescribeOutlookArchivePage(session, archiveId, archivePage);
+            int archiveRow;
+            if (IsOutlook && TryOutlookArchiveMailKey(target, out archiveId, out archivePage, out archiveRow))
+                return DescribeOutlookArchiveMail(session, archiveId, archivePage, archiveRow);
             if (IsOutlook && IsOutlookSearch(target)) return DescribeOutlookSearch(session, target);
             if (IsPowerPoint && IsPowerPointSearch(target))
             {
@@ -179,6 +189,8 @@ namespace RNAssistant.Office.Services
             }
             string outlookEntryId;
             string attachmentMail; int attachmentIndex;
+            string archiveId; int archivePage;
+            int archiveRow;
             if (!string.Equals(address.Segments[1], "root", StringComparison.Ordinal) &&
                 !string.Equals(address.Segments[1], "selection", StringComparison.Ordinal) &&
                 !(IsWord && IsWordRange(address.Segments[1])) &&
@@ -188,6 +200,8 @@ namespace RNAssistant.Office.Services
                 !(IsOutlook && TryAttachmentKey(address.Segments[1], out attachmentMail, out attachmentIndex)) &&
                 !(IsOutlook && address.Segments[1] == OutlookCollectionKey) &&
                 !(IsOutlook && IsOutlookSearch(address.Segments[1])) &&
+                !(IsOutlook && TryOutlookArchivePageKey(address.Segments[1], out archiveId, out archivePage)) &&
+                !(IsOutlook && TryOutlookArchiveMailKey(address.Segments[1], out archiveId, out archivePage, out archiveRow)) &&
                 !(IsOutlook && TryOutlookMailKey(address.Segments[1], out outlookEntryId)))
             {
                 return false;

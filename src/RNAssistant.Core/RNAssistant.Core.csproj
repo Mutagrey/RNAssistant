@@ -78,6 +78,7 @@
     <Reference Include="System.Net.Http" />
     <Reference Include="System.Security" />
     <Reference Include="System.IO.Compression" />
+    <Reference Include="System.Xml.Linq" />
   </ItemGroup>
   <ItemGroup>
     <Compile Include="Models\AppSettings.cs" />
@@ -173,6 +174,7 @@
     <Compile Include="Services\TrajectoryExportService.cs" />
     <Compile Include="Storage\AppDataPaths.cs" />
     <Compile Include="Storage\AttachmentStore.cs" />
+    <Compile Include="Storage\OfficeAttachmentTextExtractor.cs" />
     <Compile Include="Storage\BoundedLruCache.cs" />
     <Compile Include="Storage\PdfAttachmentTextExtractor.cs" />
     <Compile Include="Storage\CasBlobCodec.cs" />

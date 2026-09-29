@@ -2,6 +2,7 @@ using RNAssistant.Core.Tools;
 using System;
 using System.Collections.Generic;
 using System.IO;
+using System.IO.Compression;
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
@@ -18,6 +19,51 @@ namespace RNAssistant.Harness
 {
     internal static partial class Program
     {
+        private static void AttachmentExtractsOfficeFormats()
+        {
+            var word = OfficeZip(new Dictionary<string, string> {
+                { "word/document.xml", "<w:document xmlns:w='w'><w:body><w:p><w:r><w:t>Oil production</w:t></w:r></w:p><w:tbl><w:tr><w:tc><w:p><w:r><w:t>Issue</w:t></w:r></w:p></w:tc><w:tc><w:p><w:r><w:t>Decision</w:t></w:r></w:p></w:tc></w:tr></w:tbl></w:body></w:document>" }
+            });
+            AssertContains(AttachmentStore.ReadContent("report.docx", word).Text,
+                "Oil production", "Word paragraph");
+            AssertContains(AttachmentStore.ReadContent("report.docx", word).Text,
+                "Issue | Decision", "Word table cells");
+            var workbook = OfficeZip(new Dictionary<string, string> {
+                { "xl/workbook.xml", "<workbook xmlns:r='rel'><sheets><sheet name='Field A' r:id='r1'/></sheets></workbook>" },
+                { "xl/_rels/workbook.xml.rels", "<Relationships><Relationship Id='r1' Target='worksheets/sheet1.xml'/></Relationships>" },
+                { "xl/sharedStrings.xml", "<sst><si><t>Shutdown</t></si></sst>" },
+                { "xl/worksheets/sheet1.xml", "<worksheet><sheetData><row><c r='B2' t='s'><v>0</v></c></row></sheetData></worksheet>" }
+            });
+            var cells = AttachmentStore.ReadContent("issues.xlsx", workbook).Text;
+            AssertContains(cells, "[Sheet: Field A]", "Excel sheet provenance");
+            AssertContains(cells, "B2=Shutdown", "Excel shared string and address");
+            var slides = OfficeZip(new Dictionary<string, string> {
+                { "ppt/slides/slide2.xml", "<p:sld xmlns:p='p' xmlns:a='a'><a:p><a:r><a:t>Decision</a:t></a:r></a:p></p:sld>" },
+                { "ppt/notesSlides/notesSlide2.xml", "<p:notes xmlns:p='p' xmlns:a='a'><a:p><a:r><a:t>Follow up</a:t></a:r></a:p></p:notes>" }
+            });
+            var deck = AttachmentStore.ReadContent("review.pptx", slides).Text;
+            AssertContains(deck, "Decision", "slide text");
+            AssertContains(deck, "Follow up", "speaker notes");
+            var rejected = false;
+            try { AttachmentStore.ReadContent("wrong.docx", workbook); }
+            catch (InvalidOperationException) { rejected = true; }
+            AssertTrue(rejected, "extension mismatch is not silently accepted");
+        }
+
+        private static byte[] OfficeZip(IDictionary<string, string> entries)
+        {
+            using (var stream = new MemoryStream())
+            {
+                using (var zip = new ZipArchive(stream, ZipArchiveMode.Create, true))
+                    foreach (var entry in entries)
+                    {
+                        using (var writer = new StreamWriter(zip.CreateEntry(entry.Key).Open()))
+                            writer.Write(entry.Value);
+                    }
+                return stream.ToArray();
+            }
+        }
+
         private static void AttachmentImportCommitDelete()
         {
             WithTempPaths(delegate(AppDataPaths paths)

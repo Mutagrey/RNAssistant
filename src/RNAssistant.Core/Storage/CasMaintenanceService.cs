@@ -115,6 +115,7 @@ namespace RNAssistant.Core.Storage
             _vbaJournalStore.ScanCasReferences(reachability);
             new ResourceAuthorityStore(_paths).ScanCasReferences(reachability);
             new ResourceMutationJournal(_paths).ScanCasReferences(reachability);
+            ScanOutlookArchiveCache(reachability);
 
             var issues = new List<CasHealthIssue>(reachability.Issues);
             var stored = EnumerateStoredBlobs(issues);
@@ -185,6 +186,40 @@ namespace RNAssistant.Core.Storage
                 }).ToList()
             };
             return new CasAuditSnapshot { Report = report, OrphanCandidates = orphans };
+        }
+
+        private void ScanOutlookArchiveCache(CasReachabilityScan scan)
+        {
+            var root = Path.Combine(_paths.ResourceAuthorityDirectory, "outlook-archive-cache");
+            if (!Directory.Exists(root)) return;
+            foreach (var path in Directory.EnumerateFiles(root, "*.ref.json", SearchOption.AllDirectories))
+            {
+                var sourceId = Path.GetFileName(path);
+                try
+                {
+                    var pointer = Newtonsoft.Json.JsonConvert.DeserializeObject<ChatBlobReference>(File.ReadAllText(path));
+                    if (pointer == null) throw new InvalidDataException("Archive checkpoint pointer is empty.");
+                    scan.AddReference(pointer, "outlook-archive-cache", sourceId, "manifest");
+                    var manifestText = _blobs.ReadText(pointer);
+                    if (manifestText == null) throw new InvalidDataException("Archive checkpoint manifest is missing.");
+                    var manifest = JObject.Parse(manifestText);
+                    scan.AddTokenReferences(manifest, "outlook-archive-cache", sourceId, "manifest");
+                    var pages = manifest["Pages"] as JArray;
+                    if (pages == null) throw new InvalidDataException("Archive checkpoint pages are missing.");
+                    foreach (var page in pages)
+                    {
+                        var reference = page.ToObject<ChatBlobReference>();
+                        var pageText = _blobs.ReadText(reference);
+                        if (pageText == null) throw new InvalidDataException("Archive checkpoint page is missing.");
+                        scan.AddTokenReferences(JToken.Parse(pageText), "outlook-archive-cache", sourceId, "page");
+                    }
+                }
+                catch (Exception error) when (error is IOException || error is UnauthorizedAccessException ||
+                    error is Newtonsoft.Json.JsonException || error is InvalidOperationException || error is ArgumentException)
+                {
+                    scan.AddSourceIssue("outlook_archive_cache_invalid", "outlook-archive-cache", sourceId, error.Message);
+                }
+            }
         }
 
         private Dictionary<string, CasReferenceOccurrence> MergeReferences(

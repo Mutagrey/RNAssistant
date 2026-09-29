@@ -67,6 +67,7 @@ namespace RNAssistant.Office
         private readonly CancellationTokenSource _lifetimeCancellation;
         private int _disposed;
         private string _queuedQuickAction;
+        public Func<IReadOnlyList<OpenOfficeDocumentDto>> ExternalDocumentsProvider { get; set; }
 
         public AssistantController(IOfficeApplicationAdapter adapter)
             : this(adapter, null, null)
@@ -293,19 +294,23 @@ namespace RNAssistant.Office
         internal IReadOnlyList<OpenOfficeDocumentDto> ListOpenDocuments()
         {
             var catalog = _adapter as IOfficeDocumentCatalog;
-            if (catalog == null)
-            {
-                return new OpenOfficeDocumentDto[0];
-            }
-
+            var documents = new List<OpenOfficeDocumentDto>();
             try
             {
-                return catalog.ListOpenDocuments() ?? new OpenOfficeDocumentDto[0];
+                if (catalog != null) documents.AddRange(catalog.ListOpenDocuments() ?? new OpenOfficeDocumentDto[0]);
             }
             catch
             {
-                return new OpenOfficeDocumentDto[0];
             }
+            try
+            {
+                var external = ExternalDocumentsProvider == null ? null : ExternalDocumentsProvider();
+                foreach (var item in external ?? new OpenOfficeDocumentDto[0])
+                    if (item != null && !documents.Any(existing => existing.Host == item.Host && existing.DocumentKey == item.DocumentKey))
+                        documents.Add(item);
+            }
+            catch { }
+            return documents;
         }
 
         public ChatStateResponse ActivateDocument(string documentKey)

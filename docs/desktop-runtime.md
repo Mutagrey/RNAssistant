@@ -78,6 +78,12 @@ path/title, folder/mail id и selection reference. Долгоживущие COM-
 - Mutations используют общий confirmation и ToolRuntime policy; успешный COM return
   сам по себе не доказывает effect.
 - Outlook выбирает Inspector раньше Explorer selection.
+- Desktop обнаруживает открытые Outlook mailboxes по StoreID и показывает их в дереве
+  чатов независимо от текущей папки. На старте без другого target подключается
+  первый обнаруженный ящик. Переход к чату другого ящика сначала перепривязывает
+  runtime к нему; сохранённый чат остаётся виден при закрытом Outlook.
+  Подключённые PST входят в архивный поиск выбранного ящика, но не становятся
+  отдельными mailbox targets, если не служат delivery store учётной записи.
 
 Desktop не требует ClickOnce. `install-desktop-local.cmd` сохраняет
 `RNASSISTANT_DESKTOP_EXE` в CurrentUser environment. Logs находятся в

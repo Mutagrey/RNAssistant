@@ -29,6 +29,11 @@ namespace RNAssistant.Office.WebView
         private bool _webContentWantsKeyboard;
         private bool _resourcesDisposed;
         private IntPtr _lastExternalFocusWindow;
+        public Action<string, string, bool> MailboxNavigationRequested
+        {
+            get { return _bridge.MailboxNavigationRequested; }
+            set { _bridge.MailboxNavigationRequested = value; }
+        }
 
         public AssistantPaneControl(AssistantController controller, string webRoot)
         {

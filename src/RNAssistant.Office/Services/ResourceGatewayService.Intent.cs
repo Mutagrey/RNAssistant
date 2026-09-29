@@ -120,6 +120,18 @@ namespace RNAssistant.Office.Services
                 return outlook?.IsOutlook == true ? WithProvider(outlook, session,
                     () => outlook.ResolveOutlookAttachmentTarget(session, query)) : null;
             }
+            if (query.StartsWith("Outlook archive page: ", StringComparison.Ordinal))
+            {
+                var outlook = _registry.All().OfType<LiveDocumentResourceProvider>().SingleOrDefault();
+                return outlook?.IsOutlook == true ? WithProvider(outlook, session,
+                    () => outlook.ResolveOutlookArchivePage(session, query)) : null;
+            }
+            if (query.StartsWith("Outlook archive mail: ", StringComparison.Ordinal))
+            {
+                var outlook = _registry.All().OfType<LiveDocumentResourceProvider>().SingleOrDefault();
+                return outlook?.IsOutlook == true ? WithProvider(outlook, session,
+                    () => outlook.ResolveOutlookArchiveMail(session, query)) : null;
+            }
             if (query.StartsWith("Excel search scope: ", StringComparison.Ordinal))
                 return excel == null ? null : WithProvider(excel, session,
                     () => excel.ResolveSearch(session, query.Substring(20)));
@@ -223,6 +235,22 @@ namespace RNAssistant.Office.Services
                 if (provider?.IsOutlook != true) throw new ResourceRequestException("Outlook is unavailable.", "RESOURCE_PROVIDER_UNAVAILABLE", false);
                 var descriptor = WithProvider(provider, session, () => provider.ResolveOutlookAttachmentTarget(session, target));
                 return new ResourceIntentTarget { Target = IntentTarget(descriptor), Type = "Outlook attachment", Scope = "document",
+                    Descriptor = descriptor, Reference = descriptor.Reference };
+            }
+            if (target.StartsWith("Outlook archive page: ", StringComparison.Ordinal))
+            {
+                var provider = _registry.All().OfType<LiveDocumentResourceProvider>().SingleOrDefault();
+                if (provider?.IsOutlook != true) throw new ResourceRequestException("Outlook is unavailable.", "RESOURCE_PROVIDER_UNAVAILABLE", false);
+                var descriptor = WithProvider(provider, session, () => provider.ResolveOutlookArchivePage(session, target));
+                return new ResourceIntentTarget { Target = IntentTarget(descriptor), Type = "Outlook archive page", Scope = "document",
+                    Descriptor = descriptor, Reference = descriptor.Reference };
+            }
+            if (target.StartsWith("Outlook archive mail: ", StringComparison.Ordinal))
+            {
+                var provider = _registry.All().OfType<LiveDocumentResourceProvider>().SingleOrDefault();
+                if (provider?.IsOutlook != true) throw new ResourceRequestException("Outlook is unavailable.", "RESOURCE_PROVIDER_UNAVAILABLE", false);
+                var descriptor = WithProvider(provider, session, () => provider.ResolveOutlookArchiveMail(session, target));
+                return new ResourceIntentTarget { Target = IntentTarget(descriptor), Type = "Outlook archive mail", Scope = "document",
                     Descriptor = descriptor, Reference = descriptor.Reference };
             }
             if (target.StartsWith("Outlook search scope: ", StringComparison.Ordinal))
@@ -479,11 +507,16 @@ namespace RNAssistant.Office.Services
                         yield return new ResourceIntentPlan(provider, LiveDocumentResourceProvider.WordSearchKind, "document");
                     if ((provider as LiveDocumentResourceProvider)?.IsPowerPoint == true)
                         yield return new ResourceIntentPlan(provider, LiveDocumentResourceProvider.PowerPointSearchKind, "document");
-                    if ((provider as LiveDocumentResourceProvider)?.IsOutlook == true)
+                    if ((provider as LiveDocumentResourceProvider)?.IsOutlook == true &&
+                        (provider as LiveDocumentResourceProvider)?.IsOutlookMailbox != true)
                         yield return new ResourceIntentPlan(provider, LiveDocumentResourceProvider.OutlookSearchKind, "document");
-                    if ((provider as LiveDocumentResourceProvider)?.IsOutlook == true)
+                    if ((provider as LiveDocumentResourceProvider)?.IsOutlook == true &&
+                        (provider as LiveDocumentResourceProvider)?.IsOutlookMailbox != true)
                         yield return new ResourceIntentPlan(provider, LiveDocumentResourceProvider.OutlookMailKind, "document");
                     if ((provider as LiveDocumentResourceProvider)?.IsOutlook == true)
+                        yield return new ResourceIntentPlan(provider, LiveDocumentResourceProvider.OutlookArchivePageKind, "document");
+                    if ((provider as LiveDocumentResourceProvider)?.IsOutlook == true &&
+                        (provider as LiveDocumentResourceProvider)?.IsOutlookMailbox != true)
                         yield return new ResourceIntentPlan(provider, LiveDocumentResourceProvider.OutlookAttachmentKind, "document");
                     yield return new ResourceIntentPlan(provider, LiveDocumentResourceProvider.SelectionKind, "selection");
                 }
@@ -625,6 +658,8 @@ namespace RNAssistant.Office.Services
                 return "Read structure for attachment metadata and targets without reading the mail body. Pass a copied attachment target to common.resources_find, then read its text or media.";
             if (type == "Outlook attachment")
                 return "Read text for PDF/text files or media for images/scanned PDFs (vision model). Limit: 20 MiB. Filename discovery covers selected/open mail only; read another mail with structure for its attachment targets.";
+            if (type == "Outlook archive page")
+                return "Read text for full indexed mail records and coverage. If a row has bodyTarget, discover that exact Outlook archive mail target and read its complete body separately. Count duplicate=true rows once.";
             if (type == "Excel search scope")
                 return "Discovery only: use excel.find_cells with a query. Do not read this target to enumerate worksheet data; read an Excel range, table, or name target instead.";
             if (descriptor.Metadata.ContainsKey("sectionRead"))
@@ -786,6 +821,8 @@ namespace RNAssistant.Office.Services
                 case "Outlook mail":
                 case "Outlook collection":
                 case "Outlook search scope":
+                case "Outlook archive page":
+                case "Outlook archive mail":
                 case "PowerPoint slide":
                 case "Word range": return "document";
                 case "Word search scope": return "document";
@@ -831,6 +868,8 @@ namespace RNAssistant.Office.Services
                 case LiveDocumentResourceProvider.OutlookMailKind: return "Outlook mail";
                 case LiveDocumentResourceProvider.OutlookCollectionKind: return "Outlook collection";
                 case LiveDocumentResourceProvider.OutlookSearchKind: return "Outlook search scope";
+                case LiveDocumentResourceProvider.OutlookArchivePageKind: return "Outlook archive page";
+                case LiveDocumentResourceProvider.OutlookArchiveMailKind: return "Outlook archive mail";
                 case LiveDocumentResourceProvider.PowerPointSlideKind: return "PowerPoint slide";
                 case LiveDocumentResourceProvider.WordRangeKind: return "Word range";
                 case LiveDocumentResourceProvider.WordSearchKind: return "Word search scope";
@@ -864,7 +903,7 @@ namespace RNAssistant.Office.Services
             if (type == "Excel table") return "document";
             if (type == "Excel name") return "document";
             if (type == "Outlook search scope") return "document";
-            if (string.Equals(type, "document", StringComparison.Ordinal) || type == "Excel range" || type == "Word range" || type == "Word search scope" || type == "PowerPoint search scope" || type == "PowerPoint slide" || type == "Outlook attachment" || type == "Outlook mail" || type == "Outlook collection" || type == "Office observation") return "document";
+            if (string.Equals(type, "document", StringComparison.Ordinal) || type == "Excel range" || type == "Word range" || type == "Word search scope" || type == "PowerPoint search scope" || type == "PowerPoint slide" || type == "Outlook attachment" || type == "Outlook mail" || type == "Outlook collection" || type == "Outlook archive page" || type == "Outlook archive mail" || type == "Office observation") return "document";
             if (string.Equals(type, "selection", StringComparison.Ordinal)) return "selection";
             if (string.Equals(type, "VBA backup", StringComparison.Ordinal)) return "backups";
             if (string.Equals(type, "VBA module", StringComparison.Ordinal) ||

@@ -72,7 +72,10 @@ namespace RNAssistant.Office.Services
             if (catalogs != null) providers.Add(new CatalogResourceProvider(catalogs, authority));
             if (adapter != null)
             {
-                providers.Add(new LiveDocumentResourceProvider(adapter, authority?.Payloads));
+                providers.Add(new LiveDocumentResourceProvider(adapter, authority?.Payloads,
+                    string.Equals(adapter.HostName, "Outlook", StringComparison.OrdinalIgnoreCase) &&
+                    authority?.Payloads != null && vbaJournalStore != null
+                        ? new OutlookArchiveIndexService(vbaJournalStore.Paths, authority.Payloads) : null));
                 var excel = adapter as RNAssistant.Office.Domains.Excel.IExcelBackendProvider;
                 if (excel?.ExcelReadBackend != null) providers.Add(new ExcelResourceProvider(adapter, excel.ExcelReadBackend, authority?.Payloads));
                 if (vbaSource != null && VbaResourceProvider.SupportsHost(adapter.HostName))

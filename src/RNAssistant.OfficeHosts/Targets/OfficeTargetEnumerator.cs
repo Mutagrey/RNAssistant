@@ -1,5 +1,7 @@
 using System;
 using System.Collections.Generic;
+using System.Security.Cryptography;
+using System.Text;
 using Excel = Microsoft.Office.Interop.Excel;
 using Outlook = Microsoft.Office.Interop.Outlook;
 using PowerPoint = Microsoft.Office.Interop.PowerPoint;
@@ -130,6 +132,38 @@ namespace RNAssistant.OfficeHosts
         {
             try
             {
+                var accountStores = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+                try
+                {
+                    foreach (Outlook.Account account in application.Session.Accounts)
+                    {
+                        var delivery = account.DeliveryStore;
+                        var deliveryId = delivery == null ? string.Empty : SafeString(delegate { return delivery.StoreID; });
+                        if (!string.IsNullOrWhiteSpace(deliveryId)) accountStores.Add(deliveryId);
+                    }
+                }
+                catch { }
+                var stores = application.Session.Stores;
+                var profile = SafeString(delegate { return application.Session.CurrentProfileName; });
+                foreach (Outlook.Store store in stores)
+                {
+                    var storeId = SafeString(delegate { return store.StoreID; });
+                    var filePath = SafeString(delegate { return store.FilePath; });
+                    if (string.IsNullOrWhiteSpace(storeId) ||
+                        filePath.EndsWith(".pst", StringComparison.OrdinalIgnoreCase) &&
+                        !accountStores.Contains(storeId)) continue;
+                    result.Add(new OfficeTargetDescriptor
+                    {
+                        Host = "Outlook",
+                        StoreId = storeId,
+                        DocumentKey = OutlookMailboxKey(profile, storeId),
+                        Name = SafeString(delegate { return store.DisplayName; })
+                    });
+                }
+            }
+            catch { }
+            try
+            {
                 foreach (Outlook.Inspector inspector in application.Inspectors)
                 {
                     var mail = inspector == null
@@ -170,6 +204,16 @@ namespace RNAssistant.OfficeHosts
             }
             catch
             {
+            }
+        }
+
+        internal static string OutlookMailboxKey(string profile, string storeId)
+        {
+            if (string.IsNullOrWhiteSpace(storeId)) throw new ArgumentException("Store ID is required.", nameof(storeId));
+            using (var sha = SHA256.Create())
+            {
+                var bytes = sha.ComputeHash(Encoding.UTF8.GetBytes((profile ?? string.Empty) + "\n" + storeId));
+                return "outlook-mailbox:" + BitConverter.ToString(bytes).Replace("-", "").ToLowerInvariant();
             }
         }
 

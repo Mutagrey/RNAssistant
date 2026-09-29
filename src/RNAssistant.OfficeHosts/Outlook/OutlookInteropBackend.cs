@@ -6,7 +6,7 @@ using Outlook = Microsoft.Office.Interop.Outlook;
 
 namespace RNAssistant.OfficeHosts
 {
-    internal sealed class OutlookInteropBackend : IOutlookBackend
+    internal sealed partial class OutlookInteropBackend : IOutlookBackend, IOutlookArchiveBackend
     {
         private readonly OutlookDocumentSession _session;
 
@@ -25,6 +25,9 @@ namespace RNAssistant.OfficeHosts
                 result.Add(MailSummary(_session.SelectedMail()));
                 return new OutlookMailDiscoverySnapshot { BoundMail = true, Items = result };
             }
+            if (_session.IsMailboxTarget)
+                throw new OutlookBackendException("Mailbox-wide mail discovery is not available yet.",
+                    "outlook_archive_not_available", false);
             var items = _session.Folder.Items;
             items.Sort("[ReceivedTime]", true);
             var total = items.Count;
@@ -158,6 +161,9 @@ namespace RNAssistant.OfficeHosts
 
         public OutlookFolderSnapshot ReadFolder(OutlookFolderReadRequest request)
         {
+            if (_session.IsMailboxTarget)
+                throw new OutlookBackendException("Mailbox-wide collection and search are not available yet.",
+                    "outlook_archive_not_available", false);
             request = request ?? new OutlookFolderReadRequest();
             var collection = request.Kind == OutlookFolderCaptureKind.Collection;
             if (!Enum.IsDefined(typeof(OutlookFolderCaptureKind), request.Kind) || request.MaxItems < 1 || request.MaxItems > OutlookService.MaxItems ||
