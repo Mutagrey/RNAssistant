@@ -43,6 +43,9 @@ namespace RNAssistant.Harness
                 AssertContains(planningSkill.BodyMarkdown, TaskListToolCatalog.SetToolId, "tracking skill explains semantic set");
                 AssertContains(planningSkill.BodyMarkdown, "action=update_statuses",
                     "tracking skill selects status-only updates");
+                AssertContains(AgentJsonProtocol.CreateOpenTaskListContinuationMessage().Content,
+                    "action=close and outcome=completed",
+                    "premature final continuation names the exact closing action");
                 string contractError;
                 AssertTrue(!ModelToolResultProjection.ValidateAcceptedCall(
                     new ToolCall("old-task-list", "common.task_list_update", "{}"),
@@ -275,8 +278,7 @@ namespace RNAssistant.Harness
                     "action", "update_statuses", "goal", "Build a reusable dashboard",
                     "updates", new JArray(
                         new JObject { ["index"] = 2, ["status"] = "completed" },
-                        new JObject { ["index"] = 3, ["status"] = "completed" },
-                        new JObject { ["index"] = 4, ["status"] = "completed" })),
+                        new JObject { ["index"] = 3, ["status"] = "completed" })),
                     tools, new AppSettings(), false, false, session);
                 AssertTrue(statusUpdate.Success, "statuses update without resending step text");
                 var statusSteps = JObject.Parse(statusUpdate.DataJson)["taskList"]["steps"];
@@ -285,12 +287,29 @@ namespace RNAssistant.Harness
                     statusSteps.Select(step => (string)step["id"])
                     .SequenceEqual(expandedSteps.Select(step => (string)step["id"])),
                     "status-only update preserves every text and stable step id");
-                AssertTrue(statusSteps.All(step => (string)step["status"] == "completed"),
-                    "status-only update completes the selected unfinished steps");
-                var finished = executor.ExecuteManual(Command(TaskListToolCatalog.SetToolId,
-                    "action", "close", "outcome", "completed"),
+                AssertEqual("pending", (string)statusSteps[3]["status"],
+                    "status-only update leaves the unmentioned final step pending");
+                var invalidTerminalUpdate = executor.ExecuteManual(Command(TaskListToolCatalog.SetToolId,
+                    "action", "close", "outcome", "superseded",
+                    "updates", new JArray(new JObject { ["index"] = 4, ["status"] = "completed" })),
                     tools, new AppSettings(), false, false, session);
-                AssertTrue(finished.Success, "completed status update permits terminal close");
+                AssertEqual("task_list_close_updates_invalid",
+                    (string)JObject.Parse(invalidTerminalUpdate.DataJson)["code"],
+                    "non-completed close cannot silently change statuses");
+                var beforeFinalClose = session.Artifacts.Count;
+                var finished = executor.ExecuteManual(Command(TaskListToolCatalog.SetToolId,
+                    "action", "close", "outcome", "completed",
+                    "updates", new JArray(new JObject { ["index"] = 4, ["status"] = "completed" })),
+                    tools, new AppSettings(), false, false, session);
+                AssertTrue(finished.Success, "last status and terminal close succeed in one call");
+                AssertEqual(beforeFinalClose + 1, session.Artifacts.Count,
+                    "atomic close creates one terminal revision");
+                var terminal = JObject.Parse(finished.DataJson)["taskList"];
+                AssertEqual("completed", (string)terminal["status"],
+                    "atomic close records terminal status");
+                AssertTrue(terminal["steps"].All(step => (string)step["status"] == "completed") &&
+                    string.IsNullOrWhiteSpace(session.ActiveTaskListArtifactId),
+                    "atomic close completes the final step and clears the active list");
             });
         }
 

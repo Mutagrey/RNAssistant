@@ -93,7 +93,7 @@
     var current = steps.filter(function (step) { return status(step) === "in_progress"; })[0] ||
       steps.filter(function (step) { return status(step) === "blocked"; })[0] ||
       steps.filter(function (step) { return status(step) === "pending"; })[0] || null;
-    var planStatus = steps.length && completed === steps.length ? "completed" :
+    var planStatus = steps.length && completed === steps.length ? "ready_to_close" :
       (steps.some(function (step) { return status(step) === "blocked"; }) ? "blocked" :
         (steps.some(function (step) { return status(step) === "in_progress"; }) ? "running" : "planned"));
     return { completed: completed, total: steps.length, current: current, status: planStatus };
@@ -143,8 +143,10 @@
 
     var summary = document.createElement("summary");
     summary.className = "agent-plan-summary";
-    summary.title = plan.goal;
-    summary.setAttribute("aria-label", "Задачи: выполнено " + info.completed + " из " + info.total + ". " + plan.goal);
+    var readyToClose = info.status === "ready_to_close";
+    summary.title = plan.goal + (readyToClose ? " · шаги выполнены, список не закрыт" : "");
+    summary.setAttribute("aria-label", "Задачи: выполнено " + info.completed + " из " + info.total +
+      (readyToClose ? "; список не закрыт. " : ". ") + plan.goal);
     var icon = document.createElement("span");
     icon.className = "agent-plan-icon";
     icon.setAttribute("aria-hidden", "true");
@@ -154,7 +156,7 @@
     label.textContent = "Задачи";
     var count = document.createElement("span");
     count.className = "agent-plan-count";
-    count.textContent = info.completed + "/" + info.total;
+    count.textContent = info.completed + "/" + info.total + (readyToClose ? " · не закрыт" : "");
     var caret = document.createElement("span");
     caret.className = "agent-plan-caret";
     caret.setAttribute("aria-hidden", "true");
@@ -171,7 +173,8 @@
     var goal = document.createElement("strong");
     goal.textContent = plan.goal;
     var current = document.createElement("span");
-    current.textContent = info.current ? stepValue(info.current, "Text", "text", "") : "Задачи выполнены";
+    current.textContent = info.current ? stepValue(info.current, "Text", "text", "") :
+      "Шаги выполнены, список не закрыт";
     head.appendChild(goal);
     head.appendChild(current);
     popover.appendChild(head);

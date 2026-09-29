@@ -72,13 +72,13 @@ vm.runInContext(source, context, { filename: "app-html-workspace-artifacts.js" }
     "artifact detail has the current artifact cache key");
   assert.ok(index.includes("app-html-workspace-editor.js?v=preview-reuse-20260907-1"));
   ["app-task-list.js", "app-agent-activity.js"].forEach(asset => {
-    assert.ok(index.includes(asset + "?v=" + (asset === "app-agent-activity.js" ? "tool-error-code-20260908-1" : "planning-intents-20260902-1")), asset + " has the current planning-intent cache key");
+    assert.ok(index.includes(asset + "?v=" + (asset === "app-agent-activity.js" ? "typed-step-results-20260908-1" : "task-close-state-20260929-1")), asset + " has the current planning-intent cache key");
   });
   assert.ok(index.includes("app-html-workspace-actions.js?v=html-action-guard-20260908-1"),
     "app-html-workspace-actions.js has the current preview cache key");
   assert.ok(index.includes("app-html-workspace.js?v=html-read-20260906-1"),
     "app-html-workspace.js has the current preview cache key");
-  assert.ok(index.includes("app-html-workspace.css?v=html-export-20260831-1"), "Plan/HTML actions have the matching CSS cache key");
+  assert.ok(index.includes("app-html-workspace.css?v=json-height-20260929-1"), "Plan/HTML actions have the matching CSS cache key");
   assert.match(workspace, /switchChatMode:\s*function\s*\(mode\)/);
   assert.doesNotMatch(workspace, /switchChatMode:\s*saveChatMode/);
   assert.match(workspace, /result\.expectedRevisionArtifactId = artifactId\(selected\.item\)/);
@@ -99,7 +99,7 @@ vm.runInContext(source, context, { filename: "app-html-workspace-artifacts.js" }
 {
   const index = fs.readFileSync(path.join(root, "web/index.html"), "utf8");
   const vba = fs.readFileSync(path.join(root, "web/js/app-vba.js"), "utf8");
-  assert.ok(index.includes("app-vba.js?v=vba-upload-20260906-1"),
+  assert.ok(index.includes("app-vba.js?v=run-diff-20260908-1"),
     "VBA chat handoff uses the delivered source-upload script");
   assert.match(vba, /common\.resources_find со scope=vba/);
   assert.doesNotMatch(vba, /common\.resources_(?:list|resolve|search)|provider=vba|kind=vba-component/);
