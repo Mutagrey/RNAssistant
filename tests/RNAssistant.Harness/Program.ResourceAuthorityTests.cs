@@ -1474,6 +1474,14 @@ namespace RNAssistant.Harness
                 AssertTrue(store.Capture(scope).Heads.Values.All(head => head.Knowledge == HeadKnowledge.Unknown), "recovery marks uncertain chat membership unknown");
                 AssertEqual(0, journal.Unresolved().Count, "recovery links a terminal authority commit without replaying clear");
                 AssertTrue(store.GetRevision(documentScope, old).Payload != null, "failed clear never deletes historical bytes");
+                var otherWriter = new ResourceMutationJournal(paths);
+                var external = otherWriter.Prepare(scope, "test", new ResourceIdentity("rna://state/conversation/" + session.Id + "/cache-check"));
+                AssertEqual(external.AttemptId, journal.Unresolved().Single().AttemptId,
+                    "warm journal reader sees a different writer's appended attempt");
+                otherWriter.AbandonBeforeDispatch(external.AttemptId);
+                AssertEqual(0, journal.Unresolved().Count, "warm journal reader applies the appended terminal transition");
+                System.IO.File.AppendAllText(System.IO.Path.Combine(paths.ResourceAuthorityDirectory, "mutation-attempts.jsonl"), "{");
+                RuntimeThrows<System.IO.InvalidDataException>(() => journal.Unresolved());
             });
         }
 

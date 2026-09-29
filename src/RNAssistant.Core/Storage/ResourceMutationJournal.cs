@@ -13,6 +13,11 @@ namespace RNAssistant.Core.Storage
         private static readonly UTF8Encoding Utf8 = new UTF8Encoding(false);
         private readonly string _path;
         private readonly object _sync = new object();
+        private Dictionary<string, MutationAttempt> _latest;
+        private long _readLength;
+        private long _lastWriteTicks;
+        private long _creationTicks;
+        private int _readLineCount;
 
         public ResourceMutationJournal(AppDataPaths paths)
         {
@@ -126,27 +131,69 @@ namespace RNAssistant.Core.Storage
 
         private Dictionary<string, MutationAttempt> ReadLatest()
         {
-            var result = new Dictionary<string, MutationAttempt>(StringComparer.Ordinal);
-            if (!File.Exists(_path)) return result;
-            var lineNumber = 0;
-            foreach (var line in File.ReadLines(_path, Utf8))
+            // Callers hold both the instance lock and the journal's cross-process writer
+            // lock. Replaying the entire journal for every authority capture makes each
+            // model step proportional to every mutation ever recorded.
+            var file = new FileInfo(_path);
+            if (!file.Exists)
             {
-                lineNumber++;
-                MutationAttempt attempt;
-                try { attempt = JsonConvert.DeserializeObject<MutationAttempt>(line); }
-                catch (JsonException ex)
-                {
-                    throw new InvalidDataException("Mutation attempt journal contains an invalid record at line " + lineNumber + ".", ex);
-                }
-                if (attempt == null || string.IsNullOrWhiteSpace(attempt.AttemptId))
-                    throw new InvalidDataException("Mutation attempt journal contains an incomplete record.");
-                MutationAttempt previous;
-                if (result.TryGetValue(attempt.AttemptId, out previous)) ValidateTransition(previous, attempt);
-                else if (attempt.State != MutationAttemptState.Prepared)
-                    throw new InvalidDataException("Mutation attempt journal does not start with Prepared.");
-                result[attempt.AttemptId] = attempt;
+                _latest = new Dictionary<string, MutationAttempt>(StringComparer.Ordinal);
+                _readLength = _lastWriteTicks = _creationTicks = 0;
+                _readLineCount = 0;
+                return _latest;
             }
-            return result;
+            var length = file.Length;
+            var written = file.LastWriteTimeUtc.Ticks;
+            var created = file.CreationTimeUtc.Ticks;
+            if (_latest != null && length == _readLength && written == _lastWriteTicks && created == _creationTicks)
+                return _latest;
+            var append = _latest != null && length > _readLength && created == _creationTicks;
+            var result = append ? _latest : new Dictionary<string, MutationAttempt>(StringComparer.Ordinal);
+            var updates = append ? new Dictionary<string, MutationAttempt>(StringComparer.Ordinal) : null;
+            var offset = append ? _readLength : 0;
+            var lineNumber = append ? _readLineCount : 0;
+            using (var stream = new FileStream(_path, FileMode.Open, FileAccess.Read, FileShare.ReadWrite))
+            {
+                if (stream.Length != length) throw new InvalidDataException("Mutation attempt journal changed during replay.");
+                if (length > 0)
+                {
+                    stream.Seek(-1, SeekOrigin.End);
+                    if (stream.ReadByte() != '\n')
+                        throw new InvalidDataException("Mutation attempt journal has an incomplete terminal record.");
+                }
+                stream.Seek(offset, SeekOrigin.Begin);
+                using (var reader = new StreamReader(stream, Utf8))
+                {
+                    string line;
+                    while ((line = reader.ReadLine()) != null)
+                    {
+                        lineNumber++;
+                        MutationAttempt attempt;
+                        try { attempt = JsonConvert.DeserializeObject<MutationAttempt>(line); }
+                        catch (JsonException ex)
+                        {
+                            throw new InvalidDataException("Mutation attempt journal contains an invalid record at line " + lineNumber + ".", ex);
+                        }
+                        if (attempt == null || string.IsNullOrWhiteSpace(attempt.AttemptId))
+                            throw new InvalidDataException("Mutation attempt journal contains an incomplete record.");
+                        MutationAttempt previous;
+                        if (updates != null && updates.TryGetValue(attempt.AttemptId, out previous) ||
+                            result.TryGetValue(attempt.AttemptId, out previous)) ValidateTransition(previous, attempt);
+                        else if (attempt.State != MutationAttemptState.Prepared)
+                            throw new InvalidDataException("Mutation attempt journal does not start with Prepared.");
+                        if (updates == null) result[attempt.AttemptId] = attempt;
+                        else updates[attempt.AttemptId] = attempt;
+                    }
+                }
+            }
+            if (updates != null)
+                foreach (var update in updates) result[update.Key] = update.Value;
+            _latest = result;
+            _readLength = length;
+            _lastWriteTicks = written;
+            _creationTicks = created;
+            _readLineCount = lineNumber;
+            return _latest;
         }
 
         private static void ValidateTransition(MutationAttempt previous, MutationAttempt next)

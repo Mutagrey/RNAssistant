@@ -126,9 +126,7 @@ namespace RNAssistant.Office.Services
 
         internal PublishedCatalogSnapshot Capture()
         {
-            Current("tools"); Current("skills"); Current("prompts"); Current(PromptDefaultsKind); Current(BuiltInKind);
-            if (HasBuiltInTools) Current(BuiltInToolsKind);
-            var frozen = _authority.CaptureMany(new[] { ScopeId }).Get(ScopeId);
+            var frozen = CaptureReady();
             return new PublishedCatalogSnapshot(frozen, CaptureSkills(frozen),
                 JsonConvert.DeserializeObject<RNAssistant.Core.Tools.ToolCatalogEntry[]>(Read(Known(frozen, "tools"))),
                 Read(Known(frozen, "prompts")));
@@ -174,9 +172,24 @@ namespace RNAssistant.Office.Services
 
         internal long CaptureGeneration()
         {
-            Current("tools"); Current("skills"); Current("prompts"); Current(PromptDefaultsKind); Current(BuiltInKind);
-            if (HasBuiltInTools) Current(BuiltInToolsKind);
-            return _authority.CaptureMany(new[] { ScopeId }).Get(ScopeId).Generation;
+            return CaptureReady().Generation;
+        }
+
+        private ResourceAuthoritySnapshot CaptureReady()
+        {
+            var frozen = _authority.CaptureMany(new[] { ScopeId }).Get(ScopeId);
+            var initialized = false;
+            var kinds = HasBuiltInTools
+                ? new[] { "tools", "skills", "prompts", PromptDefaultsKind, BuiltInKind, BuiltInToolsKind }
+                : new[] { "tools", "skills", "prompts", PromptDefaultsKind, BuiltInKind };
+            foreach (var kind in kinds)
+            {
+                if (frozen.GetHead(new ResourceIdentity(ResourceUri.Create("catalog", kind)))?.Knowledge == HeadKnowledge.Known)
+                    continue;
+                Current(kind);
+                initialized = true;
+            }
+            return initialized ? _authority.CaptureMany(new[] { ScopeId }).Get(ScopeId) : frozen;
         }
 
         internal string Read(ResourceRef exact)
