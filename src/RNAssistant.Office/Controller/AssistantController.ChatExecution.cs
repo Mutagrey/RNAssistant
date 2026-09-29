@@ -595,6 +595,20 @@ namespace RNAssistant.Office
                         text,
                         attachmentAnalysis);
                     var primaryAttachments = attachmentRouting.PrimaryAttachments ?? new ChatAttachment[0];
+                    var catalogStartMs = turnTimer.ElapsedMilliseconds;
+                    var tools = (executionMode == ChatModes.Agent
+                            ? _toolCatalog.GetFreshConversationTools()
+                            : _toolCatalog.GetVisibleTools())
+                        .Where(tool => tool.Enabled)
+                        .ToList();
+                    var capturedSkills = executionMode != ChatModes.Chat || settings.AutoCompressContext
+                        ? _skillCatalog.Capture()
+                        : null;
+                    var skills = executionMode != ChatModes.Chat
+                        ? capturedSkills.Skills.Where(skill => skill.Enabled).ToList()
+                        : new List<SkillDefinition>();
+                    var catalogMs = turnTimer.ElapsedMilliseconds - catalogStartMs;
+                    var compactionStartMs = turnTimer.ElapsedMilliseconds;
                     try
                     {
                         await _contextCompactionService.EnsureWithinBudgetAsync(
@@ -603,7 +617,9 @@ namespace RNAssistant.Office
                             string.Empty,
                             false,
                             runProgress,
-                            runCancellation.Token).ConfigureAwait(false);
+                            runCancellation.Token,
+                            capturedTools: tools,
+                            capturedSkills: capturedSkills).ConfigureAwait(false);
                     }
                     catch (OperationCanceledException)
                     {
@@ -624,16 +640,7 @@ namespace RNAssistant.Office
                             "Не удалось обновить сжатый контекст; продолжаю с сохранённой историей.", null, activity));
                         runProgress("compaction_failed", activity.ResultMessage, activity);
                     }
-                    var compactionMs = turnTimer.ElapsedMilliseconds - setupStartMs - attachmentMs;
-                    var tools = (executionMode == ChatModes.Agent
-                            ? _toolCatalog.GetFreshConversationTools()
-                            : _toolCatalog.GetVisibleTools())
-                        .Where(tool => tool.Enabled)
-                        .ToList();
-                    var skills = executionMode != ChatModes.Chat
-                        ? _skillCatalog.GetVisibleSkills().Where(skill => skill.Enabled).ToList()
-                        : new List<SkillDefinition>();
-                    var catalogMs = turnTimer.ElapsedMilliseconds - setupStartMs - attachmentMs - compactionMs;
+                    var compactionMs = turnTimer.ElapsedMilliseconds - compactionStartMs;
                     if (attachmentMs + compactionMs + catalogMs >= 500)
                         RuntimeLog.Info("Chat model setup timing: attachments=" + attachmentMs +
                             "ms, compaction=" + compactionMs + "ms, catalogs=" + catalogMs + "ms.");

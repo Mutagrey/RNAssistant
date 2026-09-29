@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.Linq;
 using System.Text;
 using System.Threading;
@@ -12,6 +13,7 @@ using RNAssistant.Core.Models;
 using RNAssistant.Core.Services;
 using RNAssistant.Core.Storage;
 using RNAssistant.Core.Tools;
+using RNAssistant.Office.Diagnostics;
 
 namespace RNAssistant.Office.Services
 {
@@ -29,13 +31,14 @@ namespace RNAssistant.Office.Services
         private readonly LlmCompletionDelegate _completeAsync;
         private readonly ResourceAuthorityService _authority;
         private readonly ModelContextCompiler _compiler;
-        private readonly Func<ChatSession, CallableToolPack> _captureTools;
+        private readonly Func<ChatSession, IReadOnlyList<ToolCatalogEntry>, SkillCatalogSnapshot, CallableToolPack> _captureTools;
         private readonly Func<SkillCatalogSnapshot> _captureSkills;
         private readonly DocumentArtifactStore _sharedArtifacts;
 
         public ContextCompactionService(LlmCompletionDelegate completeAsync,
             ResourceAuthorityService authority = null, ChatBlobStore payloads = null,
-            Func<ChatSession, CallableToolPack> captureTools = null, Func<SkillCatalogSnapshot> captureSkills = null)
+            Func<ChatSession, IReadOnlyList<ToolCatalogEntry>, SkillCatalogSnapshot, CallableToolPack> captureTools = null,
+            Func<SkillCatalogSnapshot> captureSkills = null)
         {
             _completeAsync = completeAsync ?? throw new ArgumentNullException(nameof(completeAsync));
             _authority = authority;
@@ -51,7 +54,9 @@ namespace RNAssistant.Office.Services
             bool force,
             Action<string, string, ChatActivity> progress,
             CancellationToken cancellationToken, ModelAuthoritySnapshot authoritySnapshot = null,
-            IReadOnlyList<ToolCatalogEntry> runnableCatalog = null)
+            IReadOnlyList<ToolCatalogEntry> runnableCatalog = null,
+            IReadOnlyList<ToolCatalogEntry> capturedTools = null,
+            SkillCatalogSnapshot capturedSkills = null)
         {
             if (session == null || session.Messages == null || session.Messages.Count == 0)
             {
@@ -63,19 +68,33 @@ namespace RNAssistant.Office.Services
                 return null;
             }
 
+            var preflightTimer = Stopwatch.StartNew();
             var window = BuildReplayTail(session);
             var evidence = window.SelectMany(item => item.ResourceEvidence ?? new List<ResourceEvidence>())
                 .Concat((ActiveCheckpoint(session)?.Claims ?? new List<StructuredContextClaim>()).SelectMany(item => item.Evidence))
                 .GroupBy(item => item.EvidenceId, StringComparer.Ordinal).Select(group => group.First()).ToArray();
             var scopes = evidence.Select(item => item.ScopeId).Concat(new[] { new ResourceAuthorityScopeId("conversation", session.Id), CatalogPublicationService.ScopeId }).Distinct().ToList();
             if (!string.IsNullOrEmpty(session.DocumentAuthorityId)) scopes.Add(ResourceAuthorityScopeId.Document(new DocumentAuthorityId(session.DocumentAuthorityId)));
-            var resources = authoritySnapshot?.Resources ?? (_authority == null ? new ResourceAuthoritySnapshotSet(new ResourceAuthoritySnapshot[0]) : _authority.CaptureMany(scopes));
-            var pack = authoritySnapshot == null ? (_captureTools == null ? CallableToolPack.Create(session.Mode, session.Host, session.LastRun?.RunId, new ToolCatalogEntry[0]) : _captureTools(session)) : null;
+            var replayMs = preflightTimer.ElapsedMilliseconds;
+            var skills = authoritySnapshot == null
+                ? capturedSkills ?? (_captureSkills == null ? new SkillCatalogSnapshot(null) : _captureSkills())
+                : null;
+            var pack = authoritySnapshot == null
+                ? (_captureTools == null
+                    ? CallableToolPack.Create(session.Mode, session.Host, session.LastRun?.RunId,
+                        capturedTools ?? new ToolCatalogEntry[0])
+                    : _captureTools(session, capturedTools, skills))
+                : null;
+            var resources = authoritySnapshot?.Resources ?? (_authority == null
+                ? new ResourceAuthoritySnapshotSet(new ResourceAuthoritySnapshot[0])
+                : _authority.CaptureMany(scopes));
             var frozen = authoritySnapshot ?? new ModelAuthoritySnapshot(resources, pack.Revision,
-                _captureSkills == null ? new SkillCatalogSnapshot(null) : _captureSkills(), ResourceStateProvider.CaptureSchemas(resources), session.Revision);
+                skills, ResourceStateProvider.CaptureSchemas(resources), session.Revision);
             runnableCatalog = runnableCatalog ?? pack?.Catalog ?? new ToolCatalogEntry[0];
+            var authorityMs = preflightTimer.ElapsedMilliseconds - replayMs;
             window = _compiler.Compile(frozen, new ChatMessage[0], window, null, runnableCatalog,
                 settings, ModelContextBudget.InputBudgetTokens(settings), false).Messages.ToList();
+            var compileMs = preflightTimer.ElapsedMilliseconds - replayMs - authorityMs;
             var projectedWindow = window.Select(message => ProjectMessage(session, message)).ToList();
             var inputBudget = Math.Max(1024, ModelContextBudget.InputBudgetTokens(settings));
             var activeCheckpoint = ActiveCheckpoint(session);
@@ -93,6 +112,11 @@ namespace RNAssistant.Office.Services
                 instructionTokens +
                 ModelContextBudget.ContinuationReserveTokens(settings) +
                 ModelProtocolClient.EstimateFormatRepairOverheadTokens(settings);
+            if (preflightTimer.ElapsedMilliseconds >= 500)
+                RuntimeLog.Info("Context compaction preflight timing: replay=" + replayMs +
+                    "ms, authority=" + authorityMs + "ms, compile=" + compileMs +
+                    "ms, estimate=" + (preflightTimer.ElapsedMilliseconds - replayMs - authorityMs - compileMs) +
+                    "ms, messages=" + window.Count + ", tokens=" + projected + ".");
             if (!force && projected * 100 < inputBudget * TriggerPercent)
             {
                 return null;

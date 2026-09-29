@@ -102,13 +102,18 @@ namespace RNAssistant.Office.Services
         internal ModelProtocolRequest CreateRequest(string stepId, ModelProtocolCallContext callContext)
         {
             _lastSnapshot = CompileCurrent(true);
-            return CreateRequestFromSnapshot(stepId, callContext);
+            var request = CreateRequestFromSnapshot(stepId, callContext);
+            _lastSnapshot = null;
+            return request;
         }
 
         internal async Task<ModelProtocolRequest> PrepareRequestAsync(
             string stepId, ModelProtocolCallContext callContext, CancellationToken cancellationToken)
         {
-            await PrepareCurrentSnapshotAsync(cancellationToken).ConfigureAwait(false);
+            // CreateAsync has already compiled the initial snapshot. Subsequent
+            // requests clear it after dispatch and compile the updated history.
+            if (_lastSnapshot == null)
+                await PrepareCurrentSnapshotAsync(cancellationToken).ConfigureAwait(false);
             if (EndResponse(stepId))
                 await PrepareCurrentSnapshotAsync(cancellationToken).ConfigureAwait(false);
             return CreateRequestFromSnapshot(stepId, callContext);
@@ -162,6 +167,7 @@ namespace RNAssistant.Office.Services
             _settings = settings;
             _context = context == null ? null : JsonConvert.DeserializeObject<DocumentContext>(JsonConvert.SerializeObject(context));
             _packState = null;
+            _lastSnapshot = null;
         }
 
         internal void AppendToolCall(AgentToolCall call, string message, LlmCompletionResult completion,
@@ -415,16 +421,24 @@ namespace RNAssistant.Office.Services
             var skills = _skillSnapshot;
             if (retainAuthority) _skills = skills.Skills;
             var facts = PromptBudgetComposer.ConversationHistory(_session, true, false);
-            facts = JsonConvert.DeserializeObject<List<ChatMessage>>(JsonConvert.SerializeObject(facts));
-            var current = facts.FirstOrDefault(item => item.Id == _currentUserId);
+            var currentIndex = facts.FindIndex(item => item.Id == _currentUserId);
+            var current = currentIndex < 0 ? null : facts[currentIndex];
             if (current == null && _currentUserId == null)
             {
                 current = new ChatMessage { Role = "user", Content = _userText };
                 facts.Add(current);
+                currentIndex = facts.Count - 1;
             }
-            if (current != null && _currentAttachments != null) current.Attachments = _currentAttachments.ToList();
+            if (current != null && _currentAttachments != null)
+            {
+                // The compiler clones every fact; only this attachment override
+                // needs a detached copy before that boundary.
+                current = JsonConvert.DeserializeObject<ChatMessage>(JsonConvert.SerializeObject(current));
+                current.Attachments = _currentAttachments.ToList();
+                facts[currentIndex] = current;
+            }
             if (_noToolContinuation != null)
-                facts.Add(JsonConvert.DeserializeObject<ChatMessage>(JsonConvert.SerializeObject(_noToolContinuation)));
+                facts.Add(_noToolContinuation);
             var scopes = facts.SelectMany(item => item.ResourceEvidence ?? new List<ResourceEvidence>())
                 .Concat((_context?.Notes ?? new List<ContextNote>()).Where(item => item.Evidence != null).Select(item => item.Evidence))
                 .Select(item => item.ScopeId).ToList();

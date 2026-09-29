@@ -1,4 +1,5 @@
 using System;
+using System.Diagnostics;
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
@@ -7,6 +8,7 @@ using RNAssistant.Core.Agent;
 using RNAssistant.Core.ModelProtocol;
 using RNAssistant.Core.Models;
 using RNAssistant.Core.Services;
+using RNAssistant.Office.Diagnostics;
 
 namespace RNAssistant.Office.Services
 {
@@ -15,6 +17,7 @@ namespace RNAssistant.Office.Services
         public async Task<AgentModelResult> SendAsync(AgentModelRequest request, CancellationToken cancellationToken)
         {
             if (_preparationFailure != null) return _preparationFailure;
+            var contextTimer = Stopwatch.StartNew();
             try
             {
                 if (_catalogGeneration != _executor.CaptureCatalogGeneration())
@@ -24,6 +27,7 @@ namespace RNAssistant.Office.Services
                     // the existing admission journal; changed ones must be admitted again.
                     await RefreshAuthorityAsync(cancellationToken).ConfigureAwait(false);
                 }
+                var authorityMs = contextTimer.ElapsedMilliseconds;
                 try
                 {
                     await EnsureModelSessionAsync(cancellationToken).ConfigureAwait(false);
@@ -33,6 +37,7 @@ namespace RNAssistant.Office.Services
                     await RefreshAuthorityAsync(cancellationToken).ConfigureAwait(false);
                     await EnsureModelSessionAsync(cancellationToken).ConfigureAwait(false);
                 }
+                var sessionMs = contextTimer.ElapsedMilliseconds - authorityMs;
                 ModelProtocolRequest preparedRequest;
                 try
                 {
@@ -46,6 +51,10 @@ namespace RNAssistant.Office.Services
                     await RefreshAuthorityAsync(cancellationToken).ConfigureAwait(false);
                     preparedRequest = await PrepareRequestAsync(request.StepId, cancellationToken).ConfigureAwait(false);
                 }
+                var requestMs = contextTimer.ElapsedMilliseconds - authorityMs - sessionMs;
+                if (contextTimer.ElapsedMilliseconds >= 500)
+                    RuntimeLog.Info("Model context timing: authority=" + authorityMs +
+                        "ms, session=" + sessionMs + "ms, request=" + requestMs + "ms.");
                 _lastModel = await _protocol.GetResponseAsync(
                     preparedRequest,
                     ConversationStreamProgressProjector.ForProtocol(_progress), cancellationToken).ConfigureAwait(false);

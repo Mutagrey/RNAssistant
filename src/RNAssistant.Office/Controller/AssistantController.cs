@@ -194,10 +194,10 @@ namespace RNAssistant.Office
             _llmCompletion = completion;
             _attachmentAnalysisService = new AttachmentAnalysisService(completion);
             _contextCompactionService = new ContextCompactionService(completion, _toolExecutor.ResourceAuthority, _toolExecutor.Payloads,
-                session => {
+                (session, capturedTools, capturedSkills) => {
                     var policy = ConversationRunPolicy.For(session.Mode);
-                    var skills = policy.SelectSkills(_skillCatalog.Capture().Skills);
-                    var tools = policy.SelectTools(_toolCatalog.GetFreshConversationTools());
+                    var skills = policy.SelectSkills((capturedSkills ?? _skillCatalog.Capture()).Skills);
+                    var tools = policy.SelectTools(capturedTools ?? _toolCatalog.GetFreshConversationTools());
                     CapabilityCatalogService.BindReadSchema(tools, skills);
                     return CallableToolPack.Create(policy.Mode, session.Host, session.LastRun?.RunId, tools,
                         new ToolPackAdmissionJournal(_eventStore, session).ReadAccepted());
