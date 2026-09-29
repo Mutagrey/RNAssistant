@@ -910,9 +910,12 @@ namespace RNAssistant.Harness
                 AssertEqual("unknown", (string)write["status"], "typed manual projection preserves unknown status");
                 AssertEqual("vba_mutation_unknown", (string)write["errorCode"], "real journal classified the divergent effect");
                 AssertEqual(false, (bool)write["retryable"], "unknown write cannot be retried automatically");
-                var writeData = JObject.Parse((string)write["dataJson"]);
+                var activityData = session.Messages.Where(message => message.Activity != null &&
+                    message.Activity.ToolId == "common.vba_write_module")
+                    .Select(message => message.Activity.DataJson).Last();
+                var writeData = JObject.Parse(activityData);
                 AssertTrue(writeData["journalStatus"] == null,
-                    "internal journal status does not leak into model-facing data");
+                    "internal journal status does not leak into activity data");
                 AssertTrue(!string.IsNullOrWhiteSpace((string)writeData["mutationId"]),
                     "unknown evidence retains mutation correlation");
                 AssertEqual(VbaMutationStatuses.Unknown,

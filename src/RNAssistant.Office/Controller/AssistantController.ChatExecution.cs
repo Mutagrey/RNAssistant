@@ -718,8 +718,9 @@ namespace RNAssistant.Office
                 RunViewState = RunViewStateProjector.Create(session),
                 Message = completion == null ? string.Empty : completion.AssistantText,
                 ToolResults = completion == null
-                    ? (IReadOnlyList<object>)new object[0]
-                    : completion.ToolResults ?? new object[0],
+                    ? new ToolResultLogDto[0]
+                    : (completion.ToolResults ?? new ToolResultDescriptionDto[0])
+                        .Select(ToolResultLogDto.From).ToArray(),
                 Tools = ToolLibraryResponse.From(
                     _toolCatalog.GetVisibleTools()),
                 Skills = GetSkills(),
@@ -730,7 +731,7 @@ namespace RNAssistant.Office
                 Chats = _chatSessions.GetChatSummaries(activeId),
                 Documents = ListOpenDocuments(),
                 Context = session == null ? CreateEmptyContext() : ChatCloneService.CloneContext(LoadContext(session)),
-                Messages = session == null ? new List<ChatMessage>() : ChatCloneService.CloneMessages(session.Messages),
+                Messages = ChatCloneService.CloneMessagesForBridge(session == null ? null : session.Messages),
                 Artifacts = ChatArtifactDto.From(session),
                 ArtifactLibrary = ArtifactLibraryProjectionService.Project(session),
                 ActiveContextCheckpointId = session == null ? string.Empty : session.ActiveContextCheckpointId,
@@ -750,7 +751,7 @@ namespace RNAssistant.Office
             return CreateSendChatResponse(session, settings, new ChatTurnResult
             {
                 AssistantText = string.Empty,
-                ToolResults = new object[0],
+                ToolResults = new ToolResultDescriptionDto[0],
                 ContextUsage = ContextUsageEstimator.FromSession(session, settings)
             });
         }

@@ -656,7 +656,7 @@ namespace RNAssistant.Office.WebView
             {
                 Id = id,
                 Ok = true,
-                Payload = ToPayloadToken(payload)
+                Payload = payload ?? JValue.CreateNull()
             });
         }
 
@@ -803,17 +803,6 @@ namespace RNAssistant.Office.WebView
         private static T Payload<T>(JToken payload) where T : class, new()
         {
             return payload == null ? new T() : (payload.ToObject<T>() ?? new T());
-        }
-
-        private static JToken ToPayloadToken(object payload)
-        {
-            if (payload == null)
-            {
-                return JValue.CreateNull();
-            }
-
-            var token = payload as JToken;
-            return token ?? JToken.FromObject(payload);
         }
 
         private static Dictionary<string, object> ToArguments(IDictionary<string, object> arguments)

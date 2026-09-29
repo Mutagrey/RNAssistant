@@ -576,7 +576,7 @@ namespace RNAssistant.Office
                 Chats = _chatSessions.GetChatSummaries(activeId),
                 Documents = ListOpenDocuments(),
                 Context = session == null ? CreateEmptyContext() : ChatCloneService.CloneContext(LoadContext(session)),
-                Messages = session == null ? new List<ChatMessage>() : ChatCloneService.CloneMessages(session.Messages),
+                Messages = ChatCloneService.CloneMessagesForBridge(session == null ? null : session.Messages),
                 Artifacts = ChatArtifactDto.From(session),
                 ArtifactLibrary = ArtifactLibraryProjectionService.Project(session),
                 ActiveContextCheckpointId = session == null ? string.Empty : session.ActiveContextCheckpointId,

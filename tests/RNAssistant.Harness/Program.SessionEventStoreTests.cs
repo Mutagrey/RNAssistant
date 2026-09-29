@@ -2862,7 +2862,7 @@ namespace RNAssistant.Harness
                 var bridge = JObject.FromObject(new ChatStateResponse
                 {
                     RunViewState = RunViewStateProjector.Create(loaded),
-                    Messages = loaded.Messages
+                    Messages = ChatCloneService.CloneMessagesForBridge(loaded.Messages)
                 });
                 AssertTrue(bridge["executionSummary"] == null && bridge["runViewState"] == null,
                     "a run without KernelState cannot fabricate a typed UI outcome");

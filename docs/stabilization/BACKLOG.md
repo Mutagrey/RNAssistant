@@ -107,6 +107,34 @@ it pass; the stale key assertion fails. Update brittle cache-key expectations in
 separate Web-test maintenance slice, with current asset-version checks. This does
 not close Windows/WebView2 delivery qualification.
 
+## Web message-actions fixture — 2026-09-29
+
+Owner: Web tests. `node --test tests/web/message-actions.test.js` fails at the
+grouped-run footer's expected “Ответвить чат отсюда” action. The Web sources and
+test are unchanged by the 2026-09-29 bridge projection slice; the adjacent
+`chat-sync` and `run-view-state` tests pass. Reconcile the fixture with current
+footer state and verify the grouped action in a separate Web-test correction.
+
+## Remaining bridge duplication — 2026-09-29
+
+Owner: Office bridge presentation / Web artifact UI. Message artifact links still
+expose `ResourceRef` URIs that Web parses to identify revisions; move that
+association into typed artifact/message ids before removing those refs. Check
+the exact artifact cards and compare response size on the affected Windows chat
+before assigning this duplication as a main stall.
+
+## Model request schema duplication — 2026-09-29
+
+Owner: conversation prompt / ModelProtocol. In `json_schema` mode,
+`RUNTIME_CONTEXT.tools` includes full callable parameter schemas while
+`response_format.json_schema` includes the current callable argument contracts
+again. Measure each part of the retained materialized request on the affected
+chat before reducing it. Any prompt reduction must keep `json_object` and the
+one-time schema-rejection fallback usable with the same accepted prompt, retain
+exact callable authority, and pass focused prompt/schema plus target-model checks.
+The v5 response envelope itself is already limited to `message`, `final` and
+`tool_calls`; do not add a second wire format to save bytes.
+
 ## Structural debt
 
 Рефакторинг начинается только вместе с конкретным изменением, которое он упрощает.

@@ -132,19 +132,18 @@ namespace RNAssistant.Office
             };
         }
 
-        public static object DescribeResult(ToolInvocation command, ToolRunResult result)
+        public static ToolResultDescriptionDto DescribeResult(ToolInvocation command, ToolRunResult result)
         {
-            return new
+            return new ToolResultDescriptionDto
             {
-                toolId = command == null ? string.Empty : command.ToolId,
-                description = command == null ? string.Empty : command.Description,
-                success = result != null && result.Success,
-                status = result == null ? string.Empty : result.Status,
-                errorCode = result == null ? string.Empty : result.ErrorCode,
-                retryable = result == null ? null : result.Retryable,
-                pendingId = result == null ? string.Empty : result.PendingId,
-                message = result == null ? string.Empty : BoundText(result.Message, MaxTranscriptMessageChars),
-                dataJson = result == null ? null : BoundJson(result.DataJson, MaxTranscriptDataChars, false, true)
+                ToolId = command == null ? string.Empty : command.ToolId,
+                Description = command == null ? string.Empty : command.Description,
+                Success = result != null && result.Success,
+                Status = result == null ? string.Empty : result.Status,
+                ErrorCode = result == null ? string.Empty : result.ErrorCode,
+                Retryable = result == null ? null : result.Retryable,
+                PendingId = result == null ? string.Empty : result.PendingId,
+                Message = result == null ? string.Empty : BoundText(result.Message, MaxTranscriptMessageChars)
             };
         }
 

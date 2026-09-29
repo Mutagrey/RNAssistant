@@ -670,6 +670,69 @@ namespace RNAssistant.Harness
             AssertEqual("chat-1", controller.LastChatId, "full state chat id");
         }
 
+        private static void BridgeMessageProjectionOmitsHiddenBodies()
+        {
+            var hiddenBody = new string('x', 64 * 1024);
+            var extractedText = new string('y', 32 * 1024);
+            var messages = new[]
+            {
+                new ChatMessage { Id = "protocol", Role = "tool", ProtocolMessage = true,
+                    RunId = "run-1", Content = hiddenBody },
+                new ChatMessage { Id = "visible", Role = "user", Content = "Read the file",
+                    Activity = new ChatActivity { Kind = "notice", Title = "Visible activity",
+                        RuntimeGuardJson = "private-guard", ConfirmationCatalogSha256 = "private-catalog" },
+                    Attachments = new List<ChatAttachment> { new ChatAttachment {
+                        Id = "file-1", FileName = "report.txt", Kind = "text", Size = 42,
+                        ExtractedText = extractedText } },
+                    ResourceRefs = new List<ResourceRef> { new ResourceRef("rna://chat/chat-1/artifact/a/revision/1", "1") } }
+            };
+            var projected = ChatCloneService.CloneMessagesForBridge(messages);
+            var json = JsonConvert.SerializeObject(projected);
+            var wire = JArray.Parse(json);
+
+            AssertEqual(2, wire.Count, "bridge retains exact message indexes");
+            AssertEqual("protocol", (string)wire[0]["Id"], "hidden message identity retained");
+            AssertEqual("run-1", (string)wire[0]["RunId"], "latest run lookup retained");
+            AssertTrue((bool)wire[0]["ProtocolMessage"], "hidden marker retained");
+            AssertTrue(wire[0]["Content"] == null && !json.Contains(hiddenBody),
+                "hidden protocol body stays in durable history only");
+            AssertEqual("Read the file", (string)wire[1]["Content"], "visible text retained");
+            AssertEqual("file-1", (string)wire[1]["Attachments"][0]["Id"], "attachment identity retained");
+            AssertEqual("report.txt", (string)wire[1]["Attachments"][0]["FileName"], "attachment label retained");
+            AssertTrue(wire[1]["Attachments"][0]["ExtractedText"] == null && !json.Contains(extractedText),
+                "extracted attachment text stays out of browser state");
+            AssertTrue(wire[1]["ResourceRefs"][0] != null, "artifact reference retained");
+            AssertTrue(json.Length < hiddenBody.Length / 20,
+                "browser response stays bounded when hidden and extracted bodies grow");
+            AssertTrue(!object.ReferenceEquals(messages[1].Activity, projected[1].Activity),
+                "visible activity is detached from live session");
+            AssertTrue((string)wire[1]["Activity"]["RuntimeGuardJson"] == null &&
+                (string)wire[1]["Activity"]["ConfirmationCatalogSha256"] == null &&
+                !json.Contains("private-guard") && !json.Contains("private-catalog"),
+                "runtime guard and catalog hash stay out of browser activity");
+            AssertTrue(!object.ReferenceEquals(messages[1].ResourceRefs[0], projected[1].ResourceRefs[0]),
+                "artifact reference is detached from live session");
+            AssertEqual(hiddenBody, messages[0].Content, "bridge projection does not mutate durable input");
+        }
+
+        private static void BridgeToolCompletionLogOmitsResultBody()
+        {
+            var result = new ToolResultDescriptionDto
+            {
+                ToolId = "common.resources_read",
+                Success = true,
+                Message = "Read complete",
+                Description = new string('z', 128 * 1024)
+            };
+            var wire = JObject.FromObject(ToolResultLogDto.From(result));
+            AssertEqual("common.resources_read", (string)wire["toolId"], "completion tool id retained");
+            AssertTrue((bool)wire["success"], "completion success retained");
+            AssertEqual("Read complete", (string)wire["message"], "completion message retained");
+            AssertTrue(wire["dataJson"] == null && wire.ToString(Formatting.None).Length < 256,
+                "tool result body does not cross completion bridge");
+            AssertEqual(128 * 1024, result.Description.Length, "unused description remains outside completion log");
+        }
+
         private static void BridgeUsesTypedSendChatPayloadAndProgress()
         {
             var controller = new AssistantController();

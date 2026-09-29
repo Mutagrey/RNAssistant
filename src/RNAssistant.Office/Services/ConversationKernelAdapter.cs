@@ -10,6 +10,7 @@ using RNAssistant.Core.Models;
 using RNAssistant.Core.Persistence;
 using RNAssistant.Core.Services;
 using RNAssistant.Core.Tools;
+using RNAssistant.Office.Contracts;
 using RNAssistant.Office.Tools;
 using RNAssistant.Office.Runtime;
 
@@ -57,7 +58,7 @@ namespace RNAssistant.Office.Services
         private readonly Func<CancellationToken, Task<ConversationRunInput>> _refresh;
         private readonly Dictionary<string, ToolInvocation> _commands = new Dictionary<string, ToolInvocation>(StringComparer.Ordinal);
         private readonly Dictionary<string, ToolResultMaterialization> _results = new Dictionary<string, ToolResultMaterialization>(StringComparer.Ordinal);
-        private readonly List<object> _projectedResults = new List<object>();
+        private readonly List<ToolResultDescriptionDto> _projectedResults = new List<ToolResultDescriptionDto>();
         private ConversationRunInput _input;
         private List<ToolCatalogEntry> _catalog;
         private ToolPackSnapshot _toolPack;

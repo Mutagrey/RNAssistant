@@ -788,6 +788,8 @@ namespace RNAssistant.Harness
                 Test("bridge: init returns token", BridgeInitReturnsToken),
                 Test("bridge: typed transport failure preserves correlation", BridgeTransportFailureIsTypedAndCorrelated),
                 Test("bridge: chat list is catalog-only", BridgeListChatsIsCatalogOnly),
+                Test("bridge: message projection omits hidden bodies", BridgeMessageProjectionOmitsHiddenBodies),
+                Test("bridge: tool completion log omits result body", BridgeToolCompletionLogOmitsResultBody),
                 Test("webview: restricts messages and navigation", WebViewSecurityRestrictsMessagesAndNavigation),
                 Test("bridge: rejects missing token", BridgeRejectsMissingToken),
                 Test("bridge: long tool keeps controls responsive", BridgeLongToolKeepsControlsResponsive),

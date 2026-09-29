@@ -40,7 +40,7 @@ namespace RNAssistant.Office.Contracts
         public bool Ok { get; set; }
 
         [JsonProperty("payload", NullValueHandling = NullValueHandling.Ignore)]
-        public JToken Payload { get; set; }
+        public object Payload { get; set; }
 
         [JsonProperty("error", NullValueHandling = NullValueHandling.Ignore)]
         public string Error { get; set; }
@@ -575,6 +575,78 @@ namespace RNAssistant.Office.Contracts
         }
     }
 
+    // The browser needs message order for edit indexes, but protocol bodies and
+    // execution evidence belong to the durable/model path, not the chat renderer.
+    public sealed class ChatMessageViewDto
+    {
+        public string Id { get; set; }
+        public string Role { get; set; }
+        [JsonProperty(NullValueHandling = NullValueHandling.Ignore)] public string Content { get; set; }
+        [JsonProperty(DefaultValueHandling = DefaultValueHandling.Ignore)] public bool ProtocolMessage { get; set; }
+        [JsonProperty(DefaultValueHandling = DefaultValueHandling.Ignore)] public bool ExcludeFromModelContext { get; set; }
+        [JsonProperty(NullValueHandling = NullValueHandling.Ignore)] public RunViewState RunViewState { get; set; }
+        [JsonProperty(NullValueHandling = NullValueHandling.Ignore)] public IReadOnlyList<ChatAttachmentViewDto> Attachments { get; set; }
+        [JsonProperty(NullValueHandling = NullValueHandling.Ignore)] public IReadOnlyList<ResourceRef> ResourceRefs { get; set; }
+        [JsonProperty(NullValueHandling = NullValueHandling.Ignore)] public ResourceRef HtmlWorkspaceCheckpoint { get; set; }
+        [JsonProperty(NullValueHandling = NullValueHandling.Ignore)] public ChatActivity Activity { get; set; }
+        [JsonProperty(NullValueHandling = NullValueHandling.Ignore)] public int? PromptTokens { get; set; }
+        [JsonProperty(NullValueHandling = NullValueHandling.Ignore)] public int? CompletionTokens { get; set; }
+        [JsonProperty(NullValueHandling = NullValueHandling.Ignore)] public int? TotalTokens { get; set; }
+        [JsonProperty(NullValueHandling = NullValueHandling.Ignore)] public string ReasoningContent { get; set; }
+        [JsonProperty(NullValueHandling = NullValueHandling.Ignore)] public int? ReasoningTokens { get; set; }
+        [JsonProperty(DefaultValueHandling = DefaultValueHandling.Ignore)] public bool ReasoningTruncated { get; set; }
+        [JsonProperty(NullValueHandling = NullValueHandling.Ignore)] public string RunId { get; set; }
+        [JsonProperty(NullValueHandling = NullValueHandling.Ignore)] public DateTime? CreatedUtc { get; set; }
+
+        internal static ChatMessageViewDto From(ChatMessage message)
+        {
+            if (message == null) return null;
+            var view = new ChatMessageViewDto
+            {
+                Id = message.Id,
+                Role = message.Role,
+                ProtocolMessage = message.ProtocolMessage,
+                RunId = message.RunId
+            };
+            if (message.ProtocolMessage) return view;
+            view.Content = message.Content;
+            view.ExcludeFromModelContext = message.ExcludeFromModelContext;
+            view.RunViewState = message.RunViewState;
+            view.Attachments = message.Attachments == null || message.Attachments.Count == 0
+                ? null : message.Attachments.Select(ChatAttachmentViewDto.From).ToList();
+            view.PromptTokens = message.PromptTokens;
+            view.CompletionTokens = message.CompletionTokens;
+            view.TotalTokens = message.TotalTokens;
+            view.ReasoningContent = message.ReasoningContent;
+            view.ReasoningTokens = message.ReasoningTokens;
+            view.ReasoningTruncated = message.ReasoningTruncated;
+            view.CreatedUtc = message.CreatedUtc;
+            return view;
+        }
+    }
+
+    public sealed class ChatAttachmentViewDto
+    {
+        public string Id { get; set; }
+        public string FileName { get; set; }
+        public string Kind { get; set; }
+        public long Size { get; set; }
+        [JsonProperty(NullValueHandling = NullValueHandling.Ignore)] public string ExtractionWarning { get; set; }
+
+        public static ChatAttachmentViewDto From(ChatAttachment attachment)
+        {
+            if (attachment == null) return null;
+            return new ChatAttachmentViewDto
+            {
+                Id = attachment.Id,
+                FileName = attachment.FileName,
+                Kind = attachment.Kind,
+                Size = attachment.Size,
+                ExtractionWarning = attachment.ExtractionWarning
+            };
+        }
+    }
+
     public class ChatStateResponse
     {
         [JsonProperty("sessionRevision")]
@@ -605,7 +677,7 @@ namespace RNAssistant.Office.Contracts
         public DocumentContext Context { get; set; }
 
         [JsonProperty("messages", NullValueHandling = NullValueHandling.Ignore)]
-        public IReadOnlyList<ChatMessage> Messages { get; set; }
+        public IReadOnlyList<ChatMessageViewDto> Messages { get; set; }
 
         [JsonProperty("artifacts", NullValueHandling = NullValueHandling.Ignore)]
         public IReadOnlyList<ChatArtifactDto> Artifacts { get; set; }
@@ -700,7 +772,7 @@ namespace RNAssistant.Office.Contracts
         public DocumentContext Context { get; set; }
 
         [JsonProperty("messages")]
-        public IReadOnlyList<ChatMessage> Messages { get; set; }
+        public IReadOnlyList<ChatMessageViewDto> Messages { get; set; }
 
         [JsonProperty("artifacts")]
         public IReadOnlyList<ChatArtifactDto> Artifacts { get; set; }
@@ -739,13 +811,43 @@ namespace RNAssistant.Office.Contracts
         public string Message { get; set; }
 
         [JsonProperty("toolResults")]
-        public IReadOnlyList<object> ToolResults { get; set; }
+        public IReadOnlyList<ToolResultLogDto> ToolResults { get; set; }
 
         [JsonProperty("tools")]
         public ToolLibraryResponse Tools { get; set; }
 
         [JsonProperty("skills")]
         public SkillLibraryResponse Skills { get; set; }
+    }
+
+    public sealed class ToolResultDescriptionDto
+    {
+        [JsonProperty("toolId")] public string ToolId { get; set; }
+        [JsonProperty("description")] public string Description { get; set; }
+        [JsonProperty("success")] public bool Success { get; set; }
+        [JsonProperty("status")] public string Status { get; set; }
+        [JsonProperty("errorCode")] public string ErrorCode { get; set; }
+        [JsonProperty("retryable")] public bool? Retryable { get; set; }
+        [JsonProperty("pendingId")] public string PendingId { get; set; }
+        [JsonProperty("message")] public string Message { get; set; }
+    }
+
+    public sealed class ToolResultLogDto
+    {
+        [JsonProperty("toolId")] public string ToolId { get; set; }
+        [JsonProperty("success")] public bool Success { get; set; }
+        [JsonProperty("message")] public string Message { get; set; }
+
+        public static ToolResultLogDto From(ToolResultDescriptionDto result)
+        {
+            if (result == null) return null;
+            return new ToolResultLogDto
+            {
+                ToolId = result.ToolId,
+                Success = result.Success,
+                Message = result.Message
+            };
+        }
     }
 
     public sealed class ChatResourceDraftResponse

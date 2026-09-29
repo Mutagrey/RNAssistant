@@ -13,13 +13,14 @@ using RNAssistant.Core.Persistence;
 using RNAssistant.Core.Services;
 using RNAssistant.Core.Tools;
 using RNAssistant.Office.Tools;
+using RNAssistant.Office.Contracts;
 
 namespace RNAssistant.Office.Services
 {
     public sealed class ChatTurnResult
     {
         public string AssistantText { get; set; }
-        public IReadOnlyList<object> ToolResults { get; set; }
+        public IReadOnlyList<ToolResultDescriptionDto> ToolResults { get; set; }
         public object ContextUsage { get; set; }
         public bool WaitingForConfirmation { get; set; }
         public int ResponseProtocolVersion { get; set; }

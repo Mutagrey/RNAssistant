@@ -137,6 +137,22 @@ headers and first chunk; compare those stages with trace persistence and WebView
 bridge/render timing on the affected Windows host before changing storage cache
 limits or replay rules.
 
+Windows timing photo (2026-09-29): 25–26 chats account for about 70 MiB of JSONL;
+header reads take roughly 0.6–0.9 s. One startup reports session 1.7 s, chats
+0.6 s, libraries 2.0 s and projection 0.06 s; its bridge handler takes 4.4 s,
+serialization 0.09 s for about 1.1 million characters, and browser render 0.11 s.
+Model setup separately reports compaction around 3 s and catalogs around 1.4 s.
+Several failed model requests last about 42 s without an HTTP status, while later
+successful requests show roughly 2–5 s to response headers and 70–144 KiB request
+bodies. These are stage observations, not proof that JSON format causes the provider
+delay or that a 70 MiB stream is safe to trust without replay validation.
+The WebView message projection now omits hidden protocol bodies, extracted
+attachment text and activity guard material; completion logs no longer repeat
+tool `dataJson`, and bridge output avoids the intermediate token tree. Next Windows
+run should compare response characters, handler/serialization time, header cache
+behavior and the newly separated prompt/tool/skill times on the same chat; inspect
+failed-request endpoint/cancellation evidence before changing model request limits.
+
 Resource cutover / catalog freeze (2026-09-07, fixed host-neutral): the generation
 captured by `UseInput` is carried into the model session and compared against its
 final frozen `CaptureMany` tuple. Intervening publication refuses with

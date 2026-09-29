@@ -970,7 +970,7 @@ namespace RNAssistant.Office
                 ActiveChatMode = "chat",
                 Chats = new ChatSessionSummary[0],
                 Context = new DocumentContext(),
-                Messages = new ChatMessage[0]
+                Messages = new ChatMessageViewDto[0]
             };
         }
 

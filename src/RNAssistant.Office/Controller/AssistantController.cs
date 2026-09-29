@@ -239,9 +239,12 @@ namespace RNAssistant.Office
             var documents = ListOpenDocuments();
             var documentsMs = timer.ElapsedMilliseconds - sessionMs - contextMs - officeMs - chatsMs;
             var prompts = _toolExecutor.GetPromptLibrary();
+            var promptsMs = timer.ElapsedMilliseconds - sessionMs - contextMs - officeMs - chatsMs - documentsMs;
             var tools = ToolLibraryResponse.From(_toolCatalog.GetVisibleTools());
+            var toolsMs = timer.ElapsedMilliseconds - sessionMs - contextMs - officeMs - chatsMs - documentsMs - promptsMs;
             var skills = GetSkills();
-            var librariesMs = timer.ElapsedMilliseconds - sessionMs - contextMs - officeMs - chatsMs - documentsMs;
+            var skillsMs = timer.ElapsedMilliseconds - sessionMs - contextMs - officeMs - chatsMs - documentsMs - promptsMs - toolsMs;
+            var librariesMs = promptsMs + toolsMs + skillsMs;
             var response = new InitResponse
             {
                 SessionRevision = session == null ? 0 : session.Revision,
@@ -266,7 +269,7 @@ namespace RNAssistant.Office
                 Skills = skills,
                 SkillsPath = _paths.SkillsDirectory,
                 Context = ChatCloneService.CloneContext(context),
-                Messages = ChatCloneService.CloneMessages(session.Messages),
+                Messages = ChatCloneService.CloneMessagesForBridge(session.Messages),
                 Artifacts = ChatArtifactDto.From(session),
                 ArtifactLibrary = ArtifactLibraryProjectionService.Project(session),
                 ActiveContextCheckpointId = session.ActiveContextCheckpointId,
@@ -281,7 +284,8 @@ namespace RNAssistant.Office
                 RuntimeLog.Info("Startup timing: session=" + sessionMs + "ms, context=" +
                     contextMs + "ms, office=" + officeMs + "ms, chats=" + chatsMs +
                     "ms, documents=" + documentsMs + "ms, libraries=" + librariesMs +
-                    "ms, projection=" + (timer.ElapsedMilliseconds - sessionMs - contextMs - officeMs -
+                    "ms (prompts=" + promptsMs + "ms, tools=" + toolsMs + "ms, skills=" + skillsMs + "ms)," +
+                    " projection=" + (timer.ElapsedMilliseconds - sessionMs - contextMs - officeMs -
                         chatsMs - documentsMs - librariesMs) + "ms.");
             return response;
         }

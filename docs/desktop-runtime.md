@@ -93,5 +93,16 @@ Desktop не требует ClickOnce. `install-desktop-local.cmd` сохран�
 ответа чата и чтения/отрисовки Skill в тот же runtime log.
 Записи содержат время и размеры, без текста чата или запроса.
 
+Полное состояние чата сохраняет порядок сообщений для точных индексов редактирования,
+но передаёт WebView только поля для отображения. Скрытые protocol messages содержат
+id, role, marker и run id без model/tool body; вложения сообщений содержат только
+метаданные карточки без извлечённого текста. Activity не включает runtime guard,
+каталожный hash и CAS-ссылки аргументов/результата. Завершающий
+`sendChat.toolResults` содержит только id инструмента, успех и короткое сообщение;
+детали остаются в activity/trajectory. Полные тела остаются в event/CAS и
+доступны через адресные diagnostic/resource запросы. Ответ bridge сериализуется
+непосредственно из typed payload без промежуточного `JToken` дерева. `Startup timing`
+отдельно показывает `prompts`, `tools`, `skills` внутри `libraries`.
+
 Реальные multi-instance attach, Office modal/busy states и production STA/COM
 cleanup требуют Windows x64 + Office x64 + VS 2022 qualification.

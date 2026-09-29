@@ -5,6 +5,7 @@ using Newtonsoft.Json;
 using RNAssistant.Core.Llm;
 using RNAssistant.Core.Models;
 using RNAssistant.Core.Services;
+using RNAssistant.Office.Contracts;
 
 namespace RNAssistant.Office.Services
 {
@@ -87,6 +88,22 @@ namespace RNAssistant.Office.Services
             return messages == null
                 ? new List<ChatMessage>()
                 : messages.Select(CloneMessage).ToList();
+        }
+
+        public static IReadOnlyList<ChatMessageViewDto> CloneMessagesForBridge(IEnumerable<ChatMessage> messages)
+        {
+            return (messages ?? new ChatMessage[0])
+                .Select(message =>
+                {
+                    var view = ChatMessageViewDto.From(message);
+                    if (view == null || view.ProtocolMessage) return view;
+                    var references = CloneResourceRefs(message.ResourceRefs);
+                    view.ResourceRefs = references.Count == 0 ? null : references;
+                    view.HtmlWorkspaceCheckpoint = CloneResourceRef(message.HtmlWorkspaceCheckpoint);
+                    view.Activity = CloneActivity(message.Activity, true);
+                    return view;
+                })
+                .ToList();
         }
 
         public static List<ContextCheckpoint> CloneContextCheckpoints(IEnumerable<ContextCheckpoint> checkpoints, IEnumerable<ChatMessage> messages)
@@ -427,7 +444,7 @@ namespace RNAssistant.Office.Services
             };
         }
 
-        private static ChatActivity CloneActivity(ChatActivity activity)
+        private static ChatActivity CloneActivity(ChatActivity activity, bool forBridge = false)
         {
             if (activity == null)
             {
@@ -446,20 +463,20 @@ namespace RNAssistant.Office.Services
                 Subtitle = activity.Subtitle,
                 Status = activity.Status,
                 ExecutionStatus = activity.ExecutionStatus,
-                ExecutionEvidence = activity.ExecutionEvidence,
+                ExecutionEvidence = forBridge ? null : activity.ExecutionEvidence,
                 ErrorCode = activity.ErrorCode,
                 Retryable = activity.Retryable,
                 PendingId = activity.PendingId,
-                ConfirmationCatalogSha256 = activity.ConfirmationCatalogSha256,
+                ConfirmationCatalogSha256 = forBridge ? null : activity.ConfirmationCatalogSha256,
                 ToolId = activity.ToolId,
                 ToolCallId = activity.ToolCallId,
                 ArgumentsJson = activity.ArgumentsJson,
-                ArgumentsPayload = activity.ArgumentsPayload,
-                ResultPayload = activity.ResultPayload,
-                RuntimeGuardJson = activity.RuntimeGuardJson,
+                ArgumentsPayload = forBridge ? null : activity.ArgumentsPayload,
+                ResultPayload = forBridge ? null : activity.ResultPayload,
+                RuntimeGuardJson = forBridge ? null : activity.RuntimeGuardJson,
                 ResultMessage = activity.ResultMessage,
                 DataJson = activity.DataJson,
-                Children = activity.Children == null ? null : activity.Children.Select(CloneActivity).ToList()
+                Children = activity.Children == null ? null : activity.Children.Select(child => CloneActivity(child, forBridge)).ToList()
             };
         }
 
