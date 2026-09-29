@@ -49,6 +49,35 @@ in one prompt-schema change, then review/reset saved prompts through the existin
 explicit UI flow and run focused prompt/schema tests. Do not silently replace
 saved user instructions while fixing the HTML observation loop.
 
+## Complex Agent planning and model evaluation — 2026-09-28
+
+Owner: Conversation application / Agent planning / model evaluation. Agent creates
+its Task List before source inspection, while the revisioned Plan document tool is
+Plan-only and Agent's standalone Markdown authoring is reserved for explicitly
+requested documents. For a complex execution request, define one durable Agent
+plan after bounded read-only discovery, with source inventory, deliverables,
+dependencies, semantic data contract, stage exit evidence and unresolved decisions.
+Keep the Task List as its concise execution projection; do not add a second outcome
+store or make the model's prose authoritative. Decide whether the existing Plan
+lineage can own this contract before introducing another artifact type.
+
+Representative target-model scenarios must cover Excel/VBA source inspection before
+dashboard design, two differing table layouts mapped to one semantic schema,
+source change/refresh, failure without placeholder replacement, Task List step
+preservation/closure, and Skill/Tool authoring only after the primary result works.
+Score accepted calls and retained evidence, not final prose alone. Harness stubs
+remain contract regressions; they cannot establish model usability or Windows
+Office/WebView2 behavior. Uploaded XLSX ingestion, if required for sources outside
+the bound workbook, is a separate scope: current chat attachment import does not
+accept binary spreadsheets.
+
+## Compaction helper prompt contract drift — 2026-09-28
+
+Owner: context compaction. The editable default asks for `claims[{text,sourceIds}]`,
+but the appended runtime instruction, JSON schema and parser require
+`claims[{kind,text,sourceIds}]`. Align the default with the active typed contract
+and add a focused prompt/schema assertion; preserve authored custom helper text.
+
 ## Resource context fixture drift — 2026-09-08
 
 Owner: resource context / harness. On the `d29b1f58` branch, unchanged provider
