@@ -121,10 +121,8 @@ namespace RNAssistant.Core.Storage
             return session;
         }
 
-        private List<SessionOperation> BuildOperations(ChatSession beforeSession, ChatSession afterSession)
+        private static List<SessionOperation> BuildOperations(JObject before, JObject after)
         {
-            var before = ToProjectionToken(beforeSession);
-            var after = ToProjectionToken(afterSession);
             var operations = new List<SessionOperation>();
 
             var metadata = new JObject();

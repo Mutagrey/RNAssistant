@@ -146,6 +146,9 @@ One completion reports `finalSave=26ms` and `responseProjection=2525ms`: the vis
 JSONL append. The completion response rebuilds tools and skills and scans chat
 headers; Agent mode invalidates the document VBA catalog before that response.
 The response now logs those sub-times separately and uses a broader progress label.
+The canonical save also reused its already serialized post-change projection for
+the in-memory cache, removing a second full session serialization per save; event
+bytes, hash validation and durable append ordering are unchanged.
 Model setup separately reports compaction around 3 s and catalogs around 1.4 s.
 Several failed model requests last about 42 s without an HTTP status, while later
 successful requests show roughly 2–5 s to response headers and 70–144 KiB request

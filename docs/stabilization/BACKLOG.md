@@ -115,6 +115,15 @@ test are unchanged by the 2026-09-29 bridge projection slice; the adjacent
 `chat-sync` and `run-view-state` tests pass. Reconcile the fixture with current
 footer state and verify the grouped action in a separate Web-test correction.
 
+## Storage event test expectation — 2026-09-29
+
+Owner: Core storage tests. `storage: event log is canonical` expects a 32 KiB
+activity `DataJson` marker inside `session.commit`, but `SaveInternal` externalizes
+activity bodies over 8192 characters to CAS before computing that commit. The
+focused test currently fails with zero inline markers. Verify the exact CAS body
+and update this stale assertion in a separate test correction; do not change the
+storage contract to inline a large result just to satisfy the fixture.
+
 ## Remaining bridge duplication — 2026-09-29
 
 Owner: Office bridge presentation / Web artifact UI. Message artifact links still

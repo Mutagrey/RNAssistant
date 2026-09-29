@@ -784,17 +784,19 @@ namespace RNAssistant.Core.Storage
             try
             {
                 var pending = new List<PendingSessionEvent>();
+                var projectedBefore = exists ? ToProjectionToken(stored) : null;
+                var projectedAfter = ToProjectionToken(session);
                 if (!exists)
                 {
                     var initialType = string.IsNullOrWhiteSpace(session.ParentSessionId)
                         ? SessionEventTypes.SessionCreated
                         : SessionEventTypes.SessionForked;
                     pending.Add(PendingEvent(initialType,
-                        ToProjectionToken(session), null, CurrentRunId(session), CurrentTurnId(session), null));
+                        projectedAfter, null, CurrentRunId(session), CurrentTurnId(session), null));
                 }
                 else
                 {
-                    var operations = BuildOperations(stored, session);
+                    var operations = BuildOperations(projectedBefore, projectedAfter);
                     var correlationRunId = CurrentRunId(session) ?? CurrentRunId(stored);
                     var correlationTurnId = CurrentTurnId(session) ?? CurrentTurnId(stored);
                     pending.Add(PendingEvent(SessionEventTypes.SessionCommit,
@@ -825,7 +827,8 @@ namespace RNAssistant.Core.Storage
                 session.StorageHeadHash = tail.Hash;
                 session.StorageTailByteOffset = tail.StorageByteOffset;
                 CaptureStorageState(session, path);
-                StoreProjectionCache(path, ToProjectionToken(session), session);
+                projectedAfter["Revision"] = durableRevision;
+                StoreProjectionCache(path, projectedAfter, session);
                 RebuildHtmlWorkspaceProjection(session);
                 RebuildContextCheckpointProjection(session);
                 RebuildChartActivityProjection(session);
