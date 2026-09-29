@@ -18,6 +18,9 @@ namespace RNAssistant.Core.Storage
         private long _lastWriteTicks;
         private long _creationTicks;
         private int _readLineCount;
+        private long _projectionVersion;
+        private long _unresolvedVersion = -1;
+        private IReadOnlyList<MutationAttempt> _unresolved;
 
         public ResourceMutationJournal(AppDataPaths paths)
         {
@@ -85,10 +88,16 @@ namespace RNAssistant.Core.Storage
             lock (_sync)
             using (StorageFileSystem.AcquireWriteLock(_path + ".lck"))
             {
-                return ReadLatest().Values.Where(item => item.State == MutationAttemptState.Prepared ||
-                    item.State == MutationAttemptState.DispatchMayHaveOccurred)
-                    .OrderBy(item => item.PreparedAt)
-                    .ToArray();
+                var latest = ReadLatest();
+                if (_unresolvedVersion != _projectionVersion)
+                {
+                    _unresolved = latest.Values.Where(item => item.State == MutationAttemptState.Prepared ||
+                        item.State == MutationAttemptState.DispatchMayHaveOccurred)
+                        .OrderBy(item => item.PreparedAt)
+                        .ToArray();
+                    _unresolvedVersion = _projectionVersion;
+                }
+                return _unresolved;
             }
         }
 
@@ -137,9 +146,11 @@ namespace RNAssistant.Core.Storage
             var file = new FileInfo(_path);
             if (!file.Exists)
             {
+                if (_latest != null && _readLength == 0 && _lastWriteTicks == 0) return _latest;
                 _latest = new Dictionary<string, MutationAttempt>(StringComparer.Ordinal);
                 _readLength = _lastWriteTicks = _creationTicks = 0;
                 _readLineCount = 0;
+                _projectionVersion++;
                 return _latest;
             }
             var length = file.Length;
@@ -193,6 +204,7 @@ namespace RNAssistant.Core.Storage
             _lastWriteTicks = written;
             _creationTicks = created;
             _readLineCount = lineNumber;
+            _projectionVersion++;
             return _latest;
         }
 
