@@ -503,8 +503,12 @@ html[data-theme="dark"] .agent-run-empty {
   color: #7f8a9a;
 }
 
-html[data-theme="dark"] .agent-activity-detail-body {
+html[data-theme="dark"] .agent-activity-detail-body,
+html[data-theme="dark"] .run-change-diff {
   background: #20252c;
+}
+
+html[data-theme="dark"] .agent-activity-detail-body {
   color: #b6bfcc;
 }
 
