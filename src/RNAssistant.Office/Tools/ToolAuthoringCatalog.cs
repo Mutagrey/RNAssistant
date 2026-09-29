@@ -19,15 +19,17 @@ namespace RNAssistant.Office.Tools
         }
 
         internal static IEnumerable<ToolCatalogEntry> GetTools(
-            ToolAuthoringService service)
+            ToolAuthoringService service, bool enableJavaScript = true)
         {
             if (service == null) throw new ArgumentNullException(nameof(service));
             if (!service.CanUse) yield break;
 
             yield return Projection(
                 UpsertToolId,
-                "Mutates settings: Create or update a VBA package or read-only JavaScript tool. JS requires executor=js, code and a strict parameters schema with a required resources array. Omitted update fields are preserved.",
-                SchemaFor(UpsertToolId), "tools_upsert");
+                enableJavaScript
+                    ? "Mutates settings: Create or update a VBA package or read-only JavaScript tool. JS requires executor=js, code and a strict parameters schema with a required resources array. Omitted update fields are preserved."
+                    : "Mutates settings: Create or update a VBA package. Omitted update fields are preserved.",
+                SchemaFor(UpsertToolId, enableJavaScript), "tools_upsert");
             yield return Projection(
                 DeleteToolId,
                 "Mutates settings: Delete a custom RNAssistant tool by id.",
@@ -35,10 +37,10 @@ namespace RNAssistant.Office.Tools
                 "tools_delete");
         }
 
-        internal static string SchemaFor(string toolId)
+        internal static string SchemaFor(string toolId, bool enableJavaScript = true)
         {
             if (string.Equals(toolId, UpsertToolId,
-                    StringComparison.Ordinal)) return ToolUpsertSchema();
+                    StringComparison.Ordinal)) return ToolUpsertSchema(enableJavaScript);
             if (string.Equals(toolId, DeleteToolId,
                     StringComparison.Ordinal)) return ExactIdSchema();
             throw new ArgumentException("Unknown tool authoring id: " + toolId,

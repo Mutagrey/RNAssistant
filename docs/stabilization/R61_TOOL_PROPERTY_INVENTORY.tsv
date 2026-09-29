@@ -3,6 +3,7 @@
 # Every property not listed in the final column is current semantic model intent. The final column uses path=decision entries separated by |; `-` means no override.
 # The descriptor revision pins descriptions, defaults, validation and schema shape. The binding column identifies the internal resolver; family/effect/result dependencies and target merge/split decisions live in R61_TOOL_CONTRACT_AUDIT.md.
 # 2026-09-08: document Markdown save/restore added; existing property/mode reviews retained, delivered descriptor/binding identities refreshed.
+# 2026-09-29: inventory reflects the default-off Agent JavaScript setting; enabled JS contracts are covered by focused JS tests.
 common.capabilities_read	Excel,Outlook,PowerPoint,Word	agent,plan	capabilities.read.intent.v1	83a5377df41216258264626ccd93d35427348bde31354a064bb27ff1355be73f	action,id,referencePath	id=semantic-capability-identity
 common.capabilities_search	Excel,Outlook,PowerPoint,Word	agent,plan	capabilities.search.intent.v1	7e647d1a4ae13887d52348b154210db01e9dd818346404a316105e88d68b5e48	kind,query	-
 common.html_data_bind	Excel,Outlook,PowerPoint,Word	agent	html.data.bind.v2	4068b96fc3254d2f6a2796e6bfbe22b10a8bb855e5866281d1b84c18b9f874da	name,path,policy,target,view	-
@@ -12,7 +13,6 @@ common.html_data_write	Excel,Outlook,PowerPoint,Word	agent	html.data.write.v2	c9
 common.html_workspace_apply_patch	Excel,Outlook,PowerPoint,Word	agent	html.workspace.apply.patch.v2	61fbb8be7006efd11728272be60d0c70a43f6cc030ed1d960c31d577a6c82320	patch,patch[].find,patch[].op,patch[].text,path	-
 common.html_workspace_delete	Excel,Outlook,PowerPoint,Word	agent	html.workspace.delete.v2	940955ecdfe292487031f5d8dcf248567399df6855aee77d3b794ed90d154235	target	-
 common.html_workspace_write_file	Excel,Outlook,PowerPoint,Word	agent	html.workspace.write.file.v2	eb792055e3d6eda7bfeb16290395af63029b83c37a167c552bb0f3a99e6f73be	content,path	-
-common.js_run	Excel,Outlook,PowerPoint,Word	agent	js.run.v1	effc77436264995216c358ed32cb945be14d8e576b48440976179888a474b3bd	code,resources,resources[].name,resources[].path,resources[].target,resources[].view	-
 common.markdown_restore	Excel,Outlook,PowerPoint,Word	agent	common.markdown_restore.intent.v1	cea756e327c6fd2ec3673e6325095556e69d82f748916208337d48e34a6746ef	target,version	-
 common.markdown_save	Excel,Outlook,PowerPoint,Word	agent	common.markdown_save.intent.v1	3ce198ddecf14b47c81eb0243880d0d693c1c8098ce0fded102cc92092602324	description,markdown,target,title	-
 common.office_run_macro	Excel,PowerPoint,Word	agent	vba.public.office.run.macro.intent.v2	785bb35acd18fb394c35ffed344318d4eafe0745595175d8313b8551c0b7dee4	arguments,macroName	-
@@ -33,7 +33,7 @@ common.skills_reference_upsert	Excel,Outlook,PowerPoint,Word	agent	skills.refere
 common.skills_upsert	Excel,Outlook,PowerPoint,Word	agent	skills.core-upsert.intent.v1	8e15ae5641d030e5183431df8a755714b90df58a0f144027e33381e83bce86df	bodyMarkdown,description,enabled,host,id,mode,name,version	id=semantic-skill-identity
 common.task_list_set	Excel,Outlook,PowerPoint,Word	agent,plan	conversation.task-list.set.intent.v2	eebf3e56ada88bd270a382ca49f795af1c1c687094ce46dbfb7f20a81f54d6df	action,goal,outcome,steps,steps[].status,steps[].text,updates,updates[].index,updates[].status	-
 common.tools_delete	Excel,Outlook,PowerPoint,Word	agent	tools.delete.v1	cbd5d6cea98d691b451fc498391377bc2eb1b6c0cd266cdf71690c37c5709008	id	id=semantic-tool-identity
-common.tools_upsert	Excel,Outlook,PowerPoint,Word	agent	tools.upsert.intent.v1	f66d8322075fda369d0d4efc245ea25a4afb0987cec5779026360dfface6189e	code,components,components[].code,components[].name,components[].type,description,display,display.action,display.operation,display.runningAction,display.targetArguments,doNotUseWhen,executor,host,id,limitations,name,parameters,readme,useWhen	id=semantic-tool-identity
+common.tools_upsert	Excel,Outlook,PowerPoint,Word	agent	tools.upsert.intent.v1	265c5243226df7d18ccc705f99aa4786c23678b23f73da04269ddc46775cdb43	components,components[].code,components[].name,components[].type,description,display,display.action,display.operation,display.runningAction,display.targetArguments,doNotUseWhen,executor,host,id,limitations,name,readme,useWhen	id=semantic-tool-identity
 common.vba_apply_patch	Excel,PowerPoint,Word	agent	vba.public.vba.apply.patch.intent.v2	cb68e52eda68cf9593b2c1cd3b7316c94c0a2b7d93058fafa8fcf48957352c55	moduleName,patch,patch[].contextAfter,patch[].contextBefore,patch[].find,patch[].text	-
 common.vba_delete_module	Excel,PowerPoint,Word	agent	vba.public.vba.delete.module.intent.v2	749c4354b6a7405b31fa38d657c38b25ee9406647148f04785c5610851b99e49	moduleName	-
 common.vba_rename_module	Excel,PowerPoint,Word	agent	vba.public.vba.rename.module.intent.v1	3550e5187387d7bf5abb062e329101ec2c4fcc24008be7a49117361d158d4a01	moduleName,newModuleName	-

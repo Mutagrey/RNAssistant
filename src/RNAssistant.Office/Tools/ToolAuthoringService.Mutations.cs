@@ -261,6 +261,8 @@ namespace RNAssistant.Office.Tools
                 ? ReadToolDefinition(arguments)
                 : UpdateToolDefinition(existing, arguments);
             var validation = ValidateToolDefinition(intended);
+            var disabled = RejectDisabledJavaScript(intended);
+            if (disabled != null) return disabled;
             if (!validation.Success) return validation;
             if (!HasInternalPolicyArguments(arguments))
             {

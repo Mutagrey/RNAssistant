@@ -25,6 +25,7 @@ namespace RNAssistant.Office.Contracts
         public bool AutoCalibrateTokenEstimate { get; set; }
         public bool StreamResponses { get; set; }
         public bool AutoConfirmToolActions { get; set; }
+        public bool EnableAgentJavaScript { get; set; }
         public bool SmartChatTitles { get; set; }
         public int MaxAgentIterations { get; set; }
         public int MaxAgentFormatRetries { get; set; }
@@ -70,6 +71,7 @@ namespace RNAssistant.Office.Contracts
                 AutoCalibrateTokenEstimate = settings.AutoCalibrateTokenEstimate,
                 StreamResponses = settings.StreamResponses,
                 AutoConfirmToolActions = settings.AutoConfirmToolActions,
+                EnableAgentJavaScript = settings.EnableAgentJavaScript,
                 SmartChatTitles = settings.SmartChatTitles,
                 MaxAgentIterations = settings.MaxAgentIterations,
                 MaxAgentFormatRetries = settings.MaxAgentFormatRetries,
@@ -116,6 +118,7 @@ namespace RNAssistant.Office.Contracts
             result.AutoCalibrateTokenEstimate = AutoCalibrateTokenEstimate;
             result.StreamResponses = StreamResponses;
             result.AutoConfirmToolActions = AutoConfirmToolActions;
+            result.EnableAgentJavaScript = EnableAgentJavaScript;
             result.SmartChatTitles = SmartChatTitles;
             result.MaxAgentIterations = MaxAgentIterations;
             result.MaxAgentFormatRetries = MaxAgentFormatRetries;

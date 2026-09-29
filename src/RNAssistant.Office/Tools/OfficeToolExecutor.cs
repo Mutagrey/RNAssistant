@@ -50,6 +50,7 @@ namespace RNAssistant.Office.Tools
         private readonly Action<ChatSession> _persistResourceFacts;
         private readonly CatalogPublicationService _catalogPublication;
         private readonly ToolStore _toolStore;
+        private readonly Func<AppSettings> _loadSettings;
         internal ResourceAuthorityService ResourceAuthority { get { return _resourceAuthority; } }
         internal ChatBlobStore Payloads { get; private set; }
 
@@ -74,13 +75,15 @@ namespace RNAssistant.Office.Tools
             paths = paths ?? vbaJournalStore.Paths;
             _persistResourceFacts = persistResourceFacts;
             _toolStore = toolStore;
+            _loadSettings = loadSettings;
             _adapter = adapter;
             _adapterTools = OfficeToolCatalog.ForHost(
                 _adapter.HostName).ToArray();
             _controllerToolIds = new HashSet<string>(
                 StringComparer.OrdinalIgnoreCase);
             _toolAuthoringService = new ToolAuthoringService(
-                adapter, toolStore, id => IsProtectedToolId(id));
+                adapter, toolStore, id => IsProtectedToolId(id),
+                () => AgentJavaScriptEnabled);
             _skillAuthoringService = new SkillAuthoringService(
                 adapter, skillStore, id => IsProtectedToolId(id) ||
                     toolStore != null && toolStore.Load().Any(tool =>
@@ -106,7 +109,8 @@ namespace RNAssistant.Office.Tools
                 loadArtifactBody,
                 readAttachmentText,
                 BeginLiveOfficeRead,
-                _resourceAuthority, _catalogPublication, readAttachmentBytes);
+                _resourceAuthority, _catalogPublication, readAttachmentBytes,
+                () => AgentJavaScriptEnabled);
             _markdownDocuments = new MarkdownDocumentService(_resourceGateway, new DocumentArtifactStore(_resourceAuthority.Store, _resourceAuthority.Revisions, Payloads));
             _capabilityCatalogService = new CapabilityCatalogService(adapter, _catalogPublication.CaptureSkills, _resourceGateway);
             var excelBackends = _adapter as IExcelBackendProvider;
@@ -152,7 +156,7 @@ namespace RNAssistant.Office.Tools
             RegisterControllerTools(controllerTools,
                 CapabilityToolCatalog.GetTools());
             RegisterControllerTools(controllerTools,
-                ToolAuthoringCatalog.GetTools(_toolAuthoringService));
+                ToolAuthoringCatalog.GetTools(_toolAuthoringService, false));
             RegisterControllerTools(controllerTools,
                 PromptToolCatalog.GetTools(_promptSettingsService));
             RegisterControllerTools(controllerTools,
@@ -182,8 +186,21 @@ namespace RNAssistant.Office.Tools
 
         public IEnumerable<ToolCatalogEntry> GetControllerTools()
         {
-            return _controllerTools;
+            var enabled = AgentJavaScriptEnabled;
+            foreach (var tool in _controllerTools)
+            {
+                if (!enabled && string.Equals(tool.Id, JsToolHandler.RunId, StringComparison.Ordinal)) continue;
+                if (string.Equals(tool.Id, ToolAuthoringCatalog.UpsertToolId, StringComparison.Ordinal))
+                {
+                    yield return ToolAuthoringCatalog.GetTools(_toolAuthoringService, enabled)
+                        .First(entry => entry.Id == tool.Id);
+                }
+                else yield return tool;
+            }
         }
+
+        internal bool AgentJavaScriptEnabled
+        { get { return _loadSettings != null && _loadSettings()?.EnableAgentJavaScript == true; } }
 
         internal IEnumerable<ToolCatalogEntry> GetHostTools()
         {
@@ -413,6 +430,10 @@ namespace RNAssistant.Office.Tools
                     StringComparison.Ordinal)).ToArray();
             if (matches.Length != 1) return UnknownTool(command.ToolId, known);
             var tool = matches[0];
+            if (settings?.EnableAgentJavaScript != true &&
+                (string.Equals(tool.Id, JsToolHandler.RunId, StringComparison.Ordinal) || JsToolHandler.IsDefinition(tool)))
+                return ToolRunResult.Error("JavaScript tools are disabled in settings.", null,
+                    "javascript_tools_disabled", false);
             if (!tool.Enabled) return DisabledTool(command.ToolId, known);
             if (string.Equals(tool.Executor, "pipeline",
                 StringComparison.OrdinalIgnoreCase))
@@ -441,10 +462,10 @@ namespace RNAssistant.Office.Tools
             {
                 var runtimeSettings = settings ?? new AppSettings();
                 if (authorized && !runtimeSettings.AutoConfirmToolActions)
-                    runtimeSettings = new AppSettings
-                    {
-                        AutoConfirmToolActions = true
-                    };
+                {
+                    runtimeSettings = runtimeSettings.Clone();
+                    runtimeSettings.AutoConfirmToolActions = true;
+                }
                 return CreateNativeRuntime(
                         session,
                         new[] { tool },

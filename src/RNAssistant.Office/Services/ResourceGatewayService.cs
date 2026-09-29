@@ -56,7 +56,8 @@ namespace RNAssistant.Office.Services
             Func<ChatAttachment, int, string> readAttachmentText = null,
             Func<ChatSession, IDisposable> beginLiveOfficeRead = null,
             ResourceAuthorityService authority = null, CatalogPublicationService catalogs = null,
-            Func<ChatAttachment, byte[]> readAttachmentBytes = null)
+            Func<ChatAttachment, byte[]> readAttachmentBytes = null,
+            Func<bool> agentJavaScriptEnabled = null)
         {
             var providers = new List<IResourceProvider>
             {
@@ -69,7 +70,7 @@ namespace RNAssistant.Office.Services
                 providers.Add(new ResourceStateProvider(authority, authority.Payloads));
                 providers.Add(new ContextResourceProvider(authority, authority.Payloads));
             }
-            if (catalogs != null) providers.Add(new CatalogResourceProvider(catalogs, authority));
+            if (catalogs != null) providers.Add(new CatalogResourceProvider(catalogs, authority, agentJavaScriptEnabled));
             if (adapter != null)
             {
                 providers.Add(new LiveDocumentResourceProvider(adapter, authority?.Payloads,

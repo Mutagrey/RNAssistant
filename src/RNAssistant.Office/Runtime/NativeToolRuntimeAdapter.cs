@@ -76,6 +76,10 @@ namespace RNAssistant.Office.Runtime
             _ownedToolIds = new HashSet<string>(StringComparer.Ordinal);
             foreach (var registration in snapshot.Registrations.Where(OwnsRegistration))
             {
+                if (settings?.EnableAgentJavaScript != true &&
+                    (string.Equals(registration.Descriptor.Id, JsToolHandler.RunId, StringComparison.Ordinal) ||
+                     JsToolHandler.Owns(registration)))
+                    continue;
                 var packageRegistration = VbaPackageToolHandler.Owns(registration) || JsToolHandler.Owns(registration);
                 var binding = packageRegistration
                     ? registration.Binding

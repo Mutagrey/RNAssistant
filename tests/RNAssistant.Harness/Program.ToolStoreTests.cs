@@ -14,6 +14,7 @@ using RNAssistant.Core.Services;
 using RNAssistant.Core.Tools;
 using RNAssistant.Core.Storage;
 using RNAssistant.Office;
+using RNAssistant.Office.Contracts;
 using RNAssistant.Office.Runtime;
 using RNAssistant.Office.Services;
 using RNAssistant.Office.Tools;
@@ -31,8 +32,15 @@ namespace RNAssistant.Harness
             {
                 var store = new ToolStore(paths);
                 var adapter = FakeOfficeAdapter.ForHost("Excel");
+                var settings = new AppSettings();
+                AssertTrue(!settings.EnableAgentJavaScript &&
+                    !SettingsControlsDto.From(settings).EnableAgentJavaScript,
+                    "JS execution is disabled by default in storage and bridge controls");
+                AssertTrue(SettingsControlsDto.From(new AppSettings { EnableAgentJavaScript = true })
+                    .ApplyTo(settings).EnableAgentJavaScript,
+                    "JS setting survives bridge save projection");
                 var executor = new OfficeToolExecutor(adapter, new VbaJournalStore(paths),
-                    new SkillStore(paths), store);
+                    new SkillStore(paths), store, () => settings);
                 var source = "const h = await RN.resources.open('sales'); let total = 0; " +
                     "for await (const batch of h.stream()) total += batch.rows.length; return total;";
                 var tool = new ToolCatalogEntry {
@@ -41,6 +49,25 @@ namespace RNAssistant.Harness
                     Code = source,
                     ArgumentSchemaJson = "{\"type\":\"object\",\"properties\":{\"resources\":{\"type\":\"array\",\"description\":\"Named source bindings\",\"items\":{\"type\":\"object\",\"properties\":{\"name\":{\"type\":\"string\",\"description\":\"Binding name\"},\"target\":{\"type\":\"string\",\"description\":\"Semantic target\"},\"view\":{\"type\":\"string\",\"description\":\"Resource view\"}},\"required\":[\"name\",\"target\",\"view\"],\"additionalProperties\":false}}},\"required\":[\"resources\"],\"additionalProperties\":false}"
                 };
+                var catalog = new ToolCatalogService(adapter, executor);
+                var resourceSession = new ChatSession { Id = "js-flag-test", Host = "Excel" };
+                AssertTrue(!catalog.GetVisibleTools().Any(item => item.Id == JsToolHandler.RunId),
+                    "disabled JS run is absent from the agent catalog");
+                AssertEqual(0, executor.ResourceGateway.Find(resourceSession,
+                    JsToolHandler.RunId, "catalogs").Items.Count,
+                    "disabled JS run is absent from resource discovery");
+                var upsert = catalog.GetVisibleTools().Single(item => item.Id == ToolAuthoringCatalog.UpsertToolId);
+                AssertTrue(!upsert.Description.Contains("JavaScript") &&
+                    !upsert.ArgumentSchemaJson.Contains("\"js\""),
+                    "disabled JS authoring instructions and schema are hidden");
+                AssertTrue(!executor.ValidateToolDefinition(tool).Success,
+                    "disabled JS source cannot be saved");
+                settings.EnableAgentJavaScript = true;
+                AssertTrue(catalog.GetVisibleTools().Any(item => item.Id == JsToolHandler.RunId),
+                    "enabled JS run appears in the agent catalog");
+                AssertTrue(executor.ResourceGateway.Find(resourceSession,
+                    JsToolHandler.RunId, "catalogs").Items.Any(),
+                    "enabled JS run appears in resource discovery");
                 AssertTrue(executor.ValidateToolDefinition(tool).Success, "JS source validates");
                 var saved = store.SaveOne(tool);
                 AssertTrue(saved != null, "JS source reloads");
@@ -60,7 +87,6 @@ namespace RNAssistant.Harness
                 AssertTrue(!saved.MutatesDocument && !saved.MutatesLocalState && !saved.RequiresConfirmation,
                     "JS policy stays read-only after reload");
                 AssertTrue(JsToolHandler.IsDefinition(saved), "JS executor remains distinct from VBA");
-                var catalog = new ToolCatalogService(adapter, executor);
                 var visible = catalog.GetPublishedVisibleTools(new[] { saved }).Single(item => item.Id == tool.Id);
                 AssertTrue(visible.Policy.Effect == ToolEffect.Read && visible.Binding.HandlerId == JsToolHandler.PackageHandlerId,
                     "published JS tool has the read-only native binding");
@@ -69,6 +95,16 @@ namespace RNAssistant.Harness
                 AssertTrue(ToolPackSnapshotFactory.ExecutionFingerprint(new[] { visible }, visible.Id) !=
                     ToolPackSnapshotFactory.ExecutionFingerprint(new[] { changed }, changed.Id),
                     "saved JS source changes the pinned execution revision");
+                settings.EnableAgentJavaScript = false;
+                AssertTrue(!catalog.GetPublishedVisibleTools(new[] { saved }).Any(item => item.Id == tool.Id),
+                    "disabled saved JS package is absent from published catalog");
+                AssertEqual(0, executor.ResourceGateway.Find(resourceSession,
+                    tool.Id, "catalogs").Items.Count,
+                    "disabled saved JS package is absent from resource discovery");
+                var disabledRun = executor.ExecuteManual(new ToolInvocation { ToolId = visible.Id },
+                    new[] { visible }, settings, false, false);
+                AssertEqual("javascript_tools_disabled", disabledRun.ErrorCode,
+                    "explicit JS execution fails closed after disabling");
             });
         }
 

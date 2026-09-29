@@ -15,9 +15,13 @@ namespace RNAssistant.Office.Services
     {
         private readonly CatalogPublicationService _catalogs;
         private readonly RNAssistant.Core.Storage.ChatBlobStore _payloads;
+        private readonly Func<bool> _agentJavaScriptEnabled;
         public string Id { get { return "catalog"; } }
-        internal CatalogResourceProvider(CatalogPublicationService catalogs, ResourceAuthorityService authority)
-        { _catalogs = catalogs; _payloads = authority.Payloads; }
+        internal CatalogResourceProvider(CatalogPublicationService catalogs, ResourceAuthorityService authority,
+            Func<bool> agentJavaScriptEnabled = null)
+        { _catalogs = catalogs; _payloads = authority.Payloads; _agentJavaScriptEnabled = agentJavaScriptEnabled; }
+
+        private bool JavaScriptEnabled { get { return _agentJavaScriptEnabled?.Invoke() == true; } }
 
         private IEnumerable<string> Kinds { get { return new[] { "tools", "skills", "prompts", CatalogPublicationService.PromptDefaultsKind, _catalogs.BuiltInKind }
             .Concat(_catalogs.HasBuiltInTools ? new[] { _catalogs.BuiltInToolsKind } : new string[0]); } }
@@ -31,7 +35,7 @@ namespace RNAssistant.Office.Services
             foreach (var name in Kinds)
             {
                 var root = _catalogs.Current(name);
-                items.Add(DescribeRoot(root));
+                if (!ToolKind(name) || JavaScriptEnabled) items.Add(DescribeRoot(root));
                 if (PromptKind(name))
                     foreach (var key in PromptSettingsService.TemplateKeys) items.Add(DescribePrompt(root, key));
                 if (ToolKind(name) && (string.IsNullOrEmpty(kind) || kind == "tool-source"))
@@ -62,6 +66,8 @@ namespace RNAssistant.Office.Services
         public ResourceDescriptor Resolve(ChatSession session, string uri)
         {
             var address = Address(uri);
+            if (ToolKind(address.Segments[0]) && address.Segments.Count == 1 && !JavaScriptEnabled)
+                throw Error("Tool catalog root is unavailable while JavaScript tools are disabled.", "RESOURCE_ACCESS_DENIED");
             return Describe(new ResourceRef(uri, _catalogs.Current(address.Segments[0]).Revision));
         }
 
@@ -82,6 +88,8 @@ namespace RNAssistant.Office.Services
         public ResourceReadSelection Read(ChatSession session, ResourceReadRequest request)
         {
             var address = Address(request.Reference.Uri);
+            if (ToolKind(address.Segments[0]) && address.Segments.Count == 1 && !JavaScriptEnabled)
+                throw Error("Tool catalog root is unavailable while JavaScript tools are disabled.", "RESOURCE_ACCESS_DENIED");
             if (!string.IsNullOrEmpty(request.Representation) && request.Representation != "auto" && request.Representation != "text")
                 throw Error("Catalog definitions expose a bounded text view.", "RESOURCE_VIEW_UNAVAILABLE");
             var binding = ResourceReadCursor.ReadBinding(request.Reference.Uri, "text");
@@ -195,9 +203,12 @@ namespace RNAssistant.Office.Services
         { return JsonConvert.DeserializeObject<SkillDefinition[]>(_catalogs.Read(root)); }
         private IEnumerable<ToolCatalogEntry> Tools(ResourceRef root)
         {
-            return ResourceUri.Parse(root.Uri).Segments[0] == _catalogs.BuiltInToolsKind
+            var tools = ResourceUri.Parse(root.Uri).Segments[0] == _catalogs.BuiltInToolsKind
                 ? _catalogs.ReadBuiltInTools(root).Select(item => item.Definition)
                 : JsonConvert.DeserializeObject<ToolCatalogEntry[]>(_catalogs.Read(root));
+            return JavaScriptEnabled ? tools : tools.Where(item =>
+                item != null && !string.Equals(item.Executor, "js", StringComparison.OrdinalIgnoreCase) &&
+                !string.Equals(item.Id, JsToolHandler.RunId, StringComparison.Ordinal));
         }
         private ToolCatalogEntry FindTool(ResourceRef root, string id)
         {
@@ -207,7 +218,9 @@ namespace RNAssistant.Office.Services
         }
         private BuiltInToolPublication FindBuiltIn(ResourceRef root, string id)
         {
-            var values = _catalogs.ReadBuiltInTools(root).Where(item => item.Definition.Id == id).Take(2).ToArray();
+            var values = _catalogs.ReadBuiltInTools(root).Where(item =>
+                (JavaScriptEnabled || !string.Equals(item.Definition.Id, JsToolHandler.RunId, StringComparison.Ordinal)) &&
+                item.Definition.Id == id).Take(2).ToArray();
             if (values.Length != 1) throw Error("The exact built-in tool is unavailable or ambiguous.", "RESOURCE_SNAPSHOT_UNAVAILABLE");
             return values[0];
         }

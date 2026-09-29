@@ -668,7 +668,9 @@ function renderToolEditor() {
   var builtIn = !!(skill && skill.BuiltIn);
   var documentLocal = !!(skill && String(skill.Scope || skill.scope || "").toLowerCase() === "document");
   var sourceUnavailable = !skill || !skill._sourceLoaded;
-  var readOnly = builtIn || documentLocal || sourceUnavailable || !!state.bridgeUnavailable;
+  var javascriptEnabled = !!(state.settings && (state.settings.EnableAgentJavaScript || state.settings.enableAgentJavaScript));
+  var readOnly = builtIn || documentLocal || sourceUnavailable || !!state.bridgeUnavailable ||
+    !!(skill && String(skill.Executor || "").toLowerCase() === "js" && !javascriptEnabled);
   setToolRunContinuation(null);
   state.toolBuilderReadOnly = disabled || readOnly;
   var isVba = !!(skill && String(skill.Executor || "").toLowerCase() === "vba");
@@ -691,6 +693,9 @@ function renderToolEditor() {
   $("toolIdInput").value = skill ? (skill.Id || "") : "";
   $("toolHostInput").value = skill ? (skill.Host || "Common") : "Common";
   $("toolExecutorInput").value = skill ? (skill.Executor || (builtIn ? "builtin" : "vba")) : "vba";
+  Array.prototype.slice.call($("toolExecutorInput").options).forEach(function (option) {
+    if (option.value === "js") { option.hidden = !javascriptEnabled; option.disabled = !javascriptEnabled; }
+  });
   $("toolConfirmInput").checked = skill ? !!skill.RequiresConfirmation : false;
   $("toolDescriptionInput").value = skill ? (skill.Description || "") : "";
   $("toolSchemaInput").value = skill ? (skill.ArgumentSchemaJson || emptyToolSchema()) : emptyToolSchema();
@@ -937,7 +942,12 @@ function bindToolActions() {
       log("Инструменты поддерживаются в Excel, Word, PowerPoint и Outlook.", "error");
       return;
     }
-    var isJs = state.host === "Outlook";
+    var isJs = state.host === "Outlook" && !!(state.settings &&
+      (state.settings.EnableAgentJavaScript || state.settings.enableAgentJavaScript));
+    if (state.host === "Outlook" && !isJs) {
+      log("JavaScript инструменты отключены в настройках.", "error");
+      return;
+    }
     var id = uniqueDraftToolId(state.host.toLowerCase() + ".new_tool");
     var code = isJs ? "return RN.resources.names();" : newVbaToolSource(id, state.host);
     state.tools.push({

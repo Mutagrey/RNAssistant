@@ -34,6 +34,15 @@ separate owners, stores, version rules and model transports:
 
 ### Read-only JavaScript tools
 
+Agent JavaScript is experimental and disabled by default. The Settings → Agent →
+Execution checkbox `JavaScript инструменты агента` enables it for separate testing.
+While disabled, `common.js_run` and saved JS packages are absent from the visible
+tool catalog, JS creation fields and guidance are omitted from `common.tools_upsert`,
+and direct execution or authoring fails closed. Saved JS packages remain on disk.
+This switch does not affect JavaScript inside an HTML workspace/WebView page.
+There is no dedicated built-in JS skill; the existing Tool Authoring skill describes
+VBA packages only, so disabling the switch leaves no JS skill instructions active.
+
 `common.js_run` runs one async JavaScript function body in a separate local .NET Framework
 worker. It accepts named `{name,target,view,path?}` resource bindings and exposes
 `RN.resources.names()`, `await RN.resources.open(name)`, bounded `read()` and

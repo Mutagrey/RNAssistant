@@ -10,7 +10,7 @@ namespace RNAssistant.Office.Tools
             return "{\"type\":\"object\",\"properties\":{\"id\":{\"type\":\"string\",\"description\":\"Exact stable custom tool id.\",\"minLength\":1,\"maxLength\":128}},\"required\":[\"id\"],\"additionalProperties\":false}";
         }
 
-        private static string ToolUpsertSchema()
+        private static string ToolUpsertSchema(bool enableJavaScript)
         {
             var properties = new JObject
             {
@@ -21,12 +21,10 @@ namespace RNAssistant.Office.Tools
                     ["minLength"] = 1,
                     ["maxLength"] = 128
                 },
-                ["executor"] = EnumProperty("Custom tool runtime.", "vba", "js"),
-                ["host"] = EnumProperty("Tool host; JS may use Common.", "Common", "Excel", "Word", "PowerPoint", "Outlook"),
+                ["executor"] = enableJavaScript ? EnumProperty("Custom tool runtime.", "vba", "js") : EnumProperty("Custom tool runtime.", "vba"),
+                ["host"] = EnumProperty(enableJavaScript ? "Tool host; JS may use Common." : "Tool host.", "Common", "Excel", "Word", "PowerPoint", "Outlook"),
                 ["name"] = BoundedStringProperty("User-visible tool name.", 200),
                 ["description"] = BoundedStringProperty("Tool description for model discovery.", 8000),
-                ["parameters"] = BoundedStringProperty("Strict object JSON Schema serialized as a string for saved JS tool arguments.", 64000),
-                ["code"] = BoundedStringProperty("Complete JS async function body when executor=js.", 1000000),
                 ["components"] = new JObject
                 {
                     ["type"] = "array",
@@ -66,6 +64,11 @@ namespace RNAssistant.Office.Tools
                 ["doNotUseWhen"] = BoundedStringProperty("Cases where the model should not select this tool.", 4000),
                 ["limitations"] = BoundedStringProperty("Known limitations presented to the model.", 4000)
             };
+            if (enableJavaScript)
+            {
+                properties["parameters"] = BoundedStringProperty("Strict object JSON Schema serialized as a string for saved JS tool arguments.", 64000);
+                properties["code"] = BoundedStringProperty("Complete JS async function body when executor=js.", 1000000);
+            }
             return new JObject
             {
                 ["type"] = "object",

@@ -56,6 +56,10 @@ namespace RNAssistant.Office.Services
 
             foreach (var tool in published.Where(s =>
                 !string.Equals(s.Executor, "pipeline", StringComparison.OrdinalIgnoreCase) &&
+                (_toolExecutor.AgentJavaScriptEnabled ||
+                    !string.Equals(s.Executor, "js", StringComparison.OrdinalIgnoreCase)) &&
+                (_toolExecutor.AgentJavaScriptEnabled ||
+                    !string.Equals(s.Id, JsToolHandler.RunId, StringComparison.Ordinal)) &&
                 (string.Equals(s.Host, _adapter.HostName, StringComparison.OrdinalIgnoreCase) ||
                 string.Equals(s.Host, "Common", StringComparison.OrdinalIgnoreCase))))
             {

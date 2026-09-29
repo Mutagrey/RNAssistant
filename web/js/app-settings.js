@@ -22,6 +22,7 @@ var agentSettingsDefaults = {
   toolResultRole: "user",
   fallbackToJsonObject: true,
   autoConfirmToolActions: false,
+  enableAgentJavaScript: false,
   autoCompressContext: true,
   maxAgentIterations: 256,
   maxAgentFormatRetries: 10,
@@ -227,6 +228,7 @@ function renderSettings() {
   renderTokenEstimateCalibrationStatus(s);
   $("streamInput").checked = compatibilityValue(s, "StreamResponses", "streamResponses", modelSettingsDefaults.streamResponses) !== false;
   $("autoConfirmToolsInput").checked = compatibilityValue(s, "AutoConfirmToolActions", "autoConfirmToolActions", agentSettingsDefaults.autoConfirmToolActions) === true;
+  $("enableAgentJavaScriptInput").checked = compatibilityValue(s, "EnableAgentJavaScript", "enableAgentJavaScript", agentSettingsDefaults.enableAgentJavaScript) === true;
   $("autoCompressContextInput").checked = compatibilityValue(s, "AutoCompressContext", "autoCompressContext", agentSettingsDefaults.autoCompressContext) !== false;
   $("debugModelTrafficInput").checked = !!(s.DebugModelTraffic || s.debugModelTraffic);
   $("screenCaptureProtectionInput").checked = compatibilityValue(s, "ScreenCaptureProtectionEnabled", "screenCaptureProtectionEnabled", true) !== false;
@@ -295,6 +297,7 @@ function readSettings() {
     TokenEstimateCalibrations: compatibilityValue(state.settings, "TokenEstimateCalibrations", "tokenEstimateCalibrations", {}) || {},
     StreamResponses: $("streamInput").checked,
     AutoConfirmToolActions: $("autoConfirmToolsInput").checked,
+    EnableAgentJavaScript: $("enableAgentJavaScriptInput").checked,
     AutoCompressContext: $("autoCompressContextInput").checked,
     DebugModelTraffic: $("debugModelTrafficInput").checked,
     ScreenCaptureProtectionEnabled: $("screenCaptureProtectionInput").checked,
@@ -322,6 +325,7 @@ async function persistSettingsFromForm(reviewAgentPrompts) {
   var apiKey = $("apiKeyInput").value;
   var historySecret = $("historySecretInput").value;
   var nextSettings = readSettings();
+  var javascriptWasEnabled = compatibilityValue(state.settings, "EnableAgentJavaScript", "enableAgentJavaScript", false) === true;
   var response = await saveSettingsWithPromptChanges(nextSettings, apiKey, historySecret, reviewAgentPrompts);
   state.appVersion = response.appVersion || response.AppVersion || state.appVersion;
   state.settings = response.settings;
@@ -331,6 +335,14 @@ async function persistSettingsFromForm(reviewAgentPrompts) {
   $("apiKeyInput").value = "";
   $("historySecretInput").value = "";
   renderSettings();
+  if (javascriptWasEnabled !== nextSettings.EnableAgentJavaScript &&
+      typeof applyLibraryCatalogState === "function") {
+    try {
+      applyLibraryCatalogState({ tools: await send("getTools", {}) });
+    } catch (error) {
+      log("Настройка сохранена, но список инструментов не обновился: " + error.message, "error");
+    }
+  }
   updateEstimatedContextUsage();
   renderContextMeter();
   return state.settings;
@@ -378,6 +390,7 @@ function resetAgentSettingsToDefaults() {
   $("toolResultRoleInput").value = agentSettingsDefaults.toolResultRole;
   $("fallbackJsonObjectInput").checked = agentSettingsDefaults.fallbackToJsonObject;
   $("autoConfirmToolsInput").checked = agentSettingsDefaults.autoConfirmToolActions;
+  $("enableAgentJavaScriptInput").checked = agentSettingsDefaults.enableAgentJavaScript;
   $("autoCompressContextInput").checked = agentSettingsDefaults.autoCompressContext;
   $("maxAgentIterationsInput").value = agentSettingsDefaults.maxAgentIterations;
   $("maxAgentFormatRetriesInput").value = agentSettingsDefaults.maxAgentFormatRetries;

@@ -14,15 +14,18 @@ namespace RNAssistant.Office.Tools
         private readonly IOfficeApplicationAdapter _adapter;
         private readonly ToolStore _toolStore;
         private readonly Func<string, bool> _isProtectedToolId;
+        private readonly Func<bool> _javascriptEnabled;
 
         internal ToolAuthoringService(
             IOfficeApplicationAdapter adapter,
             ToolStore toolStore,
-            Func<string, bool> isProtectedToolId)
+            Func<string, bool> isProtectedToolId,
+            Func<bool> javascriptEnabled = null)
         {
             _adapter = adapter;
             _toolStore = toolStore;
             _isProtectedToolId = isProtectedToolId;
+            _javascriptEnabled = javascriptEnabled;
         }
 
         internal bool CanUse { get { return _toolStore != null; } }
@@ -30,9 +33,20 @@ namespace RNAssistant.Office.Tools
         internal ToolAuthoringOutcome ValidateDefinition(
             ToolCatalogEntry tool)
         {
+            var disabled = RejectDisabledJavaScript(tool);
+            if (disabled != null) return disabled;
             var reserved = ValidateAuthoredToolId(
                 tool == null ? null : tool.Id);
             return reserved ?? ValidateToolDefinition(tool);
+        }
+
+        private ToolAuthoringOutcome RejectDisabledJavaScript(ToolCatalogEntry tool)
+        {
+            return tool != null && JsToolHandler.IsDefinition(tool) &&
+                _javascriptEnabled?.Invoke() != true
+                ? ToolAuthoringOutcome.Error("JavaScript tools are disabled in settings.",
+                    null, "javascript_tools_disabled", false)
+                : null;
         }
 
         private static ToolCatalogEntry ReadToolDefinition(

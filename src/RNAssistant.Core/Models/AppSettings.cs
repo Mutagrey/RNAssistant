@@ -305,6 +305,7 @@ namespace RNAssistant.Core.Models
         public bool AutoCalibrateTokenEstimate { get; set; }
         public bool StreamResponses { get; set; }
         public bool AutoConfirmToolActions { get; set; }
+        public bool EnableAgentJavaScript { get; set; }
         public bool SmartChatTitles { get; set; }
         public int MaxAgentIterations { get; set; }
         // Legacy settings key: total protocol responses including the initial attempt (1–20).
@@ -376,6 +377,7 @@ namespace RNAssistant.Core.Models
             AutoCalibrateTokenEstimate = true;
             StreamResponses = true;
             AutoConfirmToolActions = false;
+            EnableAgentJavaScript = false;
             SmartChatTitles = true;
             MaxAgentIterations = DefaultMaxAgentIterations;
             MaxAgentFormatRetries = DefaultMaxAgentFormatRetries;
