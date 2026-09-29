@@ -302,6 +302,16 @@ function emptyToolSchema() {
   return "{\n  \"type\": \"object\",\n  \"properties\": {},\n  \"required\": [],\n  \"additionalProperties\": false\n}";
 }
 
+function emptyJsToolSchema() {
+  return JSON.stringify({ type: "object", properties: { resources: {
+    type: "array", description: "Named semantic resource bindings", items: { type: "object",
+      properties: { name: { type: "string", description: "Binding name" },
+        target: { type: "string", description: "Semantic target" },
+        view: { type: "string", description: "Resource representation" } },
+      required: ["name", "target", "view"], additionalProperties: false } } },
+    required: ["resources"], additionalProperties: false });
+}
+
 function toolComponents(tool) {
   if (!tool || !tool._sourceLoaded) {
     return [];
@@ -662,6 +672,7 @@ function renderToolEditor() {
   setToolRunContinuation(null);
   state.toolBuilderReadOnly = disabled || readOnly;
   var isVba = !!(skill && String(skill.Executor || "").toLowerCase() === "vba");
+  var isJs = !!(skill && String(skill.Executor || "").toLowerCase() === "js");
   var panel = $("toolEditorPanel");
   var empty = $("toolEditorEmpty");
   if (panel) {
@@ -721,7 +732,11 @@ function renderToolEditor() {
   } finally {
     state.toolLibraryRendering = false;
   }
-  if ($("vbaToolEditor")) $("vbaToolEditor").classList.toggle("hidden", !isVba);
+  if ($("vbaToolEditor")) $("vbaToolEditor").classList.toggle("hidden", !isVba && !isJs);
+  ["toolVbaComponentToolbar", "toolVbaComponentName", "toolVbaComponentType"].forEach(function (id) {
+    if ($(id)) $(id).classList.toggle("hidden", !isVba);
+  });
+  if ($("toolCodeLabel")) $("toolCodeLabel").textContent = isJs ? "JavaScript source" : "VBA source";
   applyToolEditorPage();
 
   [
@@ -743,7 +758,7 @@ function renderToolEditor() {
   if (typeof setCodeEditorReadOnly === "function") {
     setCodeEditorReadOnly("toolSchemaInput", disabled || readOnly);
     setCodeEditorReadOnly("toolRunArgsInput", sourceUnavailable);
-    setCodeEditorReadOnly("toolCodeInput", disabled || readOnly || !isVba);
+    setCodeEditorReadOnly("toolCodeInput", disabled || readOnly || !isVba && !isJs);
     setCodeEditorReadOnly("toolReadmeInput", disabled || readOnly);
   }
 
@@ -894,6 +909,16 @@ function bindToolActions() {
     var tool = state.tools[state.selectedToolIndex];
     if (!tool) return;
     tool.Executor = $("toolExecutorInput").value;
+    if (tool.Executor === "js") {
+      tool.Components = [];
+      tool.Code = "";
+      tool.RequiresConfirmation = false;
+      tool.MutatesDocument = false;
+      tool.MutatesLocalState = false;
+      tool.AgentCanRun = true;
+      tool.RiskLevel = 0;
+      tool.ArgumentSchemaJson = emptyJsToolSchema();
+    }
     if (tool.Executor === "vba" && !toolComponents(tool).length) {
       var name = inferredVbaComponentName(tool);
       tool.Components = [{ Name: name, Type: "StdModule", FileName: name + ".bas", Code: "Option Explicit\n" }];
@@ -908,33 +933,34 @@ function bindToolActions() {
   $("addToolButton").addEventListener("click", function () {
     if (typeof syncSelectedLibraryItem === "function") syncSelectedLibraryItem();
     else if (state.selectedInstructionKind === "tool") syncSelectedToolFromEditor();
-    if (["Excel", "Word", "PowerPoint"].indexOf(state.host) < 0) {
-      log("VBA tools поддерживаются в Excel, Word и PowerPoint.", "error");
+    if (["Excel", "Word", "PowerPoint", "Outlook"].indexOf(state.host) < 0) {
+      log("Инструменты поддерживаются в Excel, Word, PowerPoint и Outlook.", "error");
       return;
     }
+    var isJs = state.host === "Outlook";
     var id = uniqueDraftToolId(state.host.toLowerCase() + ".new_tool");
-    var code = newVbaToolSource(id, state.host);
+    var code = isJs ? "return RN.resources.names();" : newVbaToolSource(id, state.host);
     state.tools.push({
       Id: id,
       Host: state.host,
       Name: "new_tool",
       Description: "",
-      ArgumentSchemaJson: emptyToolSchema(),
-      Executor: "vba",
-      RequiresConfirmation: true,
+      ArgumentSchemaJson: isJs ? emptyJsToolSchema() : emptyToolSchema(),
+      Executor: isJs ? "js" : "vba",
+      RequiresConfirmation: !isJs,
       Code: code,
       Readme: "",
       Enabled: true,
       BuiltIn: false,
-      MutatesDocument: true,
-      AgentCanRun: false,
-      RiskLevel: 1,
+      MutatesDocument: !isJs,
+      AgentCanRun: isJs,
+      RiskLevel: isJs ? 0 : 1,
       CapabilityStatus: "available",
       Scope: "global",
       PackageVersion: "1.0.0",
-      EntryPoint: "Run",
+      EntryPoint: isJs ? "" : "Run",
       ArgumentOrder: [],
-      Components: [{ Name: "RNA_NewTool", Type: "StdModule", FileName: "RNA_NewTool.bas", Code: code }],
+      Components: isJs ? [] : [{ Name: "RNA_NewTool", Type: "StdModule", FileName: "RNA_NewTool.bas", Code: code }],
       _baseId: "",
       _baseRevision: "",
       _sourceLoaded: true
@@ -954,7 +980,7 @@ function bindToolActions() {
 
     var id = uniqueDraftToolId((source.Id || "tool") + ".copy");
     var components;
-    try { components = cloneVbaToolComponents(source, id); }
+    try { components = String(source.Executor || "").toLowerCase() === "js" ? [] : cloneVbaToolComponents(source, id); }
     catch (error) { log(error.message, "error"); return; }
     state.tools.push({
       Id: id,
@@ -965,7 +991,7 @@ function bindToolActions() {
       ArgumentSchemaJson: source.ArgumentSchemaJson || emptyToolSchema(),
       Executor: source.BuiltIn ? "vba" : (source.Executor || "vba"),
       RequiresConfirmation: source.BuiltIn ? true : !!source.RequiresConfirmation,
-      Code: components[0].Code,
+      Code: components.length ? components[0].Code : (source.Code || ""),
       Readme: source.Readme || "",
       Enabled: true,
       BuiltIn: false,

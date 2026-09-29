@@ -52,6 +52,7 @@ namespace RNAssistant.Office.Tools
                 ArgumentSchemaJson = ToolArgumentReader.String(arguments,
                     "parameters", "{\"type\":\"object\",\"properties\":{},\"required\":[],\"additionalProperties\":false}"),
                 Executor = ToolArgumentReader.String(arguments, "executor", "vba"),
+                Code = ToolArgumentReader.String(arguments, "code", string.Empty),
                 Readme = ToolArgumentReader.String(arguments, "readme", string.Empty),
                 Enabled = ReadBool(arguments, "enabled", true),
                 RequiresConfirmation = ReadBool(arguments, "requiresConfirmation", false),
@@ -95,6 +96,7 @@ namespace RNAssistant.Office.Tools
                 tool.ArgumentSchemaJson = ToolArgumentReader.String(
                     arguments, "parameters", tool.ArgumentSchemaJson);
             SetString(arguments, "executor", value => tool.Executor = value);
+            SetString(arguments, "code", value => tool.Code = value);
 
             SetString(arguments, "readme", value => tool.Readme = value);
             SetString(arguments, "useWhen", value => tool.UseWhen = value);
@@ -155,7 +157,7 @@ namespace RNAssistant.Office.Tools
         private static JObject ToolPayload(ToolCatalogEntry tool)
         {
             tool = tool ?? new ToolCatalogEntry();
-            return new JObject
+            var payload = new JObject
             {
                 ["id"] = tool.Id ?? string.Empty,
                 ["host"] = tool.Host ?? string.Empty,
@@ -184,6 +186,9 @@ namespace RNAssistant.Office.Tools
                 ["capabilityStatus"] = tool.CapabilityStatus ?? "available",
                 ["limitations"] = tool.Limitations ?? string.Empty
             };
+            if (string.Equals(tool.Executor, "js", StringComparison.OrdinalIgnoreCase))
+                payload["code"] = tool.Code ?? string.Empty;
+            return payload;
         }
 
         private static JToken ParseJsonObject(string json)

@@ -26,7 +26,7 @@ namespace RNAssistant.Office.Tools
 
             yield return Projection(
                 UpsertToolId,
-                "Mutates settings: Create or update one manifest-based VBA tool. Supply exact package components; runtime derives metadata, validates the complete definition, and applies conservative execution authority before confirmation/save. Omitted update fields are preserved.",
+                "Mutates settings: Create or update a VBA package or read-only JavaScript tool. JS requires executor=js, code and a strict parameters schema with a required resources array. Omitted update fields are preserved.",
                 SchemaFor(UpsertToolId), "tools_upsert");
             yield return Projection(
                 DeleteToolId,

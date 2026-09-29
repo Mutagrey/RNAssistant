@@ -76,7 +76,7 @@ namespace RNAssistant.Office.Runtime
             _ownedToolIds = new HashSet<string>(StringComparer.Ordinal);
             foreach (var registration in snapshot.Registrations.Where(OwnsRegistration))
             {
-                var packageRegistration = VbaPackageToolHandler.Owns(registration);
+                var packageRegistration = VbaPackageToolHandler.Owns(registration) || JsToolHandler.Owns(registration);
                 var binding = packageRegistration
                     ? registration.Binding
                     : DirectToolBindingCatalog.Resolve(
@@ -93,6 +93,14 @@ namespace RNAssistant.Office.Runtime
                 else if (string.Equals(registration.Descriptor.Id, ResourceToolCatalog.ReadToolId, StringComparison.Ordinal))
                 {
                     handler = new ResourceReadToolHandler(gateway, session, CaptureResourceReadAttachments);
+                }
+                else if (string.Equals(registration.Descriptor.Id, JsToolHandler.RunId, StringComparison.Ordinal))
+                {
+                    handler = new JsToolHandler(gateway, session);
+                }
+                else if (JsToolHandler.Owns(registration))
+                {
+                    handler = new JsToolHandler(gateway, session, registration.PackageMetadata?.Source);
                 }
                 else if (ExcelReadToolIds.Owns(registration.Descriptor.Id))
                 {
@@ -279,6 +287,7 @@ namespace RNAssistant.Office.Runtime
         {
             return string.Equals(toolId, ResourceToolCatalog.FindToolId, StringComparison.Ordinal) ||
                 string.Equals(toolId, ResourceToolCatalog.ReadToolId, StringComparison.Ordinal) ||
+                string.Equals(toolId, JsToolHandler.RunId, StringComparison.Ordinal) ||
                 ResourceDefinitionToolHandler.Owns(toolId) ||
                 ExcelReadToolIds.Owns(toolId) || ExcelWriteToolIds.Owns(toolId) ||
                 ExcelFindReplaceToolIds.Owns(toolId) || ExcelSheetToolIds.Owns(toolId) ||
@@ -306,7 +315,7 @@ namespace RNAssistant.Office.Runtime
         {
             return registration != null && registration.Descriptor != null &&
                 (Owns(registration.Descriptor.Id) ||
-                 VbaPackageToolHandler.Owns(registration));
+                 VbaPackageToolHandler.Owns(registration) || JsToolHandler.Owns(registration));
         }
 
         public ToolPolicySnapshot Describe(ToolCall call) { return _runtime.Describe(call); }

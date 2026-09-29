@@ -13,6 +13,8 @@ namespace RNAssistant.Office.Tools
                 StringComparison.Ordinal)) return ResourceFindToolHandler.Binding;
             if (string.Equals(toolId, ResourceToolCatalog.ReadToolId,
                 StringComparison.Ordinal)) return ResourceReadToolHandler.Binding;
+            if (string.Equals(toolId, JsToolHandler.RunId,
+                StringComparison.Ordinal)) return JsToolHandler.Binding;
             if (ExcelReadToolIds.Owns(toolId))
                 return ExcelReadToolHandler.BindingFor(toolId);
             if (ResourceDefinitionToolHandler.Owns(toolId))

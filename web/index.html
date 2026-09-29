@@ -331,7 +331,7 @@
               <div class="form-grid tool-editor-page" data-tool-page-view="main">
                 <label>ID инструмента<input id="toolIdInput" placeholder="excel.normalize_table"></label>
                 <label>Приложение<select id="toolHostInput"><option>Common</option><option>Excel</option><option>Word</option><option>PowerPoint</option><option>Outlook</option></select></label>
-                <label>Исполнитель<select id="toolExecutorInput"><option>vba</option><option>builtin</option></select></label>
+                <label>Исполнитель<select id="toolExecutorInput"><option>vba</option><option>js</option><option>builtin</option></select></label>
                 <div class="tool-form-flags"><label class="checkline"><input type="checkbox" id="toolEnabledInput"> Включён</label><label class="checkline"><input type="checkbox" id="toolConfirmInput"> Требует подтверждения</label></div>
                 <label class="wide">Описание<textarea id="toolDescriptionInput" rows="4" placeholder="Описание для модели"></textarea></label>
                 <div class="setting-note wide" id="toolPackageMeta"></div>
@@ -344,8 +344,8 @@
               </div>
               <div class="tool-editor-page hidden" data-tool-page-view="implementation">
                 <div class="vba-package-editor hidden" id="vbaToolEditor">
-                  <div class="component-toolbar"><label>Компонент<select id="toolComponentSelect"></select></label><button class="secondary" id="addToolModuleButton" type="button">+ Module</button><button class="secondary" id="addToolClassButton" type="button">+ Class</button><button class="secondary" id="addToolFormButton" type="button">+ UserForm</button><button class="secondary danger-soft" id="deleteToolComponentButton" type="button">Удалить</button></div>
-                  <div class="form-grid"><label>Имя компонента<input id="toolComponentNameInput" maxlength="40" placeholder="RNA_MyTool"></label><label>Тип<select id="toolComponentTypeInput"><option value="StdModule">Standard module</option><option value="ClassModule">Class module</option><option value="MSForm">Code-only UserForm</option></select></label><label class="wide">VBA source<textarea id="toolCodeInput" rows="14" spellcheck="false" placeholder="Option Explicit"></textarea></label></div>
+                  <div class="component-toolbar" id="toolVbaComponentToolbar"><label>Компонент<select id="toolComponentSelect"></select></label><button class="secondary" id="addToolModuleButton" type="button">+ Module</button><button class="secondary" id="addToolClassButton" type="button">+ Class</button><button class="secondary" id="addToolFormButton" type="button">+ UserForm</button><button class="secondary danger-soft" id="deleteToolComponentButton" type="button">Удалить</button></div>
+                  <div class="form-grid"><label id="toolVbaComponentName">Имя компонента<input id="toolComponentNameInput" maxlength="40" placeholder="RNA_MyTool"></label><label id="toolVbaComponentType">Тип<select id="toolComponentTypeInput"><option value="StdModule">Standard module</option><option value="ClassModule">Class module</option><option value="MSForm">Code-only UserForm</option></select></label><label class="wide"><span id="toolCodeLabel">VBA source</span><textarea id="toolCodeInput" rows="14" spellcheck="false" placeholder="Option Explicit"></textarea></label></div>
                 </div>
               </div>
               <div class="tool-editor-page hidden" data-tool-page-view="test">
@@ -1059,7 +1059,7 @@
   <script src="js/app-tools-structured.js?v=library-ux-20260903-1"></script>
   <script src="js/app-tools-actions.js?v=manual-tool-chat-20260908-1"></script>
   <script src="js/app-tools-documentation.js?v=tool-docs-20260906-1"></script>
-  <script src="js/app-tools.js?v=catalog-display-chat-20260908-1"></script>
+  <script src="js/app-tools.js?v=js-tool-editor-20260929-1"></script>
   <script src="js/app-skills.js?v=skill-source-timing-20260928-1"></script>
   <script src="js/app-text-diff.js?v=run-diff-20260908-1"></script>
   <script src="js/app-vba-actions.js?v=vba-upload-20260906-1"></script>

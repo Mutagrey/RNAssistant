@@ -33,6 +33,14 @@ independently of daily work.
 
 ## Implementation log — includes current in-flight work and earlier entries
 
+JavaScript computation addition (2026-09-29): a read-only `common.js_run` and
+saved JS tool executor use a separate bounded Jint worker and the existing Resource
+Gateway/Data Plane for named, revision-pinned streamed reads. Tool Library accepts
+`executor=js` with per-call semantic resource bindings. Host-neutral source and
+contract checks pass. The .NET Framework worker cannot be built on this ARM Mac
+with the available Mono runtime or without net48 reference assemblies in `dotnet`;
+Windows worker/build/runtime and Office/WebView2 delivery remain open evidence.
+
 Entries below may say “current” or “next” relative to their own date. Only the
 operating status above controls today's work.
 

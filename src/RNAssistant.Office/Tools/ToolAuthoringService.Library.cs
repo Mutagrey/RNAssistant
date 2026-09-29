@@ -208,7 +208,8 @@ namespace RNAssistant.Office.Tools
                 ["description"] = tool.Description ?? string.Empty,
                 ["display"] = tool.Display,
                 ["parameters"] = tool.ArgumentSchemaJson ?? string.Empty,
-                ["executor"] = "vba",
+                ["executor"] = tool.Executor ?? "vba",
+                ["code"] = tool.Code ?? string.Empty,
                 ["components"] = new JArray((tool.Components ??
                     new List<ToolPackageComponentDefinition>())
                     .Where(component => component != null)

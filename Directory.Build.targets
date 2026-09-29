@@ -110,4 +110,31 @@
   </Target>
 
   <Import Project="$(MSBuildThisFileDirectory)build/RNAssistant.Release.targets" />
+  <ItemGroup Condition="'$(MSBuildProjectName)' == 'RNAssistant.Desktop' or '$(MSBuildProjectName)' == 'RNAssistant.ExcelAddIn' or '$(MSBuildProjectName)' == 'RNAssistant.WordAddIn' or '$(MSBuildProjectName)' == 'RNAssistant.PowerPointAddIn' or '$(MSBuildProjectName)' == 'RNAssistant.OutlookAddIn'">
+    <Content Include="$(MSBuildThisFileDirectory)src/RNAssistant.JsWorker/bin/$(Configuration)/RNAssistant.JsWorker.exe;$(MSBuildThisFileDirectory)src/RNAssistant.JsWorker/bin/$(Configuration)/RNAssistant.JsWorker.exe.config;$(MSBuildThisFileDirectory)src/RNAssistant.JsWorker/bin/$(Configuration)/Jint.dll;$(MSBuildThisFileDirectory)src/RNAssistant.JsWorker/bin/$(Configuration)/Acornima.dll">
+      <Link>%(Filename)%(Extension)</Link>
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
+  </ItemGroup>
+  <Target Name="BuildRNAssistantJsWorker" BeforeTargets="Build"
+          Condition="'$(MSBuildProjectName)' == 'RNAssistant.Office'">
+    <MSBuild Projects="$(MSBuildThisFileDirectory)src/RNAssistant.JsWorker/RNAssistant.JsWorker.csproj"
+             Targets="Build" Properties="Configuration=$(Configuration);Platform=AnyCPU" />
+  </Target>
+  <Target Name="CopyRNAssistantJsWorker" AfterTargets="Build"
+          Condition="'$(MSBuildProjectName)' == 'RNAssistant.Office' or '$(MSBuildProjectName)' == 'RNAssistant.Desktop' or '$(MSBuildProjectName)' == 'RNAssistant.ExcelAddIn' or '$(MSBuildProjectName)' == 'RNAssistant.WordAddIn' or '$(MSBuildProjectName)' == 'RNAssistant.PowerPointAddIn' or '$(MSBuildProjectName)' == 'RNAssistant.OutlookAddIn'">
+    <ItemGroup>
+      <RNAssistantJsWorkerFile Include="$(MSBuildThisFileDirectory)src/RNAssistant.JsWorker/bin/$(Configuration)/RNAssistant.JsWorker.exe" />
+      <RNAssistantJsWorkerFile Include="$(MSBuildThisFileDirectory)src/RNAssistant.JsWorker/bin/$(Configuration)/RNAssistant.JsWorker.exe.config" />
+      <RNAssistantJsWorkerFile Include="$(MSBuildThisFileDirectory)src/RNAssistant.JsWorker/bin/$(Configuration)/Jint.dll" />
+      <RNAssistantJsWorkerFile Include="$(MSBuildThisFileDirectory)src/RNAssistant.JsWorker/bin/$(Configuration)/Acornima.dll" />
+      <RNAssistantJsWorkerFile Include="$(MSBuildThisFileDirectory)src/RNAssistant.JsWorker/bin/$(Configuration)/Newtonsoft.Json.dll" />
+      <RNAssistantJsWorkerFile Include="$(MSBuildThisFileDirectory)src/RNAssistant.JsWorker/bin/$(Configuration)/System.Memory.dll" />
+      <RNAssistantJsWorkerFile Include="$(MSBuildThisFileDirectory)src/RNAssistant.JsWorker/bin/$(Configuration)/System.Buffers.dll" />
+      <RNAssistantJsWorkerFile Include="$(MSBuildThisFileDirectory)src/RNAssistant.JsWorker/bin/$(Configuration)/System.Runtime.CompilerServices.Unsafe.dll" />
+    </ItemGroup>
+    <Error Condition="!Exists('%(RNAssistantJsWorkerFile.Identity)')"
+           Text="Required JavaScript worker deployment file is missing: %(RNAssistantJsWorkerFile.Identity)" />
+    <Copy SourceFiles="@(RNAssistantJsWorkerFile)" DestinationFolder="$(TargetDir)" SkipUnchangedFiles="true" />
+  </Target>
 </Project>

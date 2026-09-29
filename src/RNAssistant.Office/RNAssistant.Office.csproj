@@ -67,6 +67,7 @@
     <Compile Include="Contracts\BridgeDtos.ToolResultPresentation.cs" />
     <Compile Include="Contracts\BridgeDtos.ArtifactViewer.cs" />
     <Compile Include="Contracts\BridgeDtos.cs" />
+    <Compile Include="Tools\JsToolHandler.cs" />
     <Compile Include="Contracts\BridgeDtos.Diagnostics.cs" />
     <Compile Include="Contracts\BridgeDtos.Html.cs" />
     <Compile Include="Contracts\BridgeDtos.Qualification.cs" />

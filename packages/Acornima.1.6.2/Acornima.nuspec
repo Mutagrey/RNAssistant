@@ -1,0 +1,30 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<package xmlns="http://schemas.microsoft.com/packaging/2013/05/nuspec.xsd">
+  <metadata>
+    <id>Acornima</id>
+    <version>1.6.2</version>
+    <authors>Adam Simon</authors>
+    <license type="expression">BSD-3-Clause</license>
+    <licenseUrl>https://licenses.nuget.org/BSD-3-Clause</licenseUrl>
+    <readme>README.md</readme>
+    <projectUrl>https://github.com/adams85/acornima</projectUrl>
+    <description>A standard-compliant JavaScript parser, which is a fork of Esprima.NET combined with the .NET port of the acornjs parser.</description>
+    <copyright>Adam Simon</copyright>
+    <tags>javascript, ecmascript, parser</tags>
+    <repository type="git" url="https://github.com/adams85/acornima" commit="93b19e4e2ce0bd2c0fdca9deb92b39d1f5d9f53b" />
+    <dependencies>
+      <group targetFramework=".NETFramework4.6.2">
+        <dependency id="System.Memory" version="4.5.5" exclude="Build,Analyzers" />
+        <dependency id="System.Runtime.CompilerServices.Unsafe" version="6.0.0" exclude="Build,Analyzers" />
+      </group>
+      <group targetFramework="net8.0" />
+      <group targetFramework=".NETStandard2.0">
+        <dependency id="System.Memory" version="4.5.5" exclude="Build,Analyzers" />
+        <dependency id="System.Runtime.CompilerServices.Unsafe" version="6.0.0" exclude="Build,Analyzers" />
+      </group>
+      <group targetFramework=".NETStandard2.1">
+        <dependency id="System.Runtime.CompilerServices.Unsafe" version="6.0.0" exclude="Build,Analyzers" />
+      </group>
+    </dependencies>
+  </metadata>
+</package>

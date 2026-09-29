@@ -27,6 +27,10 @@
     <RequiredFile Include="$(NativeOutput)RNAssistant.NativeHostCli.dll" />
     <RequiredFile Include="$(CoreOutput)RNAssistant.Core.dll" />
     <RequiredFile Include="$(OfficeOutput)RNAssistant.Office.dll" />
+    <RequiredFile Include="$(OfficeOutput)RNAssistant.JsWorker.exe" />
+    <RequiredFile Include="$(OfficeOutput)RNAssistant.JsWorker.exe.config" />
+    <RequiredFile Include="$(OfficeOutput)Jint.dll" />
+    <RequiredFile Include="$(OfficeOutput)Acornima.dll" />
     <RequiredFile Include="$(HostsOutput)RNAssistant.OfficeHosts.dll" />
     <RequiredFile Include="$(OfficeOutput)Newtonsoft.Json.dll" />
     <RequiredFile Include="$(OfficeOutput)Microsoft.Web.WebView2.Core.dll" />

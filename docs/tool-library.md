@@ -32,6 +32,25 @@ separate owners, stores, version rules and model transports:
 
 ## Current implementation
 
+### Read-only JavaScript tools
+
+`common.js_run` runs one async JavaScript function body in a separate local .NET Framework
+worker. It accepts named `{name,target,view,path?}` resource bindings and exposes
+`RN.resources.names()`, `await RN.resources.open(name)`, bounded `read()` and
+`for await (const batch of handle.stream())`. The Office resource Gateway resolves
+semantic targets and pins exact view revisions before the worker starts; each
+subsequent batch uses the existing Resource Data Plane cursor and gate. Scripts
+receive no Office, CLR, filesystem, network or WebView bridge object. The return
+value must be JSON-serializable and at most 1 MiB. Execution is read-only, limited
+to 10 seconds in Jint, with a 12-second worker deadline and process termination on
+cancellation. A closed or incomplete resource read fails explicitly.
+
+Custom `executor=js` tools use the same worker and ToolPack snapshot as a one-off
+call. Their strict argument schema must require a `resources` array of named
+semantic bindings; callers select targets on every invocation. Tool Library stores
+the JS source in the package metadata and applies runtime-owned read-only policy.
+VBA component storage and execution remain separate.
+
 Source-owned host and controller catalogs are captured in one immutable execution
 snapshot. Mutable `ToolCatalogEntry` values are catalog/package projections only;
 their exact policy/binding is required at capture and missing authority fails closed.

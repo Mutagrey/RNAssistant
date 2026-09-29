@@ -21,6 +21,12 @@ namespace RNAssistant.Office.Tools
                     ["minLength"] = 1,
                     ["maxLength"] = 128
                 },
+                ["executor"] = EnumProperty("Custom tool runtime.", "vba", "js"),
+                ["host"] = EnumProperty("Tool host; JS may use Common.", "Common", "Excel", "Word", "PowerPoint", "Outlook"),
+                ["name"] = BoundedStringProperty("User-visible tool name.", 200),
+                ["description"] = BoundedStringProperty("Tool description for model discovery.", 8000),
+                ["parameters"] = BoundedStringProperty("Strict object JSON Schema serialized as a string for saved JS tool arguments.", 64000),
+                ["code"] = BoundedStringProperty("Complete JS async function body when executor=js.", 1000000),
                 ["components"] = new JObject
                 {
                     ["type"] = "array",

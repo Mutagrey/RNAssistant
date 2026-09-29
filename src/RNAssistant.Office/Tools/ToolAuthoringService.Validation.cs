@@ -89,9 +89,9 @@ namespace RNAssistant.Office.Tools
             {
                 return ToolAuthoringOutcome.Error("Pipelines are disabled during stabilization.", null, "pipeline_disabled", false);
             }
-            if (executor != "vba")
+            if (executor != "vba" && executor != "js")
             {
-                return ToolAuthoringOutcome.Error("Tool executor must be vba.");
+                return ToolAuthoringOutcome.Error("Tool executor must be vba or js.");
             }
 
             JObject normalizedSchema;
@@ -99,6 +99,32 @@ namespace RNAssistant.Office.Tools
             if (!ToolSchemaSupport.TryParse(tool, out normalizedSchema, out schemaError))
             {
                 return ToolAuthoringOutcome.Error(schemaError, null, "invalid_tool_schema", false);
+            }
+
+            if (executor == "js")
+            {
+                if (string.IsNullOrWhiteSpace(tool.Code) || tool.Components != null && tool.Components.Count != 0)
+                    return ToolAuthoringOutcome.Error("JS tool requires code and no VBA components.", null, "js_source_invalid", false);
+                if (normalizedSchema["properties"]?["code"] != null)
+                    return ToolAuthoringOutcome.Error("JS tool arguments cannot override package code.", null, "js_schema_reserved_argument", false);
+                var resources = normalizedSchema["properties"]?["resources"] as JObject;
+                var required = normalizedSchema["required"] as JArray;
+                if ((string)resources?["type"] != "array" || (string)resources?["items"]?["type"] != "object" ||
+                    required == null || !required.Values<string>().Contains("resources"))
+                    return ToolAuthoringOutcome.Error("JS tool schema must require a resources array of named semantic bindings.", null, "js_resources_schema_invalid", false);
+                var properties = resources["items"]?["properties"] as JObject;
+                var itemRequired = resources["items"]?["required"] as JArray;
+                if (properties == null || itemRequired == null ||
+                    !new[] { "name", "target", "view" }.All(name => properties[name] != null && itemRequired.Values<string>().Contains(name)) ||
+                    (bool?)resources["items"]?["additionalProperties"] != false)
+                    return ToolAuthoringOutcome.Error("JS resource items must require name, target and view with no extra properties.", null, "js_resources_schema_invalid", false);
+                if (!ToolSchemaSupport.TryValidateDomainIdentityRationales(normalizedSchema, out schemaError))
+                    return ToolAuthoringOutcome.Error("JS schema requires domain identity rationale: " + schemaError, null, "tool_parameter_rationale_required", false);
+                tool.MutatesDocument = false;
+                tool.MutatesLocalState = false;
+                tool.RequiresConfirmation = false;
+                tool.RiskLevel = 0;
+                return ToolAuthoringOutcome.Ok("Read-only JavaScript tool definition is valid.");
             }
 
             if (executor == "vba" && string.IsNullOrWhiteSpace(tool.Code))

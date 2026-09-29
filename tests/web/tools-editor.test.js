@@ -13,6 +13,7 @@ class Element {
     this.classList = { toggle() {}, add() {}, remove() {} };
   }
   addEventListener(name, handler) { this.handlers[name] = handler; }
+  setAttribute() {}
   appendChild(child) { this.children.push(child); return child; }
   querySelector() { return new Element(); }
   querySelectorAll() { return []; }
@@ -70,8 +71,16 @@ assert.equal(context.inferredVbaComponentName({ Id: "x".repeat(100) }).length, 3
 const count = context.state.tools.length;
 context.state.host = "Outlook";
 get("addToolButton").handlers.click();
-assert.equal(context.state.tools.length, count, "unsupported host cannot create invalid VBA draft");
+assert.equal(context.state.tools.length, count + 1, "Outlook creates a JS draft");
+const outlookTool = context.state.tools[count];
+assert.equal(outlookTool.Executor, "js");
+assert.equal(outlookTool.Host, "Outlook");
+assert.equal(outlookTool.Components.length, 0);
+assert.equal(outlookTool.RequiresConfirmation, false);
+assert.equal(JSON.parse(outlookTool.ArgumentSchemaJson).required[0], "resources");
 context.state.host = "Excel";
+context.state.selectedToolIndex = 0;
+context.renderToolEditor();
 pendingCode = "Option Explicit\n' edited source";
 context.syncSelectedToolFromEditor();
 assert.equal(context.toolSourceBody(created).components[0].code, "Option Explicit\n' edited source");
@@ -96,4 +105,4 @@ assert.equal(get("toolCodeInput").disabled, true); assert.equal(get("toolIdInput
 assert.equal(get("cloneToolButton").disabled, true); assert.equal(get("installVbaToolButton").disabled, true);
 get("toolCodeInput").value = "not source"; context.syncSelectedToolFromEditor();
 assert.equal(unloaded.Code, undefined); assert.equal(unloaded.Components, undefined, "unloaded body has no fabricated component");
-console.log("PASS tools editor: VBA draft, source sync and disabled built-in clone");
+console.log("PASS tools editor: VBA and Outlook JS drafts, source sync and disabled built-in clone");

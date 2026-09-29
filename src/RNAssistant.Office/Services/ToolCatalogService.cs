@@ -69,6 +69,12 @@ namespace RNAssistant.Office.Services
                         tool.InstallationStatus = "not_installed";
                         BindCustomPackage(tool);
                     }
+                    else if (JsToolHandler.IsDefinition(tool))
+                    {
+                        tool.Scope = "global";
+                        tool.Policy = JsToolHandler.PolicyFor(tool);
+                        tool.Binding = JsToolHandler.BindingFor(tool);
+                    }
                     result.Add(tool.Id, tool);
                 }
             }

@@ -25,6 +25,53 @@ namespace RNAssistant.Harness
 {
     internal static partial class Program
     {
+        private static void JsToolSourceAndPolicyArePinned()
+        {
+            WithTempPaths(delegate(AppDataPaths paths)
+            {
+                var store = new ToolStore(paths);
+                var adapter = FakeOfficeAdapter.ForHost("Excel");
+                var executor = new OfficeToolExecutor(adapter, new VbaJournalStore(paths),
+                    new SkillStore(paths), store);
+                var source = "const h = await RN.resources.open('sales'); let total = 0; " +
+                    "for await (const batch of h.stream()) total += batch.rows.length; return total;";
+                var tool = new ToolCatalogEntry {
+                    Id = "common.count_rows_js", Host = "Common", Executor = "js",
+                    Name = "Count rows", Description = "Count rows in a selected resource.",
+                    Code = source,
+                    ArgumentSchemaJson = "{\"type\":\"object\",\"properties\":{\"resources\":{\"type\":\"array\",\"description\":\"Named source bindings\",\"items\":{\"type\":\"object\",\"properties\":{\"name\":{\"type\":\"string\",\"description\":\"Binding name\"},\"target\":{\"type\":\"string\",\"description\":\"Semantic target\"},\"view\":{\"type\":\"string\",\"description\":\"Resource view\"}},\"required\":[\"name\",\"target\",\"view\"],\"additionalProperties\":false}}},\"required\":[\"resources\"],\"additionalProperties\":false}"
+                };
+                AssertTrue(executor.ValidateToolDefinition(tool).Success, "JS source validates");
+                var saved = store.SaveOne(tool);
+                AssertTrue(saved != null, "JS source reloads");
+                AssertEqual(source, saved.Code, "JS source is retained exactly");
+                var revised = saved.Clone();
+                revised.Code = "return 1;";
+                AssertTrue(!string.Equals(ToolAuthoringService.LibraryRevision(saved),
+                    ToolAuthoringService.LibraryRevision(revised), StringComparison.Ordinal),
+                    "JS source changes participate in mutation verification");
+                var previousSourceDirectory = Path.Combine(saved.StoragePath, "src");
+                Directory.CreateDirectory(previousSourceDirectory);
+                var previousSource = Path.Combine(previousSourceDirectory, "previous.bas");
+                File.WriteAllText(previousSource, "previous VBA source");
+                store.SaveOne(saved);
+                AssertEqual("previous VBA source", File.ReadAllText(previousSource),
+                    "saving JS leaves pre-existing VBA source files intact");
+                AssertTrue(!saved.MutatesDocument && !saved.MutatesLocalState && !saved.RequiresConfirmation,
+                    "JS policy stays read-only after reload");
+                AssertTrue(JsToolHandler.IsDefinition(saved), "JS executor remains distinct from VBA");
+                var catalog = new ToolCatalogService(adapter, executor);
+                var visible = catalog.GetPublishedVisibleTools(new[] { saved }).Single(item => item.Id == tool.Id);
+                AssertTrue(visible.Policy.Effect == ToolEffect.Read && visible.Binding.HandlerId == JsToolHandler.PackageHandlerId,
+                    "published JS tool has the read-only native binding");
+                var changed = visible.Clone();
+                changed.Code = "return 0;";
+                AssertTrue(ToolPackSnapshotFactory.ExecutionFingerprint(new[] { visible }, visible.Id) !=
+                    ToolPackSnapshotFactory.ExecutionFingerprint(new[] { changed }, changed.Id),
+                    "saved JS source changes the pinned execution revision");
+            });
+        }
+
         private static void ValidatesToolSaveAndPreservesMetadata()
         {
             WithTempPaths(delegate(AppDataPaths paths)

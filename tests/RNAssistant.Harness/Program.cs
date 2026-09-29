@@ -548,6 +548,7 @@ namespace RNAssistant.Harness
                 Test("tools: built-in ids cannot be shadowed", BuiltInToolIdsCannotBeShadowed),
                 Test("tools: VBA safety is effective", RefreshedCustomToolGetsEffectiveSafety),
                 Test("tools: store saves and updates", ToolStoreSavesAndUpdatesCustomTools),
+                Test("tools: read-only JS source and policy", JsToolSourceAndPolicyArePinned),
                 Test("tools: store preserves extra files", ToolStorePreservesExtraFilesAndOtherTools),
                 Test("tools: store skips broken files", ToolStoreSkipsBrokenCustomToolFiles),
                 Test("tools: validates save metadata", ValidatesToolSaveAndPreservesMetadata),

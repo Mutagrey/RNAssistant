@@ -157,6 +157,9 @@ namespace RNAssistant.Office.Tools
                 PromptToolCatalog.GetTools(_promptSettingsService));
             RegisterControllerTools(controllerTools,
                 ResourceToolCatalog.GetControllerTools());
+            RegisterControllerTools(controllerTools, new[] {
+                ControllerToolCatalogEntry.CreateReadProjection(JsToolHandler.Descriptor,
+                    JsToolHandler.Policy, "JavaScript computation") });
             RegisterControllerTools(controllerTools,
                 HtmlWorkspaceToolCatalog.GetTools(_htmlWorkspaceService));
             RegisterControllerTools(controllerTools,
@@ -921,6 +924,7 @@ namespace RNAssistant.Office.Tools
         {
             var id = tool.Id;
             if (string.Equals(tool.Executor, "pipeline", StringComparison.OrdinalIgnoreCase)) return false;
+            if (JsToolHandler.IsDefinition(tool)) return false;
             if (_adapterTools.Any(candidate => candidate != null &&
                 string.Equals(candidate.Id, id, StringComparison.OrdinalIgnoreCase))) return true;
 

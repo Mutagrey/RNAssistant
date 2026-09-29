@@ -46,14 +46,24 @@ namespace RNAssistant.Core.Storage
                 }
 
                 // Obsolete executors are skipped without loading sidecars or migrating user files.
-                if (!string.Equals(tool.Executor, "vba", StringComparison.OrdinalIgnoreCase)) continue;
+                var js = string.Equals(tool.Executor, "js", StringComparison.OrdinalIgnoreCase);
+                if (!js && !string.Equals(tool.Executor, "vba", StringComparison.OrdinalIgnoreCase)) continue;
 
                 var directory = Path.GetDirectoryName(file);
                 tool.BuiltIn = false;
                 tool.ArgumentSchemaJson = string.IsNullOrWhiteSpace(tool.ArgumentSchemaJson) ? "{}" : tool.ArgumentSchemaJson;
                 tool.StoragePath = directory;
                 string sidecar;
-                if (!LoadVbaSources(directory, tool) || !TryApplyVbaManifest(tool)) continue;
+                if (js)
+                {
+                    if (string.IsNullOrWhiteSpace(tool.Code) || tool.Code.Length > 1000000 ||
+                        tool.Components != null && tool.Components.Count != 0) continue;
+                    tool.MutatesDocument = false;
+                    tool.MutatesLocalState = false;
+                    tool.RequiresConfirmation = false;
+                    tool.RiskLevel = 0;
+                }
+                else if (!LoadVbaSources(directory, tool) || !TryApplyVbaManifest(tool)) continue;
                 if (!TryReadOptional(Path.Combine(directory, "README.md"), tool.Readme, MaxReadmeFileBytes, out sidecar)) continue;
                 tool.Readme = sidecar;
                 if (!HasSupportedMetadata(tool)) continue;
@@ -156,8 +166,9 @@ namespace RNAssistant.Core.Storage
 
         private static void RequireSupportedExecutor(ToolCatalogEntry tool)
         {
-            if (!string.Equals(tool.Executor, "vba", StringComparison.OrdinalIgnoreCase))
-                throw new NotSupportedException("Only VBA custom tools are supported. Pipelines are disabled during stabilization.");
+            if (!string.Equals(tool.Executor, "vba", StringComparison.OrdinalIgnoreCase) &&
+                !string.Equals(tool.Executor, "js", StringComparison.OrdinalIgnoreCase))
+                throw new NotSupportedException("Only VBA and read-only JavaScript tools are supported.");
         }
 
         private void SaveTool(ToolCatalogEntry tool)
@@ -190,7 +201,8 @@ namespace RNAssistant.Core.Storage
                 Description = tool.Description ?? string.Empty,
                 Display = tool.Display,
                 ArgumentSchemaJson = tool.ArgumentSchemaJson,
-                Executor = "vba",
+                Executor = tool.Executor,
+                Code = string.Equals(tool.Executor, "js", StringComparison.OrdinalIgnoreCase) ? tool.Code : null,
                 RequiresConfirmation = tool.RequiresConfirmation,
                 MutatesDocument = tool.MutatesDocument,
                 MutatesLocalState = tool.MutatesLocalState,
@@ -205,7 +217,8 @@ namespace RNAssistant.Core.Storage
                 PackageVersion = tool.PackageVersion,
                 EntryPoint = tool.EntryPoint,
                 ArgumentOrder = new List<string>(tool.ArgumentOrder ?? new List<string>()),
-                Components = (tool.Components ?? new List<ToolPackageComponentDefinition>()).Select(component => new ToolPackageComponentDefinition
+                Components = (string.Equals(tool.Executor, "js", StringComparison.OrdinalIgnoreCase)
+                    ? new List<ToolPackageComponentDefinition>() : tool.Components ?? new List<ToolPackageComponentDefinition>()).Select(component => new ToolPackageComponentDefinition
                 {
                     Name = component.Name,
                     Type = component.Type,
@@ -217,7 +230,8 @@ namespace RNAssistant.Core.Storage
 
             _json.Save(Path.Combine(directory, "tool.json"), metadata);
 
-            WriteVbaSources(directory, tool);
+            if (string.Equals(tool.Executor, "vba", StringComparison.OrdinalIgnoreCase))
+                WriteVbaSources(directory, tool);
             WriteOptional(Path.Combine(directory, "README.md"), tool.Readme);
         }
 
@@ -372,7 +386,8 @@ namespace RNAssistant.Core.Storage
                 tool.Id.Any(char.IsWhiteSpace)) return false;
             if (!new[] { "Common", "Excel", "Word", "PowerPoint", "Outlook" }
                 .Any(host => string.Equals(host, tool.Host, StringComparison.OrdinalIgnoreCase))) return false;
-            if (!string.Equals(tool.Executor, "vba", StringComparison.OrdinalIgnoreCase)) return false;
+            if (!string.Equals(tool.Executor, "vba", StringComparison.OrdinalIgnoreCase) &&
+                !string.Equals(tool.Executor, "js", StringComparison.OrdinalIgnoreCase)) return false;
             if (tool.RiskLevel < 0 || tool.RiskLevel > 3 || tool.MutatesDocument && tool.RiskLevel == 0) return false;
             return (tool.Name ?? string.Empty).Length <= 200 &&
                 (tool.Description ?? string.Empty).Length <= 8000 &&
