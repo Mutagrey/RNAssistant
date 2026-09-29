@@ -36,20 +36,47 @@ namespace RNAssistant.Office.Services
                     StringComparison.Ordinal))
                 return TaskListMutation.Fail(
                     "The active task-list goal cannot change. Close it as superseded before starting a different task.",
-                    "task_list_goal_changed", false);
+                    "task_list_goal_changed", false, current);
             if (steps == null || steps.Count < current.Steps.Count ||
                 current.Steps.Where((step, index) =>
                     !string.Equals(step.Text, steps[index] == null ? null : (steps[index].Text ?? string.Empty).Trim(),
                         StringComparison.Ordinal)).Any())
                 return TaskListMutation.Fail(
-                    "Existing task-list steps must keep their text and order. Update statuses, append steps, or supersede the list.",
-                    "task_list_steps_changed", false);
+                    "Existing task-list steps must keep their text and order. Use action=update_statuses to change statuses, or currentTaskList to append steps; supersede the list for a different task.",
+                    "task_list_steps_changed", false, current);
             return Update(session, currentArtifact.Id,
                 BindStepIds(steps, current), beforeMutation);
         }
 
+        internal TaskListMutation UpdateStatuses(ChatSession session, string goal,
+            List<TaskListStatusUpdate> updates, Action beforeMutation)
+        {
+            RequireSession(session);
+            ChatTaskList current;
+            var currentArtifact = FindRevision(session, null, out current);
+            if (currentArtifact == null || current == null ||
+                !string.Equals(current.Status, "active", StringComparison.OrdinalIgnoreCase) ||
+                current.Steps == null || current.Steps.Any(step => step == null))
+                return TaskListMutation.Fail(
+                    "This chat has no unambiguous active task list to update.",
+                    "task_list_active_revision_invalid", false);
+            if (!string.Equals((goal ?? string.Empty).Trim(), current.Goal,
+                    StringComparison.Ordinal))
+                return TaskListMutation.Fail(
+                    "The active task-list goal cannot change. Use currentTaskList or close it as superseded.",
+                    "task_list_goal_changed", false, current);
+            var invalidUpdates = ValidateStatusUpdates(current, updates, true);
+            if (invalidUpdates != null) return invalidUpdates;
+
+            var steps = Clone(current).Steps;
+            foreach (var update in updates)
+                steps[update.Index - 1].Status = NormalizeStatus(update.Status);
+            return Update(session, currentArtifact.Id, steps, beforeMutation);
+        }
+
         internal TaskListMutation CloseActive(ChatSession session,
-            string outcome, Action beforeMutation)
+            string outcome, List<TaskListStatusUpdate> updates,
+            Action beforeMutation)
         {
             RequireSession(session);
             ChatTaskList current;
@@ -60,7 +87,8 @@ namespace RNAssistant.Office.Services
                     "This chat has no unambiguous active task list to close.",
                     "task_list_not_found", false);
             }
-            return Close(session, currentArtifact.Id, outcome, beforeMutation);
+            return Close(session, currentArtifact.Id, outcome, updates,
+                beforeMutation);
         }
 
         private TaskListMutation Create(ChatSession session, string goal,
@@ -116,7 +144,8 @@ namespace RNAssistant.Office.Services
         }
 
         private TaskListMutation Close(ChatSession session, string id,
-            string outcome, Action beforeMutation)
+            string outcome, List<TaskListStatusUpdate> updates,
+            Action beforeMutation)
         {
             RequireSession(session);
             ChatTaskList selected;
@@ -135,21 +164,49 @@ namespace RNAssistant.Office.Services
                     "task_list_not_active", false);
             }
 
+            var terminalStatus = NormalizeOutcome(outcome);
+            if (updates != null && updates.Count > 0 &&
+                terminalStatus != "completed")
+                return TaskListMutation.Fail(
+                    "Step status updates are supported only when closing as completed.",
+                    "task_list_close_updates_invalid", false, selected);
+            var invalidUpdates = ValidateStatusUpdates(selected, updates, false);
+            if (invalidUpdates != null) return invalidUpdates;
             var closed = Clone(selected);
-            closed.Status = NormalizeOutcome(outcome);
+            closed.Status = terminalStatus;
+            foreach (var update in updates ?? new List<TaskListStatusUpdate>())
+                closed.Steps[update.Index - 1].Status = NormalizeStatus(update.Status);
             Validate(closed);
             if (closed.Status == "completed" && closed.Steps.Any(step =>
                 step.Status != "completed"))
             {
                 return TaskListMutation.Fail(
-                    "A completed task list requires every step to be completed.",
-                    "task_list_not_terminal", false);
+                    "A completed task list requires every step to be completed. Pass evidenced unfinished steps as updates in this close call.",
+                    "task_list_not_terminal", false, selected);
             }
             var artifact = CreateArtifact(closed, selectedArtifact,
                 Math.Max(1, selectedArtifact.Revision) + 1);
             Commit(session, artifact, true, beforeMutation);
             return TaskListMutation.Ok(
                 "Task list closed: " + selected.Goal, closed, artifact, true);
+        }
+
+        private static TaskListMutation ValidateStatusUpdates(
+            ChatTaskList current, List<TaskListStatusUpdate> updates,
+            bool requireAny)
+        {
+            if (!requireAny && (updates == null || updates.Count == 0))
+                return null;
+            if (current == null || current.Steps == null ||
+                updates == null || updates.Count == 0 || updates.Count > MaxSteps ||
+                updates.Any(update => update == null || update.Index < 1 ||
+                    update.Index > current.Steps.Count ||
+                    string.IsNullOrWhiteSpace(update.Status)) ||
+                updates.Select(update => update.Index).Distinct().Count() != updates.Count)
+                return TaskListMutation.Fail(
+                    "Status updates need distinct 1-based step indexes from currentTaskList and a status for each.",
+                    "task_list_status_updates_invalid", false, current);
+            return null;
         }
 
         private static void Commit(ChatSession session, ChatArtifact artifact,
@@ -375,6 +432,15 @@ namespace RNAssistant.Office.Services
         }
     }
 
+    internal sealed class TaskListStatusUpdate
+    {
+        [JsonProperty("index")]
+        public int Index { get; set; }
+
+        [JsonProperty("status")]
+        public string Status { get; set; }
+    }
+
     internal sealed class TaskListMutation
     {
         internal bool Success { get; private set; }
@@ -382,6 +448,7 @@ namespace RNAssistant.Office.Services
         internal string ErrorCode { get; private set; }
         internal bool? Retryable { get; private set; }
         internal ChatTaskList TaskList { get; private set; }
+        internal ChatTaskList CurrentTaskList { get; private set; }
         internal ChatArtifact Artifact { get; private set; }
         internal bool Closed { get; private set; }
 
@@ -401,14 +468,16 @@ namespace RNAssistant.Office.Services
         }
 
         internal static TaskListMutation Fail(
-            string message, string errorCode, bool? retryable)
+            string message, string errorCode, bool? retryable,
+            ChatTaskList currentTaskList = null)
         {
             return new TaskListMutation
             {
                 Success = false,
                 Message = message,
                 ErrorCode = errorCode,
-                Retryable = retryable
+                Retryable = retryable,
+                CurrentTaskList = currentTaskList
             };
         }
     }

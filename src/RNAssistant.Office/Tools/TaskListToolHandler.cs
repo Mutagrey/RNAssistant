@@ -74,8 +74,16 @@ namespace RNAssistant.Office.Tools
                     ReadSteps(context.Arguments, "steps"),
                     context.MarkDispatchPossible);
             }
+            if (string.Equals(action, "update_statuses", StringComparison.Ordinal))
+            {
+                return _service.UpdateStatuses(_session,
+                    ToolArgumentReader.String(context.Arguments, "goal", string.Empty),
+                    ReadStatusUpdates(context.Arguments, "updates"),
+                    context.MarkDispatchPossible);
+            }
             return _service.CloseActive(_session,
                 ToolArgumentReader.String(context.Arguments, "outcome", string.Empty),
+                ReadStatusUpdates(context.Arguments, "updates"),
                 context.MarkDispatchPossible);
         }
 
@@ -87,7 +95,7 @@ namespace RNAssistant.Office.Tools
                     "Task List service returned no outcome.");
             if (!mutation.Success)
             {
-                var failed = ErrorData(mutation.ErrorCode, mutation.Retryable);
+                var failed = ErrorData(mutation);
                 return context.MayHaveDispatched
                     ? new ToolHandlerResult(RuntimeResult.Unknown(
                         mutation.Message, failed), ToolEffectEvidence.Unknown)
@@ -147,6 +155,41 @@ namespace RNAssistant.Office.Tools
             var token = raw as JToken ?? JToken.FromObject(raw);
             return token.ToObject<List<ChatTaskStep>>() ??
                 new List<ChatTaskStep>();
+        }
+
+        private static List<TaskListStatusUpdate> ReadStatusUpdates(
+            IDictionary<string, object> arguments, string name)
+        {
+            object raw;
+            if (arguments == null || !arguments.TryGetValue(name, out raw) ||
+                raw == null) return new List<TaskListStatusUpdate>();
+            var token = raw as JToken ?? JToken.FromObject(raw);
+            return token.ToObject<List<TaskListStatusUpdate>>() ??
+                new List<TaskListStatusUpdate>();
+        }
+
+        private static string ErrorData(TaskListMutation mutation)
+        {
+            var data = new JObject
+            {
+                ["code"] = mutation.ErrorCode,
+                ["retryable"] = mutation.Retryable
+            };
+            var current = mutation.CurrentTaskList;
+            if (current != null)
+            {
+                data["currentTaskList"] = new JObject
+                {
+                    ["goal"] = current.Goal,
+                    ["steps"] = new JArray((current.Steps ?? new List<ChatTaskStep>())
+                        .Select(step => new JObject
+                        {
+                            ["text"] = step.Text,
+                            ["status"] = step.Status
+                        }))
+                };
+            }
+            return data.ToString(Formatting.None);
         }
 
         private static string ErrorData(string code, bool? retryable)

@@ -20,7 +20,7 @@ namespace RNAssistant.Office.Tools
         internal static IEnumerable<ToolCatalogEntry> GetTools()
         {
             yield return Projection(SetToolId,
-                "Task list: Save the complete visible checklist, keeping the active goal and existing step text/order; update statuses or append stages. Close it with a terminal outcome. Runtime owns list and stable step identity.",
+                "Task list: Use save to create or append stages; update_statuses changes existing statuses by 1-based index; close accepts optional final status updates and closes atomically. Runtime owns list and stable step identity.",
                 Schema(), "task_list_set");
         }
 
@@ -39,8 +39,8 @@ namespace RNAssistant.Office.Tools
             var action = new JObject
             {
                 ["type"] = "string",
-                ["description"] = "Use save to create or update the active list without removing existing steps; use close for a terminal outcome.",
-                ["enum"] = new JArray("save", "close")
+                ["description"] = "Use save to create or append stages, update_statuses to change only existing statuses, or close for a terminal outcome.",
+                ["enum"] = new JArray("save", "update_statuses", "close")
             };
             var steps = new JObject
             {
@@ -65,6 +65,24 @@ namespace RNAssistant.Office.Tools
                 ["action"] = action,
                 ["goal"] = new JObject { ["type"] = "string", ["description"] = "Concise user-visible goal for the current task.", ["minLength"] = 1, ["maxLength"] = TaskListService.MaxGoalCharacters },
                 ["steps"] = steps,
+                ["updates"] = new JObject
+                {
+                    ["type"] = "array",
+                    ["description"] = "Statuses to change on the active list. Index is the current 1-based step position, not a stable id. Unmentioned steps keep their statuses.",
+                    ["minItems"] = 1,
+                    ["maxItems"] = TaskListService.MaxSteps,
+                    ["items"] = new JObject
+                    {
+                        ["type"] = "object",
+                        ["properties"] = new JObject
+                        {
+                            ["index"] = new JObject { ["type"] = "integer", ["minimum"] = 1, ["maximum"] = TaskListService.MaxSteps },
+                            ["status"] = new JObject { ["type"] = "string", ["enum"] = new JArray("pending", "in_progress", "completed", "blocked", "cancelled") }
+                        },
+                        ["required"] = new JArray("index", "status"),
+                        ["additionalProperties"] = false
+                    }
+                },
                 ["outcome"] = new JObject { ["type"] = "string", ["enum"] = new JArray("completed", "cancelled", "superseded"), ["description"] = "Terminal outcome used only with action=close." }
             };
             var saveProperties = new JObject
@@ -75,8 +93,15 @@ namespace RNAssistant.Office.Tools
             };
             var closeProperties = new JObject
             {
-                ["action"] = new JObject { ["type"] = "string", ["const"] = "close", ["description"] = "Close the active checklist." },
-                ["outcome"] = properties["outcome"].DeepClone()
+                ["action"] = new JObject { ["type"] = "string", ["const"] = "close", ["description"] = "Close the active checklist, optionally completing evidenced steps in the same call." },
+                ["outcome"] = properties["outcome"].DeepClone(),
+                ["updates"] = properties["updates"].DeepClone()
+            };
+            var statusProperties = new JObject
+            {
+                ["action"] = new JObject { ["type"] = "string", ["const"] = "update_statuses", ["description"] = "Change only existing step statuses on the active list." },
+                ["goal"] = properties["goal"].DeepClone(),
+                ["updates"] = properties["updates"].DeepClone()
             };
             return new JObject
             {
@@ -90,6 +115,13 @@ namespace RNAssistant.Office.Tools
                         ["type"] = "object",
                         ["properties"] = saveProperties,
                         ["required"] = new JArray("action", "goal", "steps"),
+                        ["additionalProperties"] = false
+                    },
+                    new JObject
+                    {
+                        ["type"] = "object",
+                        ["properties"] = statusProperties,
+                        ["required"] = new JArray("action", "goal", "updates"),
                         ["additionalProperties"] = false
                     },
                     new JObject
