@@ -166,6 +166,10 @@ namespace RNAssistant.Office.Services
                     ["internetMessageId"] = item.InternetMessageId,
                     ["conversationId"] = item.ConversationId,
                     ["attachmentCount"] = item.AttachmentCount,
+                    ["attachmentTargets"] = new JArray(Enumerable.Range(1, Math.Min(20,
+                        Math.Max(0, item.AttachmentCount))).Select(attachment =>
+                        ArchiveAttachmentTarget(manifest, page, index + 1, attachment))),
+                    ["attachmentTargetsTruncated"] = item.AttachmentCount > 20,
                     ["duplicate"] = item.Duplicate,
                     ["body"] = item.Body != null && item.Body.ByteLength <= 700000
                         ? _archiveIndex.ReadBody(item) : null,

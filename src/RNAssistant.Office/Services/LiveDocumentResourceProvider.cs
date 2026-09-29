@@ -112,6 +112,10 @@ namespace RNAssistant.Office.Services
             if (IsOutlook && TryOutlookArchivePageKey(target, out archiveId, out archivePage))
                 return DescribeOutlookArchivePage(session, archiveId, archivePage);
             int archiveRow;
+            int archiveAttachment;
+            if (IsOutlook && TryOutlookArchiveAttachmentKey(target, out archiveId, out archivePage,
+                out archiveRow, out archiveAttachment))
+                return DescribeOutlookArchiveAttachment(session, archiveId, archivePage, archiveRow, archiveAttachment);
             if (IsOutlook && TryOutlookArchiveMailKey(target, out archiveId, out archivePage, out archiveRow))
                 return DescribeOutlookArchiveMail(session, archiveId, archivePage, archiveRow);
             if (IsOutlook && IsOutlookSearch(target)) return DescribeOutlookSearch(session, target);
@@ -191,6 +195,7 @@ namespace RNAssistant.Office.Services
             string attachmentMail; int attachmentIndex;
             string archiveId; int archivePage;
             int archiveRow;
+            int archiveAttachment;
             if (!string.Equals(address.Segments[1], "root", StringComparison.Ordinal) &&
                 !string.Equals(address.Segments[1], "selection", StringComparison.Ordinal) &&
                 !(IsWord && IsWordRange(address.Segments[1])) &&
@@ -202,6 +207,8 @@ namespace RNAssistant.Office.Services
                 !(IsOutlook && IsOutlookSearch(address.Segments[1])) &&
                 !(IsOutlook && TryOutlookArchivePageKey(address.Segments[1], out archiveId, out archivePage)) &&
                 !(IsOutlook && TryOutlookArchiveMailKey(address.Segments[1], out archiveId, out archivePage, out archiveRow)) &&
+                !(IsOutlook && TryOutlookArchiveAttachmentKey(address.Segments[1], out archiveId,
+                    out archivePage, out archiveRow, out archiveAttachment)) &&
                 !(IsOutlook && TryOutlookMailKey(address.Segments[1], out outlookEntryId)))
             {
                 return false;

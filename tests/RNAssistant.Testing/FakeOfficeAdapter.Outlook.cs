@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Threading;
 using RNAssistant.Core.Tools;
 using RNAssistant.Office.Domains.Outlook;
 
@@ -8,6 +9,27 @@ namespace RNAssistant.Harness
 {
     internal sealed partial class FakeOfficeAdapter
     {
+        public int ArchiveAttachmentReadCount { get; private set; }
+        public OutlookArchiveAttachmentRequest LastArchiveAttachmentRequest { get; private set; }
+
+        public OutlookArchiveScanBatch ScanArchive(OutlookArchiveScanRequest request, CancellationToken token)
+        { throw new OutlookBackendException("No fake archive scan configured.", "outlook_archive_unavailable", false); }
+
+        public OutlookArchiveAttachmentContent ReadArchiveAttachment(
+            OutlookArchiveAttachmentRequest request, CancellationToken token)
+        {
+            token.ThrowIfCancellationRequested();
+            ArchiveAttachmentReadCount++;
+            LastArchiveAttachmentRequest = request;
+            if (request == null || request.Index != 1 || request.ExpectedCount != 1 ||
+                request.ExpectedModificationUtc.Kind != DateTimeKind.Utc)
+                throw new OutlookBackendException("Indexed attachment changed.", "outlook_archive_mail_changed", false);
+            return new OutlookArchiveAttachmentContent {
+                Attachment = new OutlookAttachmentSnapshot { Index = 1, FileName = "archive-report.docx",
+                    DisplayName = "archive-report.docx", Size = OutlookAttachmentBytes?.Length ?? 0,
+                    Type = "olByValue" }, Bytes = OutlookAttachmentBytes };
+        }
+
         private OutlookBackendException _nextOutlookCreateDraftFailure;
         internal const string OutlookReadMailOperation =
             "outlook.read_mail.direct";

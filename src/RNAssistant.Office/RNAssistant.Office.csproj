@@ -228,6 +228,7 @@
     <Compile Include="Services\OutlookSearchResourceService.cs" />
     <Compile Include="Services\OutlookArchiveIndexService.cs" />
     <Compile Include="Services\LiveDocumentResourceProvider.OutlookArchive.cs" />
+    <Compile Include="Services\LiveDocumentResourceProvider.OutlookArchiveAttachments.cs" />
     <Compile Include="Services\LiveDocumentResourceProvider.PowerPoint.cs" />
     <Compile Include="Services\LiveDocumentResourceProvider.Outlook.cs" />
     <Compile Include="Services\LiveDocumentResourceProvider.OutlookAttachments.cs" />

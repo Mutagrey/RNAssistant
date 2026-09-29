@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using RNAssistant.Core.Storage;
+using RNAssistant.Core.Models;
 using RNAssistant.Office.Domains.Outlook;
 using RNAssistant.Office.Services;
 
@@ -123,6 +124,53 @@ namespace RNAssistant.Harness
                     LiveDocumentResourceProvider.OutlookArchivePageKind, 10, 200);
                 AssertTrue(largeSearch.Matches.Any(item => item.Kind == LiveDocumentResourceProvider.OutlookArchiveMailKind),
                     "large body remains searchable");
+            });
+        }
+
+        private static void OutlookArchiveAttachmentReadsExactContent()
+        {
+            var adapter = FakeOfficeAdapter.ForHost("Outlook");
+            adapter.DocumentKeyValue = "outlook-mailbox:test";
+            adapter.OutlookAttachmentBytes = OfficeZip(new Dictionary<string, string> {
+                { "word/document.xml", "<w:document xmlns:w='w'><w:body><w:p><w:r><w:t>Oil pump decision</w:t></w:r></w:p></w:body></w:document>" }
+            });
+            WithTempExecutor(adapter, (executor, fake) =>
+            {
+                var session = NewSession(fake);
+                executor.BindResourceAuthority(session);
+                var index = new OutlookArchiveIndexService(FixturePaths.Value, executor.Payloads);
+                var from = new DateTime(2026, 1, 1, 0, 0, 0, DateTimeKind.Utc);
+                var modified = from.AddDays(2);
+                var manifest = index.Open(fake.DocumentKey, from, from.AddMonths(1), true);
+                index.Append(manifest, new OutlookArchiveScanBatch { SourceSignature = "sources-a",
+                    Complete = true, Messages = new[] { new OutlookArchiveMail {
+                        StoreId = "pst-a", EntryId = "mail-1", FolderPath = "\\Archive",
+                        Subject = "Pump repair", Sender = "Ops", ReceivedUtc = from.AddDays(1),
+                        LastModificationUtc = modified, AttachmentCount = 1, Body = "See report." } },
+                    Errors = new string[0] });
+                var gateway = executor.ResourceGateway;
+                var page = gateway.List(session, "document", LiveDocumentResourceProvider.OutlookArchivePageKind,
+                    null, 20).Items.Single();
+                var pageJson = gateway.Read(session, new ResourceReadRequest {
+                    Reference = page.Reference, Representation = "text", MaxChars = 32000 }).Result.Text;
+                var target = (string)Newtonsoft.Json.Linq.JObject.Parse(pageJson)["messages"][0]["attachmentTargets"][0];
+                var found = gateway.Find(session, target, "document");
+                AssertEqual(1, found.Items.Count, "archive attachment target resolves exactly");
+                AssertEqual(0, fake.ArchiveAttachmentReadCount, "discovery reads no attachment bytes");
+                var text = gateway.Read(session, new ResourceReadRequest {
+                    Reference = found.Items[0].Reference, Representation = "text" }).Result;
+                AssertContains(text.Text, "Oil pump decision", "archived DOCX text extracted on demand");
+                AssertEqual(target, ResourceGatewayService.IntentTarget(text.Resource),
+                    "attachment target remains stable after filename capture");
+                AssertEqual(1, fake.ArchiveAttachmentReadCount, "one exact archive attachment capture");
+                AssertEqual("pst-a", fake.LastArchiveAttachmentRequest.StoreId, "PST source identity retained");
+                AssertEqual(modified, fake.LastArchiveAttachmentRequest.ExpectedModificationUtc,
+                    "indexed modification timestamp guards the live read");
+                fake.OutlookAttachmentBytes = System.Text.Encoding.UTF8.GetBytes("changed");
+                var historical = gateway.Read(session, new ResourceReadRequest {
+                    Reference = text.Resource.Reference, Representation = "text" }).Result;
+                AssertContains(historical.Text, "Oil pump decision", "exact historical attachment remains retained");
+                AssertEqual(1, fake.ArchiveAttachmentReadCount, "exact historical read performs no Outlook IO");
             });
         }
     }

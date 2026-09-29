@@ -45,6 +45,7 @@ namespace RNAssistant.Office.Services
         public string InternetMessageId { get; set; }
         public string ConversationId { get; set; }
         public int AttachmentCount { get; set; }
+        public DateTime LastModificationUtc { get; set; }
         public string Error { get; set; }
         public ChatBlobReference Body { get; set; }
         public bool Duplicate { get; set; }
@@ -129,6 +130,7 @@ namespace RNAssistant.Office.Services
                     FolderPath = mail.FolderPath, Subject = mail.Subject, Sender = mail.Sender,
                     ReceivedUtc = mail.ReceivedUtc, InternetMessageId = mail.InternetMessageId,
                     ConversationId = mail.ConversationId, AttachmentCount = mail.AttachmentCount,
+                    LastModificationUtc = mail.LastModificationUtc,
                     Error = mail.Error, Body = mail.Body == null ? null :
                         _blobs.StoreText(mail.Body, "text/plain; charset=utf-8") };
                 var duplicateKey = DuplicateKey(indexed);

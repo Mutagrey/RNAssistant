@@ -659,7 +659,7 @@ namespace RNAssistant.Office.Services
             if (type == "Outlook attachment")
                 return "Read text for PDF/text files or media for images/scanned PDFs (vision model). Limit: 20 MiB. Filename discovery covers selected/open mail only; read another mail with structure for its attachment targets.";
             if (type == "Outlook archive page")
-                return "Read text for full indexed mail records and coverage. If a row has bodyTarget, discover that exact Outlook archive mail target and read its complete body separately. Count duplicate=true rows once.";
+                return "Read text for full indexed mail records and coverage. If a row has bodyTarget, discover that exact Outlook archive mail target and read its complete body separately. Rows expose exact Outlook attachment targets for on-demand text or media reads. Count duplicate=true rows once; unread attachments remain unexamined.";
             if (type == "Excel search scope")
                 return "Discovery only: use excel.find_cells with a query. Do not read this target to enumerate worksheet data; read an Excel range, table, or name target instead.";
             if (descriptor.Metadata.ContainsKey("sectionRead"))

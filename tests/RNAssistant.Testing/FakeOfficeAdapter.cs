@@ -24,7 +24,7 @@ namespace RNAssistant.Harness
         IExcelWriteBackend, IExcelFindReplaceBackend, IExcelSheetBackend,
         IExcelRangeMutationBackend, IExcelTableBackend, IExcelChartBackend,
         IWordBackendProvider, IWordBackend, IPowerPointBackendProvider,
-        IPowerPointBackend, IOutlookBackendProvider, IOutlookBackend,
+        IPowerPointBackend, IOutlookBackendProvider, IOutlookBackend, IOutlookArchiveBackend,
         IVbaHostBackendProvider, IVbaHostBackend
     {
         internal const string ExcelInspectOperation = "inspect";

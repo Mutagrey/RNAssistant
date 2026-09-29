@@ -13,6 +13,58 @@ namespace RNAssistant.OfficeHosts
 {
     internal sealed partial class OutlookInteropBackend
     {
+        public OutlookArchiveAttachmentContent ReadArchiveAttachment(
+            OutlookArchiveAttachmentRequest request, CancellationToken cancellationToken)
+        {
+            if (!_session.IsMailboxTarget || request == null || string.IsNullOrWhiteSpace(request.StoreId) ||
+                string.IsNullOrWhiteSpace(request.EntryId) || request.Index < 1 ||
+                request.Index > OutlookService.MaxAttachments || request.ExpectedCount < request.Index ||
+                request.ExpectedModificationUtc.Kind != DateTimeKind.Utc ||
+                request.ExpectedModificationUtc == DateTime.MinValue)
+                throw new OutlookBackendException("An exact indexed attachment and timestamp are required.",
+                    "outlook_archive_attachment_invalid", false);
+            cancellationToken.ThrowIfCancellationRequested();
+            var allowed = false;
+            foreach (Outlook.Store store in _session.Application.Session.Stores)
+            {
+                if (!string.Equals(store.StoreID, request.StoreId, StringComparison.Ordinal)) continue;
+                allowed = string.Equals(request.StoreId, _session.StoreId, StringComparison.Ordinal) ||
+                    request.IncludePst && SafeArchiveString(() => store.FilePath)
+                        .EndsWith(".pst", StringComparison.OrdinalIgnoreCase);
+                break;
+            }
+            if (!allowed)
+                throw new OutlookBackendException("The indexed Outlook store is detached or outside this archive.",
+                    "outlook_archive_store_unavailable", false);
+            Outlook.MailItem mail = null;
+            try
+            {
+                var found = _session.Application.Session.GetItemFromID(request.EntryId, request.StoreId);
+                mail = found as Outlook.MailItem;
+                if (mail == null)
+                {
+                    if (found != null && Marshal.IsComObject(found)) Marshal.ReleaseComObject(found);
+                    throw new OutlookBackendException("Indexed mail is unavailable.",
+                        "outlook_archive_mail_unavailable", false);
+                }
+                var parent = mail.Parent as Outlook.MAPIFolder;
+                try
+                {
+                    if (parent == null || !string.Equals(parent.StoreID, request.StoreId, StringComparison.Ordinal))
+                        throw new OutlookBackendException("Indexed mail moved outside its source store.",
+                            "outlook_archive_mail_changed", false);
+                }
+                finally { if (parent != null) Marshal.ReleaseComObject(parent); }
+                cancellationToken.ThrowIfCancellationRequested();
+                var ownedMail = mail;
+                mail = null;
+                var capture = CaptureAttachmentFromMail(ownedMail, null, request.Index,
+                    request.ExpectedModificationUtc, request.ExpectedCount, true);
+                return new OutlookArchiveAttachmentContent { Attachment = capture.Attachment, Bytes = capture.Bytes };
+            }
+            finally { if (mail != null) Marshal.ReleaseComObject(mail); }
+        }
+
         private sealed class ArchiveFolder
         {
             internal Outlook.MAPIFolder Folder;
@@ -177,6 +229,9 @@ namespace RNAssistant.OfficeHosts
             catch { }
             try { item.AttachmentCount = mail.Attachments.Count; }
             catch (Exception error) { item.Error = "attachment metadata: " + error.Message; }
+            try { item.LastModificationUtc = DateTime.SpecifyKind(
+                mail.LastModificationTime, DateTimeKind.Local).ToUniversalTime(); }
+            catch (Exception error) { item.Error = "modification timestamp: " + error.Message; }
             try
             {
                 item.Body = mail.Body;

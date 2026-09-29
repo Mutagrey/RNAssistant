@@ -28,6 +28,11 @@ namespace RNAssistant.Office.Services
                 if (IsOutlookAttachment(resourceUri) && request.Representation == OutlookAttachmentSourceView)
                 {
                     ResourceReadCursor.RejectCursor(request);
+                    string archiveId; int archivePage; int archiveRow; int archiveAttachment;
+                    if (TryOutlookArchiveAttachmentKey(target, out archiveId, out archivePage,
+                        out archiveRow, out archiveAttachment))
+                        return CaptureOutlookArchiveAttachmentSource(session, archiveId, archivePage,
+                            archiveRow, archiveAttachment);
                     return CaptureAttachmentSource(session, target);
                 }
                 var representation = NormalizeRepresentation(request == null ? null : request.Representation, target);

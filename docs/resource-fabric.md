@@ -600,9 +600,13 @@ CAS holds indexed bodies and pages; a pointer is a rebuildable cache checkpoint.
 CAS GC traverses its manifest/page/body references. `common.resources_find/read`
 exposes `Outlook archive page` text JSON with period, coverage, page/row source
 context, duplicate flags and attachment counts. Search over indexed page text is
-literal and reports unavailable pages. Attachment contents remain unexamined.
-Automatic multi-run classification/report coordination and direct extraction of
-attachments from archived PST rows are still open. Real Outlook 2013/2016 COM
+literal and reports unavailable pages. Each row exposes up to 20 exact attachment
+targets. Reading one captures its live bytes from the indexed store (including an
+attached PST), verifies the stored modification timestamp and attachment count,
+then retains original and extracted content through the existing attachment
+resource path. Unread attachment contents remain unexamined; old checkpoints
+without timestamps require an explicit refresh before attachment reads.
+Automatic multi-run classification/report coordination remains open. Real Outlook 2013/2016 COM
 enumeration, binding, cancellation and WebView navigation need Windows qualification.
 
 ## Conversation loop

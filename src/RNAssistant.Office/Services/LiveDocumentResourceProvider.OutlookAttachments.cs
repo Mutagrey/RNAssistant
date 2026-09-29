@@ -54,8 +54,11 @@ namespace RNAssistant.Office.Services
         {
             ResourceAddress address;
             string mailKey; int index;
+            string archiveId; int archivePage; int archiveRow; int archiveAttachment;
             return IsOutlook && ResourceUri.TryParse(uri, out address) && address.Provider == ProviderName &&
-                address.Segments.Count == 2 && TryAttachmentKey(address.Segments[1], out mailKey, out index);
+                address.Segments.Count == 2 && (TryAttachmentKey(address.Segments[1], out mailKey, out index) ||
+                    TryOutlookArchiveAttachmentKey(address.Segments[1], out archiveId, out archivePage,
+                        out archiveRow, out archiveAttachment));
         }
 
         private static string MailTitle(OutlookMailSnapshot mail)
@@ -113,6 +116,8 @@ namespace RNAssistant.Office.Services
 
         internal ResourceDescriptor ResolveOutlookAttachmentTarget(ChatSession session, string target)
         {
+            if (target.StartsWith("Outlook attachment: archive ", StringComparison.Ordinal))
+                return ResolveOutlookArchiveAttachment(session, target);
             return _scope.Read(session, () =>
             {
                 var matches = new List<ResourceDescriptor>();

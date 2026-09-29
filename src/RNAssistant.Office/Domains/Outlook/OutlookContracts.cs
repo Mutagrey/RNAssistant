@@ -184,8 +184,25 @@ namespace RNAssistant.Office.Domains.Outlook
         public string InternetMessageId { get; set; }
         public string ConversationId { get; set; }
         public int AttachmentCount { get; set; }
+        public DateTime LastModificationUtc { get; set; }
         public string Body { get; set; }
         public string Error { get; set; }
+    }
+
+    public sealed class OutlookArchiveAttachmentRequest
+    {
+        public string StoreId { get; set; }
+        public string EntryId { get; set; }
+        public int Index { get; set; }
+        public int ExpectedCount { get; set; }
+        public DateTime ExpectedModificationUtc { get; set; }
+        public bool IncludePst { get; set; }
+    }
+
+    public sealed class OutlookArchiveAttachmentContent
+    {
+        public OutlookAttachmentSnapshot Attachment { get; set; }
+        public byte[] Bytes { get; set; }
     }
 
     public sealed class OutlookArchiveScanBatch
@@ -201,6 +218,8 @@ namespace RNAssistant.Office.Domains.Outlook
     public interface IOutlookArchiveBackend
     {
         OutlookArchiveScanBatch ScanArchive(OutlookArchiveScanRequest request,
+            System.Threading.CancellationToken cancellationToken);
+        OutlookArchiveAttachmentContent ReadArchiveAttachment(OutlookArchiveAttachmentRequest request,
             System.Threading.CancellationToken cancellationToken);
     }
 

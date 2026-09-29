@@ -99,18 +99,33 @@ namespace RNAssistant.OfficeHosts
             var mail = _session.ResolveMail(request.EntryId);
             if (mail == null) throw new OutlookBackendException("Mail is unavailable.", "outlook_mail_not_found", false);
             var ownsMailReference = !_session.IsMailTarget;
+            return CaptureAttachmentFromMail(mail, request.Expected, request.Expected.Index,
+                DateTime.MinValue, 0, ownsMailReference);
+        }
+
+        private static OutlookAttachmentContentSnapshot CaptureAttachmentFromMail(
+            Outlook.MailItem mail, OutlookAttachmentSnapshot expected, int index,
+            DateTime expectedModificationUtc, int expectedCount, bool ownsMailReference)
+        {
             Outlook.Attachments attachments = null;
             Outlook.Attachment attachment = null;
             string directory = null;
             try
             {
                 attachments = mail.Attachments;
-                if (request.Expected.Index < 1 || request.Expected.Index > attachments.Count)
+                if (expectedCount > 0 && attachments.Count != expectedCount)
+                    throw new OutlookBackendException("Indexed mail attachment count changed; refresh the archive.",
+                        "outlook_archive_mail_changed", false);
+                if (index < 1 || index > attachments.Count)
                     throw new OutlookBackendException("Attachment was removed.", "outlook_attachment_changed", false);
-                attachment = attachments[request.Expected.Index];
-                var before = AttachmentMetadata(attachment, request.Expected.Index);
+                attachment = attachments[index];
+                var before = AttachmentMetadata(attachment, index);
                 var modified = mail.LastModificationTime;
-                if (!OutlookService.AttachmentMatches(request.Expected, before))
+                if (expectedModificationUtc != DateTime.MinValue &&
+                    DateTime.SpecifyKind(modified, DateTimeKind.Local).ToUniversalTime() != expectedModificationUtc)
+                    throw new OutlookBackendException("Indexed mail changed after archive scan; refresh the index.",
+                        "outlook_archive_mail_changed", false);
+                if (expected != null && !OutlookService.AttachmentMatches(expected, before))
                     throw new OutlookBackendException("Attachment changed before capture.", "outlook_attachment_changed", false);
                 if (before.Type != "olByValue" || before.Size < 1 || before.Size > OutlookService.MaxAttachmentBytes)
                     throw new OutlookBackendException("Only bounded file attachments are supported.", "outlook_attachment_unsupported", false);
@@ -132,8 +147,10 @@ namespace RNAssistant.OfficeHosts
                         offset += read;
                     }
                 }
-                if (mail.LastModificationTime != modified || !OutlookService.AttachmentMatches(before,
-                    AttachmentMetadata(attachment, request.Expected.Index)))
+                if (mail.LastModificationTime != modified ||
+                    expectedCount > 0 && attachments.Count != expectedCount ||
+                    !OutlookService.AttachmentMatches(before,
+                    AttachmentMetadata(attachment, index)))
                     throw new OutlookBackendException("Attachment changed during capture.", "outlook_attachment_changed", false);
                 return new OutlookAttachmentContentSnapshot { EntryId = mail.EntryID ?? string.Empty,
                     Attachment = before, Bytes = bytes };
