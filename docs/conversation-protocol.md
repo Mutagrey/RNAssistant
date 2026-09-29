@@ -40,7 +40,8 @@ errors cannot be converted into success prose or justify silently replacing a ri
 artifact with a simplified placeholder.
 
 Task List saves preserve the active goal and every existing step's text and order;
-statuses may change and new stages may be appended. A different task requires
+statuses may change and new stages may be appended. An omitted status keeps an
+existing stage's status; a new stage defaults to `pending`. A different task requires
 `close: superseded` before a new list. `close: completed` requires every step to be
 completed. A final response with an active list remains in the kernel loop: the
 first such response is retained and followed by one corrective continuation, while

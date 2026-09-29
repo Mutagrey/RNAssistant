@@ -496,6 +496,35 @@ namespace RNAssistant.Harness
                 AssertTrue(!session.Artifacts.Any(item => item.Id == planId + "_r4_conflict"), "unpublished projection cannot become lineage");
                 AssertEqual(secondId, session.Artifacts.Single(item => item.Id == session.ActivePlanDocumentArtifactId).ParentArtifactId,
                     "new revision extends the exact committed head");
+
+                var formerHeadId = session.ActivePlanDocumentArtifactId;
+                var authorityScope = executor.ResourceAuthority.Scope(session, true);
+                var formerPlanHead = executor.ResourceAuthority.Store.GetHead(
+                    authorityScope, DocumentArtifactStore.PlanIdentity(session, planId)).Revision;
+                var separate = executor.ExecuteManual(Command(PlanDocumentToolCatalog.SaveToolId,
+                    "title", "Dashboard implementation",
+                    "markdown", "# Dashboard implementation\n\nIndependent task.\n",
+                    "status", "draft", "startNew", true),
+                    tools, new AppSettings(), false, false, session);
+                AssertTrue(separate.Success, "a different task can start a separate Plan: " +
+                    separate.ErrorCode + " " + separate.Message);
+                var separateData = JObject.Parse(separate.DataJson);
+                AssertTrue(!string.Equals(planId, (string)separateData["planId"], StringComparison.Ordinal),
+                    "new Plan has independent identity");
+                AssertEqual(1L, (long)separateData["revision"], "new Plan starts at revision one");
+                AssertEqual((string)separateData["artifactId"], session.ActivePlanDocumentArtifactId,
+                    "new Plan becomes selected");
+                AssertTrue(session.Artifacts.Any(item => item.Id == formerHeadId),
+                    "previous Plan remains available");
+                var retainedPlanHead = executor.ResourceAuthority.Store.GetHead(
+                    authorityScope, DocumentArtifactStore.PlanIdentity(session, planId)).Revision;
+                AssertEqual(formerPlanHead.Uri, retainedPlanHead.Uri,
+                    "previous Plan authority head remains unchanged");
+                AssertEqual(formerPlanHead.Revision, retainedPlanHead.Revision,
+                    "previous Plan authority revision remains unchanged");
+                AssertTrue(executor.ResourceAuthority.Store.GetHead(authorityScope,
+                    DocumentArtifactStore.PlanIdentity(session, (string)separateData["planId"])) != null,
+                    "new Plan publishes its own authority head");
             });
         }
 

@@ -101,6 +101,24 @@ namespace RNAssistant.Harness
                 "final response owns the terminal message");
         }
 
+        private static async Task KernelCompletionGateBoundsOpenTask()
+        {
+            var gate = new KernelCompletionGateFake(
+                FinalResponseDecision.Continue, FinalResponseDecision.Fail);
+            var f = new KernelFixture(gate, KernelResponse(), KernelResponse());
+            var result = await f.RunAsync();
+            AssertEqual(RunLifecycle.Failed, result.Summary.Lifecycle,
+                "an open task cannot finish on repeated model finals");
+            AssertEqual("task_list_open", result.Summary.Reason,
+                "open task has a specific terminal reason");
+            AssertEqual(2, f.Model.Requests.Count,
+                "the first premature final gives the model one chance to close the task");
+            AssertEqual(2, gate.Evaluations,
+                "completion is checked after each accepted final");
+            AssertEqual(0, f.Tools.Calls.Count,
+                "the completion gate does not invent tool effects");
+        }
+
         private static async Task KernelFailsRepeatedNoToolCheckpoints()
         {
             var f = new KernelFixture(
@@ -851,11 +869,18 @@ namespace RNAssistant.Harness
             internal int AllocationCount;
 
             internal KernelFixture(params AgentResponseDraft[] responses)
+                : this(null, responses)
+            {
+            }
+
+            internal KernelFixture(IRunCompletionGate completionGate,
+                params AgentResponseDraft[] responses)
             {
                 Model = new KernelModelFake(Store, responses);
                 Tools = new KernelToolFake(Store);
                 Kernel = new AgentKernel(Model, Tools, Store,
-                    () => new DateTime(2026, 8, 28, 0, 0, 0, DateTimeKind.Utc), AllocateCallId);
+                    () => new DateTime(2026, 8, 28, 0, 0, 0, DateTimeKind.Utc), AllocateCallId,
+                    completionGate);
             }
 
             private string AllocateCallId()
@@ -867,6 +892,23 @@ namespace RNAssistant.Harness
             internal Task<AgentRunResult> RunAsync(CancellationToken token = default(CancellationToken), AgentRunLimits limits = null)
             {
                 return Kernel.RunAsync(new AgentRunRequest("run", "turn", "Change requested.", limits ?? new AgentRunLimits(10, 10)), token);
+            }
+        }
+
+        private sealed class KernelCompletionGateFake : IRunCompletionGate
+        {
+            private readonly Queue<FinalResponseDecision> _decisions;
+            internal int Evaluations;
+
+            internal KernelCompletionGateFake(params FinalResponseDecision[] decisions)
+            {
+                _decisions = new Queue<FinalResponseDecision>(decisions);
+            }
+
+            public FinalResponseDecision EvaluateFinalResponse()
+            {
+                Evaluations++;
+                return _decisions.Dequeue();
             }
         }
 

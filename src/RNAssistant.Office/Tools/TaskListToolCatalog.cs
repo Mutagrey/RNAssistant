@@ -54,7 +54,7 @@ namespace RNAssistant.Office.Tools
                     ["properties"] = new JObject
                     {
                         ["text"] = new JObject { ["type"] = "string", ["description"] = "Concise user-visible step description.", ["minLength"] = 1, ["maxLength"] = TaskListService.MaxStepCharacters },
-                        ["status"] = new JObject { ["type"] = "string", ["description"] = "Explicit current step status.", ["enum"] = new JArray("pending", "in_progress", "completed", "blocked", "cancelled"), ["default"] = "pending" }
+                        ["status"] = new JObject { ["type"] = "string", ["description"] = "Omit to preserve an existing stage status; a new stage defaults to pending.", ["enum"] = new JArray("pending", "in_progress", "completed", "blocked", "cancelled") }
                     },
                     ["required"] = new JArray("text"),
                     ["additionalProperties"] = false

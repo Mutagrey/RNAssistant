@@ -481,7 +481,9 @@ namespace RNAssistant.Office.Services
             if (candidates.Length > 1) throw new ToolMutationPreparationException("plan_active_revision_invalid", "The selected Plan projection is ambiguous; reload its exact document snapshot.");
             var selected = candidates.SingleOrDefault();
             string planId;
-            if (string.IsNullOrWhiteSpace(_session.ActivePlanDocumentArtifactId))
+            var startNew = context.Call.Name == RNAssistant.Office.Tools.PlanDocumentToolCatalog.SaveToolId &&
+                RNAssistant.Office.Tools.ToolArgumentReader.Boolean(arguments, "startNew", false);
+            if (string.IsNullOrWhiteSpace(_session.ActivePlanDocumentArtifactId) || startNew)
             {
                 if (context.Call.Name != RNAssistant.Office.Tools.PlanDocumentToolCatalog.SaveToolId)
                     throw new ToolMutationPreparationException("plan_not_found", "Select a document Plan before restoring or removing it.");

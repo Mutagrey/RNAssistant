@@ -336,7 +336,7 @@ namespace RNAssistant.Office.Services
                 {
                     Id = id,
                     Text = text,
-                    Status = step == null ? null : step.Status
+                    Status = step?.Status ?? (index < prior.Count ? prior[index].Status : null)
                 });
                 index++;
             }

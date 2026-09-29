@@ -164,6 +164,73 @@ namespace RNAssistant.Harness
             });
         }
 
+        private static void TaskListPreservesProgressAndStages()
+        {
+            WithTempExecutor(FakeOfficeAdapter.ForHost("Excel"), delegate(OfficeToolExecutor executor, FakeOfficeAdapter adapter)
+            {
+                var session = NewSession(adapter);
+                var tools = OfficeToolCatalog.ForHost(adapter.HostName).Concat(executor.GetControllerTools()).ToList();
+                var created = executor.ExecuteManual(Command(TaskListToolCatalog.SetToolId,
+                    "action", "save", "goal", "Build a reusable dashboard",
+                    "steps", new JArray(
+                        new JObject { ["text"] = "Inspect sources", ["status"] = "completed" },
+                        new JObject { ["text"] = "Build dashboard", ["status"] = "in_progress" },
+                        new JObject { ["text"] = "Verify output" })),
+                    tools, new AppSettings(), false, false, session);
+                AssertTrue(created.Success, "initial task list saved");
+                var firstSteps = JObject.Parse(created.DataJson)["taskList"]["steps"];
+                var artifactCount = session.Artifacts.Count;
+
+                var changedGoal = executor.ExecuteManual(Command(TaskListToolCatalog.SetToolId,
+                    "action", "save", "goal", "Unrelated task",
+                    "steps", new JArray(
+                        new JObject { ["text"] = "Inspect sources" },
+                        new JObject { ["text"] = "Build dashboard" },
+                        new JObject { ["text"] = "Verify output" })),
+                    tools, new AppSettings(), false, false, session);
+                AssertTrue(!changedGoal.Success, "active goal cannot be replaced");
+                AssertEqual("task_list_goal_changed", (string)JObject.Parse(changedGoal.DataJson)["code"],
+                    "goal change has a specific recovery code");
+
+                var changedStages = executor.ExecuteManual(Command(TaskListToolCatalog.SetToolId,
+                    "action", "save", "goal", "Build a reusable dashboard",
+                    "steps", new JArray(
+                        new JObject { ["text"] = "Build dashboard" },
+                        new JObject { ["text"] = "Inspect sources" },
+                        new JObject { ["text"] = "Verify output" })),
+                    tools, new AppSettings(), false, false, session);
+                AssertTrue(!changedStages.Success, "existing stages cannot be reordered");
+                AssertEqual("task_list_steps_changed", (string)JObject.Parse(changedStages.DataJson)["code"],
+                    "stage change has a specific recovery code");
+                AssertEqual(artifactCount, session.Artifacts.Count, "rejected rewrites do not create revisions");
+
+                var expanded = executor.ExecuteManual(Command(TaskListToolCatalog.SetToolId,
+                    "action", "save", "goal", "Build a reusable dashboard",
+                    "steps", new JArray(
+                        new JObject { ["text"] = "Inspect sources" },
+                        new JObject { ["text"] = "Build dashboard" },
+                        new JObject { ["text"] = "Verify output" },
+                        new JObject { ["text"] = "Package reusable skill" })),
+                    tools, new AppSettings(), false, false, session);
+                AssertTrue(expanded.Success, "new stage can be appended");
+                var expandedSteps = JObject.Parse(expanded.DataJson)["taskList"]["steps"];
+                AssertEqual("completed", (string)expandedSteps[0]["status"], "omitted status preserves completed progress");
+                AssertEqual("in_progress", (string)expandedSteps[1]["status"], "omitted status preserves active progress");
+                AssertEqual("pending", (string)expandedSteps[3]["status"], "new stage defaults to pending");
+                AssertTrue(firstSteps.Select(step => (string)step["id"])
+                    .SequenceEqual(expandedSteps.Take(3).Select(step => (string)step["id"])),
+                    "existing stage ids remain stable");
+
+                var prematureClose = executor.ExecuteManual(Command(TaskListToolCatalog.SetToolId,
+                    "action", "close", "outcome", "completed"),
+                    tools, new AppSettings(), false, false, session);
+                AssertTrue(!prematureClose.Success, "unfinished stages block completed close");
+                AssertEqual("task_list_not_terminal", (string)JObject.Parse(prematureClose.DataJson)["code"],
+                    "completed close reports unfinished stages");
+                AssertEqual(artifactCount + 1, session.Artifacts.Count, "rejected close does not create a revision");
+            });
+        }
+
         private static void TaskListUsesVerifiedNativeRuntime()
         {
             WithTempExecutor(FakeOfficeAdapter.ForHost("Excel"),
