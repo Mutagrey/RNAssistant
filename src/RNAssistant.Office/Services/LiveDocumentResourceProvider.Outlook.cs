@@ -155,6 +155,8 @@ namespace RNAssistant.Office.Services
             string archiveId; int archivePage;
             if (TryOutlookArchivePageKey(target, out archiveId, out archivePage))
                 return ReadOutlookArchivePage(archiveId, archivePage);
+            if (TryOutlookArchiveDigestKey(target, out archiveId, out archivePage))
+                return ReadOutlookArchiveDigest(archiveId, archivePage);
             int archiveRow;
             if (TryOutlookArchiveMailKey(target, out archiveId, out archivePage, out archiveRow))
                 return ReadOutlookArchiveMail(archiveId, archivePage, archiveRow);

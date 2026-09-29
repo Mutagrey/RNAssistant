@@ -137,6 +137,10 @@ namespace RNAssistant.Office.Tools
                     from.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture) + ".." +
                     through.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture) +
                     (includePst ? " / mailbox+PST" : " / mailbox") + " / page 1",
+                firstDigestTarget = manifest.UniqueMessages == 0 ? null : "Outlook archive digest: " +
+                    from.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture) + ".." +
+                    through.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture) +
+                    (includePst ? " / mailbox+PST" : " / mailbox") + " / page 1",
                 coverage = manifest.Complete && manifest.Errors == 0 && manifest.FailedBodies == 0
                     ? "Enumerated folders scanned with no observed read errors; messages can change during a scan. Attachment contents remain unexamined."
                     : "Incomplete: inspect errors, failed bodies, remaining scan or unexamined attachments." };

@@ -606,6 +606,11 @@ attached PST), verifies the stored modification timestamp and attachment count,
 then retains original and extracted content through the existing attachment
 resource path. Unread attachment contents remain unexamined; old checkpoints
 without timestamps require an explicit refresh before attachment reads.
+`Outlook archive digest` groups distinct indexed messages by ConversationID, or by
+subject and sender when that ID is absent. Pages rank groups by message count and
+show bounded first/last samples with source page and row; the rank measures activity,
+not severity or importance. The model must inspect cited full rows before claiming
+decisions or complete issue coverage.
 Automatic multi-run classification/report coordination remains open. Real Outlook 2013/2016 COM
 enumeration, binding, cancellation and WebView navigation need Windows qualification.
 
@@ -718,6 +723,10 @@ resolved on open; existing handles remain exact. Static JSON is a chat resource.
 `RN.resources` opens named capabilities, reads bounded batches/streams and closes
 them. `ResourceDataPlaneService`/`ResourceDataRouter` serve the internal
 `https://rnassistant.local-resource/v1/<opaque-lease>` WebView route, not a server.
+The agent JS worker uses the same data-plane service through a local process pipe:
+the parent resolves semantic bindings and retains exact revisions, then serves
+bounded `open/read/close` requests. The pipe is an execution transport, not a
+second resource authority or a model-visible `rna://` route.
 Access is owner-scoped, exact, sequential and cancellable: one read per handle,
 four opens, 64 leases and ten-minute expiry bound work.
 

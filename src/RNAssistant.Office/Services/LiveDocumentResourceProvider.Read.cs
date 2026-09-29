@@ -294,6 +294,9 @@ namespace RNAssistant.Office.Services
             if (IsOutlook && TryOutlookArchivePageKey(target, out archiveId, out archivePage) &&
                 value != ResourceRepresentations.Text && value != ResourceRepresentations.Metadata)
                 throw new ResourceRequestException("Outlook archive pages expose exact text JSON.", "RESOURCE_VIEW_UNAVAILABLE", false);
+            if (IsOutlook && TryOutlookArchiveDigestKey(target, out archiveId, out archivePage) &&
+                value != ResourceRepresentations.Text && value != ResourceRepresentations.Metadata)
+                throw new ResourceRequestException("Outlook archive digests expose exact text JSON.", "RESOURCE_VIEW_UNAVAILABLE", false);
             int archiveRow;
             if (IsOutlook && TryOutlookArchiveMailKey(target, out archiveId, out archivePage, out archiveRow) &&
                 value != ResourceRepresentations.Text && value != ResourceRepresentations.Metadata)

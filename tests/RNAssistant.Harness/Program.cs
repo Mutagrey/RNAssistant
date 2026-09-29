@@ -495,6 +495,7 @@ namespace RNAssistant.Harness
                 Test("outlook archive: resumes exact local pages", OutlookArchiveIndexResumesExactPages),
                 Test("outlook archive: pages search and read", OutlookArchivePagesSearchAndRead),
                 Test("outlook archive: attachment exact content", OutlookArchiveAttachmentReadsExactContent),
+                Test("outlook archive: digest groups and invalidates", OutlookArchiveDigestGroupsAndInvalidates),
                 Test("outlook tools: native ownership and direct backend", OutlookToolsUseExactNativeOwnership),
                 Test("outlook resources: exact mail evidence and retained pages", OutlookResourcesRetainExactMail),
                 Test("outlook resources: bound mail scope and ambiguity", OutlookResourcesRespectMailScope),

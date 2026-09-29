@@ -149,6 +149,9 @@ namespace RNAssistant.Harness
                         LastModificationUtc = modified, AttachmentCount = 1, Body = "See report." } },
                     Errors = new string[0] });
                 var gateway = executor.ResourceGateway;
+                var digestTarget = "Outlook archive digest: 2026-01-01..2026-01-31 / mailbox+PST / page 1";
+                var digest = gateway.Find(session, digestTarget, "document").Items.Single();
+                AssertEqual(digestTarget, digest.Target, "digest can be discovered by exact semantic target");
                 var page = gateway.List(session, "document", LiveDocumentResourceProvider.OutlookArchivePageKind,
                     null, 20).Items.Single();
                 var pageJson = gateway.Read(session, new ResourceReadRequest {
@@ -171,6 +174,60 @@ namespace RNAssistant.Harness
                     Reference = text.Resource.Reference, Representation = "text" }).Result;
                 AssertContains(historical.Text, "Oil pump decision", "exact historical attachment remains retained");
                 AssertEqual(1, fake.ArchiveAttachmentReadCount, "exact historical read performs no Outlook IO");
+            });
+        }
+
+        private static void OutlookArchiveDigestGroupsAndInvalidates()
+        {
+            WithTempPaths(paths =>
+            {
+                var adapter = FakeOfficeAdapter.ForHost("Outlook");
+                adapter.DocumentKeyValue = "outlook-mailbox:test";
+                var session = NewSession(adapter);
+                session.DocumentAuthorityId = DocumentAuthorityId.Create().Id;
+                var index = new OutlookArchiveIndexService(paths, new ChatBlobStore(paths));
+                var from = new DateTime(2026, 1, 1, 0, 0, 0, DateTimeKind.Utc);
+                var manifest = index.Open(adapter.DocumentKey, from, from.AddMonths(1), true);
+                index.Append(manifest, new OutlookArchiveScanBatch { SourceSignature = "sources-a",
+                    NextCursor = "0:3", Messages = new[] {
+                        new OutlookArchiveMail { StoreId = "store-a", EntryId = "m1", Subject = "Pump issue",
+                            Sender = "Ops", ConversationId = "thread-a", ReceivedUtc = from.AddDays(1),
+                            Body = "Pump stopped." },
+                        new OutlookArchiveMail { StoreId = "store-a", EntryId = "m2", Subject = "Re: Pump issue",
+                            Sender = "Engineering", ConversationId = "thread-a", ReceivedUtc = from.AddDays(2),
+                            Body = "Repair approved." } }, Errors = new string[0] });
+                var provider = new LiveDocumentResourceProvider(adapter, new ChatBlobStore(paths), index);
+                var before = provider.List(session, LiveDocumentResourceProvider.OutlookArchiveDigestKind,
+                    null, 20).Items.Single();
+                var beforeText = provider.Read(session, new ResourceReadRequest {
+                    Reference = before.Reference, Representation = "text", MaxChars = 32000 }).Result.Text;
+                var beforeJson = Newtonsoft.Json.Linq.JObject.Parse(beforeText);
+                AssertEqual(1, (int)beforeJson["groupCount"], "one conversation grouped before resume");
+                AssertEqual(2, (int)beforeJson["groups"][0]["messageCount"],
+                    "conversation groups both indexed messages");
+                AssertContains(beforeText, "Repair approved", "digest samples include a decision clue");
+                AssertEqual(2, (int)beforeJson["groups"][0]["sampleMessages"].Count(),
+                    "sample rows preserve distinct page/row citations");
+                index.Append(manifest, new OutlookArchiveScanBatch { SourceSignature = "sources-a",
+                    Complete = true, Messages = Enumerable.Range(0, 50).Select(number =>
+                        new OutlookArchiveMail { StoreId = "store-a", EntryId = "m" + (number + 3),
+                            Subject = "Production review " + number, Sender = "Ops",
+                            ReceivedUtc = from.AddDays(3).AddMinutes(number), Body = "New issue." }).ToArray(),
+                    Errors = new string[0] });
+                var afterText = provider.Read(session, new ResourceReadRequest {
+                    Reference = before.Reference, Representation = "text", MaxChars = 32000 }).Result.Text;
+                var afterJson = Newtonsoft.Json.Linq.JObject.Parse(afterText);
+                AssertEqual(51, (int)afterJson["groupCount"], "digest cache invalidates after checkpoint advance");
+                AssertEqual(2, (int)afterJson["digestPageCount"], "digest spans bounded pages");
+                AssertEqual("Outlook archive digest: 2026-01-01..2026-01-31 / mailbox+PST / page 2",
+                    (string)afterJson["nextPageTarget"], "digest exposes exact continuation target");
+                AssertEqual(2, provider.List(session, LiveDocumentResourceProvider.OutlookArchiveDigestKind,
+                    null, 20).Items.Count, "all digest pages discoverable");
+                AssertEqual("subject+sender (approximate)",
+                    (string)afterJson["groups"][1]["groupBasis"], "fallback grouping is labeled approximate");
+                var target = "Outlook archive digest: " + before.Title;
+                AssertEqual(before.Reference.Uri, provider.ResolveOutlookArchiveDigest(session, target).Reference.Uri,
+                    "digest has an exact semantic target");
             });
         }
     }

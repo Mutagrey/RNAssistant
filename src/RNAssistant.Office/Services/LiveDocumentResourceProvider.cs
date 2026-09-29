@@ -51,6 +51,7 @@ namespace RNAssistant.Office.Services
                 if (IsOutlook && kind == OutlookAttachmentKind && !IsOutlookMailbox) return ListOutlookAttachments(session, cursor, limit);
                 if (IsOutlook && kind == OutlookMailKind && !IsOutlookMailbox) return ListOutlookMail(session, cursor, limit);
                 if (IsOutlook && kind == OutlookArchivePageKind) return ListOutlookArchivePages(session, cursor, limit);
+                if (IsOutlook && kind == OutlookArchiveDigestKind) return ListOutlookArchiveDigests(session, cursor, limit);
                 var items = new List<ResourceDescriptor>();
                 if (IsPowerPoint && kind == PowerPointSearchKind)
                     items.AddRange(new[] { "deck", "deck+notes" }.Select(scope => Describe(session, "search-" + scope)));
@@ -113,6 +114,8 @@ namespace RNAssistant.Office.Services
                 return DescribeOutlookArchivePage(session, archiveId, archivePage);
             int archiveRow;
             int archiveAttachment;
+            if (IsOutlook && TryOutlookArchiveDigestKey(target, out archiveId, out archivePage))
+                return DescribeOutlookArchiveDigest(session, archiveId, archivePage);
             if (IsOutlook && TryOutlookArchiveAttachmentKey(target, out archiveId, out archivePage,
                 out archiveRow, out archiveAttachment))
                 return DescribeOutlookArchiveAttachment(session, archiveId, archivePage, archiveRow, archiveAttachment);
@@ -206,6 +209,7 @@ namespace RNAssistant.Office.Services
                 !(IsOutlook && address.Segments[1] == OutlookCollectionKey) &&
                 !(IsOutlook && IsOutlookSearch(address.Segments[1])) &&
                 !(IsOutlook && TryOutlookArchivePageKey(address.Segments[1], out archiveId, out archivePage)) &&
+                !(IsOutlook && TryOutlookArchiveDigestKey(address.Segments[1], out archiveId, out archivePage)) &&
                 !(IsOutlook && TryOutlookArchiveMailKey(address.Segments[1], out archiveId, out archivePage, out archiveRow)) &&
                 !(IsOutlook && TryOutlookArchiveAttachmentKey(address.Segments[1], out archiveId,
                     out archivePage, out archiveRow, out archiveAttachment)) &&
