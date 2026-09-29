@@ -378,13 +378,7 @@ button.context-meter {
 }
 
 .prompt-context-raw-viewer {
-  height: min(420px, 48vh);
-  min-height: 180px;
   margin-top: 8px;
-}
-
-.prompt-context-raw-viewer > .rn-json-viewer {
-  height: 100%;
 }
 
 .prompt-context-inspector-actions {

@@ -398,15 +398,6 @@
   margin: 0 0 14px;
 }
 
-.artifact-json-viewer {
-  height: min(480px, 58vh);
-  min-height: 220px;
-}
-
-.artifact-json-viewer > .rn-json-viewer {
-  height: 100%;
-}
-
 .artifact-detail-preview pre {
   margin: 0;
   padding: 12px;

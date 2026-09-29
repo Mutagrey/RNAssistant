@@ -327,8 +327,6 @@
 .rn-run-journal-json-section {
   display: grid;
   min-width: 0;
-  min-height: 210px;
-  grid-template-rows: auto minmax(0, 1fr);
   gap: 4px;
 }
 
@@ -339,14 +337,7 @@
   font-weight: var(--label-font-weight);
 }
 
-.rn-run-journal-json {
-  min-width: 0;
-  min-height: 180px;
-}
-
-.rn-run-journal-json > .rn-json-viewer {
-  height: 100%;
-}
+.rn-run-journal-json { min-width: 0; }
 
 @media (max-width: 900px) {
   .rn-run-journal-metrics {

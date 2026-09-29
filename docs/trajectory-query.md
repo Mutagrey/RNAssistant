@@ -46,7 +46,8 @@ Nested decoded paths are marked `::<json>` and are display paths only.
 
 Step details show the tool id, optional error code and original result message,
 followed by a bounded, disposable preview and collapsed arguments/result JSON.
-The shared lossless JSON viewer opens in tree mode, with a taller resizable area.
+The shared lossless JSON viewer opens in tree mode, grows with visible rows and
+scrolls its body once it reaches the viewport-bound height cap.
 The context inspector remains available through the context meter.
 
 `getToolResultPresentation` takes exact `chatId`, `runId` and `toolCallId` and

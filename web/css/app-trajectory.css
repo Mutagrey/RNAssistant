@@ -246,7 +246,7 @@
 
 .trajectory-detail {
   display: grid;
-  grid-template-rows: auto auto minmax(0, 1fr) auto;
+  align-content: start;
   min-width: 0;
   min-height: 0;
   gap: 6px;
@@ -288,14 +288,6 @@
 .trajectory-json-host {
   min-width: 0;
   min-height: 0;
-}
-
-#trajectoryEventData {
-  min-height: 150px;
-}
-
-.trajectory-json-host > .rn-json-viewer {
-  height: 100%;
 }
 
 .trajectory-vba-diff {

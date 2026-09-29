@@ -948,6 +948,8 @@ are preview frames, never child artifacts or independently durable revisions.
   owners of their formats. `application/vnd.rnassistant.chart+json` artifacts
   render the ECharts chart viewer in Preview and keep the exact JSON payload in
   Details; if the domain viewer is unavailable, the safe JSON fallback remains.
+  Shared JSON cards grow with visible content up to a viewport-bound cap, then
+  scroll the tree within the card.
   Message-backed chart controls capture the source chat/message identity when the
   viewer is created. A delayed save or Excel refresh persists only to that chat and
   never rewrites whichever chat becomes active while the operation is in flight.

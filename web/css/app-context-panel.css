@@ -106,11 +106,5 @@
 }
 
 .context-json-viewer {
-  height: min(240px, 34vh);
-  min-height: 150px;
   margin-top: 7px;
-}
-
-.context-json-viewer > .rn-json-viewer {
-  height: 100%;
 }
