@@ -11,6 +11,7 @@ using RNAssistant.Core.ModelProtocol;
 using RNAssistant.Core.Models;
 using RNAssistant.Core.Persistence;
 using RNAssistant.Core.Storage;
+using RNAssistant.Core.Services;
 using RNAssistant.Office.Tools;
 
 namespace RNAssistant.Office.Services
@@ -126,7 +127,8 @@ namespace RNAssistant.Office.Services
             var snapshot = _lastSnapshot;
             _noToolContinuation = null;
             _session.LastContextReceipt = snapshot.Receipt;
-            _responseEvidence = snapshot.Messages.Where(IsVisibleResourceRead)
+            _responseEvidence = snapshot.Messages.Where(message =>
+                    IsVisibleResourceRead(message) || message.SyntheticResourceObservation)
                 .SelectMany(item => item.ResourceEvidence ?? new List<ResourceEvidence>())
                 .Where(item => new RNAssistant.Core.Services.EvidenceStateReducer().Reduce(item, snapshot.Authority.Resources).State == EvidenceState.Current)
                 .GroupBy(item => item.EvidenceId, StringComparer.Ordinal).Select(group => group.First()).ToList();
@@ -440,7 +442,13 @@ namespace RNAssistant.Office.Services
             }
             if (_noToolContinuation != null)
                 facts.Add(_noToolContinuation);
+            var archivedEvidence = ContextCompactionService.ActiveCheckpoint(_session) == null
+                ? Enumerable.Empty<ResourceEvidence>()
+                : (_session.Messages ?? new List<ChatMessage>())
+                    .SelectMany(item => item.ResourceEvidence ?? new List<ResourceEvidence>())
+                    .Where(IsCompleteCurrentView);
             var scopes = facts.SelectMany(item => item.ResourceEvidence ?? new List<ResourceEvidence>())
+                .Concat(archivedEvidence)
                 .Concat((_context?.Notes ?? new List<ContextNote>()).Where(item => item.Evidence != null).Select(item => item.Evidence))
                 .Select(item => item.ScopeId).ToList();
             scopes.Add(new ResourceAuthorityScopeId("conversation", _session.Id));
@@ -458,6 +466,7 @@ namespace RNAssistant.Office.Services
                     "RESOURCE_CATALOG_CHANGED", true);
             var frozen = new ModelAuthoritySnapshot(resources, toolGeneration, skills, ResourceStateProvider.CaptureSchemas(resources),
                 _session.Revision);
+            facts.AddRange(ArchivedCurrentSources(_session, facts, resources));
             if (retainAuthority) _currentAuthority = frozen;
             var required = new ConversationPromptComposer().BuildRequiredMessages(_mode, _userText, null,
                 tools, skillDefinitions, null, _settings, _session, null, true, 0,
@@ -467,6 +476,61 @@ namespace RNAssistant.Office.Services
                 _settings, RequestMessageBudget(tools), enforceBudget);
         }
 
+        internal static List<ChatMessage> ArchivedCurrentSources(ChatSession session, IReadOnlyList<ChatMessage> active,
+            ResourceAuthoritySnapshotSet resources = null)
+        {
+            if (ContextCompactionService.ActiveCheckpoint(session) == null) return new List<ChatMessage>();
+            var reducer = new EvidenceStateReducer();
+            var activeIds = new HashSet<string>(active.Where(item => item != null)
+                .Select(item => item.Id), StringComparer.Ordinal);
+            var activeKeys = new HashSet<string>(active.SelectMany(item => item.ResourceEvidence ?? new List<ResourceEvidence>())
+                .Where(item => IsCompleteCurrentView(item) && (resources == null ||
+                    reducer.Reduce(item, resources).State == EvidenceState.Current))
+                .Select(ObservationKey), StringComparer.Ordinal);
+            var selected = new HashSet<string>(StringComparer.Ordinal);
+            var sources = new List<ChatMessage>();
+            foreach (var result in (session.Messages ?? new List<ChatMessage>()).AsEnumerable().Reverse())
+            {
+                ToolResultWireReadResult wire;
+                string error;
+                if (!ContextCompactionService.IsReplayMessage(result) || activeIds.Contains(result.Id) ||
+                    result.ToolResultProtocolVersion != ToolResultWire.CurrentVersion ||
+                    !ToolResultHistoryReader.TryRead(result, out wire, out error) ||
+                    (result.ToolName == ResourceToolCatalog.ReadToolId &&
+                        (string)(ToolResultWire.ParseData(wire.Result.DataJson) as JObject)?["type"] == "shared context") ||
+                    (!IsVisibleResourceRead(result) && (result.ResourceEffect == null ||
+                        result.ResourceEffect.Outcome != ResourceEffectOutcome.VerifiedChanged &&
+                        result.ResourceEffect.Outcome != ResourceEffectOutcome.Restored))) continue;
+                foreach (var evidence in (result.ResourceEvidence ?? new List<ResourceEvidence>()).Where(item =>
+                    IsCompleteCurrentView(item) && (resources == null ||
+                        reducer.Reduce(item, resources).State == EvidenceState.Current)))
+                {
+                    var key = ObservationKey(evidence);
+                    if (activeKeys.Contains(key) || !selected.Add(key)) continue;
+                    sources.Add(new ChatMessage {
+                        Role = "assistant", ProtocolMessage = true, SyntheticResourceObservation = true,
+                        Content = JsonConvert.SerializeObject(new {
+                            target = ModelContextCompiler.CurrentSourceLabel(result, evidence) ?? result.ToolName,
+                            view = evidence.View }),
+                        ResultPayload = evidence.Payload,
+                        ResourceEvidence = new List<ResourceEvidence> { evidence }
+                    });
+                }
+            }
+            sources.Reverse();
+            return sources;
+        }
+
+        private static bool IsCompleteCurrentView(ResourceEvidence evidence)
+        {
+            return evidence != null && evidence.Complete && evidence.Payload != null &&
+                evidence.Coverage.Kind == ResourceCoverageKinds.Whole &&
+                (evidence.View == ResourceRepresentations.Source || evidence.View == ResourceRepresentations.Text);
+        }
+
+        private static string ObservationKey(ResourceEvidence evidence)
+        { return evidence.Resource.Uri + "\n" + evidence.View; }
+
         private ChatMessage MaterializeToolResultMessage(
             ToolInvocation command, ToolResultMaterialization result, out ChatMessage modelMessage)
         {
@@ -474,6 +538,7 @@ namespace RNAssistant.Office.Services
                 AgentJsonProtocol.DefaultMaxToolResultDataTokens, _settings);
             var message = AgentJsonProtocol.CreateToolResultMessage(command, result, int.MaxValue,
                 _settings.ToolResultRole, _settings);
+            AddVerifiedSourceEvidence(_session, _authority, _payloads, message, command, result);
             message.ResourceRefs = AgentTranscript.CloneResourceRefs(result.Result.Resources);
             // Admission validates runtime-owned descriptor/revision evidence before
             // archival externalization. Model projection deliberately strips these
@@ -492,6 +557,14 @@ namespace RNAssistant.Office.Services
                 var readData = ToolResultWire.ParseData(result.Result.DataJson) as JObject;
                 if (command.ToolId == ResourceToolCatalog.ReadToolId && (string)readData?["type"] == "shared context")
                     compact["type"] = "shared context";
+                if (command.ToolId == ResourceToolCatalog.ReadToolId &&
+                    readData?["target"]?.Type == JTokenType.String &&
+                    !((string)readData["target"]).Contains("://"))
+                    compact["target"] = readData["target"].DeepClone();
+                if (HtmlWorkspaceToolCatalog.Owns(command.ToolId) && readData?["members"] is JArray)
+                    compact["members"] = new JArray(((JArray)readData["members"]).OfType<JObject>()
+                        .Select(item => new JObject { ["path"] = item["path"]?.DeepClone(),
+                            ["uri"] = item["uri"]?.DeepClone() }));
                 var envelope = new RNAssistant.Core.Tools.Contracts.ToolResult(result.Result.Status,
                     result.Result.Message, compact.ToString(Formatting.None), result.Result.Resources);
                 var json = ToolResultWire.WriteParsed(command.ToolCallId, command.ToolId, envelope, compact, result.ResultResource);
@@ -500,6 +573,87 @@ namespace RNAssistant.Office.Services
             if (artifact != null && !string.Equals(artifact.Kind, ChatArtifactKinds.Chart, StringComparison.OrdinalIgnoreCase))
                 artifact.SourceMessageId = message.Id;
             return message;
+        }
+
+        internal static void AddVerifiedSourceEvidence(ChatSession session, ResourceAuthorityService authority,
+            ChatBlobStore payloads, ChatMessage message, ToolInvocation command, ToolResultMaterialization result)
+        {
+            if (authority == null || payloads == null || result.ResourceEffect == null ||
+                result.ResourceEffect.Outcome != ResourceEffectOutcome.VerifiedChanged &&
+                result.ResourceEffect.Outcome != ResourceEffectOutcome.Restored) return;
+
+            foreach (var impact in result.ResourceEffect.Impacts.Where(item => item?.After?.IsExact == true))
+            {
+                var exact = impact.After;
+                var provider = ResourceUri.Parse(exact.Uri).Provider;
+                var vba = provider == "vba";
+                ChatArtifact artifact = null;
+                if (!vba && provider == "chat")
+                {
+                    string artifactId;
+                    if (ChatResourceUri.TryGetArtifactId(session, exact, out artifactId))
+                        artifact = (session.Artifacts ?? new List<ChatArtifact>()).SingleOrDefault(item =>
+                            item != null && item.Id == artifactId &&
+                            (item.Kind == ChatArtifactKinds.Markdown || item.Kind == ChatArtifactKinds.PlanDocument));
+                }
+                if (!vba && artifact == null) continue;
+                var scope = authority.ScopeFor(session, exact, vba);
+                var frozen = authority.Store.Capture(scope);
+                var head = frozen.GetHead(exact.Identity);
+                if (head?.Knowledge != HeadKnowledge.Known ||
+                    head.Revision.Uri != exact.Uri || head.Revision.Revision != exact.Revision) continue;
+                var revision = authority.Revisions.GetRevision(scope, exact);
+                var view = vba ? authority.Revisions.GetView(scope, exact, ResourceRepresentations.Source) : null;
+                var payload = vba ? view?.Payload : revision?.Payload;
+                var coverage = vba ? view?.Coverage : ResourceCoverage.Whole();
+                if (payload == null || coverage?.Kind != ResourceCoverageKinds.Whole) continue;
+                var dependencies = (revision?.Dependencies ?? new ResourceDependency[0]).ToList();
+                if (artifact != null)
+                {
+                    var logical = artifact.Kind == ChatArtifactKinds.Markdown
+                        ? MarkdownDocumentIdentity.Identity(session, MarkdownDocumentIdentity.LogicalId(artifact.Id))
+                        : DocumentArtifactStore.PlanIdentity(session, DocumentArtifactStore.PlanIdFromArtifact(artifact));
+                    var logicalHead = frozen.GetHead(logical);
+                    if (logicalHead?.Knowledge != HeadKnowledge.Known) continue;
+                    dependencies.Add(new ResourceDependency(logicalHead.Revision, kind: "current-authored-source"));
+                }
+                message.ResourceEvidence.Add(new ResourceEvidence("ev_" + Guid.NewGuid().ToString("N"),
+                    scope, exact, vba ? ResourceRepresentations.Source : ResourceRepresentations.Text,
+                    ResourceCoverage.Whole(), true, frozen.Generation, payload, dependencies,
+                    immutable: artifact != null,
+                    contentSha256: vba ? view.ContentSha256 : revision.ContentSha256));
+            }
+
+            if (!HtmlWorkspaceToolCatalog.Owns(command.ToolId)) return;
+            var current = (session.Artifacts ?? new List<ChatArtifact>()).SingleOrDefault(item =>
+                item != null && item.Id == session.ActiveHtmlArtifactId &&
+                item.Kind == ChatArtifactKinds.HtmlWorkspace);
+            var logicalId = HtmlWorkspaceIdentity.LogicalId(current?.Id);
+            if (logicalId == null) return;
+            var artifactRef = ChatResourceUri.CreateArtifactRevision(session, current);
+            var documentScope = authority.ScopeFor(session, artifactRef, false);
+            var frozenDocument = authority.Store.Capture(documentScope);
+            var logicalHeadState = frozenDocument.GetHead(HtmlWorkspaceIdentity.Identity(session, logicalId));
+            var logicalRevision = logicalHeadState?.Knowledge == HeadKnowledge.Known
+                ? authority.Revisions.GetRevision(documentScope, logicalHeadState.Revision) : null;
+            if (logicalRevision?.Dependencies.Count(item => item.Kind == "immutable-snapshot" &&
+                item.Resource.Uri == artifactRef.Uri && item.Resource.Revision == artifactRef.Revision) != 1) return;
+            var retained = authority.Revisions.GetRevision(documentScope, artifactRef);
+            var body = retained?.Payload == null ? null : payloads.ReadText(retained.Payload.ToBlobReference());
+            var workspace = body == null ? null : JsonConvert.DeserializeObject<HtmlWorkspaceSnapshot>(body);
+            if (workspace == null) return;
+            foreach (var file in (workspace.Files ?? new List<HtmlWorkspaceFile>())
+                .Where(item => item != null && !string.IsNullOrWhiteSpace(item.Id)))
+            {
+                var source = file.Content ?? string.Empty;
+                var payload = PayloadRef.FromBlob(payloads.StoreText(source, "text/plain; charset=utf-8"));
+                message.ResourceEvidence.Add(new ResourceEvidence("ev_" + Guid.NewGuid().ToString("N"),
+                    documentScope, ChatHtmlResourceCatalog.FileReference(session, current, file.Id),
+                    ResourceRepresentations.Source, ResourceCoverage.Whole(), true, frozenDocument.Generation,
+                    payload, new[] { new ResourceDependency(logicalHeadState.Revision,
+                        kind: "current-html-workspace") }, immutable: true,
+                    contentSha256: TextPatternEngine.Sha256(source)));
+            }
         }
 
         private bool CanPublishToolPack(IReadOnlyList<ToolCatalogEntry> candidateTools, ChatMessage stateMessage)

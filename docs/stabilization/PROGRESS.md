@@ -55,6 +55,22 @@ and content hash remain unchanged. Changes to that file, a different run and a
 read never shown to the model still fail closed. Focused host-neutral guard and
 model-session checks pass; Windows/target-model reproduction remains open.
 
+Current source context follow-up (2026-09-29): verified writes previously folded
+to a short outcome, leaving their complete after-state out of the next model
+request. A compaction checkpoint could also remove the last complete source/text
+read. The conversation owner now attaches exact published read-back for VBA,
+Markdown, Plan and all current HTML workspace files; the compiler carries one
+authority-checked observation per current source/text view from CAS across compaction and
+excludes superseded bodies. Oversized current source stops at the prompt budget
+instead of silently disappearing. Focused host-neutral tests cover two writes,
+compaction, HTML multi-file after-state and the next guarded replacement. The
+reported model loop's exact trajectory and Windows/target-model behavior remain
+unverified.
+The follow-up check also excludes redundant markers for superseded after-states
+and retains the current archived body when a later historical read appears in
+active or compacted history. Large PDF text and typed action memory across
+compaction remain open working-set gaps in BACKLOG.
+
 Current user-requested mutation boundary (2026-09-28): Agent/Plan now accept only
 independent local reads in one model response; every mutation is a singleton.
 ModelProtocol rejects an unsafe batch before acceptance, and AgentKernel repeats

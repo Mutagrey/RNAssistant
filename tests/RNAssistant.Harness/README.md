@@ -52,6 +52,9 @@ source changes, interpretation-promotion refusal, persistence and old-version sk
 `artifacts: prompt preserves decision context` and `resource cutover: correctness
 before budget` cover optional-purpose admission, exact target preservation,
 ownership/read hints and semantic recovery after stale evidence exclusion.
+`resource cutover: current source survives writes and compaction` and `resource
+cutover: HTML write publishes current member sources` cover the verified after-state,
+CAS carry-forward, stale-version exclusion and next guarded HTML overwrite.
 
 `resources: Markdown sections` checks native semantic reads from another chat,
 exact nested-section/fence/CRLF/Unicode boundaries, partial retained evidence and

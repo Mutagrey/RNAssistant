@@ -93,7 +93,8 @@ namespace RNAssistant.Office.Services
             runnableCatalog = runnableCatalog ?? pack?.Catalog ?? new ToolCatalogEntry[0];
             var authorityMs = preflightTimer.ElapsedMilliseconds - replayMs;
             window = _compiler.Compile(frozen, new ChatMessage[0], window, null, runnableCatalog,
-                settings, ModelContextBudget.InputBudgetTokens(settings), false).Messages.ToList();
+                settings, ModelContextBudget.InputBudgetTokens(settings), false).Messages
+                .Where(message => !message.SyntheticResourceObservation).ToList();
             var compileMs = preflightTimer.ElapsedMilliseconds - replayMs - authorityMs;
             var projectedWindow = window.Select(message => ProjectMessage(session, message)).ToList();
             var inputBudget = Math.Max(1024, ModelContextBudget.InputBudgetTokens(settings));

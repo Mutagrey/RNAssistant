@@ -12,6 +12,25 @@
 новая возможность требует явной задачи, scope и owner; дефекты работающей системы
 приоритетнее расширения без конкретного пользовательского результата.
 
+## Large resource working set and compacted action memory — 2026-09-29
+
+Owner: Resource Fabric / model context compiler / context compaction. A model-facing
+`common.resources_read` assembles a complete text view (up to 2,000,000 characters)
+from internal 32,000-character pages. A large PDF can therefore exceed the model
+request budget; the current tool has no bounded PDF page/text selection. Search
+matches are discovery evidence, not a substitute for an exact selected text view.
+Provide a bounded semantic PDF view with explicit page/range coverage and a
+budgeted current excerpt working set. Keep extracted originals in CAS and older
+read findings in provenance-checked claims; never label an excerpt as the entire
+PDF or silently drop a selected view.
+
+Completed mutations are folded into short model-visible `TOOL_INTERACTION` text.
+The compaction source currently sees those folded frames as assistant text, so a
+checkpoint has no distinct typed completed-action claim. Preserve verified action
+outcomes and unfinished next steps with typed provenance while keeping recent
+causal frames and one current source view. Do not retain every old source version
+or let a model summary upgrade an unverified action to a verified outcome.
+
 ## Outlook attachment follow-ups — 2026-09-08
 
 Owner: Outlook domain / Resource Fabric. The authorized PDF/text/image slice does

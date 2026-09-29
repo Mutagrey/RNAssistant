@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using Newtonsoft.Json.Linq;
+using RNAssistant.Core.Agent;
 using RNAssistant.Core.ModelProtocol;
 using RNAssistant.Core.Models;
 using RNAssistant.Core.Services;
@@ -1969,6 +1970,197 @@ namespace RNAssistant.Harness
             });
         }
 
+        private static void ResourceCurrentSourceSurvivesWritesAndCompaction()
+        {
+            WithTempPaths(paths =>
+            {
+                var payloads = new ChatBlobStore(paths);
+                var scope = new ResourceAuthorityScopeId("document", "d");
+                var before = new ResourceRef("rna://vba/d/module", "r1");
+                var after = new ResourceRef(before.Uri, "r2");
+                Func<string, string> body = marker => string.Join("\n", Enumerable.Range(0, 1000)
+                    .Select(index => index >= 400 && index < 405 ? marker + index : "line_" + index));
+                var oldPayload = PayloadRef.FromBlob(payloads.StoreText(body("OLD_SOURCE_VERSION"), "text/plain"));
+                var currentPayload = PayloadRef.FromBlob(payloads.StoreText(body("CURRENT_SOURCE_VERSION"), "text/plain"));
+                var history = new List<ChatMessage>();
+                Action<string, ResourceRef, ResourceRef, PayloadRef, long> addWrite = (id, prior, exact, payload, generation) =>
+                {
+                    var command = new ToolInvocation { ToolCallId = id, ToolId = "common.vba_write_module" };
+                    var call = new ChatMessage { Role = "assistant", ProtocolMessage = true, RunId = "run", ToolCallId = id,
+                        ToolName = command.ToolId, ToolCalls = new List<RNAssistant.Core.Llm.LlmToolCall> {
+                            new RNAssistant.Core.Llm.LlmToolCall { Id = id, Name = command.ToolId, Type = "function", ArgumentsJson = "{}" } } };
+                    var evidence = new ResourceEvidence("ev_" + id, scope, exact, ResourceRepresentations.Source,
+                        ResourceCoverage.Whole(), true, generation, payload);
+                    var effect = new ResourceEffect("effect_" + id, command.ToolId, ResourceEffectOutcome.VerifiedChanged,
+                        new[] { new ResourceImpact(exact.Identity, ResourceImpactRelation.Exact, before: prior, after: exact) });
+                    var result = AgentJsonProtocol.CreateToolResultMessage(command,
+                        new ToolResultMaterialization(RNAssistant.Core.Tools.Contracts.ToolResult.Ok("saved",
+                            new JObject { ["target"] = "VBA module: M" }.ToString()),
+                            resourceEvidence: new[] { evidence }, resourceEffect: effect), int.MaxValue, "tool");
+                    result.RunId = "run";
+                    history.Add(call);
+                    history.Add(result);
+                };
+                addWrite("old", null, before, oldPayload, 1);
+                addWrite("current", before, after, currentPayload, 2);
+                var authority = new ModelAuthoritySnapshot(new ResourceAuthoritySnapshotSet(new[] {
+                    new ResourceAuthoritySnapshot(scope, 2, null, 0, new[] { ResourceHeadState.Known(after, 2) }) }),
+                    "tools", new SkillCatalogSnapshot(null), null, 2);
+                var compiler = new ModelContextCompiler(payloads);
+                var compiled = compiler.Compile(authority, new ChatMessage[0], history, null,
+                    new ToolCatalogEntry[0], new AppSettings(), 4096);
+                var text = string.Join("\n", compiled.Messages.Select(item => item.Content));
+                AssertContains(text, "CURRENT_SOURCE_VERSION", "verified current after-state reaches the next request");
+                AssertTrue(!text.Contains("OLD_SOURCE_VERSION"), "older source is not replayed after a newer write");
+                AssertEqual(1, compiled.Messages.Count(item => item.SyntheticResourceObservation &&
+                    item.ResourceEvidence.Count > 0),
+                    "one current source observation survives multiple writes");
+                AssertTrue(!compiled.Messages.Any(item => (item.Content ?? string.Empty).StartsWith("RESOURCE_CHANGE:",
+                    StringComparison.Ordinal)), "obsolete synthetic after-states add no duplicate change markers");
+
+                var store = new ResourceAuthorityStore(paths);
+                var sourceAuthority = new ResourceAuthorityService(store, store, payloads: payloads);
+                store.RegisterRevision(scope, new ResourceRevisionMetadata(after, currentPayload.Sha256, currentPayload));
+                store.RegisterView(scope, new ResourceRevisionView(after, ResourceRepresentations.Source,
+                    currentPayload.Sha256, currentPayload, ResourceCoverage.Whole()));
+                var publishedEffect = new ResourceEffect("published-source", "common.vba_write_module",
+                    ResourceEffectOutcome.VerifiedChanged, new[] {
+                        new ResourceImpact(after.Identity, ResourceImpactRelation.Exact, after: after) });
+                store.Publish(ResourceAuthorityCommit.Create(scope, 0, publishedEffect,
+                    new[] { new ResourceHeadChange(after.Identity, null, ResourceHeadState.Known(after, 1)) },
+                    AuthorityCommitReason.MutationEffect));
+                var bound = new ChatSession { DocumentAuthorityId = "d" };
+                var publishedCall = new ToolInvocation { ToolCallId = "published", ToolId = "common.vba_write_module" };
+                var publishedResult = new ToolResultMaterialization(
+                    RNAssistant.Core.Tools.Contracts.ToolResult.Ok("saved"), resourceEffect: publishedEffect);
+                var publishedMessage = AgentJsonProtocol.CreateToolResultMessage(publishedCall, publishedResult,
+                    int.MaxValue, "tool");
+                ConversationModelSession.AddVerifiedSourceEvidence(bound, sourceAuthority, payloads,
+                    publishedMessage, publishedCall, publishedResult);
+                AssertEqual(currentPayload.Sha256, publishedMessage.ResourceEvidence.Single().Payload.Sha256,
+                    "VBA write obtains its complete current source from the published authority view");
+
+                var session = new ChatSession();
+                session.Messages.AddRange(history);
+                var checkpoint = new ContextCheckpoint { ThroughMessageId = history.Last().Id,
+                    SummaryMarkdown = "Earlier writes summarized." };
+                checkpoint.Claims.Add(new StructuredContextClaim { ClaimId = "summary", Kind = "interpretation",
+                    Text = "Earlier writes summarized.", SourceRoles = new List<string> { "assistant" },
+                    SourceMessageIds = new List<string> { history.Last().Id } });
+                session.ContextCheckpoints.Add(checkpoint);
+                session.ActiveContextCheckpointId = checkpoint.Id;
+                session.Messages.Add(new ChatMessage { Role = "user", Content = "Continue editing." });
+                var active = PromptBudgetComposer.ConversationHistory(session, true, false);
+                AssertTrue(!active.Any(item => item.Id == history.Last().Id), "checkpoint removes the write frame");
+                var archived = ConversationModelSession.ArchivedCurrentSources(session, active);
+                AssertEqual(1, archived.Count, "only the latest source is carried across compaction");
+                var historicalRead = AgentJsonProtocol.CreateToolResultMessage(
+                    new ToolInvocation { ToolCallId = "historical", ToolId = ResourceToolCatalog.ReadToolId },
+                    new ToolResultMaterialization(RNAssistant.Core.Tools.Contracts.ToolResult.Ok("read",
+                        new JObject { ["target"] = "VBA module: M" }.ToString()),
+                        resourceEvidence: new[] { history[1].ResourceEvidence.Single() }), int.MaxValue, "tool");
+                historicalRead.RunId = "run";
+                session.Messages.Add(historicalRead);
+                AssertEqual(1, ConversationModelSession.ArchivedCurrentSources(session, active, authority.Resources).Count,
+                    "historical read in archived history cannot displace the current source");
+                AssertEqual(currentPayload.Sha256,
+                    ConversationModelSession.ArchivedCurrentSources(session,
+                        active.Concat(new[] { historicalRead }).ToList(), authority.Resources)
+                        .Single().ResourceEvidence.Single().Payload.Sha256,
+                    "stale active evidence cannot suppress the archived current source");
+                session.Messages.Remove(historicalRead);
+                var sharedCall = new ToolInvocation { ToolCallId = "shared", ToolId = ResourceToolCatalog.ReadToolId };
+                var sharedEvidence = new ResourceEvidence("shared", scope, after, ResourceRepresentations.Text,
+                    ResourceCoverage.Whole(), true, 2,
+                    PayloadRef.FromBlob(payloads.StoreText("RAW_SHARED_ARCHIVE", "text/plain")));
+                var sharedResult = AgentJsonProtocol.CreateToolResultMessage(sharedCall,
+                    new ToolResultMaterialization(RNAssistant.Core.Tools.Contracts.ToolResult.Ok("read",
+                        new JObject { ["type"] = "shared context" }.ToString()),
+                        resourceEvidence: new[] { sharedEvidence }), int.MaxValue, "tool");
+                session.Messages.Insert(0, sharedResult);
+                AssertEqual(1, ConversationModelSession.ArchivedCurrentSources(session, active).Count,
+                    "shared-context archives never bypass their claim projection through source carry-forward");
+                var afterCompaction = compiler.Compile(authority, new ChatMessage[0], active.Concat(archived).ToList(),
+                    null, new ToolCatalogEntry[0], new AppSettings(), 4096);
+                var replay = string.Join("\n", afterCompaction.Messages.Select(item => item.Content));
+                AssertContains(replay, "CURRENT_SOURCE_VERSION", "compacted context hydrates exact current CAS source");
+                AssertTrue(!replay.Contains("OLD_SOURCE_VERSION"), "compaction retains no obsolete source");
+
+                session.ContextCheckpoints.Clear();
+                session.ActiveContextCheckpointId = null;
+                session.Messages.Clear();
+                session.Messages.Add(new ChatMessage { Role = "user", Content = "Build a module." });
+                session.Messages.AddRange(history);
+                session.Messages.Add(new ChatMessage { Role = "assistant", Content = "Working." });
+                session.Messages.Add(new ChatMessage { Role = "user", Content = "Continue." });
+                var compaction = new ContextCompactionService((settings, messages, options, stream, token) =>
+                    System.Threading.Tasks.Task.FromResult(CompactionReply(messages, "Earlier work.")),
+                    payloads: payloads);
+                var actual = compaction.EnsureWithinBudgetAsync(session, new AppSettings(), null, true, null,
+                    System.Threading.CancellationToken.None, authority, new ToolCatalogEntry[0])
+                    .GetAwaiter().GetResult();
+                AssertTrue(actual != null && session.Messages.Any(item => item.Id == actual.ThroughMessageId),
+                    "compaction checkpoint ends at a durable message, never at synthesized current source");
+            });
+        }
+
+        private static void ResourceHtmlWritePublishesCurrentMemberSources()
+        {
+            WithTempExecutor(FakeOfficeAdapter.ForHost("Excel"), (executor, adapter) =>
+            {
+                var session = NewSession(adapter);
+                executor.MutateLocalResources(session, "common.html_workspace_write_file", null,
+                    () => HtmlWorkspaceToolService.UpsertFile(session, "index.html", "html", "<main>CURRENT_HTML</main>", true));
+                executor.MutateLocalResources(session, "common.html_workspace_write_file", null,
+                    () => HtmlWorkspaceToolService.UpsertFile(session, "styles.css", "css", "body{color:CURRENT_CSS}", true));
+                var scope = executor.ResourceAuthority.Scope(session, true);
+                var effect = executor.ResourceAuthority.Store.Capture(scope).Commits.Last(item =>
+                    item.Effect?.Operation == "common.html_workspace_write_file").Effect;
+                var artifact = session.Artifacts.Single(item => item.Id == session.ActiveHtmlArtifactId);
+                var members = new JArray(session.HtmlWorkspace.Files.Select(file => new JObject {
+                    ["path"] = file.Path,
+                    ["uri"] = ChatHtmlResourceCatalog.FileReference(session, artifact, file.Id).Uri
+                }));
+                var command = new ToolInvocation { ToolCallId = "html-write", ToolId = "common.html_workspace_write_file" };
+                var materialized = new ToolResultMaterialization(RNAssistant.Core.Tools.Contracts.ToolResult.Ok("saved",
+                    new JObject { ["members"] = members }.ToString()), resourceEffect: effect);
+                var result = AgentJsonProtocol.CreateToolResultMessage(command, materialized, int.MaxValue, "tool");
+                ConversationModelSession.AddVerifiedSourceEvidence(session, executor.ResourceAuthority, executor.Payloads,
+                    result, command, materialized);
+                AssertEqual(2, result.ResourceEvidence.Count, "verified HTML publication carries both current file bodies");
+                var call = new ChatMessage { Role = "assistant", ProtocolMessage = true, ToolCallId = command.ToolCallId,
+                    ToolName = command.ToolId, ToolCalls = new List<RNAssistant.Core.Llm.LlmToolCall> {
+                        new RNAssistant.Core.Llm.LlmToolCall { Id = command.ToolCallId, Name = command.ToolId,
+                            Type = "function", ArgumentsJson = "{}" } } };
+                var frozen = new ModelAuthoritySnapshot(executor.ResourceAuthority.CaptureMany(new[] { scope }),
+                    "tools", new SkillCatalogSnapshot(null), null, 2);
+                var compiled = new ModelContextCompiler(executor.Payloads).Compile(frozen, new ChatMessage[0],
+                    new[] { call, result }, null, new ToolCatalogEntry[0], new AppSettings(), 4096);
+                var text = string.Join("\n", compiled.Messages.Select(item => item.Content));
+                AssertContains(text, "CURRENT_HTML", "HTML source reaches the next model request");
+                AssertContains(text, "CURRENT_CSS", "CSS source reaches the next model request");
+                AssertContains(text, "index.html", "source body keeps its file label");
+                AssertContains(text, "styles.css", "other file body keeps its file label");
+                var seen = compiled.Messages.Where(item => item.SyntheticResourceObservation)
+                    .SelectMany(item => item.ResourceEvidence).ToList();
+                var definitions = OfficeToolCatalog.ForHost(adapter.HostName)
+                    .Concat(executor.GetControllerTools()).ToList();
+                var runtime = executor.CreateNativeRuntime(session, definitions, new AppSettings(), "agent", false);
+                var next = new ToolCall("observed-html-replace", HtmlWorkspaceToolCatalog.WriteFileToolId,
+                    new JObject { ["path"] = "index.html", ["content"] = "<main>UPDATED_HTML</main>" }.ToString());
+                session.Messages.Add(new ChatMessage { Role = "assistant", RunId = "source-run",
+                    ToolCallId = next.Id, AcceptedCallOrigin = new AcceptedToolCallOrigin("next-step", "attempt", 0),
+                    ResourceEvidence = seen });
+                var replaced = runtime.ExecuteAsync(new ToolExecutionContext(next, runtime.Describe(next),
+                    "source-run", "turn", "next-step", DateTime.UtcNow, false, 4),
+                    System.Threading.CancellationToken.None).GetAwaiter().GetResult();
+                AssertEqual(ToolExecutionOutcome.Ok, replaced.Outcome,
+                    "model-visible verified after-state authorizes the next whole-file write");
+                AssertContains(session.HtmlWorkspace.Files.Single(item => item.Path == "index.html").Content,
+                    "UPDATED_HTML", "authorized replacement changes the current file");
+            });
+        }
+
         private static void ResourceCompilerFiltersBeforeBudget()
         {
             var scope = new ResourceAuthorityScopeId("document", "d");
@@ -2045,25 +2237,12 @@ namespace RNAssistant.Harness
                     }
                 }
             };
-            var oversized = new ModelContextCompiler().Compile(authority,
+            RuntimeThrows<PromptBudgetExceededException>(() => new ModelContextCompiler().Compile(authority,
                 new ChatMessage[0], new[] { oversizedCall, oversizedResult },
-                null, new ToolCatalogEntry[0], new AppSettings(), 1024);
-            ToolResultWireReadResult oversizedWire;
-            string oversizedError;
-            AssertTrue(ToolResultHistoryReader.TryRead(
-                    oversized.Messages[1], out oversizedWire, out oversizedError),
-                "oversized resource projection remains a strict Tool Result: " + oversizedError);
-            AssertEqual(RNAssistant.Core.Tools.Contracts.ToolResultStatus.Error,
-                oversizedWire.Result.Status,
-                "oversized exact resource evidence cannot remain a partial success");
-            AssertEqual("resource_evidence_context_too_large",
-                (string)JObject.Parse(oversizedWire.Result.DataJson)["code"],
-                "oversized resource evidence exposes the exact narrower-view recovery");
-            AssertEqual(0, oversized.Messages[1].ResourceEvidence.Count,
-                "a read omitted from the model request carries no accepted-call evidence");
+                null, new ToolCatalogEntry[0], new AppSettings(), 1024));
             AssertEqual(RNAssistant.Core.Tools.Contracts.ToolResultStatus.Ok,
                 ToolResultWire.Read(oversizedResult.Content).Result.Status,
-                "request-local resource admission does not rewrite durable evidence");
+                "budget refusal does not rewrite durable source evidence");
         }
 
         private static void DocumentAuthoritySurvivesSaveAsAndSeparatesCopy()

@@ -708,6 +708,8 @@ namespace RNAssistant.Harness
                 Test("resource cutover: frozen evidence and coverage", ResourceEvidenceUsesFrozenAuthority),
                 Test("resource cutover: two chat mutations reach next compiler", ResourceTwoChatMutationsReachCompiler),
                 Test("resource cutover: correctness before budget", ResourceCompilerFiltersBeforeBudget),
+                Test("resource cutover: current source survives writes and compaction", ResourceCurrentSourceSurvivesWritesAndCompaction),
+                Test("resource cutover: HTML write publishes current member sources", ResourceHtmlWritePublishesCurrentMemberSources),
                 Test("resource cutover: typed context exact payloads", ResourceCompilerUsesTypedContextPayloads),
                 Test("resource cutover: context gateway scoped snapshots", ResourceContextGatewayUsesScopedSnapshots),
                 Test("resource cutover: retained state cursors and publication", ResourceRetainedStateReadsPreservePublication),

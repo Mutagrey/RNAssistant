@@ -118,6 +118,12 @@ model in an accepted request of the same run. The guard checks the stable file
 member identity and exact content hash, so later context reduction or changes to
 other workspace files do not force another read. A changed file, another run's
 observation, or a read excluded from model context cannot authorize replacement.
+Verified HTML writes attach complete current member source observations from the
+published aggregate snapshot. The next accepted request carries those file bodies
+and their currentness evidence, so a following whole-file replacement can use the
+source the model has just seen. The conversation compiler applies the same source/text
+carry-forward rule to VBA and document-authored text resources; an older revision is
+excluded when the authority head or dependency changes.
 An exact domain target query such as `Sheet!A1:B20`, `Excel table: Sales`,
 `Excel name: Sales`, `Word range: 0:100`, or `PowerPoint slide: 2` is a point
 lookup: it resolves that target without scanning unrelated resource catalogs or

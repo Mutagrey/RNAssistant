@@ -112,6 +112,8 @@ namespace RNAssistant.Core.Models
         public AttachmentAnalysisContext AttachmentAnalysis { get; set; }
         public List<ResourceRef> ResourceRefs { get; set; }
         public List<ResourceEvidence> ResourceEvidence { get; set; } = new List<ResourceEvidence>();
+        [JsonProperty(DefaultValueHandling = DefaultValueHandling.Ignore)]
+        public bool SyntheticResourceObservation { get; set; }
         public List<StructuredContextClaim> ContextClaims { get; set; } = new List<StructuredContextClaim>();
         public PayloadRef ArgumentPayload { get; set; }
         public PayloadRef AcceptedCallPayload { get; set; }
