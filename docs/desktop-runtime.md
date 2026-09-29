@@ -87,7 +87,7 @@ Desktop не требует ClickOnce. `install-desktop-local.cmd` сохран�
 Для диагностики задержек Desktop log пишет `Attach timing`; runtime log
 `rnassistant.log` в каталоге данных приложения пишет медленные `WebView startup`,
 `WebView navigation`, `Startup`, `Chat headers`, `Chat model setup`,
-`Model request`, `Chat save`, `Chat turn completion`, `Skill source`,
+`Model request`, `Chat save`, `Chat turn completion`, `Chat response projection`, `Skill source`,
 `Bridge response timing` и `WebView render timing`. Bridge разделяет выполнение
 запроса и сериализацию ответа; WebView передаёт только медленные замеры запуска,
 ответа чата и чтения/отрисовки Skill в тот же runtime log.
@@ -103,6 +103,10 @@ id, role, marker и run id без model/tool body; вложения сообще
 доступны через адресные diagnostic/resource запросы. Ответ bridge сериализуется
 непосредственно из typed payload без промежуточного `JToken` дерева. `Startup timing`
 отдельно показывает `prompts`, `tools`, `skills` внутри `libraries`.
+После финального сохранения `Chat response projection` отдельно измеряет
+повторную сборку каталогов `tools`/`skills`, заголовки `chats` и остальное
+состояние ответа. Статус «Завершаю ответ и обновляю чат» включает эти этапы,
+поэтому его длительность не равна времени записи JSONL.
 
 Реальные multi-instance attach, Office modal/busy states и production STA/COM
 cleanup требуют Windows x64 + Office x64 + VS 2022 qualification.

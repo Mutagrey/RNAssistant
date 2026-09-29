@@ -681,7 +681,7 @@ namespace RNAssistant.Office
                 {
                     ChatTitleBuilder.ApplyFallback(session, text, completion.AssistantText);
                 }
-                ReportProgress(runProgress, "saving", "Сохраняю историю чата...");
+                ReportProgress(runProgress, "saving", "Завершаю ответ и обновляю чат...");
                 var finalStartMs = turnTimer.ElapsedMilliseconds;
                 FinalizeControllerRun(
                     session, firstRunMessageIndex, firstRunMessageIndex,
@@ -712,7 +712,14 @@ namespace RNAssistant.Office
         {
             settings = ResolveChatSettings(session, settings);
             var activeId = session.Id;
-            return new SendChatResponse
+            var timer = Stopwatch.StartNew();
+            var tools = ToolLibraryResponse.From(_toolCatalog.GetVisibleTools());
+            var toolsMs = timer.ElapsedMilliseconds;
+            var skills = GetSkills();
+            var skillsMs = timer.ElapsedMilliseconds - toolsMs;
+            var chats = _chatSessions.GetChatSummaries(activeId);
+            var chatsMs = timer.ElapsedMilliseconds - toolsMs - skillsMs;
+            var response = new SendChatResponse
             {
                 SessionRevision = session == null ? 0 : session.Revision,
                 RunViewState = RunViewStateProjector.Create(session),
@@ -721,14 +728,13 @@ namespace RNAssistant.Office
                     ? new ToolResultLogDto[0]
                     : (completion.ToolResults ?? new ToolResultDescriptionDto[0])
                         .Select(ToolResultLogDto.From).ToArray(),
-                Tools = ToolLibraryResponse.From(
-                    _toolCatalog.GetVisibleTools()),
-                Skills = GetSkills(),
+                Tools = tools,
+                Skills = skills,
                 ActiveChatId = activeId,
                 ActiveChatModel = session == null ? string.Empty : session.Model,
                 ActiveChatMode = ChatModes.Normalize(session == null ? null : session.Mode),
                 ActiveChatReasoning = session != null && session.ReasoningEnabled,
-                Chats = _chatSessions.GetChatSummaries(activeId),
+                Chats = chats,
                 Documents = ListOpenDocuments(),
                 Context = session == null ? CreateEmptyContext() : ChatCloneService.CloneContext(LoadContext(session)),
                 Messages = ChatCloneService.CloneMessagesForBridge(session == null ? null : session.Messages),
@@ -743,6 +749,12 @@ namespace RNAssistant.Office
                     : completion.ContextUsage ?? ContextUsageEstimator.FromSession(session, settings),
                 HtmlWorkspace = HtmlWorkspaceEditorResourceService.Metadata(session)
             };
+            if (timer.ElapsedMilliseconds >= 250)
+                RuntimeLog.Info("Chat response projection timing: tools=" + toolsMs +
+                    "ms, skills=" + skillsMs + "ms, chats=" + chatsMs +
+                    "ms, state=" + (timer.ElapsedMilliseconds - toolsMs - skillsMs - chatsMs) +
+                    "ms, messages=" + (session.Messages == null ? 0 : session.Messages.Count) + ".");
+            return response;
         }
 
         private SendChatResponse EmptySendResponse(ChatSession session, AppSettings settings)

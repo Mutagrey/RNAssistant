@@ -121,7 +121,7 @@ records bridge versus render duration for slow chat switches and exact HTML sour
 load duration above 250 ms. Full chat-state updates retain an already loaded HTML
 source for the same exact revision and file metadata; a bounded in-memory exact
 source cache avoids another download when revisiting a chat.
-Follow-up inspection found that the 15-second focused WebView poll scans all chat
+Follow-up inspection found that the 60-second focused WebView poll scans all chat
 headers and reloads the active projection. For a chat exceeding the per-entry
 projection cache limit (about 4 million characters), each load can validate and
 replay the complete JSONL. Skill source selection also loads the addressed chat
@@ -141,6 +141,11 @@ Windows timing photo (2026-09-29): 25–26 chats account for about 70 MiB of JSO
 header reads take roughly 0.6–0.9 s. One startup reports session 1.7 s, chats
 0.6 s, libraries 2.0 s and projection 0.06 s; its bridge handler takes 4.4 s,
 serialization 0.09 s for about 1.1 million characters, and browser render 0.11 s.
+One completion reports `finalSave=26ms` and `responseProjection=2525ms`: the visible
+“saving history” interval chiefly covers response preparation, not the final
+JSONL append. The completion response rebuilds tools and skills and scans chat
+headers; Agent mode invalidates the document VBA catalog before that response.
+The response now logs those sub-times separately and uses a broader progress label.
 Model setup separately reports compaction around 3 s and catalogs around 1.4 s.
 Several failed model requests last about 42 s without an HTTP status, while later
 successful requests show roughly 2–5 s to response headers and 70–144 KiB request
