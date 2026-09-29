@@ -24,8 +24,8 @@ namespace RNAssistant.Office.Tools
         internal static IEnumerable<ToolCatalogEntry> GetTools()
         {
             yield return Projection(SaveToolId,
-                "Plan document: Save the complete selected document-owned Markdown plan. Runtime creates an independent plan when none is selected; otherwise it appends a revision only if the selected base is still current across all document chats.",
-                SaveSchema(), "plan_doc_save", 0);
+                "Plan document: Save a complete document-owned Markdown plan. Update the selected plan, or set startNew=true to create an independent plan for a different task without removing the previous one.",
+                SaveSchema(), "plan_doc_save", 0, true);
             yield return Projection(RestoreToolId,
                 "Plan document: On explicit request, restore one user-visible historical version as a new exactly guarded linear head without modifying history.",
                 RestoreSchema(), "plan_doc_restore", 0);
@@ -35,12 +35,12 @@ namespace RNAssistant.Office.Tools
         }
 
         private static ToolCatalogEntry Projection(string id, string description,
-            string schema, string name, int riskLevel)
+            string schema, string name, int riskLevel, bool agentAllowed = false)
         {
             return ControllerToolCatalogEntry.CreateTypedProjection(
                 new ToolDescriptor(id, description, schema),
                 new ToolPolicy(ToolEffect.Write, ToolVerification.Tool,
-                    false, false, new[] { "plan" }, riskLevel),
+                    false, false, agentAllowed ? new[] { "agent", "plan" } : new[] { "plan" }, riskLevel),
                 name: name, scope: "session", mutatesLocalState: true);
         }
 
@@ -64,7 +64,8 @@ namespace RNAssistant.Office.Tools
                 {
                     ["title"] = new JObject { ["type"] = "string", ["minLength"] = 1, ["maxLength"] = 200, ["description"] = "User-visible plan title." },
                     ["markdown"] = new JObject { ["type"] = "string", ["minLength"] = 1, ["maxLength"] = PlanDocumentService.MaximumMarkdownCharacters, ["description"] = "Complete free-form Markdown plan body; preserve it exactly without trimming or partial patch semantics." },
-                    ["status"] = new JObject { ["type"] = "string", ["enum"] = new JArray("draft", "ready"), ["description"] = "Draft while decisions remain; ready only when the plan is decision-complete." }
+                    ["status"] = new JObject { ["type"] = "string", ["enum"] = new JArray("draft", "ready"), ["description"] = "Draft while decisions remain; ready only when the plan is decision-complete." },
+                    ["startNew"] = new JObject { ["type"] = "boolean", ["description"] = "True only when the selected Plan belongs to a different task; keep its history and create a separate selected Plan." }
                 },
                 ["required"] = new JArray("title", "markdown", "status"),
                 ["additionalProperties"] = false

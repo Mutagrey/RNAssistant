@@ -73,7 +73,8 @@ namespace RNAssistant.Office.Tools
                     ToolArgumentReader.String(context.Arguments, "title", string.Empty),
                     ToolArgumentReader.String(context.Arguments, "markdown", string.Empty),
                     ToolArgumentReader.String(context.Arguments, "status", "draft"),
-                    context.MarkDispatchPossible, PlanDocumentService.CreationId(_session, context.Execution));
+                    context.MarkDispatchPossible, PlanDocumentService.CreationId(_session, context.Execution),
+                    ToolArgumentReader.Boolean(context.Arguments, "startNew", false));
             }
             if (string.Equals(_toolId, PlanDocumentToolCatalog.RestoreToolId,
                 StringComparison.Ordinal))

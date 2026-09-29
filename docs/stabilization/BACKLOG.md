@@ -51,15 +51,12 @@ saved user instructions while fixing the HTML observation loop.
 
 ## Complex Agent planning and model evaluation — 2026-09-28
 
-Owner: Conversation application / Agent planning / model evaluation. Agent creates
-its Task List before source inspection, while the revisioned Plan document tool is
-Plan-only and Agent's standalone Markdown authoring is reserved for explicitly
-requested documents. For a complex execution request, define one durable Agent
-plan after bounded read-only discovery, with source inventory, deliverables,
-dependencies, semantic data contract, stage exit evidence and unresolved decisions.
-Keep the Task List as its concise execution projection; do not add a second outcome
-store or make the model's prose authoritative. Decide whether the existing Plan
-lineage can own this contract before introducing another artifact type.
+Owner: Conversation application / Agent planning / model evaluation. Source changes
+allow Agent to use the existing revisioned document Plan after bounded read-only
+discovery; `startNew=true` creates an independent Plan for another task. Task List
+is the concise execution projection, with preserved prior stages and a runtime
+completion check. No second outcome store was added. Focused harness and live-model
+evaluation are deferred at the user's request.
 
 Representative target-model scenarios must cover Excel/VBA source inspection before
 dashboard design, two differing table layouts mapped to one semantic schema,
@@ -73,10 +70,10 @@ accept binary spreadsheets.
 
 ## Compaction helper prompt contract drift — 2026-09-28
 
-Owner: context compaction. The editable default asks for `claims[{text,sourceIds}]`,
-but the appended runtime instruction, JSON schema and parser require
-`claims[{kind,text,sourceIds}]`. Align the default with the active typed contract
-and add a focused prompt/schema assertion; preserve authored custom helper text.
+Owner: context compaction. The default now requests
+`claims[{kind,text,sourceIds}]`, matching the appended instruction, JSON schema
+and parser. Authored custom helper text is preserved. Focused harness verification
+remains deferred at the user's request.
 
 ## Resource context fixture drift — 2026-09-08
 

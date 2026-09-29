@@ -5,6 +5,13 @@ using RNAssistant.Core.Tools;
 
 namespace RNAssistant.Core.Agent
 {
+    public enum FinalResponseDecision { Complete, Continue, Fail }
+
+    public interface IRunCompletionGate
+    {
+        FinalResponseDecision EvaluateFinalResponse();
+    }
+
     public sealed class AgentRunLimits
     {
         public int MaxIterations { get; private set; }

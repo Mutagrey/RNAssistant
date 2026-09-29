@@ -167,7 +167,7 @@ namespace RNAssistant.Harness
                     planPolicy.Effect == ToolEffect.Write &&
                     planPolicy.Verification == ToolVerification.Tool &&
                     !planPolicy.RequiresConfirmation &&
-                    planPolicy.AllowedModes.SequenceEqual(new[] { "plan" }),
+                    planPolicy.AllowedModes.SequenceEqual(new[] { "agent", "plan" }),
                     "Plan document carries exact source-owned verified-write policy");
                 AssertTrue(selected.Any(item => item.Id == TaskListToolCatalog.SetToolId), "task list available");
                 AssertTrue(selected.Any(item => item.Id == UserQuestionToolCatalog.AskToolId), "questions available");

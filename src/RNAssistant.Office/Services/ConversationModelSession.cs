@@ -186,6 +186,14 @@ namespace RNAssistant.Office.Services
             _noToolContinuation = AgentJsonProtocol.CreateNoToolCheckpointContinuationMessage();
         }
 
+        internal void AppendDeferredFinal(string message, LlmCompletionResult completion)
+        {
+            var accepted = AgentJsonProtocol.CreateDeferredFinalMessage(message, completion);
+            AttachResponseEvidence(accepted);
+            _session.Messages.Add(accepted);
+            _noToolContinuation = AgentJsonProtocol.CreateOpenTaskListContinuationMessage();
+        }
+
         internal void AttachResponseEvidence(ChatMessage message)
         {
             if (message != null) message.ResourceEvidence = _responseEvidence.ToList();

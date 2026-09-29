@@ -182,6 +182,28 @@ namespace RNAssistant.Office.Services
             };
         }
 
+        internal static ChatMessage CreateDeferredFinalMessage(string message, LlmCompletionResult completion)
+        {
+            var accepted = AgentTranscript.CreateAssistantMessage(
+                ModelProtocolWire.Write(message ?? string.Empty, new ConversationToolCall[0], true),
+                completion, null, AgentResponseStatuses.InProgress);
+            accepted.ProtocolMessage = true;
+            return accepted;
+        }
+
+        internal static ChatMessage CreateOpenTaskListContinuationMessage()
+        {
+            return new ChatMessage
+            {
+                Role = "user",
+                ProtocolMessage = true,
+                Content = "RUNTIME_CONTINUE:\nThe preceding final response was accepted, but the Task List is still active. " +
+                    "Continue the requested work. Update the existing steps without removing or rewriting them, " +
+                    "verify the result, and close the list when all steps are complete. " +
+                    "Another final response while the list is active will fail the run."
+            };
+        }
+
         private static JToken BoundData(JToken parsed, int maxDataTokens, AppSettings settings)
         {
             var compact = parsed.ToString(Formatting.None);

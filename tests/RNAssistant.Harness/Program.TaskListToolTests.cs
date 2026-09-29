@@ -87,7 +87,7 @@ namespace RNAssistant.Harness
 
                 var update = Command(TaskListToolCatalog.SetToolId,
                     "action", "save",
-                    "goal", "Prepare verified workbook report",
+                    "goal", "Prepare workbook report",
                     "steps", new JArray(
                         new JObject { ["text"] = "Inspect source data", ["status"] = "completed" },
                         new JObject { ["text"] = "Write the report", ["status"] = "in_progress" },
@@ -111,7 +111,7 @@ namespace RNAssistant.Harness
                 var updatedArtifact = session.Artifacts.Single(item => item.Id == secondArtifactId);
                 var planUri = ArtifactUri(session, updatedArtifact);
                 var read = ReadResource(new ResourceGatewayService(), session, planUri, "text", null, 32000).Result;
-                AssertContains(read.Text, "Prepare verified workbook report", "active plan revision reads through resources");
+                AssertContains(read.Text, "Prepare workbook report", "active plan revision reads through resources");
                 var removedRead = executor.ExecuteManual(Command("common.plan_read"), tools, new AppSettings(), false, false, session);
                 AssertEqual("unknown_tool", removedRead.ErrorCode, "legacy plan id stays unknown");
 

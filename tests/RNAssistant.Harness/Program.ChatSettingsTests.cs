@@ -576,7 +576,7 @@ namespace RNAssistant.Harness
             }
             AssertContains(defaults.SystemPrompt, "1. **Understand.** Translate the request into explicit deliverables",
                 "Agent begins by establishing deliverables and evidence");
-            AssertContains(defaults.SystemPrompt, "3. **Inspect.** Read enough of every requested Office/VBA/source",
+            AssertContains(defaults.SystemPrompt, "3. **Inspect and plan.** For complex work, make a bounded read-only discovery pass",
                 "Agent inspects requested sources before construction");
             AssertContains(defaults.SystemPrompt, "only after the primary solution is implemented and verified",
                 "Agent follows source, deliverable, verification and reuse dependency order");
@@ -586,13 +586,13 @@ namespace RNAssistant.Harness
                 "Agent completion gate checks likely defects and regressions before final");
             AssertContains(defaults.SystemPrompt, "fix them and verify again instead of finishing",
                 "Agent completion gate requires repair loops for in-scope defects");
-            AssertContains(defaults.SystemPrompt, "result is fit to hand off",
+            AssertContains(defaults.SystemPrompt, "good enough to hand off",
                 "Agent completion gate requires a quality decision before ending");
             AssertContains(defaults.SystemPrompt, "compare every explicit deliverable and every active task-list step",
                 "Agent verifies requested outcomes before ending the loop");
-            AssertContains(defaults.SystemPrompt, "An open active Task List is an unfinished requested deliverable",
+            AssertContains(defaults.SystemPrompt, "An active Task List prevents final completion",
                 "Agent completion gate treats open task list as unfinished work");
-            AssertContains(defaults.SystemPrompt, "the final action for a successful run is `common.task_list_set` with `action=close`",
+            AssertContains(defaults.SystemPrompt, "close it through `common.task_list_set` before final",
                 "Agent final success requires the task-list close tool");
             AssertContains(defaults.SystemPrompt, "cannot become success prose",
                 "tool and protocol errors cannot be reported as completed work");
@@ -600,9 +600,9 @@ namespace RNAssistant.Harness
                 "Agent does not degrade an artifact to bypass validation");
             AssertContains(defaults.AgentToolsPrompt, "discovery -> construction -> verification",
                 "complex Agent work creates a task list before execution");
-            AssertContains(defaults.AgentToolsPrompt, "common.task_tracking` and `common.task_list_set",
+            AssertContains(defaults.AgentToolsPrompt, "`common.task_tracking`, `common.task_list_set`, and `common.plan_doc_save`",
                 "task tracking explains separate skill and tool-schema loading");
-            AssertContains(defaults.AgentToolsPrompt, "`final=true` with empty `tool_calls` is not a successful completion",
+            AssertContains(defaults.AgentToolsPrompt, "Preserve the Task List goal and existing step text/order",
                 "tool policy prevents ending while task list is still active");
             AssertContains(defaults.AgentToolsPrompt, "never add an inner `arguments`",
                 "tool arguments are supplied at the schema root");

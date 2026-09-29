@@ -20,7 +20,7 @@ namespace RNAssistant.Office.Tools
         internal static IEnumerable<ToolCatalogEntry> GetTools()
         {
             yield return Projection(SetToolId,
-                "Task list: Save the complete visible checklist, or close the active checklist with a terminal outcome. Runtime owns list and stable step identity.",
+                "Task list: Save the complete visible checklist, keeping the active goal and existing step text/order; update statuses or append stages. Close it with a terminal outcome. Runtime owns list and stable step identity.",
                 Schema(), "task_list_set");
         }
 
@@ -39,7 +39,7 @@ namespace RNAssistant.Office.Tools
             var action = new JObject
             {
                 ["type"] = "string",
-                ["description"] = "Use save to create or replace the active list; use close only after its steps are terminal.",
+                ["description"] = "Use save to create or update the active list without removing existing steps; use close for a terminal outcome.",
                 ["enum"] = new JArray("save", "close")
             };
             var steps = new JObject

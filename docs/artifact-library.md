@@ -1130,10 +1130,12 @@ Only domain-owned mutable resources expose Save/Delete:
 
 `Office.Services.PlanDocumentService` owns Plan domain rules; the document
 authority owns durable lineage as specified in the implemented slice above.
-`common.plan_doc_save` validates non-empty title/Markdown/status without normalizing
+`common.plan_doc_save` is available in Plan and Agent. It validates non-empty title/Markdown/status without normalizing
 the Markdown: leading/trailing whitespace and hard-break spaces are stored exactly.
 The service creates a plan when absent; otherwise it resolves the active exact
-artifact and appends `vN+1` as its linear child. Committed duplicate, skipped or
+artifact and appends `vN+1` as its linear child. Explicit `startNew=true` creates
+an independent selected plan for another task and retains the previous lineage.
+Committed duplicate, skipped or
 branched lineage fails closed; disposable chat metadata is rebuilt from that owner.
 `common.plan_doc_restore` accepts only a user-visible version; the
 service binds the same exact-current guard, resolves one exact non-tombstone revision

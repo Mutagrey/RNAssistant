@@ -28,8 +28,24 @@ namespace RNAssistant.Office.Services
                     "The active task list is unavailable or ambiguous; reset the chat before saving.",
                     "task_list_active_revision_invalid", false);
             }
-            return Update(session, currentArtifact.Id, goal, true,
-                BindStepIds(steps, current), true, beforeMutation);
+            if (current.Steps == null || current.Steps.Any(step => step == null))
+                return TaskListMutation.Fail(
+                    "The active task-list steps are unavailable; reset the chat before saving.",
+                    "task_list_active_revision_invalid", false);
+            if (!string.Equals((goal ?? string.Empty).Trim(), current.Goal,
+                    StringComparison.Ordinal))
+                return TaskListMutation.Fail(
+                    "The active task-list goal cannot change. Close it as superseded before starting a different task.",
+                    "task_list_goal_changed", false);
+            if (steps == null || steps.Count < current.Steps.Count ||
+                current.Steps.Where((step, index) =>
+                    !string.Equals(step.Text, steps[index] == null ? null : (steps[index].Text ?? string.Empty).Trim(),
+                        StringComparison.Ordinal)).Any())
+                return TaskListMutation.Fail(
+                    "Existing task-list steps must keep their text and order. Update statuses, append steps, or supersede the list.",
+                    "task_list_steps_changed", false);
+            return Update(session, currentArtifact.Id,
+                BindStepIds(steps, current), beforeMutation);
         }
 
         internal TaskListMutation CloseActive(ChatSession session,
@@ -71,8 +87,7 @@ namespace RNAssistant.Office.Services
         }
 
         private TaskListMutation Update(ChatSession session, string id,
-            string goal, bool hasGoal, List<ChatTaskStep> steps, bool hasSteps,
-            Action beforeMutation)
+            List<ChatTaskStep> steps, Action beforeMutation)
         {
             RequireSession(session);
             ChatTaskList current;
@@ -90,16 +105,8 @@ namespace RNAssistant.Office.Services
                 return TaskListMutation.Fail("Task list is not active: " + id,
                     "task_list_not_active", false);
             }
-            if (!hasGoal && !hasSteps)
-            {
-                return TaskListMutation.Fail(
-                    "Task-list update requires goal and/or steps.",
-                    "task_list_update_empty", true);
-            }
-
             var updated = Clone(current);
-            if (hasGoal) updated.Goal = goal;
-            if (hasSteps) updated.Steps = steps ?? new List<ChatTaskStep>();
+            updated.Steps = steps ?? new List<ChatTaskStep>();
             Validate(updated);
             var artifact = CreateArtifact(updated, previous,
                 Math.Max(1, previous.Revision) + 1);
@@ -132,10 +139,10 @@ namespace RNAssistant.Office.Services
             closed.Status = NormalizeOutcome(outcome);
             Validate(closed);
             if (closed.Status == "completed" && closed.Steps.Any(step =>
-                step.Status != "completed" && step.Status != "cancelled"))
+                step.Status != "completed"))
             {
                 return TaskListMutation.Fail(
-                    "A completed task list cannot contain pending, in_progress, or blocked steps.",
+                    "A completed task list requires every step to be completed.",
                     "task_list_not_terminal", false);
             }
             var artifact = CreateArtifact(closed, selectedArtifact,
@@ -317,28 +324,14 @@ namespace RNAssistant.Office.Services
         {
             var prior = (current == null ? null : current.Steps) ??
                 new List<ChatTaskStep>();
-            var used = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
             var result = new List<ChatTaskStep>();
             var index = 0;
             foreach (var step in requested ?? new ChatTaskStep[0])
             {
                 var text = step == null ? string.Empty : (step.Text ?? string.Empty).Trim();
-                var match = prior.FirstOrDefault(candidate => candidate != null &&
-                    !string.IsNullOrWhiteSpace(candidate.Id) &&
-                    !used.Contains(candidate.Id) &&
-                    string.Equals((candidate.Text ?? string.Empty).Trim(), text,
-                        StringComparison.OrdinalIgnoreCase));
-                if (match == null && index < prior.Count)
-                {
-                    var positional = prior[index];
-                    if (positional != null &&
-                        !string.IsNullOrWhiteSpace(positional.Id) &&
-                        !used.Contains(positional.Id)) match = positional;
-                }
-                var id = match == null
+                var id = index >= prior.Count
                     ? "step_" + Guid.NewGuid().ToString("N")
-                    : match.Id;
-                used.Add(id);
+                    : prior[index].Id;
                 result.Add(new ChatTaskStep
                 {
                     Id = id,

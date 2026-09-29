@@ -26,11 +26,12 @@ namespace RNAssistant.Office.Services
             string markdown,
             string status,
             Action beforeMutation,
-            string creationId)
+            string creationId,
+            bool startNew = false)
         {
             RequireSession(session);
             if (string.IsNullOrWhiteSpace(session.ActivePlanDocumentArtifactId))
-                return Create(session, title, markdown, status, beforeMutation, creationId);
+                return Create(session, title, markdown, status, beforeMutation, creationId, false);
 
             var current = FindActive(session);
             var planId = PlanId(current);
@@ -41,6 +42,8 @@ namespace RNAssistant.Office.Services
                     "plan_active_revision_invalid",
                     false);
             }
+            if (startNew)
+                return Create(session, title, markdown, status, beforeMutation, creationId, true);
             return Update(session, planId, current.Id, title, true,
                 markdown, status, beforeMutation);
         }
@@ -100,10 +103,11 @@ namespace RNAssistant.Office.Services
             string markdown,
             string status,
             Action beforeMutation,
-            string creationId)
+            string creationId,
+            bool startNew)
         {
             RequireSession(session);
-            if (!string.IsNullOrWhiteSpace(session.ActivePlanDocumentArtifactId))
+            if (!startNew && !string.IsNullOrWhiteSpace(session.ActivePlanDocumentArtifactId))
             {
                 return PlanDocumentMutation.Fail(
                     "This chat already has an active plan document; update it instead.",

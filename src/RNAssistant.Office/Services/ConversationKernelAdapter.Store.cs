@@ -37,6 +37,11 @@ namespace RNAssistant.Office.Services
                     if (fact.Response.ToolCalls.Count == 0 && !fact.Response.Final)
                         _modelSession.AppendNoToolCheckpoint(fact.Response.Message,
                             _lastModel == null ? null : _lastModel.Completion);
+                    else if (fact.Response.ToolCalls.Count == 0 && fact.Response.Final &&
+                        _policy.Mode != ChatModes.Chat &&
+                        !string.IsNullOrWhiteSpace(_session.ActiveTaskListArtifactId))
+                        _modelSession.AppendDeferredFinal(fact.Response.Message,
+                            _lastModel == null ? null : _lastModel.Completion);
                     for (var index = 0; index < fact.Response.ToolCalls.Count; index++)
                         _modelSession.AppendToolCall(new AgentToolCall
                             { Id = fact.Response.ToolCalls[index].Id, Name = fact.Response.ToolCalls[index].Name,
@@ -86,6 +91,25 @@ namespace RNAssistant.Office.Services
             RunViewStateProjector.StampCurrentRun(_session);
             _conversations.Save(_session);
             if (_saved != null) _saved(_session);
+        }
+
+        public FinalResponseDecision EvaluateFinalResponse()
+        {
+            if (_policy.Mode == ChatModes.Chat ||
+                string.IsNullOrWhiteSpace(_session.ActiveTaskListArtifactId))
+                return FinalResponseDecision.Complete;
+            var acceptedFinals = _session.Messages.Count(message =>
+            {
+                if (message == null || message.RunId != _session.LastRun.RunId ||
+                    !message.ProtocolMessage || message.Role != "assistant" ||
+                    message.ResponseStatus != AgentResponseStatuses.InProgress)
+                    return false;
+                var parsed = ConversationResponseHistoryReader.Read(message);
+                return parsed.Success && parsed.Response.Final && parsed.Response.ToolCalls.Count == 0;
+            });
+            return acceptedFinals == 1
+                ? FinalResponseDecision.Continue
+                : FinalResponseDecision.Fail;
         }
 
         private ChatMessage ProjectToolCompletion(AgentRunEvent fact)

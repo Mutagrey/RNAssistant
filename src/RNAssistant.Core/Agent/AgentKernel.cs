@@ -17,15 +17,17 @@ namespace RNAssistant.Core.Agent
         private readonly IRunStore _store;
         private readonly Func<DateTime> _utcNow;
         private readonly Func<string> _newCallId;
+        private readonly IRunCompletionGate _completionGate;
 
         public AgentKernel(IModelProtocol model, IToolRuntime tools, IRunStore store, Func<DateTime> utcNow = null,
-            Func<string> newCallId = null)
+            Func<string> newCallId = null, IRunCompletionGate completionGate = null)
         {
             _model = model ?? throw new ArgumentNullException(nameof(model));
             _tools = tools ?? throw new ArgumentNullException(nameof(tools));
             _store = store ?? throw new ArgumentNullException(nameof(store));
             _utcNow = utcNow ?? (() => DateTime.UtcNow);
             _newCallId = newCallId ?? (() => "call_" + Guid.NewGuid().ToString("N"));
+            _completionGate = completionGate;
         }
 
         public async Task<AgentRunResult> RunAsync(AgentRunRequest request, CancellationToken cancellationToken)
@@ -122,7 +124,26 @@ namespace RNAssistant.Core.Agent
                 if (response.ToolCalls.Count == 0)
                 {
                     if (response.Final)
-                        return await FinishAsync(state, RunLifecycle.Completed, "model_loop_ended", response.Message).ConfigureAwait(false);
+                    {
+                        FinalResponseDecision decision;
+                        try
+                        {
+                            decision = _completionGate == null
+                                ? FinalResponseDecision.Complete
+                                : _completionGate.EvaluateFinalResponse();
+                        }
+                        catch (Exception ex)
+                        {
+                            return await FinishAsync(state, RunLifecycle.Failed,
+                                "completion_gate_failure", ex.Message).ConfigureAwait(false);
+                        }
+                        if (decision == FinalResponseDecision.Complete)
+                            return await FinishAsync(state, RunLifecycle.Completed, "model_loop_ended", response.Message).ConfigureAwait(false);
+                        if (decision == FinalResponseDecision.Fail || state.Iterations >= state.Limits.MaxIterations)
+                            return await FinishAsync(state, RunLifecycle.Failed, "task_list_open",
+                                "The model tried to finish while the Task List is still active.").ConfigureAwait(false);
+                        continue;
+                    }
                     state.NoToolCheckpoints++;
                     if (state.NoToolCheckpoints >= MaximumConsecutiveNoToolCheckpoints)
                         return await FinishAsync(state, RunLifecycle.Failed, "model_loop_stalled",
