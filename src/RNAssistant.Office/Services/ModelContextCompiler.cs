@@ -74,6 +74,7 @@ namespace RNAssistant.Office.Services
             IReadOnlyList<ContextNote> notes, IReadOnlyList<ToolCatalogEntry> tools,
             AppSettings settings, int budget, bool enforceBudget = true)
         {
+            IReadOnlyList<SkillDefinition> projectionSkills = null;
             var receipt = new ContextReceipt
             {
                 SnapshotId = "ctx_" + Guid.NewGuid().ToString("N"),
@@ -197,8 +198,9 @@ namespace RNAssistant.Office.Services
                 string error;
                 var result = atom.Messages[1];
                 if (!ToolResultHistoryReader.TryRead(result, out wire, out error)) continue;
+                if (projectionSkills == null) projectionSkills = authority.Skills.Skills;
                 var modelResult = ModelToolResultProjection.Project(
-                    result, tools, authority.Skills.Skills);
+                    result, tools, projectionSkills);
                 ToolResultWireReadResult modelWire;
                 if (!ToolResultHistoryReader.TryRead(
                     modelResult, out modelWire, out error)) continue;
@@ -287,7 +289,10 @@ namespace RNAssistant.Office.Services
                     ProjectSharedContext(message, authority);
                     if (message.ToolResultProtocolVersion == ToolResultWire.CurrentVersion &&
                         !string.Equals(message.Role, "assistant", StringComparison.OrdinalIgnoreCase))
-                        atom.Messages[index] = ModelToolResultProjection.Project(message, tools, authority.Skills.Skills);
+                    {
+                        if (projectionSkills == null) projectionSkills = authority.Skills.Skills;
+                        atom.Messages[index] = ModelToolResultProjection.Project(message, tools, projectionSkills);
+                    }
                     else if ((message.Content ?? string.Empty).StartsWith("RESOURCE_MEDIA_INPUT", StringComparison.Ordinal))
                     {
                         // The durable media fact keeps exact provenance. The detached

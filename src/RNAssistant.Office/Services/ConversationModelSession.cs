@@ -419,7 +419,8 @@ namespace RNAssistant.Office.Services
             bool retainAuthority)
         {
             var skills = _skillSnapshot;
-            if (retainAuthority) _skills = skills.Skills;
+            var skillDefinitions = skills.Skills;
+            if (retainAuthority) _skills = skillDefinitions;
             var facts = PromptBudgetComposer.ConversationHistory(_session, true, false);
             var currentIndex = facts.FindIndex(item => item.Id == _currentUserId);
             var current = currentIndex < 0 ? null : facts[currentIndex];
@@ -459,8 +460,8 @@ namespace RNAssistant.Office.Services
                 _session.Revision);
             if (retainAuthority) _currentAuthority = frozen;
             var required = new ConversationPromptComposer().BuildRequiredMessages(_mode, _userText, null,
-                tools, skills.Skills, null, _settings, _session, null, true, 0,
-                _toolPack.CapabilityContext(skills.Skills, tools));
+                tools, skillDefinitions, null, _settings, _session, null, true, 0,
+                _toolPack.CapabilityContext(skillDefinitions, tools));
             if (packState != null) required.Add(packState);
             return _compiler.Compile(frozen, required, facts, _context?.Notes, _runnableCatalog,
                 _settings, RequestMessageBudget(tools), enforceBudget);
