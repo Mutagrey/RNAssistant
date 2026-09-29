@@ -98,9 +98,9 @@ namespace RNAssistant.Core.Storage
             }
 
             var operationsToken = sessionEvent.Data["Operations"];
-            var operations = operationsToken == null
-                ? new List<SessionOperation>()
-                : operationsToken.ToObject<List<SessionOperation>>();
+            var operations = operationsToken as JArray;
+            if (operationsToken != null && operationsToken.Type != JTokenType.Null && operations == null)
+                throw new JsonException("Session commit operations must be an array.");
             ApplyOperations(operations);
         }
 
@@ -348,13 +348,20 @@ namespace RNAssistant.Core.Storage
                 (root["Artifacts"] as JArray ?? new JArray()).OfType<JObject>().Select(HeaderArtifact.FromToken));
         }
 
-        private void ApplyOperations(IEnumerable<SessionOperation> operations)
+        private void ApplyOperations(IEnumerable<JToken> operations)
         {
-            foreach (var operation in operations ?? new List<SessionOperation>())
+            foreach (var token in operations ?? new JToken[0])
             {
-                if (operation == null || string.IsNullOrWhiteSpace(operation.Type)) continue;
-                var data = operation.Data ?? new JObject();
-                switch (operation.Type)
+                if (token == null || token.Type == JTokenType.Null) continue;
+                var operation = token as JObject;
+                if (operation == null) throw new JsonException("Session commit operation must be an object.");
+                var type = StringValue(operation["Type"]);
+                if (string.IsNullOrWhiteSpace(type)) continue;
+                var dataToken = operation["Data"];
+                var data = dataToken == null || dataToken.Type == JTokenType.Null
+                    ? new JObject()
+                    : dataToken as JObject ?? throw new JsonException("Session commit operation data must be an object.");
+                switch (type)
                 {
                     case SessionOperationTypes.SessionMetadataSet:
                         ApplyMetadata(data);
@@ -397,7 +404,7 @@ namespace RNAssistant.Core.Storage
                         _artifacts.Reorder(data["Ids"] as JArray);
                         break;
                     default:
-                        throw new JsonException("Unsupported session operation: " + operation.Type);
+                        throw new JsonException("Unsupported session operation: " + type);
                 }
             }
         }
