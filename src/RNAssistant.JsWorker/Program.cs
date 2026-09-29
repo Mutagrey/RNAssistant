@@ -1,5 +1,6 @@
 using System;
 using System.IO;
+using System.Text;
 using System.Threading.Tasks;
 using Jint;
 using Newtonsoft.Json;
@@ -50,7 +51,8 @@ namespace RNAssistant.JsWorker
             try { return RunAsync().GetAwaiter().GetResult(); }
             catch (Exception ex)
             {
-                Console.Out.WriteLine(new JObject { ["type"] = "error", ["message"] = ex.Message }.ToString(Formatting.None));
+                Console.Out.WriteLine(new JObject { ["type"] = "error",
+                    ["message"] = (ex.Message ?? "JavaScript failed.").Substring(0, Math.Min((ex.Message ?? "JavaScript failed.").Length, 4096)) }.ToString(Formatting.None));
                 Console.Out.Flush();
                 return 1;
             }
@@ -82,7 +84,7 @@ namespace RNAssistant.JsWorker
             if (value.IsUndefined() || value.IsNull())
                 throw new InvalidDataException("JS must return a JSON-serializable value.");
             var result = value.AsString();
-            if (result.Length > 1024 * 1024)
+            if (Encoding.UTF8.GetByteCount(result) > 1024 * 1024)
                 throw new InvalidDataException("JS result exceeds 1 MiB.");
             Console.Out.WriteLine(new JObject { ["type"] = "result", ["json"] = result }.ToString(Formatting.None));
             Console.Out.Flush();
@@ -91,6 +93,8 @@ namespace RNAssistant.JsWorker
 
         private static string Bridge(string json)
         {
+            if (json == null || json.Length > 65536)
+                throw new InvalidDataException("JS resource request exceeds 64 KiB.");
             Console.Out.WriteLine(new JObject { ["type"] = "request", ["body"] = JObject.Parse(json) }.ToString(Formatting.None));
             Console.Out.Flush();
             var response = Console.In.ReadLine();
