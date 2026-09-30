@@ -8,7 +8,7 @@ session was disposed. The exact pending request at each switch is not recorded, 
 the photos alone do not prove every refusal was false. Code inspection confirms two
 risks: background catalog sync could overlap an exclusive chat selection, and panel
 shutdown disposed its controller/adapter before accepted bridge work had finished.
-Owner: WebView bridge/pane and `AssistantRuntime`; in-process binding teardown.
+Owner: WebView bridge/pane and `AssistantRuntime`; in-process and Desktop binding teardown.
 
 The UI now drains an existing catalog sync before selection and pauses new polls;
 timing telemetry does not reserve the binding. Bridge and resource handlers expose
@@ -17,6 +17,13 @@ without blocking the Office UI thread. VSTO add-in shutdown also defers its shar
 dispatcher cleanup until pane requests leave. Busy switching returns a typed error without
 a stack trace. Focused WebView sync and host-neutral bridge checks pass; live
 Windows Office/WebView2 and long-running cancellation still need exact-build verification.
+
+Desktop review found the same early-release path in `MainForm`: it disposed its
+original Office adapter immediately after `AssistantRuntime.Dispose`, before the
+runtime's accepted bridge/resource work had drained. Desktop now defers that adapter
+release until `ShutdownCompletion` without blocking its UI thread. The host-neutral
+checks above do not exercise Desktop/COM teardown; verify attach replacement and
+window close during a long request on Windows before closing this risk.
 
 ## Repeated confirmed VBA writes — 2026-09-30
 

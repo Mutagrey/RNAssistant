@@ -52,6 +52,57 @@ async function testPageBoundary() {
   assert.equal(context.state.messages.length, 240, "paging keeps the browser window bounded");
   assert.equal(context.state.messages[0].Id, "m-0");
   assert.equal(context.state.messages[239].Id, "m-239");
+
+  context.state.messageStartIndex = 80;
+  const previousSend = context.send;
+  context.send = async (...args) => {
+    const page = await previousSend(...args);
+    context.state.chatProjectionRevisions["chat-a"] = 8;
+    return page;
+  };
+  await context.loadPreviousChatMessages({ currentTarget: button });
+  assert.equal(context.state.messageStartIndex, 80,
+    "a page from the previous revision cannot be prepended to a newer transcript");
+}
+
+async function testStaleRefreshDoesNotSelectOldChat() {
+  const context = vm.createContext({ console });
+  context.window = context;
+  context.state = {
+    activeChatId: "chat-a", chatNavigationVersion: 1,
+    messageStartIndex: 80, messageTotalCount: 160,
+    chatProjectionRevisions: { "chat-a": 7 }, messages: []
+  };
+  context.send = async () => ({ chatId: "chat-a", sessionRevision: 8, startIndex: 0,
+    totalCount: 160, messages: [] });
+  context.log = () => {};
+  let resolveLoad, signalLoad;
+  const loadStarted = new Promise(resolve => { signalLoad = resolve; });
+  let applied = 0;
+  vm.runInContext(fs.readFileSync(path.join(root, "web/js/app-chat-session.js"), "utf8"), context);
+  context.loadChatState = () => {
+    signalLoad();
+    return new Promise(resolve => { resolveLoad = resolve; });
+  };
+  context.applyChatState = () => { applied++; };
+
+  const paging = context.loadPreviousChatMessages();
+  await loadStarted;
+  context.state.activeChatId = "chat-b";
+  context.state.chatNavigationVersion++;
+  resolveLoad({ chatId: "chat-a" });
+  await paging;
+  assert.equal(applied, 0, "late page recovery cannot restore the previous chat");
+  assert.equal(context.state.messagePageBusy, false);
+
+  context.state.activeChatId = "chat-a";
+  const latestStarted = new Promise(resolve => { signalLoad = resolve; });
+  const latest = context.jumpToLatestChatMessages();
+  await latestStarted;
+  context.state.chatNavigationVersion++;
+  resolveLoad({ chatId: "chat-a" });
+  await latest;
+  assert.equal(applied, 0, "late latest-page response cannot overwrite a newer navigation");
 }
 
 function testClosedRunIsLazy() {
@@ -89,6 +140,7 @@ function testClosedRunIsLazy() {
 
 (async () => {
   await testPageBoundary();
+  await testStaleRefreshDoesNotSelectOldChat();
   testClosedRunIsLazy();
   console.log("OK chat history paging and lazy run details");
 })().catch(error => { console.error(error); process.exitCode = 1; });

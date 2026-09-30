@@ -114,13 +114,20 @@ async function loadPreviousChatMessages(event) {
   var chatIdValue = state.activeChatId;
   var beforeIndex = state.messageStartIndex;
   var revision = state.chatProjectionRevisions[chatIdValue];
+  var navigationVersion = state.chatNavigationVersion;
   state.messagePageBusy = true;
   if (button) button.disabled = true;
   try {
     var page = await send("getPreviousChatMessages", { chatId: chatIdValue, beforeIndex: beforeIndex });
-    if (state.activeChatId !== chatIdValue || state.messageStartIndex !== beforeIndex) return;
+    if (state.activeChatId !== chatIdValue || state.messageStartIndex !== beforeIndex ||
+        state.chatProjectionRevisions[chatIdValue] !== revision ||
+        state.chatNavigationVersion !== navigationVersion) return;
     if (page.chatId !== chatIdValue || page.sessionRevision !== revision) {
-      applyChatState(await loadChatState(chatIdValue));
+      var refreshed = await loadChatState(chatIdValue);
+      if (state.activeChatId === chatIdValue && state.messageStartIndex === beforeIndex &&
+          state.chatProjectionRevisions[chatIdValue] === revision &&
+          state.chatNavigationVersion === navigationVersion)
+        applyChatState(refreshed);
       return;
     }
     var older = page.messages || [];
@@ -145,9 +152,13 @@ async function loadPreviousChatMessages(event) {
 async function jumpToLatestChatMessages() {
   if (!state.activeChatId) return;
   var chatIdValue = state.activeChatId;
+  var navigationVersion = state.chatNavigationVersion;
+  var revision = state.chatProjectionRevisions[chatIdValue];
   try {
     var response = await loadChatState(chatIdValue);
-    if (state.activeChatId === chatIdValue) applyChatState(response);
+    if (state.activeChatId === chatIdValue && state.chatNavigationVersion === navigationVersion &&
+        state.chatProjectionRevisions[chatIdValue] === revision)
+      applyChatState(response);
   } catch (error) {
     log(error.detail || error.message, "error");
   }

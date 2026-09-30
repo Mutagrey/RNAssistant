@@ -22,6 +22,7 @@ namespace RNAssistant.Desktop
         private Label _placeholder;
         private AssistantRuntime _runtime;
         private IDisposable _currentAdapter;
+        private Task _pendingRuntimeShutdown = Task.FromResult(true);
         private Rectangle _restoreBounds;
         private FormWindowState _restoreWindowState;
         private bool _fullScreen;
@@ -667,25 +668,29 @@ namespace RNAssistant.Desktop
 
         private void DisposeCurrentAdapter()
         {
-            if (_currentAdapter == null)
-            {
-                return;
-            }
-
-            _currentAdapter.Dispose();
+            var adapter = _currentAdapter;
             _currentAdapter = null;
+            if (adapter == null) return;
+            var shutdown = _pendingRuntimeShutdown;
+            if (shutdown.IsCompleted) ReleaseAdapter(adapter);
+            else shutdown.ContinueWith(ignored => ReleaseAdapter(adapter), TaskScheduler.Default);
         }
 
         private void DisposeCurrentRuntime()
         {
-            if (_runtime == null)
-            {
-                return;
-            }
-
-            _runtime.Controller.SettingsChanged -= OnSettingsChanged;
-            _runtime.Dispose();
+            var runtime = _runtime;
             _runtime = null;
+            if (runtime == null) return;
+            runtime.Controller.SettingsChanged -= OnSettingsChanged;
+            try { runtime.Dispose(); }
+            catch (Exception ex) { DesktopLog.Error("Desktop runtime cleanup failed.", ex); }
+            finally { _pendingRuntimeShutdown = runtime.ShutdownCompletion; }
+        }
+
+        private static void ReleaseAdapter(IDisposable adapter)
+        {
+            try { adapter.Dispose(); }
+            catch (Exception ex) { DesktopLog.Error("Desktop Office adapter cleanup failed.", ex); }
         }
 
         private void OnSettingsChanged(AppSettings settings)
