@@ -273,7 +273,7 @@ namespace RNAssistant.OfficeHosts
             {
                 var inspector = draft.GetInspector;
                 displayed = inspector != null &&
-                    NativeWindowInfo.ReadLongMemberPath(inspector, "HWND") != 0;
+                    NativeWindowInfo.ReadOutlookWindowHandle(inspector) != 0;
             }
             catch { }
             return new OutlookDraftBackendResult

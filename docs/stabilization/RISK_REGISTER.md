@@ -1,5 +1,22 @@
 # Stabilization risk register
 
+## Outlook VSTO pane report — 2026-09-29
+
+Windows photos show two `CS0019` errors in Outlook `OfficeHosts` code; the other
+missing-assembly errors follow the failed build. A separate debug photo shows the
+Outlook VSTO DLL loading and two first-chance `ArgumentException` entries without
+messages or stacks. Those entries do not establish why the pane was absent.
+
+The `CS0019` expressions are corrected. Outlook Inspector/Explorer handle lookup
+now uses `IOleWindow`; the prior `HWND` property lookup could yield zero and make
+the ribbon action return without showing the pane. The ribbon now reports failure
+to identify the active window. Owner: `RNAssistant.OfficeHosts` Outlook window
+binding and `RNAssistant.OutlookAddIn` pane activation. Evidence still needed on
+Windows x64 + Office x64 + VS 2022: rebuild `Debug | x64`, check the Outlook
+COM Add-in load state, click Open Assistant in Explorer and Inspector, and capture
+the full exception text/stack if either path fails. No Office qualification is
+claimed from the source correction.
+
 ## VBA patch incident — 2026-09-08
 
 Original incident open; overwrite defect reproduced and corrected host-neutral.

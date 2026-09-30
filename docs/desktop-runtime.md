@@ -78,6 +78,9 @@ path/title, folder/mail id и selection reference. Долгоживущие COM-
 - Mutations используют общий confirmation и ToolRuntime policy; успешный COM return
   сам по себе не доказывает effect.
 - Outlook выбирает Inspector раньше Explorer selection.
+- Outlook получает HWND окна Inspector/Explorer через COM `IOleWindow` для точной
+  привязки панели VSTO и Desktop target. Кнопка панели сообщает об ошибке, если
+  активное окно нельзя определить.
 - Desktop обнаруживает открытые Outlook mailboxes по StoreID и показывает их в дереве
   чатов независимо от текущей папки. На старте без другого target подключается
   первый обнаруженный ящик. Переход к чату другого ящика сначала перепривязывает

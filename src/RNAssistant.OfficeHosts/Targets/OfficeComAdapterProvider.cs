@@ -500,7 +500,7 @@ namespace RNAssistant.OfficeHosts
             OutlookBinding match = null;
             foreach (Outlook.Inspector inspector in application.Inspectors)
             {
-                var hwnd = NativeWindowInfo.ReadLongMemberPath(inspector, "HWND");
+                var hwnd = NativeWindowInfo.ReadOutlookWindowHandle(inspector);
                 var mail = inspector.CurrentItem as Outlook.MailItem;
                 if (mail == null || !MatchesOutlookWindow(hwnd, target) ||
                     (!string.IsNullOrWhiteSpace(target.EntryId) &&
@@ -519,7 +519,7 @@ namespace RNAssistant.OfficeHosts
             }
             foreach (Outlook.Explorer explorer in application.Explorers)
             {
-                var hwnd = NativeWindowInfo.ReadLongMemberPath(explorer, "HWND");
+                var hwnd = NativeWindowInfo.ReadOutlookWindowHandle(explorer);
                 var folder = explorer.CurrentFolder as Outlook.MAPIFolder;
                 if (folder == null || !MatchesOutlookWindow(hwnd, target) ||
                     (!string.IsNullOrWhiteSpace(target.FolderPath) &&

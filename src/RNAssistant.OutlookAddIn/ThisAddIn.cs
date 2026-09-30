@@ -1,6 +1,5 @@
 using System;
 using System.Collections.Generic;
-using System.Reflection;
 using Microsoft.Office.Core;
 using RNAssistant.Office;
 using RNAssistant.OfficeHosts;
@@ -40,7 +39,9 @@ namespace RNAssistant.OutlookAddIn
         public void ShowAssistant(string quickAction = null)
         {
             var entry = EnsureActivePane();
-            if (entry == null) return;
+            if (entry == null)
+                throw new InvalidOperationException(
+                    "Open an Outlook mail or folder window first.");
             if (!string.IsNullOrWhiteSpace(quickAction))
                 entry.Runtime.RunQuickAction(quickAction);
             entry.Pane.Visible = true;
@@ -56,7 +57,10 @@ namespace RNAssistant.OutlookAddIn
         {
             RemoveClosedPanes();
             var binding = ActiveBinding();
-            if (binding == null || binding.Hwnd == 0) return null;
+            if (binding == null) return null;
+            if (binding.Hwnd == 0)
+                throw new InvalidOperationException(
+                    "Could not identify the active Outlook window.");
             PaneEntry existing;
             if (_panes.TryGetValue(binding.Hwnd, out existing))
             {
@@ -264,16 +268,7 @@ namespace RNAssistant.OutlookAddIn
 
         private static long WindowHwnd(object window)
         {
-            if (window == null) return 0;
-            try
-            {
-                var property = window.GetType().GetProperty(
-                    "HWND", BindingFlags.Instance | BindingFlags.Public |
-                    BindingFlags.IgnoreCase);
-                if (property == null) return 0;
-                return Convert.ToInt64(property.GetValue(window, null));
-            }
-            catch { return 0; }
+            return NativeWindowInfo.ReadOutlookWindowHandle(window);
         }
 
         private static string SafeString(Func<string> getter)

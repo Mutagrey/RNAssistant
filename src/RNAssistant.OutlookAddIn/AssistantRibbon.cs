@@ -20,6 +20,13 @@ namespace RNAssistant.OutlookAddIn
         }
 
         public void OnRibbonLoad(IRibbonUI ribbon) { }
-        public void OpenAssistant(IRibbonControl control) { _addIn.ShowAssistant(); }
+        public void OpenAssistant(IRibbonControl control)
+        {
+            try { _addIn.ShowAssistant(); }
+            catch (System.Exception ex)
+            {
+                System.Windows.Forms.MessageBox.Show(ex.Message, "RN Assistant");
+            }
+        }
     }
 }

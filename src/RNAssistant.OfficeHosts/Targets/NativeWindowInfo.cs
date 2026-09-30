@@ -4,8 +4,31 @@ using System.Runtime.InteropServices;
 
 namespace RNAssistant.OfficeHosts
 {
-    internal static class NativeWindowInfo
+    public static class NativeWindowInfo
     {
+        [ComImport]
+        [Guid("00000114-0000-0000-C000-000000000046")]
+        [InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]
+        private interface IOleWindow
+        {
+            void GetWindow(out IntPtr hwnd);
+            void ContextSensitiveHelp([MarshalAs(UnmanagedType.Bool)] bool enterMode);
+        }
+
+        public static long ReadOutlookWindowHandle(object window)
+        {
+            if (window == null) return 0;
+            try
+            {
+                var oleWindow = window as IOleWindow;
+                if (oleWindow == null) return 0;
+                IntPtr hwnd;
+                oleWindow.GetWindow(out hwnd);
+                return hwnd.ToInt64();
+            }
+            catch { return 0; }
+        }
+
         public static int GetProcessId(long hwnd)
         {
             if (hwnd == 0)

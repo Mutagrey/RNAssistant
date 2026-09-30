@@ -28,7 +28,7 @@ namespace RNAssistant.OfficeHosts
             IOfficeStaDispatcher dispatcher,
             Outlook.Store targetStore = null)
         {
-            var bound = (object)targetMail ?? targetFolder ?? targetStore;
+            var bound = (object)targetMail ?? (object)targetFolder ?? targetStore;
             var runtimeDocumentId = DocumentIdentity.RuntimeKey(
                 HostName, bound ?? throw new ArgumentNullException("target"));
             _documentSession = new OutlookDocumentSession(

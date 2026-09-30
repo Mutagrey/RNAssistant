@@ -82,7 +82,7 @@ namespace RNAssistant.OfficeHosts
             get
             {
                 RequireOwnerAccess();
-                return (object)_mail ?? _folder ?? _store;
+                return (object)_mail ?? (object)_folder ?? _store;
             }
         }
 
@@ -341,7 +341,7 @@ namespace RNAssistant.OfficeHosts
 
         private static long ReadWindowHwnd(object window)
         {
-            return NativeWindowInfo.ReadLongMemberPath(window, "HWND");
+            return NativeWindowInfo.ReadOutlookWindowHandle(window);
         }
 
         private static string SafeString(Func<string> getter)
