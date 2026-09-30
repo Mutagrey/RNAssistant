@@ -67,12 +67,12 @@ namespace RNAssistant.Core.Storage
             get { return Interlocked.Read(ref _projectionIncrementalReplayCount); }
         }
 
-        internal long HeaderFullReplayCount
+        public long HeaderFullReplayCount
         {
             get { return Interlocked.Read(ref _headerFullReplayCount); }
         }
 
-        internal long HeaderIncrementalReplayCount
+        public long HeaderIncrementalReplayCount
         {
             get { return Interlocked.Read(ref _headerIncrementalReplayCount); }
         }
