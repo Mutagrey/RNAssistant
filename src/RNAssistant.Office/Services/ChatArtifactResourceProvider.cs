@@ -589,13 +589,6 @@ namespace RNAssistant.Office.Services
                  string.Equals(artifact.Kind, ChatArtifactKinds.Chart, StringComparison.OrdinalIgnoreCase));
         }
 
-        private static string SearchDescription(ChatArtifact artifact)
-        {
-            if (artifact == null || MarkdownDocumentIdentity.LogicalId(artifact.Id) == null)
-                return null;
-            return (string)JObject.Parse(artifact.MetadataJson ?? "{}")["description"];
-        }
-
         private static string TextRepresentationSha256(ChatArtifact artifact, ChatAttachment attachment)
         {
             return attachment != null

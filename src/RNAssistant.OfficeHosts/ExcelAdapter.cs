@@ -3,7 +3,6 @@ using System.Collections.Generic;
 using System.Text;
 using Excel = Microsoft.Office.Interop.Excel;
 using Newtonsoft.Json;
-using Newtonsoft.Json.Linq;
 using RNAssistant.Core.Models;
 using RNAssistant.Core.Tools;
 using RNAssistant.Office;
@@ -493,23 +492,6 @@ namespace RNAssistant.OfficeHosts
             var rows = Math.Min(totalRows, Math.Max(1, maxCells / columns));
             var start = range.Cells[1, 1] as Excel.Range;
             return start == null ? range : start.Resize[rows, columns];
-        }
-
-        private static object ToCellValue(JToken token)
-        {
-            if (token == null || token.Type == JTokenType.Null)
-            {
-                return null;
-            }
-            if (token.Type == JTokenType.Integer || token.Type == JTokenType.Float)
-            {
-                return token.Value<double>();
-            }
-            if (token.Type == JTokenType.Boolean)
-            {
-                return token.Value<bool>();
-            }
-            return token.Type == JTokenType.String ? token.Value<string>() : token.ToString(Formatting.None);
         }
 
         private static void AppendRangeValues(StringBuilder builder, Excel.Range range, int maxChars)

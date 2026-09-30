@@ -278,12 +278,5 @@ namespace RNAssistant.Office.Tools
             column = Math.Max(1, sourceIndex - lineStarts[lineIndex] + 1);
         }
 
-        private static string CurrentSourceNewLine(string source)
-        {
-            source = source ?? string.Empty;
-            return source.IndexOf("\r\n", StringComparison.Ordinal) >= 0
-                ? "\r\n"
-                : source.IndexOf('\r') >= 0 ? "\r" : "\n";
-        }
     }
 }

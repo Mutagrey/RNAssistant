@@ -547,11 +547,6 @@ function bindSettingsActions() {
   }
 }
 
-function activeSettingsPage() {
-  var active = document.querySelector(".settings-nav-button.active");
-  return active ? active.getAttribute("data-settings-page") : "connection";
-}
-
 function updateSettingsSaveButton() {
   var row = document.querySelector(".settings-actions-row");
   var button = $("saveSettingsButton");

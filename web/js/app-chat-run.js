@@ -208,24 +208,6 @@ async function submitChatInput() {
   sendChat(text, attachments, targetChatId);
 }
 
-function retryFailedSend() {
-  if (currentActiveSend() || isPendingChatSubmit(state.activeChatId) || hasActiveMessageEdit() ||
-    (typeof pendingAgentApprovalActivity === "function" && pendingAgentApprovalActivity()) ||
-    !state.failedSend || (!state.failedSend.text && !(state.failedSend.attachments || []).length)) {
-    return;
-  }
-
-  markLocalMessage(state.failedSend.text, { Pending: true, Failed: false });
-  updateEstimatedContextUsage();
-  renderMessages({ forceScroll: true });
-  renderChatSessions();
-  renderContextMeter();
-  var text = state.failedSend.text;
-  var attachments = state.failedSend.attachments || [];
-  clearSendError();
-  sendChat(text, attachments, state.activeChatId);
-}
-
 function stopActiveSend() {
   var activeSend = currentActiveSend();
   if (!activeSend || activeSend.canceling) {

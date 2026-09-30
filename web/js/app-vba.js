@@ -13,35 +13,6 @@ function setVbaEditorCode(code) {
   $("vbaCodeInput").value = code || "";
 }
 
-function renderVbaCodePreview() {
-  var preview = $("vbaCodePreview");
-  var module = selectedVbaModule();
-  if (!preview) {
-    return;
-  }
-
-  preview.innerHTML = "";
-  if (!module) {
-    preview.textContent = state.bridgeUnavailable ? "Office bridge недоступен." : "Модуль не выбран.";
-    return;
-  }
-  if (!hasVbaModuleCode(module)) {
-    preview.textContent = "Код модуля еще не загружен.";
-    return;
-  }
-
-  var pre = document.createElement("pre");
-  var code = document.createElement("code");
-  code.className = "language-vbnet";
-  code.dataset.language = "vba";
-  code.textContent = vbaEditorCode() || "' Пустой модуль";
-  pre.appendChild(code);
-  preview.appendChild(pre);
-  if (typeof highlightCode === "function") {
-    highlightCode(code);
-  }
-}
-
 function setVbaMode(mode) {
   if (typeof syncCodeEditors === "function") {
     syncCodeEditors(["vbaCodeInput"]);
