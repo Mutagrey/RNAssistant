@@ -387,6 +387,7 @@ namespace RNAssistant.Harness
                 Test("chat sessions: addressed transient survives document switch", AddressedTransientSessionSurvivesDocumentSwitch),
                 Test("chat sessions: addressed id does not fallback", AddressedSessionDoesNotFallbackToDifferentChat),
                 Test("chat sessions: empty drafts are transient", EmptyChatDraftsAreNotPersisted),
+                Test("chat sessions: Office host row persists empty chat", OfficeHostRowPersistsEmptyChat),
                 Test("chat sessions: delete selects remaining projection", DeleteSelectsRemainingProjection),
                 Test("chat sessions: background save keeps active chat", BackgroundSaveKeepsActiveChat),
                 Test("chat sessions: active persisted state refreshes", LoadingActiveChatRefreshesPersistedState),
@@ -780,7 +781,7 @@ namespace RNAssistant.Harness
                 Test("chart: requested type truncates", ChartArtifactHonorsRequestedTypeAndTruncates),
 
                 Test("bridge: init returns token", BridgeInitReturnsToken),
-                Test("bridge: Office launch accepts only supported hosts", BridgeOfficeLaunchUsesTypedHost),
+                Test("bridge: Office chat creation accepts only supported hosts", BridgeOfficeChatUsesTypedHost),
                 Test("bridge: typed transport failure preserves correlation", BridgeTransportFailureIsTypedAndCorrelated),
                 Test("bridge: chat list is catalog-only", BridgeListChatsIsCatalogOnly),
                 Test("bridge: message projection omits hidden bodies", BridgeMessageProjectionOmitsHiddenBodies),

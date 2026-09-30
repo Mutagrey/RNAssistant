@@ -619,34 +619,105 @@ namespace RNAssistant.Harness
             AssertTrue(!unauthorizedTiming["ok"].Value<bool>(), "client timing requires the bridge token");
         }
 
-        private static void BridgeOfficeLaunchUsesTypedHost()
+        private static void BridgeOfficeChatUsesTypedHost()
         {
             using (var bridge = new AssistantWebBridge(new AssistantController(), null))
             {
-                var launched = string.Empty;
-                bridge.OfficeHostLaunchRequested = host => launched = host;
+                var requested = string.Empty;
+                bridge.OfficeHostChatRequested = host =>
+                {
+                    requested = host;
+                    return Task.FromResult(new OfficeHostChatResponse
+                    {
+                        Host = host, ChatId = "chat-1", DocumentTitle = "Mailbox"
+                    });
+                };
                 var token = BridgeToken(bridge);
                 var init = JObject.Parse(bridge.HandleMessageAsync(
-                    "{\"id\":\"office-launch-init\",\"type\":\"init\",\"payload\":{}}")
+                    "{\"id\":\"office-chat-init\",\"type\":\"init\",\"payload\":{}}")
                     .GetAwaiter().GetResult());
-                AssertTrue((bool)init["payload"]["officeHostLaunchAvailable"],
-                    "initialized panel exposes Office launch capability");
+                AssertTrue((bool)init["payload"]["officeHostChatAvailable"],
+                    "initialized panel exposes Office chat capability");
                 var valid = JObject.Parse(bridge.HandleMessageAsync(JsonConvert.SerializeObject(new
                 {
-                    id = "office-launch", type = "launchOfficeHost", bridgeToken = token,
-                    payload = new OfficeHostLaunchPayload { Host = "Outlook" }
+                    id = "office-chat", type = "createOfficeHostChat", bridgeToken = token,
+                    payload = new OfficeHostChatPayload { Host = "Outlook" }
                 })).GetAwaiter().GetResult());
-                AssertTrue((bool)valid["ok"] && (bool)valid["payload"]["scheduled"],
-                    "typed Office host launch is accepted");
-                AssertEqual("Outlook", launched, "Outlook host reaches the launcher");
+                AssertTrue((bool)valid["ok"] && (string)valid["payload"]["chatId"] == "chat-1",
+                    "typed Office host chat creation returns a chat identity");
+                AssertEqual("Outlook", requested, "Outlook host reaches the chat coordinator");
 
                 var invalid = JObject.Parse(bridge.HandleMessageAsync(JsonConvert.SerializeObject(new
                 {
-                    id = "office-launch-invalid", type = "launchOfficeHost", bridgeToken = token,
-                    payload = new OfficeHostLaunchPayload { Host = "OUTLOOK.EXE" }
+                    id = "office-chat-invalid", type = "createOfficeHostChat", bridgeToken = token,
+                    payload = new OfficeHostChatPayload { Host = "OUTLOOK.EXE" }
                 })).GetAwaiter().GetResult());
                 AssertTrue(!(bool)invalid["ok"], "executable names are not accepted from WebView");
-                AssertEqual("Outlook", launched, "rejected host did not reach the launcher");
+                AssertEqual("Outlook", requested, "rejected host did not reach the chat coordinator");
+
+                bridge.OfficeHostChatRequested = host => Task.FromResult(
+                    new OfficeHostChatResponse { Host = host });
+                var missingChat = JObject.Parse(bridge.HandleMessageAsync(JsonConvert.SerializeObject(new
+                {
+                    id = "office-chat-no-effect", type = "createOfficeHostChat", bridgeToken = token,
+                    payload = new OfficeHostChatPayload { Host = "Outlook" }
+                })).GetAwaiter().GetResult());
+                AssertTrue(!(bool)missingChat["ok"], "missing chat identity is not reported as success");
+
+                var pending = new TaskCompletionSource<OfficeHostChatResponse>();
+                bridge.OfficeHostChatRequested = host => pending.Task;
+                var switching = bridge.HandleMessageAsync(JsonConvert.SerializeObject(new
+                {
+                    id = "office-chat-switch", type = "createOfficeHostChat", bridgeToken = token,
+                    payload = new OfficeHostChatPayload { Host = "Outlook" }
+                }));
+                var overlapping = JObject.Parse(bridge.HandleMessageAsync(JsonConvert.SerializeObject(new
+                {
+                    id = "office-chat-overlap", type = "getChatState", bridgeToken = token,
+                    payload = new ChatPayload { ChatId = "old" }
+                })).GetAwaiter().GetResult());
+                AssertTrue(!(bool)overlapping["ok"], "other requests cannot race with a host switch");
+                var targetController = new AssistantController();
+                bridge.RebindController(targetController);
+                pending.SetResult(new OfficeHostChatResponse
+                {
+                    Host = "Outlook", ChatId = "chat-2",
+                    Init = new InitResponse { Host = "Outlook", ActiveChatId = "chat-2" }
+                });
+                var switched = JObject.Parse(switching.GetAwaiter().GetResult());
+                AssertTrue((bool)switched["ok"], "bound host switch returns a verified chat");
+                var selected = JObject.Parse(bridge.HandleMessageAsync(JsonConvert.SerializeObject(new
+                {
+                    id = "office-chat-target", type = "getChatState", bridgeToken = token,
+                    payload = new ChatPayload { ChatId = "chat-2" }
+                })).GetAwaiter().GetResult());
+                AssertTrue((bool)selected["ok"], "bridge token stays valid after switching");
+                AssertEqual("chat-2", targetController.LastChatId, "later actions use the rebound controller");
+
+                var nextController = new AssistantController();
+                bridge.OfficeChatSelectionRequested = chatId =>
+                {
+                    bridge.RebindController(nextController);
+                    return Task.FromResult(new OfficeHostChatResponse
+                    {
+                        Host = "Word", ChatId = chatId,
+                        Init = new InitResponse { Host = "Word", ActiveChatId = chatId }
+                    });
+                };
+                var reopened = JObject.Parse(bridge.HandleMessageAsync(JsonConvert.SerializeObject(new
+                {
+                    id = "office-chat-reopen", type = "selectChat", bridgeToken = token,
+                    payload = new ChatPayload { ChatId = "word-chat" }
+                })).GetAwaiter().GetResult());
+                AssertTrue((bool)reopened["ok"] && (string)reopened["payload"]["init"]["host"] == "Word",
+                    "selecting an existing foreign chat can rebind the same bridge");
+                bridge.HandleMessageAsync(JsonConvert.SerializeObject(new
+                {
+                    id = "office-chat-reopened-state", type = "getChatState", bridgeToken = token,
+                    payload = new ChatPayload { ChatId = "word-chat" }
+                })).GetAwaiter().GetResult();
+                AssertEqual("word-chat", nextController.LastChatId,
+                    "later requests use the selected chat's controller");
             }
         }
 

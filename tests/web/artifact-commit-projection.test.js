@@ -123,8 +123,8 @@ vm.runInContext(fs.readFileSync(path.join(root, "web/js/app-chat-state.js"), "ut
   assert.match(attachments, /preparing:\s*"Подготовка"/);
   assert.match(attachments, /committed:\s*"Оригинал"/);
   const index = fs.readFileSync(path.join(root, "web/index.html"), "utf8");
-  assert.ok(index.includes("app-core.js?v=bridge-transport-20260908-1"), "core has the bridge transport cache key");
-  assert.ok(index.includes("app-chat-state.js?v=html-source-reuse-20260928-1"), "chat state has the HTML source reuse cache key");
+  assert.ok(index.includes("app-core.js?v=office-chat-20260930-3"), "core has the current cache key");
+  assert.ok(index.includes("app-chat-state.js?v=office-chat-20260930-3"), "chat state has the current cache key");
   assert.ok(index.includes("app-messages.js?v=action-severity-20260930-1"), "messages have the current cache key");
   assert.ok(index.includes("app-attachments.js?v=vba-upload-20260906-1"),
     "attachment staging has the current pre-dispatch barrier cache key");

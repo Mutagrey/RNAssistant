@@ -16,16 +16,41 @@ namespace RNAssistant.Office.WebView
 {
     public sealed class AssistantWebBridge : IDisposable
     {
-        private readonly AssistantController _controller;
+        private AssistantController _controller;
         private readonly Action<string> _postMessageJson;
         private readonly BridgeRequestCancellationRegistry _cancellations;
         private readonly string _bridgeToken;
+        private readonly object _hostSwitchSync = new object();
+        private int _requestsInFlight;
+        private bool _hostSwitchPending;
         private readonly object _resourceChangesSync = new object();
         private readonly Dictionary<string, ResourceChangedMessage> _resourceChanges = new Dictionary<string, ResourceChangedMessage>();
         private readonly Timer _resourceChangesTimer;
         private bool _resourceChangesDisposed;
         public Action<string, string, bool> MailboxNavigationRequested { get; set; }
-        public Action<string> OfficeHostLaunchRequested { get; set; }
+        public Func<string, Task<OfficeHostChatResponse>> OfficeHostChatRequested { get; set; }
+        public Func<string, Task<OfficeHostChatResponse>> OfficeChatSelectionRequested { get; set; }
+
+        public bool HostSwitchPending
+        {
+            get { lock (_hostSwitchSync) return _hostSwitchPending; }
+        }
+
+        public void RebindController(AssistantController controller)
+        {
+            if (controller == null) throw new ArgumentNullException("controller");
+            lock (_hostSwitchSync)
+            {
+                if (!_hostSwitchPending || _requestsInFlight != 1)
+                    throw new InvalidOperationException("Office host switch is not exclusive.");
+                _controller.ModelRequestDiagnostics -= ReportModelRequestDiagnostics;
+                _controller.ResourceAuthorityChanged -= ReportResourceChanged;
+                _controller = controller;
+                _controller.ModelRequestDiagnostics += ReportModelRequestDiagnostics;
+                _controller.ResourceAuthorityChanged += ReportResourceChanged;
+            }
+            lock (_resourceChangesSync) _resourceChanges.Clear();
+        }
 
         public AssistantWebBridge(AssistantController controller, Action<string> postMessageJson)
         {
@@ -58,12 +83,23 @@ namespace RNAssistant.Office.WebView
         {
             string id = null;
             CancellationTokenSource cancellationSource = null;
+            bool registered = false;
             try
             {
                 _cancellations.ThrowIfDisposed();
                 if (request == null) throw new InvalidOperationException("WebView bridge request is missing.");
                 id = request.Id;
                 var type = (request.Type ?? string.Empty).Trim();
+                lock (_hostSwitchSync)
+                {
+                    var needsExclusiveBinding = string.Equals(type, "createOfficeHostChat", StringComparison.Ordinal) ||
+                        (string.Equals(type, "selectChat", StringComparison.Ordinal) && OfficeChatSelectionRequested != null);
+                    if (_hostSwitchPending || (needsExclusiveBinding && _requestsInFlight != 0))
+                        throw new InvalidOperationException("Дождитесь завершения текущего запроса и повторите переключение.");
+                    _requestsInFlight++;
+                    registered = true;
+                    if (needsExclusiveBinding) _hostSwitchPending = true;
+                }
                 var timer = Stopwatch.StartNew();
                 var payload = request.Payload ?? JValue.CreateNull();
                 if (RequiresBridgeToken(type) && !string.Equals(request.BridgeToken, _bridgeToken, StringComparison.Ordinal))
@@ -153,9 +189,26 @@ namespace RNAssistant.Office.WebView
                         break;
                     case "selectChat":
                         var selectChat = Payload<ChatPayload>(payload);
-                        responsePayload = await RunBridgeWorkAsync(
-                            () => _controller.SelectChat(selectChat.ChatId),
-                            cancellationToken).ConfigureAwait(false);
+                        if (OfficeChatSelectionRequested == null)
+                            responsePayload = await RunBridgeWorkAsync(
+                                () => _controller.SelectChat(selectChat.ChatId),
+                                cancellationToken).ConfigureAwait(false);
+                        else
+                        {
+                            var selectedOfficeChat = await OfficeChatSelectionRequested(
+                                selectChat.ChatId).ConfigureAwait(false);
+                            if (selectedOfficeChat == null ||
+                                !string.Equals(selectedOfficeChat.ChatId, selectChat.ChatId, StringComparison.Ordinal) ||
+                                string.IsNullOrWhiteSpace(selectedOfficeChat.Host) ||
+                                (selectedOfficeChat.State == null && selectedOfficeChat.Init == null) ||
+                                (selectedOfficeChat.State != null &&
+                                 !string.Equals(selectedOfficeChat.State.ActiveChatId, selectChat.ChatId, StringComparison.Ordinal)) ||
+                                (selectedOfficeChat.Init != null &&
+                                 (!string.Equals(selectedOfficeChat.Init.ActiveChatId, selectChat.ChatId, StringComparison.Ordinal) ||
+                                  !string.Equals(selectedOfficeChat.Init.Host, selectedOfficeChat.Host, StringComparison.Ordinal))))
+                                throw new InvalidOperationException("Office chat selection did not verify the target binding.");
+                            responsePayload = selectedOfficeChat;
+                        }
                         break;
                     case "openDocument":
                         responsePayload = _controller.OpenDocument(Payload<ChatPayload>(payload).ChatId);
@@ -171,12 +224,22 @@ namespace RNAssistant.Office.WebView
                         MailboxNavigationRequested(mailbox.DocumentKey, mailbox.ChatId, mailbox.CreateNew);
                         responsePayload = new OutlookMailboxNavigationResponse { Scheduled = true };
                         break;
-                    case "launchOfficeHost":
-                        var launchHost = Payload<OfficeHostLaunchPayload>(payload);
-                        if (OfficeHostLaunchRequested == null || !IsSupportedOfficeHost(launchHost.Host))
-                            throw new InvalidOperationException("Office host launch is unavailable.");
-                        OfficeHostLaunchRequested(launchHost.Host);
-                        responsePayload = new OfficeHostLaunchResponse { Scheduled = true };
+                    case "createOfficeHostChat":
+                        var hostChat = Payload<OfficeHostChatPayload>(payload);
+                        if (OfficeHostChatRequested == null || !IsSupportedOfficeHost(hostChat.Host))
+                            throw new InvalidOperationException("Office host chat creation is unavailable.");
+                        var createdHostChat = await OfficeHostChatRequested(hostChat.Host).ConfigureAwait(false);
+                        if (createdHostChat == null || string.IsNullOrWhiteSpace(createdHostChat.ChatId) ||
+                            !string.Equals(createdHostChat.Host, hostChat.Host, StringComparison.Ordinal))
+                            throw new InvalidOperationException("Office host chat creation returned no verified chat.");
+                        if (createdHostChat.State != null &&
+                            !string.Equals(createdHostChat.State.ActiveChatId, createdHostChat.ChatId, StringComparison.Ordinal))
+                            throw new InvalidOperationException("Office host chat state does not match the created chat.");
+                        if (createdHostChat.Init != null &&
+                            (!string.Equals(createdHostChat.Init.Host, createdHostChat.Host, StringComparison.Ordinal) ||
+                             !string.Equals(createdHostChat.Init.ActiveChatId, createdHostChat.ChatId, StringComparison.Ordinal)))
+                            throw new InvalidOperationException("Office host binding does not match the created chat.");
+                        responsePayload = createdHostChat;
                         break;
                     case "deleteDocument":
                         var deleteDocument = Payload<DocumentPayload>(payload);
@@ -603,6 +666,14 @@ namespace RNAssistant.Office.WebView
             finally
             {
                 _cancellations.Release(id, cancellationSource);
+                if (registered)
+                {
+                    lock (_hostSwitchSync)
+                    {
+                        _requestsInFlight--;
+                        if (_requestsInFlight == 0) _hostSwitchPending = false;
+                    }
+                }
             }
         }
 
@@ -624,7 +695,7 @@ namespace RNAssistant.Office.WebView
             if (response != null)
             {
                 response.BridgeToken = _bridgeToken;
-                response.OfficeHostLaunchAvailable = OfficeHostLaunchRequested != null;
+                response.OfficeHostChatAvailable = OfficeHostChatRequested != null;
             }
 
             return response;

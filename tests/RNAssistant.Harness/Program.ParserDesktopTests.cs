@@ -727,6 +727,19 @@ namespace RNAssistant.Harness
 
             AssertEqual("Excel:Runtime:first", key, "unsaved document runtime identity");
             AssertEqual(0, properties.Count, "identity lookup does not dirty unsaved document");
+
+            var stable = DocumentIdentity.EnsureDocumentId("Excel", () => properties,
+                (value, id) => ((FakeDocumentProperties)value).Add(
+                    DocumentIdentity.PropertyName, false, 4, id));
+            AssertEqual(stable, DocumentIdentity.ForOfficeDocument(
+                "Excel", string.Empty, "Excel:Runtime:first", () => properties),
+                "explicit chat creation gives unsaved document a stable identity");
+            AssertEqual(stable, DocumentIdentity.ForOfficeDocument(
+                "Excel", "C:\\Docs\\Saved.xlsx", "Excel:Runtime:second", () => properties),
+                "stable chat identity survives Save As");
+            AssertEqual(stable, DocumentIdentity.EnsureDocumentId("Excel", () => properties,
+                (value, id) => { throw new InvalidOperationException("duplicate identity write"); }),
+                "existing identity is not rewritten");
         }
 
         private static void SavedDocumentIdentityUsesFullPathOrLegacyId()

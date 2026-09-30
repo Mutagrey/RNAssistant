@@ -456,6 +456,21 @@ namespace RNAssistant.Office.Services
 
         public ChatSession CreateChat(string title)
         {
+            var session = BuildNewChat(title);
+            SetActiveSession(session);
+            return session;
+        }
+
+        public ChatSession CreatePersistentChat(string title)
+        {
+            var session = BuildNewChat(title);
+            _conversations.Save(session);
+            SetActiveSession(session);
+            return session;
+        }
+
+        private ChatSession BuildNewChat(string title)
+        {
             LoadSession(null);
             var session = _conversations.CreateTransient(
                 _adapter.HostName,
@@ -464,7 +479,6 @@ namespace RNAssistant.Office.Services
                 string.IsNullOrWhiteSpace(title) ? "New chat" : title.Trim());
             BindDocumentAuthority(session, _adapter.HostName, _adapter.RuntimeDocumentKey, CurrentDocumentPath());
             UpdateCurrentDocumentMetadata(session);
-            SetActiveSession(session);
             return session;
         }
 

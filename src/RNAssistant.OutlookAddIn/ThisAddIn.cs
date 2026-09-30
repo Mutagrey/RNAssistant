@@ -1,7 +1,9 @@
 using System;
 using System.Collections.Generic;
 using Microsoft.Office.Core;
+using RNAssistant.Core.Storage;
 using RNAssistant.Office;
+using RNAssistant.Office.Diagnostics;
 using RNAssistant.OfficeHosts;
 using Outlook = Microsoft.Office.Interop.Outlook;
 
@@ -18,9 +20,19 @@ namespace RNAssistant.OutlookAddIn
 
         private void ThisAddIn_Startup(object sender, EventArgs e)
         {
-            _officeDispatcher = new OfficeUiDispatcher();
-            Application.ItemContextMenuDisplay += Application_ItemContextMenuDisplay;
-            InstallContextMenus();
+            try { RuntimeLog.Configure(AppDataPaths.CreateDefault().Root); }
+            catch { }
+            try
+            {
+                _officeDispatcher = new OfficeUiDispatcher();
+                Application.ItemContextMenuDisplay += Application_ItemContextMenuDisplay;
+                InstallContextMenus();
+            }
+            catch (Exception ex)
+            {
+                RuntimeLog.Error("Outlook add-in startup failed.", ex);
+                throw;
+            }
         }
 
         private void ThisAddIn_Shutdown(object sender, EventArgs e)
@@ -70,17 +82,20 @@ namespace RNAssistant.OutlookAddIn
                 RemovePane(binding.Hwnd);
             }
             if (!_creatingPanes.Add(binding.Hwnd)) return null;
+            AssistantRuntime runtime = null;
+            Microsoft.Office.Tools.CustomTaskPane pane = null;
             try
             {
-                var runtime = new AssistantRuntime(
+                runtime = new AssistantRuntime(
                     new UiThreadOfficeApplicationAdapter(
                         new OutlookAdapter(
                             Application, binding.Mail, binding.Folder,
                             binding.Inspector, binding.Explorer,
                             _officeDispatcher),
                         _officeDispatcher));
-                runtime.OfficeHostLaunchRequested = OfficeHostLauncher.OpenOrActivate;
-                var pane = CustomTaskPanes.Add(
+                runtime.OfficeHostChatRequested = host => OfficeHostChatCoordinator.CreateFromPanelAsync(runtime, host);
+                runtime.OfficeChatSelectionRequested = chatId => OfficeHostChatCoordinator.SelectFromPanelAsync(runtime, chatId);
+                pane = CustomTaskPanes.Add(
                     runtime.CreatePaneControl(), "RN Assistant", binding.Window);
                 pane.Width = 520;
                 var entry = new PaneEntry
@@ -92,6 +107,19 @@ namespace RNAssistant.OutlookAddIn
                 };
                 _panes[binding.Hwnd] = entry;
                 return entry;
+            }
+            catch (Exception ex)
+            {
+                RuntimeLog.Error("Outlook assistant pane creation failed.", ex);
+                if (pane != null)
+                {
+                    try { CustomTaskPanes.Remove(pane); } catch { }
+                }
+                if (runtime != null)
+                {
+                    try { runtime.Dispose(); } catch { }
+                }
+                throw;
             }
             finally
             {

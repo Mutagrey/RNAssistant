@@ -111,6 +111,7 @@
     <Compile Include="PowerPoint\PowerPointInteropBackend.cs" />
     <Compile Include="Targets\ExcelNativeObjectResolver.cs" />
     <Compile Include="Targets\OfficeHostLauncher.cs" />
+    <Compile Include="Targets\OfficeHostChatCoordinator.cs" />
     <Compile Include="Targets\NativeWindowInfo.cs" />
     <Compile Include="Targets\OfficeComAdapterProvider.cs" />
     <Compile Include="Targets\OfficeTargetEnumerator.cs" />

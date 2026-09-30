@@ -1,12 +1,16 @@
 using System;
 using System.IO;
+using System.Threading.Tasks;
+using RNAssistant.Office.Contracts;
+using RNAssistant.Office.Diagnostics;
 using RNAssistant.Office.WebView;
 
 namespace RNAssistant.Office
 {
     public sealed class AssistantRuntime : IDisposable
     {
-        private readonly IOfficeApplicationAdapter _adapter;
+        private IOfficeApplicationAdapter _adapter;
+        private bool _ownsAdapter;
         private AssistantPaneControl _paneControl;
         private bool _disposed;
 
@@ -25,7 +29,73 @@ namespace RNAssistant.Office
         public AssistantController Controller { get; private set; }
         public string RootPath { get; private set; }
         public Action<string, string, bool> MailboxNavigationRequested { get; set; }
-        public Action<string> OfficeHostLaunchRequested { get; set; }
+        public Func<string, Task<OfficeHostChatResponse>> OfficeHostChatRequested { get; set; }
+        public Func<string, Task<OfficeHostChatResponse>> OfficeChatSelectionRequested { get; set; }
+        public event Action<AssistantController, AssistantController> ControllerChanged;
+
+        public async Task<InitResponse> SwitchToAdapterAsync(
+            IOfficeApplicationAdapter adapter, string chatId, string expectedHost, string expectedDocumentKey)
+        {
+            if (adapter == null) throw new ArgumentNullException("adapter");
+            AssistantController nextController = null;
+            try
+            {
+                ThrowIfDisposed();
+                if (string.IsNullOrWhiteSpace(chatId)) throw new ArgumentException("A chat id is required.", "chatId");
+                Controller.EnsureHostSwitchReady();
+                nextController = new AssistantController(adapter);
+                if (!string.Equals(nextController.HostName, expectedHost, StringComparison.Ordinal) ||
+                    !string.Equals(nextController.DocumentKey, expectedDocumentKey, StringComparison.Ordinal))
+                    throw new InvalidOperationException("Office target изменился до переключения панели.");
+                var selected = nextController.SelectChat(chatId);
+                if (!string.Equals(selected.ActiveChatId, chatId, StringComparison.Ordinal))
+                    throw new InvalidOperationException("Созданный чат не выбран в целевом документе.");
+                var init = nextController.Initialize();
+                if (!string.Equals(init.Host, expectedHost, StringComparison.Ordinal) ||
+                    !string.Equals(init.DocumentKey, expectedDocumentKey, StringComparison.Ordinal) ||
+                    !string.Equals(init.ActiveChatId, chatId, StringComparison.Ordinal))
+                    throw new InvalidOperationException("Привязка панели к созданному чату не подтверждена.");
+                init.OfficeHostChatAvailable = OfficeHostChatRequested != null;
+                if (_paneControl == null || _paneControl.IsDisposed)
+                    throw new InvalidOperationException("Панель RN Assistant недоступна для переключения.");
+                Controller.EnsureHostSwitchReady();
+                await _paneControl.RebindControllerAsync(nextController).ConfigureAwait(false);
+                var previousController = Controller;
+                var previousAdapter = _adapter;
+                var ownedPreviousAdapter = _ownsAdapter;
+                Controller = nextController;
+                _adapter = adapter;
+                _ownsAdapter = true;
+                var changed = ControllerChanged;
+                if (changed != null)
+                {
+                    try { changed(previousController, nextController); }
+                    catch (Exception ex) { RuntimeLog.Error("Controller change notification failed.", ex); }
+                }
+                try { previousController.Dispose(); }
+                catch (Exception ex) { RuntimeLog.Error("Previous Office controller cleanup failed.", ex); }
+                if (ownedPreviousAdapter)
+                {
+                    var disposable = previousAdapter as IDisposable;
+                    if (disposable != null)
+                    {
+                        try { disposable.Dispose(); }
+                        catch (Exception ex) { RuntimeLog.Error("Previous Office adapter cleanup failed.", ex); }
+                    }
+                }
+                return init;
+            }
+            catch
+            {
+                if (!object.ReferenceEquals(Controller, nextController))
+                {
+                    var disposable = adapter as IDisposable;
+                    try { if (nextController != null) nextController.Dispose(); }
+                    finally { if (disposable != null) disposable.Dispose(); }
+                }
+                throw;
+            }
+        }
 
         public AssistantPaneControl CreatePaneControl()
         {
@@ -37,7 +107,8 @@ namespace RNAssistant.Office
 
             _paneControl = new AssistantPaneControl(Controller, ResolveWebRoot(RootPath));
             _paneControl.MailboxNavigationRequested = MailboxNavigationRequested;
-            _paneControl.OfficeHostLaunchRequested = OfficeHostLaunchRequested;
+            _paneControl.OfficeHostChatRequested = OfficeHostChatRequested;
+            _paneControl.OfficeChatSelectionRequested = OfficeChatSelectionRequested;
             return _paneControl;
         }
 
@@ -107,6 +178,11 @@ namespace RNAssistant.Office
             finally
             {
                 Controller.Dispose();
+                if (_ownsAdapter)
+                {
+                    var disposable = _adapter as IDisposable;
+                    if (disposable != null) disposable.Dispose();
+                }
             }
         }
 

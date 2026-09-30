@@ -15,13 +15,30 @@ async function runQuickAction(action) {
   switchTab("chat");
 }
 
-async function launchOfficeHost(host) {
-  if (state.bridgeUnavailable || !state.officeHostLaunchAvailable) return;
+async function createOfficeHostChat(host) {
+  if (state.bridgeUnavailable || !state.officeHostChatAvailable || state.officeHostChatPending ||
+      currentActiveSend() || hasActiveMessageEdit()) return;
+  if (typeof confirmDiscardHtmlWorkspaceChanges === "function" &&
+      !confirmDiscardHtmlWorkspaceChanges("Создать новый чат")) return;
+  var navigationVersion = beginChatNavigation();
+  state.officeHostChatPending = true;
+  renderChatSessions();
   try {
-    await send("launchOfficeHost", { host: host });
-    log("Запуск " + host + " запрошен.");
+    if (state.chatSyncPromise) await state.chatSyncPromise;
+    var result = await send("createOfficeHostChat", { host: host });
+    if (result.init) {
+      if (navigationVersion === state.chatNavigationVersion) applyInitState(result.init);
+    } else if (result.state) {
+      applyChatNavigationState(result.state, navigationVersion);
+    } else {
+      await synchronizeChatState(true);
+    }
+    log("Чат создан: " + host + (result.documentTitle ? " — " + result.documentTitle : "") + ".");
   } catch (error) {
     log(error.detail || error.message, "error");
+  } finally {
+    state.officeHostChatPending = false;
+    renderChatSessions();
   }
 }
 

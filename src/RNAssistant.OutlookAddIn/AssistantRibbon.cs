@@ -25,6 +25,7 @@ namespace RNAssistant.OutlookAddIn
             try { _addIn.ShowAssistant(); }
             catch (System.Exception ex)
             {
+                RNAssistant.Office.Diagnostics.RuntimeLog.Error("Outlook ribbon could not open the assistant.", ex);
                 System.Windows.Forms.MessageBox.Show(ex.Message, "RN Assistant");
             }
         }

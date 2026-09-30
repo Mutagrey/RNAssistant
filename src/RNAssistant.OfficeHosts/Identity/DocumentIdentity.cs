@@ -13,11 +13,6 @@ namespace RNAssistant.OfficeHosts.Identity
             var fallback = string.IsNullOrWhiteSpace(persistentPath)
                 ? runtimeKey
                 : (host ?? string.Empty) + ":Path:" + persistentPath.Trim();
-            if (string.IsNullOrWhiteSpace(persistentPath))
-            {
-                return fallback;
-            }
-
             try
             {
                 var properties = customPropertiesFactory == null ? null : customPropertiesFactory();
@@ -37,6 +32,24 @@ namespace RNAssistant.OfficeHosts.Identity
             {
                 return fallback;
             }
+        }
+
+        public static string EnsureDocumentId(
+            string host, Func<object> customPropertiesFactory,
+            Action<object, string> addProperty)
+        {
+            if (customPropertiesFactory == null || addProperty == null)
+                throw new ArgumentNullException("customPropertiesFactory");
+            var properties = customPropertiesFactory();
+            if (properties == null)
+                throw new InvalidOperationException("Office document properties are unavailable.");
+            var existing = ReadProperty(properties, PropertyName);
+            if (!string.IsNullOrWhiteSpace(existing)) return Key(host, existing);
+            var created = Guid.NewGuid().ToString("N");
+            addProperty(properties, created);
+            if (!string.Equals(ReadProperty(properties, PropertyName), created, StringComparison.Ordinal))
+                throw new InvalidOperationException("Office document identity could not be verified.");
+            return Key(host, created);
         }
 
         public static string RuntimeKey(string host, object document)

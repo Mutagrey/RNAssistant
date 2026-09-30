@@ -353,6 +353,26 @@ namespace RNAssistant.Office
             }
         }
 
+        public ChatStateResponse CreatePersistentChat(string title)
+        {
+            using (_chatRuns.ReserveMaintenance())
+            {
+                var bound = _adapter as IOfficeDocumentSessionProvider;
+                if (bound != null)
+                {
+                    var mismatch = OfficeDocumentExecutionGuard.Validate(_adapter,
+                        new OfficeDocumentExecutionExpectation
+                        {
+                            Host = _adapter.HostName,
+                            RuntimeDocumentKey = _adapter.RuntimeDocumentKey
+                        });
+                    if (mismatch != null) throw new OfficeDocumentGuardException(mismatch);
+                }
+                var session = _chatSessions.CreatePersistentChat(title);
+                return ChatState(session);
+            }
+        }
+
         public ChatStateResponse CreateDocumentChat(string title, string host, string documentKey, string documentTitle, string documentPath)
         {
             using (_chatRuns.ReserveMaintenance())
@@ -555,6 +575,12 @@ namespace RNAssistant.Office
             {
                 throw new InvalidOperationException("Сначала остановите выполняющиеся запросы во всех окнах RNAssistant.");
             }
+        }
+
+        public void EnsureHostSwitchReady()
+        {
+            if (_chatRuns.HasRuns())
+                throw new InvalidOperationException("Сначала остановите выполняющийся запрос в этой панели RN Assistant.");
         }
 
         private ChatStateResponse WithReservedChatState(ChatSession session, Action<ChatSession> action)

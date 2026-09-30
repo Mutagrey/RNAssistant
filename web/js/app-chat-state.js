@@ -475,13 +475,14 @@ function renderOfficeHostLaunchRows(list, query) {
     var button = document.createElement("button");
     button.type = "button";
     button.className = "chat-office-launch-row" + documentHostClass(host);
-    button.disabled = !!state.bridgeUnavailable || !state.officeHostLaunchAvailable;
-    button.title = button.disabled ? "Запуск Office недоступен" : "Открыть " + host;
+    button.disabled = !!state.bridgeUnavailable || !state.officeHostChatAvailable ||
+      !!state.officeHostChatPending || !!currentActiveSend() || !!hasActiveMessageEdit();
+    button.title = button.disabled ? "Создание чата недоступно" : "Создать чат в " + host;
     button.innerHTML = "<span class=\"chat-document-icon\">" + documentHostIcon(host) + "</span>" +
       "<span class=\"chat-office-launch-name\"></span>" +
-      "<span class=\"chat-office-launch-action\">Открыть</span>";
+      "<span class=\"chat-office-launch-action\">Новый чат</span>";
     button.querySelector(".chat-office-launch-name").textContent = host;
-    button.addEventListener("click", function () { launchOfficeHost(host); });
+    button.addEventListener("click", function () { createOfficeHostChat(host); });
     group.appendChild(button);
   });
   list.appendChild(group);

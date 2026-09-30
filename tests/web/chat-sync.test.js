@@ -116,6 +116,51 @@ function createSyncContext() {
   }
 
   {
+    const { context } = createSyncContext();
+    const applied = [];
+    context.confirmDiscardHtmlWorkspaceChanges = () => true;
+    context.renderChatSessions = () => {};
+    context.clearSendError = () => {};
+    context.log = () => {};
+    context.applyInitState = init => applied.push(init);
+    context.send = async type => {
+      assert.equal(type, "selectChat");
+      return { chatId: "word-chat", init: { host: "Word", activeChatId: "word-chat" } };
+    };
+    await context.selectChat("word-chat");
+    assert.equal(applied.length, 1, "existing foreign chat reloads the target host in this pane");
+    console.log("PASS Office chat selection: current pane applies target initialization");
+  }
+
+  {
+    const applied = [];
+    const chatContext = vm.createContext({ console });
+    chatContext.window = chatContext;
+    chatContext.state = {
+      bridgeUnavailable: false, officeHostChatAvailable: true,
+      officeHostChatPending: false, chatNavigationVersion: 0, chatSyncPromise: null
+    };
+    chatContext.currentActiveSend = () => null;
+    chatContext.hasActiveMessageEdit = () => false;
+    chatContext.beginChatNavigation = () => ++chatContext.state.chatNavigationVersion;
+    chatContext.renderChatSessions = () => {};
+    chatContext.confirmDiscardHtmlWorkspaceChanges = () => true;
+    chatContext.send = async () => ({ host: "Outlook", chatId: "outlook-chat", init: {
+      host: "Outlook", activeChatId: "outlook-chat"
+    } });
+    chatContext.applyInitState = init => applied.push(init);
+    chatContext.applyChatNavigationState = () => { throw new Error("old host state applied"); };
+    chatContext.synchronizeChatState = () => { throw new Error("catalog-only update applied"); };
+    chatContext.log = () => {};
+    vm.runInContext(fs.readFileSync(path.join(root, "web/js/app-chat.js"), "utf8"), chatContext,
+      { filename: "app-chat.js" });
+    await chatContext.createOfficeHostChat("Outlook");
+    assert.equal(applied.length, 1, "cross-host creation applies full target initialization");
+    assert.equal(applied[0].activeChatId, "outlook-chat");
+    console.log("PASS Office host chat: current pane applies target initialization");
+  }
+
+  {
     const posted = [];
     const focusContext = vm.createContext({ console, setTimeout, clearTimeout });
     focusContext.window = focusContext;
@@ -146,13 +191,13 @@ function createSyncContext() {
   }
 
   const index = fs.readFileSync(path.join(root, "web/index.html"), "utf8");
-  assert.ok(index.includes("app-core.js?v=bridge-transport-20260908-1"), "app-core.js cache key was bumped");
+  assert.ok(index.includes("app-core.js?v=office-chat-20260930-3"), "app-core.js cache key was bumped");
   assert.ok(index.includes("app-chat-run.js?v=response-render-timing-20260928-1"), "chat run cache key was bumped");
   assert.ok(index.includes("app-chat-edit.js?v=chat-sync-20260903-1"), "chat edit cache key was bumped");
-  assert.ok(index.includes("app-chat-session.js?v=startup-timing-20260928-1"), "chat session cache key was bumped");
+  assert.ok(index.includes("app-chat-session.js?v=office-chat-20260930-3"), "chat session cache key was bumped");
   assert.ok(fs.readFileSync(path.join(root, "web/js/app.js"), "utf8")
     .includes("window.setInterval(synchronizeChatState, 60000)"), "background catalog scan is limited to once per minute");
-  console.log("OK 5/5");
+  console.log("OK 7/7");
 }()).catch(error => {
   console.error(error.stack || error);
   process.exitCode = 1;

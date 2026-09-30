@@ -128,7 +128,8 @@ namespace RNAssistant.ExcelAddIn
                 var runtime = new AssistantRuntime(new UiThreadOfficeApplicationAdapter(
                     new ExcelAdapter(Application, workbook, _officeDispatcher),
                     _officeDispatcher));
-                runtime.OfficeHostLaunchRequested = OfficeHostLauncher.OpenOrActivate;
+                runtime.OfficeHostChatRequested = host => OfficeHostChatCoordinator.CreateFromPanelAsync(runtime, host);
+                runtime.OfficeChatSelectionRequested = chatId => OfficeHostChatCoordinator.SelectFromPanelAsync(runtime, chatId);
                 var pane = CustomTaskPanes.Add(runtime.CreatePaneControl(), "RN Assistant", window);
                 pane.Width = 1200;
                 entry = new PaneEntry { Window = window, Pane = pane, Runtime = runtime };

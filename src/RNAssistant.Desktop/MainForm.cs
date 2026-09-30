@@ -2,6 +2,7 @@ using System;
 using System.Diagnostics;
 using System.Drawing;
 using System.Linq;
+using System.Threading.Tasks;
 using System.Windows.Forms;
 using RNAssistant.Core.Models;
 using RNAssistant.Core.Storage;
@@ -31,8 +32,6 @@ namespace RNAssistant.Desktop
         private DateTime _nextMailboxRefreshUtc;
         private string _pendingLaunchHost;
         private string _emptyLaunchHost;
-        private DateTime _pendingLaunchDeadlineUtc;
-        private DateTime _nextLaunchProbeUtc;
 
         public MainForm()
         {
@@ -57,7 +56,6 @@ namespace RNAssistant.Desktop
             _autoFollowTimer = new Timer { Interval = 750 };
             _autoFollowTimer.Tick += delegate
             {
-                if (_pendingLaunchHost != null) TryAttachLaunchedHost();
                 if (DateTime.UtcNow >= _nextMailboxRefreshUtc)
                 {
                     _nextMailboxRefreshUtc = DateTime.UtcNow.AddMinutes(1);
@@ -204,7 +202,9 @@ namespace RNAssistant.Desktop
             AttachTarget(entry, activation.Action);
         }
 
-        private void AttachTarget(OfficeTargetEntry entry, string action)
+        private void AttachTarget(
+            OfficeTargetEntry entry, string action, string chatId = null, string expectedDocumentKey = null,
+            DispatchedOfficeApplicationAdapter suppliedAdapter = null)
         {
             if (entry == null || entry.Target == null)
             {
@@ -219,7 +219,7 @@ namespace RNAssistant.Desktop
             {
                 DesktopLog.Info("Attach requested. Target=" + entry.DisplayName + ", hwnd=" + entry.Target.Hwnd + ", pid=" + entry.Target.ProcessId);
                 var target = CloneTarget(entry.Target);
-                adapter = new DispatchedOfficeApplicationAdapter(delegate(IOfficeStaDispatcher dispatcher)
+                adapter = suppliedAdapter ?? new DispatchedOfficeApplicationAdapter(delegate(IOfficeStaDispatcher dispatcher)
                 {
                     return _adapterProvider.Create(target.Host, target, dispatcher);
                 });
@@ -227,7 +227,12 @@ namespace RNAssistant.Desktop
                 runtime = new AssistantRuntime(adapter);
                 runtime.Controller.ExternalDocumentsProvider = () => _openMailboxDocuments;
                 runtime.MailboxNavigationRequested = NavigateMailbox;
-                runtime.OfficeHostLaunchRequested = RequestOfficeHostLaunch;
+                runtime.OfficeHostChatRequested = CreateOfficeHostChatAsync;
+                runtime.OfficeChatSelectionRequested = SelectOfficeChatAsync;
+                if (!string.IsNullOrWhiteSpace(expectedDocumentKey) &&
+                    !string.Equals(runtime.Controller.DocumentKey, expectedDocumentKey, StringComparison.Ordinal))
+                    throw new InvalidOperationException("Office target изменился до открытия нового чата.");
+                if (!string.IsNullOrWhiteSpace(chatId)) runtime.Controller.SelectChat(chatId);
                 var runtimeMs = attachTimer.ElapsedMilliseconds - adapterMs;
                 DisposeCurrentRuntime();
                 ClearContent();
@@ -241,8 +246,6 @@ namespace RNAssistant.Desktop
                 var pane = _runtime.CreatePaneControl();
                 pane.Dock = DockStyle.Fill;
                 _content.Controls.Add(pane);
-                if (string.Equals(_pendingLaunchHost, entry.Target.Host, StringComparison.OrdinalIgnoreCase))
-                    _pendingLaunchHost = null;
                 _emptyLaunchHost = null;
                 var paneMs = attachTimer.ElapsedMilliseconds - adapterMs - runtimeMs - replaceMs;
                 Text = "RN Assistant - " + _runtime.Controller.HostName;
@@ -408,74 +411,130 @@ namespace RNAssistant.Desktop
             }
         }
 
-        private void RequestOfficeHostLaunch(string host)
+        private async Task<OfficeHostChatResponse> CreateOfficeHostChatAsync(string host)
         {
             if (IsDisposed || !IsHandleCreated)
                 throw new InvalidOperationException("RN Assistant window is unavailable.");
-            BeginInvoke(new Action(() => LaunchOfficeHost(host)));
-        }
+            if (InvokeRequired)
+            {
+                var completion = new TaskCompletionSource<OfficeHostChatResponse>();
+                BeginInvoke(new Action(async delegate
+                {
+                    try { completion.SetResult(await CreateOfficeHostChatAsync(host)); }
+                    catch (Exception ex) { completion.SetException(ex); }
+                }));
+                return await completion.Task.ConfigureAwait(false);
+            }
 
-        private void LaunchOfficeHost(string host)
-        {
+            if (_pendingLaunchHost != null)
+                throw new InvalidOperationException("Создание Office-чата уже выполняется.");
+            _pendingLaunchHost = host;
+            _emptyLaunchHost = null;
+            RefreshTargetUi("Создаю чат в " + host + "…");
             try
             {
-                OfficeHostLauncher.OpenOrActivate(host);
-                _emptyLaunchHost = null;
-                _pendingLaunchHost = host;
-                _pendingLaunchDeadlineUtc = DateTime.UtcNow.AddSeconds(20);
-                _nextLaunchProbeUtc = DateTime.MinValue;
-                RefreshTargetUi("Opening " + host + "…");
-                if (_placeholder != null && !_placeholder.IsDisposed)
-                    _placeholder.Text = "Opening " + host + "…";
-                TryAttachLaunchedHost();
+                if (_runtime != null &&
+                    string.Equals(_runtime.Controller.HostName, host, StringComparison.Ordinal) &&
+                    (host != "Outlook" || _runtime.Controller.DocumentKey.StartsWith(
+                        "outlook-mailbox:", StringComparison.Ordinal)))
+                {
+                    var state = _runtime.Controller.CreatePersistentChat("Новый чат");
+                    _runtime.RefreshState();
+                    return new OfficeHostChatResponse
+                    {
+                        Host = host,
+                        ChatId = state.ActiveChatId,
+                        DocumentTitle = _runtime.Controller.DocumentTitle,
+                        State = state
+                    };
+                }
+
+                using (var created = await OfficeHostChatCoordinator.CreateAsync(host))
+                {
+                    var entry = _targetRegistry.Upsert(created.Target);
+                    if (entry == null)
+                        throw new InvalidOperationException("Новый чат создан, но Office target не найден.");
+                    _targetRegistry.Select(entry.Id);
+                    AttachTarget(entry, null, created.ChatId, created.DocumentKey, created.TakeAdapter());
+                    if (_runtime == null ||
+                        !string.Equals(_runtime.Controller.DocumentKey, created.DocumentKey, StringComparison.Ordinal))
+                        throw new InvalidOperationException("Новый чат создан, но привязка к документу не подтверждена.");
+                    _runtime.RefreshState();
+                    if (host == "Outlook") RefreshMailboxTargets();
+                    return new OfficeHostChatResponse
+                    {
+                        Host = host,
+                        ChatId = created.ChatId,
+                        DocumentTitle = created.DocumentTitle
+                    };
+                }
             }
             catch (Exception ex)
             {
+                DesktopLog.Error("Office host chat creation failed.", ex);
+                RefreshTargetUi(ex.Message);
+                if (_placeholder != null && !_placeholder.IsDisposed) _placeholder.Text = ex.Message;
+                throw;
+            }
+            finally
+            {
                 _pendingLaunchHost = null;
-                DesktopLog.Error("Office launch failed.", ex);
-                RefreshTargetUi("Could not open " + host + ": " + ex.Message);
-                MessageBox.Show(this, ex.Message, "RN Assistant", MessageBoxButtons.OK, MessageBoxIcon.Warning);
             }
         }
 
-        private void TryAttachLaunchedHost()
+        private async Task<OfficeHostChatResponse> SelectOfficeChatAsync(string chatId)
         {
-            var host = _pendingLaunchHost;
-            if (host == null) return;
-            if (DateTime.UtcNow < _nextLaunchProbeUtc) return;
-            _nextLaunchProbeUtc = DateTime.UtcNow.AddSeconds(2);
-            var entries = _adapterProvider.ListOpenTargets(host)
-                .Where(item => host != "Outlook" || !string.IsNullOrWhiteSpace(item.StoreId))
-                .Select(item => _targetRegistry.Upsert(item)).ToArray();
-            var entry = entries.FirstOrDefault(item => string.Equals(
-                item.Id, _targetRegistry.SelectedTargetId, StringComparison.OrdinalIgnoreCase))
-                ?? entries.FirstOrDefault();
-            if (entry != null)
+            if (IsDisposed || !IsHandleCreated || _runtime == null)
+                throw new InvalidOperationException("RN Assistant window is unavailable.");
+            if (InvokeRequired)
             {
-                _pendingLaunchHost = null;
-                _emptyLaunchHost = null;
-                if (_runtime == null ||
-                    !string.Equals(_runtime.Controller.HostName, host, StringComparison.OrdinalIgnoreCase) ||
-                    !string.Equals(_targetRegistry.SelectedTargetId, entry.Id, StringComparison.OrdinalIgnoreCase))
+                var completion = new TaskCompletionSource<OfficeHostChatResponse>();
+                BeginInvoke(new Action(async delegate
                 {
-                    _targetRegistry.Select(entry.Id);
-                    AttachTarget(entry, null);
-                    if (_runtime == null) _emptyLaunchHost = host;
-                }
-                else RefreshTargetUi("Attached: " + entry.DisplayName);
-                if (host == "Outlook") RefreshMailboxTargets();
-                return;
+                    try { completion.SetResult(await SelectOfficeChatAsync(chatId)); }
+                    catch (Exception ex) { completion.SetException(ex); }
+                }));
+                return await completion.Task.ConfigureAwait(false);
             }
 
-            if (DateTime.UtcNow < _pendingLaunchDeadlineUtc) return;
-            _pendingLaunchHost = null;
-            _emptyLaunchHost = host;
-            var message = host == "Outlook"
-                ? "Outlook is running, but no mailbox is available yet. Refresh after it finishes loading."
-                : host + " is open. Open a document there, then select it in RN Assistant.";
-            RefreshTargetUi(message);
-            if (_placeholder != null && !_placeholder.IsDisposed)
-                _placeholder.Text = message;
+            var chat = _runtime.Controller.ListChats().Chats.FirstOrDefault(item =>
+                string.Equals(item.Id, chatId, StringComparison.Ordinal));
+            if (chat == null || string.IsNullOrWhiteSpace(chat.Host) ||
+                string.IsNullOrWhiteSpace(chat.DocumentKey))
+                throw new InvalidOperationException("Чат не найден в каталоге документов.");
+            if (string.Equals(_runtime.Controller.HostName, chat.Host, StringComparison.Ordinal) &&
+                string.Equals(_runtime.Controller.DocumentKey, chat.DocumentKey, StringComparison.Ordinal))
+            {
+                var state = _runtime.Controller.SelectChat(chatId);
+                return new OfficeHostChatResponse
+                {
+                    Host = chat.Host, ChatId = chatId,
+                    DocumentTitle = chat.DocumentTitle, State = state
+                };
+            }
+
+            _pendingLaunchHost = chat.Host;
+            try
+            {
+                using (var opened = await OfficeHostChatCoordinator.OpenExistingAsync(
+                    chat.Host, chat.DocumentKey, chatId))
+                {
+                    var entry = _targetRegistry.Upsert(opened.Target);
+                    if (entry == null) throw new InvalidOperationException("Office target не найден.");
+                    _targetRegistry.Select(entry.Id);
+                    AttachTarget(entry, null, chatId, chat.DocumentKey, opened.TakeAdapter());
+                    if (_runtime == null ||
+                        !string.Equals(_runtime.Controller.DocumentKey, chat.DocumentKey, StringComparison.Ordinal))
+                        throw new InvalidOperationException("Привязка к документу этого чата не подтверждена.");
+                    if (chat.Host == "Outlook") RefreshMailboxTargets();
+                    return new OfficeHostChatResponse
+                    {
+                        Host = chat.Host, ChatId = chatId,
+                        DocumentTitle = chat.DocumentTitle
+                    };
+                }
+            }
+            finally { _pendingLaunchHost = null; }
         }
 
         private bool TryAttachSingleOpenTarget()
@@ -556,10 +615,18 @@ namespace RNAssistant.Desktop
                 {
                     Width = 210,
                     Height = 32,
-                    Text = "Open " + host,
+                    Text = "Новый чат: " + host,
                     Font = new Font("Segoe UI", 9f)
                 };
-                launchButton.Click += delegate { RequestOfficeHostLaunch(selectedHost); };
+                launchButton.Click += async delegate
+                {
+                    try { await CreateOfficeHostChatAsync(selectedHost); }
+                    catch (Exception ex)
+                    {
+                        MessageBox.Show(this, ex.Message, "RN Assistant",
+                            MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                    }
+                };
                 launchRows.Controls.Add(launchButton);
             }
             layout.Controls.Add(launchRows, 0, 1);

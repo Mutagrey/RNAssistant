@@ -12,12 +12,6 @@ function isOutlookMailboxKey(key) {
   return typeof key === "string" && key.indexOf("outlook-mailbox:") === 0;
 }
 
-function isCurrentOutlookMailbox(key) {
-  return (state.documents || []).some(function (item) {
-    return (item.documentKey || item.DocumentKey) === key && !!(item.isActive || item.IsActive);
-  });
-}
-
 async function attachOutlookMailbox(key, chatIdValue, createNew) {
   await send("attachOutlookMailbox", {
     documentKey: key, chatId: chatIdValue || "", createNew: !!createNew
@@ -84,15 +78,15 @@ async function selectChat(id) {
   state.pendingChatSelectionId = id;
   var startedAt = window.performance && window.performance.now ? window.performance.now() : Date.now();
   try {
-    var mailboxChat = (state.chats || []).find(function (chat) { return chatId(chat) === id; });
-    if (mailboxChat && isOutlookMailboxKey(chatDocumentKey(mailboxChat)) &&
-        !isCurrentOutlookMailbox(chatDocumentKey(mailboxChat))) {
-      await attachOutlookMailbox(chatDocumentKey(mailboxChat), id, false);
-      return;
-    }
     var response = await send("selectChat", { chatId: id });
     var bridgeMs = (window.performance && window.performance.now ? window.performance.now() : Date.now()) - startedAt;
-    var applied = applyChatNavigationState(response, navigationVersion);
+    var applied;
+    if (response.init) {
+      applied = navigationVersion === state.chatNavigationVersion;
+      if (applied) applyInitState(response.init);
+    } else {
+      applied = applyChatNavigationState(response.state || response, navigationVersion);
+    }
     var renderMs = (window.performance && window.performance.now ? window.performance.now() : Date.now()) - startedAt - bridgeMs;
     if (applied && bridgeMs + renderMs >= 250 && window.console && window.console.info) {
       window.console.info("RNAssistant chat select timing", {
@@ -331,7 +325,7 @@ function applyInitState(init) {
   resetMessageEditState();
   state.appVersion = init.appVersion || init.AppVersion || "";
   state.host = init.host;
-  state.officeHostLaunchAvailable = !!(init.officeHostLaunchAvailable || init.OfficeHostLaunchAvailable);
+  state.officeHostChatAvailable = !!(init.officeHostChatAvailable || init.OfficeHostChatAvailable);
   state.title = init.title;
   state.officeContext = init.officeContext || null;
   state.bridgeToken = init.bridgeToken || init.BridgeToken || state.bridgeToken || "";
@@ -417,7 +411,7 @@ function applyBridgeUnavailableState(error) {
   state.appVersion = "";
   state.hasHistorySecret = false;
   state.host = "";
-  state.officeHostLaunchAvailable = false;
+  state.officeHostChatAvailable = false;
   state.title = "";
   state.officeContext = null;
   state.chats = [];

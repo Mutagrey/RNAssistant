@@ -515,16 +515,28 @@ namespace RNAssistant.Office.Contracts
         public bool Scheduled { get; set; }
     }
 
-    public sealed class OfficeHostLaunchPayload
+    public sealed class OfficeHostChatPayload
     {
         [JsonProperty("host")]
         public string Host { get; set; }
     }
 
-    public sealed class OfficeHostLaunchResponse
+    public sealed class OfficeHostChatResponse
     {
-        [JsonProperty("scheduled")]
-        public bool Scheduled { get; set; }
+        [JsonProperty("host")]
+        public string Host { get; set; }
+
+        [JsonProperty("chatId")]
+        public string ChatId { get; set; }
+
+        [JsonProperty("documentTitle")]
+        public string DocumentTitle { get; set; }
+
+        [JsonProperty("state", NullValueHandling = NullValueHandling.Ignore)]
+        public ChatStateResponse State { get; set; }
+
+        [JsonProperty("init", NullValueHandling = NullValueHandling.Ignore)]
+        public InitResponse Init { get; set; }
     }
 
     public sealed class ChatArtifactDto
@@ -748,8 +760,8 @@ namespace RNAssistant.Office.Contracts
         [JsonProperty("host")]
         public string Host { get; set; }
 
-        [JsonProperty("officeHostLaunchAvailable")]
-        public bool OfficeHostLaunchAvailable { get; set; }
+        [JsonProperty("officeHostChatAvailable")]
+        public bool OfficeHostChatAvailable { get; set; }
 
         [JsonProperty("documentKey")]
         public string DocumentKey { get; set; }

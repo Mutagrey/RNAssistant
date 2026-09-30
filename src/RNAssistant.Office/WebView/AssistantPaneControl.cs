@@ -18,7 +18,9 @@ namespace RNAssistant.Office.WebView
 {
     public sealed class AssistantPaneControl : UserControl
     {
-        private readonly AssistantController _controller;
+        private AssistantController _controller;
+        private readonly object _resourceRequestSync = new object();
+        private int _resourceRequestsInFlight;
         private readonly string _webRoot;
         private readonly AssistantWebBridge _bridge;
         private readonly System.Threading.CancellationTokenSource _lifetimeCancellation;
@@ -34,10 +36,15 @@ namespace RNAssistant.Office.WebView
             get { return _bridge.MailboxNavigationRequested; }
             set { _bridge.MailboxNavigationRequested = value; }
         }
-        public Action<string> OfficeHostLaunchRequested
+        public Func<string, Task<OfficeHostChatResponse>> OfficeHostChatRequested
         {
-            get { return _bridge.OfficeHostLaunchRequested; }
-            set { _bridge.OfficeHostLaunchRequested = value; }
+            get { return _bridge.OfficeHostChatRequested; }
+            set { _bridge.OfficeHostChatRequested = value; }
+        }
+        public Func<string, Task<OfficeHostChatResponse>> OfficeChatSelectionRequested
+        {
+            get { return _bridge.OfficeChatSelectionRequested; }
+            set { _bridge.OfficeChatSelectionRequested = value; }
         }
 
         public AssistantPaneControl(AssistantController controller, string webRoot)
@@ -48,6 +55,25 @@ namespace RNAssistant.Office.WebView
             _lifetimeCancellation = new System.Threading.CancellationTokenSource();
             CreateWebViewControl();
             Load += OnLoad;
+        }
+
+        public async Task RebindControllerAsync(AssistantController controller)
+        {
+            if (controller == null) throw new ArgumentNullException("controller");
+            for (var attempt = 0; attempt < 200; attempt++)
+            {
+                lock (_resourceRequestSync)
+                {
+                    if (_resourceRequestsInFlight == 0)
+                    {
+                        _bridge.RebindController(controller);
+                        _controller = controller;
+                        return;
+                    }
+                }
+                await Task.Delay(25).ConfigureAwait(false);
+            }
+            throw new InvalidOperationException("Ожидание завершения передачи ресурсов RN Assistant истекло.");
         }
 
         public void BlurComposer()
@@ -218,8 +244,19 @@ namespace RNAssistant.Office.WebView
         private async void OnResourceDataRequested(object sender, CoreWebView2WebResourceRequestedEventArgs e)
         {
             var deferral = e.GetDeferral();
+            AssistantController controller = null;
             try
             {
+                lock (_resourceRequestSync)
+                {
+                    if (!_bridge.HostSwitchPending)
+                    {
+                        controller = _controller;
+                        _resourceRequestsInFlight++;
+                    }
+                }
+                if (controller == null)
+                    throw new InvalidOperationException("Office host switch is in progress.");
                 var method = e.Request.Method;
                 var url = e.Request.Uri;
                 // WebView request.Content may wrap an apartment-bound COM stream. Consume only
@@ -228,9 +265,9 @@ namespace RNAssistant.Office.WebView
                 if (method == "POST")
                 {
                     using (var body = e.Request.Content)
-                        response = _controller.HandleResourceData(method, url, _lifetimeCancellation.Token, body);
+                        response = controller.HandleResourceData(method, url, _lifetimeCancellation.Token, body);
                 }
-                else response = await Task.Run(() => _controller.HandleResourceData(method, url, _lifetimeCancellation.Token));
+                else response = await Task.Run(() => controller.HandleResourceData(method, url, _lifetimeCancellation.Token));
                 if (_resourcesDisposed || !TrySetResourceResponse(e, response))
                 {
                     response.Body.Dispose();
@@ -251,7 +288,14 @@ namespace RNAssistant.Office.WebView
                     if (!TrySetResourceResponse(e, response)) response.Body.Dispose();
                 }
             }
-            finally { CompleteResourceDeferral(deferral); }
+            finally
+            {
+                if (controller != null)
+                {
+                    lock (_resourceRequestSync) _resourceRequestsInFlight--;
+                }
+                CompleteResourceDeferral(deferral);
+            }
         }
 
         private bool TrySetResourceResponse(CoreWebView2WebResourceRequestedEventArgs e, Services.ResourceStreamResponse response)

@@ -436,6 +436,25 @@ namespace RNAssistant.Harness
             });
         }
 
+        private static void OfficeHostRowPersistsEmptyChat()
+        {
+            WithTempPaths(delegate(AppDataPaths paths)
+            {
+                var adapter = new FakeOfficeAdapter();
+                var store = new ChatStore(paths);
+                var service = new ChatSessionService(adapter, ConversationStore(store));
+                var created = service.CreatePersistentChat("Новый чат");
+                var reloaded = new ChatStore(paths).Load(
+                    adapter.HostName, adapter.DocumentKey, created.Id);
+                AssertTrue(reloaded != null, "empty host row chat is durable");
+                AssertEqual(adapter.HostName, reloaded.Host, "host identity is retained");
+                AssertEqual(adapter.DocumentKey, reloaded.DocumentKey, "document identity is retained");
+                AssertEqual(created.Id, new ChatStore(paths).LoadOrCreateActive(
+                    adapter.HostName, adapter.DocumentKey, adapter.DocumentTitle).Id,
+                    "new host chat remains active after reload");
+            });
+        }
+
         private static void DeleteSelectsRemainingProjection()
         {
             WithTempPaths(delegate(AppDataPaths paths)

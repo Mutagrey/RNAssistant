@@ -218,6 +218,8 @@ namespace RNAssistant.Office
         }
 
         public string HostName { get { return _adapter.HostName; } }
+        public string DocumentKey { get { return _adapter.DocumentKey; } }
+        public string DocumentTitle { get { return _adapter.DocumentTitle; } }
 
         public InitResponse Initialize()
         {

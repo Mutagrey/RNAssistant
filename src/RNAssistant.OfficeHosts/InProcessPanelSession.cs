@@ -46,6 +46,7 @@ namespace RNAssistant.OfficeHosts
             _screenCaptureProtectionEnabled = screenCaptureProtectionEnabled;
             _panelWindowWidth = panelWindowWidth;
             Runtime.Controller.SettingsChanged += OnSettingsChanged;
+            Runtime.ControllerChanged += OnControllerChanged;
         }
 
         public OfficeHostKind HostKind { get; private set; }
@@ -105,7 +106,8 @@ namespace RNAssistant.OfficeHosts
                 innerAdapter = new OfficeComAdapterProvider().Create(host, target, officeDispatcher);
                 var adapter = new UiThreadOfficeApplicationAdapter(innerAdapter, officeDispatcher);
                 runtime = new AssistantRuntime(adapter, rootPath);
-                runtime.OfficeHostLaunchRequested = OfficeHostLauncher.OpenOrActivate;
+                runtime.OfficeHostChatRequested = host => OfficeHostChatCoordinator.CreateFromPanelAsync(runtime, host);
+                runtime.OfficeChatSelectionRequested = chatId => OfficeHostChatCoordinator.SelectFromPanelAsync(runtime, chatId);
                 var control = runtime.CreatePaneControl();
                 control.Dock = DockStyle.Fill;
                 var settings = runtime.Controller.GetSettings().Settings;
@@ -164,6 +166,7 @@ namespace RNAssistant.OfficeHosts
             {
                 if (Runtime != null)
                 {
+                    Runtime.ControllerChanged -= OnControllerChanged;
                     Runtime.Controller.SettingsChanged -= OnSettingsChanged;
                     Runtime.Dispose();
                     Runtime = null;
@@ -216,6 +219,12 @@ namespace RNAssistant.OfficeHosts
                     widthChanged(_panelWindowWidth);
                 }
             }
+        }
+
+        private void OnControllerChanged(AssistantController previous, AssistantController next)
+        {
+            previous.SettingsChanged -= OnSettingsChanged;
+            next.SettingsChanged += OnSettingsChanged;
         }
 
         private static string HostName(OfficeHostKind kind)
