@@ -2040,23 +2040,41 @@ namespace RNAssistant.Harness
 
         private static void AgentToolResultFitsRemainingPromptBudget()
         {
+            foreach (var role in new[] { ToolResultRoles.User, ToolResultRoles.Developer, ToolResultRoles.Tool })
+            foreach (var characters in new[] { 1000, 16000, 160000 })
+                CheckCompleteInspectResult(role, characters, 262144, 1.0, true);
+        }
+
+        private static void AgentToolResultRejectsInsufficientPromptBudget()
+        {
+            foreach (var characters in new[] { 75000, 160000 })
+                CheckCompleteInspectResult(ToolResultRoles.Tool, characters, 24000, 1.0, false);
+        }
+
+        private static void AgentToolResultUsesCalibratedPromptBudget()
+        {
+            CheckCompleteInspectResult(ToolResultRoles.User, 120000, 16384, 0.25, true);
+        }
+
+        private static void CheckCompleteInspectResult(string role, int characters, int contextTokens,
+            double multiplier, bool fits)
+        {
             WithTempExecutor(FakeOfficeAdapter.ForHost("Excel"), delegate(OfficeToolExecutor executor, FakeOfficeAdapter adapter)
             {
-                var largeSheets = Enumerable.Range(1, ExcelReadService.MaxInspectItems)
-                    .Select(index => new ExcelSheetSnapshot
-                    {
-                        Name = "Sheet " + index + " " + new string('x', 750)
-                    }).ToList();
+                var charts = new List<ExcelChartSnapshot> { new ExcelChartSnapshot {
+                    Sheet = "Графики", Name = "Chart 1",
+                    Title = "CHART_BEGIN " + new string('x', characters) + " CHART_END",
+                    Series = new List<ExcelChartSeriesSnapshot>() } };
                 adapter.QueueExcelInspectSnapshot(new ExcelInspectSnapshot
                 {
-                    Kind = "sheets", Sheets = largeSheets,
-                    ReturnedCount = largeSheets.Count, Truncated = true
+                    Kind = "charts", Charts = charts, ReturnedCount = 1
                 });
+                var expectedData = JObject.FromObject(new { kind = "charts", returnedCount = 1, truncated = false, items = charts });
                 var responses = new Queue<string>(new[]
                 {
                     LoadToolSchemaResponse("excel.inspect"),
-                    "{\"message\":\"Читаю.\",\"final\":false,\"tool_calls\":[{\"name\":\"excel.inspect\",\"arguments\":{\"kind\":\"sheets\"}}]}",
-                    "{\"message\":\"Диапазон результата нужно сузить.\",\"final\":true,\"tool_calls\":[]}"
+                    "{\"message\":\"Читаю.\",\"final\":false,\"tool_calls\":[{\"name\":\"excel.inspect\",\"arguments\":{\"kind\":\"charts\",\"sheet\":\"Графики\"}}]}",
+                    "{\"message\":\"Получены данные графика.\",\"final\":true,\"tool_calls\":[]}"
                 });
                 var calls = new List<Tuple<IReadOnlyList<ChatMessage>, LlmRequestOptions>>();
                 LlmCompletionDelegate completion = (completionSettings, messages, options, stream, cancellationToken) =>
@@ -2066,41 +2084,51 @@ namespace RNAssistant.Harness
                 };
                 var settings = new AppSettings
                 {
-                    ContextWindowOverrideTokens = 24000,
-                    MaxTokens = 512
+                    ContextWindowOverrideTokens = contextTokens,
+                    TokenEstimateMultiplier = multiplier,
+                    ToolResultRole = role, MaxTokens = 512, AutoCompressContext = false
                 };
                 var tools = OfficeToolCatalog.ForHost(adapter.HostName).Where(tool => tool.Id == "excel.inspect")
                     .Concat(executor.GetControllerTools())
                     .ToList();
 
+                var session = NewSession(adapter);
                 var turn = CreateConversationRunService(adapter, executor, completion).ExecuteAsync(
                     ChatModes.Agent,
-                    "List sheets.", NewSession(adapter), NewContext(adapter), settings, tools,
+                    "Inspect charts.", session, NewContext(adapter), settings, tools,
                     null, null, null, null, CancellationToken.None, true).GetAwaiter().GetResult();
 
-                AssertEqual("Диапазон результата нужно сузить.", turn.AssistantText, "agent continues after bounded result");
-                AssertEqual(3, calls.Count, "schema read, data read, and final model calls");
-                var replay = FlattenSimple(calls[2].Item1);
-                AssertTrue(replay.IndexOf("\"payload_externalized\":true", StringComparison.Ordinal) >= 0 ||
-                    replay.IndexOf("\"externalized\":true", StringComparison.Ordinal) >= 0 ||
-                    replay.IndexOf("\"truncated\":true", StringComparison.Ordinal) >= 0,
-                    "bounded inline projection reaches the model");
-                var projectedResult = calls[2].Item1.Single(message =>
-                    string.Equals(message.ToolName, "excel.inspect",
-                        StringComparison.Ordinal) &&
-                    !string.Equals(message.Role, "assistant",
-                        StringComparison.Ordinal));
-                AssertTrue(projectedResult.Content.IndexOf(
-                        "\"relation\":\"result\"", StringComparison.Ordinal) < 0 &&
-                    projectedResult.Content.IndexOf(
-                        "rna://", StringComparison.OrdinalIgnoreCase) < 0,
-                    "externalized result identity remains runtime-only");
-                AssertContains(projectedResult.Content,
-                    "common.resources_find",
-                    "bounded result directs semantic discovery");
-                AssertContains(replay,
-                    "conversation resource: Tool result · excel.inspect",
-                    "the resource index exposes a readable semantic target");
+                AssertEqual(fits ? RunViewLifecycles.Completed : RunViewLifecycles.Failed,
+                    turn.RunViewState.Lifecycle, "complete result is delivered or explicitly exceeds the request budget");
+                AssertEqual(fits ? 3 : 2, calls.Count, "an oversized request is never sent with missing result data");
+                var durable = session.Messages.Single(message => message.ToolName == "excel.inspect" && message.Role != "assistant");
+                if (characters > 8192)
+                {
+                    AssertTrue(durable.ResultPayload != null, "large durable result remains in CAS");
+                    AssertContains(executor.Payloads.ReadText(durable.ResultPayload.ToBlobReference()),
+                        "CHART_END", "complete bytes survive archival even if model dispatch is refused");
+                    AssertTrue(!durable.Content.Contains("CHART_END"), "hydration never rewrites the durable marker");
+                }
+                if (characters == 16000)
+                    AssertTrue(!session.Artifacts.Any(item => item.Kind == ChatArtifactKinds.ToolResult),
+                        "delivery does not require a separate resource between character and token thresholds");
+                if (fits)
+                {
+                    var projectedResult = calls[2].Item1.Single(message =>
+                        message.ToolName == "excel.inspect" && message.Role != "assistant");
+                    ToolResultWireReadResult wire; string error;
+                    AssertTrue(ToolResultHistoryReader.TryRead(projectedResult, out wire, out error), "model result is valid JSON");
+                    AssertEqual(ToolResultStatus.Ok, wire.Result.Status, "read outcome is retained");
+                    AssertTrue(JToken.DeepEquals(expectedData, ToolResultWire.ParseData(wire.Result.DataJson)),
+                        "the next actual model request carries all observed chart fields, including the final bytes");
+                    AssertTrue(!projectedResult.Content.Contains("payload_externalized") &&
+                        !projectedResult.Content.Contains("common.resources_find"),
+                        "full data is not replaced by a marker or unnecessary reread instruction");
+                    AssertTrue(wire.Result.Resources.Count == 0 &&
+                        projectedResult.Content.IndexOf("rna://", StringComparison.OrdinalIgnoreCase) < 0,
+                        "hydration preserves runtime-reference isolation");
+                }
+                else AssertContains(turn.AssistantText, "budget", "actual overflow is visible to the user");
                 foreach (var request in calls)
                 {
                     var estimated = ModelContextBudget.EstimateAdmittedRequestTokens(

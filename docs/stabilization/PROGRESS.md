@@ -43,6 +43,15 @@ records it directly and reviews the signed release payload before finalization.
 
 ## Implementation log — includes current in-flight work and earlier entries
 
+Excel inspect result delivery correction (2026-09-30): a focused reproduction
+confirmed that archived generic JSON was replaced by a success marker even with
+ample context. The compiler now hydrates all selected non-folded result payloads;
+full data is limited by the complete calibrated request budget, not the storage
+threshold or a per-result cap. Full results no longer direct unnecessary resource
+rediscovery. Six focused host-neutral checks pass, including 1/16/160 KB next-request
+delivery in all result roles, calibrated capacity and actual budget overflow.
+The original Windows/Office/target-model loop remains unqualified pending trajectory.
+
 Agent recovery correction (2026-09-30): Windows photos show repeated
 `vba_patch_stale_source`, a workbook-wide `RESOURCE_SNAPSHOT_TOO_LARGE`, invalid
 Excel regex and a `final=false`/empty-tools stall. Host-neutral changes reject the

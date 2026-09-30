@@ -258,6 +258,11 @@ namespace RNAssistant.Office.Services
 
             // All remaining current evidence is relevant to the active window. Hydrate
             // only selected, bounded CAS payloads; never invoke a resource provider here.
+            // Archival size is not a model-delivery limit. Generic read results need
+            // their complete data just as resource/capability reads do. The final
+            // request budget, including calibrated token cost, decides what fits.
+            var maximumPayloadBytes = Math.Max(4096L,
+                2L * ModelContextBudget.ApproximateTextCharacterCapacity(budget, settings));
             foreach (var atom in atoms.Where(item => item.Kind != "resource-change" && item.Kind != "terminal-mutation"))
             {
                 for (var index = 0; index < atom.Messages.Count; index++)
@@ -271,7 +276,7 @@ namespace RNAssistant.Office.Services
                         receipt.HydratedPayloads++;
                         receipt.HydratedBytes += message.AcceptedCallPayload.ByteLength;
                     }
-                    if (message.ResultPayload != null && RequiresExactPayload(message))
+                    if (message.ResultPayload != null)
                     {
                         if (_payloads == null)
                         {
@@ -280,9 +285,12 @@ namespace RNAssistant.Office.Services
                             receipt.ExcludedUnavailable++;
                             break;
                         }
-                        if (message.ResultPayload.ByteLength > Math.Max(4096L, budget * 8L) &&
+                        if (message.ResultPayload.ByteLength > maximumPayloadBytes &&
                             !(IsSharedContextRead(message) && message.ResultPayload.ByteLength <= 4L * 1024 * 1024))
                         {
+                            if (message.ToolResultProtocolVersion == ToolResultWire.CurrentVersion &&
+                                !ToolResultResourceService.IsExactReadEvidence(new ToolInvocation { ToolId = message.ToolName }))
+                                throw new PromptBudgetExceededException("Complete tool result exceeds this request budget. Use a larger context or request a narrower scope.", false);
                             if (message.SyntheticResourceObservation || HasCompleteSource(message))
                                 throw new PromptBudgetExceededException("Complete current source exceeds this request budget. Use a larger context or a narrower view.", false);
                             if (atom.ContextRole == ContextNoteRole.UserInstruction)
@@ -436,17 +444,6 @@ namespace RNAssistant.Office.Services
             var projected = RNAssistant.Core.Tools.Contracts.ToolResult.Ok(available ? "Shared claims checked against current authority." : "Shared claims are unavailable: the archive is invalid or unsupported.", safe.ToString(Formatting.None));
             var json = ToolResultWire.WriteParsed(wire.ToolCallId, wire.Name, projected, safe, null);
             message.Content = message.Role == "tool" ? json : "TOOL_RESULT:\n" + json;
-        }
-
-        private static bool RequiresExactPayload(ChatMessage message)
-        {
-            if (message.ToolResultProtocolVersion != ToolResultWire.CurrentVersion)
-                return true;
-            return ToolResultResourceService.IsExactReadEvidence(new ToolInvocation
-            {
-                ToolId = message.ToolName,
-                ToolCallId = message.ToolCallId
-            });
         }
 
         private static bool HasCompleteSource(ChatMessage message)

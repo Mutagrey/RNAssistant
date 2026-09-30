@@ -73,7 +73,10 @@ namespace RNAssistant.Office.Services
             var data = source.Data.DeepClone();
             RemoveRuntimeResourceValues(data, source.Result.Resources);
             var objectData = data as JObject;
-            if (objectData != null && source.ResultResource != null)
+            if (objectData != null && source.ResultResource != null &&
+                (JToken.DeepEquals(objectData["payload_externalized"], new JValue(true)) ||
+                 JToken.DeepEquals(objectData["externalized"], new JValue(true)) ||
+                 JToken.DeepEquals(objectData["truncated"], new JValue(true)) && objectData["preview"] != null && objectData["original_chars"] != null))
             {
                 objectData["hint"] =
                     "The complete result is stored durably. Find its semantic target with common.resources_find before reading it; do not use runtime resource references.";

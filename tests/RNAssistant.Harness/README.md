@@ -39,6 +39,13 @@ version check still apply.
 
 ## Test map
 
+`agent: keeps tool result within prompt budget` checks complete next-request JSON
+delivery below/above the 8192-character archival and 8192-token artifact thresholds
+(1/16/160 KB, all three result roles). `agent: tool result rejects insufficient
+prompt budget` checks refusal before model dispatch without losing durable bytes;
+`agent: tool result uses calibrated prompt budget` covers calibrated capacity.
+Storage thresholds must not become separate limits on data sent to the model.
+
 `shared context:` checks automatic compaction publication, competing generations,
 second-chat discovery/native paged reads, externalized archive projection with a
 model stub, per-claim invalidation, raw archive masking, alternate-view refusal,

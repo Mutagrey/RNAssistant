@@ -253,6 +253,8 @@ namespace RNAssistant.Harness
                 Test("agent: provider refusal is terminal", ModelRefusalIsTerminalInAgentAndChat),
                 Test("agent: bounds oversized tool result data", AgentToolResultDataIsBounded),
                 Test("agent: keeps tool result within prompt budget", AgentToolResultFitsRemainingPromptBudget),
+                Test("agent: tool result rejects insufficient prompt budget", AgentToolResultRejectsInsufficientPromptBudget),
+                Test("agent: tool result uses calibrated prompt budget", AgentToolResultUsesCalibratedPromptBudget),
                 Test("model compatibility: accepts exact sentinels", ModelCompatibilityAcceptsExactSentinels),
                 Test("model compatibility: rejects loose responses", ModelCompatibilityRejectsLooseResponses),
                 Test("model diagnostics: connection probe reports timings", ModelConnectionProbeReportsTimings),

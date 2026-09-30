@@ -1,5 +1,50 @@
 # Stabilization risk register
 
+## Excel inspection loop — 2026-09-30
+
+Photos show repeated successful `excel.inspect` steps, a separate 155.8 KB result
+and a failed `excel.inspect charts` resource search, without visible progress to
+the requested dashboard. Exact arguments, model requests and Windows build are
+not supplied; the photo incident's complete causal sequence remains unverified.
+
+Confirmed host-neutral defect before correction: `ConversationModelSession.MaterializeToolResultMessage`
+archived result envelopes above 8192 **characters** and replaced their data with
+`payload_externalized`, `complete` and a size. `ModelContextCompiler.RequiresExactPayload`
+hydrated only resource/capability results; `excel.inspect` kept the marker even
+with ample request budget. A readable tool-result artifact was created separately,
+only above 8192 estimated **tokens**. Results between these thresholds could therefore
+reach the model as `ok` / `complete=true` without business data or a discoverable
+result resource. The full bytes remained in CAS; this was lost model input, not lost
+durable data. Larger results required an additional semantic resource read.
+
+A temporary probe invoked the production materializer and compiler from the
+existing Debug harness assembly; portable-PDB SHA-256 checks matched all five
+relevant then-current source files. With a 900000-token compiler budget, a 1070-character
+result retained its observed chart name. A 16070-character result became a
+199-character model message with no chart data and zero readable artifacts;
+a 160070-character result became a 360-character message with one artifact but
+no chart data. Neither archived payload was hydrated. No Office or live model was
+used.
+
+Correction (2026-09-30), owner: model context compiler / result projection (P1).
+All selected non-folded result payloads now hydrate from CAS before model projection;
+the resource/capability-only hydration filter is removed. The full JSON reaches the
+model when the complete request fits, without a separate per-result token cap.
+Storage thresholds remain storage decisions. Complete results no longer receive
+an instruction to rediscover their already supplied data. Payload admission follows
+calibrated request capacity; a real overflow uses existing compaction or an explicit
+budget failure, without replacing generic data with a success marker. Focused tests
+pass for 1/16/160 KB JSON in all three result roles, calibrated capacity and actual
+overflow, plus existing result projection/current-source checks. Exact Windows,
+Office and target-model reproduction remain open.
+
+AgentKernel currently blocks identical unknown-effect calls, not successful repeated
+reads; the default 256 model iterations only bound the eventual run length. Any
+separate no-progress policy must preserve legitimate refresh/recovery. Resource
+search is literal, so `excel.inspect charts` need not match the generic
+`Tool result · excel.inspect` title. Correlate the Windows trajectory before
+claiming this delivery defect caused every repeat in the photos.
+
 ## Agent recovery photos — 2026-09-30
 
 The reported VBA patch loop, Excel snapshot refusal and empty-tools stall are
