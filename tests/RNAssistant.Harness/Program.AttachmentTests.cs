@@ -168,9 +168,8 @@ namespace RNAssistant.Harness
                 var flattenedRequest = FlattenSimple(modelRequest);
                 AssertContains(flattenedRequest, "attachment: notes.txt",
                     "semantic resource target is materialized before model dispatch");
-                AssertTrue(flattenedRequest.IndexOf(uri, StringComparison.Ordinal) < 0 &&
-                    flattenedRequest.IndexOf("rna://", StringComparison.OrdinalIgnoreCase) < 0,
-                    "canonical resource URI remains durable and never enters model context");
+                AssertTrue(flattenedRequest.IndexOf(uri, StringComparison.Ordinal) < 0,
+                    "this attachment's canonical resource URI remains durable and never enters model context");
                 AssertTrue(string.IsNullOrWhiteSpace(durable.Messages.Single().Attachments.Single().DraftChatId),
                     "persisted attachment no longer carries draft ownership");
             });

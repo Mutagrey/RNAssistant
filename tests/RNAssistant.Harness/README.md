@@ -378,9 +378,9 @@ through save/reload. Test construction requires a fixture-local ChatStore; it
 never falls back to real user AppData. `model protocol:` retains endpoint-boundary
 coverage under `IMaterializedModelProtocol`; no second parser/retry loop is added.
 
-MockDemo compilation includes the actual controller; the harness's controller
-remains a stub. [Phase 3B2 evidence](../../docs/stabilization/PHASE_3B2_KERNEL_CUTOVER.md)
-separates that compile/source review from the unperformed Windows delivery gate.
+The harness uses a controller stub. The actual controller is checked by the
+separate Windows build and delivery gate; [Phase 3B2 evidence](../../docs/stabilization/PHASE_3B2_KERNEL_CUTOVER.md)
+records the historical MockDemo compile.
 
 ## Typed Excel read owner (Phase 7B)
 
@@ -638,8 +638,8 @@ complete HTML preservation in user/native history and native read-batch pairing.
 `causal trace:` links each accepted runtime ID to the exact raw model attempt and
 call position, including repair. `kernel replay:` uses the real event store.
 `context: clone preserves values` checks fork URI rebasing without changing ISO
-argument strings. Production controller reconstruction is source-reviewed and
-compiled in MockDemo, not executed by the stubbed harness. See
+argument strings. Production controller reconstruction is source-reviewed here
+but not executed by the stubbed harness; compile and delivery remain Windows gates. See
 [R29 evidence](../../docs/stabilization/R29_RUNTIME_CALL_IDS.md).
 
 The `preflight` filter covers incompatible full history in all three modes

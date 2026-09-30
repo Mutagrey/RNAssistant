@@ -1258,8 +1258,9 @@ namespace RNAssistant.Harness
                     new AttachmentAnalysisService(completion), EventStore(store), ChatModes.Agent, "Continue.", session, NewContext(adapter),
                     settings, catalog, null, null, true, null, CancellationToken.None).GetAwaiter().GetResult())
                 {
-                    var request = modelSession.CreateRequest("after_compaction",
-                        new RNAssistant.Core.ModelProtocol.ModelProtocolCallContext(new string[0]));
+                    var request = modelSession.PrepareRequestAsync("after_compaction",
+                        new RNAssistant.Core.ModelProtocol.ModelProtocolCallContext(new string[0]),
+                        CancellationToken.None).GetAwaiter().GetResult();
                     AssertEqual(1, compactions, "over-budget preparation compacts once and recomposes");
                     AssertTrue(request.RunnableCatalog.Any(tool => tool.Id == optional.Id), "local execution catalog is preserved");
                     AssertTrue(request.CallableTools.Any(tool => tool.Id == optional.Id),
@@ -1286,6 +1287,7 @@ namespace RNAssistant.Harness
                         session.Messages.Add(message);
                         nextPreview.Add(message);
                     }
+                    modelSession.ReleaseRequestMedia();
                     var nextRequest = modelSession.PrepareRequestAsync("later_step",
                         new RNAssistant.Core.ModelProtocol.ModelProtocolCallContext(new string[0]),
                         CancellationToken.None).GetAwaiter().GetResult();

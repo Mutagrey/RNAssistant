@@ -23,15 +23,6 @@ result if a chunk fails. Keep per-chunk capture bounds; a single larger configur
 snapshot would increase COM time, memory and prompt pressure without solving
 coverage.
 
-## Built-in HTML guidance assertion drift — 2026-09-30
-
-Owner: prompt guidance / harness. The focused `settings: built-in guidance uses
-runtime IDs and result v1` check expects the old literal phrase about Office read
-and bind returning `status=ok`; the current HTML skill instead describes exact
-binding coverage and visible render evidence. Reconcile that assertion against the
-current HTML contract in a separate change. This is unrelated to VBA patch or
-Excel search behavior.
-
 ## Large resource working set and compacted action memory — 2026-09-29
 
 Owner: Resource Fabric / model context compiler / context compaction. A model-facing
@@ -135,32 +126,6 @@ combined Plan/HTML statement is stale. Before admitting another same-step Plan
 caller or changing batch policy, make Plan operation identity call-scoped and
 explicitly handle prepared/persisted receipts without replaying unknown effects.
 This is a bounded future guard, not a verified lost write in the current model path.
-
-## Web cache-key assertions — 2026-09-08
-
-Owner: Web tests. `tests/web/run-view-state.test.js` already expects
-`app-agent-model.js?v=run-replay-20260907-1` on baseline `0becf772`, while that
-baseline ships `catalog-display-chat-20260908-1`. The behavioral assertions before
-it pass; the stale key assertion fails. Update brittle cache-key expectations in a
-separate Web-test maintenance slice, with current asset-version checks. This does
-not close Windows/WebView2 delivery qualification.
-
-## Web message-actions fixture — 2026-09-29
-
-Owner: Web tests. `node --test tests/web/message-actions.test.js` fails at the
-grouped-run footer's expected “Ответвить чат отсюда” action. The Web sources and
-test are unchanged by the 2026-09-29 bridge projection slice; the adjacent
-`chat-sync` and `run-view-state` tests pass. Reconcile the fixture with current
-footer state and verify the grouped action in a separate Web-test correction.
-
-## Storage event test expectation — 2026-09-29
-
-Owner: Core storage tests. `storage: event log is canonical` expects a 32 KiB
-activity `DataJson` marker inside `session.commit`, but `SaveInternal` externalizes
-activity bodies over 8192 characters to CAS before computing that commit. The
-focused test currently fails with zero inline markers. Verify the exact CAS body
-and update this stale assertion in a separate test correction; do not change the
-storage contract to inline a large result just to satisfy the fixture.
 
 ## Remaining bridge duplication — 2026-09-29
 

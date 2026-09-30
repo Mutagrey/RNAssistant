@@ -44,7 +44,11 @@ ctx.renderMessageArticle = (message, index) => {
   ctx.appendMessageFooter(node, message, index, null); return node;
 };
 const refresh = () => ctx.reconcileMessageUnits(box, ctx.buildMessageUnits());
-const titles = node => node.children.at(-1).children.at(-1).children.map(button => button.title);
+const titles = node => {
+  const footer = node.children.find(child => child.classList.contains("message-footer"));
+  const actions = footer.children.find(child => child.classList.contains("message-actions"));
+  return actions.children.map(button => button.title);
+};
 refresh();
 const article = box.firstChild, body = article.firstChild;
 assert.deepEqual(titles(article), ["Копировать сообщение"]);

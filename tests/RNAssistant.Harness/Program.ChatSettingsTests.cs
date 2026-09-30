@@ -513,22 +513,22 @@ namespace RNAssistant.Harness
                 "source-backed HTML inspects workbook and VBA prerequisites first");
             AssertContains(htmlAuthoring, "Never replace a rich implementation with a simplified placeholder",
                 "HTML validation repair preserves the requested implementation");
-            AssertContains(htmlAuthoring, "both the Office read and bind return `status=ok`",
-                "HTML guidance cannot claim live data before binding evidence");
-            AssertContains(htmlAuthoring, "finish the source read and binding before writing the data adapter or rendering code",
-                "source-backed HTML establishes its live data contract before construction");
-            AssertContains(htmlAuthoring, "columns:[{key,label,type}], rows:[{...}], rowCount",
-                "HTML guidance defines the bound table envelope used by page code");
-            AssertContains(htmlAuthoring, "rows also include label aliases",
-                "HTML guidance explains generated-dashboard compatibility for source headers");
-            AssertContains(htmlAuthoring, "RNAssistant.data.first()",
-                "HTML guidance gives a single-data-source helper instead of guessed names");
-            AssertContains(htmlAuthoring, "A host refresh with changed values/status creates a new workspace head without adding an Undo step",
-                "HTML guidance requires durable refresh read-back");
+            AssertContains(htmlAuthoring, "bindings have exact view/coverage evidence",
+                "HTML guidance requires exact binding evidence");
+            AssertContains(htmlAuthoring, "claimed refresh has bounded read-back plus visible render evidence",
+                "HTML guidance requires read-back and visible render evidence");
+            AssertContains(htmlAuthoring, "read a supported complete representation with `common.resources_read`, then call `common.html_data_bind`",
+                "source-backed HTML establishes its binding from a complete read");
+            AssertContains(htmlAuthoring, "Use exact saved binding names",
+                "HTML page code uses the saved data contract");
+            AssertContains(htmlAuthoring, "canonical column keys, bounded batches and explicit loading/error states",
+                "HTML guidance requires bounded data delivery and visible failures");
+            AssertContains(htmlAuthoring, "Refresh observes canonical source authority without rewriting workspace history",
+                "HTML refresh does not create a duplicate durable source");
             AssertContains(htmlAuthoring, "visible render evidence",
                 "HTML guidance requires proof that refreshed JSON reached the page");
-            AssertContains(htmlAuthoring, "Standalone export embeds the exact current JSON snapshot plus the local ECharts runtime",
-                "HTML guidance distinguishes a self-contained export from live Office refresh");
+            AssertContains(htmlAuthoring, "Resource-bound pages require a resource host or an exact exported resource bundle",
+                "HTML guidance distinguishes bound data from a standalone page");
             AssertContains(htmlAuthoring, "preflight has zero errors",
                 "HTML definition of done includes static validation");
             AssertContains(htmlAuthoring, "Static preflight does not prove browser execution",
@@ -549,9 +549,9 @@ namespace RNAssistant.Harness
             var taskTracking = skills.Single(skill => skill.Id == "common.task_tracking").BodyMarkdown;
             AssertContains(taskTracking, "three explicit deliverables or meaningful user-level stages",
                 "task tracking uses the complex-request threshold");
-            AssertContains(taskTracking, "Before the first Office/source read or mutation",
-                "the execution checklist precedes domain work");
-            AssertContains(taskTracking, "An open active Task List means the run is not successfully finished",
+            AssertContains(taskTracking, "After a bounded read-only pass over source structure and key examples",
+                "the execution checklist follows initial discovery and precedes construction");
+            AssertContains(taskTracking, "An open active Task List prevents final completion",
                 "task tracking forbids successful completion with an open checklist");
             foreach (var skill in skills)
                 AssertTrue(skill.BodyMarkdown.IndexOf("TOOL_RESULT ok=true", StringComparison.OrdinalIgnoreCase) < 0,

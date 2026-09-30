@@ -106,8 +106,9 @@ resource lifecycle, provider metadata and visible projections in Office. Immutab
 is carried by existing typed `run.updated` operations; immutable `RunViewState`
 is the only active bridge/UI projection and is not another outcome accumulator or store. The old Office loop,
 `RunSummaryBuilder`, mutable accepted-ID bookkeeping and `Failure.Cause` are removed.
-Actual event replay and neutral adapters are tested; production controller is
-compiled in MockDemo, with Windows/Office delivery qualification still open.
+Actual event replay and neutral adapters are tested; the host-neutral harness uses
+a controller stub. Production controller compilation and Office delivery require
+the separate Windows build and qualification gate.
 See [ADR-0001](decisions/ADR-0001-model-does-not-own-completion.md),
 [ADR-0008](decisions/ADR-0008-unknown-effects-are-not-retried.md) and
 [cutover evidence](stabilization/PHASE_3B2_KERNEL_CUTOVER.md).
