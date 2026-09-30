@@ -47,10 +47,14 @@ stage's status, and a new stage defaults to `pending`. A different task requires
 completed; optional indexed `updates` complete evidenced steps in the same
 atomic close revision. A rejected goal/step rewrite or premature completed close returns
 `currentTaskList` with the current goal and ordered step text/status, without
-runtime identities, for an exact retry.
+runtime identities, for a corrected call. A rejected completed close also names
+the unfinished 1-based indexes from the unchanged current revision; partial
+updates in a rejected close are not committed.
 A final response with an active list remains in the kernel loop: the
-first such response is retained and followed by one corrective continuation, while
-a repeated premature final fails the run as `task_list_open`. Chat mode is unaffected.
+first such response is retained and followed by one corrective continuation. A
+tool call between premature finals permits another correction after its result;
+consecutive premature finals fail the run as `task_list_open`. Run iteration and
+tool-step limits still bound correction attempts. Chat mode is unaffected.
 
 R29 switched client, prompts, schema, probes and accepted history together from v3
 to v4 and removed the model-ID parser/context path; only the kernel creates

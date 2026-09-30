@@ -46,6 +46,12 @@ namespace RNAssistant.Harness
                 AssertContains(AgentJsonProtocol.CreateOpenTaskListContinuationMessage().Content,
                     "action=close and outcome=completed",
                     "premature final continuation names the exact closing action");
+                AssertContains(AgentJsonProtocol.CreateOpenTaskListContinuationMessage().Content,
+                    "task_list_not_terminal",
+                    "premature final continuation explains a rejected close");
+                AssertContains(AgentJsonProtocol.CreateOpenTaskListContinuationMessage().Content,
+                    "every step not yet marked completed",
+                    "premature final continuation requires all evidenced unfinished statuses");
                 string contractError;
                 AssertTrue(!ModelToolResultProjection.ValidateAcceptedCall(
                     new ToolCall("old-task-list", "common.task_list_update", "{}"),
@@ -260,7 +266,19 @@ namespace RNAssistant.Harness
                     "completed close reports unfinished stages");
                 AssertEqual("in_progress", (string)closeError["currentTaskList"]["steps"][1]["status"],
                     "premature close returns the unfinished current state");
+                AssertContains(prematureClose.Message, "2, 3, 4",
+                    "premature close names every index still unfinished in the current revision");
                 AssertEqual(artifactCount + 1, session.Artifacts.Count, "rejected close does not create a revision");
+
+                var partialClose = executor.ExecuteManual(Command(TaskListToolCatalog.SetToolId,
+                    "action", "close", "outcome", "completed",
+                    "updates", new JArray(new JObject { ["index"] = 2, ["status"] = "completed" })),
+                    tools, new AppSettings(), false, false, session);
+                AssertTrue(!partialClose.Success, "partial close remains rejected");
+                AssertContains(partialClose.Message, "2, 3, 4",
+                    "rejected partial updates are not mistaken for committed progress");
+                AssertEqual(artifactCount + 1, session.Artifacts.Count,
+                    "partial close creates no revision");
 
                 var duplicateUpdate = executor.ExecuteManual(Command(TaskListToolCatalog.SetToolId,
                     "action", "update_statuses", "goal", "Build a reusable dashboard",
@@ -311,6 +329,46 @@ namespace RNAssistant.Harness
                     string.IsNullOrWhiteSpace(session.ActiveTaskListArtifactId),
                     "atomic close completes the final step and clears the active list");
             });
+        }
+
+        private static void TaskListFinalRecoveryAfterCloseAttempt()
+        {
+            const string runId = "task-list-final-recovery";
+            var firstFinal = AgentJsonProtocol.CreateDeferredFinalMessage("Done.", null);
+            firstFinal.RunId = runId;
+            var secondFinal = AgentJsonProtocol.CreateDeferredFinalMessage("Still done.", null);
+            secondFinal.RunId = runId;
+            var messages = new List<ChatMessage> { firstFinal };
+            AssertEqual(FinalResponseDecision.Continue,
+                ConversationKernelAdapter.OpenTaskListFinalDecision(messages, runId),
+                "first premature final receives a correction opportunity");
+            messages.Add(secondFinal);
+            AssertEqual(FinalResponseDecision.Fail,
+                ConversationKernelAdapter.OpenTaskListFinalDecision(messages, runId),
+                "consecutive premature finals still stop the run");
+
+            var closeAttempt = AgentJsonProtocol.CreateToolCallMessage(
+                new AgentToolCall
+                {
+                    Id = "close-attempt",
+                    Name = TaskListToolCatalog.SetToolId,
+                    Arguments = new Dictionary<string, object>
+                    {
+                        { "action", "close" }, { "outcome", "completed" }
+                    }
+                }, "Closing the task list.", null, "tool",
+                new AcceptedToolCallOrigin("step-close", "attempt-close", 0));
+            closeAttempt.RunId = runId;
+            messages.Insert(1, closeAttempt);
+            AssertEqual(FinalResponseDecision.Continue,
+                ConversationKernelAdapter.OpenTaskListFinalDecision(messages, runId),
+                "a close attempt between finals permits correction after a rejected close");
+            var thirdFinal = AgentJsonProtocol.CreateDeferredFinalMessage("Still open.", null);
+            thirdFinal.RunId = runId;
+            messages.Add(thirdFinal);
+            AssertEqual(FinalResponseDecision.Fail,
+                ConversationKernelAdapter.OpenTaskListFinalDecision(messages, runId),
+                "a second consecutive final after a close attempt stops the run");
         }
 
         private static void TaskListUsesVerifiedNativeRuntime()

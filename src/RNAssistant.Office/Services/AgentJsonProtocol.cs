@@ -176,9 +176,11 @@ namespace RNAssistant.Office.Services
                 ProtocolMessage = true,
                 Content = "RUNTIME_CONTINUE:\nThe preceding final response was accepted, but the Task List is still active. " +
                     "If every step is complete and evidenced, call common.task_list_set with action=close and outcome=completed as the sole tool call now. " +
-                    "If any evidenced step still needs a completed status, include its 1-based index and status=completed in close.updates; this applies the update and closure together. " +
+                    "Include every step not yet marked completed as a 1-based index with status=completed in close.updates, but only when its completion is evidenced. " +
+                    "If the previous close returned task_list_not_terminal, it made no change: use currentTaskList and include every still-unfinished evidenced step's 1-based index with status=completed in close.updates. " +
+                    "The close call applies those updates and closure together. " +
                     "Otherwise continue and verify the unfinished work. Do not return final=true until the close result succeeds. " +
-                    "Another final response while the list is active will fail the run."
+                    "A repeated final response without an intervening tool call will fail the run."
             };
         }
 

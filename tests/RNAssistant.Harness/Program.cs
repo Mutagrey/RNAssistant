@@ -563,6 +563,7 @@ namespace RNAssistant.Harness
                 Test("tools: validate payload without saving", ToolValidateChecksPayloadWithoutSaving),
                 Test("task lists: semantic set creates revisions and closes", TaskListCrudCreatesRevisionsAndClosesCleanly),
                 Test("task lists: progress and stages are preserved", TaskListPreservesProgressAndStages),
+                Test("task lists: final recovery after close attempt", TaskListFinalRecoveryAfterCloseAttempt),
                 Test("task lists: caller-owned step ids rejected", TaskListCrudRejectsAmbiguousSteps),
                 Test("task lists: verified native runtime", TaskListUsesVerifiedNativeRuntime),
                 Test("plan mode: filters mutations and keeps planning tools", PlanModeFiltersMutationsAndKeepsPlanningTools),

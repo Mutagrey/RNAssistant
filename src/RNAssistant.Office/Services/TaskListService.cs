@@ -180,8 +180,15 @@ namespace RNAssistant.Office.Services
             if (closed.Status == "completed" && closed.Steps.Any(step =>
                 step.Status != "completed"))
             {
+                var unfinished = selected.Steps
+                    .Select((step, index) => new { step, index })
+                    .Where(item => item.step.Status != "completed")
+                    .Select(item => (item.index + 1).ToString())
+                    .ToArray();
                 return TaskListMutation.Fail(
-                    "A completed task list requires every step to be completed. Pass evidenced unfinished steps as updates in this close call.",
+                    "Task list was not closed. Current unfinished 1-based step indexes: " +
+                    string.Join(", ", unfinished) +
+                    ". If each step is evidenced, include an update with status=completed for every listed index in a corrected action=close call. Otherwise finish or verify the remaining work.",
                     "task_list_not_terminal", false, selected);
             }
             var artifact = CreateArtifact(closed, selectedArtifact,

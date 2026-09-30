@@ -95,18 +95,28 @@ namespace RNAssistant.Office.Services
             if (_policy.Mode == ChatModes.Chat ||
                 string.IsNullOrWhiteSpace(_session.ActiveTaskListArtifactId))
                 return FinalResponseDecision.Complete;
-            var acceptedFinals = _session.Messages.Count(message =>
-            {
-                if (message == null || message.RunId != _session.LastRun.RunId ||
-                    !message.ProtocolMessage || message.Role != "assistant" ||
-                    message.ResponseStatus != AgentResponseStatuses.InProgress)
-                    return false;
-                var parsed = ConversationResponseHistoryReader.Read(message);
-                return parsed.Success && parsed.Response.Final && parsed.Response.ToolCalls.Count == 0;
-            });
-            return acceptedFinals == 1
-                ? FinalResponseDecision.Continue
-                : FinalResponseDecision.Fail;
+            return OpenTaskListFinalDecision(_session.Messages, _session.LastRun.RunId);
+        }
+
+        internal static FinalResponseDecision OpenTaskListFinalDecision(
+            System.Collections.Generic.IEnumerable<ChatMessage> messages, string runId)
+        {
+            var recent = (messages ?? Enumerable.Empty<ChatMessage>())
+                .Where(message => message != null && message.RunId == runId &&
+                    message.ProtocolMessage && message.Role == "assistant" &&
+                    message.Activity == null &&
+                    message.ResponseProtocolVersion == AgentResponseProtocol.CurrentVersion &&
+                    message.ResponseStatus == AgentResponseStatuses.InProgress)
+                .Reverse().Take(2)
+                .Select(ConversationResponseHistoryReader.Read).ToArray();
+            if (recent.Length == 0 || !recent[0].Success ||
+                !recent[0].Response.Final || recent[0].Response.ToolCalls.Count != 0 ||
+                recent.Length > 1 && !recent[1].Success)
+                return FinalResponseDecision.Fail;
+            return recent.Length > 1 && recent[1].Response.Final &&
+                recent[1].Response.ToolCalls.Count == 0
+                ? FinalResponseDecision.Fail
+                : FinalResponseDecision.Continue;
         }
 
         private ChatMessage ProjectToolCompletion(AgentRunEvent fact)
