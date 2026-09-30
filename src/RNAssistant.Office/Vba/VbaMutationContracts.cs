@@ -194,6 +194,8 @@ namespace RNAssistant.Office.Vba
         public string Text { get; set; }
         public string ContextBefore { get; set; }
         public string ContextAfter { get; set; }
+        public int? StartLine { get; set; }
+        public int? StartColumn { get; set; }
     }
 
     internal sealed class VbaApplyPatchGuardRequest

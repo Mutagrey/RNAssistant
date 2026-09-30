@@ -43,6 +43,27 @@ records it directly and reviews the signed release payload before finalization.
 
 ## Implementation log — includes current in-flight work and earlier entries
 
+Mutation-result delivery audit (2026-09-30): confirmation continuation reused a
+snapshot built before the terminal result; compilation is now deferred to the
+actual request boundary and appends invalidate the cache. Compaction source
+carry-forward no longer mistakes assistant input references for delivered bytes.
+Delivery warnings preserve mutation data/effect metadata, archival preserves source
+target labels, and source/accepted-call payload admission uses calibrated capacity.
+Focused checks include a confirmed 100-hunk VBA patch with archived result and
+complete after-source, stale confirmation, normal writes, compaction, media failure
+and HTML sources. Office/real-model qualification remains open.
+
+Repeated VBA edit correction (2026-09-30): a failing Agent regression proved that
+the compiler converted a verified write to an error when its own input snapshot
+became stale. Call input no longer invalidates terminal outcomes or fresh reads.
+Mutation results now hydrate before folding and retain full semantic data, including
+patch diagnostics, under the complete request budget. VBA patches can address an
+exact line/column with old-text verification; stale coordinates never redirect to
+another occurrence. Targeted host-neutral context/schema/patch checks pass.
+The earlier source-only regression did not check this contradictory outcome;
+it now asserts the actual next request and completion. Windows/Office and target-
+model behavior for the reported photos remain unqualified.
+
 Excel inspect result delivery correction (2026-09-30): a focused reproduction
 confirmed that archived generic JSON was replaced by a success marker even with
 ample context. The compiler now hydrates all selected non-folded result payloads;

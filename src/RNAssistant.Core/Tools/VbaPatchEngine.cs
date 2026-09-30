@@ -6,10 +6,18 @@ namespace RNAssistant.Core.Tools
     public enum VbaPatchStatus
     {
         EmptyFind,
+        InvalidLocation,
         NotFound,
         Ambiguous,
         Unchanged,
         Changed
+    }
+
+    public sealed class VbaPatchLocation
+    {
+        public int StartLine { get; private set; }
+        public int StartColumn { get; private set; }
+        internal VbaPatchLocation(int line, int column) { StartLine = line; StartColumn = column; }
     }
 
     public sealed class VbaPatchResult
@@ -20,9 +28,11 @@ namespace RNAssistant.Core.Tools
         public int MatchCount { get; private set; }
         public int FindMatchCount { get; private set; }
         public bool FormatNormalizedMatch { get; private set; }
+        public IReadOnlyList<VbaPatchLocation> Locations { get; private set; }
+        public bool LocationsComplete { get { return Locations.Count == MatchCount; } }
 
         internal VbaPatchResult(VbaPatchStatus status, string text, string find, int count, int findCount,
-            bool formatNormalizedMatch = false)
+            bool formatNormalizedMatch = false, IReadOnlyList<VbaPatchLocation> locations = null)
         {
             Status = status;
             Text = text;
@@ -30,6 +40,7 @@ namespace RNAssistant.Core.Tools
             MatchCount = count;
             FindMatchCount = findCount;
             FormatNormalizedMatch = formatNormalizedMatch;
+            Locations = locations ?? new VbaPatchLocation[0];
         }
     }
 
@@ -47,7 +58,9 @@ namespace RNAssistant.Core.Tools
             string find,
             string replacement,
             string contextBefore,
-            string contextAfter)
+            string contextAfter,
+            int? startLine = null,
+            int? startColumn = null)
         {
             source = source ?? string.Empty;
             find = VbaTextCanonicalizer.MatchLineEndings(find, source);
@@ -59,8 +72,24 @@ namespace RNAssistant.Core.Tools
             if (string.IsNullOrEmpty(find))
                 return new VbaPatchResult(VbaPatchStatus.EmptyFind, source, find, 0, 0);
             var exactBlock = contextBefore + find + contextAfter;
-            var count = CountOccurrences(source, exactBlock);
+            var positions = new List<int>();
+            var count = CountOccurrences(source, exactBlock, positions);
+            var locations = new List<VbaPatchLocation>();
+            foreach (var position in positions) locations.Add(LocationAt(source, position + contextBefore.Length));
             var findCount = CountOccurrences(source, find);
+            if (startLine.HasValue || startColumn.HasValue)
+            {
+                int position;
+                if (!startLine.HasValue || !TryPosition(source, startLine.Value, startColumn ?? 1, out position))
+                    return new VbaPatchResult(VbaPatchStatus.InvalidLocation, source, find, count, findCount, locations: locations);
+                var blockStart = position - contextBefore.Length;
+                if (blockStart < 0 || exactBlock.Length > source.Length - blockStart ||
+                    string.CompareOrdinal(source, blockStart, exactBlock, 0, exactBlock.Length) != 0)
+                    return new VbaPatchResult(VbaPatchStatus.NotFound, source, find, count, findCount, locations: locations);
+                var pointed = source.Substring(0, position) + replacement + source.Substring(position + find.Length);
+                return new VbaPatchResult(pointed == source ? VbaPatchStatus.Unchanged : VbaPatchStatus.Changed,
+                    pointed, find, 1, findCount, locations: new[] { LocationAt(source, position) });
+            }
             if (count == 0)
             {
                 // VBE can normalize spaces and identifier casing after a write.
@@ -75,25 +104,54 @@ namespace RNAssistant.Core.Tools
                 }
                 return new VbaPatchResult(VbaPatchStatus.NotFound, source, find, count, findCount);
             }
-            if (count != 1) return new VbaPatchResult(VbaPatchStatus.Ambiguous, source, find, count, findCount);
+            if (count != 1) return new VbaPatchResult(VbaPatchStatus.Ambiguous, source, find, count, findCount, locations: locations);
             var blockIndex = source.IndexOf(exactBlock, StringComparison.Ordinal);
             var index = blockIndex + contextBefore.Length;
             var updated = source.Substring(0, index) + replacement + source.Substring(index + find.Length);
             return new VbaPatchResult(string.Equals(updated, source, StringComparison.Ordinal)
-                ? VbaPatchStatus.Unchanged : VbaPatchStatus.Changed, updated, find, count, findCount);
+                ? VbaPatchStatus.Unchanged : VbaPatchStatus.Changed, updated, find, count, findCount, locations: locations);
         }
 
-        private static int CountOccurrences(string value, string find)
+        private static int CountOccurrences(string value, string find, List<int> positions = null)
         {
             var count = 0;
             var index = 0;
             while ((index = value.IndexOf(find, index, StringComparison.Ordinal)) >= 0)
             {
                 count++;
+                // Location previews are bounded diagnostics; the full match count
+                // and LocationsComplete explicitly describe omitted candidates.
+                if (positions != null && positions.Count < 20) positions.Add(index);
                 // Distinct start offsets are ambiguous even when matches overlap.
                 index++;
             }
             return count;
+        }
+
+        private static VbaPatchLocation LocationAt(string source, int position)
+        {
+            var line = 1;
+            var lineStart = 0;
+            for (var index = 0; index < position; index++)
+            {
+                if (!IsLineTerminator(source[index])) continue;
+                if (source[index] == '\r' && index + 1 < position && source[index + 1] == '\n') index++;
+                line++;
+                lineStart = index + 1;
+            }
+            return new VbaPatchLocation(line, position - lineStart + 1);
+        }
+
+        private static bool TryPosition(string source, int line, int column, out int position)
+        {
+            position = 0;
+            if (line < 1 || column < 1) return false;
+            var lines = Lines(source);
+            if (line > lines.Count) return false;
+            var selected = lines[line - 1];
+            if (column > selected.End - selected.Start + 1) return false;
+            position = selected.Start + column - 1;
+            return true;
         }
 
         private static bool CanMatchCompleteLines(string find, string contextBefore, string contextAfter)
@@ -128,6 +186,7 @@ namespace RNAssistant.Core.Tools
                     source.Substring(actual[index].Start, actual[index].End - actual[index].Start));
             var needsFinalNewline = expected[expected.Count - 1].Terminated;
             var matches = 0;
+            var locations = new List<VbaPatchLocation>();
             var matchedFindStart = 0;
             var matchedFindEnd = 0;
             for (var start = 0; start <= actual.Count - expected.Count; start++)
@@ -147,15 +206,16 @@ namespace RNAssistant.Core.Tools
                 var firstFindLine = actual[start + beforeLineCount];
                 var lastFindLine = actual[start + beforeLineCount + findLineCount - 1];
                 matchedFindStart = firstFindLine.Start;
+                if (locations.Count < 20) locations.Add(new VbaPatchLocation(start + beforeLineCount + 1, 1));
                 matchedFindEnd = IsLineTerminator(find[find.Length - 1])
                     ? lastFindLine.TerminatorEnd : lastFindLine.End;
             }
             if (matches == 0) return null;
             if (matches != 1)
-                return new VbaPatchResult(VbaPatchStatus.Ambiguous, source, find, matches, findCount, true);
+                return new VbaPatchResult(VbaPatchStatus.Ambiguous, source, find, matches, findCount, true, locations);
             var updated = source.Substring(0, matchedFindStart) + replacement + source.Substring(matchedFindEnd);
             return new VbaPatchResult(string.Equals(updated, source, StringComparison.Ordinal)
-                ? VbaPatchStatus.Unchanged : VbaPatchStatus.Changed, updated, find, 1, findCount, true);
+                ? VbaPatchStatus.Unchanged : VbaPatchStatus.Changed, updated, find, 1, findCount, true, locations);
         }
 
         private static List<LineSpan> Lines(string text)

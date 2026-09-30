@@ -2025,6 +2025,10 @@ namespace RNAssistant.Harness
                     "one current source observation survives multiple writes");
                 AssertTrue(!compiled.Messages.Any(item => (item.Content ?? string.Empty).StartsWith("RESOURCE_CHANGE:",
                     StringComparison.Ordinal)), "obsolete synthetic after-states add no duplicate change markers");
+                var calibrated = compiler.Compile(authority, new ChatMessage[0], history, null,
+                    new ToolCatalogEntry[0], new AppSettings { TokenEstimateMultiplier = 0.25 }, 1024);
+                AssertContains(calibrated.Messages.Single(item => item.SyntheticResourceObservation).Content,
+                    body("CURRENT_SOURCE_VERSION"), "current mutation source uses the calibrated request budget without a separate byte cap");
 
                 var store = new ResourceAuthorityStore(paths);
                 var sourceAuthority = new ResourceAuthorityService(store, store, payloads: payloads);
@@ -2062,6 +2066,20 @@ namespace RNAssistant.Harness
                 AssertTrue(!active.Any(item => item.Id == history.Last().Id), "checkpoint removes the write frame");
                 var archived = ConversationModelSession.ArchivedCurrentSources(session, active);
                 AssertEqual(1, archived.Count, "only the latest source is carried across compaction");
+                foreach (var protocol in new[] { false, true })
+                {
+                    var inputOnly = new ChatMessage { Role = "assistant", ProtocolMessage = protocol,
+                        Content = "Continue with the already edited module.",
+                        ResourceEvidence = history.Last().ResourceEvidence.ToList() };
+                    var withInput = active.Concat(new[] { inputOnly }).ToList();
+                    var retained = ConversationModelSession.ArchivedCurrentSources(session, withInput, authority.Resources);
+                    AssertEqual(1, retained.Count,
+                        "current input references on later assistant messages cannot stand in for visible source bytes");
+                    var request = compiler.Compile(authority, new ChatMessage[0], withInput.Concat(retained).ToList(),
+                        null, new ToolCatalogEntry[0], new AppSettings(), 4096);
+                    AssertTrue(request.Messages.Any(item => item.SyntheticResourceObservation &&
+                        item.Content.Contains("CURRENT_SOURCE_VERSION")), "compaction restores the actual body, not only its reference");
+                }
                 var historicalRead = AgentJsonProtocol.CreateToolResultMessage(
                     new ToolInvocation { ToolCallId = "historical", ToolId = ResourceToolCatalog.ReadToolId },
                     new ToolResultMaterialization(RNAssistant.Core.Tools.Contracts.ToolResult.Ok("read",
@@ -2212,6 +2230,59 @@ namespace RNAssistant.Harness
 
             var currentEvidence = new ResourceEvidence("read", scope, r2,
                 "source", ResourceCoverage.Whole(), true, 2);
+            call.ResourceEvidence.Add(evidence);
+            var currentResult = AgentJsonProtocol.CreateToolResultMessage(command,
+                new ToolResultMaterialization(RNAssistant.Core.Tools.Contracts.ToolResult.Ok("read",
+                    new JObject { ["target"] = "VBA module: Module1", ["text"] = "CURRENT_READ" }.ToString()),
+                    resourceEvidence: new[] { currentEvidence }), int.MaxValue, "tool");
+            var fresh = new ModelContextCompiler().Compile(authority, new ChatMessage[0], new[] { call, currentResult },
+                null, new ToolCatalogEntry[0], new AppSettings(), 1024);
+            AssertEqual(RNAssistant.Core.Tools.Contracts.ToolResultStatus.Ok,
+                ToolResultWire.Read(fresh.Messages.Last().Content).Result.Status,
+                "a fresh read result is not invalidated by its call's older input evidence");
+            AssertContains(fresh.Messages.Last().Content, "CURRENT_READ", "fresh read body reaches the model");
+
+            WithTempPaths(paths =>
+            {
+                var payloads = new ChatBlobStore(paths);
+                var diagnostic = "CURRENT_RECOVERY_SOURCE_" + new string('x', 16000);
+                var mutationCall = new ChatMessage { Role = "assistant", ProtocolMessage = true,
+                    ToolCallId = "failed-patch", ToolName = "common.vba_apply_patch",
+                    ResourceEvidence = new List<ResourceEvidence> { evidence } };
+                var mutationTool = new ToolCatalogEntry { Id = mutationCall.ToolName,
+                    Policy = new ToolPolicy(ToolEffect.Write, ToolVerification.Tool, false, false, new[] { "agent" }) };
+                foreach (var role in new[] { "user", "developer", "tool" })
+                {
+                    var failure = AgentJsonProtocol.CreateToolResultMessage(new ToolInvocation {
+                            ToolCallId = mutationCall.ToolCallId, ToolId = mutationCall.ToolName },
+                        new ToolResultMaterialization(RNAssistant.Core.Tools.Contracts.ToolResult.Error("Patch rejected.", new JObject {
+                            ["code"] = "vba_patch_ambiguous", ["hunkIndex"] = 2, ["matchCount"] = 3,
+                            ["locations"] = new JArray(new JObject { ["startLine"] = 12, ["startColumn"] = 5 }),
+                            ["locationsComplete"] = false,
+                            ["currentSource"] = diagnostic }.ToString())), int.MaxValue, role);
+                    failure.ResultPayload = PayloadRef.FromBlob(payloads.StoreText(failure.Content, "application/json"));
+                    var compact = AgentJsonProtocol.CreateToolResultMessage(new ToolInvocation {
+                            ToolCallId = mutationCall.ToolCallId, ToolId = mutationCall.ToolName },
+                        new ToolResultMaterialization(RNAssistant.Core.Tools.Contracts.ToolResult.Error("Patch rejected.",
+                            "{\"payload_externalized\":true}")), int.MaxValue, role);
+                    failure.Content = compact.Content;
+                    var replay = new ModelContextCompiler(payloads).Compile(authority, new ChatMessage[0],
+                        new[] { mutationCall, failure }, null, new[] { mutationTool }, new AppSettings(), 16000);
+                    var frame = replay.Messages.Single().Content;
+                    var frameData = JObject.Parse(frame.Substring(frame.IndexOf('\n') + 1));
+                    AssertEqual("Error", (string)frameData["outcome"], "actual failure status survives folding");
+                    AssertEqual("vba_patch_ambiguous", (string)frameData["data"]?["code"],
+                        "folded failure retains the real patch recovery code in " + role);
+                    AssertEqual(3, (int)frameData["data"]["matchCount"], "ambiguous locations retain their count");
+                    AssertEqual(12, (int)frameData["data"]["locations"][0]["startLine"],
+                        "semantic patch coordinates survive mutation folding and runtime-evidence sanitization");
+                    AssertEqual(diagnostic, (string)frameData["data"]["currentSource"],
+                        "archived mutation diagnostics are delivered completely within the request budget");
+                    RuntimeThrows<PromptBudgetExceededException>(() => new ModelContextCompiler(payloads).Compile(
+                        authority, new ChatMessage[0], new[] { mutationCall, failure }, null,
+                        new[] { mutationTool }, new AppSettings(), 1024));
+                }
+            });
             var oversizedCommand = new ToolInvocation
             {
                 ToolId = "common.resources_read",

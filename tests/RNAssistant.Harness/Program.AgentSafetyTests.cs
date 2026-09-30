@@ -1445,11 +1445,14 @@ namespace RNAssistant.Harness
                 AssertTrue(exactReplace != null, "patch schema exposes one exact replacement contract");
                 AssertTrue(exactReplace.SelectToken("properties.op") == null,
                     "constant VBA patch operation is runtime-owned");
-                AssertEqual(4, ((JObject)exactReplace["properties"]).Properties().Count(),
-                    "exact replacement exposes find, text, and optional exact context");
-                AssertTrue(exactReplace.SelectToken("properties.startLine") == null &&
+                AssertEqual(6, ((JObject)exactReplace["properties"]).Properties().Count(),
+                    "exact replacement exposes find, text, optional exact context and location");
+                foreach (var coordinate in new[] { "startLine", "startColumn" })
+                    AssertContains(exactReplace.SelectToken("properties." + coordinate + ".type").ToString(),
+                        "integer", "patch location uses integer coordinates");
+                AssertTrue(exactReplace.SelectToken("properties.deleteCount") == null &&
                     exactReplace.SelectToken("properties.pattern") == null,
-                    "line-number and regex patch fields are absent from the model schema");
+                    "unchecked line deletion and regex patch fields are absent from the model schema");
 
                 var restoreTool = executor.GetControllerTools().Single(candidate => candidate.Id == "common.vba_restore_backup");
                 var restoreSchema = JObject.Parse(ConversationResponseSchemaBuilder.Build(new[] { restoreTool }));

@@ -109,9 +109,12 @@ durable event formats remain unchanged.
 
 Since 11O5 the six public VBA/macro registrations use exact intent bindings. Whole-
 source write and identity-preserving rename are separate tools. Model patch hunks
-require `find` and `text`; optional unchanged `contextBefore`/`contextAfter`
-disambiguates repeated text inside the exact `moduleName`, while runtime supplies
-the fixed replace operation before domain preparation. Restore accepts either an exact readable backup target returned
+require `find` and `text`. Repeated source within `moduleName` is selected by
+unchanged `contextBefore`/`contextAfter` or explicit `startLine` and optional
+`startColumn` (1-based UTF-16 column including indentation; default 1). A location
+checks exact old text and adjacent context only there, with no search elsewhere
+or format-normalized redirection. These are code coordinates, not runtime resource
+handles. Runtime supplies the fixed replace operation before domain preparation. Restore accepts either an exact readable backup target returned
 by Resource Fabric or a module name meaning its latest available backup. Runtime
 resolves that intent to the exact backup id before confirmation and stores it only
 in prepared state. Raw backup ids, hashes, revisions, guards and journal identities
@@ -128,9 +131,12 @@ are absent from accepted model arguments and replay.
 Patch inputs match actual newline characters to the current source style. Literal
 backslash sequences are never decoded again. Comparison representations are never
 written over the original CAS body. Every starting offset counts toward uniqueness,
-including overlaps (`aaaa` / `aaa` has two matches). A replacement requires exactly
-one match even when its text equals the find block. Ambiguity returns
-`vba_patch_ambiguous` with the full `matchCount` and leaves source unchanged.
+including overlaps (`aaaa` / `aaa` has two matches). Without a location, a
+replacement requires exactly one match even when its text equals the find block.
+Ambiguity returns `vba_patch_ambiguous`, full `matchCount`, up to 20 candidate
+`locations` and explicit `locationsComplete`; source remains unchanged. A pointed
+replacement requires exact matching at that location, even if other copies exist.
+Later hunks use coordinates in the candidate after preceding hunks.
 
 Ordered operations work on candidate text only. If any operation is ambiguous,
 the entire patch is rejected before confirmation, backend write or creation of a

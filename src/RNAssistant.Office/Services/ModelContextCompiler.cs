@@ -85,6 +85,8 @@ namespace RNAssistant.Office.Services
                 ResourceGenerations = authority.Resources.Snapshots.ToDictionary(item => item.Key, item => item.Value.Generation)
             };
             var atoms = new List<ContextAtom>();
+            var maximumPayloadBytes = Math.Max(4096L,
+                2L * ModelContextBudget.ApproximateTextCharacterCapacity(budget, settings));
             foreach (var message in required ?? new ChatMessage[0])
                 atoms.Add(Atom("system-invariant", Clone(message), true));
             foreach (var note in notes ?? new ContextNote[0])
@@ -135,12 +137,16 @@ namespace RNAssistant.Office.Services
                 {
                     var frame = new ToolInteractionFrame { Call = fact, Result = result };
                     var atom = Atom("tool-interaction", frame.Call, true);
+                    // A call's evidence describes the input used to authorize it.
+                    // Its own write can supersede that input without invalidating
+                    // the terminal outcome or an independent subsequent read.
+                    atom.Evidence.Clear();
                     atom.Messages.Add(frame.Result);
                     if (frame.Result.ResourceEffect == null)
                         atom.Evidence.AddRange(frame.Result.ResourceEvidence ?? new List<ResourceEvidence>());
                     atom.CausalFrameId = fact.ToolCallId;
                     atoms.Add(atom);
-                    AddCurrentMutationSources(atoms, frame, authority.Resources, budget);
+                    AddCurrentMutationSources(atoms, frame, authority.Resources, maximumPayloadBytes);
                     consumed.Add(result.Id);
                 }
                 else atoms.Add(Atom(fact.ProtocolMessage ? "protocol-fact" : "dialogue", fact, !fact.ProtocolMessage));
@@ -204,34 +210,7 @@ namespace RNAssistant.Office.Services
                 var call = atom.Messages[0];
                 var tool = (tools ?? new ToolCatalogEntry[0]).FirstOrDefault(item => item.Id == call.ToolName);
                 if (atom.Messages[1].ResourceEffect == null && (tool == null || tool.Policy == null || !tool.Policy.MayHaveSideEffects)) continue;
-                ToolResultWireReadResult wire;
-                string error;
-                var result = atom.Messages[1];
-                if (!ToolResultHistoryReader.TryRead(result, out wire, out error)) continue;
-                if (projectionSkills == null) projectionSkills = authority.Skills.Skills;
-                var modelResult = ModelToolResultProjection.Project(
-                    result, tools, projectionSkills);
-                ToolResultWireReadResult modelWire;
-                if (!ToolResultHistoryReader.TryRead(
-                    modelResult, out modelWire, out error)) continue;
-                var effect = result.ResourceEffect;
                 atom.Kind = "terminal-mutation";
-                atom.Messages = new List<ChatMessage> { new ChatMessage {
-                    Id = result.Id, Role = "assistant", ProtocolMessage = true,
-                    Content = "TOOL_INTERACTION (completed causal frame):\n" + JsonConvert.SerializeObject(new {
-                        tool = modelWire.Name, outcome = modelWire.Result.Status.ToString(), message = modelWire.Result.Message,
-                        effect = effect == null ? null : new {
-                            operation = effect.Operation,
-                            outcome = effect.Outcome.ToString(),
-                            verification = ModelToolResultProjection.SanitizeRuntimeText(
-                                effect.Verification),
-                            impacts = effect.Impacts.Select(impact => new {
-                                relation = impact.Relation.ToString(),
-                                coverage = impact.Coverage,
-                                changeKind = ModelToolResultProjection.SanitizeRuntimeText(
-                                    impact.ChangeKind)
-                            })
-                        } }) } };
             }
 
             var observed = new HashSet<string>(StringComparer.Ordinal);
@@ -261,16 +240,14 @@ namespace RNAssistant.Office.Services
             // Archival size is not a model-delivery limit. Generic read results need
             // their complete data just as resource/capability reads do. The final
             // request budget, including calibrated token cost, decides what fits.
-            var maximumPayloadBytes = Math.Max(4096L,
-                2L * ModelContextBudget.ApproximateTextCharacterCapacity(budget, settings));
-            foreach (var atom in atoms.Where(item => item.Kind != "resource-change" && item.Kind != "terminal-mutation"))
+            foreach (var atom in atoms.Where(item => item.Kind != "resource-change"))
             {
                 for (var index = 0; index < atom.Messages.Count; index++)
                 {
                     var message = atom.Messages[index];
-                    if (message.AcceptedCallPayload != null)
+                    if (message.AcceptedCallPayload != null && atom.Kind != "terminal-mutation")
                     {
-                        if (_payloads == null || message.AcceptedCallPayload.ByteLength > Math.Max(4096L, budget * 8L))
+                        if (_payloads == null || message.AcceptedCallPayload.ByteLength > maximumPayloadBytes)
                             throw new PromptBudgetExceededException("An unresolved accepted call exceeds the bounded request. Complete or cancel it before continuing.", false);
                         atom.Messages[index] = message = AcceptedCallPayloadService.Hydrate(message, _payloads);
                         receipt.HydratedPayloads++;
@@ -280,6 +257,8 @@ namespace RNAssistant.Office.Services
                     {
                         if (_payloads == null)
                         {
+                            if (atom.Kind == "terminal-mutation")
+                                throw new InvalidOperationException("Exact mutation result payload reader is unavailable.");
                             MarkUnavailable(atom,
                                 "Exact payload reader is unavailable.");
                             receipt.ExcludedUnavailable++;
@@ -314,7 +293,13 @@ namespace RNAssistant.Office.Services
                             receipt.HydratedBytes += message.ResultPayload.ByteLength;
                         }
                         catch (Exception ex) when (ex is System.IO.IOException || ex is System.IO.InvalidDataException || ex is System.Security.Cryptography.CryptographicException)
-                        { MarkUnavailable(atom, "Exact payload is unavailable; no newer revision was substituted."); receipt.ExcludedUnavailable++; break; }
+                        {
+                            if (atom.Kind == "terminal-mutation")
+                                throw new InvalidOperationException("Exact mutation result payload is unavailable.", ex);
+                            MarkUnavailable(atom, "Exact payload is unavailable; no newer revision was substituted.");
+                            receipt.ExcludedUnavailable++;
+                            break;
+                        }
                     }
                     ProjectSharedContext(message, authority);
                     if (message.ToolResultProtocolVersion == ToolResultWire.CurrentVersion &&
@@ -332,6 +317,31 @@ namespace RNAssistant.Office.Services
                     }
                 }
             }
+            // Fold only after complete result hydration and model projection. Data
+            // carries target, changed/no-op facts and structured recovery (including
+            // patch locations); retaining only a success/error sentence loses them.
+            foreach (var atom in atoms.Where(item => item.Kind == "terminal-mutation"))
+            {
+                var result = atom.Messages[1];
+                ToolResultWireReadResult wire;
+                string error;
+                if (!ToolResultHistoryReader.TryRead(result, out wire, out error)) continue;
+                var effect = result.ResourceEffect;
+                atom.Messages = new List<ChatMessage> { new ChatMessage {
+                    Id = result.Id, Role = "assistant", ProtocolMessage = true,
+                    Content = "TOOL_INTERACTION (completed causal frame):\n" + JsonConvert.SerializeObject(new {
+                        tool = wire.Name, outcome = wire.Result.Status.ToString(), message = wire.Result.Message,
+                        data = ToolResultWire.ParseData(wire.Result.DataJson),
+                        effect = effect == null ? null : new {
+                            operation = effect.Operation,
+                            outcome = effect.Outcome.ToString(),
+                            verification = ModelToolResultProjection.SanitizeRuntimeText(effect.Verification),
+                            impacts = effect.Impacts.Select(impact => new {
+                                relation = impact.Relation.ToString(), coverage = impact.Coverage,
+                                changeKind = ModelToolResultProjection.SanitizeRuntimeText(impact.ChangeKind)
+                            })
+                        } }) } };
+            }
             var messages = atoms.SelectMany(item => item.Messages).ToList();
             receipt.EstimatedTokens = ModelContextBudget.EstimateMessagesTokens(messages, settings);
             receipt.AtomCounts = atoms.GroupBy(item => item.Kind).ToDictionary(group => group.Key, group => group.Count());
@@ -343,7 +353,7 @@ namespace RNAssistant.Office.Services
         }
 
         private void AddCurrentMutationSources(List<ContextAtom> atoms,
-            ToolInteractionFrame frame, ResourceAuthoritySnapshotSet authority, int budget)
+            ToolInteractionFrame frame, ResourceAuthoritySnapshotSet authority, long maximumPayloadBytes)
         {
             var effect = frame.Result.ResourceEffect;
             if (effect == null || effect.Outcome != ResourceEffectOutcome.VerifiedChanged &&
@@ -357,7 +367,7 @@ namespace RNAssistant.Office.Services
                     _reducer.Reduce(evidence, authority).State != EvidenceState.Current) continue;
                 if (_payloads == null)
                     throw new InvalidOperationException("Verified current source has no payload reader.");
-                if (evidence.Payload.ByteLength > Math.Max(4096L, (long)budget * 8L))
+                if (evidence.Payload.ByteLength > maximumPayloadBytes)
                     throw new PromptBudgetExceededException(
                         "Complete current source after mutation exceeds the request budget.", false);
                 var body = _payloads.ReadText(evidence.Payload.ToBlobReference());
@@ -383,6 +393,8 @@ namespace RNAssistant.Office.Services
             string error;
             if (!ToolResultHistoryReader.TryRead(result, out wire, out error)) return null;
             var data = ToolResultWire.ParseData(wire.Result.DataJson) as JObject;
+            // Delivery warnings retain the original semantic result under tool_data.
+            data = data?["tool_data"] as JObject ?? data;
             var member = (data?["members"] as JArray ?? new JArray()).OfType<JObject>()
                 .FirstOrDefault(item => string.Equals((string)item["uri"],
                     evidence.Resource.Uri, StringComparison.Ordinal));

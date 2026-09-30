@@ -1907,7 +1907,7 @@ namespace RNAssistant.Harness
 
                 var result = executor.ExecuteManual(command, OfficeToolCatalog.ForHost(adapter.HostName).ToList(), new AppSettings { AutoConfirmToolActions = true }, false, false);
 
-                AssertTrue(!result.Success, "line-number patch mode rejected by schema");
+                AssertTrue(!result.Success, "unchecked line deletion mode rejected by schema");
                 AssertEqual("invalid_arguments", result.ErrorCode, "removed addressing mode fails before patch execution");
                 AssertEqual("Sub Main()\nEnd Sub", adapter.VbaModuleCode, "removed addressing mode leaves module unchanged");
             });
@@ -2704,6 +2704,33 @@ namespace RNAssistant.Harness
 
         private static void VbaPatchDisambiguatesWithExactContext()
         {
+            WithTempExecutor((executor, adapter) =>
+            {
+                var source = "Sub One()\nDebug.Print \"same\"\nEnd Sub\n" +
+                    "Sub Two()\nDebug.Print \"same\"\nEnd Sub";
+                adapter.VbaModuleCode = source;
+                var hunk = new JObject { ["find"] = "Debug.Print \"same\"", ["text"] = "Debug.Print \"changed\"" };
+                var tools = OfficeToolCatalog.ForHost(adapter.HostName).Concat(executor.GetControllerTools()).ToList();
+                Func<ToolRunResult> apply = () => executor.ExecuteManual(Command(VbaToolCatalog.ApplyPatch,
+                    "moduleName", "Module1", "patch", new JArray(hunk.DeepClone())), tools,
+                    new AppSettings { AutoConfirmToolActions = true }, false, false);
+                var ambiguous = apply();
+                AssertEqual("vba_patch_ambiguous", ambiguous.ErrorCode, "unaddressed duplicate writes nothing");
+                var locations = JObject.Parse(ambiguous.DataJson);
+                AssertEqual(true, (bool)locations["locationsComplete"], "all candidate locations are supplied");
+                AssertEqual(5, (int)locations["locations"][1]["startLine"], "second procedure's line is explicit");
+                hunk["startLine"] = locations["locations"][1]["startLine"].DeepClone();
+                hunk["startColumn"] = locations["locations"][1]["startColumn"].DeepClone();
+                AssertTrue(apply().Success, "exact location selects the intended duplicate");
+                AssertEqual("Sub One()\nDebug.Print \"same\"\nEnd Sub\n" +
+                    "Sub Two()\nDebug.Print \"changed\"\nEnd Sub", adapter.VbaModuleCode,
+                    "only the selected occurrence changes");
+                AssertEqual("vba_patch_stale_source", apply().ErrorCode,
+                    "repeating the old patch cannot redirect to the remaining occurrence");
+                AssertEqual(1, adapter.CountVbaCalls(FakeVbaOperation.ReplaceModule),
+                    "ambiguous and stale positions never dispatch");
+            });
+
             WithTempExecutor(delegate(OfficeToolExecutor executor,
                 FakeOfficeAdapter adapter)
             {
@@ -2745,6 +2772,32 @@ namespace RNAssistant.Harness
                 "stale exact context is rejected");
             AssertEqual("A\nX\nA", stale.Text,
                 "stale context never mutates source");
+            foreach (var newline in new[] { "\n", "\r\n", "\r" })
+            {
+                var source = "header" + newline + "  old old";
+                var selected = VbaPatchEngine.Replace(source, "old", "new", null, null, 2, 7);
+                AssertEqual("header" + newline + "  old new", selected.Text,
+                    "exact column selects a duplicate on the same line for each newline style");
+                AssertEqual(VbaPatchStatus.NotFound,
+                    VbaPatchEngine.Replace(source, "old", "new", null, null, 2, 4).Status,
+                    "nearby matching text cannot rescue a wrong coordinate");
+                AssertEqual(VbaPatchStatus.NotFound,
+                    VbaPatchEngine.Replace(source, "old", "new", "wrong", null, 2, 7).Status,
+                    "position does not bypass adjacent context verification");
+                AssertEqual(VbaPatchStatus.InvalidLocation,
+                    VbaPatchEngine.Replace(source, "old", "new", null, null, null, 7).Status,
+                    "a column requires a line");
+                AssertEqual(VbaPatchStatus.InvalidLocation,
+                    VbaPatchEngine.Replace(source, "old", "new", null, null, 99).Status,
+                    "out-of-range location is rejected");
+                AssertEqual(VbaPatchStatus.Unchanged,
+                    VbaPatchEngine.Replace(source, "old", "old", null, null, 2, 7).Status,
+                    "explicitly selected no-op remains a no-op despite another occurrence");
+            }
+            var many = VbaPatchEngine.Replace(string.Join("\n", Enumerable.Repeat("old", 25)), "old", "new");
+            AssertEqual(25, many.MatchCount, "ambiguity count is complete");
+            AssertEqual(20, many.Locations.Count, "candidate location preview is bounded");
+            AssertTrue(!many.LocationsComplete, "omitted locations are explicit");
         }
 
         private static void VbaExactPatchPreservesBoundaryNewlines()

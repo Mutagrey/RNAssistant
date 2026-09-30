@@ -12,14 +12,62 @@ The screenshot does not show the exact second model request, VBA source or Windo
 build, so it cannot establish whether the model missed the first after-state or
 ignored it. A confirmed write proves matching source read-back, not compilation.
 
-Owner: model context delivery / Agent VBA workflow. The current host-neutral path
-publishes complete VBA source after a verified mutation and fails explicitly if it
-cannot fit the model request. A focused Agent loop regression now checks that both
-patch and whole-module write after-states appear in the next model request. Obtain
-the affected run's full trajectory, including model-request CAS bodies, accepted
-calls/results and the Windows build revision; compare the request between the first
-and second writes with the journaled after-source. If the source was present,
-investigate the repeated repair decision separately from context delivery.
+Follow-up photo shows successful patches interleaved with stale/ambiguous patch
+errors and repeated renaming of already changed identifiers. Owner: model context
+compiler / VBA patch engine and guidance. Two host-neutral defects are reproduced:
+
+- A call's input evidence was treated as its result's currentness evidence. The
+  write superseded that input, so the next request could contain `outcome: Error`
+  and “Prior observation is not current evidence” alongside `VerifiedChanged` and
+  complete correct after-source. The compiler now filters result observations
+  independently; input evidence remains available for audit/guards.
+- Completed mutations folded before CAS hydration and discarded `data`, losing
+  patch hunk diagnostics and structured recovery. Folding now follows full result
+  hydration/projection and retains semantic data within the complete request
+  budget. Missing mutation payloads fail explicitly; no terminal status is invented.
+
+The earlier regression checked source presence only; its final-step assertion was
+also on an unreachable request number. The corrected Agent test asserts actual
+completion and the next request's successful write outcome outside the model stub.
+Compiler tests cover fresh reads after stale input, all three result roles,
+archived mutation data above 8192 characters, patch coordinates and budget refusal.
+The outcome assertion failed before correction and passes afterward.
+
+Patch now accepts exact line/column coordinates with old-text/context verification,
+or unique context. Ambiguity returns explicit candidate locations. A stale selected
+location cannot redirect to another matching line. Tests cover repeated text in
+different procedures, a repeated old patch, newline styles and bounded diagnostics.
+Guidance requires a concrete remaining defect before editing a verified after-state.
+These host-neutral checks do not establish the exact photo incident's full cause
+or real-model behavior; Windows/Office and the affected model trajectory remain open.
+
+Broader result-delivery audit (2026-09-30), owner: conversation model session and
+context compiler. Further defects were identified and corrected:
+
+- Confirmation created a model session and compiled its initial snapshot before
+  appending the terminal result. That cache could serve the next request without
+  the already completed action. Compilation now occurs at the request boundary;
+  accepted history appends invalidate cached snapshots.
+- After compaction, complete current input evidence on a later assistant message
+  suppressed source carry-forward, although that message contained no source bytes.
+  Only actual source-bearing observations suppress the archived body. A focused
+  regression reproduced zero restored bodies before correction and one afterward.
+- Media preparation reconstructed materialization without ResourceEffect,
+  ResourceEvidence or AuthorityCommitId. The explicit reproduction failed with a
+  missing verified effect. Both media and general delivery failures now preserve
+  terminal semantics/evidence; a warning does not imply the mutation did not happen.
+- Large mutation archival dropped module/title labels needed before result
+  hydration and after compaction. Markers now retain semantic source labels.
+- Current after-source and unresolved accepted-call hydration used an uncalibrated
+  byte bound. They now use the same calibrated request-capacity admission as other
+  payloads, followed by the complete request budget check.
+
+The successful confirmation regression uses 100 ordered hunks, forces result CAS
+archival, verifies one dispatch and complete labeled after-source in the next
+request, and checks the provider message builder preserves it. The stale-confirmation
+fixture now keeps the original run identity so it tests source drift independently
+of execution-identity mismatch. These checks do not exercise real Office or claim
+that model decisions are deterministic when the correct result is supplied.
 
 ## Excel inspection loop — 2026-09-30
 

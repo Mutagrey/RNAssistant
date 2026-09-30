@@ -131,7 +131,7 @@ namespace RNAssistant.Office.Tools
             var find = new JObject
             {
                 ["type"] = "string",
-                ["description"] = "Current VBA source to replace. Exact matching runs first; if it fails, one unique complete-line token-equivalent block may match VBE spacing/case changes, including line-aligned context. Strings and comments remain significant. Copy from a recent source read; use context to disambiguate repeats.",
+                ["description"] = "Current VBA source to replace. Exact matching runs first; if it fails, one unique complete-line token-equivalent block may match VBE spacing/case changes, including line-aligned context. Strings and comments remain significant. Copy from complete current source in context; use exact context or startLine/startColumn to select a repeated occurrence. Explicit locations require exact text with no format-normalized search.",
                 ["minLength"] = 1
             };
             var text = new JObject
@@ -146,6 +146,16 @@ namespace RNAssistant.Office.Tools
                 {
                     ["find"] = find,
                     ["text"] = text,
+                    ["startLine"] = new JObject
+                    {
+                        ["type"] = "integer", ["minimum"] = 1,
+                        ["description"] = "Optional exact 1-based line where find starts in the current candidate module. Use with startColumn to select one repeated occurrence. Runtime checks find and any adjacent context at this position only; a mismatch never searches elsewhere. Later hunks use positions after preceding hunks."
+                    },
+                    ["startColumn"] = new JObject
+                    {
+                        ["type"] = "integer", ["minimum"] = 1,
+                        ["description"] = "Optional 1-based UTF-16 column, including indentation, where find starts. Requires startLine; defaults to 1. Prefer locations returned by an ambiguous-patch diagnostic."
+                    },
                     ["contextBefore"] = new JObject
                     {
                         ["type"] = "string",

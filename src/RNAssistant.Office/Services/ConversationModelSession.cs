@@ -111,8 +111,8 @@ namespace RNAssistant.Office.Services
         internal async Task<ModelProtocolRequest> PrepareRequestAsync(
             string stepId, ModelProtocolCallContext callContext, CancellationToken cancellationToken)
         {
-            // CreateAsync has already compiled the initial snapshot. Subsequent
-            // requests clear it after dispatch and compile the updated history.
+            // Compile at the request boundary, after every accepted terminal
+            // result (including confirmation continuation) has entered history.
             if (_lastSnapshot == null)
                 await PrepareCurrentSnapshotAsync(cancellationToken).ConfigureAwait(false);
             if (EndResponse(stepId))
@@ -184,6 +184,7 @@ namespace RNAssistant.Office.Services
                 AcceptedCallPayloadService.Externalize(accepted, _payloads);
             }
             _session.Messages.Add(accepted);
+            _lastSnapshot = null;
         }
 
         internal void AppendDeferredFinal(string message, LlmCompletionResult completion)
@@ -192,6 +193,7 @@ namespace RNAssistant.Office.Services
             AttachResponseEvidence(accepted);
             _session.Messages.Add(accepted);
             _runtimeContinuation = AgentJsonProtocol.CreateOpenTaskListContinuationMessage();
+            _lastSnapshot = null;
         }
 
         internal void AttachResponseEvidence(ChatMessage message)
@@ -207,6 +209,9 @@ namespace RNAssistant.Office.Services
             var accepted = MaterializeToolResultMessage(
                 command, result, out model);
             _session.Messages.Add(accepted);
+            // Confirmation may construct this session before the terminal result
+            // is appended. That initial request snapshot must not be reused.
+            _lastSnapshot = null;
         }
 
         internal async Task<PreparedToolResult> PrepareToolResultAsync(
@@ -236,7 +241,7 @@ namespace RNAssistant.Office.Services
             return new PreparedToolResult(result, media);
         }
 
-        private static ToolResultMaterialization ProjectionFailure(ToolInvocation command,
+        internal static ToolResultMaterialization ProjectionFailure(ToolInvocation command,
             ToolResultMaterialization source,
             string message, string code)
         {
@@ -249,16 +254,26 @@ namespace RNAssistant.Office.Services
                 ["complete"] = false,
                 ["tool_data"] = source.Data.DeepClone()
             };
+            if (!ToolResultResourceService.IsExactReadEvidence(command))
+                data = new JObject {
+                    ["tool_data"] = source.Data.DeepClone(),
+                    ["delivery_warning"] = new JObject {
+                        ["code"] = code, ["loaded"] = false, ["complete"] = false }
+                };
             return new ToolResultMaterialization(
                 new RNAssistant.Core.Tools.Contracts.ToolResult(
                     ToolResultResourceService.ProjectionFailureStatus(
                         command, source.Result.Status),
-                    message,
+                    ToolResultResourceService.IsExactReadEvidence(command) ? message :
+                        source.Result.Message + "\nResult delivery warning: " + message,
                     data.ToString(Formatting.None),
                     source.Result.Resources),
                 resultResource: source.ResultResource,
                 resultResourceKind: source.ResultResourceKind,
-                data: data);
+                data: data,
+                resourceEvidence: source.ResourceEvidence,
+                resourceEffect: source.ResourceEffect,
+                authorityCommitId: source.AuthorityCommitId);
         }
 
         internal void AppendToolResult(ToolInvocation command, PreparedToolResult prepared)
@@ -272,6 +287,7 @@ namespace RNAssistant.Office.Services
                 : _session.LastRun.RunId;
             if (model != null) model.RunId = accepted.RunId;
             AppendPairedResult(_session.Messages, accepted);
+            _lastSnapshot = null;
             _toolPack.StageReadResult(model);
             if (prepared.Media != null && result.Result.Status == RNAssistant.Core.Tools.Contracts.ToolResultStatus.Ok)
             {
@@ -347,7 +363,7 @@ namespace RNAssistant.Office.Services
             return options;
         }
 
-        private async Task BuildMessagesAsync(
+        private Task BuildMessagesAsync(
             string mode,
             string text,
             ChatSession session,
@@ -371,7 +387,8 @@ namespace RNAssistant.Office.Services
                 session == null || session.LastRun == null ? null : session.LastRun.RunId,
                 runnableCatalog,
                 restoredAdmissions);
-            await PrepareCurrentSnapshotAsync(cancellationToken).ConfigureAwait(false);
+            cancellationToken.ThrowIfCancellationRequested();
+            return Task.CompletedTask;
         }
 
         private async Task PrepareCurrentSnapshotAsync(CancellationToken cancellationToken)
@@ -475,7 +492,8 @@ namespace RNAssistant.Office.Services
             var reducer = new EvidenceStateReducer();
             var activeIds = new HashSet<string>(active.Where(item => item != null)
                 .Select(item => item.Id), StringComparer.Ordinal);
-            var activeKeys = new HashSet<string>(active.SelectMany(item => item.ResourceEvidence ?? new List<ResourceEvidence>())
+            var activeKeys = new HashSet<string>(active.Where(ExposesSourceObservation)
+                .SelectMany(item => item.ResourceEvidence ?? new List<ResourceEvidence>())
                 .Where(item => IsCompleteCurrentView(item) && (resources == null ||
                     reducer.Reduce(item, resources).State == EvidenceState.Current))
                 .Select(ObservationKey), StringComparer.Ordinal);
@@ -483,16 +501,8 @@ namespace RNAssistant.Office.Services
             var sources = new List<ChatMessage>();
             foreach (var result in (session.Messages ?? new List<ChatMessage>()).AsEnumerable().Reverse())
             {
-                ToolResultWireReadResult wire;
-                string error;
                 if (!ContextCompactionService.IsReplayMessage(result) || activeIds.Contains(result.Id) ||
-                    result.ToolResultProtocolVersion != ToolResultWire.CurrentVersion ||
-                    !ToolResultHistoryReader.TryRead(result, out wire, out error) ||
-                    (result.ToolName == ResourceToolCatalog.ReadToolId &&
-                        (string)(ToolResultWire.ParseData(wire.Result.DataJson) as JObject)?["type"] == "shared context") ||
-                    (!IsVisibleResourceRead(result) && (result.ResourceEffect == null ||
-                        result.ResourceEffect.Outcome != ResourceEffectOutcome.VerifiedChanged &&
-                        result.ResourceEffect.Outcome != ResourceEffectOutcome.Restored))) continue;
+                    !ExposesSourceObservation(result)) continue;
                 foreach (var evidence in (result.ResourceEvidence ?? new List<ResourceEvidence>()).Where(item =>
                     IsCompleteCurrentView(item) && (resources == null ||
                         reducer.Reduce(item, resources).State == EvidenceState.Current)))
@@ -511,6 +521,22 @@ namespace RNAssistant.Office.Services
             }
             sources.Reverse();
             return sources;
+        }
+
+        private static bool ExposesSourceObservation(ChatMessage message)
+        {
+            if (message == null || message.ExcludeFromModelContext) return false;
+            if (message.SyntheticResourceObservation) return true;
+            ToolResultWireReadResult wire;
+            string error;
+            if (message.ToolResultProtocolVersion != ToolResultWire.CurrentVersion ||
+                !ToolResultHistoryReader.TryRead(message, out wire, out error)) return false;
+            if (message.ToolName == ResourceToolCatalog.ReadToolId)
+                return wire.Result.Status == RNAssistant.Core.Tools.Contracts.ToolResultStatus.Ok &&
+                    (string)(ToolResultWire.ParseData(wire.Result.DataJson) as JObject)?["type"] != "shared context";
+            return message.ResourceEffect != null &&
+                (message.ResourceEffect.Outcome == ResourceEffectOutcome.VerifiedChanged ||
+                 message.ResourceEffect.Outcome == ResourceEffectOutcome.Restored);
         }
 
         private static bool IsCompleteCurrentView(ResourceEvidence evidence)
@@ -549,12 +575,15 @@ namespace RNAssistant.Office.Services
                 var readData = ToolResultWire.ParseData(result.Result.DataJson) as JObject;
                 if (command.ToolId == ResourceToolCatalog.ReadToolId && (string)readData?["type"] == "shared context")
                     compact["type"] = "shared context";
-                if (command.ToolId == ResourceToolCatalog.ReadToolId &&
-                    readData?["target"]?.Type == JTokenType.String &&
-                    !((string)readData["target"]).Contains("://"))
-                    compact["target"] = readData["target"].DeepClone();
-                if (HtmlWorkspaceToolCatalog.Owns(command.ToolId) && readData?["members"] is JArray)
-                    compact["members"] = new JArray(((JArray)readData["members"]).OfType<JObject>()
+                // Current after-source is selected before full result hydration,
+                // including after compaction. Preserve its semantic label here.
+                var sourceData = readData?["tool_data"] as JObject ?? readData;
+                foreach (var label in new[] { "target", "moduleName", "title" })
+                    if (sourceData?[label]?.Type == JTokenType.String &&
+                        !((string)sourceData[label]).Contains("://"))
+                        compact[label] = sourceData[label].DeepClone();
+                if (HtmlWorkspaceToolCatalog.Owns(command.ToolId) && sourceData?["members"] is JArray)
+                    compact["members"] = new JArray(((JArray)sourceData["members"]).OfType<JObject>()
                         .Select(item => new JObject { ["path"] = item["path"]?.DeepClone(),
                             ["uri"] = item["uri"]?.DeepClone() }));
                 var envelope = new RNAssistant.Core.Tools.Contracts.ToolResult(result.Result.Status,

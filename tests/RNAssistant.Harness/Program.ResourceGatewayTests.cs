@@ -2549,6 +2549,30 @@ namespace RNAssistant.Harness
                         ToolResultResourceService.ProjectionFailureStatus(
                             new ToolInvocation { ToolId = "common.resources_upsert" }, ToolResultStatus.Ok),
                         "resource namespace prefixes do not classify future mutations as exact reads");
+                    var after = new ResourceRef("rna://vba/projection/module", "r1");
+                    var evidence = new ResourceEvidence("after-image", new ResourceAuthorityScopeId("document", "projection"),
+                        after, ResourceRepresentations.Source, ResourceCoverage.Whole(), true, 1);
+                    var effect = new ResourceEffect("saved-with-preview", "fixture.write_with_preview",
+                        ResourceEffectOutcome.VerifiedChanged,
+                        new[] { new ResourceImpact(after.Identity, ResourceImpactRelation.Exact, after: after) });
+                    var mutation = new ToolResultMaterialization(
+                        RNAssistant.Core.Tools.Contracts.ToolResult.Ok("Module was saved.", "{\"changed\":true}"),
+                        original.ModelAttachments, resourceEvidence: new[] { evidence }, resourceEffect: effect,
+                        authorityCommitId: "saved-authority");
+                    var projectedMutation = modelSession.PrepareToolResultAsync(new ToolInvocation {
+                        ToolId = effect.Operation, ToolCallId = "mutation-preview" }, mutation, CancellationToken.None)
+                        .GetAwaiter().GetResult().Result;
+                    AssertEqual(effect, projectedMutation.ResourceEffect,
+                        "a preview failure must retain the verified mutation effect");
+                    AssertEqual(evidence, projectedMutation.ResourceEvidence.Single(),
+                        "a preview failure must retain the captured after-state");
+                    AssertEqual("saved-authority", projectedMutation.AuthorityCommitId, "publication identity survives media failure");
+                    AssertContains(projectedMutation.Result.Message, "Module was saved.",
+                        "delivery diagnostics cannot replace the successful mutation message");
+                    AssertTrue(projectedMutation.Data["code"] == null &&
+                        (bool)projectedMutation.Data["tool_data"]["changed"] &&
+                        (string)projectedMutation.Data["delivery_warning"]["code"] == "artifact_media_unavailable",
+                        "failed preview is a delivery warning, not a mutation failure");
                 }
             });
         }

@@ -59,6 +59,18 @@ source changes, interpretation-promotion refusal, persistence and old-version sk
 `artifacts: prompt preserves decision context` and `resource cutover: correctness
 before budget` cover optional-purpose admission, exact target preservation,
 ownership/read hints and semantic recovery after stale evidence exclusion.
+The latter also checks that stale call input cannot invalidate a fresh result and
+that archived mutation diagnostics survive folding in every result role.
+`agent: VBA mutation batch rejects before dispatch` checks complete after-source
+and the verified write's unchanged success status in the next model request.
+`agent: confirmed VBA after-state reaches next request` covers a confirmed 100-hunk
+patch, result archival, semantic source labeling, one write and provider message
+serialization. `agent: resource media projection failure is explicit` also checks
+that delivery failures preserve mutation outcome/effect metadata. The source
+compaction check rejects input-only references as substitutes for visible bytes
+and covers calibrated admission of complete mutation source.
+`vba: patch disambiguates with exact context` also covers explicit line/column
+selection, duplicate procedures, stale-address refusal and candidate completeness.
 `resource cutover: current source survives writes and compaction` and `resource
 cutover: HTML write publishes current member sources` cover the verified after-state,
 CAS carry-forward, stale-version exclusion and next guarded HTML overwrite.

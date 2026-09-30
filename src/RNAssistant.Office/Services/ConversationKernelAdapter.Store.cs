@@ -163,16 +163,14 @@ namespace RNAssistant.Office.Services
                                 ? ModelProtocolFailureKind.PromptBudgetExceeded
                                 : ModelProtocolFailureKind.Infrastructure,
                         ex.Message);
-                    // Close the accepted exchange without copying a large/unprepared
-                    // payload. This is projection failure, not new execution evidence.
+                    // Close the exchange with its known outcome/effect and exact
+                    // semantic result, even when auxiliary delivery failed.
                     if (!_session.Messages.Any(message => message.ProtocolMessage && message.Role != "assistant" && message.ToolCallId == command.ToolCallId))
                     {
                         var fallback = AgentJsonProtocol.CreateToolResultMessage(command,
-                            new TerminalResult(
-                                ToolResultResourceService.ProjectionFailureStatus(command, result.Result.Status),
-                                "Result materialization failed: " + ex.Message,
-                                new JObject { ["code"] = "result_materialization_failed", ["loaded"] = false,
-                                    ["complete"] = false }.ToString(Formatting.None)), _input.Settings.ToolResultRole);
+                            ConversationModelSession.ProjectionFailure(command, result,
+                                "Result materialization failed: " + ex.Message, "result_materialization_failed"),
+                            int.MaxValue, _input.Settings.ToolResultRole, _input.Settings);
                         fallback.RunId = _session.LastRun.RunId;
                         ConversationModelSession.AppendPairedResult(_session.Messages, fallback);
                     }
@@ -203,7 +201,9 @@ namespace RNAssistant.Office.Services
                     record.Outcome == ToolExecutionOutcome.Unknown ? ToolResultStatus.Unknown : ToolResultStatus.Error,
                     record.Message, new JObject { ["code"] = code }.ToString(Formatting.None));
             }
-            result = new ToolResultMaterialization(terminal);
+            result = new ToolResultMaterialization(terminal,
+                resourceEvidence: record.ResourceEvidence, resourceEffect: record.ResourceEffect,
+                authorityCommitId: record.AuthorityCommitId);
             _results[record.Context.Call.Id] = result;
             return result;
         }

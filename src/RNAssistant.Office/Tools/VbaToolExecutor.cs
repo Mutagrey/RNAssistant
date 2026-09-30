@@ -101,7 +101,9 @@ namespace RNAssistant.Office.Tools
                         Find = (string)item["find"],
                         Text = (string)item["text"],
                         ContextBefore = (string)item["contextBefore"],
-                        ContextAfter = (string)item["contextAfter"]
+                        ContextAfter = (string)item["contextAfter"],
+                        StartLine = (int?)item["startLine"],
+                        StartColumn = (int?)item["startColumn"]
                     });
             }
             return operations;

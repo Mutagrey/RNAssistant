@@ -1972,9 +1972,11 @@ namespace RNAssistant.Harness
                     "{\"message\":\"Проверка завершена.\",\"final\":true,\"tool_calls\":[]}"
                 });
                 var modelRequests = 0;
+                var sourceRequests = new List<IReadOnlyList<ChatMessage>>();
                 LlmCompletionDelegate completion = (settings, messages, options, stream, token) =>
                 {
                     modelRequests++;
+                    sourceRequests.Add(messages.ToList());
                     if (modelRequests == 4)
                     {
                         AssertEqual(before, adapter.VbaModuleCode, "rejected batch performs no VBA mutation");
@@ -1987,17 +1989,6 @@ namespace RNAssistant.Harness
                         AssertEqual(1, adapter.CountVbaCalls(FakeVbaOperation.ReplaceModule), "only the patch dispatched");
                         AssertEqual(1, journal.ListMutations(adapter.HostName, adapter.DocumentKey).Count,
                             "rejected batch creates no VBA preparation");
-                        var currentSource = messages.Single(message => message.SyntheticResourceObservation &&
-                            message.Content.Contains("CURRENT_RESOURCE_SOURCE"));
-                        AssertContains(currentSource.Content, patched,
-                            "next model decision sees the changed VBA source");
-                    }
-                    if (modelRequests == 8)
-                    {
-                        var currentSource = messages.Single(message => message.SyntheticResourceObservation &&
-                            message.Content.Contains("CURRENT_RESOURCE_SOURCE"));
-                        AssertContains(currentSource.Content, "' Version 2",
-                            "final model decision sees the latest whole-module source");
                     }
                     return Task.FromResult(new LlmCompletionResult { Content = responses.Dequeue() });
                 };
@@ -2006,6 +1997,18 @@ namespace RNAssistant.Harness
                     session, NewContext(adapter), new AppSettings { AutoConfirmToolActions = true },
                     OfficeToolCatalog.ForHost(adapter.HostName).Concat(executor.GetControllerTools()).ToList(), null)
                     .GetAwaiter().GetResult();
+                AssertEqual(7, modelRequests, "both mutations reach their next model decision");
+                AssertEqual(AgentResponseStatuses.Completed, result.ResponseStatus, "model completes after both writes");
+                AssertContains(sourceRequests[4].Single(message => message.SyntheticResourceObservation).Content,
+                    patched, "next model decision sees the changed VBA source");
+                AssertContains(sourceRequests.Last().Single(message => message.SyntheticResourceObservation).Content,
+                    "' Version 2\n" + patched, "final model decision sees the latest whole-module source");
+                var writeFrame = sourceRequests.Last().Where(message =>
+                        (message.Content ?? string.Empty).StartsWith("TOOL_INTERACTION (completed causal frame):\n"))
+                    .Select(message => JObject.Parse(message.Content.Substring(message.Content.IndexOf('\n') + 1)))
+                    .Single(frame => (string)frame["tool"] == "common.vba_write_module");
+                AssertEqual("Ok", (string)writeFrame["outcome"],
+                    "the write's superseded input observation cannot turn its verified result into an error");
                 var writes = result.ToolResults.Select(item => JObject.FromObject(item))
                     .Where(item => (string)item["toolId"] == "common.vba_write_module").ToList();
                 AssertEqual(1, writes.Count, "rejected batch contributes no accepted write result");
@@ -2233,22 +2236,32 @@ namespace RNAssistant.Harness
             });
         }
 
-        private static void SimpleAgentVbaConfirmationResumesPreparedState()
+        private static void SimpleAgentVbaConfirmationResumesPreparedState(bool externalDrift)
         {
             WithTempExecutor(FakeOfficeAdapter.ForHost("Excel"),
                 delegate(OfficeToolExecutor executor, FakeOfficeAdapter adapter)
             {
                 adapter.VbaModuleCode =
                     "Sub Main()\nDebug.Print \"old\"\nEnd Sub";
+                var patch = new JArray(new JObject { ["find"] = "\"old\"", ["text"] = "\"new\"" });
+                var expectedSource = "Sub Main()\nDebug.Print \"new\"\nEnd Sub";
+                if (!externalDrift)
+                {
+                    adapter.VbaModuleCode = "Sub Main()\n" + string.Join("\n", Enumerable.Range(0, 100)
+                        .Select(index => "Debug.Print \"old_" + index + "\"")) + "\nEnd Sub";
+                    expectedSource = adapter.VbaModuleCode.Replace("old_", "new_");
+                    patch = new JArray(Enumerable.Range(0, 100).Select(index => new JObject {
+                        ["find"] = "\"old_" + index + "\"", ["text"] = "\"new_" + index + "\"" }));
+                }
                 var responses = new Queue<string>(new[]
                 {
                     LoadToolSchemaResponse("common.vba_apply_patch"),
-                    "{\"message\":\"Обновляю VBA.\",\"final\":false,\"tool_calls\":[{" +
-                        "\"name\":\"common.vba_apply_patch\",\"arguments\":{" +
-                        "\"moduleName\":\"Module1\",\"patch\":[{" +
-                        "\"find\":\"\\\"old\\\"\"," +
-                        "\"text\":\"\\\"new\\\"\"}]}}]}",
-                    "{\"message\":\"Изменение отклонено как устаревшее.\",\"final\":true,\"tool_calls\":[]}"
+                    new JObject { ["message"] = "Обновляю VBA.", ["final"] = false,
+                        ["tool_calls"] = new JArray(new JObject { ["name"] = "common.vba_apply_patch",
+                            ["arguments"] = new JObject { ["moduleName"] = "Module1", ["patch"] = patch } }) }.ToString(),
+                    externalDrift
+                        ? "{\"message\":\"Изменение отклонено как устаревшее.\",\"final\":true,\"tool_calls\":[]}"
+                        : "{\"message\":\"Изменение сохранено.\",\"final\":true,\"tool_calls\":[]}"
                 });
                 var calls = new List<IReadOnlyList<ChatMessage>>();
                 LlmCompletionDelegate completion =
@@ -2286,7 +2299,9 @@ namespace RNAssistant.Harness
                 var activity = session.Messages.Last(message =>
                     message.Activity != null &&
                     message.Activity.ToolCallId == pending.Call.Id).Activity;
-                AssertContains(activity.DataJson, "operations",
+                var preview = activity.ResultPayload == null ? activity.DataJson :
+                    executor.Payloads.ReadText(activity.ResultPayload.ToBlobReference());
+                AssertContains(preview, "operations",
                     "confirmation activity carries the prepared preview");
                 AssertTrue(!string.IsNullOrWhiteSpace(
                         activity.ConfirmationCatalogSha256),
@@ -2301,9 +2316,8 @@ namespace RNAssistant.Harness
                         confirmedCommand.RuntimeGuardJson),
                     "confirmation command has no compatibility guard field");
 
-                adapter.VbaModuleCode =
+                if (externalDrift) adapter.VbaModuleCode =
                     "Sub Main()\nDebug.Print \"external\"\nEnd Sub";
-                loaded.LastRun.RunId = "continued-vba-run";
                 var final = service.ConfirmAsync(
                     "pending-vba-native",
                     confirmedCommand,
@@ -2312,6 +2326,38 @@ namespace RNAssistant.Harness
                         settings, NewContext(adapter), tools),
                     null).GetAwaiter().GetResult();
 
+                if (!externalDrift)
+                {
+                    AssertEqual(3, calls.Count, "confirmation reaches exactly one next model decision");
+                    AssertEqual(AgentResponseStatuses.Completed, final.ResponseStatus, "confirmed mutation completes");
+                    var terminal = loaded.Messages.Last(message => message.ToolName == VbaToolCatalog.ApplyPatch &&
+                        message.ToolResultProtocolVersion == ToolResultWire.CurrentVersion && message.Role != "assistant");
+                    ToolResultWireReadResult terminalWire;
+                    string terminalError;
+                    AssertTrue(ToolResultHistoryReader.TryRead(terminal, out terminalWire, out terminalError), "confirmed patch result is readable");
+                    AssertEqual(RNAssistant.Core.Tools.Contracts.ToolResultStatus.Ok, terminalWire.Result.Status,
+                        "confirmed patch outcome: " + terminalWire.Result.Message);
+                    AssertRunViewState(final, loaded, "clean", 1, 0, 0);
+                    AssertEqual(expectedSource, adapter.VbaModuleCode, "confirmed large patch saves the intended module");
+                    var afterSource = calls.Last().SingleOrDefault(message => message.SyntheticResourceObservation);
+                    AssertTrue(afterSource != null, "the first request after confirmation has an after-source observation");
+                    AssertContains(afterSource.Content, expectedSource,
+                        "the first request after confirmation contains complete changed source");
+                    AssertContains(afterSource.Content, "VBA module: Module1", "archival keeps the source associated with its target");
+                    AssertTrue(loaded.Messages.Any(message => message.ToolName == VbaToolCatalog.ApplyPatch &&
+                        message.ResultPayload != null), "large patch result exercises CAS archival");
+                    var frame = calls.Last().SingleOrDefault(message => (message.Content ?? string.Empty)
+                        .StartsWith("TOOL_INTERACTION (completed causal frame):\n"));
+                    AssertTrue(frame != null && frame.Content.Contains("VerifiedChanged"),
+                        "the first request after confirmation contains the terminal effect");
+                    var apiMessages = new LlmMessageBuilder().Build(calls.Last(), settings).Messages
+                        .Select(item => JObject.FromObject(item)).ToList();
+                    AssertTrue(apiMessages.Any(item => (string)item["content"] == afterSource.Content) &&
+                        apiMessages.Any(item => (string)item["content"] == frame.Content),
+                        "provider message serialization preserves the complete after-source and terminal result");
+                    AssertEqual(1, adapter.CountVbaCalls(FakeVbaOperation.ReplaceModule), "confirmed VBA dispatches once");
+                    return;
+                }
                 AssertContains(final.AssistantText,
                     "Изменение отклонено как устаревшее.",
                     "model receives the terminal stale result after confirmation");

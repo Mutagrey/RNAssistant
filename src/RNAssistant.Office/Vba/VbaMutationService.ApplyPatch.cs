@@ -148,7 +148,7 @@ namespace RNAssistant.Office.Vba
             if (!string.Equals(op, "replace", StringComparison.Ordinal))
             {
                 return VbaMutationOutcome.Error(
-                    "Unsupported VBA patch op: " + op + ". Use replace with one exact unique source block.",
+                    "Unsupported VBA patch op: " + op + ". Use replace with an exact source block and a unique context or explicit location.",
                     null,
                     "vba_patch_invalid",
                     true);
@@ -159,7 +159,15 @@ namespace RNAssistant.Office.Vba
                 operation.Find,
                 operation.Text,
                 operation.ContextBefore,
-                operation.ContextAfter);
+                operation.ContextAfter,
+                operation.StartLine,
+                operation.StartColumn);
+            if (patch.Status == VbaPatchStatus.InvalidLocation)
+            {
+                return VbaMutationOutcome.Error(
+                    "VBA patch requires a valid startLine and startColumn within the current module. Columns are 1-based UTF-16 positions; startColumn requires startLine. Nothing was written.",
+                    new JObject { ["hunkIndex"] = hunkIndex }, "vba_patch_invalid", true);
+            }
             if (patch.Status == VbaPatchStatus.EmptyFind)
             {
                 return VbaMutationOutcome.Error(
@@ -172,7 +180,9 @@ namespace RNAssistant.Office.Vba
             {
                 var contextMismatch = patch.FindMatchCount > 0;
                 return VbaMutationOutcome.Error(
-                    "VBA patch hunk " + hunkIndex + (contextMismatch
+                    "VBA patch hunk " + hunkIndex + (operation.StartLine.HasValue
+                        ? ": find or its adjacent context does not match at the specified startLine/startColumn. Inspect current source and correct the position and exact text; runtime did not choose another occurrence."
+                        : contextMismatch
                         ? ": find exists, but its exact adjacent context does not match. Remove or recopy contextBefore/contextAfter from current source."
                         : ": exact find text does not occur in the current module. Recopy it from current source, or use a unique complete-line block without context to allow VBA spacing/case normalization; keep string literals and comments exact.") +
                     " Nothing was written; do not repeat this patch unchanged.",
@@ -180,6 +190,9 @@ namespace RNAssistant.Office.Vba
                     {
                         ["hunkIndex"] = hunkIndex,
                         ["findMatchCount"] = patch.FindMatchCount,
+                        ["matchCount"] = patch.MatchCount,
+                        ["locations"] = PatchLocations(patch),
+                        ["locationsComplete"] = patch.LocationsComplete,
                         ["findSha256"] = TextPatternEngine.Sha256(patch.NormalizedFind),
                         ["inspectTool"] = "common.resources_read",
                         ["discoveryScope"] = "vba"
@@ -194,12 +207,14 @@ namespace RNAssistant.Office.Vba
                     " occurs " + patch.MatchCount + " times. Nothing was written; " +
                     (patch.FormatNormalizedMatch
                         ? "extend the hunk with adjacent complete lines, or copy a unique exact block from current source."
-                        : "add exact contextBefore or contextAfter from the same module read so one block is identified."),
+                        : "select the intended startLine/startColumn from locations, or add exact contextBefore or contextAfter from the same module read so one block is identified."),
                     new JObject
                     {
                         ["hunkIndex"] = hunkIndex,
                         ["matchCount"] = patch.MatchCount,
                         ["matchMode"] = patch.FormatNormalizedMatch ? "formatNormalizedLines" : "exact",
+                        ["locations"] = PatchLocations(patch),
+                        ["locationsComplete"] = patch.LocationsComplete,
                         ["findSha256"] = TextPatternEngine.Sha256(patch.NormalizedFind),
                         ["inspectTool"] = "common.resources_read",
                         ["discoveryScope"] = "vba"
@@ -209,11 +224,18 @@ namespace RNAssistant.Office.Vba
             }
 
             updated = patch.Text;
+            var location = patch.Locations.Single();
             return patch.Status == VbaPatchStatus.Unchanged
                 ? VbaMutationOutcome.Ok("The exact VBA replacement already matches current source; skipped.")
-                : VbaMutationOutcome.Ok(patch.FormatNormalizedMatch
+                : VbaMutationOutcome.Ok("At line " + location.StartLine + ", column " + location.StartColumn + ": " + (patch.FormatNormalizedMatch
                     ? "Replaced one unique format-equivalent VBA line block; text outside those complete lines was preserved."
-                    : "Replaced one exact unique VBA source block without changing text outside it.");
+                    : "Replaced the selected exact VBA source block without changing text outside it."));
+        }
+
+        private static JArray PatchLocations(VbaPatchResult patch)
+        {
+            return new JArray(patch.Locations.Select(location => new JObject {
+                ["startLine"] = location.StartLine, ["startColumn"] = location.StartColumn }));
         }
     }
 }
