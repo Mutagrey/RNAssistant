@@ -1,5 +1,26 @@
 # Stabilization risk register
 
+## Repeated confirmed VBA writes — 2026-09-30
+
+The new screenshot starts the second user request at “Вы правы”. Within that
+response, Agent reports three confirmed `common.vba_write_module` actions on
+`P5_Consolidator` and proposes another correction after the user had observed the
+original compile error disappear. The preceding screen section shows two unverified
+VBA changes from earlier activity; those are separate outcomes and do not negate
+the three later read-backs.
+The screenshot does not show the exact second model request, VBA source or Windows
+build, so it cannot establish whether the model missed the first after-state or
+ignored it. A confirmed write proves matching source read-back, not compilation.
+
+Owner: model context delivery / Agent VBA workflow. The current host-neutral path
+publishes complete VBA source after a verified mutation and fails explicitly if it
+cannot fit the model request. A focused Agent loop regression now checks that both
+patch and whole-module write after-states appear in the next model request. Obtain
+the affected run's full trajectory, including model-request CAS bodies, accepted
+calls/results and the Windows build revision; compare the request between the first
+and second writes with the journaled after-source. If the source was present,
+investigate the repeated repair decision separately from context delivery.
+
 ## Excel inspection loop — 2026-09-30
 
 Photos show repeated successful `excel.inspect` steps, a separate 155.8 KB result

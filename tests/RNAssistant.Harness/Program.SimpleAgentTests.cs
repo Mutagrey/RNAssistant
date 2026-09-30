@@ -1987,6 +1987,17 @@ namespace RNAssistant.Harness
                         AssertEqual(1, adapter.CountVbaCalls(FakeVbaOperation.ReplaceModule), "only the patch dispatched");
                         AssertEqual(1, journal.ListMutations(adapter.HostName, adapter.DocumentKey).Count,
                             "rejected batch creates no VBA preparation");
+                        var currentSource = messages.Single(message => message.SyntheticResourceObservation &&
+                            message.Content.Contains("CURRENT_RESOURCE_SOURCE"));
+                        AssertContains(currentSource.Content, patched,
+                            "next model decision sees the changed VBA source");
+                    }
+                    if (modelRequests == 8)
+                    {
+                        var currentSource = messages.Single(message => message.SyntheticResourceObservation &&
+                            message.Content.Contains("CURRENT_RESOURCE_SOURCE"));
+                        AssertContains(currentSource.Content, "' Version 2",
+                            "final model decision sees the latest whole-module source");
                     }
                     return Task.FromResult(new LlmCompletionResult { Content = responses.Dequeue() });
                 };
