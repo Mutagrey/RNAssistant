@@ -60,6 +60,8 @@ boundary; it does not rewrite the immutable catalog of an already accepted model
 step.
 A failed authoring-directory removal cannot be reported as a verified delete, even
 if catalog read-back no longer sees the skill.
+Cleanup of a replaced package directory also fails the save instead of silently
+leaving the old package behind.
 
 ### Editor source reads
 

@@ -257,7 +257,7 @@ namespace RNAssistant.Office.Tools
                     StringComparison.Ordinal));
             data.ExpectedRevision = intendedRevision;
             SkillAuthoringOutcome outcome;
-            if (!oldStillPresent && string.Equals(
+            if (string.IsNullOrWhiteSpace(mutationError) && !oldStillPresent && string.Equals(
                 actualRevision, intendedRevision, StringComparison.Ordinal))
             {
                 outcome = SkillAuthoringOutcome.Ok(

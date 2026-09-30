@@ -221,6 +221,14 @@ namespace RNAssistant.Core.Storage
             }
         }
 
+        public static void DeleteDirectoryOrThrow(string path)
+        {
+            if (!TryDeleteDirectory(path))
+            {
+                throw new IOException("Managed storage directory could not be removed: " + path);
+            }
+        }
+
         internal static bool IsReparsePoint(string path)
         {
             if (string.IsNullOrWhiteSpace(path)) return true;

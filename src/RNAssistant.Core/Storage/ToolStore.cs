@@ -112,7 +112,7 @@ namespace RNAssistant.Core.Storage
             SaveTool(tool);
             foreach (var oldDirectory in oldDirectories)
             {
-                StorageFileSystem.TryDeleteDirectory(oldDirectory);
+                StorageFileSystem.DeleteDirectoryOrThrow(oldDirectory);
             }
             return Load().FirstOrDefault(t => string.Equals(t.Id, tool.Id, StringComparison.OrdinalIgnoreCase));
         }
@@ -160,7 +160,7 @@ namespace RNAssistant.Core.Storage
                     string.Equals(existing.Host, "Common", StringComparison.OrdinalIgnoreCase);
                 if (inScope && !incomingDirectories.Contains(existing.StoragePath ?? string.Empty))
                 {
-                    StorageFileSystem.TryDeleteDirectory(existing.StoragePath);
+                    StorageFileSystem.DeleteDirectoryOrThrow(existing.StoragePath);
                 }
             }
         }
@@ -491,7 +491,7 @@ namespace RNAssistant.Core.Storage
         {
             if (!string.Equals(tool.Executor, "vba", StringComparison.OrdinalIgnoreCase))
             {
-                StorageFileSystem.TryDeleteDirectory(Path.Combine(directory, "src"));
+                StorageFileSystem.DeleteDirectoryOrThrow(Path.Combine(directory, "src"));
                 return;
             }
 
@@ -534,7 +534,7 @@ namespace RNAssistant.Core.Storage
                 }
                 return;
             }
-            StorageFileSystem.TryDeleteDirectory(sourceDirectory);
+            StorageFileSystem.DeleteDirectoryOrThrow(sourceDirectory);
         }
 
         private static string SourceFileName(ToolPackageComponentDefinition component)

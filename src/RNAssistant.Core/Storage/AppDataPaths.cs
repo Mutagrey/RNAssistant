@@ -110,10 +110,7 @@ namespace RNAssistant.Core.Storage
 
             foreach (var child in Directory.GetDirectories(directory))
             {
-                if (!StorageFileSystem.TryDeleteDirectory(child))
-                {
-                    throw new IOException("Managed storage directory could not be cleared: " + child);
-                }
+                StorageFileSystem.DeleteDirectoryOrThrow(child);
             }
         }
 

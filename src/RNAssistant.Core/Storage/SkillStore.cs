@@ -77,7 +77,7 @@ namespace RNAssistant.Core.Storage
             SaveSkill(skill);
             foreach (var oldDirectory in oldDirectories)
             {
-                StorageFileSystem.TryDeleteDirectory(oldDirectory);
+                StorageFileSystem.DeleteDirectoryOrThrow(oldDirectory);
             }
             return Load().FirstOrDefault(s => string.Equals(s.Id, skill.Id, StringComparison.OrdinalIgnoreCase));
         }
@@ -392,7 +392,7 @@ namespace RNAssistant.Core.Storage
                     string.Equals(existing.Host, "Common", StringComparison.OrdinalIgnoreCase);
                 if (inScope && !incomingDirectories.Contains(existing.StoragePath ?? string.Empty))
                 {
-                    StorageFileSystem.TryDeleteDirectory(existing.StoragePath);
+                    StorageFileSystem.DeleteDirectoryOrThrow(existing.StoragePath);
                 }
             }
         }

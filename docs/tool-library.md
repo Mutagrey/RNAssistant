@@ -86,6 +86,8 @@ the accepted run. Library actions return typed result v1 with status, source rev
 dispatch and effect evidence; PascalCase/legacy result fallbacks are unsupported.
 A failed authoring-directory removal cannot be reported as a verified delete, even
 if catalog read-back no longer sees the package.
+Cleanup of a replaced package or obsolete VBA source directory also fails the save
+instead of silently leaving stale files.
 Tool entries can also carry optional typed `display` metadata, separately from the
 VBA manifest and execution descriptor: `action`, optional `runningAction`, an
 `operation` icon category and optional ordered `targetArguments` (up to eight exact
