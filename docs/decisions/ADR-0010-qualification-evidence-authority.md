@@ -1,7 +1,8 @@
 # ADR-0010: Qualification evidence belongs to runtime and domain verifiers
 
-Status: accepted; WQ-A1–A5 host-neutral implementation complete, real Windows/live
-pack evidence pending.
+Status: superseded 2026-09-30. Qualification Center, packs, helper and in-app release
+admission were removed. This ADR records the prior design; the current boundary is
+[Windows/Office verification](../qualification.md).
 
 ## Context
 
@@ -51,4 +52,5 @@ port/helper, closed suite catalog и exact-build release admission. Отсутс
 adapters остаются N/A, а Windows проверка — отдельным Milestone WQ; этот ADR сам не
 квалифицирует COM identity и не разрешает production 5B2 switch.
 
-Полный контракт: [qualification.md](../qualification.md).
+Прежний контракт сохранён в WQ phase reports; текущий маршрут описан в
+[qualification.md](../qualification.md).

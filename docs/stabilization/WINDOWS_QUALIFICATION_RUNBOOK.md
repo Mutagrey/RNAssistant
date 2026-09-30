@@ -21,33 +21,25 @@
 `BLOCKED` не считается pass. После изменения production inputs создаётся новый build;
 старое evidence применяется только к неизменившимся контурам.
 
-По согласованному [Milestone WQ-A](STABILIZATION_MASTER_PLAN.md#milestone-wq-a--in-app-qualification-center)
-основной пользовательский путь встроен в [Qualification Center](../qualification.md):
-выберите suite `release` и pack `excel.wq0.identity`. Pack wizard, automatic
-assertion и report работают без scripts. Команды из probe README остаются только
-engineering fallback и сами не считаются встроенным UI evidence.
-
-До прогона `RNAssistant.BuildEvidence.v1.json` отсутствует, поэтому
-`release.candidate` закономерно недоступен. Сначала выполнить остальные required
-packs и собрать immutable evidence bundle; затем release contour подписывает
-[exact-build manifest](../operations/BUILD_EVIDENCE.md). После размещения sidecar
-рядом с тем же `RNAssistant.Office.dll` и перезапуска приложения выполнить
-`release.candidate`; rebuilt binary требует нового полного evidence.
+Проверка выполняется в обычном приложении на Windows/Office. Встроенного
+Qualification Center, отдельных packs, probe/helper и автоматического pass нет.
+Для формального релиза результаты привязываются к exact build и сохраняются по
+[release process](../operations/RELEASE_PROCESS.md); обычная разработка не требует
+этого прогона после каждого изменения.
 
 ## 2. WQ0 — deferred identity diagnostic для 11T0/7D
 
 По принятому 2026-08-31 риску WQ0 не блокирует production identity/factory switch:
 11T0/7D фиксирует текущий `RuntimeKey` на lifetime exact bound workbook и удаляет
-active-document fallback. Pack `excel.wq0.identity` выполняется затем как обязательная
-release qualification. Если pack недоступен, это остаётся `BLOCKED`, а не pass;
-не подменять его результатами [PowerShell fallback](../../tests/RNAssistant.ExcelIdentityProbe/README.md).
+active-document fallback. Для формального релиза поведение identity проверяется
+через реальные действия с книгами; отсутствие evidence остаётся открытым gap.
 
 Проверить:
 
 - одну книгу через desktop/VSTO/native call sites и разные COM proxies;
 - две разные книги и две книги с одинаковым видимым именем;
 - switch active workbook, close/reopen и Save As;
-- retained marshal reference, release/cleanup и отсутствие ложного равенства.
+- отсутствие ложного равенства, чтения или записи в другой книге.
 
 Результат WQ0 — diagnostic evidence, а не общий pass Phase 5. Failure исправляется
 в bound-session identity/lifetime contract без восстановления `ActiveWorkbook` или
@@ -91,9 +83,8 @@ causal journal не позволяет установить последнюю �
 - FAIL исправлен отдельным commit, покрыт targeted regression и повторно проверен в
   затронутом Windows scenario.
 - После последних исправлений повторены WQ-BASE и общий smoke WQ-CROSS.
-- Detached manifest имеет status `complete`, hashes совпадают с неизменёнными
-  distributable files, а `release.candidate` прошёл и сохранил тот же manifest SHA.
+- Detached release manifest имеет status `complete`; release owner сверил hashes
+  неизменённых distributable files и результаты Windows сценариев.
 - Нет неразобранных P0/P1, false-positive success, wrong-target или unclassified
   `unknown` effect.
-- Результаты и оставшиеся ограничения записаны в `PROGRESS.md`; только затем начинается
-  Phase 12.
+- Результаты и оставшиеся ограничения записаны в `PROGRESS.md`.

@@ -93,7 +93,6 @@
   </ItemGroup>
   <ItemGroup>
     <Compile Include="ExcelAdapter.cs" />
-    <Compile Include="ExcelAdapter.Qualification.cs" />
     <Compile Include="Excel\ExcelDocumentSession.cs" />
     <Compile Include="Excel\ExcelChartInteropBackend.cs" />
     <Compile Include="Excel\ExcelFindReplaceInteropBackend.cs" />
@@ -102,12 +101,6 @@
     <Compile Include="Excel\ExcelSheetInteropBackend.cs" />
     <Compile Include="Excel\ExcelTableInteropBackend.cs" />
     <Compile Include="Identity\DocumentIdentity.cs" />
-    <Compile Include="Qualification\ComIdentityLease.cs" />
-    <Compile Include="Qualification\ComIdentitySample.cs" />
-    <Compile Include="Qualification\ExcelIdentityHelperClient.cs" />
-    <Compile Include="Qualification\ExcelIdentityHelperProtocol.cs" />
-    <Compile Include="Qualification\ExcelProbeTarget.cs" />
-    <Compile Include="Qualification\ExcelWq0EvidenceVerifier.cs" />
     <Compile Include="InProcessPanelSession.cs" />
     <Compile Include="OutlookAdapter.cs" />
     <Compile Include="Outlook\OutlookDocumentSession.cs" />

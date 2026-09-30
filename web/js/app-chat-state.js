@@ -332,9 +332,6 @@ function applyChatState(response) {
   if (chatChanged && typeof restoreActiveChatRun === "function") {
     restoreActiveChatRun();
   }
-  if (chatChanged && !state.messages.length && typeof refreshActiveQualificationState === "function") {
-    refreshActiveQualificationState();
-  }
   return true;
 }
 

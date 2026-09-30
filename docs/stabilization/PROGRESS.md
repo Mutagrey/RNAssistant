@@ -1,6 +1,6 @@
 # Stabilization progress
 
-## Current operating status — 2026-09-28
+## Current operating status — 2026-09-30
 
 The maintainer accepts the completed host-neutral architecture migration as a
 **working baseline** for continued development. RNAssistant runs, edits code and
@@ -30,6 +30,16 @@ storage; reconcile known host-neutral test drift. Detailed risks remain in the
 entries below and [RISK_REGISTER](RISK_REGISTER.md) / [BACKLOG](BACKLOG.md).
 Qualification scenarios retain the [Windows runbook](WINDOWS_QUALIFICATION_RUNBOOK.md),
 independently of daily work.
+
+Diagnostics simplification (2026-09-30): Qualification Center, its embedded packs,
+Excel identity helper and in-app release admission are removed. The maintainer
+continues to build and test the product on the real Windows/Office machine; no
+separate helper or automatic verification process is introduced. Diagnostics now
+opens at a bounded current-session work log, with saved chronological chat history
+and optional technical views. VBA diffs stay in the editor; the journal remains
+available for recovery evidence. Historical chat events and VBA journals are not
+deleted. Formal exact-build Windows/Office evidence remains open; the release owner
+records it directly and reviews the signed release payload before finalization.
 
 ## Implementation log — includes current in-flight work and earlier entries
 
@@ -3734,7 +3744,7 @@ Windows x64 + Office + VS 2022 обязательны для controller/WebView,
 
 Подготовлен отдельный `tests/RNAssistant.ExcelIdentityProbe` (net48/x64, C# 7.3), не подключённый к production/solution. Кандидат — OXID/OID из стандартного IUnknown OBJREF плюс scope Excel process/start time; original marshal reference удерживается до STA dispose. Неизвестный format, неполный packet и пустая identity отвергаются без fallback. Native-OM driver выбирает explicit HWND/workbook index один раз; последующие snapshots не перепривязывают закрытую книгу. Данные книги не меняются, raw marshal packets не экспортируются.
 
-Проверены primary Microsoft specifications; выбор остаётся кандидатом до реальных proxy/lifetime наблюдений. [Probe README](../../tests/RNAssistant.ExcelIdentityProbe/README.md) содержит Windows команды, реальные desktop/VSTO/native call sites, acceptance observations и ownership/removal gate. Это инструмент для конкретного блокера ближайшего factory switch, не новый runtime adapter. Production `RuntimeKey`, ExcelAdapter/factories и ActiveWorkbook fallback не изменены; cleanup кандидата — при его принятии/отклонении в 5B2.
+Проверены primary Microsoft specifications; выбор остаётся кандидатом до реальных proxy/lifetime наблюдений. Исторический [ADR-0005](../decisions/ADR-0005-bound-document-session.md) фиксирует допущение и границу identity; probe README и код удалены 2026-09-30. Это был инструмент для конкретного блокера factory switch, не runtime adapter. Production `RuntimeKey`, ExcelAdapter/factories и ActiveWorkbook fallback тогда не изменялись.
 
 Исходная verification (2026-08-28): `dotnet run --project tests/RNAssistant.Harness/RNAssistant.Harness.csproj -- "excel identity probe:"` — **3/3 pass**: unsigned LE/object-vs-interface identity, malformed/unsupported/bounded packets, non-Windows refusal до native access. Этот результат переиспользован при review: probe sources/tests, dependencies, build settings и environment неизменны. Свежий read-switch build также скомпилировал probe C# sources; 4 ожидаемых CA1416 warnings у guarded Windows COM calls. Итого для 5B2 **24 distinct cases: 12 свежих + 12 reused**, без повторного полного прогона. Это не net48/PowerShell/Office validation.
 
@@ -3762,7 +3772,7 @@ Full harness, MockDemo build и Windows/Office/VSTO не запускались.
 
 Накопленные Windows проверки (Windows x64 + Office + VS 2022):
 
-- 5B2: [identity probe / acceptance matrix](../../tests/RNAssistant.ExcelIdentityProbe/README.md), реальные proxy/lifetime и wrong-target сценарии; identity evidence требуется до реализации/switch factories.
+- 5B2: [identity assumption](../decisions/ADR-0005-bound-document-session.md), реальные proxy/lifetime и wrong-target сценарии; прежний probe удалён 2026-09-30.
 - 5B2: controller/WebView selection/context/catalog reads, ошибки/закрытие книги/смена активной книги и несколько клиентов под gate.
 - 6A: exact patch/guard на реальном VBE с CRLF/LF/CR, literal backslashes и комментариями; read-back/hash normalization, restore и package/rename regression. Journal/CAS evidence проверять без автоматического replay/restore.
 

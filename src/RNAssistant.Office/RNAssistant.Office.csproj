@@ -70,7 +70,6 @@
     <Compile Include="Tools\JsToolHandler.cs" />
     <Compile Include="Contracts\BridgeDtos.Diagnostics.cs" />
     <Compile Include="Contracts\BridgeDtos.Html.cs" />
-    <Compile Include="Contracts\BridgeDtos.Qualification.cs" />
     <Compile Include="Contracts\BridgeDtos.Settings.cs" />
     <Compile Include="Contracts\BridgeDtos.Prompts.cs" />
     <Compile Include="Contracts\SettingsControlsDto.cs" />
@@ -92,20 +91,10 @@
     <Compile Include="Controller\AssistantController.HtmlWorkspace.cs" />
     <Compile Include="Controller\AssistantController.Lifecycle.cs" />
     <Compile Include="Controller\AssistantController.QuickActions.cs" />
-    <Compile Include="Controller\AssistantController.Qualification.cs" />
     <Compile Include="Controller\AssistantController.Settings.cs" />
     <Compile Include="Controller\AssistantController.Tools.cs" />
     <Compile Include="Controller\AssistantController.Vba.cs" />
     <Compile Include="Diagnostics\RuntimeLog.cs" />
-    <Compile Include="Qualification\BuildEvidenceContracts.cs" />
-    <Compile Include="Qualification\BuildEvidenceRuntime.cs" />
-    <Compile Include="Qualification\QualificationCatalog.cs" />
-    <Compile Include="Qualification\QualificationBuiltInCatalog.cs" />
-    <Compile Include="Qualification\QualificationContracts.cs" />
-    <Compile Include="Qualification\QualificationHostPort.cs" />
-    <Compile Include="Qualification\QualificationEventJournal.cs" />
-    <Compile Include="Qualification\QualificationManifest.cs" />
-    <Compile Include="Qualification\QualificationRunner.cs" />
     <Compile Include="AssistantRuntime.cs" />
     <Compile Include="Runtime\NativeToolRuntimeAdapter.cs" />
     <Compile Include="Runtime\ToolHandlerRegistry.cs" />
@@ -310,7 +299,6 @@
     <Compile Include="Services\ChatTitleBuilder.cs" />
     <Compile Include="Services\ChatSessionService.cs" />
     <Compile Include="Services\ChatRunRegistry.cs" />
-    <Compile Include="Services\QualificationApplicationService.cs" />
     <Compile Include="Services\ModelTracePersistenceService.cs" />
     <Compile Include="Services\RunCausalTrace.cs" />
     <Compile Include="Services\SessionTraceWriteQueue.cs" />
@@ -390,44 +378,6 @@
     <Compile Include="WebView\BridgeRequestCancellationRegistry.cs" />
     <Compile Include="WebView\WebViewSecurityPolicy.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />
-  </ItemGroup>
-  <ItemGroup>
-    <EmbeddedResource Include="Qualification\Packs\coverage.v1.json">
-      <LogicalName>RNAssistant.Office.Qualification.Packs.coverage.v1.json</LogicalName>
-    </EmbeddedResource>
-    <EmbeddedResource Include="Qualification\Packs\common.ui-shell.v1.json">
-      <LogicalName>RNAssistant.Office.Qualification.Packs.common.ui-shell.v1.json</LogicalName>
-    </EmbeddedResource>
-    <EmbeddedResource Include="Qualification\Packs\common.quick.v1.json">
-      <LogicalName>RNAssistant.Office.Qualification.Packs.common.quick.v1.json</LogicalName>
-    </EmbeddedResource>
-    <EmbeddedResource Include="Qualification\Packs\provider.live.v1.json">
-      <LogicalName>RNAssistant.Office.Qualification.Packs.provider.live.v1.json</LogicalName>
-    </EmbeddedResource>
-    <EmbeddedResource Include="Qualification\Packs\storage.recovery.v1.json">
-      <LogicalName>RNAssistant.Office.Qualification.Packs.storage.recovery.v1.json</LogicalName>
-    </EmbeddedResource>
-    <EmbeddedResource Include="Qualification\Packs\ui.webview.v1.json">
-      <LogicalName>RNAssistant.Office.Qualification.Packs.ui.webview.v1.json</LogicalName>
-    </EmbeddedResource>
-    <EmbeddedResource Include="Qualification\Packs\excel.wq0.identity.v1.json">
-      <LogicalName>RNAssistant.Office.Qualification.Packs.excel.wq0.identity.v1.json</LogicalName>
-    </EmbeddedResource>
-    <EmbeddedResource Include="Qualification\Packs\excel.read-write.v1.json">
-      <LogicalName>RNAssistant.Office.Qualification.Packs.excel.read-write.v1.json</LogicalName>
-    </EmbeddedResource>
-    <EmbeddedResource Include="Qualification\Packs\excel.complex-task.v1.json">
-      <LogicalName>RNAssistant.Office.Qualification.Packs.excel.complex-task.v1.json</LogicalName>
-    </EmbeddedResource>
-    <EmbeddedResource Include="Qualification\Packs\vba.lifecycle.v1.json">
-      <LogicalName>RNAssistant.Office.Qualification.Packs.vba.lifecycle.v1.json</LogicalName>
-    </EmbeddedResource>
-    <EmbeddedResource Include="Qualification\Packs\cross.full-run.v1.json">
-      <LogicalName>RNAssistant.Office.Qualification.Packs.cross.full-run.v1.json</LogicalName>
-    </EmbeddedResource>
-    <EmbeddedResource Include="Qualification\Packs\release.candidate.v1.json">
-      <LogicalName>RNAssistant.Office.Qualification.Packs.release.candidate.v1.json</LogicalName>
-    </EmbeddedResource>
   </ItemGroup>
   <ItemGroup>
     <None Include="packages.config" />

@@ -18,7 +18,6 @@ param(
     [switch]$Finalize,
     [string]$BuildEvidenceManifest,
     [switch]$WindowsOfficeValidated,
-    [switch]$ReleasePackPassed,
     [switch]$Push
 )
 
@@ -115,8 +114,8 @@ try {
         throw "Expected branch '$Branch', found '$actualBranch'. No branch switch is performed."
     }
     if ($Finalize) {
-        if (-not $WindowsOfficeValidated -or -not $ReleasePackPassed) {
-            throw "Finalize requires recorded Windows/Office qualification and a passed in-app release.candidate pack."
+        if (-not $WindowsOfficeValidated) {
+            throw "Finalize requires recorded Windows/Office qualification."
         }
         Assert-TrackedReleaseVersion -ExpectedPrefix $versionPrefix -ExpectedSuffix $versionSuffix
         $releaseCommit = (Invoke-Checked -Command "git" -Arguments @("rev-parse", "HEAD") | Out-String).Trim()

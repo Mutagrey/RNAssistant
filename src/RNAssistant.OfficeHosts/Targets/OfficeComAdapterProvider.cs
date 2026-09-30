@@ -31,8 +31,7 @@ namespace RNAssistant.OfficeHosts
                 return new ExcelAdapter(
                     workbook.Application ?? application,
                     workbook,
-                    dispatcher,
-                    "desktop-native-owner");
+                    dispatcher);
             }
 
             if (string.Equals(host, "Word", StringComparison.OrdinalIgnoreCase))

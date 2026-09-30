@@ -258,7 +258,7 @@ The user-authorized 11E presentation slice is implemented host-neutral on
 semantic targets, one current-action shimmer, disclosure retention and readable
 cause cards with lazy technical JSON replace the reviewed presentation paths.
 Canonical behavior: [conversation projection](../conversation-protocol.md#effect-mapping-and-ui-projection)
-and [Issue Center](../qualification.md#11-phase-11-issue-center).
+and [trajectory query](../trajectory-query.md).
 
 Remaining bounded follow-ups:
 
@@ -276,10 +276,6 @@ Remaining bounded follow-ups:
   second result store or promise that every binary format is previewable. Acceptance:
   large results and replay retain accurate summaries; exact model wire, body refs,
   partial coverage and mutation uncertainty stay unchanged.
-- **Full Issue Center:** source/build/catalog/qualification aggregation and
-  redacted issue export remain the existing Phase 11 scope. The current journal
-  cause cards derive only from loaded correlated rows; no additional issue store
-  or implicit whole-history lookup is introduced.
 - **Delivery qualification:** local browser component scenarios cover narrow
   320/400/600px layouts, themes and disclosure transitions; actual Office/WebView2,
   DPI, keyboard focus during live replacement, multi-window replay/confirmation

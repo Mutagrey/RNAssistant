@@ -295,7 +295,7 @@ async function collectCasGarbage() {
 }
 
 function setDiagnosticsTab(name, refreshRecords) {
-  name = name || "overview";
+  name = name === "overview" || name === "trajectory" ? name : "runtime-log";
   state.diagnosticsTab = name;
   Array.prototype.slice.call(document.querySelectorAll(".diagnostics-tab-button")).forEach(function (button) {
     var active = button.getAttribute("data-diagnostics-tab") === name;
@@ -304,13 +304,14 @@ function setDiagnosticsTab(name, refreshRecords) {
   });
   Array.prototype.slice.call(document.querySelectorAll(".diagnostics-tab-panel")).forEach(function (panel) {
     var target = panel.getAttribute("data-diagnostics-panel");
-    var active = target === name || target === "records" &&
-      (name === "events" || name === "trajectory" || name === "vba-journal");
+    var active = target === name || target === "records" && name === "trajectory";
     panel.classList.toggle("active", active);
   });
-  if ((name === "events" || name === "trajectory" || name === "vba-journal") &&
-      typeof setTrajectoryDiagnosticsMode === "function") {
-    setTrajectoryDiagnosticsMode(name, refreshRecords !== false);
+  if (name === "trajectory" && typeof setTrajectoryDiagnosticsMode === "function") {
+    setTrajectoryDiagnosticsMode("trajectory", refreshRecords !== false);
+  }
+  if (name === "runtime-log" && typeof updateLogScrollButton === "function") {
+    requestAnimationFrame(updateLogScrollButton);
   }
 }
 
@@ -321,7 +322,7 @@ function bindDiagnosticsActions() {
       setDiagnosticsTab(tab.getAttribute("data-diagnostics-tab"), true);
     });
   });
-  setDiagnosticsTab(state.diagnosticsTab || "overview", false);
+  setDiagnosticsTab(state.diagnosticsTab || "runtime-log", false);
   var button = $("testModelConnectionButton");
   if (button) button.addEventListener("click", async function () {
     var root = $("modelConnectionResults");

@@ -3,11 +3,18 @@
 `ITrajectoryQuery` is a read-only, disposable projection over a fully validated session event stream. The implementation receives canonical `SessionEvent` records from `ChatStore`, builds query metadata in memory, returns one page, and discards it. It never writes an index or another history file.
 
 Phase 9A exposes a host-neutral `run-causal` projection over these source events.
-Phase 9B supplies the shared JSON viewer and Phase 9C now renders the projection as
-an expandable host-neutral run journal:
+Phase 9B supplies the shared JSON viewer and Phase 9C renders the projection as
+an expandable host-neutral chat history:
 [R32 — run journal and shared JSON viewer](stabilization/R32_DIAGNOSTICS_JSON_VIEWER.md).
 Existing query/export authority and raw pagination remain intact; the journal is not
 a second durable log.
+
+The current Diagnostics UI opens at **Ход работы**, a bounded in-memory stream for
+the current app session. **История чата** loads the saved `run-causal` view only when
+opened and shows the latest run first; **Показать весь чат** removes that run filter.
+Search, raw events and specialized projections are under **Поиск и технические
+данные**. The VBA editor owns the convenient code diff; the journal view is retained
+for mutation recovery evidence. Large event bodies are fetched only on demand.
 
 ## Query contract
 

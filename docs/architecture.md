@@ -6,8 +6,8 @@ cross-cutting engineering rules live in
 [development-rules.md](development-rules.md); temporary execution order and gates
 live in the [stabilization progress](stabilization/PROGRESS.md). Historical phase
 reports and ADRs are evidence/rationale, not a second current architecture. The
-architecture migration is the working baseline; [qualification](qualification.md)
-remains a separate exact-build release and environment-evidence path.
+architecture migration is the working baseline; [Windows/Office verification](qualification.md)
+remains separate from development on macOS.
 
 Canonical domain documents:
 
@@ -17,7 +17,7 @@ Canonical domain documents:
 - [Skill Library](skills.md): trusted instruction packages and references.
 - [Conversation protocol](conversation-protocol.md): model loop and result/effect contracts.
 - [Session events](session-events.md): durable stream, replay and recovery.
-- [Qualification](qualification.md): typed qualification and issue evidence.
+- [Windows/Office verification](qualification.md): current manual evidence boundary.
 - [Host Fabric](host-fabric.md) and [Local Automation](local-automation-agent.md): deferred contours that do not expand the current stable-core route.
 - [Desktop runtime](desktop-runtime.md): standalone shell, activation and Office target selection.
 
@@ -57,37 +57,17 @@ automation first needs an ADR for workspace-owned sessions and a signed isolated
 worker. Office processes never become general shell workers. See
 [Local Automation Agent](local-automation-agent.md).
 
-## Qualification boundary (WQ-A1–A5)
+## Windows/Office verification boundary
 
-Qualification Center is an application orchestrator over declarative,
-versioned host packs. Agent tasks use the normal conversation/kernel/tool/domain
-path; allowlisted host probes and deterministic verifiers supply evidence. Model
-text and UI presentation cannot declare pass. Runs append closed typed operations to
-the existing document chat stream/CAS and are projected through `ITrajectoryQuery`;
-there is no second result store or test executor. The empty-chat card opens the
-runner instead of inserting a prompt. Host-neutral harness evidence remains a
-build artifact and is never executed by VSTO. See [qualification.md](qualification.md)
-and [ADR-0010](decisions/ADR-0010-qualification-evidence-authority.md).
-
-WQ-A1 implements the host-neutral boundary in `RNAssistant.Office/Qualification`:
-strict data-only manifest and coverage parsers, an immutable catalog, a finite runner,
-closed mandatory qualification events over `IEventStore`, CAS-backed large evidence
-and bounded typed bridge DTOs. Automatic pass requires a required assertion with
-typed expected/actual evidence. A durable start barrier precedes every automatic
-step; an open possible effect after replay is blocked and never redispatched. The
-WQ-A2 application service, controller routes and WebView shell expose one embedded
-read-only `common.ui-shell` pack from both empty chat and Diagnostics. Each run owns a
-dedicated document chat, replays from the same validated event stream after restart,
-rejects ordinary conversation turns and navigates to the existing exact run journal
-and shared JSON viewer. UI status cannot override the typed runner result. The shell
-itself does not exercise Office, COM, the model loop or document tools. WQ-A3 adds
-the single Excel identity owner/host port and bounded same-build helper.
-WQ-A4 embeds the closed versioned suite catalog; absent exact production capabilities
-remain N/A. WQ-A5 verifies a detached RS256 envelope against the signer pinned in
-assembly metadata, exact build/catalog/file hashes and the complete release run
-matrix. Only compatible complete evidence enables the read-only
-`release.candidate` pack. Real Office/provider adapters and scenario evidence remain
-Milestone WQ; local admission tests do not close them.
+Development on macOS uses host-neutral code and focused local checks. The maintainer
+builds and exercises the product on a real Windows/Office machine; the results
+remain open evidence until recorded for that exact build. There is no in-app
+Qualification Center, pack runner or Excel identity helper. Diagnostics reads the
+ordinary session events and runtime log without starting a separate verifier.
+Historical WQ-A1–A5 designs remain in the phase reports and
+[ADR-0010](decisions/ADR-0010-qualification-evidence-authority.md); they are not
+active runtime contracts. See [verification](qualification.md) and the
+[release process](operations/RELEASE_PROCESS.md).
 
 ## Chat, Plan, and Agent
 

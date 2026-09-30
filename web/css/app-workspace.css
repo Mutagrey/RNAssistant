@@ -915,6 +915,36 @@
   overflow: hidden;
 }
 
+.diagnostics-logs .log-scroll-region {
+  position: relative;
+  display: flex;
+  min-height: 0;
+}
+
+.diagnostics-logs .log-box {
+  min-width: 0;
+}
+
+.log-scroll-button {
+  position: absolute;
+  right: 18px;
+  bottom: 14px;
+  display: none;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  padding: 0;
+  border: 1px solid var(--line-strong);
+  border-radius: 50%;
+  background: var(--panel);
+  color: var(--text);
+  box-shadow: 0 2px 9px rgba(15, 23, 42, .16);
+}
+
+.log-scroll-button.is-visible { display: flex; }
+.log-scroll-button svg { width: 17px; height: 17px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+
 .diagnostics-logs .log-section-head > div {
   display: grid;
   gap: 2px;

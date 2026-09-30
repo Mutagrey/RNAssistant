@@ -97,22 +97,17 @@ execution.
 
 ## 5B2 identity candidate — diagnostic only
 
-The diagnostic candidate is a retained standard COM marshal reference and its
-OXID/OID, scoped by the local Excel process and creation time. It is not production
-runtime identity. The isolated [Excel identity probe](../../tests/RNAssistant.ExcelIdentityProbe/README.md)
-records independent observations without modifying workbooks or switching factories;
-it is deferred regression evidence, not a cutover prerequisite, and remains mandatory
-for release qualification.
+The historical diagnostic candidate was a retained standard COM marshal reference
+and its OXID/OID, scoped by the local Excel process and creation time. It was not
+production runtime identity. The separate probe was removed with Qualification
+Center; real Windows/Office identity behavior remains open evidence.
 Only OBJREF_STANDARD/IUnknown is supported; any other format or cross-client mismatch
 blocks the candidate. No fallback to local pointer, path, HWND or a generated ID.
 
-The probe owns its marshal packet until explicit disposal on its creating STA.
 Identity lifetime, client attach/detach, close/reopen and in-process VSTO/native
-equivalence must be demonstrated, not inferred from parser tests. The probe README
-defines observations, actual call sites and cleanup evidence. Production liveness
-must remain separate from a retained COM reference. The diagnostic reader/resolver
-has no production execution consumer and remains qualification-only; it is not an
-additional runtime identity or dispatch path.
+equivalence still need direct Windows evidence. Production liveness must remain
+separate from a retained COM reference; there is no diagnostic resolver in the
+current product.
 
 ## Production switch and deferred qualification
 
@@ -148,9 +143,8 @@ over `ExecuteTool(ToolCommand)` is an allowed intermediate state.
 
 The first implementation captures the existing `DocumentIdentity.RuntimeKey` once
 for that bound object and lifetime. This is explicit risk acceptance, not proof that
-independently resolved proxies/processes share an identity. WQ0 remains deferred
-diagnostic/regression tooling and is required as part of release qualification;
-it is not runtime authority or a pre-cutover gate. Windows close/reopen, Save As,
+independently resolved proxies/processes share an identity. The former WQ0 tooling
+was removed; it is not runtime authority or a pre-cutover gate. Windows close/reopen, Save As,
 multi-window/client and cross-proxy scenarios remain unperformed qualification.
 Failures found later are fixed against the bound-session contract; legacy
 active-document fallback must not return.

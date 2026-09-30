@@ -1655,7 +1655,7 @@ change без промежуточного production состояния. WQ0 о
 ### Выполнить
 
 - [x] 5B1: ввести `IOfficeDocumentSession` и нейтрального consumer в HostRuntime; production providers появятся только в 5B2.
-- [x] 5B2: подготовить отдельный [identity probe](../../tests/RNAssistant.ExcelIdentityProbe/README.md) кандидата OXID/OID с retained marshal reference; production identity не переключать по результатам parser tests.
+- [x] 5B2: подготовить отдельный identity probe кандидата OXID/OID с retained marshal reference; production identity не переключать по результатам parser tests. Probe позже удалён; [identity decision](../decisions/ADR-0005-bound-document-session.md) сохранено.
 - [ ] 5B2/WQ0: квалифицировать принятое lifetime identity допущение и равенство desktop/VSTO/native на Windows; это обязательное release evidence, не blocker implementation.
 - [x] Ввести `ExcelDocumentSession` (11T0/7D host-neutral; Windows lifetime evidence остаётся открытым).
 - [x] 5A: выделить текущую document access/serialization из `OfficeToolExecutor` в `HostRuntime`; старые helpers удалить.

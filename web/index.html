@@ -30,14 +30,13 @@
   <link rel="stylesheet" href="css/app-reasoning.css?v=chat-projection-20260907-1">
   <link rel="stylesheet" href="css/app-context-chips.css?v=sidebar-polish-20260723-1">
   <link rel="stylesheet" href="css/app-models.css?v=model-capability-inline-20260826-1">
-  <link rel="stylesheet" href="css/app-workspace.css?v=diagnostics-ui-20260825-1">
+  <link rel="stylesheet" href="css/app-workspace.css?v=diagnostics-clarity-20260930-1">
   <link rel="stylesheet" href="css/app-json-viewer.css?v=json-height-20260929-1">
   <link rel="stylesheet" href="css/app-text-viewer.css?v=artifact-text-20260831-1">
   <link rel="stylesheet" href="css/app-sequence-viewer.css?v=artifact-gallery-20260902-1">
   <link rel="stylesheet" href="css/app-resource-viewer.css?v=artifact-gallery-20260902-1">
-  <link rel="stylesheet" href="css/app-trajectory.css?v=json-height-20260929-1">
+  <link rel="stylesheet" href="css/app-trajectory.css?v=diagnostics-clarity-20260930-1">
   <link rel="stylesheet" href="css/app-run-journal.css?v=json-height-20260929-1">
-  <link rel="stylesheet" href="css/app-qualification.css?v=qualification-center-20260831-1">
   <link rel="stylesheet" href="css/app-tools.css?v=json-height-20260929-1">
   <link rel="stylesheet" href="css/app-vba.css?v=json-height-20260929-1">
   <link rel="stylesheet" href="css/app-context-panel.css?v=json-height-20260929-1">
@@ -844,28 +843,12 @@
               </div>
               <input id="debugModelTrafficInput" type="checkbox" hidden>
               <div class="diagnostics-tabs" role="tablist" aria-label="Разделы диагностики">
-                <button class="diagnostics-tab-button active" type="button" role="tab" aria-selected="true" data-diagnostics-tab="overview">Проверки</button>
-                <button class="diagnostics-tab-button" type="button" role="tab" aria-selected="false" data-diagnostics-tab="events">Технические события</button>
-                <button class="diagnostics-tab-button" type="button" role="tab" aria-selected="false" data-diagnostics-tab="trajectory">Журнал запуска</button>
-                <button class="diagnostics-tab-button" type="button" role="tab" aria-selected="false" data-diagnostics-tab="vba-journal">Изменения VBA</button>
-                <button class="diagnostics-tab-button" type="button" role="tab" aria-selected="false" data-diagnostics-tab="runtime-log">События интерфейса</button>
+                <button class="diagnostics-tab-button active" type="button" role="tab" aria-selected="true" data-diagnostics-tab="runtime-log">Ход работы</button>
+                <button class="diagnostics-tab-button" type="button" role="tab" aria-selected="false" data-diagnostics-tab="trajectory">История чата</button>
+                <button class="diagnostics-tab-button" type="button" role="tab" aria-selected="false" data-diagnostics-tab="overview">Проверки и данные</button>
               </div>
 
-              <div class="diagnostics-tab-panel diagnostics-overview active" data-diagnostics-panel="overview">
-                <section class="model-compatibility-panel qualification-diagnostics-card" aria-labelledby="qualificationDiagnosticsTitle">
-                  <div class="model-compatibility-head">
-                    <div>
-                      <h3 id="qualificationDiagnosticsTitle">Qualification Center</h3>
-                      <p>Versioned in-app проверки с durable evidence. Сейчас доступен только безопасный shell-пак; Office и модель он не квалифицирует.</p>
-                    </div>
-                    <button class="accent-soft" id="openQualificationCenterButton" type="button">Открыть центр проверок</button>
-                  </div>
-                </section>
-                <div class="diagnostics-concepts" aria-label="Различие событий и траектории">
-                  <div><strong>Технические события</strong><span>Исходные записи для подробного технического разбора.</span></div>
-                  <div><strong>Журнал запуска</strong><span>Начните здесь: причины, результаты действий и связанные события одного запуска.</span></div>
-                  <div><strong>Изменения VBA</strong><span>История изменений модулей в текущем документе, с исходным и полученным кодом.</span></div>
-                </div>
+              <div class="diagnostics-tab-panel diagnostics-overview" data-diagnostics-panel="overview">
                 <section class="model-compatibility-panel diagnostics-model-panel" aria-labelledby="modelConnectionTitle">
                   <div class="model-compatibility-head">
                     <div>
@@ -901,21 +884,28 @@
               <section class="model-compatibility-panel trajectory-panel diagnostics-tab-panel" data-diagnostics-panel="records" aria-labelledby="trajectoryTitle">
                 <div class="model-compatibility-head">
                   <div>
-                    <h3 id="trajectoryTitle">Технические события</h3>
-                    <p id="trajectoryDescription">Канонические записи активного chat stream. Event data показан сразу, большие payload читаются из CAS только по запросу.</p>
+                    <h3 id="trajectoryTitle">История чата</h3>
+                    <p id="trajectoryDescription">Сохранённые шаги последнего запуска текущего чата. Раскройте строку для подробностей.</p>
                   </div>
                 </div>
-                <div class="trajectory-querybar">
-                  <label class="trajectory-field" id="trajectoryViewField"><span>Представление</span><select id="trajectoryViewInput"><option value="raw" hidden>Технические события</option><option value="run-causal">Журнал запуска</option><option value="model-replay">Только шаги модели</option><option value="tool-execution">Только действия</option><option value="artifact-lineage">Дерево артефактов</option><option value="confirmation-pauses">Подтверждения</option><option value="failure-retries">Ошибки и повторы</option><option value="turn-usage">Токены и стоимость</option><option value="vba-mutations" hidden>VBA mutations</option></select></label>
-                  <label class="trajectory-field trajectory-search-field"><span>Поиск</span><input id="trajectorySearchInput" maxlength="512" placeholder="Metadata и event data"></label>
-                  <label class="trajectory-field" id="trajectoryTypeField"><span>Тип события</span><input id="trajectoryTypeInput" maxlength="256" placeholder="Типы через запятую"></label>
-                  <label class="trajectory-field" id="trajectoryVisibilityField"><span>Состояние</span><select id="trajectoryVisibilityInput"><option value="">Все</option><option value="current">Текущее</option><option value="shadowed">Заменённое</option><option value="log-only">Только журнал</option></select></label>
-                  <label class="trajectory-field hidden" id="trajectoryVbaKindField"><span>VBA scope</span><select id="trajectoryVbaKindInput"><option value="">Модули и пакеты</option><option value="module">Модули</option><option value="package">Пакеты</option></select></label>
-                  <label class="trajectory-field hidden" id="trajectoryVbaStatusField"><span>Статус</span><select id="trajectoryVbaStatusInput"><option value="">Все</option><option value="open">Open</option><option value="committed">Committed</option><option value="not_applied">Not applied</option><option value="rolled_back">Rolled back</option><option value="failed">Failed</option><option value="unknown">Unknown</option></select></label>
-                  <button class="secondary trajectory-refresh-button" id="refreshTrajectoryButton" type="button">Обновить</button>
+                <div class="trajectory-primary-actions">
+                  <button class="secondary trajectory-refresh-button" id="refreshTrajectoryButton" type="button">Обновить историю</button>
+                  <button class="secondary hidden" id="clearTrajectoryCorrelationButton" type="button">Показать весь чат</button>
                 </div>
-                <div class="trajectory-correlation-bar hidden" id="trajectoryCorrelationBar"><div class="trajectory-correlation-actions" id="trajectoryCorrelationActions"></div><button class="secondary hidden" id="clearTrajectoryCorrelationButton" type="button">Сбросить переход</button></div>
-                <div class="trajectory-status-row"><div class="trajectory-status" id="trajectoryStatus">Нажмите «Обновить», чтобы прочитать текущий event stream.</div><button class="secondary hidden" id="loadMoreTrajectoryButton" type="button">Старше</button></div>
+                <details class="trajectory-advanced-options" id="trajectoryAdvancedOptions">
+                  <summary>Поиск и технические данные</summary>
+                  <p>Дифф кода — во вкладке VBA. Журнал изменений здесь нужен для сохранённых исходных записей и восстановления.</p>
+                  <div class="trajectory-querybar">
+                    <label class="trajectory-field" id="trajectoryViewField"><span>Данные</span><select id="trajectoryViewInput"><option value="raw">Исходные события чата</option><option value="run-causal">Ход запуска</option><option value="model-replay">Шаги модели</option><option value="tool-execution">Действия</option><option value="artifact-lineage">Артефакты</option><option value="confirmation-pauses">Подтверждения</option><option value="failure-retries">Ошибки и повторы</option><option value="turn-usage">Токены и стоимость</option><option value="vba-mutations">Журнал VBA и восстановление</option></select></label>
+                    <label class="trajectory-field trajectory-search-field"><span>Поиск в сохранённой истории</span><input id="trajectorySearchInput" maxlength="512" placeholder="Слова из событий"></label>
+                    <label class="trajectory-field" id="trajectoryTypeField"><span>Тип события</span><input id="trajectoryTypeInput" maxlength="256" placeholder="Типы через запятую"></label>
+                    <label class="trajectory-field" id="trajectoryVisibilityField"><span>Состояние</span><select id="trajectoryVisibilityInput"><option value="">Все</option><option value="current">Текущее</option><option value="shadowed">Заменённое</option><option value="log-only">Только журнал</option></select></label>
+                    <label class="trajectory-field hidden" id="trajectoryVbaKindField"><span>VBA scope</span><select id="trajectoryVbaKindInput"><option value="">Модули и пакеты</option><option value="module">Модули</option><option value="package">Пакеты</option></select></label>
+                    <label class="trajectory-field hidden" id="trajectoryVbaStatusField"><span>Статус</span><select id="trajectoryVbaStatusInput"><option value="">Все</option><option value="open">Open</option><option value="committed">Committed</option><option value="not_applied">Not applied</option><option value="rolled_back">Rolled back</option><option value="failed">Failed</option><option value="unknown">Unknown</option></select></label>
+                  </div>
+                  <div class="trajectory-correlation-bar hidden" id="trajectoryCorrelationBar"><div class="trajectory-correlation-actions" id="trajectoryCorrelationActions"></div></div>
+                </details>
+                <div class="trajectory-status-row"><div class="trajectory-status" id="trajectoryStatus">История загрузится при открытии вкладки.</div><button class="secondary hidden" id="loadMoreTrajectoryButton" type="button">Ранее</button></div>
                 <div class="trajectory-workspace split-layout hidden" id="trajectoryWorkspace" data-split-key="trajectory" data-default-ratio="0.32" data-min-left="160" data-max-ratio="0.6">
                   <div class="trajectory-events" id="trajectoryEvents" role="listbox" aria-label="События траектории"></div>
                   <div class="splitter" role="separator" aria-label="Ширина списка событий" aria-orientation="vertical"></div>
@@ -940,9 +930,9 @@
                 </details>
               </section>
 
-              <div class="logs-workspace diagnostics-logs diagnostics-tab-panel" data-diagnostics-panel="runtime-log">
+              <div class="logs-workspace diagnostics-logs diagnostics-tab-panel active" data-diagnostics-panel="runtime-log">
                 <section class="log-section surface-panel padded">
-                  <div class="log-section-head"><div><strong>Журнал интерфейса</strong><span>Текущий WebView-сеанс; это не durable JSONL chat stream.</span></div><button class="secondary" id="clearLogButton" type="button">Очистить</button></div>
+                  <div class="log-section-head"><div><strong>Ход работы</strong><span>События текущего сеанса. Сохранённые шаги и результаты — во вкладке «История чата».</span></div><button class="secondary" id="clearLogButton" type="button">Очистить экран</button></div>
                   <div class="log-filter-bar" role="toolbar" aria-label="Фильтр событий">
                     <button class="log-filter-button active" type="button" data-log-filter="all" aria-pressed="true">Все <span class="log-filter-count">0</span></button>
                     <button class="log-filter-button" type="button" data-log-filter="error" aria-pressed="false">Ошибки <span class="log-filter-count">0</span></button>
@@ -950,7 +940,7 @@
                     <button class="log-filter-button" type="button" data-log-filter="success" aria-pressed="false">Успешно <span class="log-filter-count">0</span></button>
                     <button class="log-filter-button" type="button" data-log-filter="info" aria-pressed="false">Инфо <span class="log-filter-count">0</span></button>
                   </div>
-                  <pre class="log-box" id="logBox" aria-live="polite" aria-label="Журнал событий"></pre>
+                  <div class="log-scroll-region"><pre class="log-box" id="logBox" aria-live="polite" aria-label="Ход работы"></pre><button class="log-scroll-button" id="logScrollBottomButton" type="button" title="К последним событиям" aria-label="К последним событиям" aria-hidden="true" tabindex="-1"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m7 10 5 5 5-5"/></svg></button></div>
                 </section>
               </div>
             </section>
@@ -962,53 +952,6 @@
       </section>
 
     </main>
-  </div>
-
-  <div class="qualification-overlay hidden" id="qualificationCenterOverlay" aria-hidden="true">
-    <section class="qualification-dialog" id="qualificationCenterDialog" role="dialog" aria-modal="true" aria-labelledby="qualificationCenterTitle">
-      <header class="qualification-head">
-        <div>
-          <span class="qualification-kicker">Встроенная квалификация</span>
-          <h2 id="qualificationCenterTitle">Qualification Center</h2>
-          <p>Результат вычисляет только typed verifier; экран показывает записанное состояние без собственной оценки.</p>
-        </div>
-        <button class="icon-button secondary" id="closeQualificationCenterButton" type="button" aria-label="Закрыть Qualification Center">×</button>
-      </header>
-      <div class="qualification-status" id="qualificationCenterStatus" role="status" aria-live="polite"></div>
-      <div class="qualification-layout">
-        <aside class="qualification-packs" aria-label="Наборы проверок">
-          <div class="qualification-section-title">Пакеты</div>
-          <label class="qualification-suite-label" for="qualificationSuiteSelect">Suite</label>
-          <select id="qualificationSuiteSelect" class="qualification-suite-select">
-            <option value="quick">Quick</option>
-            <option value="full">Full</option>
-            <option value="release">Release</option>
-          </select>
-          <div id="qualificationPackList"></div>
-        </aside>
-        <main class="qualification-run">
-          <div class="qualification-run-head">
-            <div>
-              <h3 id="qualificationRunTitle">Выберите пакет</h3>
-              <p id="qualificationRunDescription"></p>
-            </div>
-            <span class="qualification-run-status" id="qualificationRunStatus">Готов</span>
-          </div>
-          <div class="qualification-provenance" id="qualificationProvenance"></div>
-          <div class="qualification-user-instruction hidden" id="qualificationUserInstruction"></div>
-          <div class="qualification-steps" id="qualificationSteps"></div>
-          <div class="qualification-actions">
-            <button class="accent-soft" id="startQualificationButton" type="button">Запустить</button>
-            <button class="accent-soft hidden" id="continueQualificationButton" type="button">Подтвердить и продолжить</button>
-            <button class="secondary hidden" id="cancelQualificationButton" type="button">Отменить запуск</button>
-            <button class="secondary hidden" id="repeatQualificationButton" type="button">Повторить</button>
-            <button class="secondary hidden" id="openQualificationJournalButton" type="button">Открыть журнал</button>
-            <button class="secondary hidden" id="copyQualificationReportButton" type="button">Копировать отчёт</button>
-          </div>
-          <div class="qualification-report-status" id="qualificationReportStatus" aria-live="polite"></div>
-        </main>
-      </div>
-    </section>
   </div>
 
   <script src="js/vendor/purify.min.js"></script>
@@ -1035,8 +978,8 @@
   <script src="js/app-editors.js?v=ui-lazy-20260903-1"></script>
   <script src="js/app-markdown.js?v=chat-message-cleanup-20260908-1"></script>
   <script src="js/app-settings.js?v=prompt-source-20260906-1"></script>
-  <script src="js/app-logs.js?v=log-filters-20260824-1"></script>
-  <script src="js/app-diagnostics.js?v=diagnostics-ui-20260825-1"></script>
+  <script src="js/app-logs.js?v=diagnostics-clarity-20260930-1"></script>
+  <script src="js/app-diagnostics.js?v=diagnostics-clarity-20260930-1"></script>
   <script src="js/app-viewer-registry.js?v=artifact-preview-20260902-2"></script>
   <script src="js/app-json-viewer.js?v=chat-projection-20260907-1"></script>
   <script src="js/app-text-viewer.js?v=artifact-text-20260831-1"></script>
@@ -1046,8 +989,7 @@
   <script src="js/app-resource-download.js?v=binary-chunks-20260906-1"></script>
   <script src="js/app-resource-upload.js?v=vba-upload-20260906-1"></script>
   <script src="js/app-trajectory-payload.js?v=trajectory-payload-20260906-1"></script>
-  <script src="js/app-trajectory.js?v=run-diff-20260908-1"></script>
-  <script src="js/app-qualification.js?v=qualification-center-20260831-1"></script>
+  <script src="js/app-trajectory.js?v=diagnostics-clarity-20260930-1"></script>
   <script src="js/app-prompts.js?v=prompt-source-20260906-1"></script>
   <script src="js/app-model-data.js?v=media-routing-20260824-1"></script>
   <script src="js/app-model-picker.js?v=model-modules-20260823-2"></script>

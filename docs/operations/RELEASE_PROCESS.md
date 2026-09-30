@@ -51,10 +51,10 @@ This preparation invocation:
 
 Preparation **does not create a tag or push**. Build one unchanged Release/x64 Office
 candidate from the resulting commit with the same build number and signer fingerprint.
-Run all required Qualification Center packs on Windows x64 + Office x64. The approved
-release contour constructs the strict payload described in
-[Exact-build qualification evidence](BUILD_EVIDENCE.md), hashes the immutable evidence
-bundle and distributable files, then signs it without overwriting an earlier envelope:
+Exercise the applicable scenarios directly on Windows x64 + Office x64 and record
+results for the exact candidate. The release contour constructs the payload described
+in [Exact-build release evidence](BUILD_EVIDENCE.md), hashes the evidence bundle and
+distributable files, then signs it without overwriting an earlier envelope:
 
 ```powershell
 ./tools/Sign-BuildEvidence.ps1 `
@@ -64,8 +64,7 @@ bundle and distributable files, then signs it without overwriting an earlier env
   -ExpectedSignerSha256 <lowercase-certificate-der-sha256>
 ```
 
-Place the sidecar beside the unchanged `RNAssistant.Office.dll`, restart RNAssistant
-and run `release.candidate`. Only after it passes, finalize:
+Review the recorded Windows results and unchanged candidate artifacts, then finalize:
 
 ```powershell
 ./tools/Prepare-Release.ps1 `
@@ -75,17 +74,17 @@ and run `release.candidate`. Only after it passes, finalize:
   -BuildEvidenceSignerSha256 <lowercase-certificate-der-sha256> `
   -Finalize `
   -BuildEvidenceManifest .\RNAssistant.BuildEvidence.v1.json `
-  -WindowsOfficeValidated `
-  -ReleasePackPassed
+  -WindowsOfficeValidated
 ```
 
 Finalization verifies the tracked product version, clean exact commit, tag absence,
 signer/signature and payload identity. It then creates one annotated tag containing
 the manifest hash. It pushes the branch and exact tag atomically only with explicit
-`-Push`. `-WindowsOfficeValidated` and `-ReleasePackPassed` acknowledge recorded
-evidence; they do not run Office or replace the signed admission check.
+`-Push`. `-WindowsOfficeValidated` acknowledges recorded evidence; it does not run
+Office. The script verifies the envelope and commit/version identity, while the
+release owner reviews the Windows matrix and artifact hashes in the signed payload.
 
-The scripts do not build/package Office add-ins or execute WQ packs. Do not distribute
+The scripts do not build/package Office add-ins or execute Office scenarios. Do not distribute
 pre-commit, dirty or post-evidence rebuilt artifacts.
 
 ## Build an existing release

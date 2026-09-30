@@ -39,7 +39,7 @@ direct cutover объясняют порядок уже выполненной �
 | Artifacts and viewers | [Artifact Library](artifact-library.md) |
 | VBA safety, packages, UserForms | [Mutation journal](vba-mutation-journal.md), [packages](vba-tool-packages.md), [UserForms](vba-userforms.md) |
 | Desktop shell and Office target selection | [Desktop runtime](desktop-runtime.md) |
-| Qualification and evidence | [Qualification](qualification.md) |
+| Проверка на Windows/Office и evidence | [Проверка](qualification.md), [release](operations/RELEASE_PROCESS.md) |
 | Versioning and release | [Versioning](operations/VERSIONING.md), [release](operations/RELEASE_PROCESS.md), [build evidence](operations/BUILD_EVIDENCE.md) |
 | Targeted checks | [Harness guide](../tests/RNAssistant.Harness/README.md) |
 

@@ -385,9 +385,6 @@ function applyInitState(init) {
   renderSettings();
   renderChatSessions();
   renderMessages();
-  if (!state.messages.length && typeof refreshActiveQualificationState === "function") {
-    refreshActiveQualificationState();
-  }
   renderContextMeter();
   renderVisibleSecondarySurfaces();
   log("Initialized " + init.host);

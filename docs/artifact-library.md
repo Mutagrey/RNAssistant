@@ -1230,10 +1230,9 @@ Phase 11 is implemented as separate changes:
    - Audio remains a separate measured slice with its own security and Windows gate.
 5. The Artifact milestone closes only after one Windows WebView pass covers the
    Library, Plan and HTML together: reload, exact history navigation, stale
-   revisions, viewer cleanup and bounded large payloads. Product-wide Problems and
-   causal evidence links then belong to the Phase 11
-   [Issue Center](qualification.md#11-phase-11-issue-center), not to artifact
-   metadata or a new artifact class.
+   revisions, viewer cleanup and bounded large payloads. Causal evidence links
+   belong to the saved [chat history](trajectory-query.md), not artifact metadata
+   or a new artifact class.
 
 Minimum tests prove: a draft is absent from durable projection/context; commit and
 UI projection precede the first fake model transport call; provider failure after

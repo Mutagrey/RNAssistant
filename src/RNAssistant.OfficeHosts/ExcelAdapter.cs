@@ -30,18 +30,14 @@ namespace RNAssistant.OfficeHosts
         private readonly ExcelTableInteropBackend _excelTableBackend;
         private readonly ExcelChartInteropBackend _excelChartBackend;
         private readonly VbaInteropBackend _vbaHostBackend;
-        private readonly string _qualificationOwnerLabel;
 
         public ExcelAdapter(
             Excel.Application application,
             Excel.Workbook targetWorkbook,
-            IOfficeStaDispatcher dispatcher,
-            string qualificationOwnerLabel = null)
+            IOfficeStaDispatcher dispatcher)
         {
             _application = application ?? throw new ArgumentNullException(nameof(application));
             _targetWorkbook = targetWorkbook ?? throw new ArgumentNullException(nameof(targetWorkbook));
-            _qualificationOwnerLabel = string.IsNullOrWhiteSpace(qualificationOwnerLabel)
-                ? "host-owner" : qualificationOwnerLabel;
             var runtimeDocumentId = DocumentIdentity.RuntimeKey(HostName, _targetWorkbook);
             _documentSession = new ExcelDocumentSession(
                 _targetWorkbook,

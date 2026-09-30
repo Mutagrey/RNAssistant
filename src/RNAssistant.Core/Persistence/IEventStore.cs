@@ -53,11 +53,7 @@ namespace RNAssistant.Core.Persistence
         TurnStarted = 20,
         TurnEnded = 21,
         StepStarted = 22,
-        StepEnded = 23,
-        QualificationRunStarted = 24,
-        QualificationStepStarted = 25,
-        QualificationStepCompleted = 26,
-        QualificationRunCompleted = 27
+        StepEnded = 23
     }
 
     public sealed class SessionEventDescriptor
@@ -114,14 +110,6 @@ namespace RNAssistant.Core.Persistence
                     SessionEventAuthority.Authority, SessionEventDurability.Mandatory),
                 Agent(SessionEventKind.ToolPackExtensionRejected, SessionEventTypes.ToolPackExtensionRejected,
                     SessionEventAuthority.Diagnostic, SessionEventDurability.Mandatory),
-                Agent(SessionEventKind.QualificationRunStarted, SessionEventTypes.QualificationRunStarted,
-                    SessionEventAuthority.Authority, SessionEventDurability.Mandatory),
-                Agent(SessionEventKind.QualificationStepStarted, SessionEventTypes.QualificationStepStarted,
-                    SessionEventAuthority.Authority, SessionEventDurability.Mandatory),
-                Agent(SessionEventKind.QualificationStepCompleted, SessionEventTypes.QualificationStepCompleted,
-                    SessionEventAuthority.Authority, SessionEventDurability.Mandatory),
-                Agent(SessionEventKind.QualificationRunCompleted, SessionEventTypes.QualificationRunCompleted,
-                    SessionEventAuthority.Authority, SessionEventDurability.Mandatory),
                 Diagnostic(SessionEventKind.RunStartedObservation, SessionEventTypes.RunStartedObservation),
                 Diagnostic(SessionEventKind.RunSummaryCreated, SessionEventTypes.RunSummaryCreated),
                 Diagnostic(SessionEventKind.UiProjected, SessionEventTypes.UiProjected),

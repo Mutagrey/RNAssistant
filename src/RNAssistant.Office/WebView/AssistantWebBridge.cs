@@ -137,39 +137,6 @@ namespace RNAssistant.Office.WebView
                         var chatEventPayload = Payload<ChatEventPayloadRequest>(payload);
                         responsePayload = await _controller.GetChatEventPayloadAsync(chatEventPayload.ChatId, chatEventPayload.EventId, cancellationToken).ConfigureAwait(false);
                         break;
-                    case "getQualificationCatalog":
-                        var qualificationCatalog = Payload<QualificationCatalogPayload>(payload);
-                        responsePayload = await RunBridgeWorkAsync(
-                            () => _controller.GetQualificationCatalog(
-                                qualificationCatalog.ChatId, qualificationCatalog.Suite),
-                            cancellationToken).ConfigureAwait(false);
-                        break;
-                    case "getQualificationRun":
-                        var qualificationRun = Payload<QualificationRunPayload>(payload);
-                        responsePayload = await RunBridgeWorkAsync(
-                            () => _controller.GetQualificationRun(
-                                qualificationRun.ChatId, qualificationRun.RunId),
-                            cancellationToken).ConfigureAwait(false);
-                        break;
-                    case "startQualification":
-                        var qualificationStart = Payload<QualificationStartPayload>(payload);
-                        responsePayload = await _controller.StartQualificationAsync(
-                            qualificationStart.ChatId,
-                            qualificationStart.PackId,
-                            qualificationStart.PreviousRunId,
-                            cancellationToken).ConfigureAwait(false);
-                        break;
-                    case "advanceQualification":
-                        var qualificationAdvance = Payload<QualificationAdvancePayload>(payload);
-                        responsePayload = await _controller.AdvanceQualificationAsync(
-                            qualificationAdvance.ChatId,
-                            qualificationAdvance.RunId,
-                            qualificationAdvance.StepId,
-                            qualificationAdvance.Acknowledged,
-                            qualificationAdvance.Cancel,
-                            qualificationAdvance.Note,
-                            cancellationToken).ConfigureAwait(false);
-                        break;
                     case "createChat":
                         var createChat = Payload<CreateChatPayload>(payload);
                         responsePayload = _controller.CreateChat(createChat.Title);

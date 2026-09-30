@@ -78,8 +78,6 @@ function renderSendControls() {
   var editBar = $("messageEditBar");
   var cancelEditButton = $("cancelMessageEditButton");
   var currentDocumentAvailable = typeof activeChatUsesCurrentDocument !== "function" || activeChatUsesCurrentDocument();
-  var qualificationChat = typeof window.activeQualificationRun === "function" &&
-    !!window.activeQualificationRun();
 
   if (form) {
     form.classList.toggle("is-message-editing", isEditing);
@@ -106,25 +104,23 @@ function renderSendControls() {
   }
   if (input) {
     input.readOnly = isSending || isPreparingAttachments || approvalPending || state.modeSaving || state.reasoningSaving ||
-      state.bridgeUnavailable || qualificationChat;
-    input.placeholder = qualificationChat
-      ? "Продолжите проверку через Qualification Center..."
-      : (isEditing
+      state.bridgeUnavailable;
+    input.placeholder = isEditing
       ? "Измените сообщение или отправьте его заново..."
       : (state.bridgeUnavailable
         ? "Откройте RNAssistant внутри Office, чтобы начать чат..."
         : (approvalPending
           ? "Подтвердите или отмените действие агента..."
-          : (currentDocumentAvailable ? "Спросите про текущий документ..." : "Обсудите сохранённый контекст..."))));
+          : (currentDocumentAvailable ? "Спросите про текущий документ..." : "Обсудите сохранённый контекст...")));
   }
   if (clearButton) {
-    clearButton.disabled = isSending || isPreparingAttachments || state.editingBusy || qualificationChat;
+    clearButton.disabled = isSending || isPreparingAttachments || state.editingBusy;
   }
   if (modelSelect) {
-    modelSelect.disabled = isSending || isPreparingAttachments || isEditing || state.modelCatalog.loading || state.modelSaving || state.reasoningSaving || state.bridgeUnavailable || qualificationChat || !state.activeChatId;
+    modelSelect.disabled = isSending || isPreparingAttachments || isEditing || state.modelCatalog.loading || state.modelSaving || state.reasoningSaving || state.bridgeUnavailable || !state.activeChatId;
   }
   if (modeSelect) {
-    modeSelect.disabled = isSending || isPreparingAttachments || isEditing || state.modeSaving || state.reasoningSaving || state.bridgeUnavailable || qualificationChat || !state.activeChatId;
+    modeSelect.disabled = isSending || isPreparingAttachments || isEditing || state.modeSaving || state.reasoningSaving || state.bridgeUnavailable || !state.activeChatId;
   }
   renderChatModePicker();
   if (typeof renderChatModelPicker === "function") {
@@ -141,10 +137,10 @@ function renderSendControls() {
     if ($("chatReasoningToggle")) $("chatReasoningToggle").disabled = true;
   }
   if ($("addSelectionContextButton")) {
-    $("addSelectionContextButton").disabled = isSending || isPreparingAttachments || isEditing || state.bridgeUnavailable || qualificationChat || !currentDocumentAvailable;
+    $("addSelectionContextButton").disabled = isSending || isPreparingAttachments || isEditing || state.bridgeUnavailable || !currentDocumentAvailable;
   }
   if ($("attachFileButton")) {
-    $("attachFileButton").disabled = isSending || isPreparingAttachments || approvalPending || isEditing || state.bridgeUnavailable || qualificationChat || !state.activeChatId;
+    $("attachFileButton").disabled = isSending || isPreparingAttachments || approvalPending || isEditing || state.bridgeUnavailable || !state.activeChatId;
   }
   if (typeof renderPromptContextInspectorAvailability === "function") {
     renderPromptContextInspectorAvailability();
@@ -191,7 +187,6 @@ function updateSendButtonAvailability(hasContent) {
     state.modeSaving ||
     state.reasoningSaving ||
     state.bridgeUnavailable ||
-    (typeof window.activeQualificationRun === "function" && !!window.activeQualificationRun()) ||
     !state.activeChatId ||
     (hasActiveMessageEdit() ? !canSaveEdit : !hasContent);
 }

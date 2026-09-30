@@ -171,6 +171,7 @@ function log(message, type) {
   if (!box) {
     return;
   }
+  var followLatest = typeof isLogNearBottom !== "function" || isLogNearBottom(box);
   var resolvedType = resolveLogType(message, type);
   var entry = document.createElement("span");
   entry.className = "log-entry log-entry-" + resolvedType;
@@ -183,16 +184,21 @@ function log(message, type) {
 
   var text = document.createElement("span");
   text.className = "log-entry-message";
-  text.textContent = String(message === null || message === undefined ? "" : message);
+  var content = String(message === null || message === undefined ? "" : message);
+  text.textContent = content.length > 4096 ? content.slice(0, 4096) + "… [сокращено]" : content;
 
   entry.appendChild(time);
   entry.appendChild(document.createTextNode(" "));
   entry.appendChild(text);
   box.appendChild(entry);
-  if (typeof updateLogFilterCounts === "function") {
-    updateLogFilterCounts();
+  var removed = null;
+  if (box.childElementCount > 500) {
+    removed = box.firstElementChild;
+    removed.remove();
   }
-  box.scrollTop = box.scrollHeight;
+  if (typeof recordLogEntry === "function") recordLogEntry(entry, removed);
+  if (followLatest) box.scrollTop = box.scrollHeight;
+  if (typeof updateLogScrollButton === "function") updateLogScrollButton();
 }
 
 function logOnce(message, type) {

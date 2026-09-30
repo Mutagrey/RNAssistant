@@ -152,8 +152,9 @@
 
   function navigateCorrelation(field, filterValue, targetView, sourceChatId) {
     if (typeof setDiagnosticsTab === "function") {
-      setDiagnosticsTab(targetView === "raw" ? "events" : "trajectory", false);
+      setDiagnosticsTab("trajectory", false);
     }
+    if (targetView !== "run-causal") $("trajectoryAdvancedOptions").open = true;
     correlationFilter = {};
     if (field === "sourceRange") {
       correlationFilter.minSequence = filterValue.min;
@@ -995,7 +996,7 @@
       panel.classList.toggle("is-vba", vba);
       panel.classList.toggle("is-run-journal", journal);
     }
-    $("trajectoryViewField").classList.toggle("hidden", raw || vba);
+    $("trajectoryViewField").classList.remove("hidden");
     $("trajectoryTypeField").classList.toggle("hidden", !raw);
     $("trajectoryTypeInput").disabled = !raw;
     $("trajectoryVisibilityField").classList.toggle("hidden", !raw);
@@ -1005,17 +1006,17 @@
     $("trajectoryVbaStatusField").classList.toggle("hidden", !vba);
     $("trajectoryVbaStatusInput").disabled = !vba;
     if (raw) {
-      $("trajectoryTitle").textContent = "Технические события";
-      $("trajectoryDescription").textContent = "Исходные события выбранного чата. Полное содержимое доступно по отдельному запросу.";
+      $("trajectoryTitle").textContent = "Исходные события чата";
+      $("trajectoryDescription").textContent = "Записи выбранного чата. Большие данные загружаются только при открытии события.";
     } else if (vba) {
-      $("trajectoryTitle").textContent = "Изменения VBA";
-      $("trajectoryDescription").textContent = "Изменения VBA в текущем документе. Исходный и полученный код доступны в деталях операции.";
+      $("trajectoryTitle").textContent = "Журнал VBA и восстановление";
+      $("trajectoryDescription").textContent = "Сохранённые операции текущего документа. Дифф кода удобнее смотреть во вкладке VBA.";
     } else if (journal) {
-      $("trajectoryTitle").textContent = "Журнал запуска";
-      $("trajectoryDescription").textContent = "Причины и последствия показаны в начале. Ниже — действия и связанные события; исходные данные открываются отдельно.";
+      $("trajectoryTitle").textContent = "История чата";
+      $("trajectoryDescription").textContent = "Сохранённые шаги запуска в порядке выполнения. Раскройте строку для причин, действий и результата.";
     } else {
-      $("trajectoryTitle").textContent = "Специализированная проекция";
-      $("trajectoryDescription").textContent = "Read-only проекция, которая каждый раз пересобирается из проверенного JSONL stream и связывает исходные event seq/id.";
+      $("trajectoryTitle").textContent = "История чата";
+      $("trajectoryDescription").textContent = "Выбранная техническая часть сохранённой истории чата.";
     }
     updateExportControls();
   }
@@ -1025,15 +1026,9 @@
     correlationFilter = {};
     trajectoryChatId = null;
     nextCursor = null;
-    if (mode === "events") {
-      $("trajectoryViewInput").value = "raw";
-    } else if (mode === "vba-journal") {
-      $("trajectoryViewInput").value = "vba-mutations";
-    } else {
-      $("trajectoryViewInput").value = "run-causal";
-      var latestRunId = latestKnownRunId();
-      if (latestRunId) correlationFilter.runId = latestRunId;
-    }
+    $("trajectoryViewInput").value = "run-causal";
+    var latestRunId = latestKnownRunId();
+    if (latestRunId) correlationFilter.runId = latestRunId;
     updateViewControls();
     if (refresh) refreshTrajectory(false);
   }

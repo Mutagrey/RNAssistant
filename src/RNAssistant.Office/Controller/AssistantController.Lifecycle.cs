@@ -34,7 +34,6 @@ namespace RNAssistant.Office
             // call may not observe cancellation immediately, so releasing here would allow overlap.
             _chatRuns.CancelAll();
             _resourceData.Dispose();
-            try { _qualification.Dispose(); } catch { }
             lock (_syncRoot)
             {
                 _pendingAgentTools.Clear();
