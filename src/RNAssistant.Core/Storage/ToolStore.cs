@@ -132,11 +132,12 @@ namespace RNAssistant.Core.Storage
                 return false;
             }
 
+            var deleted = true;
             foreach (var tool in matches)
             {
-                StorageFileSystem.TryDeleteDirectory(tool.StoragePath);
+                if (!StorageFileSystem.TryDeleteDirectory(tool.StoragePath)) deleted = false;
             }
-            return true;
+            return deleted;
         }
 
         private void Reconcile(IEnumerable<ToolCatalogEntry> tools, string host)

@@ -90,6 +90,7 @@ namespace RNAssistant.Core.Storage
             }
 
             var found = false;
+            var deleted = true;
             foreach (var skill in Load())
             {
                 if (!string.Equals(skill.Id, id, StringComparison.OrdinalIgnoreCase) || string.IsNullOrWhiteSpace(skill.StoragePath))
@@ -98,10 +99,10 @@ namespace RNAssistant.Core.Storage
                 }
 
                 found = true;
-                StorageFileSystem.TryDeleteDirectory(skill.StoragePath);
+                if (!StorageFileSystem.TryDeleteDirectory(skill.StoragePath)) deleted = false;
             }
 
-            return found;
+            return found && deleted;
         }
 
         public bool TryReadReference(

@@ -58,6 +58,8 @@ There is no unversioned/PascalCase response fallback or storage-path identity in
 UI. A mutation becomes available through a freshly built catalog on the next run
 boundary; it does not rewrite the immutable catalog of an already accepted model
 step.
+A failed authoring-directory removal cannot be reported as a verified delete, even
+if catalog read-back no longer sees the skill.
 
 ### Editor source reads
 

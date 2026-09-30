@@ -176,7 +176,8 @@ namespace RNAssistant.Office.Tools
                 !string.Equals(beforeRevision, actualRevision,
                     StringComparison.Ordinal));
             data.ExpectedRevision = intendedRevision;
-            if (string.Equals(actualRevision, intendedRevision,
+            if (string.IsNullOrWhiteSpace(mutationError) &&
+                string.Equals(actualRevision, intendedRevision,
                 StringComparison.Ordinal))
             {
                 return SkillAuthoringOutcome.Ok(
@@ -272,7 +273,7 @@ namespace RNAssistant.Office.Tools
             if (string.Equals(operation, "delete", StringComparison.Ordinal))
             {
                 return _skillStore.Delete(current.Id)
-                    ? null : "Custom skill was not found during deletion.";
+                    ? null : "Custom skill could not be removed.";
             }
             if (string.Equals(operation, "create_reference",
                     StringComparison.Ordinal) ||

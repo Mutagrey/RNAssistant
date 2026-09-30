@@ -184,9 +184,10 @@ namespace RNAssistant.Office.Tools
             }
 
             if (markDispatchPossible != null) markDispatchPossible();
+            var removed = true;
             if (string.Equals(operation, "delete", StringComparison.Ordinal))
             {
-                _toolStore.Delete(id);
+                removed = _toolStore.Delete(id);
             }
             else
             {
@@ -195,7 +196,7 @@ namespace RNAssistant.Office.Tools
 
             var verified = FindStoredTool(id);
             var actualHash = StateHash(verified);
-            if (!string.Equals(intendedHash, actualHash,
+            if (!removed || !string.Equals(intendedHash, actualHash,
                 StringComparison.Ordinal))
             {
                 return ToolAuthoringOutcome.Unknown(

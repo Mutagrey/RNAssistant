@@ -84,6 +84,8 @@ capture one complete `ToolPackageSource` v1. Its deterministic content revision 
 separate from the manifest package version and is pinned with the native handler in
 the accepted run. Library actions return typed result v1 with status, source revision,
 dispatch and effect evidence; PascalCase/legacy result fallbacks are unsupported.
+A failed authoring-directory removal cannot be reported as a verified delete, even
+if catalog read-back no longer sees the package.
 Tool entries can also carry optional typed `display` metadata, separately from the
 VBA manifest and execution descriptor: `action`, optional `runningAction`, an
 `operation` icon category and optional ordered `targetArguments` (up to eight exact
