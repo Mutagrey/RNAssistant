@@ -43,6 +43,16 @@ records it directly and reviews the signed release payload before finalization.
 
 ## Implementation log — includes current in-flight work and earlier entries
 
+Excel literal search correction (2026-09-30): `excel.find_cells` previously captured
+every cell in the requested sheet/workbook before matching, so an ordinary heading
+search could fail with `RESOURCE_SNAPSHOT_TOO_LARGE`. Literal queries up to 255
+characters now use bound Excel `Find`/`FindNext`, with complete match counting and a
+32,000-character result cap; only the compact query-bound result enters Gateway/CAS
+evidence. Regex and longer literals retain the bounded exact-snapshot path. Focused
+host-neutral Excel search/find-replace checks pass, including a sparse sheet beyond
+the old 100,000-cell capture limit. Real Windows Excel COM behavior and model delivery
+remain open evidence.
+
 Mutation-result delivery audit (2026-09-30): confirmation continuation reused a
 snapshot built before the terminal result; compilation is now deferred to the
 actual request boundary and appends invalidate the cache. Compaction source

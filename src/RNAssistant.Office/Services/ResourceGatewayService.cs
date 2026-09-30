@@ -140,6 +140,19 @@ namespace RNAssistant.Office.Services
             return result;
         }
 
+        internal ResourceReadSelection ReadExcelLiteralFind(ChatSession session,
+            RNAssistant.Office.Domains.Excel.ExcelFindRequest query, System.Threading.CancellationToken cancellationToken)
+        {
+            var provider = _registry.All().OfType<ExcelResourceProvider>().SingleOrDefault();
+            if (provider == null)
+                throw new ResourceRequestException("The bound Excel search reader is unavailable.",
+                    "RESOURCE_PROVIDER_UNAVAILABLE", false);
+            return WithProvider(provider, session, () => {
+                var selection = provider.CaptureLiteralFind(session, query, cancellationToken);
+                return _authority == null ? selection : _authority.PublishRead(session, selection, null, true);
+            });
+        }
+
         public ResourceResolveResult Resolve(ChatSession session, string resourceUri)
         {
             var provider = ProviderFor(resourceUri);

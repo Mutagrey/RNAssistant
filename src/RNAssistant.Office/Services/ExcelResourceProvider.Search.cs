@@ -4,6 +4,7 @@ using System.Threading;
 using Newtonsoft.Json;
 using RNAssistant.Core.Models;
 using RNAssistant.Core.Services;
+using RNAssistant.Core.Tools;
 using RNAssistant.Office.Domains.Excel;
 
 namespace RNAssistant.Office.Services
@@ -12,6 +13,28 @@ namespace RNAssistant.Office.Services
     {
         internal const string SearchKind = "excel-search-scope";
         private readonly IExcelFindReplaceBackend _searchBackend;
+
+        internal ResourceReadSelection CaptureLiteralFind(ChatSession session, ExcelFindRequest query,
+            CancellationToken cancellationToken)
+        {
+            return _scope.Read(session, () =>
+            {
+                if (_searchBackend == null)
+                    throw Error("RESOURCE_PROVIDER_UNAVAILABLE", "The bound Excel search reader is unavailable.");
+                var outcome = new ExcelFindReplaceService(_searchBackend).FindLiteral(query, cancellationToken);
+                if (!outcome.Success) throw Error(outcome.ErrorCode, outcome.Message);
+                var binding = JsonConvert.SerializeObject(query);
+                var descriptor = new ResourceDescriptor {
+                    Reference = new ResourceRef(ResourceUri.Create(Id, _scope.DocumentToken(session),
+                        "find", TextPatternEngine.Sha256(binding))),
+                    Provider = Id, Kind = "excel-find-result", Title = "Excel find result",
+                    Mutable = true, MimeType = "application/json", Tracking = "externally-observed"
+                };
+                descriptor.Representations.Add("text");
+                return SelectCapture(new ResourceReadRequest { Reference = descriptor.Reference,
+                    Representation = "text", MaxChars = 256 }, descriptor, outcome.DataJson, "text");
+            });
+        }
 
         internal static string SearchTitle(ExcelCellScopeRequest request)
         {

@@ -344,12 +344,14 @@ qualification remain open, as does finer Excel impact/coverage qualification.
 
 ### Excel search
 
-`excel.find_cells` captures through `ExcelSearchResourceService` → the existing
-Excel provider/Gateway/CAS, then invokes pure `ExcelFindReplaceService.Find` over
-the exact cell snapshot. The direct adapter search method and public scope/content
-hashes are removed. Matches retain sheet/cell/field coordinates and bounded previews,
-not complete value/formula copies; full cell data uses the resource readers.
-Literal/regex, case/whole-word and values/formulas/both semantics remain unchanged.
+`excel.find_cells` routes ordinary `mode=literal` queries of at most 255 characters
+to bound Excel `Range.Find`/`FindNext`. The backend visits candidate cells only;
+`ExcelFindReplaceService` applies the requested case, whole-word and
+values/formulas/both filters and counts all matches. The Excel provider publishes
+the completed, query-bound result through Gateway/CAS as exact evidence, including
+zero matches. Its model result contains coordinates and bounded previews, not a
+whole-sheet cell snapshot; returned match JSON is capped at 32,000 characters.
+The result resource is runtime evidence, not a model-facing read target.
 
 `Excel search scope: workbook`, `selection`, `sheet 'Name'` and
 `range 'Name'!A1:B10` expose exact text JSON with scope and captured cell fields.
@@ -359,16 +361,17 @@ Omitting a sheet retains the existing bound active-sheet behavior; omitted tool
 scope still infers range from address, sheet from sheet name, otherwise workbook.
 Named/multi-area range interpretation remains with the bound Excel backend.
 
-Capture admits at most 100,000 cells and one million aggregate field characters;
-serialized JSON is independently capped at one million characters. Native range
-cell counts are checked before cell materialization. Invalid/duplicate cells and
-oversize sources fail explicitly, never produce a prefix-as-complete snapshot.
-These are coupled capture and prompt-safety bounds, not a configurable result-count
-limit: increasing only the cell count would still hit the character/JSON limits and
-make per-cell COM capture slower. For an oversized workbook, `excel.inspect` with
-`kind=sheets` exposes UsedRange addresses; search explicit smaller `scope=range`
-slices and report which slices were actually searched. Plain headings use literal
-mode; regex is reserved for an actual pattern.
+Regex and longer literal queries still capture through `ExcelSearchResourceService`
+→ the existing Excel provider/Gateway/CAS and run pure matching over the exact cell
+snapshot. Capture admits at most
+100,000 cells and one million aggregate field characters; serialized JSON has its
+own one-million-character cap. Bound range cell counts are checked before cell
+materialization. Invalid/duplicate cells and oversized sources fail explicitly.
+For these bounded scans, use `excel.inspect` with `kind=sheets` for UsedRange
+addresses and search smaller explicit `scope=range` slices if necessary.
+Literal native search bounds candidate cells at 100,000 and reports an error if the
+scan cannot complete; a limited match list sets `truncated=true` while preserving
+the complete match count. No prefix is reported as a complete search.
 Invalid regex is refused before capture. Positive, zero-match and blank-cell results
 retain complete exact evidence; drift and replacement invalidate previous evidence.
 Historical pages do no Excel I/O, and missing CAS never falls forward. Search scopes

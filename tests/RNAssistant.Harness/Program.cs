@@ -440,6 +440,7 @@ namespace RNAssistant.Harness
                 Test("excel find replace: dispatch fault classification", ExcelFindReplaceClassifiesDispatchFaults),
                 Test("excel find replace: bound document scope", ExcelFindReplaceUsesBoundDocumentScope),
                 Test("excel search: exact snapshots and zero-match drift", ExcelSearchRetainsExactSnapshots),
+                Test("excel search: native literal avoids full scope snapshot", ExcelLiteralSearchUsesNativeFind),
                 Test("excel search: incomplete captures rejected", ExcelSearchRejectsIncompleteCaptures),
                 Test("excel sheet: native ownership and direct backend", ExcelSheetUsesExactNativeOwnership),
                 Test("excel sheet: lifecycle semantics", ExcelSheetPreservesLifecycleSemantics),

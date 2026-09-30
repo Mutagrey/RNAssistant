@@ -65,6 +65,33 @@ namespace RNAssistant.Harness
             }
         }
 
+        public void FindLiteral(ExcelFindRequest request, Action<ExcelCellSnapshot> visit)
+        {
+            BeginExcelBackendCall(ExcelNativeFindOperation);
+            if (request == null) throw new ArgumentNullException(nameof(request));
+            if (visit == null) throw new ArgumentNullException(nameof(visit));
+            var scope = new ExcelCellScopeRequest { Scope = request.Scope,
+                Sheet = request.Sheet, Address = request.Address };
+            foreach (var selected in ResolveFakeScope(scope))
+            {
+                var candidates = selected.Sheet.Cells.Select(entry =>
+                {
+                    var parts = entry.Key.Split(':');
+                    return new { entry.Key, Row = int.Parse(parts[0]), Column = int.Parse(parts[1]),
+                        Text = Convert.ToString(entry.Value) ?? string.Empty };
+                }).Where(item => item.Row >= selected.Range.Start.Row && item.Row <= selected.Range.End.Row &&
+                    item.Column >= selected.Range.Start.Column && item.Column <= selected.Range.End.Column &&
+                    item.Text.IndexOf(request.Query, StringComparison.OrdinalIgnoreCase) >= 0 &&
+                    (request.LookIn != "formulas" || selected.Sheet.FormulaCells.Contains(item.Key)))
+                    .OrderBy(item => item.Row).ThenBy(item => item.Column);
+                foreach (var item in candidates)
+                    visit(new ExcelCellSnapshot { Sheet = selected.Sheet.Name,
+                        Address = FormatAddress(new FakeCellAddress { Row = item.Row, Column = item.Column }),
+                        Value = item.Text, Formula = item.Text,
+                        HasFormula = selected.Sheet.FormulaCells.Contains(item.Key) });
+            }
+        }
+
         public void Apply(
             ExcelReplaceApplyRequest request,
             Action markDispatchPossible)

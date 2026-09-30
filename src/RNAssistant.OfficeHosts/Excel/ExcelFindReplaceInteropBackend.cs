@@ -53,6 +53,49 @@ namespace RNAssistant.OfficeHosts
             }
         }
 
+        public void FindLiteral(ExcelFindRequest request, Action<ExcelCellSnapshot> visit)
+        {
+            if (request == null) throw new ArgumentNullException(nameof(request));
+            if (visit == null) throw new ArgumentNullException(nameof(visit));
+            if (string.IsNullOrEmpty(request.Query) || request.Query.Length > 255)
+                throw Failure("Excel Find requires a literal query of at most 255 characters.",
+                    "invalid_arguments", false);
+            var workbook = RequireWorkbook();
+            var what = request.Query.Replace("~", "~~").Replace("*", "~*").Replace("?", "~?");
+            foreach (var range in ResolveScopeRanges(workbook, new ExcelCellScopeRequest {
+                Scope = request.Scope, Sheet = request.Sheet, Address = request.Address }))
+            {
+                foreach (Excel.Range area in range.Areas)
+                {
+                    foreach (var lookIn in request.LookIn == "both"
+                        ? new[] { Excel.XlFindLookIn.xlValues, Excel.XlFindLookIn.xlFormulas }
+                        : new[] { request.LookIn == "formulas"
+                            ? Excel.XlFindLookIn.xlFormulas : Excel.XlFindLookIn.xlValues })
+                    {
+                        var after = area.Cells[area.Rows.Count, area.Columns.Count] as Excel.Range;
+                        var found = area.Find(What: what, After: after, LookIn: lookIn,
+                            LookAt: Excel.XlLookAt.xlPart,
+                            SearchOrder: Excel.XlSearchOrder.xlByRows,
+                            SearchDirection: Excel.XlSearchDirection.xlNext,
+                            MatchCase: false, MatchByte: false, SearchFormat: false);
+                        if (found == null) continue;
+                        var first = found.Address[false, false];
+                        do
+                        {
+                            var cell = Snapshot(found);
+                            if (cell == null)
+                                throw Failure("Excel Find returned a cell outside the bound workbook.",
+                                    "excel_scope_invalid", false);
+                            visit(cell);
+                            found = area.FindNext(found);
+                        }
+                        while (found != null && !string.Equals(found.Address[false, false], first,
+                            StringComparison.OrdinalIgnoreCase));
+                    }
+                }
+            }
+        }
+
         public void Apply(
             ExcelReplaceApplyRequest request,
             Action markDispatchPossible)

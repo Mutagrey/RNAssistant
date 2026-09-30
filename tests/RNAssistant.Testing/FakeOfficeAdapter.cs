@@ -32,6 +32,7 @@ namespace RNAssistant.Harness
         internal const string ExcelWriteReadOperation = "write.read";
         internal const string ExcelWriteApplyOperation = "write.apply";
         internal const string ExcelFindScopeReadOperation = "find_replace.read";
+        internal const string ExcelNativeFindOperation = "find_replace.native_find";
         internal const string ExcelReplaceApplyOperation = "find_replace.apply";
         internal const string ExcelSheetReadOperation = "sheet.read";
         internal const string ExcelSheetAddOperation = "sheet.add";

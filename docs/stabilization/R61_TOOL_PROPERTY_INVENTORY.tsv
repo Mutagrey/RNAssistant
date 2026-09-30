@@ -46,7 +46,7 @@ excel.clear_range	Excel	agent	excel.range.clear.v1	6e1b384e54e44bddcb193e2808d6a
 excel.create_chat_chart	Excel	agent	excel.chart.chat.v1	37bbccbd7aceb12d4c0b3453ad389b019b0e4fe1299c9f52920b064e9ae12342	address,chartType,sheet,title	-
 excel.delete_chart	Excel	agent	excel.chart.delete.v1	711829110840a72c7d0cc5de140d8f8d01c0aad9ae83a8fdc7d8f51000ce461c	chartName,sheet	-
 excel.filter_range	Excel	agent	excel.range.filter.v1	0266476847ebdc848f01e527895dc451f414d25b00042cd64309773edb63124f	address,criteria,field,sheet	-
-excel.find_cells	Excel	agent	excel.find.cells.resource.v1	c87a881cd26aeeb6e8f4c275c04e1fb5e98563767305a4fa7ef85c7c6b74fe67	address,contextChars,lookIn,matchCase,maxResults,mode,query,scope,sheet,wholeWord	-
+excel.find_cells	Excel	agent	excel.find.cells.resource.v1	84dd45828ccd55a8f6b819e525547151da983fb309e26511c2605d2517b94a69	address,contextChars,lookIn,matchCase,maxResults,mode,query,scope,sheet,wholeWord	-
 excel.format_range	Excel	agent	excel.range.format.v1	c3eff161dea1fac728ce190d1b80c92f3c55040f5af697bcfb1ef4c7fdffcc52	address,autoFit,bold,fillColor,fontColor,horizontalAlignment,italic,numberFormat,sheet	-
 excel.inspect	Excel	agent	excel.read.inspect.v1	f9ce30c364e86eec46325c3569770eb90571e631c6b82fd44f8ec1d5bd3d7e6a	chartName,kind,sheet	-
 excel.rename_sheet	Excel	agent	excel.sheet.rename.v1	dec016294e52d2b9d7879ef2526fe0dc93f4e8528658da5b25d0df9f2b044066	newName,sheet	-

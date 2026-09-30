@@ -81,6 +81,52 @@ namespace RNAssistant.Harness
             });
         }
 
+        private static void ExcelLiteralSearchUsesNativeFind()
+        {
+            WithTempExecutor(FakeOfficeAdapter.ForHost("Excel"), (executor, adapter) =>
+            {
+                adapter.SetExcelCell("Data", "A150000", "P5 needle");
+                var session = NewSession(adapter);
+                executor.BindResourceAuthority(session);
+                var runtime = executor.CreateNativeRuntime(session,
+                    OfficeToolCatalog.ForHost("Excel").Where(tool => ExcelFindReplaceToolIds.Owns(tool.Id)),
+                    new AppSettings(), "agent", false);
+                var found = ExecuteHtmlNative(runtime, ExcelFindReplaceToolIds.FindCells,
+                    new JObject { ["query"] = "needle", ["scope"] = "sheet", ["sheet"] = "Data",
+                        ["mode"] = "literal", ["maxResults"] = 10 });
+                AssertEqual(ToolExecutionOutcome.Ok, found.Outcome, "native search handles a sheet above the full-snapshot bound");
+                var data = JObject.Parse(found.Result.DataJson);
+                AssertEqual(1, (int)data["matchCount"], "native search finds the distant cell");
+                AssertEqual("A150000", (string)data["matches"][0]["address"], "native search retains coordinates");
+                AssertTrue((bool)data["complete"] && !((bool)data["truncated"]),
+                    "completed native scan reports complete result coverage");
+                AssertEqual(0, adapter.ExcelSearchCellCaptureCount, "literal search never captures the full sheet");
+                AssertEqual(1, adapter.ExcelBackendCalls.Count(operation =>
+                    operation == FakeOfficeAdapter.ExcelNativeFindOperation), "native Find is called once");
+                AssertTrue(found.ResourceEvidence.Single().Complete &&
+                    found.ResourceEvidence.Single().Payload.ByteLength < 4096,
+                    "compact result retains exact resource evidence");
+                var retained = executor.ResourceGateway.Read(session, new ResourceReadRequest {
+                    Reference = found.ResourceEvidence.Single().Resource, Representation = "text", MaxChars = 32000 }).Result;
+                AssertContains(retained.Text, "A150000", "exact native result is readable from retained CAS");
+                var absent = ExecuteHtmlNative(runtime, ExcelFindReplaceToolIds.FindCells,
+                    new JObject { ["query"] = "missing", ["scope"] = "sheet", ["sheet"] = "Data" });
+                AssertEqual(0, (int)JObject.Parse(absent.Result.DataJson)["matchCount"],
+                    "completed zero-match native scan is not inferred from a prefix");
+                AssertTrue(absent.ResourceEvidence.Single().Complete, "zero-match result is retained");
+                for (var row = 1; row <= 60; row++)
+                    adapter.SetExcelCell("Data", "C" + row,
+                        new string('x', 500) + "needle" + new string('y', 500));
+                var bounded = ExecuteHtmlNative(runtime, ExcelFindReplaceToolIds.FindCells,
+                    new JObject { ["query"] = "needle", ["scope"] = "sheet", ["sheet"] = "Data",
+                        ["maxResults"] = 500, ["contextChars"] = 1000 });
+                var boundedData = JObject.Parse(bounded.Result.DataJson);
+                AssertTrue((bool)boundedData["complete"] && (bool)boundedData["truncated"] &&
+                    (int)boundedData["matchCount"] == 61 && bounded.Result.DataJson.Length <= 32000,
+                    "native scan counts all matches without flooding model context");
+            });
+        }
+
         private static void ExcelSearchRejectsIncompleteCaptures()
         {
             WithTempExecutor(FakeOfficeAdapter.ForHost("Excel"), (executor, adapter) =>
@@ -94,11 +140,11 @@ namespace RNAssistant.Harness
                 AssertEqual(ToolRetryPolicy.Replan,
                     invalid.Recovery.RetryPolicy,
                     "invalid search asks the model to correct its call");
-                var oversized = ExecuteHtmlNative(runtime, ExcelFindReplaceToolIds.FindCells, new JObject { ["query"] = "x", ["sheet"] = "Data", ["address"] = "A1:Z10000" });
+                var oversized = ExecuteHtmlNative(runtime, ExcelFindReplaceToolIds.FindCells, new JObject { ["query"] = "x", ["mode"] = "regex", ["sheet"] = "Data", ["address"] = "A1:Z10000" });
                 AssertEqual(ToolExecutionOutcome.Error, oversized.Outcome, "oversized range rejected");
                 AssertContains(oversized.Result.Message, "Do not retry it unchanged", "oversized search returns a bounded recovery route");
                 AssertEqual(0, adapter.ExcelSearchCellCaptureCount, "cell-count bound precedes materialization");
-                var args = new JObject { ["query"] = "x", ["sheet"] = "Data", ["address"] = "A1" };
+                var args = new JObject { ["query"] = "x", ["mode"] = "regex", ["sheet"] = "Data", ["address"] = "A1" };
                 adapter.ExcelSearchCellTransform = cell => { cell.Value = null; return cell; };
                 AssertEqual(ToolExecutionOutcome.Error, ExecuteHtmlNative(runtime, ExcelFindReplaceToolIds.FindCells, args).Outcome, "null field is not a complete empty cell");
                 adapter.ExcelSearchCellTransform = cell => { cell.Value = new string('x', ExcelFindReplaceService.MaximumSearchCharacters + 1); return cell; };
@@ -140,8 +186,8 @@ namespace RNAssistant.Harness
                         JObject.Parse(found.Result.DataJson)["matchCount"].Value<int>(),
                         "typed find preserves match count");
                     AssertEqual(1, adapter.ExcelBackendCalls.Count(operation =>
-                        operation == FakeOfficeAdapter.ExcelFindScopeReadOperation),
-                        "find reaches the direct backend once");
+                        operation == FakeOfficeAdapter.ExcelNativeFindOperation),
+                        "literal find reaches the native search backend once");
 
                     var replaceCall = new ToolCall(
                         "replace-native",
@@ -387,7 +433,7 @@ namespace RNAssistant.Harness
                     var searchOwnerSta = false;
                     host.BeforeRead = operation =>
                     {
-                        if (operation == FakeOfficeAdapter.ExcelFindScopeReadOperation) searchOwnerSta = dispatcher.CheckAccess;
+                        if (operation == FakeOfficeAdapter.ExcelNativeFindOperation) searchOwnerSta = dispatcher.CheckAccess;
                         if (operation == FakeOfficeAdapter.ExcelReplaceApplyOperation)
                             ownerSta = dispatcher.CheckAccess;
                     };

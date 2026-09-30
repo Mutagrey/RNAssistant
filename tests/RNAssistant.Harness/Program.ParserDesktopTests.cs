@@ -1091,6 +1091,7 @@ namespace RNAssistant.Harness
             public ExcelWriteSnapshot Read(ExcelWriteReadRequest request) { BeforeRead?.Invoke(FakeOfficeAdapter.ExcelWriteReadOperation); return _inner.Read(request); }
             public void Apply(ExcelWriteApplyRequest request, Action markDispatchPossible) { BeforeRead?.Invoke(FakeOfficeAdapter.ExcelWriteApplyOperation); _inner.Apply(request, markDispatchPossible); }
             public void ReadScope(ExcelCellScopeRequest request, Action<ExcelCellSnapshot> visit) { BeforeRead?.Invoke(FakeOfficeAdapter.ExcelFindScopeReadOperation); _inner.ReadScope(request, visit); }
+            public void FindLiteral(ExcelFindRequest request, Action<ExcelCellSnapshot> visit) { BeforeRead?.Invoke(FakeOfficeAdapter.ExcelNativeFindOperation); _inner.FindLiteral(request, visit); }
             public void Apply(ExcelReplaceApplyRequest request, Action markDispatchPossible) { BeforeRead?.Invoke(FakeOfficeAdapter.ExcelReplaceApplyOperation); _inner.Apply(request, markDispatchPossible); }
             public ExcelSheetCollectionSnapshot Read() { BeforeRead?.Invoke(FakeOfficeAdapter.ExcelSheetReadOperation); return _inner.Read(); }
             public void Add(ExcelAddSheetApplyRequest request, Action markDispatchPossible) { BeforeRead?.Invoke(FakeOfficeAdapter.ExcelSheetAddOperation); _inner.Add(request, markDispatchPossible); }

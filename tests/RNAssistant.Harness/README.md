@@ -90,6 +90,11 @@ result clipping and bound-document refusal. Use `excel names:`, `excel tables:`,
 `excel read:` and `resources:` for affected consumers. Live workbook/502 qualification
 requires the reported Windows/server environment.
 
+`excel search:` checks exact regex snapshots and native literal search over a sparse
+sheet beyond the full-snapshot bound, including zero matches and the compact result
+limit. `excel find replace:` checks the bound search/mutation path and scope semantics.
+These host-neutral checks do not qualify Excel COM `Find` on Windows.
+
 `resources: document discovery bounds source pages` uses 73 resources and 1000
 unrelated receipts to verify per-page metadata IO, no full authority capture on
 provider discovery, exact point identities, complete traversal/search, cold index

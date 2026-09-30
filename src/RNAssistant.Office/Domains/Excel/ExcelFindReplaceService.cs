@@ -16,6 +16,7 @@ namespace RNAssistant.Office.Domains.Excel
         public const int MaxReplacements = 10000;
         public const int MaximumSearchCharacters = 1000000;
         public const int MaximumSearchCells = 100000;
+        public const int MaximumFindResultCharacters = 32000;
         public const string NarrowSearchScopeMessage =
             "Excel search scope exceeds the exact snapshot limit (100000 cells or 1000000 characters). Do not retry it unchanged. Read excel.inspect with kind=sheets for UsedRange addresses, then search smaller explicit scope=range slices with sheet and address; combine the reported matches without treating an unsearched slice as empty.";
 
@@ -137,6 +138,78 @@ namespace RNAssistant.Office.Domains.Excel
             {
                 return FindFailure(ex.Message, "office_tool_error", true);
             }
+        }
+
+        public ExcelFindOutcome FindLiteral(ExcelFindRequest request, CancellationToken cancellationToken)
+        {
+            if (request == null || string.IsNullOrWhiteSpace(request.Query) ||
+                NormalizeMode(request.Mode) != "literal" ||
+                NormalizeFindLookIn(request.LookIn) == null ||
+                NormalizeScope(request.Scope, request.Sheet, request.Address, "workbook") == null)
+                return FindFailure("A valid literal query, scope and lookIn are required.", "invalid_arguments", false);
+            var maximum = Math.Max(1, Math.Min(MaxResults, request.MaxResults < 1 ? 50 : request.MaxResults));
+            var contextChars = Math.Max(0, Math.Min(MaxContextChars, request.ContextChars < 0 ? 0 : request.ContextChars));
+            var options = new TextPatternOptions { Mode = "literal", MatchCase = request.MatchCase,
+                WholeWord = request.WholeWord };
+            var matches = new JArray();
+            var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            var total = 0;
+            var resultLimited = false;
+            try
+            {
+                _backend.FindLiteral(request, cell =>
+                {
+                    cancellationToken.ThrowIfCancellationRequested();
+                    ValidateCell(cell);
+                    if (cell.Value == null || cell.Formula == null)
+                        throw new ExcelFindReplaceBackendException("Excel Find returned an incomplete cell.",
+                            "excel_scope_snapshot_invalid", false);
+                    if (!seen.Add(CellKey(cell.Sheet, cell.Address))) return;
+                    if (seen.Count > MaximumSearchCells)
+                        throw new ExcelFindReplaceBackendException("Too many matching cells for one bounded search. Narrow the scope or query.",
+                            "RESOURCE_SNAPSHOT_TOO_LARGE", false);
+                    foreach (var field in SearchFields(cell, request.LookIn))
+                    {
+                        var found = TextPatternEngine.Find(field.Text, request.Query, options,
+                            Math.Max(1, maximum - matches.Count), contextChars);
+                        total = checked(total + found.MatchCount);
+                        foreach (var match in found.Matches)
+                        {
+                            if (matches.Count >= maximum || resultLimited) break;
+                            var item = new JObject { ["sheet"] = cell.Sheet, ["address"] = cell.Address,
+                                ["field"] = field.Name, ["start"] = match.Index,
+                                ["end"] = match.Index + match.Length, ["preview"] = match.Preview ?? string.Empty };
+                            matches.Add(item);
+                            if (matches.ToString(Formatting.None).Length > MaximumFindResultCharacters)
+                            { matches.RemoveAt(matches.Count - 1); resultLimited = true; }
+                        }
+                    }
+                });
+                var data = new JObject { ["query"] = request.Query, ["mode"] = "literal",
+                    ["scope"] = request.Scope, ["matchCount"] = total,
+                    ["returnedCount"] = matches.Count,
+                    ["truncated"] = resultLimited || total > matches.Count,
+                    ["complete"] = true, ["matches"] = matches };
+                var json = data.ToString(Formatting.None);
+                while (json.Length > MaximumFindResultCharacters && matches.Count > 0)
+                {
+                    matches.RemoveAt(matches.Count - 1);
+                    data["returnedCount"] = matches.Count;
+                    data["truncated"] = true;
+                    json = data.ToString(Formatting.None);
+                }
+                if (json.Length > MaximumFindResultCharacters)
+                    return FindFailure("The search result exceeds its bounded model projection.",
+                        "RESOURCE_SNAPSHOT_TOO_LARGE", false);
+                return ExcelFindOutcome.Ok("Cells found: " + total, json);
+            }
+            catch (OperationCanceledException) { throw; }
+            catch (TextPatternException ex) { return FindFailure(ex.Message, ex.ErrorCode, false); }
+            catch (ExcelFindReplaceBackendException ex)
+            { return FindFailure(ex.Message, ex.ErrorCode, ex.Retryable, ex.DetailsJson); }
+            catch (OverflowException)
+            { return FindFailure("Too many matches for one search.", "RESOURCE_SNAPSHOT_TOO_LARGE", false); }
+            catch (Exception ex) { return FindFailure(ex.Message, "office_tool_error", true); }
         }
 
         public ExcelReplaceOutcome Replace(
@@ -336,14 +409,10 @@ namespace RNAssistant.Office.Domains.Excel
         private static IEnumerable<SearchField> SearchFields(
             ExcelCellSnapshot cell, string lookIn)
         {
-            if (!cell.HasFormula && lookIn != "formulas")
+            if (lookIn != "formulas")
                 yield return new SearchField("value", cell.Value);
             if (cell.HasFormula && lookIn != "values")
-            {
-                if (lookIn == "both")
-                    yield return new SearchField("value", cell.Value);
                 yield return new SearchField("formula", cell.Formula);
-            }
         }
 
         private static void ValidateCell(ExcelCellSnapshot cell)

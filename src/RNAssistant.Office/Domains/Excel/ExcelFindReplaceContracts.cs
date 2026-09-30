@@ -76,6 +76,7 @@ namespace RNAssistant.Office.Domains.Excel
     public interface IExcelFindReplaceBackend
     {
         void ReadScope(ExcelCellScopeRequest request, Action<ExcelCellSnapshot> visit);
+        void FindLiteral(ExcelFindRequest request, Action<ExcelCellSnapshot> visit);
         void Apply(ExcelReplaceApplyRequest request, Action markDispatchPossible);
     }
 

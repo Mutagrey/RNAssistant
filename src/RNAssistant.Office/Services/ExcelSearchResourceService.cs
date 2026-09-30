@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Threading;
 using Newtonsoft.Json;
+using Newtonsoft.Json.Linq;
 using RNAssistant.Core.Models;
 using RNAssistant.Core.Tools;
 using RNAssistant.Office.Domains.Excel;
@@ -38,6 +39,22 @@ namespace RNAssistant.Office.Services
                     return Failure("A valid query, scope, mode and lookIn are required.", "invalid_arguments");
                 TextPatternEngine.Find(string.Empty, request.Query, new TextPatternOptions {
                     Mode = request.Mode, MatchCase = request.MatchCase, WholeWord = request.WholeWord }, 1, 0);
+                if (request.Mode == "literal" && request.Query.Length <= 255 &&
+                    request.Query.IndexOfAny(new[] { '\r', '\n' }) < 0)
+                {
+                    var native = _gateway.ReadExcelLiteralFind(session, request, cancellationToken).Result;
+                    var exact = native.CompleteViewPayload;
+                    if (exact == null)
+                        return Failure("The exact Excel search result is unavailable.", "RESOURCE_SNAPSHOT_UNAVAILABLE");
+                    var resultJson = ResourceSnapshotReadService.ReadPayload(_gateway.Authority.Payloads, exact);
+                    var count = (int?)JObject.Parse(resultJson)["matchCount"] ?? 0;
+                    native.Payload = exact; native.Coverage = ResourceCoverage.Whole(); native.Complete = true;
+                    native.Truncated = false; native.Offset = 0; native.ReturnedCharacters = resultJson.Length;
+                    native.NextCursor = null;
+                    return new ToolHandlerResult(RuntimeResult.Ok("Cells found: " + count, resultJson,
+                        new[] { native.Resource.Reference }), ToolEffectEvidence.None,
+                        resourceEvidence: _gateway.Evidence(session, native));
+                }
                 var target = _gateway.ResolveIntentTarget(session, "Excel search scope: " + ExcelResourceProvider.SearchTitle(
                     new ExcelCellScopeRequest { Scope = request.Scope, Sheet = request.Sheet, Address = request.Address }));
                 var read = _gateway.Read(session, new ResourceReadRequest {

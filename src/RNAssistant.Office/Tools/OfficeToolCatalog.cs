@@ -114,7 +114,7 @@ namespace RNAssistant.Office.Tools
                     SetStringLimit(schema, "query", 2048);
                     Property(schema, "sheet")["description"] = "Optional worksheet for sheet/range scope; omit to use the active worksheet.";
                     Property(schema, "scope")["description"] = "Optional scope. When omitted, address selects range, sheet selects that sheet, otherwise the workbook is searched.";
-                    tool.Description += " Exact capture is limited to 100000 cells and 1000000 characters, so inspect sheet UsedRange metadata and search explicit range slices for large workbooks. Use mode=literal for ordinary text, including headings; regex escapes require mode=regex and a valid pattern.";
+                    tool.Description += " Use mode=literal for ordinary text, including headings: Excel Find scans the scope without placing a whole-sheet snapshot in context. Native literal queries up to 255 characters return at most 32000 characters of matches. Regex and longer literal queries require a bounded exact snapshot (100000 cells, 1000000 characters); narrow those searches with explicit ranges if needed.";
                     break;
                 case "excel.replace_cells":
                     SetStringLimit(schema, "find", 2048);

@@ -85,6 +85,13 @@ namespace RNAssistant.Office
             LastChatId = chatId;
             return ChatState(null, chatId);
         }
+        public ChatMessagePageDto GetPreviousChatMessages(string chatId, int beforeIndex)
+        {
+            LastChatId = chatId;
+            return new ChatMessagePageDto { ChatId = chatId,
+                StartIndex = Math.Max(0, beforeIndex), TotalCount = 0,
+                Messages = new ChatMessageViewDto[0] };
+        }
         public ChatTrajectoryResponse GetChatTrajectory(ChatTrajectoryRequest request)
         {
             LastChatId = request == null ? null : request.ChatId;
