@@ -106,8 +106,7 @@ namespace RNAssistant.Office.Tools
                             ". Current files (" + session.HtmlWorkspace.Files.Count + "): " +
                             string.Join(", ", files) +
                             (session.HtmlWorkspace.Files.Count > files.Length ? ", ..." : ".") +
-                            " Source SHA-256: " + TextPatternEngine.Sha256(file.Content) +
-                            ". Continue from this saved state; read current source before replacing an existing file.",
+                            " Continue from this saved state; read current source before replacing an existing file.",
                             WorkspaceMutationJson(session, "file", file.Path),
                             HtmlWorkspaceEffect.VerifiedChange),
                         cancellationToken);

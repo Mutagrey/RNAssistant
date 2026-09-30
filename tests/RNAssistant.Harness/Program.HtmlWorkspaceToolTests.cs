@@ -157,6 +157,9 @@ namespace RNAssistant.Harness
                     AssertEqual(ToolEffectEvidence.VerifiedChange,
                         upsert.Evidence.Effect,
                         "HTML upsert reports verified change");
+                    AssertTrue(upsert.Result.Message.IndexOf("SHA-256",
+                            StringComparison.OrdinalIgnoreCase) < 0,
+                        "HTML write does not put a runtime content hash in the visible result");
                     AssertTrue(upsert.Result.Resources.Any(reference =>
                             reference.Uri.IndexOf("/artifact/",
                                 StringComparison.Ordinal) >= 0),

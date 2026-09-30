@@ -1785,6 +1785,69 @@ namespace RNAssistant.Harness
             AssertContains(genericMessage.Content, genericReference.Uri,
                 "generic durable result retains exact resource evidence");
 
+            var runtimeHash = new string('a', 64);
+            var officeRuntimeResults = new[]
+            {
+                new { Name = ExcelFindReplaceToolIds.ReplaceCells,
+                    Data = new JObject { ["replacements"] = 2, ["scopeSha256"] = runtimeHash },
+                    Hidden = "scopeSha256", Kept = "replacements" },
+                new { Name = WordToolIds.ReplaceText,
+                    Data = new JObject { ["replacements"] = 2, ["scopeSha256"] = runtimeHash },
+                    Hidden = "scopeSha256", Kept = "replacements" },
+                new { Name = PowerPointToolIds.ReplaceText,
+                    Data = new JObject { ["replacements"] = 2, ["scopeSha256"] = runtimeHash },
+                    Hidden = "scopeSha256", Kept = "replacements" },
+                new { Name = "outlook.create_draft",
+                    Data = new JObject { ["kind"] = "new", ["subject"] = "Report",
+                        ["targetEntryId"] = "target-internal", ["draftEntryId"] = "draft-internal" },
+                    Hidden = "draftEntryId", Kept = "subject" },
+                new { Name = "outlook.update_mail",
+                    Data = new JObject { ["categories"] = "Review", ["unread"] = false,
+                        ["entryId"] = "mail-internal", ["stateSha256"] = runtimeHash },
+                    Hidden = "stateSha256", Kept = "categories" }
+            };
+            foreach (var item in officeRuntimeResults)
+            foreach (var role in new[] { ToolResultRoles.User, ToolResultRoles.Developer, ToolResultRoles.Tool })
+            {
+                var archived = AgentJsonProtocol.CreateToolResultMessage(
+                    new ToolInvocation { ToolCallId = "office_runtime", ToolId = item.Name },
+                    TerminalToolResult.Ok("Done.", item.Data.ToString(Formatting.None)), role);
+                var projected = ModelToolResultProjection.Project(archived);
+                ToolResultWireReadResult officeWire;
+                string officeError;
+                AssertTrue(ToolResultHistoryReader.TryRead(projected, out officeWire, out officeError),
+                    item.Name + " keeps a valid model result in " + role);
+                var officeData = JObject.Parse(officeWire.Result.DataJson);
+                AssertTrue(officeData[item.Hidden] == null && officeData["targetEntryId"] == null &&
+                    officeData["entryId"] == null && officeData["scopeSha256"] == null,
+                    item.Name + " removes runtime state in " + role);
+                AssertTrue(officeData[item.Kept] != null,
+                    item.Name + " retains business outcome in " + role);
+                AssertContains(archived.Content, item.Hidden,
+                    "historical Office result remains intact for diagnostics");
+            }
+            var wordCall = AgentJsonProtocol.CreateToolCallMessage(
+                new AgentToolCall { Id = "word_hash", Name = WordToolIds.ReplaceText,
+                    Arguments = new Dictionary<string, object> { ["find"] = "old", ["replace"] = "new" } },
+                "Replacing text.", null, ToolResultRoles.User, FixtureCallOrigin());
+            var wordResult = AgentJsonProtocol.CreateToolResultMessage(
+                new ToolInvocation { ToolCallId = "word_hash", ToolId = WordToolIds.ReplaceText },
+                TerminalToolResult.Ok("Word replacements completed: 2.",
+                    officeRuntimeResults[1].Data.ToString(Formatting.None)));
+            var wordTool = new ToolCatalogEntry { Id = WordToolIds.ReplaceText,
+                Policy = new ToolPolicy(ToolEffect.Write, ToolVerification.Tool, false, false,
+                    new[] { ChatModes.Agent }) };
+            var wordContext = new ModelContextCompiler().Compile(
+                new ModelAuthoritySnapshot(new ResourceAuthoritySnapshotSet(new ResourceAuthoritySnapshot[0]),
+                    "projection-tools", new SkillCatalogSnapshot(new SkillDefinition[0]), null, 2),
+                new ChatMessage[0], new[] { wordCall, wordResult }, null,
+                new[] { wordTool }, new AppSettings(), 4096, false);
+            var wordPrompt = string.Join("\n", wordContext.Messages.Select(message => message.Content));
+            AssertTrue(wordPrompt.IndexOf(runtimeHash, StringComparison.OrdinalIgnoreCase) < 0 &&
+                wordPrompt.IndexOf("scopeSha256", StringComparison.Ordinal) < 0,
+                "the next model request excludes archived Word scope hashes");
+            AssertContains(wordPrompt, "replacements", "the next model request retains the change count");
+
             var resourceProjection = ModelToolResultProjection.Project(
                 AgentJsonProtocol.CreateToolResultMessage(
                     new ToolInvocation
@@ -1815,6 +1878,77 @@ namespace RNAssistant.Harness
             AssertTrue(acceptedProjection.Content.IndexOf(
                     genericReference.Uri, StringComparison.Ordinal) < 0,
                 "accepted assistant prose cannot replay an exact resource reference");
+
+            var oldHtmlMessage = "HTML workspace file saved: index.html. Current files (1): index.html." +
+                " Source SHA-256: " + runtimeHash + ". Continue from this saved state.";
+            foreach (var role in new[] { ToolResultRoles.User, ToolResultRoles.Developer, ToolResultRoles.Tool })
+            {
+                var archived = AgentJsonProtocol.CreateToolResultMessage(
+                    new ToolInvocation { ToolCallId = "old_html", ToolId = HtmlWorkspaceToolCatalog.WriteFileToolId },
+                    TerminalToolResult.Ok(oldHtmlMessage, new JObject {
+                        ["target"] = "index.html", ["revisionArtifactId"] = "runtime-id"
+                    }.ToString(Formatting.None)), role);
+                var projected = ModelToolResultProjection.Project(archived);
+                AssertTrue(projected.Content.IndexOf(runtimeHash, StringComparison.OrdinalIgnoreCase) < 0 &&
+                    projected.Content.IndexOf("Source SHA-256", StringComparison.OrdinalIgnoreCase) < 0 &&
+                    projected.Content.IndexOf("revisionArtifactId", StringComparison.Ordinal) < 0,
+                    "archived HTML result hides hash and revision in " + role + " model role");
+                AssertContains(projected.Content, "index.html",
+                    "archived HTML result retains its semantic path");
+                AssertContains(archived.Content, runtimeHash,
+                    "projection does not rewrite archived HTML evidence");
+            }
+
+            var oldHtmlCall = AgentJsonProtocol.CreateToolCallMessage(
+                new AgentToolCall { Id = "old_html", Name = HtmlWorkspaceToolCatalog.WriteFileToolId,
+                    Arguments = new Dictionary<string, object> {
+                        ["path"] = "index.html", ["content"] = "<main>saved</main>"
+                    } }, "Saving HTML.", null, ToolResultRoles.User, FixtureCallOrigin());
+            var oldHtmlResult = AgentJsonProtocol.CreateToolResultMessage(
+                new ToolInvocation { ToolCallId = "old_html", ToolId = HtmlWorkspaceToolCatalog.WriteFileToolId },
+                TerminalToolResult.Ok(oldHtmlMessage, "{\"target\":\"index.html\"}"));
+            var oldHtmlTool = new ToolCatalogEntry { Id = HtmlWorkspaceToolCatalog.WriteFileToolId,
+                Policy = new ToolPolicy(ToolEffect.Write, ToolVerification.Tool, false, false,
+                    new[] { ChatModes.Agent }) };
+            var nextAfterHtml = new ModelContextCompiler().Compile(
+                new ModelAuthoritySnapshot(new ResourceAuthoritySnapshotSet(new ResourceAuthoritySnapshot[0]),
+                    "projection-tools", new SkillCatalogSnapshot(new SkillDefinition[0]), null, 2),
+                new ChatMessage[0], new[] { oldHtmlCall, oldHtmlResult }, null,
+                new[] { oldHtmlTool }, new AppSettings(), 4096, false);
+            var htmlContext = string.Join("\n", nextAfterHtml.Messages.Select(item => item.Content));
+            AssertContains(htmlContext, "index.html", "folded HTML result retains its semantic path");
+            AssertTrue(htmlContext.IndexOf(runtimeHash, StringComparison.OrdinalIgnoreCase) < 0 &&
+                htmlContext.IndexOf("Source SHA-256", StringComparison.OrdinalIgnoreCase) < 0,
+                "old HTML write hash is absent from the actual next request");
+
+            var replayCall = AgentJsonProtocol.CreateToolCallMessage(
+                new AgentToolCall { Id = "replay_find", Name = ResourceToolCatalog.FindToolId,
+                    Arguments = new Dictionary<string, object> {
+                        ["query"] = "Literal " + genericReference.Uri + " " + runtimeHash
+                    } },
+                "Inspecting " + genericReference.Uri + " and " + runtimeHash + ".",
+                null, ToolResultRoles.User, FixtureCallOrigin());
+            var replayResult = AgentJsonProtocol.CreateToolResultMessage(
+                new ToolInvocation { ToolCallId = "replay_find", ToolId = ResourceToolCatalog.FindToolId },
+                TerminalToolResult.Ok("Found.", "{\"items\":[]}"));
+            var replayed = new ModelContextCompiler().Compile(
+                new ModelAuthoritySnapshot(new ResourceAuthoritySnapshotSet(new ResourceAuthoritySnapshot[0]),
+                    "projection-tools", new SkillCatalogSnapshot(new SkillDefinition[0]), null, 2),
+                new ChatMessage[0], new[] { replayCall, replayResult }, null,
+                new ToolCatalogEntry[0], new AppSettings(), 4096, false);
+            var replayedCall = replayed.Messages.First(item => item.Role == "assistant");
+            var replayedEnvelope = JObject.Parse(replayedCall.Content);
+            AssertTrue(((string)replayedEnvelope["message"]).IndexOf(genericReference.Uri,
+                    StringComparison.Ordinal) < 0 &&
+                ((string)replayedEnvelope["message"]).IndexOf(runtimeHash,
+                    StringComparison.OrdinalIgnoreCase) < 0,
+                "the compiled next request sanitizes accepted assistant prose");
+            AssertEqual("Literal " + genericReference.Uri + " " + runtimeHash,
+                (string)replayedEnvelope.SelectToken("tool_calls[0].arguments.query"),
+                "semantic tool arguments keep their exact literal content");
+            AssertEqual(replayCall.Content.Substring(replayCall.Content.IndexOf("\"tool_calls\":", StringComparison.Ordinal)),
+                replayedCall.Content.Substring(replayedCall.Content.IndexOf("\"tool_calls\":", StringComparison.Ordinal)),
+                "model projection does not rewrite accepted call arguments");
 
             var malformedGeneric = AgentJsonProtocol.CreateToolResultMessage(
                 new ToolInvocation
@@ -1913,7 +2047,8 @@ namespace RNAssistant.Harness
                         ClaimId = "claim-runtime-reference",
                         Kind = "interpretation", SourceRoles = new List<string> { "assistant" },
                         SourceMessageIds = new List<string> { "source-message" },
-                        Text = "Prior resource was " + genericReference.Uri + "."
+                        Text = "Prior resource was " + genericReference.Uri +
+                            ". Source SHA-256: " + runtimeHash + "."
                     }
                 }
             };
@@ -1937,6 +2072,10 @@ namespace RNAssistant.Harness
                     genericReference.Uri,
                     StringComparison.Ordinal) < 0,
                 "retained compacted claims cannot replay a runtime resource URI");
+            AssertTrue(string.Join("\n", claimProjection.Messages.Select(
+                    item => item.Content)).IndexOf(runtimeHash,
+                    StringComparison.OrdinalIgnoreCase) < 0,
+                "retained assistant claims cannot replay an archived runtime hash");
 
             var chartSession = new ChatSession
             {

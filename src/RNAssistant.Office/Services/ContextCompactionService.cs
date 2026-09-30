@@ -445,8 +445,7 @@ namespace RNAssistant.Office.Services
                         sourceId,
                         kind = claim.Kind,
                         sourceRoles = claim.SourceRoles,
-                        text = ModelToolResultProjection.SanitizeRuntimeText(
-                            claim.Text)
+                        text = ModelToolResultProjection.SanitizeClaimText(claim)
                     }));
                 }
             }
@@ -460,7 +459,7 @@ namespace RNAssistant.Office.Services
                         var claimSourceId = "source-" + (++sourceNumber);
                         sources.Add(claimSourceId, claim);
                         builder.AppendLine(JsonConvert.SerializeObject(new { sourceId = claimSourceId, kind = claim.Kind,
-                            sourceRoles = claim.SourceRoles, text = ModelToolResultProjection.SanitizeRuntimeText(claim.Text) }));
+                            sourceRoles = claim.SourceRoles, text = ModelToolResultProjection.SanitizeClaimText(claim) }));
                     }
                     continue;
                 }

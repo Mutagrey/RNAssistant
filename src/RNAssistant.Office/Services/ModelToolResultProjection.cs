@@ -38,7 +38,7 @@ namespace RNAssistant.Office.Services
             if (string.Equals(source.Role, "assistant",
                 StringComparison.OrdinalIgnoreCase))
             {
-                projected.Content = SanitizeRuntimeText(source.Content);
+                projected.Content = SanitizeAcceptedAssistantContent(source);
                 return projected;
             }
 
@@ -54,7 +54,7 @@ namespace RNAssistant.Office.Services
                 wire.Result, resultResource: wire.ResultResource, data: data);
             var model = IsSwitchedResult(source)
                 ? ForModel(wire.Name, materialized, tools, skills)
-                : GenericForModel(materialized);
+                : GenericForModel(wire.Name, materialized);
             var json = ToolResultWire.WriteParsed(
                 wire.ToolCallId,
                 wire.Name,
@@ -68,10 +68,12 @@ namespace RNAssistant.Office.Services
         }
 
         private static ToolResultMaterialization GenericForModel(
+            string name,
             ToolResultMaterialization source)
         {
             var data = source.Data.DeepClone();
             RemoveRuntimeResourceValues(data, source.Result.Resources);
+            RemoveOfficeRuntimeState(name, data);
             var objectData = data as JObject;
             if (objectData != null && source.ResultResource != null &&
                 (JToken.DeepEquals(objectData["payload_externalized"], new JValue(true)) ||
@@ -83,12 +85,38 @@ namespace RNAssistant.Office.Services
             }
             var result = new RNAssistant.Core.Tools.Contracts.ToolResult(
                 source.Result.Status,
-                RemoveRuntimeResourceValues(
-                    source.Result.Message, source.Result.Resources),
+                IsOfficeRuntimeStateResult(name)
+                    ? SanitizeOperationalText(RemoveRuntimeResourceValues(
+                        source.Result.Message, source.Result.Resources))
+                    : RemoveRuntimeResourceValues(
+                        source.Result.Message, source.Result.Resources),
                 data.ToString(Formatting.None),
                 new ResourceRef[0]);
             return new ToolResultMaterialization(
                 result, source.ModelAttachments, data: data);
+        }
+
+        private static bool IsOfficeRuntimeStateResult(string name)
+        {
+            return string.Equals(name, ExcelFindReplaceToolIds.ReplaceCells, StringComparison.Ordinal) ||
+                string.Equals(name, WordToolIds.ReplaceText, StringComparison.Ordinal) ||
+                string.Equals(name, PowerPointToolIds.ReplaceText, StringComparison.Ordinal) ||
+                string.Equals(name, "outlook.create_draft", StringComparison.Ordinal) ||
+                string.Equals(name, "outlook.update_mail", StringComparison.Ordinal);
+        }
+
+        private static void RemoveOfficeRuntimeState(string name, JToken data)
+        {
+            var root = data as JObject;
+            if (root == null) return;
+            if (string.Equals(name, ExcelFindReplaceToolIds.ReplaceCells, StringComparison.Ordinal) ||
+                string.Equals(name, WordToolIds.ReplaceText, StringComparison.Ordinal) ||
+                string.Equals(name, PowerPointToolIds.ReplaceText, StringComparison.Ordinal))
+                RemoveProperties(root, "scopeSha256");
+            else if (string.Equals(name, "outlook.create_draft", StringComparison.Ordinal))
+                RemoveProperties(root, "targetEntryId", "draftEntryId");
+            else if (string.Equals(name, "outlook.update_mail", StringComparison.Ordinal))
+                RemoveProperties(root, "entryId", "stateSha256");
         }
 
         private static void RemoveRuntimeResourceValues(
@@ -129,6 +157,57 @@ namespace RNAssistant.Office.Services
         internal static string SanitizeRuntimeText(string value)
         {
             return RemoveRuntimeResourceValues(value, null);
+        }
+
+        internal static string SanitizeOperationalText(string value)
+        {
+            var result = SanitizeRuntimeText(value);
+            result = Regex.Replace(result,
+                @"\s*Source SHA-256:\s*[0-9a-f]{64}\.?", string.Empty,
+                RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
+            return Regex.Replace(result,
+                @"(?<![0-9a-f])[0-9a-f]{64}(?![0-9a-f])", "[runtime hash]",
+                RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
+        }
+
+        internal static string SanitizeClaimText(StructuredContextClaim claim)
+        {
+            var text = claim == null ? string.Empty : claim.Text;
+            return (claim?.SourceRoles ?? new List<string>()).Any(role =>
+                string.Equals(role, "tool", StringComparison.OrdinalIgnoreCase) ||
+                string.Equals(role, "assistant", StringComparison.OrdinalIgnoreCase))
+                ? SanitizeOperationalText(text)
+                : SanitizeRuntimeText(text);
+        }
+
+        private static string SanitizeAcceptedAssistantContent(ChatMessage source)
+        {
+            if (string.Equals(source.ToolResultRole, ToolResultRoles.Tool, StringComparison.Ordinal))
+                return SanitizeOperationalText(source.Content);
+
+            // The non-native accepted call is a canonical v5 envelope. Preserve the
+            // exact tool_calls suffix: it may contain literal source text or hashes.
+            const string prefix = "{\"message\":";
+            var content = source.Content ?? string.Empty;
+            if (!content.StartsWith(prefix, StringComparison.Ordinal) ||
+                content.Length <= prefix.Length || content[prefix.Length] != '"')
+                return content;
+            var escaped = false;
+            for (var index = prefix.Length + 1; index < content.Length; index++)
+            {
+                if (escaped) { escaped = false; continue; }
+                if (content[index] == '\\') { escaped = true; continue; }
+                if (content[index] != '"') continue;
+                var encoded = content.Substring(prefix.Length, index - prefix.Length + 1);
+                string message;
+                try { message = JsonConvert.DeserializeObject<string>(encoded); }
+                catch (JsonException) { return content; }
+                var sanitized = SanitizeOperationalText(message);
+                return string.Equals(message, sanitized, StringComparison.Ordinal)
+                    ? content
+                    : prefix + JsonConvert.SerializeObject(sanitized) + content.Substring(index + 1);
+            }
+            return content;
         }
 
         internal static ToolResultMaterialization ForModel(
@@ -187,7 +266,8 @@ namespace RNAssistant.Office.Services
 
             // Result prose is operational metadata, not resource content. Apply the
             // same exact-reference boundary as data for every switched family.
-            message = RemoveRuntimeResourceValues(message, source.Result.Resources);
+            message = SanitizeOperationalText(
+                RemoveRuntimeResourceValues(message, source.Result.Resources));
 
             var result = new RNAssistant.Core.Tools.Contracts.ToolResult(
                 status,
