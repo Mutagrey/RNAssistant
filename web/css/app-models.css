@@ -71,18 +71,17 @@
 }
 
 .model-capability-list {
-  max-height: 280px;
   margin-top: 10px;
-  overflow: auto;
+  border-radius: var(--radius);
+  background: var(--secondary-bg-hover);
 }
 
 .model-capability-row {
   display: grid;
-  grid-template-columns: minmax(165px, 1fr) 82px 80px 86px 86px 70px 70px 64px;
+  grid-template-columns: minmax(150px, 1fr) 72px 70px 78px 82px 62px 62px 56px;
   gap: 6px;
   align-items: center;
   min-height: 46px;
-  min-width: 770px;
   padding: 6px 8px;
   border-bottom: 1px solid var(--section-line);
 }
@@ -96,10 +95,8 @@
 }
 
 .model-capability-header {
-  position: sticky;
-  top: 0;
-  z-index: 1;
   min-height: 34px;
+  border-radius: var(--radius) var(--radius) 0 0;
   border-bottom-color: var(--line);
   background: var(--secondary-bg);
   color: var(--muted);
@@ -152,9 +149,7 @@
 
 .model-capability-title,
 .model-capability-id {
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  overflow-wrap: anywhere;
 }
 
 .model-capability-title {
@@ -177,6 +172,8 @@
 
 .attachment-model-priority {
   margin-top: 10px;
+  border-radius: var(--radius);
+  background: var(--secondary-bg-hover);
 }
 
 .attachment-model-priority-row {
@@ -243,4 +240,55 @@
 
 .model-capability-indicator.is-disabled {
   color: #7a4b12;
+}
+
+@media (max-width: 900px) {
+  .model-capability-row:not(.model-capability-header) {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 8px 12px;
+    padding: 10px 12px;
+  }
+
+  .model-capability-header {
+    display: none;
+  }
+
+  .model-capability-row > .model-capability-text {
+    grid-column: 1 / -1;
+  }
+
+  .model-capability-flag {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 4px;
+  }
+
+  .model-capability-flag::before {
+    color: var(--muted);
+    font-size: 11px;
+  }
+
+  .model-capability-row > :nth-child(2)::before { content: "Контекст"; }
+  .model-capability-row > :nth-child(3)::before { content: "Ответ"; }
+  .model-capability-row > :nth-child(4)::before { content: "Reasoning"; }
+  .model-capability-row > :nth-child(5)::before { content: "Reasoning API"; }
+  .model-capability-row > :nth-child(6)::before { content: "Vision"; }
+  .model-capability-row > :nth-child(7)::before { content: "Audio"; }
+  .model-capability-row > :nth-child(8)::before { content: "Изобр."; }
+}
+
+@media (max-width: 420px) {
+  .attachment-model-priority-row {
+    grid-template-columns: 28px minmax(0, 1fr) auto;
+  }
+
+  .attachment-model-priority-badges {
+    flex-wrap: wrap;
+    justify-content: flex-end;
+  }
+
+  .attachment-model-priority-actions {
+    grid-column: 2 / -1;
+    justify-content: flex-end;
+  }
 }
