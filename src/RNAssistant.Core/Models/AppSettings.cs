@@ -263,6 +263,9 @@ namespace RNAssistant.Core.Models
 
     public sealed class AppSettings
     {
+        public const int DefaultDesktopWindowWidth = 1600;
+        public const int MinimumDesktopWindowWidth = 900;
+        public const int MaximumDesktopWindowWidth = 3840;
         public const int CurrentAgentPromptSchemaVersion = 32;
         public const int DefaultMaxTokens = 3072;
         public const int DefaultMaxImagesPerPrompt = 5;
@@ -320,6 +323,7 @@ namespace RNAssistant.Core.Models
         public bool ScreenCaptureProtectionEnabled { get; set; }
         public double UiFontScale { get; set; }
         public string UiTheme { get; set; }
+        public int DesktopWindowWidth { get; set; }
         public Dictionary<string, string> CustomHeaders { get; set; }
         public Dictionary<string, bool?> ModelImageSupportOverrides { get; set; }
         public Dictionary<string, bool?> ModelAudioSupportOverrides { get; set; }
@@ -390,6 +394,7 @@ namespace RNAssistant.Core.Models
             ScreenCaptureProtectionEnabled = true;
             UiFontScale = 1.0;
             UiTheme = UiThemes.Light;
+            DesktopWindowWidth = DefaultDesktopWindowWidth;
             CustomHeaders = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
             ModelImageSupportOverrides = new Dictionary<string, bool?>(StringComparer.OrdinalIgnoreCase);
             ModelAudioSupportOverrides = new Dictionary<string, bool?>(StringComparer.OrdinalIgnoreCase);
@@ -437,6 +442,9 @@ namespace RNAssistant.Core.Models
             TopP = Math.Min(1, TopP);
             UiFontScale = FiniteOrDefault(UiFontScale, defaults.UiFontScale);
             UiFontScale = Math.Max(0.85, Math.Min(1.30, UiFontScale));
+            if (DesktopWindowWidth <= 0) DesktopWindowWidth = DefaultDesktopWindowWidth;
+            DesktopWindowWidth = Math.Max(MinimumDesktopWindowWidth,
+                Math.Min(MaximumDesktopWindowWidth, DesktopWindowWidth));
         }
 
         private static double FiniteOrDefault(double value, double fallback)

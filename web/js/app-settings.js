@@ -217,6 +217,7 @@ function renderSettings() {
   $("temperatureInput").value = compatibilityValue(s, "Temperature", "temperature", modelSettingsDefaults.temperature);
   $("topPInput").value = compatibilityValue(s, "TopP", "topP", modelSettingsDefaults.topP);
   $("uiFontScaleInput").value = Math.round(clampUiFontScale(s.UiFontScale || s.uiFontScale || 1) * 100);
+  $("desktopWindowWidthInput").value = compatibilityValue(s, "DesktopWindowWidth", "desktopWindowWidth", 1600);
   Array.prototype.slice.call(document.querySelectorAll('input[name="uiTheme"]')).forEach(function (input) {
     input.checked = input.value === uiTheme;
   });
@@ -288,6 +289,7 @@ function readSettings() {
     Temperature: Number($("temperatureInput").value || modelSettingsDefaults.temperature),
     TopP: Number($("topPInput").value || modelSettingsDefaults.topP),
     UiFontScale: clampUiFontScale(Number($("uiFontScaleInput").value || 100) / 100),
+    DesktopWindowWidth: Number($("desktopWindowWidthInput").value || 1600),
     UiTheme: normalizeUiTheme((document.querySelector('input[name="uiTheme"]:checked') || {}).value),
     ContextWindowOverrideTokens: Number($("contextLimitInput").value || 0),
     AttachmentHelperMaxTokens: Math.max(0, Math.floor(Number($("attachmentHelperMaxTokensInput").value || 0))),

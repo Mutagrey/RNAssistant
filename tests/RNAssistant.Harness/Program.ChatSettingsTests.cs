@@ -687,22 +687,37 @@ namespace RNAssistant.Harness
 
         private static void SettingsNormalizeInvalidNumericValues()
         {
+            AssertEqual(1600, JsonConvert.DeserializeObject<AppSettings>("{}").DesktopWindowWidth,
+                "older settings without a width use the new Desktop default");
             var settings = new AppSettings
             {
                 Temperature = double.NaN,
                 TopP = double.PositiveInfinity,
-                UiFontScale = double.NegativeInfinity
+                UiFontScale = double.NegativeInfinity,
+                DesktopWindowWidth = -1
             };
             settings.NormalizeSamplingAndUiValues();
             AssertEqual(0.2, settings.Temperature, "non-finite temperature uses the default");
             AssertEqual(1.0, settings.TopP, "non-finite top-p uses the default");
             AssertEqual(1.0, settings.UiFontScale, "non-finite UI scale uses the default");
+            AssertEqual(1600, settings.DesktopWindowWidth, "invalid Desktop width uses the default");
 
             settings.Temperature = 10;
             settings.UiFontScale = 10;
+            settings.DesktopWindowWidth = int.MaxValue;
             settings.NormalizeSamplingAndUiValues();
             AssertEqual(2.0, settings.Temperature, "temperature is clamped to the supported endpoint range");
             AssertEqual(1.30, settings.UiFontScale, "UI scale is clamped to the rendered range");
+            AssertEqual(3840, settings.DesktopWindowWidth, "Desktop width is clamped to the supported range");
+
+            settings.DesktopWindowWidth = 500;
+            settings.NormalizeSamplingAndUiValues();
+            AssertEqual(900, settings.DesktopWindowWidth, "Desktop width respects the minimum form size");
+
+            settings.DesktopWindowWidth = 1450;
+            var controls = RNAssistant.Office.Contracts.SettingsControlsDto.From(settings);
+            AssertEqual(1450, controls.ApplyTo(new AppSettings()).DesktopWindowWidth,
+                "Desktop width survives settings bridge projection and save");
         }
     }
 }

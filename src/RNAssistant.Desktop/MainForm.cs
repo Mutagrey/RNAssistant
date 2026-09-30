@@ -3,6 +3,8 @@ using System.Diagnostics;
 using System.Drawing;
 using System.Linq;
 using System.Windows.Forms;
+using RNAssistant.Core.Models;
+using RNAssistant.Core.Storage;
 using RNAssistant.Office;
 using RNAssistant.Office.Contracts;
 using RNAssistant.OfficeHosts;
@@ -22,6 +24,9 @@ namespace RNAssistant.Desktop
         private Rectangle _restoreBounds;
         private FormWindowState _restoreWindowState;
         private bool _fullScreen;
+        private bool _restoringFullScreen;
+        private bool _applyWidthOnRestore;
+        private int _desktopWindowWidth = AppSettings.DefaultDesktopWindowWidth;
         private volatile OpenOfficeDocumentDto[] _openMailboxDocuments = new OpenOfficeDocumentDto[0];
         private DateTime _nextMailboxRefreshUtc;
         private string _pendingLaunchHost;
@@ -35,7 +40,15 @@ namespace RNAssistant.Desktop
             _targetRegistry = new OfficeTargetRegistry();
             _targetBar = new TargetSelectionBar();
             Text = "RN Assistant";
-            Width = 1200;
+            try
+            {
+                _desktopWindowWidth = new SettingsService(AppDataPaths.CreateDefault()).Load().DesktopWindowWidth;
+            }
+            catch (Exception ex)
+            {
+                DesktopLog.Error("Could not load Desktop window width.", ex);
+            }
+            Width = Math.Min(_desktopWindowWidth, Screen.PrimaryScreen.WorkingArea.Width);
             Height = 820;
             MinimumSize = new Size(900, 640);
             StartPosition = FormStartPosition.CenterScreen;
@@ -71,7 +84,11 @@ namespace RNAssistant.Desktop
                 }
             };
             _autoFollowTimer.Start();
-            Shown += delegate { RefreshMailboxTargets(); };
+            Shown += delegate
+            {
+                ApplyDesktopWindowWidth(_desktopWindowWidth);
+                RefreshMailboxTargets();
+            };
             Controls.Add(_content);
             Controls.Add(_targetBar);
             _targetBar.UseActiveRequested += AttachForegroundOffice;
@@ -92,15 +109,33 @@ namespace RNAssistant.Desktop
             base.OnKeyDown(e);
         }
 
+        protected override void OnResize(EventArgs e)
+        {
+            base.OnResize(e);
+            if (_applyWidthOnRestore && !_fullScreen && !_restoringFullScreen &&
+                WindowState == FormWindowState.Normal)
+                ApplyDesktopWindowWidth(_desktopWindowWidth);
+        }
+
         private void ToggleFullScreen()
         {
             if (_fullScreen)
             {
                 _fullScreen = false;
-                FormBorderStyle = FormBorderStyle.Sizable;
-                WindowState = FormWindowState.Normal;
-                Bounds = _restoreBounds;
-                WindowState = _restoreWindowState;
+                _restoringFullScreen = true;
+                try
+                {
+                    FormBorderStyle = FormBorderStyle.Sizable;
+                    WindowState = FormWindowState.Normal;
+                    Bounds = _restoreBounds;
+                    WindowState = _restoreWindowState;
+                }
+                finally
+                {
+                    _restoringFullScreen = false;
+                }
+                if (_applyWidthOnRestore && WindowState == FormWindowState.Normal)
+                    ApplyDesktopWindowWidth(_desktopWindowWidth);
                 return;
             }
 
@@ -200,6 +235,7 @@ namespace RNAssistant.Desktop
                 var replaceMs = attachTimer.ElapsedMilliseconds - adapterMs - runtimeMs;
                 _runtime = runtime;
                 runtime = null;
+                _runtime.Controller.SettingsChanged += OnSettingsChanged;
                 _currentAdapter = adapter;
                 adapter = null;
                 var pane = _runtime.CreatePaneControl();
@@ -572,8 +608,37 @@ namespace RNAssistant.Desktop
                 return;
             }
 
+            _runtime.Controller.SettingsChanged -= OnSettingsChanged;
             _runtime.Dispose();
             _runtime = null;
+        }
+
+        private void OnSettingsChanged(AppSettings settings)
+        {
+            if (settings == null || IsDisposed) return;
+            if (InvokeRequired)
+            {
+                if (IsHandleCreated)
+                    BeginInvoke(new Action<AppSettings>(OnSettingsChanged), settings);
+                return;
+            }
+            ApplyDesktopWindowWidth(settings.DesktopWindowWidth);
+        }
+
+        private void ApplyDesktopWindowWidth(int width)
+        {
+            _desktopWindowWidth = width;
+            if (_fullScreen || WindowState != FormWindowState.Normal)
+            {
+                _applyWidthOnRestore = true;
+                return;
+            }
+
+            var workingArea = Screen.FromControl(this).WorkingArea;
+            var displayWidth = Math.Max(MinimumSize.Width, Math.Min(width, workingArea.Width));
+            var left = Math.Max(workingArea.Left, Math.Min(Left, workingArea.Right - displayWidth));
+            _applyWidthOnRestore = false;
+            SetBounds(left, Top, displayWidth, Height);
         }
 
         private static OfficeTargetDescriptor CloneTarget(OfficeTargetDescriptor source)
