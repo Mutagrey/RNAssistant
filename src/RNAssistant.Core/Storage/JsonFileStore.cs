@@ -9,28 +9,29 @@ namespace RNAssistant.Core.Storage
     {
         public T Load<T>(string path, T fallback)
         {
+            string json;
             try
             {
-                if (!File.Exists(path))
-                {
-                    return fallback;
-                }
+                json = File.ReadAllText(path);
+            }
+            catch (FileNotFoundException)
+            {
+                return fallback;
+            }
+            catch (DirectoryNotFoundException)
+            {
+                return fallback;
+            }
 
-                var json = File.ReadAllText(path);
+            try
+            {
                 var value = JsonConvert.DeserializeObject<T>(json);
-                return value == null ? fallback : value;
+                if (value == null) throw new InvalidDataException("Stored JSON value is null: " + path);
+                return value;
             }
-            catch (IOException)
+            catch (JsonException ex)
             {
-                return fallback;
-            }
-            catch (UnauthorizedAccessException)
-            {
-                return fallback;
-            }
-            catch (JsonException)
-            {
-                return fallback;
+                throw new InvalidDataException("Stored JSON is invalid: " + path, ex);
             }
         }
 

@@ -223,6 +223,7 @@ Settings → Diagnostics → History protection controls two independent feature
 - The selected key source is the API key by default or a separate custom secret. Both secrets are stored with DPAPI CurrentUser and never enter settings, events, diagnostics, or exports.
 - Keys are derived with PBKDF2-SHA256 and a portable installation salt, then domain-separated for encryption, ciphertext authentication, and event-chain HMAC.
 - Changing the enabled modes, key source, or effective key is rejected while event streams or CAS blobs exist. Clear Chats/Data first. In particular, rotating an API key used for protection requires clearing or a future explicit re-key operation.
+- A missing settings file uses defaults. An existing unreadable, malformed, or `null` settings file fails closed; saving settings does not replace its bytes with defaults.
 - For ordinary sharing, use the disposable trajectory export and keep its default metadata redaction. Canonical protected history can still be transferred with a custom secret plus `history-protection.salt`, communicating the secret separately; never share an API key.
 
 Current history encryption does not cover transient attachment staging, settings, runtime logs, or WebView data. Committed attachments and VBA snapshots are protected after they enter the shared CAS; document-scoped VBA journal data is protected without making it chat-owned.

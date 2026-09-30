@@ -42,6 +42,17 @@ namespace RNAssistant.Harness
                 var bytes = File.ReadAllBytes(path);
                 AssertTrue(bytes.Length > 3 && !(bytes[0] == 0xef && bytes[1] == 0xbb && bytes[2] == 0xbf),
                     "streamed json uses utf8 without bom");
+
+                foreach (var invalid in new[] { "{broken", "null" })
+                {
+                    File.WriteAllText(paths.SettingsFile, invalid);
+                    var rejected = false;
+                    try { new SettingsService(paths).Save(new AppSettings()); }
+                    catch (InvalidDataException) { rejected = true; }
+                    AssertTrue(rejected, "corrupt existing settings reject a save");
+                    AssertEqual(invalid, File.ReadAllText(paths.SettingsFile),
+                        "rejected save preserves corrupt settings for recovery");
+                }
             });
         }
 
