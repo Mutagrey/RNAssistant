@@ -91,7 +91,26 @@ namespace RNAssistant.Harness
                 }
                 AssertTrue(wrongChatRejected, "resource draft is scoped to its chat");
 
+                var stagedPath = Path.Combine(paths.AttachmentDirectory, attachment.RelativePath);
+                var originalPath = attachment.RelativePath;
+                attachment.RelativePath = Path.Combine("staging", attachment.Id + ".meta.json");
+                store.SaveDraftMetadata(attachment);
+                RuntimeThrows<InvalidOperationException>(() => store.LoadDrafts(new[] { attachment.Id }, "chat-a"));
+                attachment.RelativePath = originalPath;
+
+                var originalSidecar = attachment.ExtractedTextPath;
+                attachment.ExtractedTextPath = Path.Combine("staging", attachment.Id + ".meta.json");
+                store.SaveDraftMetadata(attachment);
+                RuntimeThrows<InvalidOperationException>(() => store.LoadDrafts(new[] { attachment.Id }, "chat-a"));
+                attachment.ExtractedTextPath = originalSidecar;
+                store.SaveDraftMetadata(attachment);
+
+                File.AppendAllText(stagedPath, " changed");
+                RuntimeThrows<InvalidOperationException>(() => store.LoadDrafts(new[] { attachment.Id }, "chat-a"));
                 var message = new ChatMessage { Role = "user", Content = "analyze", Attachments = drafts };
+                RuntimeThrows<InvalidOperationException>(() => store.CommitToCas(message));
+                File.WriteAllBytes(stagedPath, System.Text.Encoding.UTF8.GetBytes("hello attachment"));
+
                 store.CommitToCas(message);
                 AssertTrue(store.ReadBytes(message.Attachments[0]).Length > 0, "committed bytes");
                 AssertTrue(File.Exists(Path.Combine(paths.AttachmentDirectory, "staging", attachment.Id + ".meta.json")), "draft retained until durable save");

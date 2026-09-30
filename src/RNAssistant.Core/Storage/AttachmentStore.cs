@@ -107,10 +107,7 @@ namespace RNAssistant.Core.Storage
                 {
                     throw new InvalidOperationException("Resource draft does not belong to the active chat: " + id);
                 }
-                if (!File.Exists(AbsolutePath(metadata.RelativePath)))
-                {
-                    throw new InvalidOperationException("Attachment is no longer available: " + id);
-                }
+                RequireStagedFile(metadata);
                 result.Add(metadata);
             }
 
@@ -161,15 +158,16 @@ namespace RNAssistant.Core.Storage
             }
             foreach (var attachment in message.Attachments.Where(item => item != null))
             {
-                if (!File.Exists(AbsolutePath(attachment.RelativePath)))
-                {
-                    throw new InvalidOperationException("Attachment file is missing: " + (attachment.FileName ?? attachment.Id));
-                }
+                RequireStagedFile(attachment);
             }
             foreach (var attachment in message.Attachments.Where(item => item != null))
             {
-                var source = AbsolutePath(attachment.RelativePath);
+                var source = RequireStagedFile(attachment);
                 var content = _blobs.StoreFile(source, attachment.ContentType);
+                if (content.ByteLength != attachment.Size)
+                {
+                    throw new InvalidOperationException("Attachment changed while being committed: " + attachment.Id);
+                }
                 attachment.ContentSha256 = content.Sha256;
                 attachment.ContentByteLength = content.ByteLength;
                 var extractedSource = ExtractedTextAbsolutePath(attachment);
@@ -404,6 +402,40 @@ namespace RNAssistant.Core.Storage
 
         private string StagingDirectory() { return Path.Combine(_paths.AttachmentDirectory, "staging"); }
         private string RelativePath(string path) { return path.Substring(_paths.AttachmentDirectory.Length).TrimStart(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar); }
+
+        private string RequireStagedFile(ChatAttachment attachment)
+        {
+            var id = attachment == null ? null : attachment.Id;
+            var expected = attachment == null ? null : Path.Combine("staging",
+                id + SafeExtension(attachment.FileName, attachment.Kind));
+            if (!IsSafeId(id) || attachment.Size < 1 || attachment.Size > MaxFileBytes ||
+                !string.Equals(attachment.RelativePath, expected, StringComparison.Ordinal))
+            {
+                throw new InvalidOperationException("Attachment draft metadata is invalid: " + (id ?? string.Empty));
+            }
+
+            var path = AbsolutePath(expected);
+            if (!File.Exists(path) || StorageFileSystem.IsReparsePoint(path))
+            {
+                throw new InvalidOperationException("Attachment is no longer available: " + id);
+            }
+            if (new FileInfo(path).Length != attachment.Size)
+            {
+                throw new InvalidOperationException("Attachment draft size changed: " + id);
+            }
+
+            if (!string.IsNullOrWhiteSpace(attachment.ExtractedTextPath))
+            {
+                var sidecar = Path.Combine("staging", id + ".extracted.txt");
+                if (!string.Equals(attachment.ExtractedTextPath, sidecar, StringComparison.Ordinal) ||
+                    !File.Exists(AbsolutePath(sidecar)) ||
+                    StorageFileSystem.IsReparsePoint(AbsolutePath(sidecar)))
+                {
+                    throw new InvalidOperationException("Attachment extracted text is no longer available: " + id);
+                }
+            }
+            return path;
+        }
 
         private string AbsolutePath(string relative)
         {

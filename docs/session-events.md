@@ -171,6 +171,8 @@ Authenticated-encryption writes place AES ciphertext directly into the final env
 
 File-backed CAS ingestion (committed attachment bytes and extracted-text sidecars) uses a bounded streaming path. It hashes the staging file incrementally, gzip-compresses eligible content to a temporary candidate beside that staging source, and streams the candidate or original file through AES/HMAC into the atomic CAS write. Verification authenticates ciphertext before streaming decryption/decompression directly into SHA-256; it creates no decrypted temporary file and no full-size managed payload arrays. CAS health uses the same verifier. Existing `RNACAS01` and `RNAENC01` formats remain byte-compatible; model/HTTP payloads stay byte-buffered because the same materialized bytes are required by `HttpContent`.
 
+Draft ingestion requires the metadata to name its own staged content and extracted-text sidecar, and requires the content size to match at load and CAS commit. A missing, redirected, or size-changed draft fails before the chat event is saved.
+
 Artifact metadata and lineage remain in the session stream. Each HTML whole-workspace
 `artifact.revision.created` uses the next revision number across the complete logical
 workspace graph, including inactive branches, and records the exact active artifact
