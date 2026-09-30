@@ -360,7 +360,7 @@ namespace RNAssistant.Office
                 var bound = _adapter as IOfficeDocumentSessionProvider;
                 if (bound != null)
                 {
-                    var mismatch = OfficeDocumentExecutionGuard.Validate(_adapter,
+                    var mismatch = OfficeDocumentExecutionGuardState.Validate(_adapter,
                         new OfficeDocumentExecutionExpectation
                         {
                             Host = _adapter.HostName,

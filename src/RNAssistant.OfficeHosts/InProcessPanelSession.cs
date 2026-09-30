@@ -106,7 +106,7 @@ namespace RNAssistant.OfficeHosts
                 innerAdapter = new OfficeComAdapterProvider().Create(host, target, officeDispatcher);
                 var adapter = new UiThreadOfficeApplicationAdapter(innerAdapter, officeDispatcher);
                 runtime = new AssistantRuntime(adapter, rootPath);
-                runtime.OfficeHostChatRequested = host => OfficeHostChatCoordinator.CreateFromPanelAsync(runtime, host);
+                runtime.OfficeHostChatRequested = requestedHost => OfficeHostChatCoordinator.CreateFromPanelAsync(runtime, requestedHost);
                 runtime.OfficeChatSelectionRequested = chatId => OfficeHostChatCoordinator.SelectFromPanelAsync(runtime, chatId);
                 var control = runtime.CreatePaneControl();
                 control.Dock = DockStyle.Fill;
