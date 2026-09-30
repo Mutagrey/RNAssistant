@@ -113,14 +113,6 @@ namespace RNAssistant.Office.WebView
             source.Dispose();
         }
 
-        public void ThrowIfDisposed()
-        {
-            lock (_sync)
-            {
-                if (_disposed) throw new ObjectDisposedException("BridgeRequestCancellationRegistry");
-            }
-        }
-
         public void Dispose()
         {
             List<CancellationTokenSource> sources;

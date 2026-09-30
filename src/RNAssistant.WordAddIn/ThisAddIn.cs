@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Threading.Tasks;
 using Microsoft.Office.Core;
 using RNAssistant.Office;
 using RNAssistant.OfficeHosts;
@@ -32,13 +33,15 @@ namespace RNAssistant.WordAddIn
             Application.WindowActivate -= Application_WindowActivate;
             Application.WindowSelectionChange -= Application_WindowSelectionChange;
             Application.DocumentBeforeClose -= Application_DocumentBeforeClose;
+            var shutdowns = new List<Task>();
             foreach (var entry in new List<PaneEntry>(_panes.Values))
             {
                 try { CustomTaskPanes.Remove(entry.Pane); } catch { }
                 entry.Runtime.Dispose();
+                shutdowns.Add(entry.Runtime.ShutdownCompletion);
             }
             _panes.Clear();
-            if (_officeDispatcher != null) _officeDispatcher.Dispose();
+            if (_officeDispatcher != null) _officeDispatcher.DisposeAfter(Task.WhenAll(shutdowns));
         }
 
         public void ShowAssistant(string quickAction = null)

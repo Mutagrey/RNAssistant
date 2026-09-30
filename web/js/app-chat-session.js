@@ -78,6 +78,8 @@ async function selectChat(id) {
   state.pendingChatSelectionId = id;
   var startedAt = window.performance && window.performance.now ? window.performance.now() : Date.now();
   try {
+    if (state.chatSyncPromise) await state.chatSyncPromise;
+    if (navigationVersion !== state.chatNavigationVersion) return;
     var response = await send("selectChat", { chatId: id });
     var bridgeMs = (window.performance && window.performance.now ? window.performance.now() : Date.now()) - startedAt;
     var applied;
@@ -517,7 +519,8 @@ async function loadChatState(chatIdValue) {
 }
 
 async function synchronizeChatState(force) {
-  if (state.bridgeUnavailable || (!force && (document.hidden || !document.hasFocus() || currentActiveSend()))) return;
+  if (state.bridgeUnavailable || state.pendingChatSelectionId || state.officeHostChatPending ||
+      (!force && (document.hidden || !document.hasFocus() || currentActiveSend()))) return;
   if (state.chatSyncPromise) {
     var pendingSync = state.chatSyncPromise;
     if (!force) return pendingSync;

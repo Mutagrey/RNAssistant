@@ -133,6 +133,29 @@ function createSyncContext() {
   }
 
   {
+    const { context, calls } = createSyncContext();
+    let releaseSync;
+    context.state.chatSyncPromise = new Promise(resolve => { releaseSync = resolve; });
+    context.confirmDiscardHtmlWorkspaceChanges = () => true;
+    context.renderChatSessions = () => {};
+    context.clearSendError = () => {};
+    context.log = () => {};
+    context.applyInitState = () => {};
+    context.send = async (type, payload) => {
+      calls.push({ type, payload });
+      return { chatId: "word-chat", init: { host: "Word", activeChatId: "word-chat" } };
+    };
+    const selection = context.selectChat("word-chat");
+    assert.equal(calls.length, 0, "selection waits for an active catalog request");
+    await context.synchronizeChatState(true);
+    assert.equal(calls.length, 0, "new catalog requests pause during selection");
+    releaseSync();
+    await selection;
+    assert.deepEqual(calls.map(call => call.type), ["selectChat"]);
+    console.log("PASS Office chat selection: catalog sync drains before host switch");
+  }
+
+  {
     const applied = [];
     const chatContext = vm.createContext({ console });
     chatContext.window = chatContext;
@@ -194,7 +217,7 @@ function createSyncContext() {
   assert.ok(index.includes("app-core.js?v=office-chat-20260930-3"), "app-core.js cache key was bumped");
   assert.ok(index.includes("app-chat-run.js?v=response-render-timing-20260928-1"), "chat run cache key was bumped");
   assert.ok(index.includes("app-chat-edit.js?v=chat-sync-20260903-1"), "chat edit cache key was bumped");
-  assert.ok(index.includes("app-chat-session.js?v=office-chat-20260930-3"), "chat session cache key was bumped");
+  assert.ok(index.includes("app-chat-session.js?v=office-chat-20260930-4"), "chat session cache key was bumped");
   assert.ok(fs.readFileSync(path.join(root, "web/js/app.js"), "utf8")
     .includes("window.setInterval(synchronizeChatState, 60000)"), "background catalog scan is limited to once per minute");
   console.log("OK 7/7");

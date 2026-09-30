@@ -1,6 +1,8 @@
 using System;
 using System.Threading;
+using System.Threading.Tasks;
 using System.Windows.Forms;
+using RNAssistant.Office.Diagnostics;
 
 namespace RNAssistant.Office
 {
@@ -54,6 +56,20 @@ namespace RNAssistant.Office
             }
             try { _control.Invoke(new Action(delegate { _control.Dispose(); })); }
             catch (InvalidOperationException) { }
+        }
+
+        public void DisposeAfter(Task work)
+        {
+            if (work == null || work.IsCompleted)
+            {
+                Dispose();
+                return;
+            }
+            work.ContinueWith(ignored =>
+            {
+                try { Dispose(); }
+                catch (Exception ex) { RuntimeLog.Error("Office UI dispatcher cleanup failed.", ex); }
+            }, TaskContinuationOptions.ExecuteSynchronously);
         }
 
         private void ThrowIfDisposed()

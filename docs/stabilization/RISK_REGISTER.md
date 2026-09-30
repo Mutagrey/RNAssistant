@@ -1,5 +1,23 @@
 # Stabilization risk register
 
+## Office panel switch and shutdown race — 2026-09-30
+
+Windows photos show repeated bridge switch-busy errors during chat navigation and
+`ObjectDisposedException` from `OfficeStaDispatcher` after an in-process panel
+session was disposed. The exact pending request at each switch is not recorded, so
+the photos alone do not prove every refusal was false. Code inspection confirms two
+risks: background catalog sync could overlap an exclusive chat selection, and panel
+shutdown disposed its controller/adapter before accepted bridge work had finished.
+Owner: WebView bridge/pane and `AssistantRuntime`; in-process binding teardown.
+
+The UI now drains an existing catalog sync before selection and pauses new polls;
+timing telemetry does not reserve the binding. Bridge and resource handlers expose
+a shutdown drain; runtime and in-process Office binding cleanup wait for that drain
+without blocking the Office UI thread. VSTO add-in shutdown also defers its shared
+dispatcher cleanup until pane requests leave. Busy switching returns a typed error without
+a stack trace. Focused WebView sync and host-neutral bridge checks pass; live
+Windows Office/WebView2 and long-running cancellation still need exact-build verification.
+
 ## Repeated confirmed VBA writes — 2026-09-30
 
 The new screenshot starts the second user request at “Вы правы”. Within that

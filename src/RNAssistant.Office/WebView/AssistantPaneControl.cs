@@ -21,6 +21,8 @@ namespace RNAssistant.Office.WebView
         private AssistantController _controller;
         private readonly object _resourceRequestSync = new object();
         private int _resourceRequestsInFlight;
+        private readonly TaskCompletionSource<bool> _resourceRequestsDrained =
+            new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
         private readonly string _webRoot;
         private readonly AssistantWebBridge _bridge;
         private readonly System.Threading.CancellationTokenSource _lifetimeCancellation;
@@ -29,7 +31,11 @@ namespace RNAssistant.Office.WebView
         private Stopwatch _initialNavigationTimer;
         private string _trustedDocumentUri;
         private bool _webContentWantsKeyboard;
-        private bool _resourcesDisposed;
+        private volatile bool _resourcesDisposed;
+        public Task RequestsDrained
+        {
+            get { return Task.WhenAll(_bridge.RequestsDrained, _resourceRequestsDrained.Task); }
+        }
         private IntPtr _lastExternalFocusWindow;
         public Action<string, string, bool> MailboxNavigationRequested
         {
@@ -249,7 +255,7 @@ namespace RNAssistant.Office.WebView
             {
                 lock (_resourceRequestSync)
                 {
-                    if (!_bridge.HostSwitchPending)
+                    if (!_resourcesDisposed && !_bridge.HostSwitchPending)
                     {
                         controller = _controller;
                         _resourceRequestsInFlight++;
@@ -276,7 +282,8 @@ namespace RNAssistant.Office.WebView
             }
             catch (Exception ex)
             {
-                RuntimeLog.Error("Resource response failed: " + ex.GetType().Name);
+                if (!_resourcesDisposed)
+                    RuntimeLog.Error("Resource response failed: " + ex.GetType().Name);
                 if (!_resourcesDisposed)
                 {
                     var response = new Services.ResourceStreamResponse
@@ -292,7 +299,12 @@ namespace RNAssistant.Office.WebView
             {
                 if (controller != null)
                 {
-                    lock (_resourceRequestSync) _resourceRequestsInFlight--;
+                    lock (_resourceRequestSync)
+                    {
+                        _resourceRequestsInFlight--;
+                        if (_resourcesDisposed && _resourceRequestsInFlight == 0)
+                            _resourceRequestsDrained.TrySetResult(true);
+                    }
                 }
                 CompleteResourceDeferral(deferral);
             }
@@ -665,12 +677,22 @@ namespace RNAssistant.Office.WebView
         {
             if (disposing && !_resourcesDisposed)
             {
-                _resourcesDisposed = true;
+                lock (_resourceRequestSync)
+                {
+                    _resourcesDisposed = true;
+                    if (_resourceRequestsInFlight == 0)
+                        _resourceRequestsDrained.TrySetResult(true);
+                }
                 Load -= OnLoad;
                 try { _lifetimeCancellation.Cancel(); } catch (ObjectDisposedException) { }
                 DetachInitializedWebView();
                 _bridge.Dispose();
-                _lifetimeCancellation.Dispose();
+                if (_resourceRequestsDrained.Task.IsCompleted)
+                    _lifetimeCancellation.Dispose();
+                else
+                    _resourceRequestsDrained.Task.ContinueWith(
+                        ignored => _lifetimeCancellation.Dispose(),
+                        TaskContinuationOptions.ExecuteSynchronously);
             }
 
             base.Dispose(disposing);

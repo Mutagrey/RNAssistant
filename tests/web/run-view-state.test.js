@@ -129,7 +129,7 @@ function state(runId, lifecycle = "completed", health = "clean", pending = null)
   });
   assert.ok(index.includes("app-agent.js?v=action-severity-20260930-1"),
     "agent outcome uses the current cache key");
-  assert.ok(index.includes("app-chat-session.js?v=office-chat-20260930-3"), "chat session uses the current cache key");
+  assert.ok(index.includes("app-chat-session.js?v=office-chat-20260930-4"), "chat session uses the current cache key");
   assert.ok(index.includes("app-core.js?v=office-chat-20260930-3"), "core uses the current cache key");
   assert.ok(index.includes("app-chat-state.js?v=office-chat-20260930-3"), "chat state uses the current cache key");
   assert.ok(index.includes("app-messages.js?v=action-severity-20260930-1"), "messages uses the transcript incremental cache key");

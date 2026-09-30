@@ -719,6 +719,28 @@ namespace RNAssistant.Harness
                 AssertEqual("word-chat", nextController.LastChatId,
                     "later requests use the selected chat's controller");
             }
+
+            var draining = new AssistantWebBridge(new AssistantController(), null);
+            var drainToken = BridgeToken(draining);
+            var completion = new TaskCompletionSource<OfficeHostChatResponse>();
+            draining.OfficeHostChatRequested = host => completion.Task;
+            var inFlight = draining.HandleMessageAsync(JsonConvert.SerializeObject(new
+            {
+                id = "office-chat-drain", type = "createOfficeHostChat", bridgeToken = drainToken,
+                payload = new OfficeHostChatPayload { Host = "Excel" }
+            }));
+            var timingDuringSwitch = JObject.Parse(draining.HandleMessageAsync(JsonConvert.SerializeObject(new
+            {
+                id = "office-chat-timing", type = "reportClientTiming", bridgeToken = drainToken,
+                payload = new ClientTimingPayload { Kind = "chatResponse", BridgeMs = 0, RenderMs = 0 }
+            })).GetAwaiter().GetResult());
+            AssertTrue((bool)timingDuringSwitch["ok"], "timing telemetry does not block host switching");
+            draining.Dispose();
+            AssertTrue(!draining.RequestsDrained.IsCompleted,
+                "bridge shutdown retains the controller while a request is still running");
+            completion.SetResult(new OfficeHostChatResponse { Host = "Excel", ChatId = "chat-drain" });
+            inFlight.GetAwaiter().GetResult();
+            draining.RequestsDrained.GetAwaiter().GetResult();
         }
 
         private static void BridgeTransportFailureIsTypedAndCorrelated()

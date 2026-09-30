@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Threading.Tasks;
 using Microsoft.Office.Core;
 using RNAssistant.Core.Storage;
 using RNAssistant.Office;
@@ -39,13 +40,15 @@ namespace RNAssistant.OutlookAddIn
         {
             Application.ItemContextMenuDisplay -= Application_ItemContextMenuDisplay;
             RemoveContextMenus();
+            var shutdowns = new List<Task>();
             foreach (var entry in new List<PaneEntry>(_panes.Values))
             {
                 try { CustomTaskPanes.Remove(entry.Pane); } catch { }
                 entry.Runtime.Dispose();
+                shutdowns.Add(entry.Runtime.ShutdownCompletion);
             }
             _panes.Clear();
-            if (_officeDispatcher != null) _officeDispatcher.Dispose();
+            if (_officeDispatcher != null) _officeDispatcher.DisposeAfter(Task.WhenAll(shutdowns));
         }
 
         public void ShowAssistant(string quickAction = null)

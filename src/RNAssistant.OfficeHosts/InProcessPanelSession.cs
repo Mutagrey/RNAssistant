@@ -1,6 +1,7 @@
 using System;
 using System.Diagnostics;
 using System.IO;
+using System.Threading.Tasks;
 using System.Windows.Forms;
 using RNAssistant.Core.Models;
 using RNAssistant.Office;
@@ -162,14 +163,20 @@ namespace RNAssistant.OfficeHosts
 
             _disposed = true;
             RuntimeLog.Info("Disposing in-process panel session.");
+            var runtime = Runtime;
+            var shutdown = Task.FromResult(true);
             try
             {
-                if (Runtime != null)
+                if (runtime != null)
                 {
-                    Runtime.ControllerChanged -= OnControllerChanged;
-                    Runtime.Controller.SettingsChanged -= OnSettingsChanged;
-                    Runtime.Dispose();
-                    Runtime = null;
+                    runtime.ControllerChanged -= OnControllerChanged;
+                    runtime.Controller.SettingsChanged -= OnSettingsChanged;
+                    try { runtime.Dispose(); }
+                    finally
+                    {
+                        shutdown = runtime.ShutdownCompletion;
+                        Runtime = null;
+                    }
                 }
                 if (PanelControl != null)
                 {
@@ -179,21 +186,24 @@ namespace RNAssistant.OfficeHosts
             }
             finally
             {
-                try
-                {
-                    var disposable = _adapter as IDisposable;
-                    if (disposable != null)
-                    {
-                        disposable.Dispose();
-                    }
-                }
-                finally
-                {
-                    if (_officeDispatcher != null)
-                    {
-                        _officeDispatcher.Dispose();
-                    }
-                }
+                if (shutdown.IsCompleted) ReleaseOfficeBinding();
+                else shutdown.ContinueWith(ignored => ReleaseOfficeBinding(),
+                    TaskContinuationOptions.ExecuteSynchronously);
+            }
+        }
+
+        private void ReleaseOfficeBinding()
+        {
+            try
+            {
+                var disposable = _adapter as IDisposable;
+                if (disposable != null) disposable.Dispose();
+            }
+            catch (Exception ex) { RuntimeLog.Error("In-process Office adapter cleanup failed.", ex); }
+            finally
+            {
+                try { if (_officeDispatcher != null) _officeDispatcher.Dispose(); }
+                catch (Exception ex) { RuntimeLog.Error("In-process Office dispatcher cleanup failed.", ex); }
             }
         }
 

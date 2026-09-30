@@ -27,6 +27,7 @@ namespace RNAssistant.Office
         }
 
         public AssistantController Controller { get; private set; }
+        public Task ShutdownCompletion { get; private set; } = Task.FromResult(true);
         public string RootPath { get; private set; }
         public Action<string, string, bool> MailboxNavigationRequested { get; set; }
         public Func<string, Task<OfficeHostChatResponse>> OfficeHostChatRequested { get; set; }
@@ -60,6 +61,7 @@ namespace RNAssistant.Office
                     throw new InvalidOperationException("Панель RN Assistant недоступна для переключения.");
                 Controller.EnsureHostSwitchReady();
                 await _paneControl.RebindControllerAsync(nextController).ConfigureAwait(false);
+                ThrowIfDisposed();
                 var previousController = Controller;
                 var previousAdapter = _adapter;
                 var ownedPreviousAdapter = _ownsAdapter;
@@ -167,23 +169,37 @@ namespace RNAssistant.Office
             }
 
             _disposed = true;
+            var pane = _paneControl;
+            _paneControl = null;
+            var controller = Controller;
+            var adapter = _adapter;
+            var ownsAdapter = _ownsAdapter;
             try
             {
-                if (_paneControl != null)
-                {
-                    _paneControl.Dispose();
-                    _paneControl = null;
-                }
+                if (pane != null) pane.Dispose();
             }
             finally
             {
-                Controller.Dispose();
-                if (_ownsAdapter)
-                {
-                    var disposable = _adapter as IDisposable;
-                    if (disposable != null) disposable.Dispose();
-                }
+                var drained = pane == null ? Task.FromResult(true) : pane.RequestsDrained;
+                if (drained.IsCompleted)
+                    ReleaseRuntimeResources(controller, adapter, ownsAdapter);
+                else
+                    ShutdownCompletion = drained.ContinueWith(
+                        ignored => ReleaseRuntimeResources(controller, adapter, ownsAdapter),
+                        TaskScheduler.Default);
             }
+        }
+
+        private static void ReleaseRuntimeResources(
+            AssistantController controller, IOfficeApplicationAdapter adapter, bool ownsAdapter)
+        {
+            try { controller.Dispose(); }
+            catch (Exception ex) { RuntimeLog.Error("Office controller cleanup failed.", ex); }
+            if (!ownsAdapter) return;
+            var disposable = adapter as IDisposable;
+            if (disposable == null) return;
+            try { disposable.Dispose(); }
+            catch (Exception ex) { RuntimeLog.Error("Office adapter cleanup failed.", ex); }
         }
 
         private void ThrowIfDisposed()

@@ -23,6 +23,9 @@ namespace RNAssistant.Office.WebView
         private readonly object _hostSwitchSync = new object();
         private int _requestsInFlight;
         private bool _hostSwitchPending;
+        private bool _disposed;
+        private readonly TaskCompletionSource<bool> _requestsDrained =
+            new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
         private readonly object _resourceChangesSync = new object();
         private readonly Dictionary<string, ResourceChangedMessage> _resourceChanges = new Dictionary<string, ResourceChangedMessage>();
         private readonly Timer _resourceChangesTimer;
@@ -36,11 +39,14 @@ namespace RNAssistant.Office.WebView
             get { lock (_hostSwitchSync) return _hostSwitchPending; }
         }
 
+        public Task RequestsDrained { get { return _requestsDrained.Task; } }
+
         public void RebindController(AssistantController controller)
         {
             if (controller == null) throw new ArgumentNullException("controller");
             lock (_hostSwitchSync)
             {
+                if (_disposed) throw new ObjectDisposedException(nameof(AssistantWebBridge));
                 if (!_hostSwitchPending || _requestsInFlight != 1)
                     throw new InvalidOperationException("Office host switch is not exclusive.");
                 _controller.ModelRequestDiagnostics -= ReportModelRequestDiagnostics;
@@ -86,18 +92,22 @@ namespace RNAssistant.Office.WebView
             bool registered = false;
             try
             {
-                _cancellations.ThrowIfDisposed();
                 if (request == null) throw new InvalidOperationException("WebView bridge request is missing.");
                 id = request.Id;
                 var type = (request.Type ?? string.Empty).Trim();
                 lock (_hostSwitchSync)
                 {
+                    if (_disposed) throw new OperationCanceledException("Bridge is closing.");
+                    var telemetry = string.Equals(type, "reportClientTiming", StringComparison.Ordinal);
                     var needsExclusiveBinding = string.Equals(type, "createOfficeHostChat", StringComparison.Ordinal) ||
                         (string.Equals(type, "selectChat", StringComparison.Ordinal) && OfficeChatSelectionRequested != null);
-                    if (_hostSwitchPending || (needsExclusiveBinding && _requestsInFlight != 0))
-                        throw new InvalidOperationException("Дождитесь завершения текущего запроса и повторите переключение.");
-                    _requestsInFlight++;
-                    registered = true;
+                    if (!telemetry && (_hostSwitchPending || (needsExclusiveBinding && _requestsInFlight != 0)))
+                        throw new BridgeSwitchBusyException();
+                    if (!telemetry)
+                    {
+                        _requestsInFlight++;
+                        registered = true;
+                    }
                     if (needsExclusiveBinding) _hostSwitchPending = true;
                 }
                 var timer = Stopwatch.StartNew();
@@ -125,7 +135,8 @@ namespace RNAssistant.Office.WebView
                     return Success(id, responsePayload);
                 }
 
-                cancellationSource = _cancellations.Create(id, type);
+                try { cancellationSource = _cancellations.Create(id, type); }
+                catch (ObjectDisposedException) { throw new OperationCanceledException("Bridge is closing."); }
                 var cancellationToken = cancellationSource == null ? CancellationToken.None : cancellationSource.Token;
 
                 switch (type)
@@ -656,6 +667,10 @@ namespace RNAssistant.Office.WebView
                     string.IsNullOrWhiteSpace(ex.Message) ? "Request cancelled." : ex.Message,
                     "bridge_request_cancelled", false, true);
             }
+            catch (BridgeSwitchBusyException ex)
+            {
+                return SerializeFailure(id, ex.Message, ex.Message, "bridge_switch_busy", false);
+            }
             catch (Exception ex)
             {
                 RuntimeLog.Error("WebView bridge request failed.", ex);
@@ -672,6 +687,7 @@ namespace RNAssistant.Office.WebView
                     {
                         _requestsInFlight--;
                         if (_requestsInFlight == 0) _hostSwitchPending = false;
+                        if (_disposed && _requestsInFlight == 0) _requestsDrained.TrySetResult(true);
                     }
                 }
             }
@@ -703,6 +719,12 @@ namespace RNAssistant.Office.WebView
 
         public void Dispose()
         {
+            lock (_hostSwitchSync)
+            {
+                if (_disposed) return;
+                _disposed = true;
+                if (_requestsInFlight == 0) _requestsDrained.TrySetResult(true);
+            }
             _controller.ModelRequestDiagnostics -= ReportModelRequestDiagnostics;
             _controller.ResourceAuthorityChanged -= ReportResourceChanged;
             lock (_resourceChangesSync)
@@ -712,6 +734,14 @@ namespace RNAssistant.Office.WebView
                 _resourceChangesTimer.Dispose();
             }
             _cancellations.Dispose();
+        }
+
+        private sealed class BridgeSwitchBusyException : InvalidOperationException
+        {
+            public BridgeSwitchBusyException()
+                : base("Дождитесь завершения текущего запроса и повторите переключение.")
+            {
+            }
         }
 
         private static string Success(string id, object payload)
