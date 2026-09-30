@@ -212,6 +212,8 @@ namespace RNAssistant.Harness
             }
             AssertTrue(!ParseV4(V4EnvelopeWithFinal(true, V4Call()), V4ReadTool()).Success,
                 "final answer intent cannot accompany a tool call");
+            AssertTrue(!ParseV4("{\"message\":\"thinking\",\"final\":false,\"tool_calls\":[]}").Success,
+                "non-final intent requires a real tool call");
             foreach (var json in new[] { "{}", "{\"message\":\"x\"}", "{\"message\":\"x\",\"final\":true}",
                 "{\"message\":\"x\",\"tool_calls\":[]}", "{\"tool_calls\":[]}",
                 "{\"message\":null,\"final\":true,\"tool_calls\":[]}", "{\"message\":1,\"final\":true,\"tool_calls\":[]}",
@@ -1334,7 +1336,7 @@ namespace RNAssistant.Harness
             });
         }
 
-        private static void SimpleAgentNoToolCheckpointContinues()
+        private static void SimpleAgentRepairsNoToolNonFinal()
         {
             WithTempExecutor(FakeOfficeAdapter.ForHost("Excel"), delegate(OfficeToolExecutor executor, FakeOfficeAdapter adapter)
             {
@@ -1356,21 +1358,13 @@ namespace RNAssistant.Harness
                     OfficeToolCatalog.ForHost(adapter.HostName).Concat(executor.GetControllerTools()).ToList(),
                     null).GetAwaiter().GetResult();
 
-                AssertEqual(2, requests.Count, "non-final empty calls ask the model for one more response");
-                AssertContains(FlattenSimple(requests[1]), "Составляю итоговый отчет.",
-                    "checkpoint is accepted into the next model request");
-                AssertContains(FlattenSimple(requests[1]), "RUNTIME_CONTINUE:",
-                    "checkpoint continuation gives the model an explicit next-turn instruction");
-                AssertContains(FlattenSimple(requests[1]), "return it with final=true",
-                    "checkpoint continuation explains how to finish a completed answer");
-                AssertTrue(!session.Messages.Any(message => (message.Content ?? string.Empty).Contains("RUNTIME_CONTINUE:")),
-                    "checkpoint continuation is transient rather than durable chat history");
-                var checkpoint = session.Messages.Single(message => message.ProtocolMessage &&
-                    message.ResponseStatus == AgentResponseStatuses.InProgress &&
-                    (message.Content ?? string.Empty).Contains("Составляю итоговый отчет."));
-                var parsed = ConversationResponseHistoryReader.Read(checkpoint);
-                AssertTrue(parsed.Success && !parsed.Response.Final && parsed.Response.ToolCalls.Count == 0,
-                    "checkpoint is valid v5 history but not terminal");
+                AssertEqual(2, requests.Count, "invalid no-tool intent gets one format repair");
+                AssertContains(FlattenSimple(requests[1]), "FORMAT_REPAIR:",
+                    "repair reaches the model before accepting an answer");
+                AssertContains(FlattenSimple(requests[1]), "final=false requires at least one tool call",
+                    "repair explains the exact invalid combination");
+                AssertTrue(!session.Messages.Any(message => (message.Content ?? string.Empty).Contains("Составляю итоговый отчет.")),
+                    "invalid no-tool response is not accepted into durable history");
                 AssertEqual("Итог готов.", result.AssistantText, "final response owns the visible terminal answer");
                 AssertEqual(RunViewLifecycles.Completed, result.RunViewState.Lifecycle,
                     "final=true empty calls complete the run");

@@ -131,7 +131,7 @@ namespace RNAssistant.Office.Tools
             var find = new JObject
             {
                 ["type"] = "string",
-                ["description"] = "Exact current VBA source to replace, copied from a recent read of moduleName. If it repeats, keep find minimal and add exact contextBefore/contextAfter. LF and CRLF are accepted.",
+                ["description"] = "Current VBA source to replace. Exact matching runs first; if it fails, one unique complete-line token-equivalent block may match VBE spacing/case changes, including line-aligned context. Strings and comments remain significant. Copy from a recent source read; use context to disambiguate repeats.",
                 ["minLength"] = 1
             };
             var text = new JObject

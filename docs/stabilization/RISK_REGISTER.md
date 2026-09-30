@@ -1,5 +1,18 @@
 # Stabilization risk register
 
+## Agent recovery photos — 2026-09-30
+
+The reported VBA patch loop, Excel snapshot refusal and empty-tools stall are
+corrected at their host-neutral contract boundaries. The exact accepted model
+arguments, source bytes, workbook UsedRange and Windows build in the photos are
+unavailable, so their full causal sequence and target-model behavior remain open.
+Owner: VBA mutation diagnostics / AgentKernel / Excel search / ModelProtocol.
+Reproduce on Windows x64 + Office x64 + WebView2 with a redacted trajectory before
+claiming the user scenario qualified; do not infer that a rejected patch wrote code.
+The older R72 and R78 entries below describe their historical implementations;
+the current empty-call and definite no-effect recovery rules are in
+`docs/conversation-protocol.md`.
+
 ## Outlook VSTO pane report — 2026-09-29
 
 Windows photos show two `CS0019` errors in Outlook `OfficeHosts` code; the other

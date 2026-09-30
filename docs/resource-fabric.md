@@ -363,6 +363,12 @@ Capture admits at most 100,000 cells and one million aggregate field characters;
 serialized JSON is independently capped at one million characters. Native range
 cell counts are checked before cell materialization. Invalid/duplicate cells and
 oversize sources fail explicitly, never produce a prefix-as-complete snapshot.
+These are coupled capture and prompt-safety bounds, not a configurable result-count
+limit: increasing only the cell count would still hit the character/JSON limits and
+make per-cell COM capture slower. For an oversized workbook, `excel.inspect` with
+`kind=sheets` exposes UsedRange addresses; search explicit smaller `scope=range`
+slices and report which slices were actually searched. Plain headings use literal
+mode; regex is reserved for an actual pattern.
 Invalid regex is refused before capture. Positive, zero-match and blank-cell results
 retain complete exact evidence; drift and replacement invalidate previous evidence.
 Historical pages do no Excel I/O, and missing CAS never falls forward. Search scopes

@@ -11,7 +11,6 @@ namespace RNAssistant.Core.Agent
 {
     public sealed class AgentKernel
     {
-        private const int MaximumConsecutiveNoToolCheckpoints = 3;
         private readonly IModelProtocol _model;
         private readonly IToolRuntime _tools;
         private readonly IRunStore _store;
@@ -144,13 +143,7 @@ namespace RNAssistant.Core.Agent
                                 "The model tried to finish while the Task List is still active.").ConfigureAwait(false);
                         continue;
                     }
-                    state.NoToolCheckpoints++;
-                    if (state.NoToolCheckpoints >= MaximumConsecutiveNoToolCheckpoints)
-                        return await FinishAsync(state, RunLifecycle.Failed, "model_loop_stalled",
-                            "Model returned final=false with empty tool_calls three consecutive times.").ConfigureAwait(false);
-                    continue;
                 }
-                state.NoToolCheckpoints = 0;
 
                 for (var index = 0; index < response.ToolCalls.Count; index++)
                 {
@@ -188,6 +181,8 @@ namespace RNAssistant.Core.Agent
 
         private ToolPolicySnapshot[] ValidateResponse(AgentResponse response)
         {
+            if (!response.Final && response.ToolCalls.Count == 0)
+                throw new InvalidOperationException("final=false requires at least one tool call.");
             var policies = new List<ToolPolicySnapshot>();
             foreach (var call in response.ToolCalls)
             {
@@ -217,15 +212,13 @@ namespace RNAssistant.Core.Agent
                 return state.Summary(RunLifecycle.Failed, "tool_step_limit", "Tool step limit reached.");
             }
             var callSignature = call.Name + "\n" + call.ArgumentsJson;
-            if (!confirmed && (state.ErrorCallSignatures.Contains(callSignature) ||
-                state.RefreshableErrorCallSignatures.ContainsKey(callSignature) ||
-                state.UnknownCallSignatures.Contains(callSignature)))
+            if (!confirmed && state.UnknownCallSignatures.Contains(callSignature))
             {
                 await RecordNotDispatchedAsync(state, call, policy, stepId,
-                    "An identical failed tool call was already attempted.").ConfigureAwait(false);
+                    "An identical call with an unknown effect was already attempted.").ConfigureAwait(false);
                 return state.Summary(RunLifecycle.Failed,
-                    "repeated_failed_tool_call",
-                    "Model repeated an identical failed tool call.");
+                    "repeated_unknown_tool_call",
+                    "The previous call may have had an effect; it cannot be repeated automatically.");
             }
             var context = new ToolExecutionContext(call, policy, state.RunId, state.TurnId, stepId,
                 _utcNow(), confirmed, remaining, preparedStateJson);
@@ -233,7 +226,6 @@ namespace RNAssistant.Core.Agent
                 stepId, toolContext: context)).ConfigureAwait(false);
             ToolExecutionRecord record;
             RunLifecycle? stop = null;
-            var repeatedUnrefreshedConflict = false;
             var enteredRuntime = false;
             try
             {
@@ -269,36 +261,6 @@ namespace RNAssistant.Core.Agent
                 stop = cancelled ? RunLifecycle.Cancelled : RunLifecycle.Failed;
             }
             if (record.ToolStepsConsumed > remaining) stop = RunLifecycle.Failed;
-            if (record.Outcome == ToolExecutionOutcome.Error)
-            {
-                if (record.Recovery == null ||
-                    record.Recovery.RetryPolicy != ToolRetryPolicy.RefreshRequired)
-                    state.ErrorCallSignatures.Add(callSignature);
-                else
-                {
-                    state.RefreshableErrorCallSignatures[callSignature] = record.Recovery;
-                    if (record.Recovery.FailureKind == ToolFailureKind.ConflictNoEffect &&
-                        record.Recovery.ResourceIdentity != null)
-                    {
-                        repeatedUnrefreshedConflict = state.RefreshableErrorCallSignatures.Values.Count(item =>
-                            item.FailureKind == ToolFailureKind.ConflictNoEffect &&
-                            item.ResourceIdentity != null &&
-                            item.ResourceIdentity.Equals(record.Recovery.ResourceIdentity) &&
-                            string.Equals(item.View, record.Recovery.View, StringComparison.Ordinal)) >= 3;
-                    }
-                }
-            }
-            else if (record.Outcome == ToolExecutionOutcome.Ok && policy.MayHaveSideEffects)
-            {
-                state.ErrorCallSignatures.Clear();
-                state.RefreshableErrorCallSignatures.Clear();
-            }
-            else if (record.Outcome == ToolExecutionOutcome.Ok && record.ResourceEvidence.Count > 0)
-            {
-                var refreshed = state.RefreshableErrorCallSignatures.Where(item =>
-                    record.ResourceEvidence.Any(item.Value.IsSatisfiedBy)).Select(item => item.Key).ToArray();
-                foreach (var signature in refreshed) state.RefreshableErrorCallSignatures.Remove(signature);
-            }
             if (record.Outcome == ToolExecutionOutcome.Unknown)
             {
                 state.UnknownCallSignatures.Add(callSignature);
@@ -313,9 +275,6 @@ namespace RNAssistant.Core.Agent
                 state.Messages.Add(AgentMessage.ToolResult(record));
             await AppendAsync(state, new AgentRunEvent(AgentRunEventKind.ToolCompleted, state.Summary(),
                 stepId, execution: record)).ConfigureAwait(false);
-            if (repeatedUnrefreshedConflict)
-                return state.Summary(RunLifecycle.Failed, "repeated_refresh_required_failure",
-                    "Three changed calls reached the same source conflict without a complete current resource read.");
             if (stop.HasValue || cancellationToken.IsCancellationRequested)
             {
                 if (state.Pending != null)
@@ -389,12 +348,7 @@ namespace RNAssistant.Core.Agent
             internal int ToolSteps;
             internal long Revision;
             internal PendingConfirmation Pending;
-            internal int NoToolCheckpoints;
             internal bool UnknownEffectObserved;
-            internal readonly HashSet<string> ErrorCallSignatures =
-                new HashSet<string>(StringComparer.Ordinal);
-            internal readonly Dictionary<string, ToolRecoveryContract> RefreshableErrorCallSignatures =
-                new Dictionary<string, ToolRecoveryContract>(StringComparer.Ordinal);
             internal readonly HashSet<string> UnknownCallSignatures =
                 new HashSet<string>(StringComparer.Ordinal);
 

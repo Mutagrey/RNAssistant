@@ -62,6 +62,8 @@ namespace RNAssistant.Core.ModelProtocol
             var final = (bool)root["final"];
             if (final && calls.Count > 0)
                 return ConversationResponseParseResult.Fail("final=true is valid only with an empty tool_calls array.");
+            if (!final && calls.Count == 0)
+                return ConversationResponseParseResult.Fail("final=false requires at least one tool call. Use final=true for an answer without tools.");
 
             var parsedCalls = new List<ConversationToolCall>();
             foreach (var token in calls)

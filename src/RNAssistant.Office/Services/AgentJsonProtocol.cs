@@ -159,29 +159,6 @@ namespace RNAssistant.Office.Services
             return protocolMessage;
         }
 
-        public static ChatMessage CreateNoToolCheckpointMessage(string message, RNAssistant.Core.Llm.LlmCompletionResult completion)
-        {
-            var protocolMessage = AgentTranscript.CreateAssistantMessage(
-                ModelProtocolWire.Write(message ?? string.Empty, new ConversationToolCall[0], false),
-                completion,
-                null,
-                AgentResponseStatuses.InProgress);
-            protocolMessage.ProtocolMessage = true;
-            return protocolMessage;
-        }
-
-        public static ChatMessage CreateNoToolCheckpointContinuationMessage()
-        {
-            return new ChatMessage
-            {
-                Role = "user",
-                ProtocolMessage = true,
-                Content = "RUNTIME_CONTINUE:\nThe preceding response was accepted with final=false and empty tool_calls, so the run is still open. " +
-                    "Continue the current request now. If that message was already the complete user-facing answer or asks the user for required input, return it with final=true and empty tool_calls. " +
-                    "Otherwise return the next required tool_calls. Do not repeat a no-tool checkpoint."
-            };
-        }
-
         internal static ChatMessage CreateDeferredFinalMessage(string message, LlmCompletionResult completion)
         {
             var accepted = AgentTranscript.CreateAssistantMessage(

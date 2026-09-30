@@ -42,7 +42,7 @@ namespace RNAssistant.Office.Services
         private IReadOnlyList<ChatAttachment> _currentAttachments;
         private string _currentUserId;
         private ChatMessage _packState;
-        private ChatMessage _noToolContinuation;
+        private ChatMessage _runtimeContinuation;
         private List<ResourceEvidence> _responseEvidence = new List<ResourceEvidence>();
         private CallableToolPack _toolPack;
         private LlmRunCache _runCache;
@@ -125,7 +125,7 @@ namespace RNAssistant.Office.Services
         {
             var activeTools = _toolPack.Tools;
             var snapshot = _lastSnapshot;
-            _noToolContinuation = null;
+            _runtimeContinuation = null;
             _session.LastContextReceipt = snapshot.Receipt;
             _responseEvidence = snapshot.Messages.Where(message =>
                     IsVisibleResourceRead(message) || message.SyntheticResourceObservation)
@@ -186,20 +186,12 @@ namespace RNAssistant.Office.Services
             _session.Messages.Add(accepted);
         }
 
-        internal void AppendNoToolCheckpoint(string message, LlmCompletionResult completion)
-        {
-            var accepted = AgentJsonProtocol.CreateNoToolCheckpointMessage(message, completion);
-            AttachResponseEvidence(accepted);
-            _session.Messages.Add(accepted);
-            _noToolContinuation = AgentJsonProtocol.CreateNoToolCheckpointContinuationMessage();
-        }
-
         internal void AppendDeferredFinal(string message, LlmCompletionResult completion)
         {
             var accepted = AgentJsonProtocol.CreateDeferredFinalMessage(message, completion);
             AttachResponseEvidence(accepted);
             _session.Messages.Add(accepted);
-            _noToolContinuation = AgentJsonProtocol.CreateOpenTaskListContinuationMessage();
+            _runtimeContinuation = AgentJsonProtocol.CreateOpenTaskListContinuationMessage();
         }
 
         internal void AttachResponseEvidence(ChatMessage message)
@@ -440,8 +432,8 @@ namespace RNAssistant.Office.Services
                 current.Attachments = _currentAttachments.ToList();
                 facts[currentIndex] = current;
             }
-            if (_noToolContinuation != null)
-                facts.Add(_noToolContinuation);
+            if (_runtimeContinuation != null)
+                facts.Add(_runtimeContinuation);
             var archivedEvidence = ContextCompactionService.ActiveCheckpoint(_session) == null
                 ? Enumerable.Empty<ResourceEvidence>()
                 : (_session.Messages ?? new List<ChatMessage>())

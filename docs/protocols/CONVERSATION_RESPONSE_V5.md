@@ -1,7 +1,7 @@
 # Conversation Response v5
 
 Status: **active R72 response-intent contract**. Response protocol is `5`;
-current prompt schema is `30` (`AppSettings.CurrentAgentPromptSchemaVersion`).
+current prompt schema is `32` (`AppSettings.CurrentAgentPromptSchemaVersion`).
 Product version is independent and unchanged by this switch. The
 [v4 specification](CONVERSATION_RESPONSE_V4.md) is historical, not a
 runtime compatibility path. This document records host-neutral behavior; Windows,
@@ -26,16 +26,6 @@ The example target is copied from current runtime context or resource discovery.
 }
 ```
 
-No-tool checkpoint:
-
-```json
-{
-  "message": "Составляю итоговый отчет.",
-  "final": false,
-  "tool_calls": []
-}
-```
-
 Final answer:
 
 ```json
@@ -52,11 +42,9 @@ Final answer:
 - `final=true` means only that `message` is the final user-facing answer for the
   model loop. It is valid only with an empty `tool_calls` array.
 - `final=false` with one or more calls is a normal tool turn.
-- `final=false` with empty calls is an accepted no-tool checkpoint. The runtime
-  persists it and asks the model for the next response instead of completing. That
-  next request includes a transient runtime continuation telling the model to emit
-  `final=true` when the checkpoint already contains the complete answer or asks for
-  user input, or to emit the next tool calls; the continuation is not chat history.
+- `final=false` with empty calls is invalid and receives format repair before
+  acceptance. An answer without tools, including a blocker or request for user
+  input, uses `final=true` with empty calls.
 - Message wording never proves execution success, failure, verification or
   refusal. Runtime lifecycle, execution health and effect evidence remain separate.
 - On tool turns, the native schema asks `message` to briefly connect a relevant
@@ -77,11 +65,9 @@ Final answer:
 and `json_object` responses pass through the same local parser and safety checks.
 
 `AgentKernel` completes a model loop only after an accepted response with
-`final=true` and no calls. An accepted `final=false` empty-call response increments
-a bounded no-tool checkpoint counter and continues with the transient instruction
-above. Three consecutive no-tool
-checkpoints fail closed with `model_loop_stalled`, without dispatching tools or
-inventing effects.
+`final=true` and no calls. A `final=false` empty-call response is rejected by
+ModelProtocol before acceptance; AgentKernel also rejects it defensively if a
+protocol implementation bypasses the parser.
 
 The same R29 runtime-ID boundary remains in force: the model supplies only
 `name` and `arguments`; the kernel assigns opaque IDs after whole-response
@@ -100,12 +86,12 @@ evidence and is not automatically retried.
 ## History And Prompts
 
 Accepted assistant records are explicitly marked `ResponseProtocolVersion=5`.
-History is a projection of accepted runtime calls and accepted no-tool/final
+History is a projection of accepted runtime calls and final
 responses, not a second model-facing response format. Unmarked, older or malformed
 assistant history requires explicit reset/new chat; RNAssistant does not sniff,
 convert, dual-write or delete user data automatically.
 
-Agent, Chat and Plan defaults use the same current prompt schema `29`. Missing,
+Agent, Chat and Plan defaults use the same current prompt schema `32`. Missing,
 older or future stored markers require explicit review/reset before execution.
 Prompt guidance must describe `final` as response intent only; tool results and
 read-back evidence remain the authority for effects.
@@ -113,6 +99,6 @@ read-back evidence remain the authority for effects.
 ## Remaining Gates
 
 Required host-neutral evidence covers schema/parser/writer, prompt defaults,
-accepted history, no-tool checkpoint continuation, bounded stalled-loop failure
+accepted history, invalid empty-call repair and defensive kernel rejection
 and unchanged R29 call-ID/result behavior. Windows Office, WebView2 and live
 provider qualification remain open until recorded in stabilization progress.

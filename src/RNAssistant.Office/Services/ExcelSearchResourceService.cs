@@ -62,7 +62,9 @@ namespace RNAssistant.Office.Services
                     ToolEffectEvidence.None, resourceEvidence: _gateway.Evidence(session, read));
             }
             catch (ResourceRequestException error) { return Failure(error.Message, error.ErrorCode); }
-            catch (TextPatternException error) { return Failure(error.Message, error.ErrorCode); }
+            catch (TextPatternException error) { return Failure(error.Message +
+                " For a heading or other plain text, use mode=literal without regex escapes; otherwise correct the regex.",
+                error.ErrorCode); }
             catch (JsonException) { return Failure("Invalid exact Excel search snapshot.", "RESOURCE_SNAPSHOT_UNAVAILABLE"); }
         }
 

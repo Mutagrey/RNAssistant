@@ -46,7 +46,7 @@ namespace RNAssistant.Core.ModelProtocol
                     ["final"] = new JObject
                     {
                         ["type"] = "boolean",
-                        ["description"] = "true only when message is the final answer and tool_calls is empty. false for tool turns and brief no-tool checkpoints."
+                        ["description"] = "true when message is the final answer and tool_calls is empty; false only when tool_calls contains a call."
                     },
                     ["tool_calls"] = new JObject
                     {
@@ -57,7 +57,7 @@ namespace RNAssistant.Core.ModelProtocol
                             ["required"] = new JArray(), ["additionalProperties"] = false
                         },
                         ["maxItems"] = options.Count > 0 ? MaximumToolCalls : 0,
-                        ["description"] = "Calls to execute now. [] ends the loop only with final=true; with final=false it is a bounded checkpoint and proves no effect."
+                        ["description"] = "Calls to execute now. An empty array requires final=true."
                     }
                 },
                 ["required"] = new JArray("message", "final", "tool_calls"),

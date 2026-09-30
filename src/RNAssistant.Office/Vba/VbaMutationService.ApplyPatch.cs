@@ -46,11 +46,12 @@ namespace RNAssistant.Office.Vba
 
             var updated = code;
             var summary = new List<Tuple<string, bool, string>>();
-            foreach (var operation in operations)
+            for (var index = 0; index < operations.Count; index++)
             {
                 cancellationToken.ThrowIfCancellationRequested();
+                var operation = operations[index];
                 var beforeOperation = updated;
-                var result = ApplyPatchOperation(updated, operation, out updated);
+                var result = ApplyPatchOperation(updated, operation, index + 1, out updated);
                 if (result.Status != VbaMutationOutcomeStatus.Ok) return result;
                 summary.Add(Tuple.Create(
                     operation.Operation,
@@ -139,6 +140,7 @@ namespace RNAssistant.Office.Vba
         private static VbaMutationOutcome ApplyPatchOperation(
             string current,
             VbaPatchOperationRequest operation,
+            int hunkIndex,
             out string updated)
         {
             updated = current;
@@ -168,14 +170,19 @@ namespace RNAssistant.Office.Vba
             }
             if (patch.Status == VbaPatchStatus.NotFound)
             {
+                var contextMismatch = patch.FindMatchCount > 0;
                 return VbaMutationOutcome.Error(
-                    "The exact VBA source block was not found in the current module. Nothing was written; re-read the smallest relevant range and rebuild the patch from current code.",
+                    "VBA patch hunk " + hunkIndex + (contextMismatch
+                        ? ": find exists, but its exact adjacent context does not match. Remove or recopy contextBefore/contextAfter from current source."
+                        : ": exact find text does not occur in the current module. Recopy it from current source, or use a unique complete-line block without context to allow VBA spacing/case normalization; keep string literals and comments exact.") +
+                    " Nothing was written; do not repeat this patch unchanged.",
                     new JObject
                     {
+                        ["hunkIndex"] = hunkIndex,
+                        ["findMatchCount"] = patch.FindMatchCount,
                         ["findSha256"] = TextPatternEngine.Sha256(patch.NormalizedFind),
                         ["inspectTool"] = "common.resources_read",
-                        ["discoveryScope"] = "vba",
-                        ["retrySamePatch"] = false
+                        ["discoveryScope"] = "vba"
                     },
                     "vba_patch_stale_source",
                     true);
@@ -183,14 +190,19 @@ namespace RNAssistant.Office.Vba
             if (patch.Status == VbaPatchStatus.Ambiguous)
             {
                 return VbaMutationOutcome.Error(
-                    "The exact VBA source block occurs " + patch.MatchCount + " times. Nothing was written; add exact contextBefore or contextAfter from the same module read so one block is identified.",
+                    (patch.FormatNormalizedMatch ? "The format-equivalent VBA line block" : "The exact VBA source block") +
+                    " occurs " + patch.MatchCount + " times. Nothing was written; " +
+                    (patch.FormatNormalizedMatch
+                        ? "extend the hunk with adjacent complete lines, or copy a unique exact block from current source."
+                        : "add exact contextBefore or contextAfter from the same module read so one block is identified."),
                     new JObject
                     {
+                        ["hunkIndex"] = hunkIndex,
                         ["matchCount"] = patch.MatchCount,
+                        ["matchMode"] = patch.FormatNormalizedMatch ? "formatNormalizedLines" : "exact",
                         ["findSha256"] = TextPatternEngine.Sha256(patch.NormalizedFind),
                         ["inspectTool"] = "common.resources_read",
-                        ["discoveryScope"] = "vba",
-                        ["retrySamePatch"] = false
+                        ["discoveryScope"] = "vba"
                     },
                     "vba_patch_ambiguous",
                     true);
@@ -199,7 +211,9 @@ namespace RNAssistant.Office.Vba
             updated = patch.Text;
             return patch.Status == VbaPatchStatus.Unchanged
                 ? VbaMutationOutcome.Ok("The exact VBA replacement already matches current source; skipped.")
-                : VbaMutationOutcome.Ok("Replaced one exact unique VBA source block without changing text outside it.");
+                : VbaMutationOutcome.Ok(patch.FormatNormalizedMatch
+                    ? "Replaced one unique format-equivalent VBA line block; text outside those complete lines was preserved."
+                    : "Replaced one exact unique VBA source block without changing text outside it.");
         }
     }
 }

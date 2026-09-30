@@ -656,8 +656,9 @@ makes the six-stage operating workflow and prompt/skill/tool authority split
 explicit, strengthens all built-in skill completion criteria, and adds exact
 skill-reference-to-catalog validation. Schema 25 tightens successful finish around
 closing active Task Lists and HTML bound-data render evidence. Schema 26
-adds explicit v5 `final` intent and no-tool checkpoint behavior. Current schema 27
-adds the final read-back, regression check and quality handoff decision before a
+adds explicit v5 `final` intent. Current schema 32 requires `final=true` for every
+empty-call answer and repairs `final=false` with no calls before acceptance; it also
+keeps the final read-back, regression check and quality handoff decision before a
 successful final. Tests
 preserve, review, or reset saved older/future markers explicitly. JS review behavior
 is unchanged.

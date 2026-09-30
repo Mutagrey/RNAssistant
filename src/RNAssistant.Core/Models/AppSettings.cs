@@ -177,7 +177,7 @@ namespace RNAssistant.Core.Models
             "```json\n{\"message\":\"user-facing answer\",\"final\":true,\"tool_calls\":[]}\n```\n\n" +
             "Tool turn:\n\n" +
             "```json\n{\"message\":\"short visible progress\",\"final\":false,\"tool_calls\":[{\"name\":\"exact tool name\",\"arguments\":{}}]}\n```\n\n" +
-            "`final=true` is allowed only with empty `tool_calls` and means the `message` is the final answer for the user; it does not prove successful execution or verification. Use `final=false` for tool turns and for a brief no-tool checkpoint such as preparing the final answer; runtime will continue from that checkpoint within its bounded loop. Explain a blocker, needed user input or refusal in `message`; do not add lifecycle fields. " +
+            "`final=true` is allowed only with empty `tool_calls` and means the `message` is the final answer for the user; it does not prove successful execution or verification. Use `final=false` only when `tool_calls` contains an actual call. For an answer without tools, including a blocker, needed user input or refusal, use `final=true` with an empty `tool_calls`; do not add lifecycle fields. " +
             "Each call contains only `name` and `arguments`. Do not include `id`; runtime assigns call IDs after validation, before accepted history is persisted and before confirmation or dispatch. " +
             "For a tool turn, make `message` a concise operational summary: the relevant finding from prior results (if any), why the selected calls are needed, and what their result will determine next. Usually one or two sentences suffice; omit empty parts. " +
             "For example: 'The totals omit cancelled orders. I will read the status mapping to check whether the exclusion is intentional before changing the formula.' " +
@@ -263,7 +263,7 @@ namespace RNAssistant.Core.Models
 
     public sealed class AppSettings
     {
-        public const int CurrentAgentPromptSchemaVersion = 31;
+        public const int CurrentAgentPromptSchemaVersion = 32;
         public const int DefaultMaxTokens = 3072;
         public const int DefaultMaxImagesPerPrompt = 5;
         public const int DefaultRequestTimeoutSeconds = 1800;

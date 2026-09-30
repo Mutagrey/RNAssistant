@@ -98,8 +98,9 @@ ModelProtocol.
   consumers переключаются вместе, без dual-write и скрытой нормализации.
 - Текущий model response — conversation-response v5: `message`, `final` и
   `tool_calls`; call содержит только `name` и `arguments`. Runtime назначает IDs.
-- Только `final=true` с пустым `tool_calls` завершает model loop. `final=false` с
-  пустым `tool_calls` — bounded checkpoint; эффект этим не доказывается.
+- Только `final=true` с пустым `tool_calls` завершает model loop. `final=false`
+  требует непустой `tool_calls`; пустой массив получает format repair до
+  acceptance. Эффект ответом модели не доказывается.
 - `ok` означает успешное выполнение контракта tool, но не обязательно изменение.
   Изменение доказывается отдельным dispatch/read-back evidence.
 - Возможный внешний эффект после dispatch, который нельзя подтвердить, имеет

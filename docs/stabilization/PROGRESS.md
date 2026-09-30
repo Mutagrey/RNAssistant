@@ -43,6 +43,23 @@ records it directly and reviews the signed release payload before finalization.
 
 ## Implementation log — includes current in-flight work and earlier entries
 
+Agent recovery correction (2026-09-30): Windows photos show repeated
+`vba_patch_stale_source`, a workbook-wide `RESOURCE_SNAPSHOT_TOO_LARGE`, invalid
+Excel regex and a `final=false`/empty-tools stall. Host-neutral changes reject the
+empty-call combination before acceptance and repair it as format; VBA patch now
+reports hunk/context mismatch and accepts a unique complete-line VBA token match,
+including line-aligned context, when VBE changed spacing or identifier case. Definite no-effect failures no longer
+end the run solely because a call repeats or several conflicts occur; possible
+unknown effects remain non-repeatable. Excel oversize guidance points to sheet
+UsedRange inspection and explicit range slices; plain-text search uses literal mode.
+The 100,000-cell/one-million-character exact snapshot bounds remain safety limits,
+not user settings: raising one bound alone would increase COM work without making
+large workbook capture complete. Focused kernel, VBA, Excel, ModelProtocol and
+settings review checks pass. The existing built-in guidance assertion and R61
+inventory gates still fail and are tracked in BACKLOG. Exact Windows
+trajectory, real Office/WebView2 and target-model qualification remain open.
+Prompt schema 32 requires the existing explicit review/reset for saved prompts.
+
 JavaScript computation addition (2026-09-29): a read-only `common.js_run` and
 saved JS tool executor use a separate bounded Jint worker and the existing Resource
 Gateway/Data Plane for named, revision-pinned streamed reads. Tool Library accepts

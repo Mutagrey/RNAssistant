@@ -34,10 +34,7 @@ namespace RNAssistant.Office.Services
                     _stepMessage = fact.Response.Message;
                     // Persist the entire accepted batch before any dispatch. Callable
                     // pack membership changes only at the next model-step boundary.
-                    if (fact.Response.ToolCalls.Count == 0 && !fact.Response.Final)
-                        _modelSession.AppendNoToolCheckpoint(fact.Response.Message,
-                            _lastModel == null ? null : _lastModel.Completion);
-                    else if (fact.Response.ToolCalls.Count == 0 && fact.Response.Final &&
+                    if (fact.Response.ToolCalls.Count == 0 && fact.Response.Final &&
                         _policy.Mode != ChatModes.Chat &&
                         !string.IsNullOrWhiteSpace(_session.ActiveTaskListArtifactId))
                         _modelSession.AppendDeferredFinal(fact.Response.Message,

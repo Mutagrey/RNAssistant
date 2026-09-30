@@ -12,6 +12,26 @@
 новая возможность требует явной задачи, scope и owner; дефекты работающей системы
 приоритетнее расширения без конкретного пользовательского результата.
 
+## Large Excel search without manual range slicing — 2026-09-30
+
+Owner: Excel search / Resource Fabric. `excel.find_cells` needs one complete exact
+snapshot and rejects scopes above 100,000 cells or one million characters. Current
+recovery exposes a path through sheet UsedRange inspection and explicit smaller
+range calls. Evaluate runtime-owned bounded chunk traversal for workbook-wide
+discovery with exact coverage, revision/drift handling, and an explicit incomplete
+result if a chunk fails. Keep per-chunk capture bounds; a single larger configurable
+snapshot would increase COM time, memory and prompt pressure without solving
+coverage.
+
+## Built-in HTML guidance assertion drift — 2026-09-30
+
+Owner: prompt guidance / harness. The focused `settings: built-in guidance uses
+runtime IDs and result v1` check expects the old literal phrase about Office read
+and bind returning `status=ok`; the current HTML skill instead describes exact
+binding coverage and visible render evidence. Reconcile that assertion against the
+current HTML contract in a separate change. This is unrelated to VBA patch or
+Excel search behavior.
+
 ## Large resource working set and compacted action memory — 2026-09-29
 
 Owner: Resource Fabric / model context compiler / context compaction. A model-facing
@@ -55,6 +75,9 @@ runtime has `display.*`, baseline has `mode`). Review these inherited contracts
 in a separate approved slice before updating their baseline. The new
 `common.resources_read` section schema matches its reviewed inventory row.
 This gate remains failed; it is not Windows qualification.
+The 2026-09-30 Excel search and VBA patch wording/schema changes also need a
+reviewed inventory refresh when this inherited gate is reconciled; do not replace
+the entire expected inventory blindly.
 
 ## Resource read prompt wording — 2026-09-28
 

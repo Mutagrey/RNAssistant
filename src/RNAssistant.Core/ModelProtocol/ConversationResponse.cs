@@ -19,6 +19,7 @@ namespace RNAssistant.Core.ModelProtocol
         {
             var snapshot = (calls ?? new ConversationToolCall[0]).ToArray();
             if (final && snapshot.Length > 0) throw new ArgumentException("A final response cannot contain tool calls.", nameof(final));
+            if (!final && snapshot.Length == 0) throw new ArgumentException("A non-final response requires a tool call.", nameof(final));
             Message = message;
             Final = final;
             ToolCalls = Array.AsReadOnly(snapshot);

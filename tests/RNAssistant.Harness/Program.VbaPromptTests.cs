@@ -2027,6 +2027,7 @@ namespace RNAssistant.Harness
                     session);
                 AssertEqual("vba_patch_stale_source", rejected.ErrorCode,
                     "an exact patch is checked against current live source");
+                AssertContains(rejected.Message, "hunk 1", "stale patch identifies the failed hunk");
                 AssertEqual("A\nX\nB\nC", adapter.VbaModuleCode, "stale exact patch leaves current module intact");
                 AssertEqual(1, adapter.CountVbaCalls(FakeVbaOperation.ReplaceModule),
                     "stale exact hunk never reaches the backend writer");
@@ -2123,9 +2124,65 @@ namespace RNAssistant.Harness
                     "unchanged replacement still requires one unambiguous match");
             }
             AssertEqual("B", VbaPatchEngine.Replace("aaa", "aaa", "B").Text, "full source remains a unique match");
+            var normalized = VbaPatchEngine.Replace(
+                "Sub Main()\r\n    If X = 1 Then\r\n        Debug.Print \"old\"\r\n    End If\r\nEnd Sub",
+                "if x=1 then\nDebug.Print \"old\"\nend if",
+                "If X = 2 Then\nDebug.Print \"new\"\nEnd If");
+            AssertEqual(VbaPatchStatus.Changed, normalized.Status,
+                "one complete VBA line block survives VBE spacing and identifier case normalization");
+            AssertTrue(normalized.FormatNormalizedMatch, "format-normalized match is reported explicitly");
+            AssertContains(normalized.Text, "Sub Main()\r\nIf X = 2 Then\r\nDebug.Print \"new\"\r\nEnd If\r\nEnd Sub",
+                "format-normalized replacement preserves text outside matched complete lines");
+            AssertEqual(VbaPatchStatus.NotFound,
+                VbaPatchEngine.Replace("Debug.Print \"actual\"", "debug.print \"different\"", "Debug.Print \"new\"").Status,
+                "string literal differences never normalize into a match");
+            AssertEqual(VbaPatchStatus.Ambiguous,
+                VbaPatchEngine.Replace("    X = 1\n    X = 1", "x=1", "X = 2").Status,
+                "two format-equivalent lines remain ambiguous");
+            var contextual = VbaPatchEngine.Replace(
+                "If x = 1 Then\n    Debug.Print \"old\"\nEnd If\nIf x = 2 Then\n    Debug.Print \"old\"\nEnd If",
+                "debug.print \"old\"", "Debug.Print \"new\"",
+                "if X=2 then\n", "\nend if");
+            AssertEqual(VbaPatchStatus.Changed, contextual.Status,
+                "line-aligned normalized context selects one of two equivalent find lines");
+            AssertContains(contextual.Text,
+                "If x = 1 Then\n    Debug.Print \"old\"\nEnd If\nIf x = 2 Then\nDebug.Print \"new\"\nEnd If",
+                "context remains unchanged while only the selected find line is replaced");
+            AssertEqual(VbaPatchStatus.NotFound,
+                VbaPatchEngine.Replace("    X = 1", "x=1", "X = 2", "wrong\n", null).Status,
+                "different line-aligned context cannot select an otherwise matching line");
+            AssertEqual(VbaPatchStatus.NotFound,
+                VbaPatchEngine.Replace("prefix X = 1", "x=1", "X = 2", "prefix ", null).Status,
+                "inline context remains exact after an exact-match miss");
             AssertEqual(VbaPatchStatus.NotFound, VbaPatchEngine.Replace("A", "B", "C").Status, "stale source rejected");
+            var contextMismatch = VbaPatchEngine.Replace("before\nfind\nafter", "find", "new", "wrong\n", "\nafter");
+            AssertEqual(VbaPatchStatus.NotFound, contextMismatch.Status, "incorrect context rejects the edit");
+            AssertEqual(1, contextMismatch.FindMatchCount, "diagnostic distinguishes wrong context from missing find");
             AssertEqual(VbaPatchStatus.EmptyFind, VbaPatchEngine.Replace("A", null, "B").Status, "empty find rejected");
             AssertEqual(string.Empty, VbaPatchEngine.Replace("A", "A", null).Text, "null replacement is deletion");
+        }
+
+        private static void VbaPatchAcceptsUniqueFormatNormalizedLine()
+        {
+            WithTempExecutor(delegate(OfficeToolExecutor executor, FakeOfficeAdapter adapter)
+            {
+                adapter.VbaModuleCode = "Sub Main()\n    Debug.Print \"old\"\nEnd Sub";
+                var result = executor.ExecuteManual(
+                    Command(VbaToolCatalog.ApplyPatch, "moduleName", "Module1",
+                        "patch", new JArray(new JObject
+                        {
+                            ["find"] = "debug.print \"old\"",
+                            ["text"] = "Debug.Print \"new\""
+                        })),
+                    OfficeToolCatalog.ForHost(adapter.HostName)
+                        .Concat(executor.GetControllerTools()).ToList(),
+                    new AppSettings { AutoConfirmToolActions = true }, false, false);
+                AssertTrue(result.Success, "unique format-equivalent VBA line can be patched");
+                AssertEqual("Sub Main()\nDebug.Print \"new\"\nEnd Sub", adapter.VbaModuleCode,
+                    "only the matched complete line is replaced");
+                AssertEqual(1, adapter.CountVbaCalls(FakeVbaOperation.ReplaceModule),
+                    "normalized match still uses one guarded whole-module write");
+            });
         }
 
         private static void VbaLiveHashPreservesLineStructure()

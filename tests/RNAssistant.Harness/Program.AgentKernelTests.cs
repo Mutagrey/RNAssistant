@@ -87,18 +87,17 @@ namespace RNAssistant.Harness
             }
         }
 
-        private static async Task KernelContinuesAfterNoToolCheckpoint()
+        private static async Task KernelRejectsNoToolNonFinal()
         {
             var f = new KernelFixture(
                 new AgentResponseDraft("Составляю итог.", new ToolCallDraft[0], false),
                 KernelResponse());
             var result = await f.RunAsync();
-            AssertEqual(RunLifecycle.Completed, result.Summary.Lifecycle, "non-final empty calls do not finish the loop");
-            AssertEqual(2, f.Model.Requests.Count, "kernel asks the model for the final response after a no-tool checkpoint");
-            AssertEqual(2, f.Store.Events.Count(e => e.Kind == AgentRunEventKind.ResponseAccepted),
-                "checkpoint and final response are both accepted");
-            AssertEqual("Done; all changes applied.", result.Summary.AssistantMessage,
-                "final response owns the terminal message");
+            AssertEqual(RunLifecycle.Failed, result.Summary.Lifecycle, "invalid accepted intent fails closed");
+            AssertEqual("invalid_accepted_response", result.Summary.Reason, "kernel rejects a bypassed parser");
+            AssertEqual(1, f.Model.Requests.Count, "kernel does not continue an invalid no-tool response");
+            AssertEqual(0, f.Store.Events.Count(e => e.Kind == AgentRunEventKind.ResponseAccepted),
+                "invalid response is never persisted as accepted");
         }
 
         private static async Task KernelCompletionGateBoundsOpenTask()
@@ -119,44 +118,27 @@ namespace RNAssistant.Harness
                 "the completion gate does not invent tool effects");
         }
 
-        private static async Task KernelFailsRepeatedNoToolCheckpoints()
-        {
-            var f = new KernelFixture(
-                new AgentResponseDraft("One.", new ToolCallDraft[0], false),
-                new AgentResponseDraft("Two.", new ToolCallDraft[0], false),
-                new AgentResponseDraft("Three.", new ToolCallDraft[0], false));
-            var result = await f.RunAsync();
-            AssertEqual(RunLifecycle.Failed, result.Summary.Lifecycle, "repeated no-tool checkpoints fail closed");
-            AssertEqual("model_loop_stalled", result.Summary.Reason, "stalled no-tool loop has explicit reason");
-            AssertContains(result.Summary.AssistantMessage, "final=false with empty tool_calls",
-                "stall diagnostic identifies the accepted model intent");
-            AssertEqual(3, f.Model.Requests.Count, "stall is bounded");
-            AssertEqual(0, f.Tools.Calls.Count, "stalled checkpoint loop dispatches no tools");
-        }
-
-        private static async Task KernelStopsIdenticalFailedToolCall()
+        private static async Task KernelRetriesIdenticalDefiniteFailure()
         {
             const string arguments = "{\"target\":\"same invalid target\"}";
             var f = new KernelFixture(
                 KernelResponse(KernelCall("read", arguments)),
-                KernelResponse(KernelCall("read", arguments)));
+                KernelResponse(KernelCall("read", arguments)),
+                KernelResponse());
+            var outcomes = new Queue<ToolExecutionOutcome>(new[]
+            { ToolExecutionOutcome.Error, ToolExecutionOutcome.Ok });
             f.Tools.OnExecute = (context, token) => Task.FromResult(
-                KernelRecord(context, ToolExecutionOutcome.Error));
+                KernelRecord(context, outcomes.Dequeue()));
 
             var result = await f.RunAsync();
 
-            AssertEqual(RunLifecycle.Failed, result.Summary.Lifecycle,
-                "identical failed call stops the run");
-            AssertEqual("repeated_failed_tool_call", result.Summary.Reason,
-                "repeat has an explicit terminal reason");
-            AssertEqual(1, f.Tools.Calls.Count,
-                "identical failed call is dispatched only once");
-            AssertTrue(f.Store.Events.Any(item => item.Execution != null &&
-                    item.Execution.Outcome == ToolExecutionOutcome.NotDispatched),
-                "repeated accepted call is closed without dispatch");
+            AssertEqual(RunLifecycle.Completed, result.Summary.Lifecycle,
+                "a definite no-effect error does not terminate a recoverable run");
+            AssertEqual(2, f.Tools.Calls.Count,
+                "the same call may succeed when its underlying state changes");
         }
 
-        private static async Task KernelStopsChangedCallsWithoutRequiredRefresh()
+        private static async Task KernelContinuesChangedConflicts()
         {
             var f = new KernelFixture(
                 KernelResponse(KernelCall("write", "{\"path\":\"index.html\",\"content\":\"first\"}")),
@@ -172,12 +154,10 @@ namespace RNAssistant.Harness
 
             var result = await f.RunAsync();
 
-            AssertEqual(RunLifecycle.Failed, result.Summary.Lifecycle,
-                "changed rejected writes to one source stop the run");
-            AssertEqual("repeated_refresh_required_failure", result.Summary.Reason,
-                "missing current source has an explicit stall reason");
+            AssertEqual(RunLifecycle.Completed, result.Summary.Lifecycle,
+                "changed rejected writes do not impose a separate retry cap");
             AssertEqual(3, f.Tools.Calls.Count, "all three refusals are recorded once");
-            AssertEqual(3, f.Model.Requests.Count, "kernel does not request another rewrite");
+            AssertEqual(4, f.Model.Requests.Count, "model may replan or finish after refusals");
         }
 
         private static async Task KernelAllowsFailedCallAfterInterveningSuccess()
@@ -208,37 +188,38 @@ namespace RNAssistant.Harness
                 "kernel continues to the final answer after corrective execution");
         }
 
-        private static async Task KernelDoesNotResetFailedCallsAfterAnotherFailure()
+        private static async Task KernelContinuesAfterAlternatingFailures()
         {
             const string first = "{\"target\":\"first invalid target\"}";
             const string second = "{\"target\":\"second invalid target\"}";
             var f = new KernelFixture(
                 KernelResponse(KernelCall("read", first)),
                 KernelResponse(KernelCall("read", second)),
-                KernelResponse(KernelCall("read", first)));
+                KernelResponse(KernelCall("read", first)),
+                KernelResponse());
             f.Tools.OnExecute = (context, token) => Task.FromResult(
                 KernelRecord(context, ToolExecutionOutcome.Error));
 
             var result = await f.RunAsync();
 
-            AssertEqual(RunLifecycle.Failed, result.Summary.Lifecycle,
-                "another failure does not authorize an earlier failed call");
-            AssertEqual("repeated_failed_tool_call", result.Summary.Reason,
-                "alternating failed calls remain bounded");
-            AssertEqual(2, f.Tools.Calls.Count,
-                "earlier failed call is not dispatched twice without a success");
+            AssertEqual(RunLifecycle.Completed, result.Summary.Lifecycle,
+                "definite failures leave the model free to choose a next step");
+            AssertEqual(3, f.Tools.Calls.Count,
+                "same no-effect call may be attempted again without a kernel cap");
         }
 
-        private static async Task KernelDoesNotResetFailedCallsAfterSuccessfulRead()
+        private static async Task KernelAllowsDefiniteRetryAfterRead()
         {
-            const string failed = "{\"target\":\"invalid target\"}";
+            const string failed = "{\"target\":\"current module\"}";
             var f = new KernelFixture(
                 KernelResponse(KernelCall("write", failed)),
-                KernelResponse(KernelCall("read", "{\"target\":\"status\"}")),
-                KernelResponse(KernelCall("write", failed)));
+                KernelResponse(KernelCall("read", "{\"target\":\"source\"}")),
+                KernelResponse(KernelCall("write", failed)),
+                KernelResponse());
             var outcomes = new Queue<ToolExecutionOutcome>(new[]
             {
                 ToolExecutionOutcome.Error,
+                ToolExecutionOutcome.Ok,
                 ToolExecutionOutcome.Ok
             });
             f.Tools.OnExecute = (context, token) => Task.FromResult(
@@ -246,70 +227,10 @@ namespace RNAssistant.Harness
 
             var result = await f.RunAsync();
 
-            AssertEqual(RunLifecycle.Failed, result.Summary.Lifecycle,
-                "read-only success cannot correct a failed mutation");
-            AssertEqual("repeated_failed_tool_call", result.Summary.Reason,
-                "failed mutation remains bounded after a read");
-            AssertEqual(2, f.Tools.Calls.Count,
-                "read-only success does not redispatch the failed mutation");
-
-            var identity = new ResourceIdentity("rna://vba/document/component/module1");
-            var requirement = new ToolRecoveryContract(
-                ToolFailureKind.ConflictNoEffect,
-                ToolRetryPolicy.RefreshRequired,
-                identity,
-                ResourceRepresentations.Source,
-                "VBA module: Module1");
-            var matchingEvidence = new ResourceEvidence("evidence", new ResourceAuthorityScopeId("document", "document"),
-                new ResourceRef(identity.Uri, "revision"), ResourceRepresentations.Source, ResourceCoverage.Whole(),
-                true, 1);
-            var incompleteEvidence = new ResourceEvidence("partial", new ResourceAuthorityScopeId("document", "document"),
-                new ResourceRef(identity.Uri, "revision"), ResourceRepresentations.Source,
-                new ResourceCoverage(ResourceCoverageKinds.CharacterRange, start: 0, end: 10), false, 1);
-            var insufficient = new KernelFixture(
-                KernelResponse(KernelCall("write", failed)),
-                KernelResponse(KernelCall("read", "{\"target\":\"VBA module prefix\"}")),
-                KernelResponse(KernelCall("write", failed)));
-            var insufficientCall = 0;
-            insufficient.Tools.OnExecute = (context, token) =>
-            {
-                insufficientCall++;
-                return Task.FromResult(insufficientCall == 1
-                    ? KernelRecord(context, ToolExecutionOutcome.Error, recovery: requirement)
-                    : KernelRecord(context, resourceEvidence: new[] { incompleteEvidence }));
-            };
-
-            var stillBlocked = await insufficient.RunAsync();
-
-            AssertEqual(RunLifecycle.Failed, stillBlocked.Summary.Lifecycle,
-                "partial source evidence cannot authorize the same operation again");
-            AssertEqual("repeated_failed_tool_call", stillBlocked.Summary.Reason,
-                "incomplete recovery evidence keeps the failed operation bounded");
-            AssertEqual(2, insufficient.Tools.Calls.Count,
-                "partial source read does not redispatch the failed write");
-
-            var recoverable = new KernelFixture(
-                KernelResponse(KernelCall("write", failed)),
-                KernelResponse(KernelCall("read", "{\"target\":\"VBA module: Module1 - Source\"}")),
-                KernelResponse(KernelCall("write", failed)),
-                KernelResponse());
-            var call = 0;
-            recoverable.Tools.OnExecute = (context, token) =>
-            {
-                call++;
-                if (call == 1) return Task.FromResult(KernelRecord(context,
-                    ToolExecutionOutcome.Error, recovery: requirement));
-                if (call == 2) return Task.FromResult(KernelRecord(context,
-                    resourceEvidence: new[] { matchingEvidence }));
-                return Task.FromResult(KernelRecord(context));
-            };
-
-            var recovered = await recoverable.RunAsync();
-
-            AssertEqual(RunLifecycle.Completed, recovered.Summary.Lifecycle,
-                "matching complete resource refresh allows the same operation again");
-            AssertEqual(3, recoverable.Tools.Calls.Count,
-                "failed write, required source read and retried write each dispatch once");
+            AssertEqual(RunLifecycle.Completed, result.Summary.Lifecycle,
+                "definite no-effect failure can be retried after reading current source");
+            AssertEqual(3, f.Tools.Calls.Count,
+                "read and successful retry reach the tool runtime once each");
         }
 
         private static async Task KernelNeverRepeatsUnknownCallAfterInterveningSuccess()
@@ -331,8 +252,8 @@ namespace RNAssistant.Harness
 
             AssertEqual(RunLifecycle.Failed, result.Summary.Lifecycle,
                 "the exact same possible effect remains non-repeatable");
-            AssertEqual("repeated_failed_tool_call", result.Summary.Reason,
-                "unknown write repeat uses the bounded duplicate-call guard");
+            AssertEqual("repeated_unknown_tool_call", result.Summary.Reason,
+                "unknown write remains non-repeatable because an effect may exist");
             AssertEqual(2, f.Tools.Calls.Count,
                 "intervening success does not redispatch the unknown write");
         }
