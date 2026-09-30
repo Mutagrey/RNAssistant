@@ -38,7 +38,10 @@ Agent JavaScript is experimental and disabled by default. The Settings → Agent
 Execution checkbox `JavaScript инструменты агента` enables it for separate testing.
 While disabled, `common.js_run` and saved JS packages are absent from the visible
 tool catalog, JS creation fields and guidance are omitted from `common.tools_upsert`,
-and direct execution or authoring fails closed. Saved JS packages remain on disk.
+and direct execution or authoring fails closed. Its VBA-only model schema omits
+`host` and `executor`: the manifest owns the package host and VBA is the only
+available executor. When enabled, the schema exposes `executor`, `host`,
+`parameters` and `code` for JS package authoring. Saved JS packages remain on disk.
 This switch does not affect JavaScript inside an HTML workspace/WebView page.
 There is no dedicated built-in JS skill; the existing Tool Authoring skill describes
 VBA packages only, so disabling the switch leaves no JS skill instructions active.

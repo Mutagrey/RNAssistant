@@ -21,8 +21,6 @@ namespace RNAssistant.Office.Tools
                     ["minLength"] = 1,
                     ["maxLength"] = 128
                 },
-                ["executor"] = enableJavaScript ? EnumProperty("Custom tool runtime.", "vba", "js") : EnumProperty("Custom tool runtime.", "vba"),
-                ["host"] = EnumProperty(enableJavaScript ? "Tool host; JS may use Common." : "Tool host.", "Common", "Excel", "Word", "PowerPoint", "Outlook"),
                 ["name"] = BoundedStringProperty("User-visible tool name.", 200),
                 ["description"] = BoundedStringProperty("Tool description for model discovery.", 8000),
                 ["components"] = new JObject
@@ -66,6 +64,8 @@ namespace RNAssistant.Office.Tools
             };
             if (enableJavaScript)
             {
+                properties["executor"] = EnumProperty("Custom tool runtime.", "vba", "js");
+                properties["host"] = EnumProperty("Tool host for JavaScript packages; VBA host comes from its manifest.", "Common", "Excel", "Word", "PowerPoint", "Outlook");
                 properties["parameters"] = BoundedStringProperty("Strict object JSON Schema serialized as a string for saved JS tool arguments.", 64000);
                 properties["code"] = BoundedStringProperty("Complete JS async function body when executor=js.", 1000000);
             }

@@ -55,10 +55,18 @@ UsedRange inspection and explicit range slices; plain-text search uses literal m
 The 100,000-cell/one-million-character exact snapshot bounds remain safety limits,
 not user settings: raising one bound alone would increase COM work without making
 large workbook capture complete. Focused kernel, VBA, Excel, ModelProtocol and
-settings review checks pass. The existing built-in guidance assertion and R61
-inventory gates still fail and are tracked in BACKLOG. Exact Windows
+settings review checks pass. The existing built-in guidance assertion remains
+open in BACKLOG. Exact Windows
 trajectory, real Office/WebView2 and target-model qualification remain open.
 Prompt schema 32 requires the existing explicit review/reset for saved prompts.
+
+Tool authoring and R61 inventory correction (2026-09-30): with Agent JavaScript
+disabled, `common.tools_upsert` no longer exposes VBA-irrelevant `host` and
+`executor`; the VBA manifest supplies the host. Focused semantic authoring, JS
+switch and pipeline checks pass. The 69-row inventory now matches the reviewed
+Plan `startNew`/Agent admission, resource-find guidance, VBA patch and Excel search
+descriptors; its host-neutral gate passes. Windows/Office and live-model checks
+remain open.
 
 JavaScript computation addition (2026-09-29): a read-only `common.js_run` and
 saved JS tool executor use a separate bounded Jint worker and the existing Resource

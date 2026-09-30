@@ -57,14 +57,25 @@ namespace RNAssistant.Harness
                     JsToolHandler.RunId, "catalogs").Items.Count,
                     "disabled JS run is absent from resource discovery");
                 var upsert = catalog.GetVisibleTools().Single(item => item.Id == ToolAuthoringCatalog.UpsertToolId);
+                var disabledSchema = JObject.Parse(upsert.ArgumentSchemaJson);
                 AssertTrue(!upsert.Description.Contains("JavaScript") &&
-                    !upsert.ArgumentSchemaJson.Contains("\"js\""),
+                    disabledSchema.SelectToken("properties.executor") == null &&
+                    disabledSchema.SelectToken("properties.host") == null &&
+                    disabledSchema.SelectToken("properties.parameters") == null &&
+                    disabledSchema.SelectToken("properties.code") == null,
                     "disabled JS authoring instructions and schema are hidden");
                 AssertTrue(!executor.ValidateToolDefinition(tool).Success,
                     "disabled JS source cannot be saved");
                 settings.EnableAgentJavaScript = true;
                 AssertTrue(catalog.GetVisibleTools().Any(item => item.Id == JsToolHandler.RunId),
                     "enabled JS run appears in the agent catalog");
+                var enabledSchema = JObject.Parse(catalog.GetVisibleTools()
+                    .Single(item => item.Id == ToolAuthoringCatalog.UpsertToolId).ArgumentSchemaJson);
+                AssertTrue(enabledSchema.SelectToken("properties.executor.enum") is JArray &&
+                    enabledSchema.SelectToken("properties.host") != null &&
+                    enabledSchema.SelectToken("properties.parameters") != null &&
+                    enabledSchema.SelectToken("properties.code") != null,
+                    "enabled JS authoring exposes the package fields it needs");
                 AssertTrue(executor.ResourceGateway.Find(resourceSession,
                     JsToolHandler.RunId, "catalogs").Items.Any(),
                     "enabled JS run appears in resource discovery");

@@ -66,19 +66,6 @@ six Office files for `DocumentIdentity.` because the text scan also matches
 `670301c9`; the Outlook attachment slice adds none. Correct identifier matching in a
 separate approved test correction; do not treat this failed gate as passed.
 
-## Resource prompt test expectation — 2026-09-08
-
-Owner: tool contracts / harness. During Markdown section-read verification against
-`22575b8c`, R61 inventory still differs for unchanged `common.resources_find`
-(schema fingerprint) and `common.tools_upsert` (fingerprint and property paths:
-runtime has `display.*`, baseline has `mode`). Review these inherited contracts
-in a separate approved slice before updating their baseline. The new
-`common.resources_read` section schema matches its reviewed inventory row.
-This gate remains failed; it is not Windows qualification.
-The 2026-09-30 Excel search and VBA patch wording/schema changes also need a
-reviewed inventory refresh when this inherited gate is reconciled; do not replace
-the entire expected inventory blindly.
-
 ## Resource read prompt wording — 2026-09-28
 
 Owner: Agent/Chat prompt defaults and Resource Fabric. Current Chat instructions
