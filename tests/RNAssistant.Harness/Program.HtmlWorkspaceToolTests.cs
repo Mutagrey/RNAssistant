@@ -256,6 +256,95 @@ namespace RNAssistant.Harness
                 });
         }
 
+        private static void HtmlWorkspacePatchMismatchReturnsCurrentSource()
+        {
+            WithTempExecutor(FakeOfficeAdapter.ForHost("Excel"),
+                delegate(OfficeToolExecutor executor, FakeOfficeAdapter adapter)
+                {
+                    var session = NewSession(adapter);
+                    var definitions = OfficeToolCatalog.ForHost(adapter.HostName)
+                        .Concat(executor.GetControllerTools()).ToList();
+                    var runtime = executor.CreateNativeRuntime(
+                        session, definitions, new AppSettings(), "agent", false);
+                    var source = "const first = 1;\nconst second = 2;\r\nconst third = 3;";
+                    var created = ExecuteHtmlNative(runtime,
+                        HtmlWorkspaceToolCatalog.WriteFileToolId,
+                        new JObject { ["path"] = "app.js", ["content"] = source });
+                    AssertEqual(ToolExecutionOutcome.Ok, created.Outcome,
+                        "mixed-newline source is created");
+                    var revision = session.ActiveHtmlArtifactId;
+
+                    var failed = ExecuteHtmlNative(runtime,
+                        HtmlWorkspaceToolCatalog.ApplyPatchToolId,
+                        new JObject
+                        {
+                            ["path"] = "app.js",
+                            ["patch"] = new JArray(
+                                new JObject { ["op"] = "replace",
+                                    ["find"] = "const first = 1;\nconst second = 2;",
+                                    ["text"] = "const first = 4;" },
+                                new JObject { ["op"] = "replace",
+                                    ["find"] = "const missing = 9;",
+                                    ["text"] = "const missing = 10;" })
+                        });
+                    AssertEqual(ToolExecutionOutcome.Error, failed.Outcome,
+                        "missing second anchor refuses the whole patch");
+                    AssertEqual(ToolDispatchEvidence.NotDispatched, failed.Evidence.Dispatch,
+                        "failed patch never reaches the workspace write");
+                    AssertEqual(revision, session.ActiveHtmlArtifactId,
+                        "failed patch keeps the active revision");
+                    AssertEqual(source, session.HtmlWorkspace.Files.Single().Content,
+                        "earlier in-memory hunk is not saved after a later failure");
+                    var data = JObject.Parse(failed.Result.DataJson);
+                    AssertEqual("text_patch_not_found", (string)data["code"],
+                        "mismatch has a precise code");
+                    AssertEqual(2, (int)data["hunkIndex"],
+                        "mismatch identifies the failed hunk");
+                    AssertEqual(source, (string)data["recovery"]["currentContent"],
+                        "model-facing result contains the current source");
+                    AssertEqual(source, failed.Recovery.CurrentContent,
+                        "bounded recovery returns the exact current source");
+                    AssertTrue(failed.Recovery.CurrentContentComplete,
+                        "recovery labels the complete source");
+                    AssertEqual(ToolRetryPolicy.Replan, failed.Recovery.RetryPolicy,
+                        "model can repair the patch from returned source");
+
+                    var corrected = ExecuteHtmlNative(runtime,
+                        HtmlWorkspaceToolCatalog.ApplyPatchToolId,
+                        new JObject
+                        {
+                            ["path"] = "app.js",
+                            ["patch"] = new JArray(new JObject { ["op"] = "replace",
+                                ["find"] = "const first = 1;\nconst second = 2;",
+                                ["text"] = "const first = 4;" })
+                        });
+                    AssertEqual(ToolExecutionOutcome.Ok, corrected.Outcome,
+                        "a copied exact anchor across mixed line endings applies");
+                    AssertContains(session.HtmlWorkspace.Files.Single().Content,
+                        "const first = 4;\r\nconst third = 3;",
+                        "replacement affects only the copied block");
+
+                    var largeSource = string.Concat(Enumerable.Repeat("// source line\n", 900));
+                    var large = ExecuteHtmlNative(runtime,
+                        HtmlWorkspaceToolCatalog.WriteFileToolId,
+                        new JObject { ["path"] = "large.js", ["content"] = largeSource });
+                    AssertEqual(ToolExecutionOutcome.Ok, large.Outcome,
+                        "large source is created");
+                    var missingLarge = ExecuteHtmlNative(runtime,
+                        HtmlWorkspaceToolCatalog.ApplyPatchToolId,
+                        new JObject { ["path"] = "large.js",
+                            ["patch"] = new JArray(new JObject { ["op"] = "replace",
+                                ["find"] = "missing anchor", ["text"] = "new" }) });
+                    AssertEqual(ToolExecutionOutcome.Error, missingLarge.Outcome,
+                        "large missing anchor is rejected");
+                    AssertEqual(ToolRetryPolicy.RefreshRequired,
+                        missingLarge.Recovery.RetryPolicy,
+                        "large source requires a fresh resource read");
+                    AssertTrue(missingLarge.Recovery.CurrentContent == null,
+                        "large source is not silently truncated in recovery");
+                });
+        }
+
         private static void HtmlWorkspaceBatchedWritesUsePerCallOperationIdentity()
         {
             WithTempExecutor(FakeOfficeAdapter.ForHost("Excel"),

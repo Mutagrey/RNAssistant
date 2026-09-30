@@ -555,6 +555,7 @@ namespace RNAssistant.Harness
                 Test("tools: manual read-only run skips chat lease", ManualReadOnlyRunSkipsChatLease),
                 Test("tools: html workspace updates session", HtmlWorkspaceToolsUpdateChatSession),
                 Test("html tools: native ownership and typed binding", HtmlWorkspaceUsesExactNativeOwnership),
+                Test("html tools: patch mismatch returns current source", HtmlWorkspacePatchMismatchReturnsCurrentSource),
                 Test("html tools: batched writes keep per-call operation identity", HtmlWorkspaceBatchedWritesUsePerCallOperationIdentity),
                 Test("html tools: replacement requires current source", HtmlWorkspaceReplacementRequiresCurrentSource),
                 Test("html tools: visible source read authorizes next write", HtmlWorkspaceVisibleSourceReadAuthorizesNextWrite),

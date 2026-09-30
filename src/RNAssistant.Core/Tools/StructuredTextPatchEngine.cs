@@ -46,11 +46,13 @@ namespace RNAssistant.Core.Tools
     public sealed class StructuredTextPatchException : Exception
     {
         public string ErrorCode { get; private set; }
+        public int OperationIndex { get; private set; }
 
-        public StructuredTextPatchException(string errorCode, string message)
+        public StructuredTextPatchException(string errorCode, string message, int operationIndex = 0)
             : base(message)
         {
             ErrorCode = errorCode;
+            OperationIndex = operationIndex;
         }
     }
 
@@ -69,18 +71,26 @@ namespace RNAssistant.Core.Tools
 
             var current = source ?? string.Empty;
             var result = new StructuredTextPatchResult();
-            foreach (var operation in items)
+            for (var index = 0; index < items.Count; index++)
             {
+                var operation = items[index];
                 if (operation == null)
                 {
-                    throw Error("text_patch_invalid", "Each patch operation must be an object.");
+                    throw Error("text_patch_invalid", "Each patch operation must be an object.", index + 1);
                 }
 
                 StructuredTextPatchStep step;
-                current = ApplyOne(current, operation, out step);
+                try
+                {
+                    current = ApplyOne(current, operation, out step);
+                }
+                catch (StructuredTextPatchException ex)
+                {
+                    throw Error(ex.ErrorCode, "Patch operation " + (index + 1) + ": " + ex.Message, index + 1);
+                }
                 if (maxOutputCharacters > 0 && current.Length > maxOutputCharacters)
                 {
-                    throw Error("text_patch_too_large", "Patched text exceeds " + maxOutputCharacters + " characters.");
+                    throw Error("text_patch_too_large", "Patched text exceeds " + maxOutputCharacters + " characters.", index + 1);
                 }
                 result.Steps.Add(step);
             }
@@ -97,7 +107,8 @@ namespace RNAssistant.Core.Tools
             var op = (operation.Op ?? string.Empty).Trim();
             var normalized = op.ToLowerInvariant();
             var text = MatchLineEndings(operation.Text ?? string.Empty, current);
-            var find = MatchLineEndings(operation.Find, current);
+            var find = operation.Find != null && current.Contains(operation.Find)
+                ? operation.Find : MatchLineEndings(operation.Find, current);
             switch (normalized)
             {
                 case "replace":
@@ -235,9 +246,9 @@ namespace RNAssistant.Core.Tools
             return new StructuredTextPatchStep { Op = op, MatchCount = matchCount, Message = message };
         }
 
-        private static StructuredTextPatchException Error(string code, string message)
+        private static StructuredTextPatchException Error(string code, string message, int operationIndex = 0)
         {
-            return new StructuredTextPatchException(code, message);
+            return new StructuredTextPatchException(code, message, operationIndex);
         }
 
         private static int CountOccurrences(string value, string find)

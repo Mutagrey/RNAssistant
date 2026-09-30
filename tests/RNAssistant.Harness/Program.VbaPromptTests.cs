@@ -2124,6 +2124,14 @@ namespace RNAssistant.Harness
                     "unchanged replacement still requires one unambiguous match");
             }
             AssertEqual("B", VbaPatchEngine.Replace("aaa", "aaa", "B").Text, "full source remains a unique match");
+            var mixed = VbaPatchEngine.Replace("Sub Main()\nold\r\nEnd Sub",
+                "Sub Main()\nold", "new");
+            AssertEqual(VbaPatchStatus.Changed, mixed.Status,
+                "a copied VBA block survives mixed source line endings");
+            AssertTrue(!mixed.FormatNormalizedMatch,
+                "a copied VBA block is matched exactly before format normalization");
+            AssertEqual("new\r\nEnd Sub", mixed.Text,
+                "exact VBA match preserves source outside the selected block");
             var normalized = VbaPatchEngine.Replace(
                 "Sub Main()\r\n    If X = 1 Then\r\n        Debug.Print \"old\"\r\n    End If\r\nEnd Sub",
                 "if x=1 then\nDebug.Print \"old\"\nend if",

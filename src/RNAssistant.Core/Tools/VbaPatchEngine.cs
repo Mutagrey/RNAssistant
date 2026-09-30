@@ -63,12 +63,16 @@ namespace RNAssistant.Core.Tools
             int? startColumn = null)
         {
             source = source ?? string.Empty;
-            find = VbaTextCanonicalizer.MatchLineEndings(find, source);
+            var rawFind = find;
+            var rawBefore = contextBefore ?? string.Empty;
+            var rawAfter = contextAfter ?? string.Empty;
+            var copiedBlock = rawBefore + rawFind + rawAfter;
+            var copiedBlockExists = !string.IsNullOrEmpty(rawFind) &&
+                source.IndexOf(copiedBlock, StringComparison.Ordinal) >= 0;
+            find = copiedBlockExists ? rawFind : VbaTextCanonicalizer.MatchLineEndings(find, source);
             replacement = VbaTextCanonicalizer.MatchLineEndings(replacement ?? string.Empty, source);
-            contextBefore = VbaTextCanonicalizer.MatchLineEndings(
-                contextBefore ?? string.Empty, source);
-            contextAfter = VbaTextCanonicalizer.MatchLineEndings(
-                contextAfter ?? string.Empty, source);
+            contextBefore = copiedBlockExists ? rawBefore : VbaTextCanonicalizer.MatchLineEndings(rawBefore, source);
+            contextAfter = copiedBlockExists ? rawAfter : VbaTextCanonicalizer.MatchLineEndings(rawAfter, source);
             if (string.IsNullOrEmpty(find))
                 return new VbaPatchResult(VbaPatchStatus.EmptyFind, source, find, 0, 0);
             var exactBlock = contextBefore + find + contextAfter;

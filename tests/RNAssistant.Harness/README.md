@@ -71,6 +71,9 @@ compaction check rejects input-only references as substitutes for visible bytes
 and covers calibrated admission of complete mutation source.
 `vba: patch disambiguates with exact context` also covers explicit line/column
 selection, duplicate procedures, stale-address refusal and candidate completeness.
+`vba: pure patch text contract` covers copied blocks in mixed-newline source.
+`html tools: patch mismatch returns current source` checks atomic multi-hunk
+rejection, bounded recovery and exact copied anchors across mixed line endings.
 `resource cutover: current source survives writes and compaction` and `resource
 cutover: HTML write publishes current member sources` cover the verified after-state,
 CAS carry-forward, stale-version exclusion and next guarded HTML overwrite.

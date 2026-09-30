@@ -6,6 +6,7 @@ using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
 using RNAssistant.Core.Models;
 using RNAssistant.Core.Tools;
+using RNAssistant.Office.Services;
 
 namespace RNAssistant.Office.Tools
 {
@@ -125,14 +126,16 @@ namespace RNAssistant.Office.Tools
             Action markDispatchPossible,
             CancellationToken cancellationToken)
         {
+            HtmlWorkspaceFile file = null;
+            string before = null;
             try
             {
                 cancellationToken.ThrowIfCancellationRequested();
                 var name = ToolArgumentReader.String(
                     arguments, "path", string.Empty);
                 var workspace = NormalizedWorkspaceCopy(session.HtmlWorkspace);
-                var file = FindFile(workspace, name, false);
-                var before = file.Content ?? string.Empty;
+                file = FindFile(workspace, name, false);
+                before = file.Content ?? string.Empty;
                 var patch = StructuredTextPatchEngine.Apply(
                     before, ReadPatchOperations(arguments), MaxHtmlChars);
                 ValidateFile(file.Path, file.Kind, patch.Text);
@@ -181,6 +184,38 @@ namespace RNAssistant.Office.Tools
             }
             catch (StructuredTextPatchException ex)
             {
+                if (file != null && before != null &&
+                    (ex.ErrorCode == "text_patch_not_found" ||
+                     ex.ErrorCode == "text_patch_ambiguous"))
+                {
+                    // The complete file is useful only when it fits the bounded
+                    // recovery projection. Larger files require a fresh source read.
+                    var complete = before.Length <= 12000;
+                    var artifact = (session.Artifacts ?? new List<ChatArtifact>())
+                        .FirstOrDefault(item => item != null &&
+                            item.Id == session.ActiveHtmlArtifactId);
+                    var identity = artifact == null ? null :
+                        ChatHtmlResourceCatalog.FileReference(session, artifact, file.Id).Identity;
+                    var recovery = new ToolRecoveryContract(
+                        ToolFailureKind.RejectedNoEffect,
+                        complete ? ToolRetryPolicy.Replan : ToolRetryPolicy.RefreshRequired,
+                        identity, ResourceRepresentations.Source,
+                        "HTML file: " + file.Path,
+                        complete ? before : null, complete);
+                    return HtmlWorkspaceToolOutcome.Error(
+                        ex.Message + " Nothing was written. " + (complete
+                            ? "Use the complete current source in recovery to revise the patch."
+                            : "Read current source with common.resources_read or find a unique snippet with common.resources_find, then revise the patch.") +
+                        " Do not repeat the same patch unchanged.",
+                        new JObject
+                        {
+                            ["path"] = file.Path,
+                            ["hunkIndex"] = ex.OperationIndex,
+                            ["sourceCharacters"] = before.Length,
+                            ["inspectTool"] = "common.resources_read"
+                        }.ToString(Formatting.None),
+                        ex.ErrorCode, true, recovery);
+                }
                 return HtmlWorkspaceToolOutcome.Error(
                     ex.Message, null, ex.ErrorCode, true);
             }
