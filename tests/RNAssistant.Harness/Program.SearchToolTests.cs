@@ -19,10 +19,49 @@ namespace RNAssistant.Harness
             AssertEqual("item-12 item-345 decoder-7", replaced.Text, "regex capture replacement");
             AssertEqual(2, replaced.MatchCount, "regex replacement count");
 
+            var literal = new TextPatternOptions();
+            var literalReplacement = "cost $& and $$";
+            AssertEqual(literalReplacement,
+                TextPatternEngine.Replace("alpha", "alpha", literalReplacement, literal, true, 1).Text,
+                "literal replacement preserves dollar sequences");
+            AssertEqual(literalReplacement,
+                TextPatternEngine.PlanReplacements("alpha", "alpha", literalReplacement, literal, true, 1)[0].Text,
+                "planned literal replacement preserves dollar sequences");
+
             var limited = TextPatternEngine.Find("x x x", "x", new TextPatternOptions(), 1, 0);
             AssertEqual(3, limited.MatchCount, "truncated search keeps exact match count");
             AssertEqual(1, limited.Matches.Count, "truncated search limits returned matches");
             AssertTrue(limited.Truncated, "truncated search flag");
+
+            var largeText = new string('a', TextPatternEngine.MaxPreviewChars - 2) +
+                "\uD83D\uDE00" + new string('b', 10000);
+            var large = TextPatternEngine.Find(largeText, ".+",
+                new TextPatternOptions { Mode = "regex" }, 1, 0);
+            var preview = large.Matches[0].Preview;
+            AssertEqual(largeText.Length, large.Matches[0].Length, "long match keeps exact coordinates");
+            AssertTrue(preview.Length <= TextPatternEngine.MaxPreviewChars &&
+                preview.EndsWith("…", System.StringComparison.Ordinal),
+                "long match preview is bounded and marked as clipped");
+            AssertTrue(!char.IsHighSurrogate(preview[preview.Length - 2]),
+                "bounded preview does not split a surrogate pair");
+
+            var endAnchor = TextPatternEngine.Find("x", "$",
+                new TextPatternOptions { Mode = "regex" }, 1, 0);
+            AssertEqual(string.Empty, endAnchor.Matches[0].Preview,
+                "end-anchor match permits an empty preview");
+
+            TextPatternException invalidMode = null;
+            try
+            {
+                TextPatternEngine.Find("aaaa", "a+",
+                    new TextPatternOptions { Mode = "regx" }, 1, 0);
+            }
+            catch (TextPatternException error)
+            {
+                invalidMode = error;
+            }
+            AssertEqual("invalid_arguments", invalidMode == null ? null : invalidMode.ErrorCode,
+                "unknown search mode fails before interpreting the pattern as literal");
         }
 
         private static void VbaSearchRegexpPatchAndDeleteAreSafe()

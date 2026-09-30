@@ -22,7 +22,6 @@ namespace RNAssistant.Core.Tools
     {
         public int Index { get; set; }
         public int Length { get; set; }
-        public string Value { get; set; }
         public string Preview { get; set; }
     }
 
@@ -66,6 +65,7 @@ namespace RNAssistant.Core.Tools
     {
         public const int MaxPatternChars = 2048;
         public const int MaxResults = 500;
+        public const int MaxPreviewChars = 2048;
         private static readonly TimeSpan MatchTimeout = TimeSpan.FromMilliseconds(250);
 
         public static TextPatternSearchResult Find(
@@ -91,7 +91,6 @@ namespace RNAssistant.Core.Tools
                         {
                             Index = match.Index,
                             Length = match.Length,
-                            Value = match.Value,
                             Preview = Preview(text, match.Index, match.Length, contextChars)
                         });
                     }
@@ -118,11 +117,11 @@ namespace RNAssistant.Core.Tools
         {
             text = text ?? string.Empty;
             replacement = replacement ?? string.Empty;
-            maxReplacements = Math.Max(1, Math.Min(10000, maxReplacements));
             try
             {
                 var regex = BuildRegex(pattern, options);
-                var edits = PlanReplacements(text, regex, replacement, replaceAll, maxReplacements);
+                var edits = PlanReplacements(text, regex, replacement, replaceAll, maxReplacements,
+                    IsRegexMode(options));
                 var builder = new StringBuilder(text);
                 for (var index = edits.Count - 1; index >= 0; index--)
                 {
@@ -148,7 +147,9 @@ namespace RNAssistant.Core.Tools
         {
             try
             {
-                return PlanReplacements(text ?? string.Empty, BuildRegex(pattern, options), replacement ?? string.Empty, replaceAll, maxReplacements);
+                return PlanReplacements(text ?? string.Empty, BuildRegex(pattern, options),
+                    replacement ?? string.Empty, replaceAll, maxReplacements,
+                    IsRegexMode(options));
             }
             catch (RegexMatchTimeoutException)
             {
@@ -156,7 +157,8 @@ namespace RNAssistant.Core.Tools
             }
         }
 
-        private static List<TextPatternReplacement> PlanReplacements(string text, Regex regex, string replacement, bool replaceAll, int maxReplacements)
+        private static List<TextPatternReplacement> PlanReplacements(string text, Regex regex, string replacement,
+            bool replaceAll, int maxReplacements, bool regexMode)
         {
             maxReplacements = Math.Max(1, Math.Min(10000, maxReplacements));
             var edits = new List<TextPatternReplacement>();
@@ -166,7 +168,8 @@ namespace RNAssistant.Core.Tools
                 {
                     throw new TextPatternException("zero_length_replacement", "A replacement pattern must not produce zero-length matches.");
                 }
-                edits.Add(new TextPatternReplacement { Index = match.Index, Length = match.Length, Text = match.Result(replacement) });
+                edits.Add(new TextPatternReplacement { Index = match.Index, Length = match.Length,
+                    Text = regexMode ? match.Result(replacement) : replacement });
                 if (!replaceAll) break;
                 if (edits.Count > maxReplacements)
                 {
@@ -197,7 +200,12 @@ namespace RNAssistant.Core.Tools
             }
 
             options = options ?? new TextPatternOptions();
-            var expression = string.Equals(options.Mode, "regex", StringComparison.OrdinalIgnoreCase)
+            var regexMode = IsRegexMode(options);
+            if (!regexMode && !string.Equals(options.Mode, "literal", StringComparison.OrdinalIgnoreCase))
+            {
+                throw new TextPatternException("invalid_arguments", "mode must be literal or regex.");
+            }
+            var expression = regexMode
                 ? pattern
                 : Regex.Escape(pattern);
             if (options.WholeWord)
@@ -216,11 +224,24 @@ namespace RNAssistant.Core.Tools
             }
         }
 
+        private static bool IsRegexMode(TextPatternOptions options)
+        {
+            return options != null && string.Equals(options.Mode, "regex", StringComparison.OrdinalIgnoreCase);
+        }
+
         private static string Preview(string text, int index, int length, int contextChars)
         {
             var start = Math.Max(0, index - contextChars);
-            var end = Math.Min(text.Length, index + length + contextChars);
-            return text.Substring(start, Math.Max(0, end - start));
+            var end = (int)Math.Min(text.Length, (long)index + length + contextChars);
+            if (start > 0 && start < text.Length && char.IsLowSurrogate(text[start]) &&
+                char.IsHighSurrogate(text[start - 1])) start--;
+            if (end < text.Length && end > 0 && char.IsLowSurrogate(text[end]) && char.IsHighSurrogate(text[end - 1])) end--;
+            if (end - start <= MaxPreviewChars) return text.Substring(start, end - start);
+
+            var prefixLength = MaxPreviewChars - 1;
+            if (char.IsHighSurrogate(text[start + prefixLength - 1]) &&
+                char.IsLowSurrogate(text[start + prefixLength])) prefixLength--;
+            return text.Substring(start, prefixLength) + "…";
         }
     }
 }
