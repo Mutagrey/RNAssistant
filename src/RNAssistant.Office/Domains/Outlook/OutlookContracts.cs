@@ -102,9 +102,11 @@ namespace RNAssistant.Office.Domains.Outlook
         public string Subject { get; set; }
         public string Sender { get; set; }
         public string SenderEmail { get; set; }
+        public bool SenderEmailTruncated { get; set; }
         public string To { get; set; }
         public string Cc { get; set; }
         public string Bcc { get; set; }
+        public bool RecipientsTruncated { get; set; }
         public DateTime Received { get; set; }
         public string Categories { get; set; }
         public bool Unread { get; set; }

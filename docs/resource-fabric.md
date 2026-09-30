@@ -545,6 +545,11 @@ removed, including accepted-call replay. `common.resources_find` exposes an
 `Outlook collection` target. `text` is the complete JSON projection; `records/table`
 at `$.messages` and HTML bindings derive from that exact retained text snapshot.
 No separate collection store, bulk result tool or compatibility alias remains.
+The singleton collection resolves directly, so a truncated list of individual mail
+targets cannot block it with `resource_scope_incomplete`. The semantic target
+`Outlook collection: latest:N` (N = 1–500) limits the Outlook capture itself;
+`maxRows` limits only a derived records page after capture. A failed oversized
+capture should be retried with a smaller N, not the same collection target.
 
 This is a bounded projection of at most 500 newest **folder items** (mail rows only),
 not a complete mailbox or full-body capture. The JSON envelope reports
@@ -554,6 +559,9 @@ Read the envelope before interpreting record totals; `complete` on a records pag
 means completion of this captured projection, not the whole folder. Monthly grouping
 belongs to the consumer; full bodies use individual mail resources. Folder paths and
 EntryIDs are not projected into the body. Empty folders/previews remain valid.
+An individual mail target from an incomplete folder listing still cannot be
+assumed unique; that read returns `resource_scope_incomplete` with guidance rather
+than silently selecting one matching message.
 
 The typed `OutlookService.CaptureCollection` validates row identity/extent and a
 750,000-character aggregate budget; serialized JSON has the provider's one-million
@@ -581,11 +589,21 @@ body-capture flag, folder extent/truncation and mail header/body-prefix rows. Bo
 are capped at 100,000 characters per mail with explicit `bodyTruncated`; the
 aggregate retained header/body bound is 750,000 characters and serialized JSON is
 limited to one million. Oversize aggregate captures fail and request a lower N.
+Changing the search query alone does not reduce this capture; `maxItems` or the
+selected fields must change.
+Subject and sender names stay exact for semantic mail targets and reject values above
+4,096 characters. Sender email and `To`/`CC`/`BCC` capture at most 4,096 characters
+each, preserving surrogate boundaries; `senderEmailTruncated` and
+`recipientsTruncated` mark incomplete prefixes. One long recipient list no longer
+rejects a subject, sender or body search by itself. `sourceTruncated` includes these markers
+only when the corresponding sender or recipient field was searched, so zero-match
+results never claim complete coverage of an incomplete searched field.
 Header-only search never reads Body; body search reads it once without a mutation
 token, preserves surrogate boundaries and never substitutes empty text after errors.
 
-`sourceTruncated` and the returned overall `truncated` flag include incomplete body
-prefixes as well as folder truncation; `matchCount` counts only captured fields.
+`sourceTruncated` and the returned overall `truncated` flag include incomplete
+searched-field prefixes as well as folder truncation; `matchCount` counts only
+captured fields.
 Complete evidence means the complete bounded projection, not the entire mailbox or
 full mail bodies. Positive, zero-match and empty-folder searches retain exact CAS
 evidence and publish observed drift; historical reads do no Office I/O and missing
@@ -598,8 +616,10 @@ Real Windows/COM, OOM pre-materialization and WebView/model qualification remain
 Desktop offers stable mailbox chats keyed from StoreID. `outlook.index_archive`
 scans the selected mailbox and optionally attached PST stores for an inclusive UTC
 date range; each call persists up to 20 batches of 25 matching mails and may be
-repeated to resume. The backend walks folders, excludes recognised search folders,
-reads each matching body once, and records folder/read errors. A source signature
+repeated to resume. Folder or mail chats receive `outlook_mailbox_required`; the
+user must select the Outlook account chat for a mailbox scan. The backend walks
+folders, excludes recognised search folders, reads each matching body once, and
+records folder/read errors. A source signature
 checks folder identities and item counts between batches; unchanged counts do not
 prove that messages stayed unchanged during the scan. `refresh=true` explicitly
 starts a new scan. Large bodies have separate exact mail targets and are read through

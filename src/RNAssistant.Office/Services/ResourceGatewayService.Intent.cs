@@ -114,6 +114,12 @@ namespace RNAssistant.Office.Services
                 scope != "all" && scope != "document") return null;
             var excel = _registry.All().OfType<ExcelResourceProvider>()
                 .SingleOrDefault();
+            if (query.StartsWith("Outlook collection: ", StringComparison.Ordinal))
+            {
+                var outlook = _registry.All().OfType<LiveDocumentResourceProvider>().SingleOrDefault();
+                return outlook?.IsOutlook == true ? WithProvider(outlook, session,
+                    () => outlook.ResolveOutlookCollection(session, query)) : null;
+            }
             if (query.StartsWith("Outlook attachment: ", StringComparison.Ordinal))
             {
                 var outlook = _registry.All().OfType<LiveDocumentResourceProvider>().SingleOrDefault();
@@ -243,6 +249,14 @@ namespace RNAssistant.Office.Services
                 return new ResourceIntentTarget { Target = IntentTarget(descriptor), Type = "Outlook attachment", Scope = "document",
                     Descriptor = descriptor, Reference = descriptor.Reference };
             }
+            if (target.StartsWith("Outlook collection: ", StringComparison.Ordinal))
+            {
+                var provider = _registry.All().OfType<LiveDocumentResourceProvider>().SingleOrDefault();
+                if (provider?.IsOutlook != true) throw new ResourceRequestException("Outlook is unavailable.", "RESOURCE_PROVIDER_UNAVAILABLE", false);
+                var descriptor = WithProvider(provider, session, () => provider.ResolveOutlookCollection(session, target));
+                return new ResourceIntentTarget { Target = IntentTarget(descriptor), Type = "Outlook collection", Scope = "document",
+                    Descriptor = descriptor, Reference = descriptor.Reference };
+            }
             if (target.StartsWith("Outlook archive page: ", StringComparison.Ordinal))
             {
                 var provider = _registry.All().OfType<LiveDocumentResourceProvider>().SingleOrDefault();
@@ -361,7 +375,9 @@ namespace RNAssistant.Office.Services
             if ((truncated || searchIncomplete) &&
                 !(matches.Count == 1 && searchConfirmedTarget && !searchIncomplete))
                 throw new ResourceRequestException(
-                    "The resource scope is incomplete; a unique semantic target cannot be established from the captured collection.",
+                    target.StartsWith("Outlook mail: ", StringComparison.Ordinal)
+                        ? "Outlook mail discovery covers only the newest folder items; this mail target cannot be proved unique. Do not repeat the same read. Use a bounded Outlook collection for an overview or the Outlook account chat for an archive scan."
+                        : "The resource scope is incomplete; a unique semantic target cannot be established from the captured collection.",
                     "resource_scope_incomplete", false);
             if (matches.Count > 1)
             {

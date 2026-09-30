@@ -64,7 +64,13 @@ namespace RNAssistant.Office.Tools
                         return _search.Search(_session, context.Arguments, cancellationToken);
                     }));
                 if (_toolId == OutlookToolIds.IndexArchive)
+                {
+                    if (!(_session.DocumentKey ?? string.Empty).StartsWith("outlook-mailbox:", StringComparison.Ordinal))
+                        return OfficeToolFailure.Rejected(
+                            "Archive indexing requires a mailbox chat. Open the Outlook account chat, then retry there.",
+                            "outlook_mailbox_required");
                     return Task.FromResult(IndexArchive(context, cancellationToken));
+                }
                 var outcome = OutlookToolIds.IsRead(_toolId)
                     ? _runtime.ReadDocument(
                         Target(_session), cancellationToken, delegate
@@ -98,9 +104,6 @@ namespace RNAssistant.Office.Tools
 
         private ToolHandlerResult IndexArchive(ToolHandlerContext context, CancellationToken token)
         {
-            if (!_session.DocumentKey.StartsWith("outlook-mailbox:", StringComparison.Ordinal))
-                return new ToolHandlerResult(RuntimeResult.Error("Select a mailbox chat to index its archive."),
-                    ToolEffectEvidence.None);
             var from = ReadUtcDate(context.Arguments, "fromDate", DateTime.UtcNow.Date.AddMonths(-6));
             var through = ReadUtcDate(context.Arguments, "throughDate", DateTime.UtcNow.Date);
             var to = through.AddDays(1);

@@ -14,6 +14,7 @@ namespace RNAssistant.Office.Domains.Outlook
         public const int MaxAttachments = 1000;
         public const int MaxBodyChars = 1000000;
         public const int MaxSearchBodyChars = 100000;
+        public const int MaxSearchHeaderChars = 4096;
         public const int CollectionPreviewCharacters = 1000;
         public const int CollectionMaximumCharacters = 750000;
 
@@ -120,13 +121,14 @@ namespace RNAssistant.Office.Domains.Outlook
                     throw new OutlookBackendException("Invalid search mail capture.", "outlook_search_snapshot_invalid", false);
                 foreach (var header in new[] { mail.Subject, mail.Sender, mail.SenderEmail, mail.To, mail.Cc, mail.Bcc })
                 {
-                    if (header == null || header.Length > 4096)
+                    if (header == null || header.Length > MaxSearchHeaderChars)
                         throw new OutlookBackendException("Invalid search header.", "outlook_search_snapshot_invalid", false);
                     characters += header.Length;
                 }
                 characters += (mail.Body ?? string.Empty).Length;
                 if (characters > CollectionMaximumCharacters)
-                    throw new OutlookBackendException("Reduce maxItems for this search.", "RESOURCE_SNAPSHOT_TOO_LARGE", false);
+                    throw new OutlookBackendException("Outlook search capture is too large. Reduce maxItems or exclude body; changing query alone does not reduce capture.",
+                        "RESOURCE_SNAPSHOT_TOO_LARGE", false);
             }
             return new OutlookSearchSnapshot { MaximumItems = maxItems, BodyCaptured = includeBody, Folder = folder };
         }
@@ -192,16 +194,20 @@ namespace RNAssistant.Office.Domains.Outlook
                         }
                     }
                 }
+                var sourceTruncated = folder.Truncated ||
+                    fields.Contains("body") && folder.Messages.Any(mail => mail.BodyTruncated) ||
+                    fields.Contains("sender") && folder.Messages.Any(mail => mail.SenderEmailTruncated) ||
+                    fields.Contains("recipients") && folder.Messages.Any(mail => mail.RecipientsTruncated);
                 return OutlookOutcome.Ok(
                     "Mail search matches: " + total,
                     new JObject
                     {
                         ["maximumFolderItems"] = snapshot.MaximumItems,
                         ["maximumBodyCharacters"] = snapshot.BodyCaptured ? MaxSearchBodyChars : 0,
-                        ["sourceTruncated"] = folder.Truncated || folder.Messages.Any(mail => mail.BodyTruncated),
+                        ["sourceTruncated"] = sourceTruncated,
                         ["matchCount"] = total,
                         ["returnedCount"] = matches.Count,
-                        ["truncated"] = total > matches.Count || folder.Truncated || folder.Messages.Any(mail => mail.BodyTruncated),
+                        ["truncated"] = total > matches.Count || sourceTruncated,
                         ["matches"] = matches
                     }.ToString(Formatting.None),
                     OutlookEffect.None);
@@ -226,14 +232,19 @@ namespace RNAssistant.Office.Domains.Outlook
 
         // A complete snapshot of a bounded folder projection, not complete mail bodies.
         public OutlookFolderSnapshot CaptureCollection(CancellationToken cancellationToken)
+        { return CaptureCollection(MaxItems, cancellationToken); }
+
+        public OutlookFolderSnapshot CaptureCollection(int maxItems, CancellationToken cancellationToken)
         {
+            if (maxItems < 1 || maxItems > MaxItems)
+                throw new OutlookBackendException("Invalid collection item limit.", "invalid_arguments", false);
             cancellationToken.ThrowIfCancellationRequested();
             var snapshot = _backend.ReadFolder(new OutlookFolderReadRequest {
-                MaxItems = MaxItems, MaxBodyChars = CollectionPreviewCharacters, Kind = OutlookFolderCaptureKind.Collection });
+                MaxItems = maxItems, MaxBodyChars = CollectionPreviewCharacters, Kind = OutlookFolderCaptureKind.Collection });
             cancellationToken.ThrowIfCancellationRequested();
-            if (snapshot == null || snapshot.Messages == null || snapshot.Messages.Count > MaxItems ||
+            if (snapshot == null || snapshot.Messages == null || snapshot.Messages.Count > maxItems ||
                 snapshot.TotalItems < snapshot.Messages.Count ||
-                (snapshot.TotalItems > MaxItems && !snapshot.Truncated))
+                (snapshot.TotalItems > maxItems && !snapshot.Truncated))
                 throw new OutlookBackendException("Invalid mail collection extent.", "outlook_collection_invalid", false);
             long characters = 0;
             var ids = new HashSet<string>(StringComparer.Ordinal);
@@ -248,7 +259,8 @@ namespace RNAssistant.Office.Domains.Outlook
                     throw new OutlookBackendException("Incomplete or oversized mail collection row.", "outlook_collection_invalid", false);
                 characters += mail.Subject.Length + mail.Sender.Length + mail.Body.Length;
                 if (characters > CollectionMaximumCharacters)
-                    throw new OutlookBackendException("The mail collection exceeds the snapshot budget.", "RESOURCE_SNAPSHOT_TOO_LARGE", false);
+                    throw new OutlookBackendException("Outlook collection capture is too large. Read Outlook collection: latest:N with a smaller N; maxRows does not reduce capture.",
+                        "RESOURCE_SNAPSHOT_TOO_LARGE", false);
             }
             return snapshot;
         }

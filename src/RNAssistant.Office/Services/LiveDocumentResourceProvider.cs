@@ -58,7 +58,7 @@ namespace RNAssistant.Office.Services
                 if (IsWord && kind == WordSearchKind)
                     items.AddRange(new[] { "main", "selection", "all" }.Select(scope => Describe(session, "stories-" + scope)));
                 if (IsOutlook && !IsOutlookMailbox && (string.IsNullOrWhiteSpace(kind) || kind == OutlookCollectionKind))
-                    items.Add(DescribeOutlookCollection(session));
+                    items.Add(DescribeOutlookCollection(session, OutlookCollectionKey));
                 if (IsOutlook && !IsOutlookMailbox && kind == OutlookSearchKind)
                     items.AddRange(new[] { "search-latest-100", "search-latest-100+body" }.Select(key => DescribeOutlookSearch(session, key)));
                 if (string.IsNullOrWhiteSpace(kind) ||
@@ -108,7 +108,8 @@ namespace RNAssistant.Office.Services
         {
             string attachmentMail; int attachmentIndex;
             if (IsOutlook && TryAttachmentKey(target, out attachmentMail, out attachmentIndex)) return DescribeAttachment(session, target);
-            if (IsOutlook && target == OutlookCollectionKey) return DescribeOutlookCollection(session);
+            if (IsOutlook && TryOutlookCollectionLimit(target, out var collectionLimit))
+                return DescribeOutlookCollection(session, target);
             string archiveId; int archivePage;
             if (IsOutlook && TryOutlookArchivePageKey(target, out archiveId, out archivePage))
                 return DescribeOutlookArchivePage(session, archiveId, archivePage);
@@ -206,7 +207,7 @@ namespace RNAssistant.Office.Services
                 !(IsPowerPoint && IsPowerPointSlide(address.Segments[1])) &&
                 !(IsPowerPoint && IsPowerPointSearch(address.Segments[1])) &&
                 !(IsOutlook && TryAttachmentKey(address.Segments[1], out attachmentMail, out attachmentIndex)) &&
-                !(IsOutlook && address.Segments[1] == OutlookCollectionKey) &&
+                !(IsOutlook && TryOutlookCollectionLimit(address.Segments[1], out var collectionLimit)) &&
                 !(IsOutlook && IsOutlookSearch(address.Segments[1])) &&
                 !(IsOutlook && TryOutlookArchivePageKey(address.Segments[1], out archiveId, out archivePage)) &&
                 !(IsOutlook && TryOutlookArchiveDigestKey(address.Segments[1], out archiveId, out archivePage)) &&

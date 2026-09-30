@@ -52,7 +52,8 @@ namespace RNAssistant.Office.Services
                 cancellationToken.ThrowIfCancellationRequested();
                 var json = ResourceSnapshotReadService.ReadPayload(_gateway.Authority.Payloads, payload);
                 if (json.Length > OutlookService.MaxBodyChars)
-                    return Failure("Reduce maxItems for this search.", "RESOURCE_SNAPSHOT_TOO_LARGE");
+                    return Failure("Reduce maxItems or exclude body; changing the query alone does not reduce capture.",
+                        "RESOURCE_SNAPSHOT_TOO_LARGE");
                 var outcome = OutlookService.SearchMail(JsonConvert.DeserializeObject<OutlookSearchSnapshot>(json), request, cancellationToken);
                 cancellationToken.ThrowIfCancellationRequested();
                 if (outcome.Status != OutlookOutcomeStatus.Ok)

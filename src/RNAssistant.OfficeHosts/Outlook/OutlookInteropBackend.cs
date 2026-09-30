@@ -203,7 +203,10 @@ namespace RNAssistant.OfficeHosts
                     (captured.SenderEmail ?? string.Empty).Length + (captured.To ?? string.Empty).Length +
                     (captured.Cc ?? string.Empty).Length + (captured.Bcc ?? string.Empty).Length;
                 if (characters > OutlookService.CollectionMaximumCharacters)
-                    throw new OutlookBackendException("Reduce the folder capture size.", "RESOURCE_SNAPSHOT_TOO_LARGE", false);
+                    throw new OutlookBackendException(collection
+                        ? "Outlook collection capture is too large. Read Outlook collection: latest:N with a smaller N; maxRows does not reduce capture."
+                        : "Outlook search capture is too large. Reduce maxItems or exclude body; changing query alone does not reduce capture.",
+                        "RESOURCE_SNAPSHOT_TOO_LARGE", false);
                 messages.Add(captured);
             }
             return new OutlookFolderSnapshot
@@ -403,11 +406,20 @@ namespace RNAssistant.OfficeHosts
         {
             var snapshot = new OutlookMailSnapshot { EntryId = mail.EntryID,
                 Subject = mail.Subject ?? string.Empty, Sender = mail.SenderName ?? string.Empty,
-                SenderEmail = mail.SenderEmailAddress ?? string.Empty, To = mail.To ?? string.Empty,
-                Cc = mail.CC ?? string.Empty, Bcc = mail.BCC ?? string.Empty, Received = mail.ReceivedTime };
-            foreach (var header in new[] { snapshot.Subject, snapshot.Sender, snapshot.SenderEmail, snapshot.To, snapshot.Cc, snapshot.Bcc })
-                if (header.Length > 4096)
-                    throw new OutlookBackendException("Search headers exceed the capture bound.", "RESOURCE_SNAPSHOT_TOO_LARGE", false);
+                Received = mail.ReceivedTime };
+            // Subject and sender identify semantic mail targets and must stay exact.
+            if (snapshot.Subject.Length > OutlookService.MaxSearchHeaderChars)
+                throw new OutlookBackendException("Mail subject exceeds the search identity bound.",
+                    "RESOURCE_SNAPSHOT_TOO_LARGE", false);
+            if (snapshot.Sender.Length > OutlookService.MaxSearchHeaderChars)
+                throw new OutlookBackendException("Mail sender name exceeds the search identity bound.",
+                    "RESOURCE_SNAPSHOT_TOO_LARGE", false);
+            snapshot.SenderEmail = SearchHeaderPrefix(mail.SenderEmailAddress, out var senderEmailTruncated);
+            snapshot.SenderEmailTruncated = senderEmailTruncated;
+            snapshot.To = SearchHeaderPrefix(mail.To, out var toTruncated);
+            snapshot.Cc = SearchHeaderPrefix(mail.CC, out var ccTruncated);
+            snapshot.Bcc = SearchHeaderPrefix(mail.BCC, out var bccTruncated);
+            snapshot.RecipientsTruncated = toTruncated || ccTruncated || bccTruncated;
             if (includeBody)
             {
                 // OOM returns Body as one string. This is a bounded retained prefix,
@@ -419,6 +431,15 @@ namespace RNAssistant.OfficeHosts
                 snapshot.BodyTruncated = length < body.Length;
             }
             return snapshot;
+        }
+
+        private static string SearchHeaderPrefix(string value, out bool truncated)
+        {
+            value = value ?? string.Empty;
+            var length = Math.Min(value.Length, OutlookService.MaxSearchHeaderChars);
+            if (length > 0 && length < value.Length && char.IsHighSurrogate(value[length - 1])) length--;
+            truncated = length < value.Length;
+            return value.Substring(0, length);
         }
 
         private static OutlookMailSnapshot Snapshot(

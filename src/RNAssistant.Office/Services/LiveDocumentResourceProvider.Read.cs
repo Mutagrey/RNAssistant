@@ -305,7 +305,8 @@ namespace RNAssistant.Office.Services
                 throw new ResourceRequestException("PowerPoint search scopes expose exact text JSON.", "RESOURCE_VIEW_UNAVAILABLE", false);
             if (IsWord && IsWordSearch(target) && value != ResourceRepresentations.Text && value != ResourceRepresentations.Metadata)
                 throw new ResourceRequestException("Word search scopes expose exact text JSON.", "RESOURCE_VIEW_UNSUPPORTED", false);
-            if (IsOutlook && target == OutlookCollectionKey && (value == ResourceRepresentations.Structure || value == ResourceRepresentations.Source))
+            if (IsOutlook && TryOutlookCollectionLimit(target, out var collectionLimit) &&
+                (value == ResourceRepresentations.Structure || value == ResourceRepresentations.Source))
                 throw new ResourceRequestException("Read collection text metadata or records at $.messages.", "RESOURCE_VIEW_UNSUPPORTED", false);
             if (value == ResourceRepresentations.Source && (IsOutlook || (IsPowerPoint && target != "selection"))) return value;
             if (value == ResourceRepresentations.Metadata ||

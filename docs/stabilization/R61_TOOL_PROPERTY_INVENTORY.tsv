@@ -55,8 +55,8 @@ excel.sort_range	Excel	agent	excel.range.sort.v1	1fc8d16e2e09d2ed6f374aaabbea3f5
 excel.upsert_chart	Excel	agent	excel.chart.upsert.v1	9f5a0fc8ff5860242435e124e7929dc1dedb4617d959cbd55efcaef588bcdc3c	categoryLabelsRange,chartName,chartType,height,left,mode,sheet,sourceRange,title,top,width,xAxisTitle,yAxisTitle	-
 excel.write_range	Excel	agent	excel.write.range.v1	13e99ee4e0563481460a65ebc96ea4a61e8a9c6703442331dc1d816ff1bdad2d	address,formula,kind,sheet,value,values	-
 outlook.create_draft	Outlook	agent	outlook.create.draft.v1	8e5df76b96c516a4ae9de013868c352138ab761091ebc39f70a31149b50da2e2	bcc,body,cc,kind,subject,to	-
-outlook.index_archive	Outlook	agent	outlook.index.archive.v1	fd94b1047c7dd371f28a5bc4c694f26e90eb0f4871f81c3d6aa55ee7c8fb8eae	fromDate,includePst,maxBatches,refresh,throughDate	-
-outlook.search_mail	Outlook	agent	outlook.search.mail.resource.v1	10fe99fe11ea218198a4fe1b72c495dfb0908d3b1b2d64c034bb71090661144b	contextChars,fields,matchCase,maxItems,maxResults,mode,query,wholeWord	-
+outlook.index_archive	Outlook	agent	outlook.index.archive.v1	574e58c879a22ce866113654c4421bfc7934d87d7987549abdea75f7530c7344	fromDate,includePst,maxBatches,refresh,throughDate	-
+outlook.search_mail	Outlook	agent	outlook.search.mail.resource.v1	63a6e88cded74da39b9f6d0a959d9a62f3cb0bca60df1005ee067e05d7bfa4a2	contextChars,fields,matchCase,maxItems,maxResults,mode,query,wholeWord	-
 outlook.update_mail	Outlook	agent	outlook.update.mail.v1	aa3f77b292a1b8131d0abc2ea32ae24a284b219550bbf32c48fa0330e62059c4	categories,kind	-
 powerpoint.add_object	PowerPoint	agent	powerpoint.add.object.v1	21295b9ccd63cb655dfc1b2492d9d22a67277f956e6cfd6030725efb3340e820	columns,fontSize,height,kind,left,path,rows,slideIndex,text,top,values,width	-
 powerpoint.add_slide	PowerPoint	agent	powerpoint.add.slide.v1	d85ce4dd519becaff3891d5320a79171940f0104e289205c4494f9f8ad7c312e	body,title	-

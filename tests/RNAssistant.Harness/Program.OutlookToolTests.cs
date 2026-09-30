@@ -220,6 +220,32 @@ namespace RNAssistant.Harness
                 var headerResult = ExecuteHtmlNative(runtime, OutlookToolIds.SearchMail, headers);
                 AssertEqual(ToolExecutionOutcome.Ok, headerResult.Outcome, "header matching works");
                 AssertEqual(0, adapter.OutlookSearchBodyCaptureCount, "header-only search never reads body");
+                adapter.OutlookSelectedTo = new string('a', OutlookService.MaxSearchHeaderChars - 1) + "😀needle@example.com";
+                var subject = ExecuteHtmlNative(runtime, OutlookToolIds.SearchMail,
+                    new JObject { ["query"] = "Renewal", ["fields"] = "subject" });
+                AssertEqual(ToolExecutionOutcome.Ok, subject.Outcome, "long unrelated recipient list cannot reject subject search");
+                AssertTrue(!(bool)JObject.Parse(subject.Result.DataJson)["sourceTruncated"],
+                    "recipient truncation does not weaken a subject-only result");
+                var source = ResourceSnapshotReadService.ReadPayload(executor.Payloads,
+                    subject.ResourceEvidence.Single().Payload);
+                var firstMail = JObject.Parse(source)["folder"]["messages"][0];
+                AssertTrue((bool)firstMail["recipientsTruncated"] &&
+                    ((string)firstMail["to"]).Length == OutlookService.MaxSearchHeaderChars - 1,
+                    "bounded recipient prefix preserves the truncation marker and surrogate boundary");
+                var recipient = ExecuteHtmlNative(runtime, OutlookToolIds.SearchMail,
+                    new JObject { ["query"] = "needle@example.com", ["fields"] = "recipients" });
+                AssertTrue(recipient.Outcome == ToolExecutionOutcome.Ok &&
+                    (int)JObject.Parse(recipient.Result.DataJson)["matchCount"] == 0 &&
+                    (bool)JObject.Parse(recipient.Result.DataJson)["sourceTruncated"],
+                    "recipient negative result reports its incomplete source");
+                adapter.OutlookSelectedSenderEmail = new string('e', OutlookService.MaxSearchHeaderChars) + "needle";
+                var sender = ExecuteHtmlNative(runtime, OutlookToolIds.SearchMail,
+                    new JObject { ["query"] = "needle", ["fields"] = "sender" });
+                AssertTrue(sender.Outcome == ToolExecutionOutcome.Ok &&
+                    (bool)JObject.Parse(sender.Result.DataJson)["sourceTruncated"],
+                    "sender email prefix is explicitly incomplete");
+                adapter.OutlookSelectedTo = "owner@example.com";
+                adapter.OutlookSelectedSenderEmail = "customer@example.com";
                 adapter.OutlookSelectedBody = new string('x', OutlookService.MaxSearchBodyChars - 1) + "😀 needle";
                 var bodies = new JObject { ["query"] = "needle", ["fields"] = "body" };
                 var limited = ExecuteHtmlNative(runtime, OutlookToolIds.SearchMail, bodies);
@@ -237,6 +263,9 @@ namespace RNAssistant.Harness
                 adapter.OutlookFolderSnapshotTransform = null;
                 adapter.OutlookIsMailTarget = true;
                 AssertEqual(ToolExecutionOutcome.Error, ExecuteHtmlNative(runtime, OutlookToolIds.SearchMail, bodies).Outcome, "Inspector cannot fall back to a folder search");
+                var archive = ExecuteHtmlNative(runtime, OutlookToolIds.IndexArchive, new JObject());
+                AssertEqual("outlook_mailbox_required", (string)JObject.Parse(archive.Result.DataJson)["code"],
+                    "folder or Inspector archive refusal reports the actual prerequisite");
             });
         }
 
@@ -368,11 +397,23 @@ namespace RNAssistant.Harness
                 executor.BindResourceAuthority(session);
                 var tools = OfficeToolCatalog.ForHost("Outlook").Concat(executor.GetControllerTools()).ToList();
                 var runtime = executor.CreateNativeRuntime(session, tools, new AppSettings(), "agent", false);
-                var candidate = executor.ResourceGateway.Find(session, "", "document").Items.Single(item => item.Type == "Outlook collection");
+                adapter.OutlookDiscoveryTransform = discovery => { discovery.Truncated = true; return discovery; };
+                var incomplete = executor.ResourceGateway.Find(session, "", "document");
+                AssertTrue(!incomplete.Complete, "bounded mail discovery is incomplete");
+                var candidate = incomplete.Items.Single(item => item.Type == "Outlook collection");
+                var mailTarget = incomplete.Items.First(item => item.Type == "Outlook mail").Target;
+                var refusedMail = RuntimeThrows<ResourceRequestException>(() =>
+                    executor.ResourceGateway.ResolveIntentTarget(session, mailTarget));
+                AssertEqual("resource_scope_incomplete", refusedMail.ErrorCode,
+                    "unproven individual mail uniqueness still fails closed");
+                AssertContains(refusedMail.Message, "Do not repeat the same read",
+                    "mail refusal explains the missing coverage without blaming cache");
                 AssertEqual(0, adapter.OutlookCollectionCaptureCount, "discovery is body-free");
                 var sourceRead = ExecuteHtmlNative(runtime, ResourceToolCatalog.ReadToolId,
                     new JObject { ["target"] = candidate.Target, ["representation"] = "text" });
-                AssertEqual(ToolExecutionOutcome.Ok, sourceRead.Outcome, "collection source uses common reader");
+                AssertEqual(ToolExecutionOutcome.Ok, sourceRead.Outcome,
+                    "collection resolves directly despite incomplete mail discovery");
+                adapter.OutlookDiscoveryTransform = null;
                 var source = JObject.Parse((string)JObject.Parse(sourceRead.Result.DataJson)["text"]);
                 var messages = (JArray)source["messages"];
                 AssertEqual(2, messages.Count, "bounded collection retains both fixture mails");
@@ -382,6 +423,23 @@ namespace RNAssistant.Harness
                 AssertTrue((bool)preview["bodyTruncated"] && !(bool)source["collectionTruncated"], "body and folder coverage remain separate");
                 AssertTrue(source.ToString().IndexOf("entryId", StringComparison.OrdinalIgnoreCase) < 0 && source["folder"] == null,
                     "no folder locator or mail runtime identity in source body");
+                var narrowTarget = "Outlook collection: latest:1";
+                var narrowFound = executor.ResourceGateway.Find(session, narrowTarget, "document");
+                AssertTrue(narrowFound.Complete && narrowFound.Items.Single().Target == narrowTarget,
+                    "bounded collection has a direct semantic target");
+                var narrowRead = ExecuteHtmlNative(runtime, ResourceToolCatalog.ReadToolId,
+                    new JObject { ["target"] = narrowTarget, ["representation"] = "text" });
+                AssertEqual(ToolExecutionOutcome.Ok, narrowRead.Outcome, "narrow collection captures at source");
+                var narrowSource = JObject.Parse((string)JObject.Parse(narrowRead.Result.DataJson)["text"]);
+                AssertTrue((int)narrowSource["maximumFolderItems"] == 1 &&
+                    (int)narrowSource["totalFolderItems"] == 2 &&
+                    (bool)narrowSource["collectionTruncated"] &&
+                    ((JArray)narrowSource["messages"]).Count == 1,
+                    "bounded source reports captured rows and incomplete folder coverage");
+                var narrowRecords = executor.ResourceGateway.Read(session, new ResourceReadRequest {
+                    Reference = narrowRead.ResourceEvidence.Single().Resource, Representation = "records",
+                    ViewPath = "$.messages", MaxRows = 1 }).Result;
+                AssertEqual(1, narrowRecords.Table.Rows.Count, "records derive from narrow exact capture");
                 var evidence = sourceRead.ResourceEvidence.Single();
                 AssertTrue(evidence.Complete && evidence.Payload != null, "complete exact collection is retained in CAS");
                 var count = adapter.OutlookCollectionCaptureCount;
@@ -437,7 +495,12 @@ namespace RNAssistant.Harness
                     snapshot.TotalItems = 100; return snapshot; };
                 denied = false;
                 try { executor.ResourceGateway.Read(session, new ResourceReadRequest { Reference = reference, Representation = "text" }); }
-                catch (ResourceRequestException error) { denied = error.ErrorCode == "RESOURCE_SNAPSHOT_TOO_LARGE"; }
+                catch (ResourceRequestException error)
+                {
+                    denied = error.ErrorCode == "RESOURCE_SNAPSHOT_TOO_LARGE";
+                    AssertContains(error.Message, "Outlook collection: latest:N",
+                        "oversized capture gives the actionable bounded source target");
+                }
                 AssertTrue(denied, "aggregate collection budget refuses individually valid oversized rows");
                 adapter.OutlookFolderSnapshotTransform = snapshot => {
                     snapshot.Messages[0].Body = ""; snapshot.Messages[1].Body = ""; return snapshot; };

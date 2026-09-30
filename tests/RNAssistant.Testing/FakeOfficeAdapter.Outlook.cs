@@ -75,6 +75,18 @@ namespace RNAssistant.Harness
             set { OutlookSelected().Body = value; }
         }
 
+        public string OutlookSelectedTo
+        {
+            get { return OutlookSelected().To; }
+            set { OutlookSelected().To = value; }
+        }
+
+        public string OutlookSelectedSenderEmail
+        {
+            get { return OutlookSelected().SenderEmail; }
+            set { OutlookSelected().SenderEmail = value; }
+        }
+
         public OutlookMailReadSnapshot ReadMail(OutlookReadMailRequest request)
         {
             BeginOutlookBackendCall(OutlookReadMailOperation);
@@ -155,9 +167,20 @@ namespace RNAssistant.Harness
                 .Select(item => {
                     if (!collection)
                     {
-                        var captured = new OutlookMailSnapshot { EntryId = item.EntryId, Subject = item.Subject ?? string.Empty, Sender = item.Sender ?? string.Empty,
-                            SenderEmail = item.SenderEmail ?? string.Empty, To = item.To ?? string.Empty,
-                            Cc = item.Cc ?? string.Empty, Bcc = item.Bcc ?? string.Empty, Received = item.Received };
+                        var captured = new OutlookMailSnapshot { EntryId = item.EntryId, Subject = item.Subject ?? string.Empty,
+                            Sender = item.Sender ?? string.Empty, Received = item.Received };
+                        if (captured.Subject.Length > OutlookService.MaxSearchHeaderChars)
+                            throw new OutlookBackendException("Mail subject exceeds the search identity bound.",
+                                "RESOURCE_SNAPSHOT_TOO_LARGE", false);
+                        if (captured.Sender.Length > OutlookService.MaxSearchHeaderChars)
+                            throw new OutlookBackendException("Mail sender name exceeds the search identity bound.",
+                                "RESOURCE_SNAPSHOT_TOO_LARGE", false);
+                        captured.SenderEmail = SearchHeaderPrefix(item.SenderEmail, out var senderEmailTruncated);
+                        captured.SenderEmailTruncated = senderEmailTruncated;
+                        captured.To = SearchHeaderPrefix(item.To, out var toTruncated);
+                        captured.Cc = SearchHeaderPrefix(item.Cc, out var ccTruncated);
+                        captured.Bcc = SearchHeaderPrefix(item.Bcc, out var bccTruncated);
+                        captured.RecipientsTruncated = toTruncated || ccTruncated || bccTruncated;
                         if (request.Kind == OutlookFolderCaptureKind.SearchBodies)
                         {
                             OutlookSearchBodyCaptureCount++;
@@ -182,6 +205,15 @@ namespace RNAssistant.Harness
                 Truncated = all.Length > source.Length
             };
             return OutlookFolderSnapshotTransform == null ? snapshot : OutlookFolderSnapshotTransform(snapshot);
+        }
+
+        private static string SearchHeaderPrefix(string value, out bool truncated)
+        {
+            value = value ?? string.Empty;
+            var length = Math.Min(value.Length, OutlookService.MaxSearchHeaderChars);
+            if (length > 0 && length < value.Length && char.IsHighSurrogate(value[length - 1])) length--;
+            truncated = length < value.Length;
+            return value.Substring(0, length);
         }
 
         public OutlookDraftBackendResult CreateDraft(

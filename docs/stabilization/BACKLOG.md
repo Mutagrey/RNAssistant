@@ -58,6 +58,18 @@ not include DOCX/XLSX/PPTX extraction, archives, embedded .msg/OLE items or mail
 attachment search. Any extension requires a separate approved scope. Windows delivery
 and real model/COM checks remain open under the existing qualification gates.
 
+## Outlook exact mail from a large folder — 2026-09-30
+
+Owner: Outlook backend / Resource Fabric. When a folder has more than the 500
+discovered items, an `Outlook mail` title cannot be proven unique against older
+messages, so its semantic read returns `resource_scope_incomplete`. The folder
+collection now resolves independently and supports `latest:N`, but previews do
+not replace complete bodies or attachment reads. Provide a bounded exact lookup
+or runtime-issued disambiguating semantic target with full-folder uniqueness
+evidence before enabling those reads; preserve the no-EntryID model boundary and
+verify on real Outlook. Until then, use the mailbox chat archive scan for full
+mailbox analysis.
+
 ## Dependency-direction substring false positives — 2026-09-08
 
 Owner: architecture harness. `architecture: mandatory dependency direction` reports
