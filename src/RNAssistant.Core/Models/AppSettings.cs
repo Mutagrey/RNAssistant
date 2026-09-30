@@ -323,6 +323,7 @@ namespace RNAssistant.Core.Models
         public bool ScreenCaptureProtectionEnabled { get; set; }
         public double UiFontScale { get; set; }
         public string UiTheme { get; set; }
+        // Shared by the separate Desktop and NativeHostCli windows.
         public int DesktopWindowWidth { get; set; }
         public Dictionary<string, string> CustomHeaders { get; set; }
         public Dictionary<string, bool?> ModelImageSupportOverrides { get; set; }

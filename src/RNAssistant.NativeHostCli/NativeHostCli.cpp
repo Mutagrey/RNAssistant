@@ -56,6 +56,10 @@ private:
     static bool _screenCaptureProtectionEnabled = true;
     static EventInfo^ _screenCaptureProtectionChangedEvent = nullptr;
     static Action<bool>^ _screenCaptureProtectionChangedHandler = nullptr;
+    static int _panelWindowWidth = 0;
+    static bool _applyWidthOnRestore = false;
+    static EventInfo^ _panelWindowWidthChangedEvent = nullptr;
+    static Action<int>^ _panelWindowWidthChangedHandler = nullptr;
 
 public:
     static int ShowPanel(IntPtr officeHwnd, String^ rootPath, int hostKind)
@@ -265,6 +269,29 @@ private:
                 _session,
                 _screenCaptureProtectionChangedHandler);
 
+            PropertyInfo^ panelWindowWidthProperty = sessionType->GetProperty("PanelWindowWidth");
+            if (panelWindowWidthProperty == nullptr)
+            {
+                throw gcnew MissingMemberException(
+                    sessionType->FullName + ".PanelWindowWidth was not found.");
+            }
+            _panelWindowWidth = safe_cast<int>(panelWindowWidthProperty->GetValue(_session, nullptr));
+            if (_panelWindowWidth <= 0)
+            {
+                throw gcnew InvalidOperationException("PanelWindowWidth must be positive.");
+            }
+            _panelWindowWidthChangedEvent = sessionType->GetEvent("PanelWindowWidthChanged");
+            if (_panelWindowWidthChangedEvent == nullptr)
+            {
+                throw gcnew MissingMemberException(
+                    sessionType->FullName + ".PanelWindowWidthChanged was not found.");
+            }
+            _panelWindowWidthChangedHandler =
+                gcnew Action<int>(&ManagedPanelHost::OnPanelWindowWidthChanged);
+            _panelWindowWidthChangedEvent->AddEventHandler(
+                _session,
+                _panelWindowWidthChangedHandler);
+
             PropertyInfo^ panelProperty = sessionType->GetProperty("PanelControl");
             Control^ panel = panelProperty == nullptr
                 ? nullptr
@@ -276,7 +303,7 @@ private:
 
             _form = gcnew Form();
             _form->Text = "RN Assistant";
-            _form->Width = 1200;
+            _form->Width = _panelWindowWidth;
             _form->Height = 720;
             _form->MinimumSize = System::Drawing::Size(420, 300);
             _form->StartPosition = FormStartPosition::Manual;
@@ -286,6 +313,7 @@ private:
             _form->MinimizeBox = false;
             _form->Controls->Add(panel);
             _form->HandleCreated += gcnew EventHandler(&ManagedPanelHost::OnFormHandleCreated);
+            _form->Resize += gcnew EventHandler(&ManagedPanelHost::OnFormResize);
             _form->FormClosed += gcnew FormClosedEventHandler(&ManagedPanelHost::OnFormClosed);
 
             _officeHwnd = officeHwnd;
@@ -366,6 +394,56 @@ private:
         ApplyScreenCaptureProtection(form);
     }
 
+    static void OnPanelWindowWidthChanged(int width)
+    {
+        _panelWindowWidth = width;
+        Form^ form = _form;
+        if (form == nullptr || form->IsDisposed || !form->IsHandleCreated)
+        {
+            return;
+        }
+
+        if (form->InvokeRequired)
+        {
+            array<Object^>^ arguments = gcnew array<Object^>(1);
+            arguments[0] = width;
+            form->BeginInvoke(gcnew Action<int>(&ManagedPanelHost::ApplyPanelWindowWidthChange), arguments);
+            return;
+        }
+
+        ApplyPanelWindowWidthChange(width);
+    }
+
+    static void ApplyPanelWindowWidthChange(int width)
+    {
+        Form^ form = _form;
+        if (width != _panelWindowWidth || form == nullptr || form->IsDisposed)
+        {
+            return;
+        }
+        if (form->WindowState != FormWindowState::Normal)
+        {
+            _applyWidthOnRestore = true;
+            return;
+        }
+
+        System::Drawing::Rectangle workingArea = Screen::FromControl(form)->WorkingArea;
+        int boundedWidth = Math::Min(width, workingArea.Width);
+        int left = Math::Max(workingArea.Left,
+            Math::Min(form->Right - boundedWidth, workingArea.Right - boundedWidth));
+        _applyWidthOnRestore = false;
+        form->SetBounds(left, form->Top, boundedWidth, form->Height);
+    }
+
+    static void OnFormResize(Object^, EventArgs^)
+    {
+        if (_applyWidthOnRestore && _form != nullptr && !_form->IsDisposed &&
+            _form->WindowState == FormWindowState::Normal)
+        {
+            ApplyPanelWindowWidthChange(_panelWindowWidth);
+        }
+    }
+
     static void ApplyScreenCaptureProtection(Form^ form)
     {
         HWND hwnd = static_cast<HWND>(form->Handle.ToPointer());
@@ -427,12 +505,11 @@ private:
 
         System::Drawing::Rectangle workingArea =
             Screen::FromHandle(officeHwnd)->WorkingArea;
-        const int panelWidth = 1200;
         const int topOffset = 120;
         const int rightMargin = 20;
         const int bottomMargin = 40;
 
-        int width = Math::Min(panelWidth, workingArea.Width);
+        int width = Math::Min(_panelWindowWidth, workingArea.Width);
         int desiredHeight = (rect.bottom - rect.top) - topOffset - bottomMargin;
         int height = Math::Max(300, Math::Min(desiredHeight, workingArea.Height));
         int left = rect.right - width - rightMargin;
@@ -467,6 +544,20 @@ private:
             {
             }
         }
+        if (_session != nullptr &&
+            _panelWindowWidthChangedEvent != nullptr &&
+            _panelWindowWidthChangedHandler != nullptr)
+        {
+            try
+            {
+                _panelWindowWidthChangedEvent->RemoveEventHandler(
+                    _session,
+                    _panelWindowWidthChangedHandler);
+            }
+            catch (Exception^)
+            {
+            }
+        }
         IDisposable^ disposable = dynamic_cast<IDisposable^>(_session);
         if (disposable != nullptr)
         {
@@ -476,6 +567,10 @@ private:
         _screenCaptureProtectionChangedEvent = nullptr;
         _screenCaptureProtectionChangedHandler = nullptr;
         _screenCaptureProtectionEnabled = true;
+        _panelWindowWidthChangedEvent = nullptr;
+        _panelWindowWidthChangedHandler = nullptr;
+        _panelWindowWidth = 0;
+        _applyWidthOnRestore = false;
     }
 
     static int Fail(int result, String^ message, Exception^ exception, IntPtr owner)

@@ -22,6 +22,7 @@ namespace RNAssistant.OfficeHosts
         private readonly IOfficeApplicationAdapter _adapter;
         private readonly OfficeUiDispatcher _officeDispatcher;
         private bool _screenCaptureProtectionEnabled;
+        private int _panelWindowWidth;
         private bool _disposed;
 
         private InProcessPanelSession(
@@ -32,7 +33,8 @@ namespace RNAssistant.OfficeHosts
             OfficeUiDispatcher officeDispatcher,
             AssistantRuntime runtime,
             Control panelControl,
-            bool screenCaptureProtectionEnabled)
+            bool screenCaptureProtectionEnabled,
+            int panelWindowWidth)
         {
             HostKind = hostKind;
             OfficeHwnd = officeHwnd;
@@ -42,6 +44,7 @@ namespace RNAssistant.OfficeHosts
             Runtime = runtime;
             PanelControl = panelControl;
             _screenCaptureProtectionEnabled = screenCaptureProtectionEnabled;
+            _panelWindowWidth = panelWindowWidth;
             Runtime.Controller.SettingsChanged += OnSettingsChanged;
         }
 
@@ -54,8 +57,13 @@ namespace RNAssistant.OfficeHosts
         {
             get { return _screenCaptureProtectionEnabled; }
         }
+        public int PanelWindowWidth
+        {
+            get { return _panelWindowWidth; }
+        }
 
         public event Action<bool> ScreenCaptureProtectionChanged;
+        public event Action<int> PanelWindowWidthChanged;
 
         public static InProcessPanelSession Create(int hostKind, long officeHwnd, string rootPath)
         {
@@ -100,7 +108,7 @@ namespace RNAssistant.OfficeHosts
                 runtime.OfficeHostLaunchRequested = OfficeHostLauncher.OpenOrActivate;
                 var control = runtime.CreatePaneControl();
                 control.Dock = DockStyle.Fill;
-                var screenCaptureProtectionEnabled = runtime.Controller.GetSettings().Settings.ScreenCaptureProtectionEnabled;
+                var settings = runtime.Controller.GetSettings().Settings;
                 return new InProcessPanelSession(
                     kind,
                     officeHwnd,
@@ -109,7 +117,8 @@ namespace RNAssistant.OfficeHosts
                     officeDispatcher,
                     runtime,
                     control,
-                    screenCaptureProtectionEnabled);
+                    settings.ScreenCaptureProtectionEnabled,
+                    settings.DesktopWindowWidth);
             }
             catch
             {
@@ -188,16 +197,24 @@ namespace RNAssistant.OfficeHosts
         private void OnSettingsChanged(AppSettings settings)
         {
             var enabled = settings == null || settings.ScreenCaptureProtectionEnabled;
-            if (_screenCaptureProtectionEnabled == enabled)
+            if (_screenCaptureProtectionEnabled != enabled)
             {
-                return;
+                _screenCaptureProtectionEnabled = enabled;
+                var captureChanged = ScreenCaptureProtectionChanged;
+                if (captureChanged != null)
+                {
+                    captureChanged(enabled);
+                }
             }
 
-            _screenCaptureProtectionEnabled = enabled;
-            var changed = ScreenCaptureProtectionChanged;
-            if (changed != null)
+            if (settings != null && _panelWindowWidth != settings.DesktopWindowWidth)
             {
-                changed(enabled);
+                _panelWindowWidth = settings.DesktopWindowWidth;
+                var widthChanged = PanelWindowWidthChanged;
+                if (widthChanged != null)
+                {
+                    widthChanged(_panelWindowWidth);
+                }
             }
         }
 
