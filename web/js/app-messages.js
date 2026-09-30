@@ -195,7 +195,8 @@ function appendMessageFooter(node, message, index, activity) {
   if (runViewState && runViewState.lifecycle !== "completed" && runViewState.lifecycle !== "running") {
     var outcome = document.createElement("span");
     outcome.className = "message-outcome status-" +
-      window.RNAssistantRunViewState.displayStatus(runViewState, runViewState.lifecycle);
+      (runViewState.executionHealth === "unknown" && runViewState.lifecycle === "failed"
+        ? "warning" : window.RNAssistantRunViewState.displayStatus(runViewState, runViewState.lifecycle));
     outcome.textContent = conversationOutcomeLabel(runViewState);
     if (outcome.textContent) meta.appendChild(outcome);
   } else if (!runViewState && messageRole(message) === "assistant" &&

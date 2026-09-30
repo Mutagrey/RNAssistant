@@ -159,12 +159,42 @@ vm.runInContext(fs.readFileSync(path.join(__dirname, "../../web/js/app-agent-act
 tests.push(["semantic target is visible and unknown effect takes precedence over conflict wording", () => {
   const activity = { Kind: "tool", ToolId: "common.resources_read", Display: { action: "Чтение ресурса", runningAction: "Читаю ресурс", operation: "Read" }, Title: "Resource read", ProgressTitle: "Working", Subtitle: "Продажи!A1:D120", Status: "running" };
   const row = context.renderActivityRow(activity, true, false, null);
-  assert.match(row.textContent, /Читаю ресурс/);
+  assert.match(row.textContent, /Читаю/);
   assert.match(row.textContent, /Продажи!A1:D120/);
   const conflict = { Status: "failed", ErrorCode: "excel_sheet_already_exists", ResultMessage: "raw", ExecutionEvidence: { Dispatch: "NotDispatched", Effect: "None" } };
   assert.equal(context.activityDisplayResult(conflict), "Лист уже существует. Создание не выполнено.");
   conflict.ExecutionEvidence = { Dispatch: "MayHaveDispatched", Effect: "Unknown" };
   assert.match(context.activityDisplayResult(conflict), /не подтверждён/);
+}]);
+
+tests.push(["uncertain and correctable actions are amber while hard failures stay red", () => {
+  const macro = { Kind: "tool", ToolId: "common.office_run_macro", Status: "failed", ErrorCode: "tool_effect_uncertain",
+    ExecutionEvidence: { Dispatch: "MayHaveDispatched", Effect: "Unknown" } };
+  assert.equal(context.activityPresentationState(macro), "unknown");
+  assert.match(context.renderActivityRow(macro, false, false, null).textContent, /Результат не подтверждён/);
+  const correctable = { Kind: "tool", ToolId: "common.resources_read", Status: "failed", ErrorCode: "resource_revision_changed",
+    ExecutionEvidence: { Dispatch: "NotDispatched", Effect: "None" } };
+  assert.equal(context.activityPresentationState(correctable), "warning");
+  assert.match(walk(context.renderActivityRow(correctable, false, false, null)).find(node =>
+    /agent-activity-caption/.test(node.className)).className, /status-warning/);
+  correctable.ErrorCode = "RESOURCE_SNAPSHOT_TOO_LARGE";
+  assert.equal(context.activityPresentationState(correctable), "warning");
+  correctable.ErrorCode = "resource_access_denied";
+  assert.equal(context.activityPresentationState(correctable), "failed");
+  correctable.ErrorCode = "parameters_schema";
+  assert.equal(context.activityPresentationState(correctable), "failed");
+  correctable.ErrorCode = "constructor";
+  assert.equal(context.activityPresentationState(correctable), "failed", "only exact declared codes are warnings");
+  assert.match(context.activityDisplayResult(correctable), /Не удалось начать действие/);
+  correctable.ErrorCode = "resource_revision_changed";
+  delete correctable.ExecutionEvidence;
+  assert.equal(context.activityPresentationState(correctable), "failed", "missing effect evidence cannot downgrade a failure");
+  const unknownRun = view("unknown", { lifecycle: "failed", unknown: 1, failed: 1 });
+  assert.match(assertVisibleEvidence(renderFinal(unknownRun), "unknown").className, /status-warning/);
+  assert.match(context.RNAssistantRunViewState.outcomeLabel(context.RNAssistantRunViewState.normalize(unknownRun)), /результат действия неизвестен/);
+  const stopped = view("errors", { lifecycle: "failed", failed: 1 });
+  assert.match(assertVisibleEvidence(renderFinal(stopped), "errors").className, /status-failed/);
+  assert.match(assertVisibleEvidence(renderFinal(view("errors", { failed: 1 })), "errors").className, /status-warning/);
 }]);
 
 tests.push(["tool rows preserve action target and result without rewriting model data", () => {

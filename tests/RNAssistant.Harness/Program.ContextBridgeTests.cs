@@ -711,7 +711,9 @@ namespace RNAssistant.Harness
                     RunId = "run-1", Content = hiddenBody },
                 new ChatMessage { Id = "visible", Role = "user", Content = "Read the file",
                     Activity = new ChatActivity { Kind = "notice", Title = "Visible activity",
-                        RuntimeGuardJson = "private-guard", ConfirmationCatalogSha256 = "private-catalog" },
+                        RuntimeGuardJson = "private-guard", ConfirmationCatalogSha256 = "private-catalog",
+                        ExecutionEvidence = new ToolExecutionEvidence(ToolDispatchEvidence.MayHaveDispatched,
+                            ToolEffectEvidence.Unknown) },
                     Attachments = new List<ChatAttachment> { new ChatAttachment {
                         Id = "file-1", FileName = "report.txt", Kind = "text", Size = 42,
                         ExtractedText = extractedText } },
@@ -741,6 +743,8 @@ namespace RNAssistant.Harness
                 (string)wire[1]["Activity"]["ConfirmationCatalogSha256"] == null &&
                 !json.Contains("private-guard") && !json.Contains("private-catalog"),
                 "runtime guard and catalog hash stay out of browser activity");
+            AssertEqual("Unknown", (string)wire[1]["Activity"]["ExecutionEvidence"]["Effect"],
+                "browser activity retains source-owned effect for the warning color");
             AssertTrue(!object.ReferenceEquals(messages[1].ResourceRefs[0], projected[1].ResourceRefs[0]),
                 "artifact reference is detached from live session");
             AssertEqual(hiddenBody, messages[0].Content, "bridge projection does not mutate durable input");

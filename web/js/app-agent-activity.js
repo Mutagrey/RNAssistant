@@ -105,12 +105,13 @@ function renderActivityRow(activity, current, expandable, context) {
   var title = activityPrimaryText(activity);
   var comment = activityCommentText(activity);
   var time = activityTimeText(context);
+  var presentation = activityPresentationState(activity);
   var hideIcon = (context && context.hideIcon) ||
     ["notice", "reasoning", "step", "compaction"].indexOf(activityKind(activity)) >= 0;
   row.className = "agent-activity-row" + (comment ? " has-comment" : " has-no-comment") +
     (hideIcon ? " is-status-label" : "") +
     (context && context.liveFeed && activity === context.currentActivity && status === "running" ? " is-live-current" : "");
-  row.title = [title, comment, agentStatusLabel(status), time].filter(Boolean).join(" · ");
+  row.title = [title, comment, agentStatusLabel(presentation), time].filter(Boolean).join(" · ");
 
   if (!hideIcon) {
     var mark = document.createElement("span");
@@ -144,11 +145,11 @@ function renderActivityRow(activity, current, expandable, context) {
   var resultText = activityDisplayResult(activity);
   if (resultText && resultText !== title && resultText !== comment) {
     var resultLine = document.createElement("span");
-    resultLine.className = "agent-activity-caption status-" + activityPresentationState(activity);
+    resultLine.className = "agent-activity-caption status-" + presentation;
     var symbol = document.createElement("span");
     symbol.className = "agent-activity-status-symbol";
     symbol.setAttribute("aria-hidden", "true");
-    symbol.textContent = { failed: "×", unknown: "!", waiting: "…", partial: "…", cancelled: "−", completed: "✓" }[activityPresentationState(activity)] || "";
+    symbol.textContent = { failed: "×", unknown: "!", warning: "!", waiting: "…", partial: "…", cancelled: "−", completed: "✓" }[presentation] || "";
     resultLine.appendChild(symbol);
     var resultCopy = document.createElement("span");
     resultCopy.textContent = resultText;
@@ -284,16 +285,66 @@ function activityResultCaption(activity) {
   return caption;
 }
 
+var activityNoEffectWarningCodes = {
+  excel_sheet_already_exists: true,
+  vba_patch_stale_source: true,
+  vba_patch_ambiguous: true,
+  vba_patch_invalid: true,
+  vba_snapshot_refresh_required: true,
+  stale_vba_module: true,
+  vba_backup_target_ambiguous: true,
+  text_patch_invalid: true,
+  text_patch_ambiguous: true,
+  html_source_observation_required: true,
+  html_workspace_target_ambiguous: true,
+  invalid_task_list: true,
+  invalid_plan_document: true,
+  resource_not_found: true,
+  resource_target_not_found: true,
+  resource_target_ambiguous: true,
+  resource_scope_incomplete: true,
+  resource_revision_changed: true,
+  resource_head_unknown: true,
+  resource_batch_too_large: true,
+  resource_snapshot_too_large: true,
+  resource_backpressure: true,
+  resource_authority_not_ready: true,
+  resource_cursor_invalid: true,
+  resource_view_invalid: true,
+  resource_target_required: true,
+  resource_target_runtime_owned: true,
+  resource_view_unsupported: true,
+  resource_request_invalid: true,
+  resource_whole_read_incomplete: true,
+  resource_whole_read_invalid: true,
+  capability_not_found: true,
+  invalid_arguments: true,
+  tool_not_found: true,
+  tool_arguments_invalid: true,
+  tool_mutation_busy: true,
+  manual_tool_chat_busy: true,
+  active_document_changed: true,
+  document_session_unavailable: true
+};
+
 function activityPresentationState(activity) {
   var evidence = activityValue(activity, "ExecutionEvidence", "executionEvidence", null);
-  if (activityValue(evidence, "Effect", "effect", "") === "Unknown") return "unknown";
+  var effect = activityValue(evidence, "Effect", "effect", "");
+  if (effect === "Unknown") return "unknown";
   var status = activityStatus(activity);
   if (status === "completed") {
     activityResultCaption(activity);
     var display = activityPresentationCache.get(activity);
     if (display && display.source === activityDataJson(activity) && display.partial) return "partial";
   }
-  return status === "completed_with_errors" ? "failed" : status;
+  if (status === "failed" || status === "completed_with_errors") {
+    var code = String(activityValue(activity, "ErrorCode", "errorCode", "") || "").toLowerCase();
+    var dispatch = activityValue(evidence, "Dispatch", "dispatch", "");
+    var noEffect = dispatch === "NotDispatched" || effect === "None" || effect === "VerifiedNoChange";
+    return activityToolId(activity) && noEffect && Object.prototype.hasOwnProperty.call(activityNoEffectWarningCodes, code)
+      ? "warning" : "failed";
+  }
+  return status;
 }
 
 function activityDisplayResult(activity) {
@@ -323,6 +374,7 @@ function activityDisplayResult(activity) {
       resource_revision_changed: "Ресурс изменился — нужно перечитать",
       resource_head_unknown: "Состояние ресурса требует проверки",
       resource_batch_too_large: "Слишком большой объём данных",
+      resource_snapshot_too_large: "Выберите меньший объём данных",
       resource_backpressure: "Ресурс занят — попробуйте позже",
       resource_authority_not_ready: "Ресурс пока недоступен",
       resource_cursor_invalid: "Данные изменились — повторите поиск",
@@ -342,9 +394,16 @@ function activityDisplayResult(activity) {
       manual_tool_chat_busy: "Дождитесь завершения текущего действия",
       active_document_changed: "Активный документ изменился",
       document_session_unavailable: "Документ недоступен",
+      vba_patch_stale_source: "Код изменился — обновите исходник",
+      vba_patch_ambiguous: "Нужно уточнить место правки",
+      vba_patch_invalid: "Нужно исправить патч",
+      vba_snapshot_refresh_required: "Код изменился — перечитайте модуль",
+      stale_vba_module: "Модуль изменился — перечитайте код",
+      html_source_observation_required: "Нужно прочитать текущий HTML",
       tool_effect_uncertain: "Результат не подтверждён — нужна проверка"
     };
-    var failure = errors[code] || (dispatch === "NotDispatched" ? "Не удалось начать действие" : "Действие завершилось с ошибкой");
+    var failure = Object.prototype.hasOwnProperty.call(errors, code) ? errors[code]
+      : (dispatch === "NotDispatched" ? "Не удалось начать действие" : "Действие завершилось с ошибкой");
     return code ? failure + " · " + code : failure;
   }
   if (!activityToolId(activity)) return activityResultMessage(activity);
@@ -509,6 +568,9 @@ function agentStatusLabel(status) {
     completed_with_errors: "Завершено с ошибками",
     running: "Выполняю",
     waiting: "Нужно подтверждение",
+    warning: "Требует внимания",
+    unknown: "Результат требует проверки",
+    partial: "Получена часть данных",
     failed: "Ошибка",
     cancelled: "Отменено",
     pending: "Ожидает"

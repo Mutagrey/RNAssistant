@@ -253,8 +253,6 @@ html[data-theme="dark"] .inline-field input,
 html[data-theme="dark"] .mode-toggle,
 html[data-theme="dark"] .editor-preview,
 html[data-theme="dark"] .editor-edit-input,
-html[data-theme="dark"] .model-info,
-html[data-theme="dark"] .model-capability-section,
 html[data-theme="dark"] .tool-search {
   border-color: var(--line);
   background: var(--panel);
@@ -521,6 +519,14 @@ html[data-theme="dark"] .agent-activity-tool-id {
   color: #b6bfcc;
 }
 
+html[data-theme="dark"] .agent-activity-caption.status-unknown,
+html[data-theme="dark"] .agent-activity-caption.status-warning,
+html[data-theme="dark"] .agent-activity-caption.status-partial,
+html[data-theme="dark"] .agent-run-history-state.status-warning,
+html[data-theme="dark"] .message-outcome.status-warning {
+  color: #fbbf24;
+}
+
 html[data-theme="dark"] .agent-approval-panel {
   border-color: #5c4b30;
   background: #241f17;
@@ -540,15 +546,10 @@ html[data-theme="dark"] .agent-data > summary {
   color: var(--text);
 }
 
-html[data-theme="dark"] .model-info-metrics span,
 html[data-theme="dark"] .model-capability-header,
 html[data-theme="dark"] .attachment-model-priority-rank {
   background: #202a38;
   color: #b9c7dc;
-}
-
-html[data-theme="dark"] .model-default-badge {
-  background: #203452;
 }
 
 html[data-theme="dark"] .attachment-model-priority-badges span {

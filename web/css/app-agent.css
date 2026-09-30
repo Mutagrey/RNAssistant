@@ -246,6 +246,10 @@
   color: #b54708;
 }
 
+.agent-run-history-state.status-warning {
+  color: #a15c07;
+}
+
 .agent-run-history-state.status-failed {
   color: #d92d20;
 }
@@ -861,6 +865,9 @@
 }
 .agent-activity-caption::before { content: " → "; white-space: pre-wrap; }
 .agent-activity-status-symbol { margin-right: 4px; font-weight: 600; }
+.agent-activity-caption.status-unknown,
+.agent-activity-caption.status-warning,
+.agent-activity-caption.status-partial { color: #a15c07; }
 .agent-activity-caption.status-failed { color: var(--danger); }
 
 /* Retained text changes, shared source formatter with VBA previews/journal. */

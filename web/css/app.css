@@ -1027,8 +1027,6 @@ body[data-ui-font-scale] .composer-mode select,
 body[data-ui-font-scale] .composer-model select,
 body[data-ui-font-scale] .workspace-note,
 body[data-ui-font-scale] .context-panel-meta,
-body[data-ui-font-scale] .model-info-description,
-body[data-ui-font-scale] .model-info-value,
 body[data-ui-font-scale] .agent-run-subtitle,
 body[data-ui-font-scale] .agent-activity-subtitle {
   font-size: calc(12px * var(--ui-font-scale)) !important;

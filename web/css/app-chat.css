@@ -800,7 +800,7 @@
 .message-outcome.status-failed { color: var(--danger); }
 
 .message-outcome.status-warning {
-  color: var(--text);
+  color: #8a5500;
   border-color: #b98630;
 }
 

@@ -72,7 +72,7 @@ vm.runInContext(source, context, { filename: "app-html-workspace-artifacts.js" }
     "artifact detail has the current artifact cache key");
   assert.ok(index.includes("app-html-workspace-editor.js?v=preview-reuse-20260907-1"));
   ["app-task-list.js", "app-agent-activity.js"].forEach(asset => {
-    assert.ok(index.includes(asset + "?v=" + (asset === "app-agent-activity.js" ? "typed-step-results-20260908-1" : "task-close-state-20260929-1")), asset + " has the current planning-intent cache key");
+    assert.ok(index.includes(asset + "?v=" + (asset === "app-agent-activity.js" ? "action-severity-20260930-1" : "task-close-state-20260929-1")), asset + " has the current planning-intent cache key");
   });
   assert.ok(index.includes("app-html-workspace-actions.js?v=html-action-guard-20260908-1"),
     "app-html-workspace-actions.js has the current preview cache key");

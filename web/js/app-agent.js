@@ -284,6 +284,7 @@ function appendAgentRunSummaryState(summary, status) {
   var labels = {
     running: "",
     waiting: "!",
+    warning: "!",
     failed: "×",
     cancelled: "–"
   };
@@ -308,7 +309,9 @@ function appendAgentRunOverview(parent, steps, timeline, stats) {
   title.className = "agent-run-history-title";
   title.textContent = agentRunSummaryTitle(stats.status, stats.elapsed, stats.runViewState) + " · " + actionCount;
   summary.appendChild(title);
-  appendAgentRunSummaryState(summary, stats.status);
+  appendAgentRunSummaryState(summary,
+    stats.status === "failed" && stats.runViewState && stats.runViewState.executionHealth === "unknown"
+      ? "warning" : stats.status);
   var caret = document.createElement("span");
   caret.className = "agent-run-history-caret";
   caret.setAttribute("aria-hidden", "true");
@@ -347,7 +350,8 @@ function appendAgentRunViewState(parent, runViewState, runId) {
   var uncertain = health === "unknown";
   if (health === "clean" && runViewState && ["failed", "cancelled"].indexOf(runViewState.lifecycle) < 0) return;
   var note = document.createElement("div");
-  note.className = "message-outcome " + (uncertain ? "status-warning" : runViewState && runViewState.lifecycle === "failed" ? "status-failed" : "status-history");
+  note.className = "message-outcome " + (uncertain ? "status-warning" : runViewState && runViewState.lifecycle === "failed" ? "status-failed" :
+    health === "errors" ? "status-warning" : "status-history");
   note.setAttribute("data-runtime-health", health);
   note.setAttribute("role", uncertain ? "alert" : "status");
   if (!runViewState) {

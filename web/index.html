@@ -24,12 +24,12 @@
   <link rel="stylesheet" href="css/vendor/wunderbaum.css">
   <link rel="stylesheet" href="css/vendor/viewer.min.css">
   <link rel="stylesheet" href="css/app.css?v=json-surfaces-20260829-1">
-  <link rel="stylesheet" href="css/app-chat.css?v=office-launch-20260930-1">
+  <link rel="stylesheet" href="css/app-chat.css?v=action-severity-20260930-1">
   <link rel="stylesheet" href="css/app-markdown.css?v=json-height-20260929-1">
   <link rel="stylesheet" href="css/app-composer.css?v=composer-polish-20260826-1">
   <link rel="stylesheet" href="css/app-reasoning.css?v=chat-projection-20260907-1">
   <link rel="stylesheet" href="css/app-context-chips.css?v=sidebar-polish-20260723-1">
-  <link rel="stylesheet" href="css/app-models.css?v=model-capability-inline-20260826-1">
+  <link rel="stylesheet" href="css/app-models.css?v=model-settings-20260930-1">
   <link rel="stylesheet" href="css/app-workspace.css?v=diagnostics-clarity-20260930-1">
   <link rel="stylesheet" href="css/app-json-viewer.css?v=json-height-20260929-1">
   <link rel="stylesheet" href="css/app-text-viewer.css?v=artifact-text-20260831-1">
@@ -46,9 +46,9 @@
   <link rel="stylesheet" href="css/app-tree-adapter.css?v=tree-adapter-20260829-1">
   <link rel="stylesheet" href="css/app-html-workspace.css?v=json-height-20260929-1">
   <link rel="stylesheet" href="css/app-responsive.css?v=library-layout-20260907-1">
-  <link rel="stylesheet" href="css/app-agent.css?v=typed-step-results-20260908-1">
+  <link rel="stylesheet" href="css/app-agent.css?v=action-severity-20260930-1">
   <link rel="stylesheet" href="css/app-agent-data.css?v=json-height-20260929-1">
-  <link rel="stylesheet" href="css/app-theme.css?v=run-diff-grey-20260929-1">
+  <link rel="stylesheet" href="css/app-theme.css?v=action-severity-20260930-1">
 </head>
 <body>
   <div class="shell">
@@ -633,53 +633,57 @@
               </div>
             </section>
 
-            <section class="settings-page" data-settings-page="model">
+            <section class="settings-page model-settings-page" data-settings-page="model">
               <div class="settings-heading settings-heading-with-action">
                 <div>
                   <h2>Модель</h2>
-                  <p>Основная модель, лимиты ответа и параметры генерации.</p>
+                  <p>Выбор модели, её возможности и параметры запроса.</p>
                 </div>
                 <button class="secondary" id="resetModelSettingsButton" type="button" title="Вернуть модель, параметры запроса и возможности к исходным значениям">Сбросить параметры</button>
               </div>
-              <div class="form-grid two-columns">
+              <div class="form-grid two-columns model-selection-fields">
                 <label><span>Модель по умолчанию</span><select id="modelSelect"></select></label>
                 <label><span>ID модели вручную</span><input id="modelInput" autocomplete="off" placeholder="Если модели нет в каталоге"></label>
-                <label class="wide"><span>Параметр reasoning API</span><select id="reasoningRequestModeInput"><option value="auto">Авто — стандарт OpenAI reasoning_effort</option><option value="reasoning_effort">reasoning_effort: medium / none</option><option value="enable_thinking">enable_thinking: true / false</option><option value="chat_template_kwargs" selected>chat_template_kwargs.enable_thinking</option><option value="reasoning_enabled">reasoning.enabled: true / false</option><option value="custom_json">Кастомный JSON в теле запроса</option></select><small>Для QwenCloud выберите enable_thinking, для vLLM — chat_template_kwargs, для OpenRouter — reasoning.enabled. Каталог модели может переопределить режим.</small></label>
+                <label class="wide"><span>Параметр reasoning API</span><select id="reasoningRequestModeInput"><option value="auto">Авто — стандарт OpenAI reasoning_effort</option><option value="reasoning_effort">reasoning_effort: medium / none</option><option value="enable_thinking">enable_thinking: true / false</option><option value="chat_template_kwargs" selected>chat_template_kwargs.enable_thinking</option><option value="reasoning_enabled">reasoning.enabled: true / false</option><option value="custom_json">Кастомный JSON в теле запроса</option></select><small>Если режим не указан в каталоге: QwenCloud — enable_thinking, vLLM — chat_template_kwargs, OpenRouter — reasoning.enabled.</small></label>
                 <label class="wide hidden" id="reasoningCustomJsonField"><span>Кастомный reasoning JSON</span><textarea class="reasoning-json-input" id="reasoningCustomJsonInput" rows="5" spellcheck="false" placeholder='{"reasoning":{"effort":"high"}}'></textarea><small>JSON-объект добавляется на верхний уровень тела запроса только при включённой лампочке reasoning. Системные поля model, messages, tools и response_format переопределять нельзя.</small></label>
-                <div class="model-info wide" id="modelInfo"></div>
-                <section class="model-capability-section wide" aria-labelledby="modelCapabilityTitle">
-                  <div class="model-capability-heading">
-                    <div>
-                      <h3 id="modelCapabilityTitle">Возможности моделей</h3>
-                      <p>Каталог может содержать только ID. Остальные поля задаются вручную; пустой контекст использует безопасный резерв 32768 токенов.</p>
-                    </div>
-                  </div>
-                  <div class="model-capability-list" id="modelCapabilityList"></div>
-                </section>
-                <section class="model-capability-section wide" aria-labelledby="attachmentModelPriorityTitle">
-                  <div class="model-capability-heading">
-                    <div>
-                      <h3 id="attachmentModelPriorityTitle">Маршрутизация вложений</h3>
-                      <p>Если модель чата сама поддерживает Vision/Audio, она получает media напрямую одним запросом. Для недостающих модальностей helper видит только текущий запрос и файлы.</p>
-                    </div>
-                  </div>
-                  <div class="attachment-model-priority" id="attachmentModelPriorityList"></div>
-                </section>
-                <label><span>Ответ media-helper, токены (0 = авто)</span><input id="attachmentHelperMaxTokensInput" type="number" min="0" step="1"><small>Авто: до 1024 токенов на каждый пакет вложений. Для прямого мультимодального запроса helper не вызывается.</small></label>
-                <label><span>Media-контекст основной модели, токены (0 = авто)</span><input id="attachmentEvidenceMaxTokensInput" type="number" min="0" step="1"><small>Авто: до 20% входного бюджета, но не более 2048 токенов. Положительное значение задаёт собственный предел.</small></label>
-                <label><span>Макс. токены ответа</span><input id="maxTokensInput" type="number" min="1"></label>
-                <label><span>Таймаут запроса, сек</span><input id="requestTimeoutInput" type="number" min="30"></label>
-                <label><span>Temperature</span><input id="temperatureInput" type="number" min="0" max="2" step="0.1"></label>
-                <label><span>Top P</span><input id="topPInput" type="number" min="0" max="1" step="0.01"></label>
-                <label><span>Окно контекста, токены (0 = по модели)</span><input id="contextLimitInput" type="number" min="0"></label>
-                <label><span>Коэффициент без API usage</span><input id="tokenEstimateMultiplierInput" type="number" min="0.25" max="4" step="0.05"><small id="tokenEstimateCalibrationStatus">×1,00 · UTF-8/4</small></label>
-                <label class="checkline"><input id="autoCalibrateTokenEstimateInput" type="checkbox"><span>Автокалибровка по API usage для каждой модели</span></label>
-                <label class="checkline"><input id="streamInput" type="checkbox"><span>Потоковый API (SSE)</span></label>
               </div>
-              <div class="toolbar">
-                <button class="secondary" id="loadModelsButton" type="button">Обновить список моделей</button>
-              </div>
-              <div class="status" id="modelStatus"></div>
+              <section class="model-settings-section" aria-labelledby="modelCapabilityTitle">
+                <div class="model-capability-heading model-capability-heading-with-action">
+                  <div>
+                    <h3 id="modelCapabilityTitle">Возможности моделей</h3>
+                    <p>Если каталог не указал возможности или лимиты, задайте их здесь. Пустой контекст использует резерв 32 768 токенов.</p>
+                  </div>
+                  <button class="secondary" id="loadModelsButton" type="button">Обновить каталог</button>
+                </div>
+                <div class="status" id="modelStatus"></div>
+                <div class="model-capability-list" id="modelCapabilityList"></div>
+              </section>
+              <section class="model-settings-section" aria-labelledby="attachmentModelPriorityTitle">
+                <div class="model-capability-heading">
+                  <h3 id="attachmentModelPriorityTitle">Маршрутизация вложений</h3>
+                  <p>Если модель чата не поддерживает вложение, используется первая подходящая модель из списка. Ей передаются только текущий запрос и файлы.</p>
+                </div>
+                <div class="attachment-model-priority" id="attachmentModelPriorityList"></div>
+                <div class="form-grid two-columns model-attachment-fields">
+                  <label><span>Лимит ответа helper, токены</span><input id="attachmentHelperMaxTokensInput" type="number" min="0" step="1"><small>0 — автоматически, до 1024 токенов на пакет вложений.</small></label>
+                  <label><span>Media-контекст, токены</span><input id="attachmentEvidenceMaxTokensInput" type="number" min="0" step="1"><small>0 — автоматически, до 20% входного бюджета, максимум 2048.</small></label>
+                </div>
+              </section>
+              <section class="model-settings-section" aria-labelledby="modelRequestTitle">
+                <div class="model-capability-heading">
+                  <h3 id="modelRequestTitle">Параметры запроса</h3>
+                </div>
+                <div class="form-grid two-columns model-request-fields">
+                  <label><span>Макс. токены ответа</span><input id="maxTokensInput" type="number" min="1"></label>
+                  <label><span>Таймаут запроса, сек</span><input id="requestTimeoutInput" type="number" min="30"></label>
+                  <label><span>Temperature</span><input id="temperatureInput" type="number" min="0" max="2" step="0.1"></label>
+                  <label><span>Top P</span><input id="topPInput" type="number" min="0" max="1" step="0.01"></label>
+                  <label><span>Окно контекста, токены (0 = по модели)</span><input id="contextLimitInput" type="number" min="0"></label>
+                  <label><span>Коэффициент без API usage</span><input id="tokenEstimateMultiplierInput" type="number" min="0.25" max="4" step="0.05"><small id="tokenEstimateCalibrationStatus">×1,00 · UTF-8/4</small></label>
+                  <label class="checkline"><input id="autoCalibrateTokenEstimateInput" type="checkbox"><span>Автокалибровка по API usage для каждой модели</span></label>
+                  <label class="checkline"><input id="streamInput" type="checkbox"><span>Потоковый API (SSE)</span></label>
+                </div>
+              </section>
             </section>
 
             <section class="settings-page" data-settings-page="agent">
@@ -972,7 +976,7 @@
   <script src="js/vendor/viewer.min.js"></script>
   <script src="js/app-core.js?v=office-launch-20260930-1"></script>
   <script src="js/app-utils.js?v=run-view-state-20260830-1"></script>
-  <script src="js/app-run-view-state.js?v=chat-message-cleanup-20260908-1"></script>
+  <script src="js/app-run-view-state.js?v=action-severity-20260930-1"></script>
   <script src="js/app-layout.js"></script>
   <script src="js/app-vba-completion.js?v=vba-completion-20260903-1"></script>
   <script src="js/app-editors.js?v=ui-lazy-20260903-1"></script>
@@ -994,7 +998,7 @@
   <script src="js/app-model-data.js?v=media-routing-20260824-1"></script>
   <script src="js/app-model-picker.js?v=model-modules-20260823-2"></script>
   <script src="js/app-model-capabilities.js?v=model-capability-inline-20260826-1"></script>
-  <script src="js/app-model-render.js?v=ui-lazy-20260903-1"></script>
+  <script src="js/app-model-render.js?v=model-settings-20260930-1"></script>
   <script src="js/app-models.js?v=ui-lazy-20260903-1"></script>
   <script src="js/app-context-data.js"></script>
   <script src="js/app-chat-state.js?v=office-launch-20260930-1"></script>
@@ -1027,11 +1031,11 @@
   <script src="js/app-chart-artifacts.js?v=chart-chat-scope-20260908-1"></script>
   <script src="js/app-artifacts.js?v=shared-markdown-20260908-1"></script>
   <script src="js/app-task-list.js?v=task-close-state-20260929-1"></script>
-  <script src="js/app-agent-activity.js?v=typed-step-results-20260908-1"></script>
+  <script src="js/app-agent-activity.js?v=action-severity-20260930-1"></script>
   <script src="js/app-agent-approval.js?v=run-view-state-20260830-1"></script>
   <script src="js/app-run-changes.js?v=typed-step-results-20260908-1"></script>
-  <script src="js/app-agent.js?v=run-diff-20260908-1"></script>
-  <script src="js/app-messages.js?v=chat-message-cleanup-20260908-1"></script>
+  <script src="js/app-agent.js?v=action-severity-20260930-1"></script>
+  <script src="js/app-messages.js?v=action-severity-20260930-1"></script>
   <script src="js/app-reasoning.js?v=chat-projection-20260907-1"></script>
   <script src="js/app-attachments.js?v=vba-upload-20260906-1"></script>
   <script src="js/app-chat-session.js?v=office-launch-20260930-1"></script>

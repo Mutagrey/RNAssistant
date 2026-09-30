@@ -746,16 +746,22 @@ narrative or retained `ResponseStatus`. Unknown/errors retain an independent
 warning, and a clean no-write answer does not certify applied changes.
 
 Chat presentation keeps lifecycle separate from execution health. Earlier failed
-calls remain in history and a neutral failure-count note; they do not turn a
+calls remain in history and a separate failure-count note; they do not turn a
 running, waiting or completed header into a failed run. Unknown possible effects
 retain a visible verification warning outside collapsed history. A pre-dispatch
 `excel_sheet_already_exists` is displayed as a quiet conflict, never as proof that
 the sheet satisfies the request or that a later call resolved the conflict.
 
 Activities show **action → semantic target → result** in a naturally wrapping,
-muted 12 px flow. Action, icon, target and ordinary outcome share the muted color;
-only failed outcomes are red. Targets use literal inline-code styling (not Markdown
-or HTML interpretation) and remain readable without extra UI truncation; distinct
+muted 12 px flow. Action, icon, target and ordinary outcome share the muted color.
+Unknown effects and incomplete reads are amber. A failed action is amber only for
+an exact actionable error code with source-owned no-effect/undispatched evidence;
+missing evidence, access failures, tool defects and other failures remain red.
+An unknown effect stays amber even when it stopped the run; the stopped lifecycle
+remains explicit. A completed run with failed calls shows an amber count note,
+while a failed run without unknown effects remains red. Targets use literal
+inline-code styling (not Markdown or HTML interpretation) and remain readable
+without extra UI truncation; distinct
 icons identify search, read, write, capability study, delete, questions, plans,
 charts and other operations. The display classifies icons only, never tool effects.
 `AgentTranscript` derives target captions from accepted scalar arguments, including

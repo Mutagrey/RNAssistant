@@ -180,7 +180,9 @@
     if (viewState.lifecycle === "awaiting_confirmation") return "Нужно подтверждение";
     if (viewState.lifecycle === "awaiting_user") return "Ожидает ответа";
     if (viewState.lifecycle === "cancelled") return "Отменено";
-    if (viewState.lifecycle === "failed") return viewState.reason === "provider_refused" ? "Отказ провайдера" : "Ошибка выполнения";
+    if (viewState.lifecycle === "failed") return viewState.executionHealth === "unknown"
+      ? "Работа остановлена · результат действия неизвестен"
+      : viewState.reason === "provider_refused" ? "Отказ провайдера" : "Ошибка выполнения";
     if (viewState.lifecycle === "completed") return "Готово";
     return "Выполняется";
   }
