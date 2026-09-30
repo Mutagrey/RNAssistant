@@ -34,6 +34,11 @@ namespace RNAssistant.Office.WebView
             get { return _bridge.MailboxNavigationRequested; }
             set { _bridge.MailboxNavigationRequested = value; }
         }
+        public Action<string> OfficeHostLaunchRequested
+        {
+            get { return _bridge.OfficeHostLaunchRequested; }
+            set { _bridge.OfficeHostLaunchRequested = value; }
+        }
 
         public AssistantPaneControl(AssistantController controller, string webRoot)
         {

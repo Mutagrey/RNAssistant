@@ -367,6 +367,8 @@ function renderChatSessionList(chats) {
 
   list.innerHTML = "";
   renderChatTreeControls();
+  var query = (state.chatSearch || "").trim().toLowerCase();
+  renderOfficeHostLaunchRows(list, query);
   if (!chats.length && !(state.documents || []).length) {
     list.classList.add("is-empty");
     var empty = document.createElement("div");
@@ -377,7 +379,6 @@ function renderChatSessionList(chats) {
   }
   list.classList.remove("is-empty");
 
-  var query = (state.chatSearch || "").trim().toLowerCase();
   var documents = {};
   chats.forEach(function (chat) {
     if (query && [chatTitle(chat), chatDocumentTitle(chat), chatHost(chat)].join(" ").toLowerCase().indexOf(query) < 0) {
@@ -455,6 +456,35 @@ function renderChatSessionList(chats) {
   }).forEach(function (key) {
     list.appendChild(renderChatDocumentNode(documents[key], query));
   });
+}
+
+function renderOfficeHostLaunchRows(list, query) {
+  var hosts = ["Excel", "Word", "PowerPoint", "Outlook"].filter(function (host) {
+    return !query || host.toLowerCase().indexOf(query) >= 0;
+  });
+  if (!hosts.length) return;
+
+  var group = document.createElement("section");
+  group.className = "chat-office-launch-list";
+  var heading = document.createElement("div");
+  heading.className = "chat-office-launch-heading";
+  heading.textContent = "Приложения Office";
+  group.appendChild(heading);
+
+  hosts.forEach(function (host) {
+    var button = document.createElement("button");
+    button.type = "button";
+    button.className = "chat-office-launch-row" + documentHostClass(host);
+    button.disabled = !!state.bridgeUnavailable || !state.officeHostLaunchAvailable;
+    button.title = button.disabled ? "Запуск Office недоступен" : "Открыть " + host;
+    button.innerHTML = "<span class=\"chat-document-icon\">" + documentHostIcon(host) + "</span>" +
+      "<span class=\"chat-office-launch-name\"></span>" +
+      "<span class=\"chat-office-launch-action\">Открыть</span>";
+    button.querySelector(".chat-office-launch-name").textContent = host;
+    button.addEventListener("click", function () { launchOfficeHost(host); });
+    group.appendChild(button);
+  });
+  list.appendChild(group);
 }
 
 function renderChatDocumentNode(documentItem, query) {

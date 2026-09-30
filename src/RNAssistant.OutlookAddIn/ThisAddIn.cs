@@ -79,6 +79,7 @@ namespace RNAssistant.OutlookAddIn
                             binding.Inspector, binding.Explorer,
                             _officeDispatcher),
                         _officeDispatcher));
+                runtime.OfficeHostLaunchRequested = OfficeHostLauncher.OpenOrActivate;
                 var pane = CustomTaskPanes.Add(
                     runtime.CreatePaneControl(), "RN Assistant", binding.Window);
                 pane.Width = 520;

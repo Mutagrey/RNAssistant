@@ -15,6 +15,16 @@ async function runQuickAction(action) {
   switchTab("chat");
 }
 
+async function launchOfficeHost(host) {
+  if (state.bridgeUnavailable || !state.officeHostLaunchAvailable) return;
+  try {
+    await send("launchOfficeHost", { host: host });
+    log("Запуск " + host + " запрошен.");
+  } catch (error) {
+    log(error.detail || error.message, "error");
+  }
+}
+
 async function saveChatMode(mode) {
   mode = mode || "agent";
   if (!state.activeChatId || state.bridgeUnavailable || state.modeSaving || currentActiveSend() || hasActiveMessageEdit()) {

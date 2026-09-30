@@ -97,6 +97,7 @@ namespace RNAssistant.OfficeHosts
                 innerAdapter = new OfficeComAdapterProvider().Create(host, target, officeDispatcher);
                 var adapter = new UiThreadOfficeApplicationAdapter(innerAdapter, officeDispatcher);
                 runtime = new AssistantRuntime(adapter, rootPath);
+                runtime.OfficeHostLaunchRequested = OfficeHostLauncher.OpenOrActivate;
                 var control = runtime.CreatePaneControl();
                 control.Dock = DockStyle.Fill;
                 var screenCaptureProtectionEnabled = runtime.Controller.GetSettings().Settings.ScreenCaptureProtectionEnabled;

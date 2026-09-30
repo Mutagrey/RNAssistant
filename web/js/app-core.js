@@ -11,6 +11,7 @@ function scheduleChatProgressRender() {
 var state = {
   appVersion: "",
   host: "",
+  officeHostLaunchAvailable: false,
   title: "",
   officeContext: null,
   settings: {},

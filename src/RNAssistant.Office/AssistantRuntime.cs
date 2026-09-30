@@ -25,6 +25,7 @@ namespace RNAssistant.Office
         public AssistantController Controller { get; private set; }
         public string RootPath { get; private set; }
         public Action<string, string, bool> MailboxNavigationRequested { get; set; }
+        public Action<string> OfficeHostLaunchRequested { get; set; }
 
         public AssistantPaneControl CreatePaneControl()
         {
@@ -36,6 +37,7 @@ namespace RNAssistant.Office
 
             _paneControl = new AssistantPaneControl(Controller, ResolveWebRoot(RootPath));
             _paneControl.MailboxNavigationRequested = MailboxNavigationRequested;
+            _paneControl.OfficeHostLaunchRequested = OfficeHostLaunchRequested;
             return _paneControl;
         }
 

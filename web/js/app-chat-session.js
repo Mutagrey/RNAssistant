@@ -331,6 +331,7 @@ function applyInitState(init) {
   resetMessageEditState();
   state.appVersion = init.appVersion || init.AppVersion || "";
   state.host = init.host;
+  state.officeHostLaunchAvailable = !!(init.officeHostLaunchAvailable || init.OfficeHostLaunchAvailable);
   state.title = init.title;
   state.officeContext = init.officeContext || null;
   state.bridgeToken = init.bridgeToken || init.BridgeToken || state.bridgeToken || "";
@@ -416,6 +417,7 @@ function applyBridgeUnavailableState(error) {
   state.appVersion = "";
   state.hasHistorySecret = false;
   state.host = "";
+  state.officeHostLaunchAvailable = false;
   state.title = "";
   state.officeContext = null;
   state.chats = [];

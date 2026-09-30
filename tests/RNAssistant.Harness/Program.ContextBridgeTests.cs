@@ -619,6 +619,37 @@ namespace RNAssistant.Harness
             AssertTrue(!unauthorizedTiming["ok"].Value<bool>(), "client timing requires the bridge token");
         }
 
+        private static void BridgeOfficeLaunchUsesTypedHost()
+        {
+            using (var bridge = new AssistantWebBridge(new AssistantController(), null))
+            {
+                var launched = string.Empty;
+                bridge.OfficeHostLaunchRequested = host => launched = host;
+                var token = BridgeToken(bridge);
+                var init = JObject.Parse(bridge.HandleMessageAsync(
+                    "{\"id\":\"office-launch-init\",\"type\":\"init\",\"payload\":{}}")
+                    .GetAwaiter().GetResult());
+                AssertTrue((bool)init["payload"]["officeHostLaunchAvailable"],
+                    "initialized panel exposes Office launch capability");
+                var valid = JObject.Parse(bridge.HandleMessageAsync(JsonConvert.SerializeObject(new
+                {
+                    id = "office-launch", type = "launchOfficeHost", bridgeToken = token,
+                    payload = new OfficeHostLaunchPayload { Host = "Outlook" }
+                })).GetAwaiter().GetResult());
+                AssertTrue((bool)valid["ok"] && (bool)valid["payload"]["scheduled"],
+                    "typed Office host launch is accepted");
+                AssertEqual("Outlook", launched, "Outlook host reaches the launcher");
+
+                var invalid = JObject.Parse(bridge.HandleMessageAsync(JsonConvert.SerializeObject(new
+                {
+                    id = "office-launch-invalid", type = "launchOfficeHost", bridgeToken = token,
+                    payload = new OfficeHostLaunchPayload { Host = "OUTLOOK.EXE" }
+                })).GetAwaiter().GetResult());
+                AssertTrue(!(bool)invalid["ok"], "executable names are not accepted from WebView");
+                AssertEqual("Outlook", launched, "rejected host did not reach the launcher");
+            }
+        }
+
         private static void BridgeTransportFailureIsTypedAndCorrelated()
         {
             var json = AssistantWebBridge.SerializeFailure("request-17", "Transport failed.",

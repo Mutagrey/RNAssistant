@@ -778,6 +778,7 @@ namespace RNAssistant.Harness
                 Test("chart: requested type truncates", ChartArtifactHonorsRequestedTypeAndTruncates),
 
                 Test("bridge: init returns token", BridgeInitReturnsToken),
+                Test("bridge: Office launch accepts only supported hosts", BridgeOfficeLaunchUsesTypedHost),
                 Test("bridge: typed transport failure preserves correlation", BridgeTransportFailureIsTypedAndCorrelated),
                 Test("bridge: chat list is catalog-only", BridgeListChatsIsCatalogOnly),
                 Test("bridge: message projection omits hidden bodies", BridgeMessageProjectionOmitsHiddenBodies),

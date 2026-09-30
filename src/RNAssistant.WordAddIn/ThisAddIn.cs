@@ -115,6 +115,7 @@ namespace RNAssistant.WordAddIn
                         new WordAdapter(
                             Application, document, _officeDispatcher),
                         _officeDispatcher));
+                runtime.OfficeHostLaunchRequested = OfficeHostLauncher.OpenOrActivate;
                 var pane = CustomTaskPanes.Add(
                     runtime.CreatePaneControl(), "RN Assistant", window);
                 pane.Width = 520;

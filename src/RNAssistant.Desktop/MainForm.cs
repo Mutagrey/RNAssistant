@@ -24,6 +24,10 @@ namespace RNAssistant.Desktop
         private bool _fullScreen;
         private volatile OpenOfficeDocumentDto[] _openMailboxDocuments = new OpenOfficeDocumentDto[0];
         private DateTime _nextMailboxRefreshUtc;
+        private string _pendingLaunchHost;
+        private string _emptyLaunchHost;
+        private DateTime _pendingLaunchDeadlineUtc;
+        private DateTime _nextLaunchProbeUtc;
 
         public MainForm()
         {
@@ -40,12 +44,14 @@ namespace RNAssistant.Desktop
             _autoFollowTimer = new Timer { Interval = 750 };
             _autoFollowTimer.Tick += delegate
             {
+                if (_pendingLaunchHost != null) TryAttachLaunchedHost();
                 if (DateTime.UtcNow >= _nextMailboxRefreshUtc)
                 {
                     _nextMailboxRefreshUtc = DateTime.UtcNow.AddMinutes(1);
                     RefreshMailboxTargets();
                 }
-                if (_targetRegistry.Mode != TargetSelectionMode.AutoFollow || ContainsFocus)
+                if (_pendingLaunchHost != null ||
+                    _targetRegistry.Mode != TargetSelectionMode.AutoFollow || ContainsFocus)
                 {
                     return;
                 }
@@ -54,6 +60,9 @@ namespace RNAssistant.Desktop
                     var activation = ForegroundOfficeDetector.Detect();
                     if (activation != null && !string.IsNullOrWhiteSpace(activation.Host))
                     {
+                        if (string.Equals(activation.Host, _emptyLaunchHost, StringComparison.OrdinalIgnoreCase))
+                            return;
+                        _emptyLaunchHost = null;
                         ApplyActivation(activation, false);
                     }
                 }
@@ -183,6 +192,7 @@ namespace RNAssistant.Desktop
                 runtime = new AssistantRuntime(adapter);
                 runtime.Controller.ExternalDocumentsProvider = () => _openMailboxDocuments;
                 runtime.MailboxNavigationRequested = NavigateMailbox;
+                runtime.OfficeHostLaunchRequested = RequestOfficeHostLaunch;
                 var runtimeMs = attachTimer.ElapsedMilliseconds - adapterMs;
                 DisposeCurrentRuntime();
                 ClearContent();
@@ -195,6 +205,9 @@ namespace RNAssistant.Desktop
                 var pane = _runtime.CreatePaneControl();
                 pane.Dock = DockStyle.Fill;
                 _content.Controls.Add(pane);
+                if (string.Equals(_pendingLaunchHost, entry.Target.Host, StringComparison.OrdinalIgnoreCase))
+                    _pendingLaunchHost = null;
+                _emptyLaunchHost = null;
                 var paneMs = attachTimer.ElapsedMilliseconds - adapterMs - runtimeMs - replaceMs;
                 Text = "RN Assistant - " + _runtime.Controller.HostName;
                 if (!string.IsNullOrWhiteSpace(action))
@@ -243,6 +256,8 @@ namespace RNAssistant.Desktop
 
         private void AttachForegroundOffice()
         {
+            _pendingLaunchHost = null;
+            _emptyLaunchHost = null;
             try
             {
                 ApplyActivation(ForegroundOfficeDetector.Detect(), true);
@@ -272,6 +287,8 @@ namespace RNAssistant.Desktop
 
         private void SelectTarget(string id)
         {
+            _emptyLaunchHost = null;
+            _pendingLaunchHost = null;
             var entry = _targetRegistry.Select(id);
             AttachTarget(entry, null);
         }
@@ -300,7 +317,8 @@ namespace RNAssistant.Desktop
                 var targets = _adapterProvider.ListOpenTargets("Outlook")
                     .Where(item => !string.IsNullOrWhiteSpace(item.StoreId)).ToArray();
                 _targetRegistry.UpsertMany(targets);
-                if (_runtime == null && targets.Length > 0 && _targetRegistry.SelectedTarget == null)
+                if (_runtime == null && targets.Length > 0 && _targetRegistry.SelectedTarget == null &&
+                    (_pendingLaunchHost == null || _pendingLaunchHost == "Outlook"))
                 {
                     var first = _targetRegistry.Select(targets[0]);
                     AttachTarget(first, null);
@@ -328,6 +346,8 @@ namespace RNAssistant.Desktop
             }
             try
             {
+                _pendingLaunchHost = null;
+                _emptyLaunchHost = null;
                 var target = _adapterProvider.ListOpenTargets("Outlook").FirstOrDefault(item =>
                     !string.IsNullOrWhiteSpace(item.StoreId) &&
                     string.Equals(item.DocumentKey, documentKey, StringComparison.Ordinal));
@@ -350,6 +370,76 @@ namespace RNAssistant.Desktop
                 DesktopLog.Error("Outlook mailbox navigation failed.", ex);
                 MessageBox.Show(this, ex.Message, "RN Assistant", MessageBoxButtons.OK, MessageBoxIcon.Warning);
             }
+        }
+
+        private void RequestOfficeHostLaunch(string host)
+        {
+            if (IsDisposed || !IsHandleCreated)
+                throw new InvalidOperationException("RN Assistant window is unavailable.");
+            BeginInvoke(new Action(() => LaunchOfficeHost(host)));
+        }
+
+        private void LaunchOfficeHost(string host)
+        {
+            try
+            {
+                OfficeHostLauncher.OpenOrActivate(host);
+                _emptyLaunchHost = null;
+                _pendingLaunchHost = host;
+                _pendingLaunchDeadlineUtc = DateTime.UtcNow.AddSeconds(20);
+                _nextLaunchProbeUtc = DateTime.MinValue;
+                RefreshTargetUi("Opening " + host + "…");
+                if (_placeholder != null && !_placeholder.IsDisposed)
+                    _placeholder.Text = "Opening " + host + "…";
+                TryAttachLaunchedHost();
+            }
+            catch (Exception ex)
+            {
+                _pendingLaunchHost = null;
+                DesktopLog.Error("Office launch failed.", ex);
+                RefreshTargetUi("Could not open " + host + ": " + ex.Message);
+                MessageBox.Show(this, ex.Message, "RN Assistant", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+            }
+        }
+
+        private void TryAttachLaunchedHost()
+        {
+            var host = _pendingLaunchHost;
+            if (host == null) return;
+            if (DateTime.UtcNow < _nextLaunchProbeUtc) return;
+            _nextLaunchProbeUtc = DateTime.UtcNow.AddSeconds(2);
+            var entries = _adapterProvider.ListOpenTargets(host)
+                .Where(item => host != "Outlook" || !string.IsNullOrWhiteSpace(item.StoreId))
+                .Select(item => _targetRegistry.Upsert(item)).ToArray();
+            var entry = entries.FirstOrDefault(item => string.Equals(
+                item.Id, _targetRegistry.SelectedTargetId, StringComparison.OrdinalIgnoreCase))
+                ?? entries.FirstOrDefault();
+            if (entry != null)
+            {
+                _pendingLaunchHost = null;
+                _emptyLaunchHost = null;
+                if (_runtime == null ||
+                    !string.Equals(_runtime.Controller.HostName, host, StringComparison.OrdinalIgnoreCase) ||
+                    !string.Equals(_targetRegistry.SelectedTargetId, entry.Id, StringComparison.OrdinalIgnoreCase))
+                {
+                    _targetRegistry.Select(entry.Id);
+                    AttachTarget(entry, null);
+                    if (_runtime == null) _emptyLaunchHost = host;
+                }
+                else RefreshTargetUi("Attached: " + entry.DisplayName);
+                if (host == "Outlook") RefreshMailboxTargets();
+                return;
+            }
+
+            if (DateTime.UtcNow < _pendingLaunchDeadlineUtc) return;
+            _pendingLaunchHost = null;
+            _emptyLaunchHost = host;
+            var message = host == "Outlook"
+                ? "Outlook is running, but no mailbox is available yet. Refresh after it finishes loading."
+                : host + " is open. Open a document there, then select it in RN Assistant.";
+            RefreshTargetUi(message);
+            if (_placeholder != null && !_placeholder.IsDisposed)
+                _placeholder.Text = message;
         }
 
         private bool TryAttachSingleOpenTarget()
@@ -396,10 +486,11 @@ namespace RNAssistant.Desktop
             {
                 Dock = DockStyle.Fill,
                 ColumnCount = 1,
-                RowCount = showAttach ? 2 : 1,
+                RowCount = showAttach ? 3 : 2,
                 Padding = new Padding(24)
             };
             layout.RowStyles.Add(new RowStyle(SizeType.Percent, 100f));
+            layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 168f));
             if (showAttach)
             {
                 layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 48f));
@@ -415,6 +506,28 @@ namespace RNAssistant.Desktop
             };
             layout.Controls.Add(_placeholder, 0, 0);
 
+            var launchRows = new FlowLayoutPanel
+            {
+                Dock = DockStyle.Fill,
+                FlowDirection = FlowDirection.TopDown,
+                WrapContents = false,
+                AutoScroll = true
+            };
+            foreach (var host in new[] { "Excel", "Word", "PowerPoint", "Outlook" })
+            {
+                var selectedHost = host;
+                var launchButton = new Button
+                {
+                    Width = 210,
+                    Height = 32,
+                    Text = "Open " + host,
+                    Font = new Font("Segoe UI", 9f)
+                };
+                launchButton.Click += delegate { RequestOfficeHostLaunch(selectedHost); };
+                launchRows.Controls.Add(launchButton);
+            }
+            layout.Controls.Add(launchRows, 0, 1);
+
             if (showAttach)
             {
                 var button = new Button
@@ -425,7 +538,7 @@ namespace RNAssistant.Desktop
                     Font = new Font("Segoe UI", 9f)
                 };
                 button.Click += delegate { AttachForegroundOffice(); };
-                layout.Controls.Add(button, 0, 1);
+                layout.Controls.Add(button, 0, 2);
             }
 
             _content.Controls.Add(layout);

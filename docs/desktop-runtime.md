@@ -19,6 +19,17 @@ Office launcher or manual attach
 `RNAssistant.*AddIn` остаются compatibility/debug VSTO shells. VBA launchers для
 Excel, Word, PowerPoint и Outlook находятся в `wrappers/native`.
 
+Список чатов в Desktop, VSTO и in-process NativeHostCli всегда показывает строки
+Excel, Word, PowerPoint и Outlook, включая состояние без чатов. Выбор строки
+открывает приложение Office или выводит на передний план его запущенное окно;
+текущая in-process панель остаётся привязанной к своему документу. Desktop после
+запуска подключает обнаруженный документ. Для Outlook сначала проверяется
+запущенный `OUTLOOK.EXE`: повторный процесс не создаётся, а Desktop подключает
+обнаруженный mailbox по StoreID. Если Office ещё не открыл документ или Outlook
+не предоставил mailbox, Desktop показывает ожидание и предлагает обновить список.
+Когда Desktop ещё не подключён к Office, те же четыре действия доступны в его
+начальном окне.
+
 ## Activation and target selection
 
 Desktop принимает `--host`, `--hwnd`, `--pid`/`--process-id`,

@@ -25,6 +25,7 @@ namespace RNAssistant.Office.WebView
         private readonly Timer _resourceChangesTimer;
         private bool _resourceChangesDisposed;
         public Action<string, string, bool> MailboxNavigationRequested { get; set; }
+        public Action<string> OfficeHostLaunchRequested { get; set; }
 
         public AssistantWebBridge(AssistantController controller, Action<string> postMessageJson)
         {
@@ -169,6 +170,13 @@ namespace RNAssistant.Office.WebView
                             throw new InvalidOperationException("Outlook mailbox navigation is unavailable.");
                         MailboxNavigationRequested(mailbox.DocumentKey, mailbox.ChatId, mailbox.CreateNew);
                         responsePayload = new OutlookMailboxNavigationResponse { Scheduled = true };
+                        break;
+                    case "launchOfficeHost":
+                        var launchHost = Payload<OfficeHostLaunchPayload>(payload);
+                        if (OfficeHostLaunchRequested == null || !IsSupportedOfficeHost(launchHost.Host))
+                            throw new InvalidOperationException("Office host launch is unavailable.");
+                        OfficeHostLaunchRequested(launchHost.Host);
+                        responsePayload = new OfficeHostLaunchResponse { Scheduled = true };
                         break;
                     case "deleteDocument":
                         var deleteDocument = Payload<DocumentPayload>(payload);
@@ -603,11 +611,20 @@ namespace RNAssistant.Office.WebView
             return !string.Equals(type, "init", StringComparison.OrdinalIgnoreCase);
         }
 
+        private static bool IsSupportedOfficeHost(string host)
+        {
+            return string.Equals(host, "Excel", StringComparison.Ordinal) ||
+                string.Equals(host, "Word", StringComparison.Ordinal) ||
+                string.Equals(host, "PowerPoint", StringComparison.Ordinal) ||
+                string.Equals(host, "Outlook", StringComparison.Ordinal);
+        }
+
         private InitResponse WithBridgeToken(InitResponse response)
         {
             if (response != null)
             {
                 response.BridgeToken = _bridgeToken;
+                response.OfficeHostLaunchAvailable = OfficeHostLaunchRequested != null;
             }
 
             return response;
