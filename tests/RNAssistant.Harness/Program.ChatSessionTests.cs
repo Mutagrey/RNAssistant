@@ -98,6 +98,21 @@ namespace RNAssistant.Harness
                 AssertEqual(1, sessions.Count, "document session count");
                 AssertEqual(session.Id, sessions[0].Id, "session id");
                 AssertEqual(session.Id, store.LoadActiveSessionId("Word", "doc-key"), "active id");
+
+                var history = Enumerable.Range(0, 181).Select(index => new ChatMessage
+                {
+                    Id = "message-" + index, Role = "user", Content = "text-" + index
+                }).ToList();
+                int startIndex;
+                var recent = ChatCloneService.CloneRecentMessagesForBridge(history, out startIndex);
+                AssertEqual(101, startIndex, "bridge opens at bounded recent history");
+                AssertEqual(80, recent.Count, "bridge recent page size");
+                AssertEqual("message-101", recent[0].Id, "bridge recent page boundary");
+                var previous = ChatCloneService.ClonePreviousMessagesForBridge(
+                    session.Id, session.Revision, history, startIndex);
+                AssertEqual(21, previous.StartIndex, "older page start");
+                AssertEqual(181, previous.TotalCount, "older page retains total count");
+                AssertEqual("message-100", previous.Messages.Last().Id, "older page does not overlap");
             });
         }
 
@@ -337,6 +352,9 @@ namespace RNAssistant.Harness
 
                 var loaded = service.LoadAddressedSession(archived.Id);
 
+                AssertTrue(service.TryLoadCurrentDocumentChat(archived.Id) == null,
+                    "current-document selection does not attach a foreign chat");
+
                 AssertEqual(archived.Id, loaded.Id, "addressed session id");
                 AssertEqual("Word", loaded.Host, "addressed host");
                 AssertEqual("archived-doc", loaded.DocumentKey, "addressed document key");
@@ -444,6 +462,8 @@ namespace RNAssistant.Harness
                 var store = new ChatStore(paths);
                 var service = new ChatSessionService(adapter, ConversationStore(store));
                 var created = service.CreatePersistentChat("Новый чат");
+                AssertEqual(created.Id, service.TryLoadCurrentDocumentChat(created.Id).Id,
+                    "current-document selection resolves an exact chat without catalog lookup");
                 var reloaded = new ChatStore(paths).Load(
                     adapter.HostName, adapter.DocumentKey, created.Id);
                 AssertTrue(reloaded != null, "empty host row chat is durable");

@@ -38,29 +38,64 @@ namespace RNAssistant.Core.Storage
 
         private static JObject ReplayProjectionRoot(IEnumerable<SessionEvent> events, JObject seedRoot)
         {
-            var root = seedRoot == null ? null : (JObject)seedRoot.DeepClone();
-            var replay = root == null ? null : new ProjectionReplayState(root);
+            var cursor = new ProjectionReplayCursor(seedRoot);
             foreach (var sessionEvent in events ?? new List<SessionEvent>())
             {
+                cursor.Apply(sessionEvent);
+            }
+            return cursor.Materialize();
+        }
+
+        private sealed class ProjectionReplayCursor
+        {
+            private JObject _root;
+            private ProjectionReplayState _replay;
+            private bool _invalid;
+
+            public ProjectionReplayCursor(JObject seedRoot)
+            {
+                _root = seedRoot == null ? null : (JObject)seedRoot.DeepClone();
+                _replay = _root == null ? null : new ProjectionReplayState(_root);
+            }
+
+            public void Apply(SessionEvent sessionEvent)
+            {
+                if (_invalid || sessionEvent == null) return;
                 if (string.Equals(sessionEvent.Type, SessionEventTypes.SessionCreated, StringComparison.Ordinal) ||
                     string.Equals(sessionEvent.Type, SessionEventTypes.SessionForked, StringComparison.Ordinal))
                 {
-                    if (root != null || sessionEvent.Data == null || sessionEvent.Data.Type != JTokenType.Object) return null;
-                    root = (JObject)sessionEvent.Data.DeepClone();
-                    if ((int?)root["FormatVersion"] != ChatSession.CurrentFormatVersion) return null;
-                    replay = new ProjectionReplayState(root);
-                    continue;
+                    if (_root != null || sessionEvent.Data == null || sessionEvent.Data.Type != JTokenType.Object)
+                    {
+                        _invalid = true;
+                        return;
+                    }
+                    _root = (JObject)sessionEvent.Data.DeepClone();
+                    if ((int?)_root["FormatVersion"] != ChatSession.CurrentFormatVersion)
+                    {
+                        _invalid = true;
+                        return;
+                    }
+                    _replay = new ProjectionReplayState(_root);
+                    return;
                 }
-                if (!string.Equals(sessionEvent.Type, SessionEventTypes.SessionCommit, StringComparison.Ordinal)) continue;
-                if (root == null || sessionEvent.Data == null) return null;
+                if (!string.Equals(sessionEvent.Type, SessionEventTypes.SessionCommit, StringComparison.Ordinal)) return;
+                if (_root == null || sessionEvent.Data == null)
+                {
+                    _invalid = true;
+                    return;
+                }
                 var operations = sessionEvent.Data["Operations"] == null
                     ? new List<SessionOperation>()
                     : sessionEvent.Data["Operations"].ToObject<List<SessionOperation>>();
-                ApplyOperations(root, operations, replay);
+                ApplyOperations(_root, operations, _replay);
             }
-            if (root == null || replay == null) return null;
-            replay.Materialize(root);
-            return root;
+
+            public JObject Materialize()
+            {
+                if (_invalid || _root == null || _replay == null) return null;
+                _replay.Materialize(_root);
+                return _root;
+            }
         }
 
         private ChatSession Project(

@@ -34,6 +34,8 @@ var state = {
   activeChatReasoning: false,
   bridgeToken: "",
   messages: [],
+  messageStartIndex: 0,
+  messageTotalCount: 0,
   artifacts: [],
   artifactLibrary: { sessionRevision: 0, heads: [] },
   artifactViewerPages: {},

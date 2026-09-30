@@ -108,6 +108,51 @@ async function selectChat(id) {
   }
 }
 
+async function loadPreviousChatMessages(event) {
+  if (state.messagePageBusy || !state.activeChatId || state.messageStartIndex <= 0) return;
+  var button = event && event.currentTarget;
+  var chatIdValue = state.activeChatId;
+  var beforeIndex = state.messageStartIndex;
+  var revision = state.chatProjectionRevisions[chatIdValue];
+  state.messagePageBusy = true;
+  if (button) button.disabled = true;
+  try {
+    var page = await send("getPreviousChatMessages", { chatId: chatIdValue, beforeIndex: beforeIndex });
+    if (state.activeChatId !== chatIdValue || state.messageStartIndex !== beforeIndex) return;
+    if (page.chatId !== chatIdValue || page.sessionRevision !== revision) {
+      applyChatState(await loadChatState(chatIdValue));
+      return;
+    }
+    var older = page.messages || [];
+    if (page.startIndex < 0 || page.startIndex + older.length !== beforeIndex) {
+      throw new Error("Неверная граница страницы истории чата.");
+    }
+    var box = $("messages");
+    var previousScrollHeight = box ? box.scrollHeight : 0;
+    state.messages = older.concat(state.messages || []).slice(0, 240);
+    state.messageStartIndex = page.startIndex;
+    state.messageTotalCount = page.totalCount;
+    renderMessages({ preserveTop: true, previousScrollHeight: previousScrollHeight });
+    renderChatSessions();
+  } catch (error) {
+    log(error.detail || error.message, "error");
+  } finally {
+    state.messagePageBusy = false;
+    if (button) button.disabled = false;
+  }
+}
+
+async function jumpToLatestChatMessages() {
+  if (!state.activeChatId) return;
+  var chatIdValue = state.activeChatId;
+  try {
+    var response = await loadChatState(chatIdValue);
+    if (state.activeChatId === chatIdValue) applyChatState(response);
+  } catch (error) {
+    log(error.detail || error.message, "error");
+  }
+}
+
 async function openActiveDocument(chatIdValue) {
   var targetChatId = typeof chatIdValue === "string" ? chatIdValue : state.activeChatId;
   if (!targetChatId) {
@@ -370,6 +415,8 @@ function applyInitState(init) {
     [], init.chats || init.Chats || [], state.chatProjectionRevisions);
   state.documents = init.documents || init.Documents || [];
   state.messages = init.messages || [];
+  state.messageStartIndex = init.messageStartIndex || init.MessageStartIndex || 0;
+  state.messageTotalCount = init.messageTotalCount || init.MessageTotalCount || state.messages.length;
   state.artifacts = init.artifacts || init.Artifacts || [];
   state.artifactLibrary = init.artifactLibrary || init.ArtifactLibrary || { sessionRevision: 0, heads: [] };
   state.activeContextCheckpointId = init.activeContextCheckpointId || init.ActiveContextCheckpointId || "";

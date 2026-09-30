@@ -597,6 +597,26 @@
   padding: 16px clamp(12px, 3vw, 24px) 24px;
 }
 
+.chat-history-more {
+  align-self: center;
+  max-width: 100%;
+  padding: 7px 14px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: var(--surface);
+  color: var(--muted);
+  cursor: pointer;
+}
+
+.chat-history-more:hover {
+  color: var(--text);
+}
+
+.chat-history-more:disabled {
+  cursor: wait;
+  opacity: 0.6;
+}
+
 .chatbar-icon-button {
   border: 0;
   background: transparent;

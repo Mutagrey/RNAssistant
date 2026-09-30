@@ -172,6 +172,13 @@ namespace RNAssistant.Office.WebView
                             () => _controller.GetChatState(getChat.ChatId),
                             cancellationToken).ConfigureAwait(false);
                         break;
+                    case "getPreviousChatMessages":
+                        var previousMessages = Payload<ChatMessagePagePayload>(payload);
+                        responsePayload = await RunBridgeWorkAsync(
+                            () => _controller.GetPreviousChatMessages(
+                                previousMessages.ChatId, previousMessages.BeforeIndex),
+                            cancellationToken).ConfigureAwait(false);
+                        break;
                     case "getChatTrajectory":
                         var trajectoryRequest = Payload<ChatTrajectoryRequest>(payload);
                         responsePayload = await RunBridgeWorkAsync(

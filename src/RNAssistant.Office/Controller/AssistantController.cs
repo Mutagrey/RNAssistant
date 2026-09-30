@@ -244,8 +244,12 @@ namespace RNAssistant.Office
             var skills = GetSkills();
             var skillsMs = timer.ElapsedMilliseconds - sessionMs - contextMs - officeMs - chatsMs - documentsMs - promptsMs - toolsMs;
             var librariesMs = promptsMs + toolsMs + skillsMs;
+            int messageStartIndex;
+            var bridgeMessages = ChatCloneService.CloneRecentMessagesForBridge(session.Messages, out messageStartIndex);
             var response = new InitResponse
             {
+                MessageStartIndex = messageStartIndex,
+                MessageTotalCount = session.Messages.Count,
                 SessionRevision = session == null ? 0 : session.Revision,
                 RunViewState = RunViewStateProjector.Create(session),
                 AppVersion = ApplicationVersionService.Current,
@@ -268,7 +272,7 @@ namespace RNAssistant.Office
                 Skills = skills,
                 SkillsPath = _paths.SkillsDirectory,
                 Context = ChatCloneService.CloneContext(context),
-                Messages = ChatCloneService.CloneMessagesForBridge(session.Messages),
+                Messages = bridgeMessages,
                 Artifacts = ChatArtifactDto.From(session),
                 ArtifactLibrary = ArtifactLibraryProjectionService.Project(session),
                 ActiveContextCheckpointId = session.ActiveContextCheckpointId,

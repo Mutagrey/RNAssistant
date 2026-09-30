@@ -727,8 +727,13 @@ namespace RNAssistant.Office
             var incrementalReplays = _chatStore.HeaderIncrementalReplayCount;
             var chats = _chatSessions.GetChatSummaries(activeId);
             var chatsMs = timer.ElapsedMilliseconds - toolsMs - skillsMs;
+            int messageStartIndex;
+            var bridgeMessages = ChatCloneService.CloneRecentMessagesForBridge(
+                session == null ? null : session.Messages, out messageStartIndex);
             var response = new SendChatResponse
             {
+                MessageStartIndex = messageStartIndex,
+                MessageTotalCount = session == null || session.Messages == null ? 0 : session.Messages.Count,
                 SessionRevision = session == null ? 0 : session.Revision,
                 RunViewState = RunViewStateProjector.Create(session),
                 Message = completion == null ? string.Empty : completion.AssistantText,
@@ -745,7 +750,7 @@ namespace RNAssistant.Office
                 Chats = chats,
                 Documents = ListOpenDocuments(),
                 Context = session == null ? CreateEmptyContext() : ChatCloneService.CloneContext(LoadContext(session)),
-                Messages = ChatCloneService.CloneMessagesForBridge(session == null ? null : session.Messages),
+                Messages = bridgeMessages,
                 Artifacts = ChatArtifactDto.From(session),
                 ArtifactLibrary = ArtifactLibraryProjectionService.Project(session),
                 ActiveContextCheckpointId = session == null ? string.Empty : session.ActiveContextCheckpointId,

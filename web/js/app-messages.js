@@ -529,6 +529,16 @@ function refreshMessageFooter(node, append) {
 
 function buildMessageUnits() {
   var units = [];
+  if (state.messageStartIndex > 0) {
+    appendMessageUnit(units, "older-messages", String(state.messageStartIndex), function () {
+      var button = document.createElement("button");
+      button.type = "button";
+      button.className = "chat-history-more";
+      button.textContent = "Показать предыдущие сообщения";
+      button.addEventListener("click", loadPreviousChatMessages);
+      return button;
+    }, "", null);
+  }
   var actionsSignature = messageActionsSignature();
   var liveRunId = liveAgentRunId();
   renderedLiveRunBase = null;
@@ -575,6 +585,17 @@ function buildMessageUnits() {
           };
         }(state.messages[index], index)));
     }
+  }
+
+  if (state.messageStartIndex + state.messages.length < state.messageTotalCount) {
+    appendMessageUnit(units, "latest-messages", String(state.messageTotalCount), function () {
+      var button = document.createElement("button");
+      button.type = "button";
+      button.className = "chat-history-more";
+      button.textContent = "Вернуться к последним сообщениям";
+      button.addEventListener("click", jumpToLatestChatMessages);
+      return button;
+    }, "", null);
   }
 
   return units.concat(buildLiveMessageUnits());
@@ -713,12 +734,12 @@ function renderMessages(options) {
   if (typeof renderChatResourceNavigation === "function") renderChatResourceNavigation();
   var box = $("messages");
   var chatChanged = renderedMessagesChatId !== state.activeChatId;
-  var shouldScroll = !!options.forceScroll || chatChanged || isChatNearBottom(box);
+  var shouldScroll = !options.preserveTop && (!!options.forceScroll || chatChanged || isChatNearBottom(box));
 
   renderedMessagesChatId = state.activeChatId;
   if (chatChanged || options.fullReset) resetRenderedMessageUnits(box);
   var visibleMessages = (state.messages || []).filter(function (message) { return !messageProtocolMessage(message); });
-  if (!visibleMessages.length && !state.liveStreamContent && !state.liveReasoning && !state.liveActivity && !(state.liveAgentRun && state.liveAgentRun.length)) {
+  if (!visibleMessages.length && !state.messageStartIndex && !state.liveStreamContent && !state.liveReasoning && !state.liveActivity && !(state.liveAgentRun && state.liveAgentRun.length)) {
     resetRenderedMessageUnits(box);
     box.appendChild(renderChatEmptyState());
     renderAgentPlanDock();
@@ -732,5 +753,8 @@ function renderMessages(options) {
 
   renderAgentPlanDock();
   renderAgentApprovalDock();
+  if (options.preserveTop) {
+    box.scrollTop += box.scrollHeight - options.previousScrollHeight;
+  }
   syncChatScroll(shouldScroll, false);
 }

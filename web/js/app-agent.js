@@ -320,27 +320,36 @@ function appendAgentRunOverview(parent, steps, timeline, stats) {
   summary.title = agentActionCountText(actionCount);
   details.appendChild(summary);
 
-  var content = document.createElement("div");
-  content.className = "agent-run-history-content agent-run-overview-content";
-  (steps || []).forEach(function (step) {
-    var section = document.createElement("section");
-    section.className = "agent-model-step agent-model-step-history";
-    appendAgentStepMessage(section, step.message);
-    if ((step.items || []).length) {
-      section.appendChild(buildAgentRunTranscript(
-        step.items,
-        step.items,
-        agentRunStats(step.items, true, null)));
+  var content = null;
+  details.addEventListener("toggle", function () {
+    if (!details.open) {
+      if (content && typeof clearMarkdownEnhancements === "function") clearMarkdownEnhancements(content);
+      if (content) details.removeChild(content);
+      content = null;
+      return;
     }
-    content.appendChild(section);
+    if (content) return;
+    content = document.createElement("div");
+    content.className = "agent-run-history-content agent-run-overview-content";
+    (steps || []).forEach(function (step) {
+      var section = document.createElement("section");
+      section.className = "agent-model-step agent-model-step-history";
+      appendAgentStepMessage(section, step.message);
+      if ((step.items || []).length) {
+        section.appendChild(buildAgentRunTranscript(
+          step.items, step.items, agentRunStats(step.items, true, null)));
+      }
+      content.appendChild(section);
+    });
+    if (!content.childNodes.length) {
+      var empty = document.createElement("div");
+      empty.className = "agent-run-empty";
+      empty.textContent = "Подробности выполнения не записаны.";
+      content.appendChild(empty);
+    }
+    details.appendChild(content);
+    enhanceActivity(content);
   });
-  if (!content.childNodes.length) {
-    var empty = document.createElement("div");
-    empty.className = "agent-run-empty";
-    empty.textContent = "Подробности выполнения не записаны.";
-    content.appendChild(empty);
-  }
-  details.appendChild(content);
   parent.appendChild(details);
   return details;
 }

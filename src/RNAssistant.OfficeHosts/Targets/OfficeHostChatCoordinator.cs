@@ -46,6 +46,14 @@ namespace RNAssistant.OfficeHosts
             if (runtime == null) throw new ArgumentNullException("runtime");
             if (string.IsNullOrWhiteSpace(chatId)) throw new ArgumentException("A chat id is required.", "chatId");
             runtime.Controller.EnsureHostSwitchReady();
+            var currentState = await Task.Run(() => runtime.Controller.TrySelectCurrentDocumentChat(chatId))
+                .ConfigureAwait(false);
+            if (currentState != null)
+                return new OfficeHostChatResponse
+                {
+                    Host = runtime.Controller.HostName, ChatId = chatId,
+                    DocumentTitle = runtime.Controller.DocumentTitle, State = currentState
+                };
             var chat = await Task.Run(() => runtime.Controller.ListChats().Chats
                 .FirstOrDefault(item => string.Equals(item.Id, chatId, StringComparison.Ordinal)))
                 .ConfigureAwait(false);

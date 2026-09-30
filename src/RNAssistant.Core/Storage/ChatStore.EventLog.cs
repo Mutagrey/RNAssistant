@@ -21,10 +21,20 @@ namespace RNAssistant.Core.Storage
 
         private EventLogReadResult ReadEventLog(string path, long startByteOffset, SessionEvent previousEvent)
         {
+            return ReadEventLog(path, startByteOffset, previousEvent, null);
+        }
+
+        // Projection reads validate every event, but retain and hydrate only the
+        // events that can change the chat. Diagnostic payloads stay in the log.
+        private EventLogReadResult ReadEventLog(
+            string path, long startByteOffset, SessionEvent previousEvent,
+            Action<SessionEvent> projectionVisitor)
+        {
             if (string.IsNullOrWhiteSpace(path) || !File.Exists(path)) return null;
             var result = new EventLogReadResult();
             var protector = Protection();
             var before = CaptureStorageFileState(path);
+            SessionEvent tail = null;
             try
             {
                 var summary = JsonlRecordReader.Read(
@@ -34,11 +44,21 @@ namespace RNAssistant.Core.Storage
                     (sessionEvent, line) =>
                     {
                         ValidateEvent(previousEvent, sessionEvent, protector);
-                        HydrateEventData(sessionEvent, protector);
                         sessionEvent.StorageByteOffset = line.Offset;
-                        result.Events.Add(sessionEvent);
+                        if (projectionVisitor == null)
+                        {
+                            HydrateEventData(sessionEvent, protector);
+                            result.Events.Add(sessionEvent);
+                        }
+                        else if (IsProjectionEvent(sessionEvent))
+                        {
+                            HydrateEventData(sessionEvent, protector);
+                            projectionVisitor(sessionEvent);
+                        }
+                        tail = sessionEvent;
                         previousEvent = sessionEvent;
                     });
+                if (projectionVisitor != null && tail != null) result.Events.Add(tail);
                 result.ByteLength = summary.ByteLength;
                 result.TailNextByteOffset = summary.TailNextByteOffset;
                 result.HasIncompleteTail = summary.HasIncompleteTail;

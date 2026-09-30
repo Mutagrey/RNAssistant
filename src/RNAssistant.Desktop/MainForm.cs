@@ -497,6 +497,14 @@ namespace RNAssistant.Desktop
                 return await completion.Task.ConfigureAwait(false);
             }
 
+            var currentState = await Task.Run(() => _runtime.Controller.TrySelectCurrentDocumentChat(chatId));
+            if (currentState != null)
+                return new OfficeHostChatResponse
+                {
+                    Host = _runtime.Controller.HostName, ChatId = chatId,
+                    DocumentTitle = _runtime.Controller.DocumentTitle, State = currentState
+                };
+
             var chat = _runtime.Controller.ListChats().Chats.FirstOrDefault(item =>
                 string.Equals(item.Id, chatId, StringComparison.Ordinal));
             if (chat == null || string.IsNullOrWhiteSpace(chat.Host) ||

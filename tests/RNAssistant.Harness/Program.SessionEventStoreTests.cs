@@ -1057,8 +1057,10 @@ namespace RNAssistant.Harness
                 AssertEqual(evidenceCases.Length - 1, compactEvidence.Length, "historical null evidence is omitted from the commit");
                 AssertTrue(compactEvidence.All(value => value.Count == 2 && value["Dispatch"] != null && value["Effect"] != null),
                     "persisted evidence contains only compact dispatch and effect facts");
-                AssertEqual(1, commit.Data.ToString(Formatting.None).Split(new[] { payloadMarker }, StringSplitOptions.None).Length - 1,
-                    "large result data is not duplicated inside compact evidence");
+                AssertEqual(0, commit.Data.ToString(Formatting.None).Split(new[] { payloadMarker }, StringSplitOptions.None).Length - 1,
+                    "large result data stays out of the commit projection");
+                AssertTrue(commit.Data.SelectTokens("$..ResultPayload").Any(),
+                    "large result data retains an exact CAS reference");
 
                 loaded = new ChatStore(paths).Load(session.Host, session.DocumentKey, session.Id);
                 var clone = ChatCloneService.CloneSessionSnapshot(loaded);

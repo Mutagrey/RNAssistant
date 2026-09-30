@@ -133,6 +133,12 @@ namespace RNAssistant.Office.Contracts
         public string ChatId { get; set; }
     }
 
+    public sealed class ChatMessagePagePayload : ChatPayload
+    {
+        [JsonProperty("beforeIndex")]
+        public int BeforeIndex { get; set; }
+    }
+
     public sealed class PromptContextInspectorPayload : ChatPayload
     {
         [JsonProperty("text")]
@@ -617,8 +623,8 @@ namespace RNAssistant.Office.Contracts
         }
     }
 
-    // The browser needs message order for edit indexes, but protocol bodies and
-    // execution evidence belong to the durable/model path, not the chat renderer.
+    // The browser receives an ordered page; message ids address history actions.
+    // Protocol bodies and execution evidence belong to the durable/model path.
     public sealed class ChatMessageViewDto
     {
         public string Id { get; set; }
@@ -691,6 +697,12 @@ namespace RNAssistant.Office.Contracts
 
     public class ChatStateResponse
     {
+        [JsonProperty("messageStartIndex")]
+        public int MessageStartIndex { get; set; }
+
+        [JsonProperty("messageTotalCount")]
+        public int MessageTotalCount { get; set; }
+
         [JsonProperty("sessionRevision")]
         public long SessionRevision { get; set; }
 
@@ -709,10 +721,10 @@ namespace RNAssistant.Office.Contracts
         [JsonProperty("activeChatReasoning")]
         public bool ActiveChatReasoning { get; set; }
 
-        [JsonProperty("chats")]
+        [JsonProperty("chats", NullValueHandling = NullValueHandling.Ignore)]
         public IReadOnlyList<ChatSessionSummary> Chats { get; set; }
 
-        [JsonProperty("documents")]
+        [JsonProperty("documents", NullValueHandling = NullValueHandling.Ignore)]
         public IReadOnlyList<OpenOfficeDocumentDto> Documents { get; set; }
 
         [JsonProperty("context", NullValueHandling = NullValueHandling.Ignore)]
@@ -748,6 +760,12 @@ namespace RNAssistant.Office.Contracts
 
     public sealed class InitResponse
     {
+        [JsonProperty("messageStartIndex")]
+        public int MessageStartIndex { get; set; }
+
+        [JsonProperty("messageTotalCount")]
+        public int MessageTotalCount { get; set; }
+
         [JsonProperty("sessionRevision")]
         public long SessionRevision { get; set; }
 
@@ -848,6 +866,24 @@ namespace RNAssistant.Office.Contracts
 
         [JsonProperty("bridgeToken")]
         public string BridgeToken { get; set; }
+    }
+
+    public sealed class ChatMessagePageDto
+    {
+        [JsonProperty("chatId")]
+        public string ChatId { get; set; }
+
+        [JsonProperty("sessionRevision")]
+        public long SessionRevision { get; set; }
+
+        [JsonProperty("startIndex")]
+        public int StartIndex { get; set; }
+
+        [JsonProperty("totalCount")]
+        public int TotalCount { get; set; }
+
+        [JsonProperty("messages")]
+        public IReadOnlyList<ChatMessageViewDto> Messages { get; set; }
     }
 
     public sealed class SendChatResponse : ChatStateResponse

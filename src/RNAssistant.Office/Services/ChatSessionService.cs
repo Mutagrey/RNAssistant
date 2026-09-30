@@ -293,18 +293,25 @@ namespace RNAssistant.Office.Services
         {
             return string.IsNullOrWhiteSpace(requestedSessionId)
                 ? LoadSession(null)
-                : LoadSession(requestedSessionId, false, false);
+                : LoadSession(requestedSessionId, false, false, false);
+        }
+
+        public ChatSession TryLoadCurrentDocumentChat(string requestedSessionId)
+        {
+            return string.IsNullOrWhiteSpace(requestedSessionId)
+                ? null : LoadSession(requestedSessionId, false, false, true);
         }
 
         public ChatSession LoadSession(string requestedSessionId, bool allowMissingRequestedFallback)
         {
-            return LoadSession(requestedSessionId, allowMissingRequestedFallback, true);
+            return LoadSession(requestedSessionId, allowMissingRequestedFallback, true, false);
         }
 
         private ChatSession LoadSession(
             string requestedSessionId,
             bool allowMissingRequestedFallback,
-            bool makeActive)
+            bool makeActive,
+            bool currentDocumentOnly)
         {
             var host = _adapter.HostName;
             var documentKey = _adapter.DocumentKey;
@@ -388,12 +395,26 @@ namespace RNAssistant.Office.Services
                 if (RunStateProvider != null)
                 {
                     var running = RunStateProvider(requestedSessionId);
-                    if (running != null) session = running.Session;
+                    if (running != null && (!currentDocumentOnly ||
+                        (running.Session != null &&
+                         string.Equals(running.Session.Host, host, StringComparison.OrdinalIgnoreCase) &&
+                         string.Equals(running.Session.DocumentKey, documentKey, StringComparison.OrdinalIgnoreCase))))
+                        session = running.Session;
                 }
                 if (session == null)
                 {
                     session = _conversations.Load(host, documentKey, requestedSessionId);
                 }
+                if (session == null && currentDocumentOnly && _activeSession != null &&
+                    !_activeSessionPersisted &&
+                    string.Equals(_activeSession.Id, requestedSessionId, StringComparison.OrdinalIgnoreCase) &&
+                    string.Equals(_activeHost, host, StringComparison.OrdinalIgnoreCase) &&
+                    string.Equals(_activeDocumentKey, documentKey, StringComparison.OrdinalIgnoreCase))
+                    session = _activeSession;
+                if (currentDocumentOnly && (session == null ||
+                    !string.Equals(session.Host, host, StringComparison.OrdinalIgnoreCase) ||
+                    !string.Equals(session.DocumentKey, documentKey, StringComparison.OrdinalIgnoreCase)))
+                    return null;
                 if (session == null &&
                     (!allowMissingRequestedFallback ||
                      (string.IsNullOrWhiteSpace(_activeRuntimeDocumentKey) &&

@@ -1017,9 +1017,10 @@ namespace RNAssistant.Core.Storage
                     hydrateActiveArtifacts, rebuildDerivedProjections);
             }
 
-            validatedLog = ReadEventLog(path);
+            var replay = new ProjectionReplayCursor(null);
+            validatedLog = ReadEventLog(path, 0, null, replay.Apply);
             if (validatedLog == null || validatedLog.Events.Count == 0) return null;
-            var root = ReplayProjectionRoot(validatedLog.Events, null);
+            var root = replay.Materialize();
             var tail = LastEvent(validatedLog);
             Interlocked.Increment(ref _projectionFullReplayCount);
             var session = Project(root, tail.Sequence, tail.Hash, tail.StorageByteOffset,

@@ -21,6 +21,8 @@ Chat-list/header reads use a separate streaming reducer: a cold read still valid
 
 The same validated header scan derives per-chat storage usage without a second durable index. `JsonlByteLength` is the exact event file length. CAS totals deduplicate retained references by plaintext SHA-256: `CasLogicalByteLength` sums declared plaintext lengths, while `CasStoredByteLength` sums actual compressed/encrypted blob file lengths without loading their bodies. Shared blobs are counted for every chat that references them, so per-chat totals are diagnostic attribution rather than globally additive disk usage. Missing, invalid, or length-conflicting references raise a critical warning. Healthy chats warn at 64 MiB JSONL, 256 MiB combined JSONL plus stored CAS, or 512 MiB logical CAS; critical size thresholds are 256 MiB, 1 GiB, and 2 GiB respectively. These warnings are advisory: RNAssistant has no event retention or automatic history deletion.
 
+Cold chat projection reads apply only `session.created`, `session.forked` and `session.commit` while validating the stream. They retain the final event and resulting projection, rather than accumulating every diagnostic event or hydrating its payload. Raw trajectory/export reads still use their full event path.
+
 ## Event contract
 
 Every `SessionEvent` contains `SchemaVersion`, `SessionId`, contiguous `Sequence`, `EventId`, UTC time, type, optional run/turn/step correlation, `PreviousHash`, hash algorithm/key metadata, `Hash`, JSON data or encrypted data, and an optional content-addressed payload reference. This top-level envelope is closed: duplicate or unknown fields invalidate the stream instead of remaining outside the authenticated canonical projection.

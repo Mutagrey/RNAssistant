@@ -11,6 +11,35 @@ namespace RNAssistant.Office.Services
 {
     public static class ChatCloneService
     {
+        private const int BridgeMessagePageSize = 80;
+
+        public static IReadOnlyList<ChatMessageViewDto> CloneRecentMessagesForBridge(
+            IReadOnlyList<ChatMessage> messages, out int startIndex)
+        {
+            var count = messages == null ? 0 : messages.Count;
+            startIndex = Math.Max(0, count - BridgeMessagePageSize);
+            return CloneMessagesForBridge(messages == null
+                ? null : messages.Skip(startIndex));
+        }
+
+        public static ChatMessagePageDto ClonePreviousMessagesForBridge(
+            string chatId, long revision, IReadOnlyList<ChatMessage> messages, int beforeIndex)
+        {
+            var count = messages == null ? 0 : messages.Count;
+            if (beforeIndex < 0 || beforeIndex > count)
+                throw new ArgumentOutOfRangeException(nameof(beforeIndex));
+            var start = Math.Max(0, beforeIndex - BridgeMessagePageSize);
+            return new ChatMessagePageDto
+            {
+                ChatId = chatId,
+                SessionRevision = revision,
+                StartIndex = start,
+                TotalCount = count,
+                Messages = CloneMessagesForBridge(messages == null
+                    ? null : messages.Skip(start).Take(beforeIndex - start))
+            };
+        }
+
         public static ChatSession CloneSessionSnapshot(ChatSession session)
         {
             if (session == null)

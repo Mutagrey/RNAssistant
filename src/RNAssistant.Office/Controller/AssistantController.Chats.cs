@@ -344,6 +344,15 @@ namespace RNAssistant.Office
             return response;
         }
 
+        public ChatMessagePageDto GetPreviousChatMessages(string chatId, int beforeIndex)
+        {
+            if (string.IsNullOrWhiteSpace(chatId))
+                throw new ArgumentException("A chat id is required.", nameof(chatId));
+            var session = LoadAddressedSession(chatId);
+            return ChatCloneService.ClonePreviousMessagesForBridge(
+                session.Id, session.Revision, session.Messages, beforeIndex);
+        }
+
         public ChatStateResponse CreateChat(string title)
         {
             using (_chatRuns.ReserveMaintenance())
@@ -389,7 +398,7 @@ namespace RNAssistant.Office
             var loadMs = timer.ElapsedMilliseconds;
             _chatSessions.SetActiveSession(session);
             var selectionMs = timer.ElapsedMilliseconds - loadMs;
-            var response = ChatState(session);
+            var response = ChatState(session, false);
             if (timer.ElapsedMilliseconds >= 250)
                 RNAssistant.Office.Diagnostics.RuntimeLog.Info(
                     "Chat select timing: load=" + loadMs + "ms, selection=" + selectionMs +
@@ -397,6 +406,14 @@ namespace RNAssistant.Office
                     "ms, messages=" + (session.Messages == null ? 0 : session.Messages.Count) +
                     ", artifacts=" + (session.Artifacts == null ? 0 : session.Artifacts.Count) + ".");
             return response;
+        }
+
+        public ChatStateResponse TrySelectCurrentDocumentChat(string chatId)
+        {
+            var session = _chatSessions.TryLoadCurrentDocumentChat(chatId);
+            if (session == null) return null;
+            _chatSessions.SetActiveSession(session);
+            return ChatState(session, false);
         }
 
         public OpenDocumentResponse OpenDocument(string chatId)
@@ -593,21 +610,25 @@ namespace RNAssistant.Office
             return ChatState(updated);
         }
 
-        private ChatStateResponse ChatState(ChatSession session)
+        private ChatStateResponse ChatState(ChatSession session, bool includeCatalog = true)
         {
             var activeId = session.Id;
+            int messageStartIndex;
+            var bridgeMessages = ChatCloneService.CloneRecentMessagesForBridge(session.Messages, out messageStartIndex);
             return new ChatStateResponse
             {
+                MessageStartIndex = messageStartIndex,
+                MessageTotalCount = session.Messages.Count,
                 SessionRevision = session == null ? 0 : session.Revision,
                 RunViewState = RunViewStateProjector.Create(session),
                 ActiveChatId = activeId,
                 ActiveChatModel = session == null ? string.Empty : session.Model,
                 ActiveChatMode = ChatModes.Normalize(session == null ? null : session.Mode),
                 ActiveChatReasoning = session != null && session.ReasoningEnabled,
-                Chats = _chatSessions.GetChatSummaries(activeId),
-                Documents = ListOpenDocuments(),
+                Chats = includeCatalog ? _chatSessions.GetChatSummaries(activeId) : null,
+                Documents = includeCatalog ? ListOpenDocuments() : null,
                 Context = session == null ? CreateEmptyContext() : ChatCloneService.CloneContext(LoadContext(session)),
-                Messages = ChatCloneService.CloneMessagesForBridge(session == null ? null : session.Messages),
+                Messages = bridgeMessages,
                 Artifacts = ChatArtifactDto.From(session),
                 ArtifactLibrary = ArtifactLibraryProjectionService.Project(session),
                 ActiveContextCheckpointId = session == null ? string.Empty : session.ActiveContextCheckpointId,

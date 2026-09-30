@@ -39,7 +39,10 @@ function renderChatSessions() {
   $("activeChatTitle").textContent = activeChat ? chatTitle(activeChat) : "Новый чат";
   var subtitle = [];
   if (state.activeChatId) {
-    subtitle.push(formatChatMessageCount((state.messages || []).filter(function (message) { return !messageProtocolMessage(message); }).length));
+    var visibleCount = (state.messages || []).filter(function (message) { return !messageProtocolMessage(message); }).length;
+    subtitle.push(state.messageStartIndex > 0
+      ? "Показано " + visibleCount + " · история доступна выше"
+      : formatChatMessageCount(visibleCount));
   }
   if (activeChat) {
     subtitle = subtitle.concat([chatDocumentTitle(activeChat), chatHost(activeChat)].filter(Boolean));
@@ -49,7 +52,7 @@ function renderChatSessions() {
   $("openDocumentButton").hidden = isCurrentDocument || !chatDocumentPath(activeChat);
 
   var hasActive = !!state.activeChatId;
-  var hasMessages = !!(state.messages && state.messages.length);
+  var hasMessages = state.messageTotalCount > 0 || !!(state.messages && state.messages.length);
   var compactableMessages = (state.messages || []).filter(function (message) {
     return !messageActivity(message);
   }).length;
@@ -280,6 +283,10 @@ function applyChatState(response) {
     state.liveStreamContent = null;
     if (typeof resetLiveReasoning === "function") resetLiveReasoning();
     state.messages = response.messages || response.Messages || [];
+    state.messageStartIndex = response.messageStartIndex !== undefined
+      ? response.messageStartIndex : (response.MessageStartIndex || 0);
+    state.messageTotalCount = response.messageTotalCount !== undefined
+      ? response.messageTotalCount : (response.MessageTotalCount || state.messages.length);
   }
   if (response.artifacts !== undefined || response.Artifacts !== undefined) {
     state.artifacts = response.artifacts || response.Artifacts || [];
