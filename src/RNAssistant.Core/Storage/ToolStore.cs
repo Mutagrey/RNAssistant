@@ -274,7 +274,8 @@ namespace RNAssistant.Core.Storage
                 return;
             }
 
-            StorageFileSystem.WriteAllTextAtomic(path, value);
+            // Keep a literal leading U+FEFF distinct from the README's UTF-8 BOM.
+            StorageFileSystem.WriteAllTextAtomic(path, value, new UTF8Encoding(true));
         }
 
         private static bool LoadVbaSources(string directory, ToolCatalogEntry tool)

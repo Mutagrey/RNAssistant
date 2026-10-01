@@ -1076,8 +1076,7 @@ Finite closure status:
    live-provider, COM/lifetime, model and UI evidence remains open before formal
    release or claims that those environments are qualified. No new provider kinds,
    universal raw expansion or generic
-   cleanup workstream is scheduled. The unrelated ToolStore leading-U+FEFF defect
-   remains explicitly recorded in BACKLOG, not silently fixed or declared closed.
+   cleanup workstream is scheduled.
 
 ## Delivery order
 

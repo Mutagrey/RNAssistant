@@ -1230,8 +1230,8 @@ dependency direction, production source inclusion and document catalog access
 Library UX 4/4, context JSON 7/7, skill editor 13/13, shared upload 6/6, chat sync
 4/4, Artifact Library 5/5, commit projection 4/4 and VBA reader 4/4 — 58/58.
 JavaScript syntax, version-format and diff checks pass. No full harness or
-Office/VSTO validation. A pre-existing literal leading-U+FEFF README sidecar issue
-was recorded in BACKLOG; storage behavior is unchanged, read-back remains unknown.
+Office/VSTO validation. A literal leading-U+FEFF README sidecar issue was recorded
+in BACKLOG; its read-back was unknown at that checkpoint.
 Tool source read slice (2026-09-06): catalog and outgoing Init/chat/mutation/package
 DTOs now carry hash/extent-only source metadata. ToolEditorResourceService reserves
 shared capacity, checks displayed Library revision and reads exact custom/builtin

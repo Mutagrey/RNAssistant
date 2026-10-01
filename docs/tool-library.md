@@ -244,8 +244,11 @@ Direct package install/remove authorization and execution remain unchanged.
 
 The inline save request and separate pre-install save transport are removed;
 catalog and outgoing library projections now use the source metadata above.
-The pre-existing README leading-`U+FEFF` sidecar/read-back issue is tracked in
-[backlog](stabilization/BACKLOG.md#existing-defects-outside-the-completed-cutover).
+Tool package README sidecars are written with a separate UTF-8 BOM so a literal
+leading `U+FEFF` remains part of the text on read-back. Reads still accept existing
+BOM-prefixed files and do not rewrite them. An older BOM-less file beginning with
+literal `U+FEFF` has the same bytes as a BOM-prefixed file, so its original intent
+cannot be recovered automatically.
 
 ## Mandatory all-tool contract audit (R61)
 

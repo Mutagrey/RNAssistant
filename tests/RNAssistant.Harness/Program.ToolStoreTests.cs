@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
+using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
 using Newtonsoft.Json;
@@ -762,6 +763,34 @@ namespace RNAssistant.Harness
                 AssertTrue(updated.RequiresConfirmation, "updated confirmation flag");
                 AssertContains(updated.Code, "Updated report", "updated source");
                 AssertTrue(HasTool(loaded, "word.review"), "other host preserved");
+
+                var readmeTool = CustomTool("Excel", "excel.readme_roundtrip");
+                var unicode = "Résumé — Привет 世界";
+                readmeTool.Readme = unicode;
+                var savedReadme = store.SaveOne(readmeTool);
+                AssertEqual(unicode, savedReadme.Readme, "ordinary Unicode README round-trips");
+
+                var readmePath = Path.Combine(savedReadme.StoragePath, "README.md");
+                var bom = new UTF8Encoding(true).GetPreamble();
+                var ordinaryBytes = bom.Concat(Encoding.UTF8.GetBytes(unicode)).ToArray();
+                AssertTrue(File.ReadAllBytes(readmePath).SequenceEqual(ordinaryBytes),
+                    "new README has a separate UTF-8 BOM");
+
+                var legacy = "Legacy — Привет 世界";
+                var legacyBytes = bom.Concat(Encoding.UTF8.GetBytes(legacy)).ToArray();
+                File.WriteAllBytes(readmePath, legacyBytes);
+                AssertEqual(legacy, FindTool(store.Load(), readmeTool.Id).Readme,
+                    "existing BOM-prefixed README loads without a text prefix");
+                AssertTrue(File.ReadAllBytes(readmePath).SequenceEqual(legacyBytes),
+                    "loading does not rewrite the existing README");
+
+                readmeTool.Readme = "\uFEFF" + unicode;
+                savedReadme = store.SaveOne(readmeTool);
+                AssertEqual(readmeTool.Readme, savedReadme.Readme,
+                    "literal leading U+FEFF README round-trips");
+                var literalBytes = bom.Concat(Encoding.UTF8.GetBytes(readmeTool.Readme)).ToArray();
+                AssertTrue(File.ReadAllBytes(readmePath).SequenceEqual(literalBytes),
+                    "literal leading U+FEFF follows the separate UTF-8 BOM");
             });
         }
 

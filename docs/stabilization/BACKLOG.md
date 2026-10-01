@@ -201,14 +201,6 @@ transport alone does not qualify source allocation.
   or trigger automatic replay. Explicit `postMessage` exceptions are now handled
   by the shared send boundary; ready/queued/init regressions pass host-neutral.
 
-- Tool package README leading `U+FEFF`: `StorageFileSystem` writes a UTF-8 sidecar
-  without a separate BOM, while `ToolStore.TryReadUtf8` strips its first BOM-shaped
-  character. A literal leading `U+FEFF` therefore yields a different read-back and
-  `unknown`, not a false successful mutation. Observed during the 2026-09-06 Tool
-  upload check; transport preserves the submitted text. Owner: ToolStore/package
-  authoring. Resolve exact sidecar text semantics in an explicitly scoped storage
-  slice; verify ordinary/BOM-prefixed Unicode and preserve existing user files.
-
 ## Chat / diagnostics UX follow-ups — 2026-09-07
 
 The user-authorized 11E presentation slice is implemented host-neutral.
