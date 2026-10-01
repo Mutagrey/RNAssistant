@@ -75,6 +75,38 @@ ToolPack state. Confirmation uses the same kernel accounting and preserves repla
 ordering. The whole accepted read batch is persisted before dispatch; bounded result
 projection then keeps each native call/result pair adjacent in live and replayed requests.
 
+Context retention is not the visible chat transcript. Before each model dispatch,
+the compiler selects the active history window, validates observations against one
+frozen authority snapshot, hydrates selected complete CAS payloads, projects semantic
+results and then checks the complete request budget. The durable event stream keeps
+original calls/results; filtering never deletes them. Search results are bounded
+discovery metadata/snippets, not proof that the underlying body was read.
+
+- Optional tool schemas remain callable for the logical user turn, including
+  confirmation and compaction, through durable admission events. A new user turn
+  begins with its finite core and can require fresh optional admission. The current
+  `schemaLoaded` catalog flag and complete callable schemas are authoritative.
+- Skill bodies remain ordinary complete capability-read evidence in history/CAS,
+  with `loaded`, `complete` and `bodyMarkdown`. There is no separate persistent
+  "skill loaded" flag. A still-current complete read remains usable; compaction
+  can remove the body and requires a fresh read. Tool admission does not reload it.
+- Repeated input evidence does not supersede an earlier successful call. Different
+  JS computations can use the same resource revision. After hydration/projection,
+  byte-equivalent successful resource/capability results with equal evidence keep
+  one full result and an earlier successful causal frame linked to its call id.
+  Different result data remains distinct; redundant synthetic source copies can
+  also be omitted. Deduplication never reports staleness or requests another read.
+  Real revision drift still invalidates an old observation explicitly.
+- Runtime owns Turn/Run/Step/call/effect identities. Model call/result pairs carry
+  `tool_call_id`; folded completed mutations retain that correlation alongside
+  semantic data and verified effects. It is never an argument or a retry token.
+  Remaining work is expressed by the Task List/Plan and proposed next-action
+  claims, not inferred automatically from a mutation's `ok` status.
+
+For a repetition incident, compare the persisted `llm.request` bytes with accepted
+calls/results and compaction/effect events. A UI tool label or low token percentage
+cannot establish what evidence the model received or why it chose the next call.
+
 Every request contains one editable instruction followed by one dynamic `RUNTIME_CONTEXT` JSON object. Agent composes general (`SystemPrompt`), tool-use (`AgentToolsPrompt`), and skill-use (`AgentSkillsPrompt`) Markdown; Plan uses `PlanSystemPrompt` with the same progressive capability policy; Chat uses `ChatSystemPrompt`. The instruction role is selected independently as `developer` (default), `system`, or `user`:
 
 - current host and document identity;
@@ -932,3 +964,282 @@ links and a verified current-goal outcome are not inferred from these counters.
 Capability admission is the only consumer of the pre-archival result-message copy.
 Ordinary resource/tool results skip that copy and the capability wire reader;
 exact result bodies still use `ResultPayload` and compiler-selected CAS hydration.
+
+## Agent continuity audit — 2026-10-01
+
+Статус: общий контур исправлен и проверяется host-neutral; исходный Windows/model
+сценарий остаётся открытым evidence. Ниже сохранён анализ состояния **до исправления**.
+Owner: Conversation/model context; совместные границы — Core kernel, Tool Runtime
+и Resource Gateway. Аудит публичных инструментов находится в
+[Tool Library](tool-library.md#tool-ergonomics-audit--2026-10-01).
+
+### Реализованный контур
+
+- `CompletedToolOperation` сохраняет terminal outcome и runtime call ID независимо
+  от свежести тела. Исходный failed read не превращается в другую ошибку при
+  отсутствии evidence. Устаревший успешный read получает отдельный
+  `ResourceObservationNotice`. Compactor получает `operation_source` с tool provenance;
+  короткие receipts последних мутаций/ошибок восстанавливаются из terminal events,
+  а не из предположений LLM.
+- `ToolExecutionProgress` сохраняется в том же terminal message: outcome, existing
+  typed recovery и fingerprint результата. `AgentProgressTracker` — только
+  восстанавливаемая проекция logical turn. JSON-порядок аргументов не обходит guard.
+  Неизменённая ошибка не dispatch повторно; RetryLater допускает три попытки с
+  задержками 250/500 ms. Повторяющиеся refresh conflicts и три одинаковых успешных
+  ответа без новых сведений завершают цикл с конкретной причиной. Новые данные,
+  точное complete observation для RefreshRequired и verified state change позволяют
+  продолжение. Unknown не очищается посторонним успешным чтением или записью.
+  Старый pending continuation без typed progress явно отвергается; история не удаляется.
+- `ContextWorkingSet` заменяет `ArchivedCurrentSources`: оба потребителя (реальный
+  запрос и preview) восстанавливают точные тела из events/CAS в пределах бюджета.
+  До 32 недавних current bodies, в том числе skills/references и ограниченные
+  table/records/structure results; до 24 коротких operation receipts. Для archive
+  отводится не более трети message budget и только свободное место после active
+  facts; четверть этого резерва, максимум 2048 tokens, — receipts. Selection по
+  recency детерминирован; второй durable store не создаётся. Media не переигрывается
+  как якобы доставленное изображение. Current Task List/Plan остаются у существующих
+  владельцев, не копируются в новый store.
+- Exact resource dependencies определяют актуальность claims. Добавление unrelated
+  callable tool больше не аннулирует все факты. Checkpoint schema `context-claims-v5`
+  явно пропускает старые несовместимые checkpoints. Capability notices сохраняются
+  при повторной материализации claims. `ContextReceipt` отражает rejected claims,
+  operation receipts и retained/evicted archive bodies; WORKING_SET отличает
+  отсутствие тела в запросе от отсутствия ресурса.
+- `ResourceGatewayService.ReadWhole` — общий владелец полной сборки ресурса и core
+  skill. Нет отдельного 24000-character skill path, обещающего полную загрузку.
+  `ResourceSelectorContract` используется read/HTML/JS: record path отделён от
+  `pageIndex`, Office canonical path выбирает runtime. HTML требует явный `view`,
+  default `policy=head`; `exact` выбирается для снимка. `table` и `records` сохраняют
+  общий rows/columns batch. Business payload не получает ещё один универсальный
+  action/result wrapper.
+- Prompt schema **33** убирает обязательный повторный read уже включённого current
+  after-state, повтор admission после compaction и дублирование Task List/Markdown
+  Plan для любой сложной задачи. Сохранённые пользовательские prompts не заменяются:
+  существующий механизм требует review/reset в «Библиотека → Промпты».
+
+Общий Tool Result v1 и существующие typed evidence/recovery/effect contracts
+сохраняются. Массовое переименование tools, generic Office layer и замена всех
+стабильных family projections не нужны для этого инварианта. Их дальнейшая замена
+допустима по конкретному воспроизведению, с переключением producer и consumer вместе.
+
+### Вывод и границы доказательства
+
+Это комплексный дефект сохранения смысла между исполнением инструмента и следующим
+запросом модели. Часть повторов объясняется воспроизводимой потерей информации
+в runtime, а не забывчивостью модели или заполнением окна контекста. Нужен один
+контракт проекции и удержания контекста, реализованный последовательными небольшими
+изменениями. Замена event store, Resource Fabric или всего agent loop не обоснована.
+
+Новые фото показывают многократный `RESOURCE_VIEW_PATH_MISMATCH`: для Excel-диапазона
+канонический путь — `$`, передан `$.records`. Исходная ошибка прямо предлагает
+убрать `path`. Позже агент называет другую ошибку — `resource_evidence_unavailable`.
+Эту подмену удалось воспроизвести в компиляторе контекста. Это достаточная причина
+исправления, но без сохранённого `llm.request` исходного Windows-run нельзя доказать,
+что каждый повтор на всех восьми фотографиях вызван только ею.
+
+### Текущий путь данных
+
+```mermaid
+flowchart LR
+  A[AgentKernel: accepted call] --> B[ToolRuntime: descriptor / policy / binding]
+  B --> C[Provider or guarded document operation]
+  C --> D[Terminal result + effect + evidence]
+  D --> E[Append-only events + CAS bodies]
+  E --> F[ConversationModelSession: active history + current sources + admissions]
+  F --> G[ModelContextCompiler: authority / projection / folding / budget]
+  G --> H[Model request]
+  G --> I[ContextCompactionService: selected history to claims]
+  I --> F
+  H --> A
+```
+
+UI, durable history и отправленный запрос — разные представления. Наличие файла
+в ресурсах или успешной строки в UI не доказывает присутствие его тела, исходной
+ошибки или результата записи в следующем запросе. Проверять нужно цепочку
+`accepted call → terminal event → compiled request → next accepted call`.
+
+| Что | Где хранится сейчас | Что получает модель / где теряется |
+|---|---|---|
+| Вызовы и результаты | Append-only events; большие тела в CAS | Активное окно и выбранная проекция. Исходный журнал не удаляется при сжатии |
+| Схемы инструментов | Каталог и durable admission events текущего logical turn | Полный callable pack восстанавливается после сжатия/confirmation. Новый пользовательский turn начинает с core; повторное admission тогда допустимо |
+| Скиллы | Версионированный каталог; `capabilities_read` body в истории/CAS | Отдельного активного working set скиллов нет. Полное тело может уйти при сжатии; schema admission его не возвращает. В каталоге есть `schemaLoaded` для tools, но нет факта включения skill body в этот запрос |
+| Прочитанные данные | Evidence с revision/coverage и payload; результаты поиска отдельно | Архивный перенос удерживает complete whole `text/source` из resource reads и подтверждённых мутаций. Skill capability reads, табличные фрагменты, structure и search не получают такого же переноса |
+| Выполненная операция | Runtime call/effect IDs, terminal result и журнал мутаций | `tool_call_id` есть в Tool Result и теперь в folded frame, но folding теряет typed action metadata перед compaction |
+| Оставшаяся работа | Task List, Markdown Plan, claims `next_action` | Индекс/active Plan metadata не гарантируют наличие конкретных шагов и unresolved failures в каждом запросе. `next_action` — предложение модели, не доказательство завершения |
+
+ID уже существуют; добавлять ещё один ID в аргументы модели не нужно. Корреляция
+сама по себе не предотвращает повтор: новый вызов получает новый ID, даже если
+семантически повторяет предыдущий. Старый успешный эффект и текущая актуальность
+его after-state — также разные факты.
+
+### Воспроизведённые дефекты
+
+Диагностика выполнена временным .NET 8 probe поверх существующей host-neutral
+сборки Harness, без Office, model HTTP и изменения production-кода. Это проверки
+реального compiler/compactor/kernel с заданными входами, а не пересказ ответов LLM.
+
+| Сценарий | Наблюдаемый результат | Причина / owner |
+|---|---|---|
+| Ошибочный `resources_read`, без successful observation; роли `user`, `developer`, `tool` | Во всех трёх исходный `RESOURCE_VIEW_PATH_MISMATCH`, исправляющий текст и recovery заменены на `resource_evidence_unavailable` и совет найти/прочитать заново | `ModelContextCompiler.Compile`: ветка `Evidence.Count == 0` проверяет имя read, но не terminal status; `Mark` переписывает результат |
+| Сохранённый observation claim; ресурс и его revision не менялись, изменился только tool pack | Claim исчезает; счётчики исключённых resource observations этого не показывают | `ContextCompactionService.BuildCompactionSource` ставит глобальные tool/skill/schema generations на tool-dependent claims; compiler удаляет claim при любом несовпадении |
+| Подтверждённая VBA-запись → folding → compaction source | Call ID остаётся в тексте, `ResourceEffect` отсутствует; source классифицирован как `interpretation_source`, role `assistant` | Folding возвращает отображаемое сообщение вместо typed completed action; compactor заново выводит происхождение из этого сообщения |
+| Checkpoint с `SKILL_CONTEXT_NOTICE` и claims → compile | Notice есть до компиляции и отсутствует в отправляемой проекции | Compiler заменяет всё `Content` на `STRUCTURED_CONTEXT_CLAIMS`. Наличие другого общего skill prompt не делает потерю notice корректной |
+| Модель шесть раз возвращает одинаковый детерминированно ошибочный read | Шесть dispatch; остановка только `iteration_limit` | `AgentKernel` блокирует повтор byte-identical unknown-effect call, но не применяет общий no-progress/recovery guard к обычным ошибкам |
+
+Основные исходники: [compiler](../src/RNAssistant.Office/Services/ModelContextCompiler.cs),
+[compactor](../src/RNAssistant.Office/Services/ContextCompactionService.cs),
+[session](../src/RNAssistant.Office/Services/ConversationModelSession.cs),
+[kernel](../src/RNAssistant.Core/Agent/AgentKernel.cs).
+Воспроизведение первых двух случаев не требует большого контекста или compaction
+на самом проверяемом шаге: обычная сборка запроса уже меняет/убирает информацию.
+
+Дополнительные подтверждённые по коду несогласованности:
+
+- Перенос архивных current sources выбирает все подходящие актуальные whole
+  source/text observations, а не ограниченный набор для активной задачи. При этом
+  необходимый skill body может исчезнуть. Итоговый budget ограничен, но такая
+  политика способна оставить мало выигрыша от сжатия или вызвать budget failure.
+- `CapabilityCatalogService.ReadSkill` читает только 24 000 символов. Для частичного
+  тела рекомендует `resources_read`; общий skill prompt признаёт загрузку только
+  по capability-result с `kind=skill`, `loaded=true`, полным `bodyMarkdown` и при
+  truncation советует уменьшить body/новый чат. SkillStore допускает 500 000
+  символов. Общего выполнимого протокола для большого core skill нет. Это не
+  доказательство, что на фотографиях использовался большой skill.
+- `AgentToolsPrompt` требует нового source read после предыдущей записи;
+  `vba_apply_patch` разрешает использовать complete current after-source из
+  контекста. Даже описания whole write и patch сформулированы по-разному.
+- Default compaction prompt требует повторного admission optional tools, хотя
+  `ToolPackAdmissionJournal` сохраняет их в logical turn. Новое admission также
+  способно удалить unrelated claims через общий generation filter.
+- Предписание создавать Task List **и** Markdown Plan, предварительно загружая
+  tracking skill и обе схемы, распространяется на обычный цикл
+  discovery/construction/verification. Это несколько обязательных действий до
+  полезной правки; Task List при этом может блокировать final. Это продуктовая
+  сложность для оценки, а не доказанный источник каждой петли.
+- Saved prompts перекрывают defaults через `ConversationPromptComposer`.
+  Изменение `AppSettings` само по себе не исправляет инструкции существующего
+  пользователя; нужен явный review устаревшего default с сохранением авторских
+  настроек, без скрытой перезаписи.
+
+### Предлагаемый единый контракт
+
+Сохранить `ConversationRunService → AgentKernel`, exact descriptor/policy/binding,
+Resource Gateway, document gate, append-only events и CAS. Развить существующие
+`ContextAtom`, typed result/effect/evidence и `ToolRecoveryContract`; не вводить
+вторую базу «памяти», новый executor или универсальный Office router.
+
+Один typed intermediate representation должен доходить от terminal event до
+compactor/compiler. Только в конце он превращается в сообщения модели. В нём
+различаются четыре аспекта:
+
+1. **Факт операции:** вызов, terminal status, effect, исходная ошибка и recovery.
+   Не меняется от устаревания данных. Успешная запись остаётся выполненной;
+   `unknown` остаётся неизвестным до отдельного подтверждения. Compaction не
+   поручает LLM решать, была ли операция исполнена.
+2. **Наблюдение:** semantic target, representation, точная coverage, актуальность
+   относительно authority, payload и факт включения тела в запрос. Runtime
+   revision/URI остаются внутренними. Устаревание наблюдения даёт отдельный marker,
+   а не новый выдуманный terminal error старого вызова.
+3. **Доступность capability:** tool schema callable в этом turn; skill/reference
+   body действительно включён полностью, частично, выгружен или изменился.
+   Историческое «загружал» не равно «содержится сейчас». Состояние вычисляется
+   по окончательной материализации запроса, а не хранится вечным boolean.
+4. **Рабочая задача:** цель/ограничения пользователя, актуальные шаги, unresolved
+   failures и unknown effects, proposed next action. Выполнение шага не следует
+   автоматически из `ok`; доказательство должно относиться к этому deliverable.
+
+Это четыре вида данных в существующей проекции, а не четыре новых durable stores.
+Короткие operation receipts строятся детерминированно из событий. LLM-summary
+сохраняет рассуждения, решения и пользовательский контекст; он не является
+authority завершённых действий. Старые неактуальные тела можно выгружать,
+не уничтожая факт их чтения и границы того, что было проверено.
+
+| Что удерживать после очистки | Что можно выгрузить / как вернуть |
+|---|---|
+| Цель, ограничения, нужные шаги и нерешённые вопросы | Подробные промежуточные объяснения и устаревшие планы |
+| Короткие подтверждённые действия по активной задаче, no-op, ошибки и неизвестные эффекты | Большие before/after bodies; точные результаты остаются в events/CAS |
+| Один необходимый current source для следующей правки; нужный диапазон с coverage | Другие источники и старые версии. Актуальный immutable payload вернуть из CAS без повторного исполнения Office read |
+| Полные инструкции активных skills; только нужные reference sections | Неактивные skill bodies; вернуть точное опубликованное тело при следующей надобности |
+| Текущие callable schemas и компактная доступность остальных | Старые ответы загрузки схем; admission не выполнять повторно из-за compaction |
+| Выбранные semantic targets, coverage и usable findings поиска | Повторяющиеся discovery lists. Неполный поиск не превращать в доказательство отсутствия |
+
+Selection должен быть budgeted и объяснимым: active task, предстоящее действие,
+недавнее использование, unresolved recovery. Нельзя молча урезать обязательный
+source или skill body и считать его полным. Если нужное целиком не помещается,
+явно сообщить это и предложить поддерживаемый bounded view; таблицы и страницы
+не становятся whole-resource evidence. Для live Office CAS reuse допустим лишь
+при действующей authority/coverage; внешние изменения продолжают обнаруживаться.
+
+Зависимости claims проверять по реально использованному ресурсу/skill/schema,
+а не по всему каталогу. Добавление unrelated tool не меняет прочитанный факт
+о диапазоне. В receipt сборки запроса должны быть включённые/выгруженные данные,
+причины, rejected claims и число сохранённых operation receipts; уже существующий
+Prompt Context Inspector должен показывать именно эту окончательную проекцию.
+
+### Повтор и восстановление
+
+Использовать существующие `ToolFailureKind`/`ToolRetryPolicy`, а не ещё один набор
+строковых статусов. Kernel получает typed recovery и проверяет прогресс между
+попытками. Resource/domain owners предоставляют необходимые наблюдения состояния;
+kernel не разбирает Excel/VBA/HTML JSON самостоятельно.
+
+- `Replan`: тот же semantic request с той же причиной отказа не dispatch заново;
+  вернуть исходное объяснение и допустимое исправление аргументов. Для фото это
+  удаление `path`, а не ещё один поиск или перезапись источника.
+- `RefreshRequired`: продолжение требует новой подходящей observation, а не
+  любого успешного read, другого текста commentary или изменения JSON-порядка.
+- `RetryLater`: ограниченные попытки с backoff; ожидание должно быть разрешено
+  владельцем ошибки. Общий детерминированный отказ не становится retryable.
+- Повтор успешного read при неизменной authority/coverage может использовать
+  сохранённый payload. Повтор no-op/успеха без продвижения учитывается отдельно;
+  нельзя объявлять все повторные чтения ошибкой или запретить намеренное повторное
+  действие пользователя.
+- Possible effect/`unknown` никогда автоматически не повторять. Исторические
+  receipts не заменяют доменную защиту от повторной записи и reconciliation.
+
+Счётчик относится к logical turn и восстанавливается при confirmation/compaction
+из уже имеющихся событий. Семантический fingerprint учитывает аргументы, target,
+coverage и релевантную authority; простое изменение порядка JSON либо текста
+комментария не считается прогрессом. Новые данные, другой запрошенный диапазон,
+исправленный аргумент, выполненный шаг или новое пользовательское намерение —
+допустимые причины продолжения. Нужен короткий bounded recovery, затем честная
+остановка с причиной; лимиты 256 iterations / 4096 tool steps — только аварийный
+предел, не стратегия устранения петли.
+
+### Порядок реализации и минимальные проверки
+
+| Срез | Owner и конкретное изменение | Что удалить / проверка |
+|---|---|---|
+| 1. Неподменяемый результат | Compiler + compactor: разделить operation outcome и observation currency, сохранить typed terminal provenance при folding, exact original failure и recovery | Удалить read-name-only rewriting и повторный вывод completed action из assistant text. Проверить три result roles, stale success, исходный path error, mutation → compaction |
+| 2. Прогресс и recovery | Core kernel + typed runtime adapter: bounded no-progress по существующему recovery; восстановление по событиям | Заменить надежду на общий iteration limit для одинаковых отказов. Проверить повтор ошибки/no-op/unknown, изменённые аргументы, новую coverage, RetryLater, confirmation/compaction |
+| 3. Единый working set | Model session/compiler/compactor: budgeted source/skill/task projection, точные claim dependencies, полный per-request receipt | Удалить все-source carry-forward, global-generation filtering unrelated claims и исчезающий notice. Проверить unchanged skill после compaction, изменение одного skill, admission unrelated tool, большой body и бюджет |
+| 4. Контракты consumers | Tool/Resource/Skill owners: общий typed result metadata/error/observation contract, согласованные selectors и prompts; детали в Tool Library | Удалять family-specific JSON stripping только после переключения consumer; atomically обновить skill/schema/default prompt. Проверить target round-trip и одинаковые read/bind/JS view rules |
+| 5. Реальный сценарий | Windows/Office + target model: исходный Excel/VBA/HTML workflow по сохранённому redacted trajectory | Сопоставить accepted result с exact next request до/после compaction. Измерять повтор одинаковых отказов, лишние reloads, потерю фактов, ложный успех и фактический результат |
+
+Срезы проверяют один общий набор инвариантов, а не добавляют независимые исключения
+для каждого инструмента. Уже существующее подходящее coverage использовать;
+не запускать всю Office-матрицу ради docs или чистого compiler change. Host-neutral
+проверки не закрывают Windows/COM/WebView2 evidence и качество конкретной модели.
+
+### Сопоставление с другими агентскими системами
+
+Anthropic рекомендует небольшое число ясно различимых инструментов, полезные
+ответы и ошибки с понятным исправлением, а эффективность оценивать по реальным
+траекториям. Это поддерживает упрощение перекрывающихся selectors и проверку
+повторных вызовов, а не переименование всего каталога.
+[Writing tools for agents](https://www.anthropic.com/engineering/writing-tools-for-agents).
+
+Их context engineering отделяет подробную историю от нужного текущего контекста,
+сохраняет важные решения/незавершённую работу при compaction и предупреждает
+о чрезмерном сжатии. Для RNAssistant из этого следует budgeted working set,
+а не максимальное удержание всех когда-либо прочитанных источников.
+[Effective context engineering](https://www.anthropic.com/engineering/effective-context-engineering-for-ai-agents).
+
+OpenAI описывает agent loop как последовательное построение запроса, получение
+результатов tools и замену истории компактным представлением. Поэтому проверять
+нужно сформированный input, а не только UI transcript. Конкретный provider-specific
+механизм compaction переносить в RNAssistant для разных моделей не требуется.
+[Unrolling the Codex agent loop](https://openai.com/index/unrolling-the-codex-agent-loop/).
+
+Это обоснование принципов; предложенная реализация — вывод из кода RNAssistant,
+а не утверждение, что другой framework автоматически исправит его дефекты.

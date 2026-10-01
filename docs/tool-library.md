@@ -57,6 +57,10 @@ value must be JSON-serializable and at most 1 MiB. Execution is read-only, limit
 to 10 seconds in Jint, with a 12-second worker deadline and process termination on
 cancellation. A closed or incomplete resource read fails explicitly.
 
+The worker does not run the page's `app.js` or inherit its named HTML bindings.
+For an HTML data member, read its binding metadata to obtain `sourceTarget` and
+pass that source explicitly. Worker success alone is not WebView/render evidence.
+
 Custom `executor=js` tools use the same worker and ToolPack snapshot as a one-off
 call. Their strict argument schema must require a `resources` array of named
 semantic bindings; callers select targets on every invocation. Tool Library stores
@@ -252,6 +256,11 @@ cannot be recovered automatically.
 
 ## Mandatory all-tool contract audit (R61)
 
+R61 below records the completed family cutovers, not proof of agent continuity.
+The [2026-10-01 runtime/ergonomics audit](#tool-ergonomics-audit--2026-10-01)
+rechecks the current surface and its consumers; its open context defects are not
+closed by the historical descriptor inventory.
+
 The post-cutover catalog is complete host-neutral but is not yet Windows-qualified
 as the final candidate. R61/11O1
 corrected Resources + Capabilities host-neutral, 11O2 corrected planning, and 11O3
@@ -278,7 +287,8 @@ completed Resources + Capabilities slice.
 
 The 11O0 source baseline in that audit enumerated all 35 conditional built-in
 `common.*` tool IDs and all nine then-existing built-in Common skill IDs; after
-11O5 the current source contains 31 Common tool IDs and eight Common skills.
+11O5 that checkpoint contained 31 Common tool IDs and eight Common skills.
+These counts describe that migration checkpoint, not today's complete inventory.
 Progressive capability loading is
 acknowledged, but does not
 exempt optional tools from merge/split/internalization review or justify
@@ -306,7 +316,9 @@ semantic intent or runtime-owned state:
   may remain when they identify a real domain target.
 - Call/run/chat/document/endpoint IDs, UUIDs, internal artifact IDs, catalog or
   package revisions, optimistic-concurrency hashes, prepared guards, cursors,
-  offsets and page tokens are runtime-owned. After a family cutover they are absent
+  internal continuation offsets and page tokens are runtime-owned. Explicit row
+  selection such as `resources_read.offset/limit` is semantic intent, not a provider
+  cursor. After a family cutover runtime-owned fields are absent
   from model-facing arguments, ordinary Tool Result data, `RUNTIME_CONTEXT` and
   replayed model history; they are not typed, copied or even selected by the model
   or by a person testing a tool.
@@ -541,3 +553,146 @@ x64 tests cover actual custom-package discovery/install/run/cleanup in Excel, Wo
 and PowerPoint, target changes during an editor session and endpoint loss. UI status
 alone never proves an Office effect; install/remove require package journal/read-back,
 and arbitrary VBA macro execution remains unknown after dispatch.
+
+## Tool ergonomics audit — 2026-10-01
+
+Статус: каталог исследован; общий selector/whole-read/context cutover реализован.
+Ниже сохранены исходные наблюдения; массовое объединение/переименование tools
+и миграция стабильных domain payloads не выбраны. Owner: Tool Library / Resource Gateway, совместно с model-context owner.
+Причины зацикливания, воспроизведения и общий план находятся в
+[Agent continuity audit](conversation-protocol.md#agent-continuity-audit--2026-10-01).
+
+### Действующий общий контракт
+
+`ResourceSelectorContract` задаёт одинаковые name/target/view/path/pageIndex для
+HTML bindings и JS inputs; target и record path переиспользуются resource reader.
+`view` явный, `path` только для JSON records, `pageIndex` — целое zero-based число
+для page views. Office records не требуют path. Колонки выбираются по keys из
+`columns`, не по переведённому заголовку. `policy=head` — default HTML binding;
+для фиксированного снимка указать `exact`. Source target из JSON write/binding
+metadata проходит round-trip отдельно от workspace и самой binding.
+
+Повторные операции контролируются typed `ToolExecutionProgress`/recovery в kernel,
+исторический результат — `CompletedToolOperation`, отсутствие/устаревание тела —
+`ResourceObservationNotice`. Внешний Tool Result v1 не меняется. Complete core skill
+и resource read используют один Gateway whole-reader; partial references сохраняют
+свою точную coverage. Prompt schema 33 согласована с этим контрактом; custom prompts
+требуют review, без автоматической перезаписи. R61 inventory отражает новые schemas.
+
+### Реальная поверхность и качество схем
+
+Инвентаризация через `OfficeToolCatalog.ForHost` и
+`OfficeToolExecutor.GetControllerTools` поверх host-neutral fake adapters, с
+включённым Agent JavaScript: **70 уникальных built-in ID** — Common 36, Excel 14,
+Word 8, PowerPoint 8, Outlook 4. Доступный объединённый каталог для Excel содержит
+50 ID, Word/PowerPoint — по 44, Outlook — 34. При default-off JS уникальных ID 69;
+схема custom tool authoring также зависит от этой настройки. Пользовательские
+пакеты в эти числа не входят.
+
+Это не размер каждого model request. `CallableToolPack` начинает Agent/Excel
+с 4 bootstrap + 14 Excel + 2 VBA = 20 доступных схем; Agent/Word и PowerPoint —
+с 6, Outlook — с 4, Plan — с 4, Chat — с 2 resource readers. Optional schemas
+подключаются по admission. Проверять меньший Excel core можно по trajectories,
+но считать любое большое число ID архитектурной ошибкой нельзя.
+
+Во всех рассмотренных схемах описаны top-level arguments; closed object branches,
+enums и диапазоны уже используются. Критичная проблема не в отсутствии JSON Schema,
+а в расхождениях semantics, зафиксированных до cutover:
+
+- `resources_read.representation`, `html_data_bind.view` и `js_run.resources[].view`
+  имеют перекрывающиеся, но неодинаковые словари. Чтение использует `media`, runtime
+  bindings различают image/raw/page views. Это допустимые разные операции, однако
+  связь между ними и фактическая форма batch должны описываться одним контрактом.
+- `path` означает JSON record-array path, а для page views — индекс страницы в
+  строке. Для Office record path уже знает provider, для JSON его выбирает caller.
+  `$.records` из примера легко перенести на Excel, где правильный путь `$`.
+  В read schema уже сказано omit Office path; в bind примеры всё ещё общие.
+- `table` и `records` проходят через один `ResourceStructuredViewService` и дают
+  один `ResourceTableBatch` с columns/rows. Название `records` не означает, что
+  tool result — голый массив объектов, а Excel header не всегда structural field
+  key. `fields` должно отсылать к опубликованным ключам конкретного view.
+- У `js_run.resources[]` name/target/view/path не имеют собственных пояснений.
+  Поэтому особенно легко перенести HTML binding name в независимый worker или
+  выбрать text для target, поддерживающего только metadata/structure.
+- `html_data_bind` по умолчанию выбирает `view=text`, `policy=exact`. Для живого
+  Excel dashboard нужны подходящий records view и намеренно выбранная head policy;
+  иначе корректный snapshot API может не соответствовать ожиданию пользователя.
+- Полный source/text read собирается до 2 000 000 символов, а skills reader отдаёт
+  лишь 24 000. Слово «прочитано» не должно скрывать разные completeness/coverage.
+- Семантические row `offset/limit` доступны в resource reads, хотя общий текст
+  правил относит любые offsets/limits к runtime. Нужно отделить выбор строк от
+  внутреннего provider cursor; запрет одного не должен запрещать другое.
+
+Это аудит описаний и общей цепочки; все 70 domain operations не исполнялись в
+реальном Office. Наличие корректной схемы не доказывает корректность COM delivery.
+
+### Объединение и разделение
+
+| Семейство | Решение для следующего изменения |
+|---|---|
+| Resource find/read — 2 | Сохранить отдельно discovery и content read. Exact known target читать напрямую; поиск не должен быть обязательным ритуалом. Не добавлять отдельные Excel/VBA/HTML readers поверх общего gateway |
+| Resource schema/mapping/derive — 4 | Оставить отдельным optional advanced workflow. Не требовать draft → publish → mapping → derive для обычного чтения диапазона или dashboard binding |
+| Capabilities — 2 | Search только фильтрует каталог; read загружает выбранный skill/schema. Пока сохранить оба, но показывать actual per-request inclusion/admission. Не заставлять искать известный id или заново читать уже callable schema |
+| HTML — 7 | Сохранить разделение file write/patch, JSON data write и live source binding. JSON write уже создаёт binding: эта атомарность полезна и должна быть видна в результате. Freeze/refresh оставить optional; не объединять их в универсальный action tool |
+| JS — 1 | Сохранить отдельный read-only worker с explicit resource inputs. Его `ok` не доказывает исполнение app.js в WebView или отрисовку страницы. Переиспользовать общий selector/batch contract с HTML runtime |
+| VBA/macro — 6 | Whole write, targeted patch, rename, delete, restore и arbitrary execution различаются effects/guards; объединять их нельзя. Согласовать reuse after-source для write/patch. Длинное описание patch сократить до выбора/правил/исправления ошибки; подробную грамматику оставить в нужном skill/reference |
+| Excel — 14 | Сохранить тематические inspect/search/write/format/table/chart operations. `create_chat_chart` и `upsert_chart` имеют разные destinations. Discriminated `write_range.kind` лучше трёх почти одинаковых tools; для записи стоит требовать явный range intent вместо неожиданного default A1. Это оценка контракта, не установленный случай записи не туда |
+| Word — 8; PowerPoint — 8 | Сохранить domain operations и branch schemas. Ясно различить preview/поиск и полную evidence coverage; не сливать inspect и source read из-за частичного пересечения данных. `add_object.kind` не требует трёх новых tools без evidence путаницы |
+| Outlook — 4 | Сохранить search, bounded archive index, draft и update: разная цена, scope и effect. Ограничения scan coverage не должны превращать неполный поиск в утверждение «писем нет» |
+| Task List — 1; Plan — 3; Markdown — 2 | У сущностей разные цели: ход выполнения, план решений и пользовательский документ. Не объединять storage semantics; убрать обязательное создание всех сущностей для обычной правки. Checklist — для длительной работы, Markdown Plan — когда нужен план как deliverable или сложные решения |
+| Questions — 1 | Сохранить отдельный typed user interaction. Не делать его обязательной стадией там, где ответ уже есть в контексте |
+| Prompt — 1; skill authoring — 4; tool authoring — 2 | Оставить optional authoring; обычная работа не должна менять собственные инструкции для обхода ошибок. Для VBA/JS upsert нужны ясные discriminated branches; JSON Schema в `parameters` лучше принимать объектом, а не JSON-строкой внутри JSON. Не разбивать authoring на новые tools без конкретного сценария |
+
+Первый шаг — общий **семантический selector contract** для read/bind/JS и общие
+генераторы его schema/usage. Это отдельный model-facing DTO, не сериализация
+внутреннего `ResourceReadRequest` с URI/revision/cursor. Provider объявляет допустимые
+representations, структурные keys и допустимый выбор path/page; caller не угадывает.
+Page index и JSON path следует развести по typed branch. Для Office canonical path
+подставляет runtime. `table/records` — кандидат на одно каноническое representation
+после проверки всех consumers; оставить два имени имеет смысл лишь при явно разной
+семантике, которой текущий materializer не показывает.
+
+Не нужен новый registry aliases или большой tool `resources.action`. Существующий
+semantic target должен выдерживать round-trip: target из find/read/write/binding
+разрешается обратно в тот же ресурс в той же authority. Exact resolution не должно
+зависеть от того, попал ли ресурс в первые результаты общего поиска. Для HTML
+описания явно различают workspace, binding metadata и source values; один title
+или видимая карточка не заменяют тип и supported operations.
+
+### Что именно унифицировать в ответах
+
+Единый внешний Tool Result v1 уже существует: `tool_call_id`, `name`, `status`,
+`message`, `data`; статусы `ok/error/unknown`. Это сохраняется. Добавлять ещё один
+`success/ok` рядом или заставлять таблицу и VBA source иметь одинаковое содержимое
+не нужно.
+
+Слабая граница — `data` как произвольный JSON плюс независимые metadata paths.
+`ModelToolResultProjection` знает семейства по именам и рекурсивно удаляет ключи,
+похожие на runtime state. Для business table rows уже требуется специальное
+исключение. Такой blacklist хрупок при добавлении новых форм результата, даже если
+конкретная известная форма сейчас защищена. Исправлять надо источник DTO и общую
+проекцию, а не добавлять очередное исключение имени поля.
+
+Общий контур использует typed metadata-композицию при сохранении domain payload.
+Для ещё не переключённых family producers это критерий последующего локального cutover:
+
+| Аспект | Единое правило |
+|---|---|
+| Outcome/effect | Terminal invocation status отдельно от проверенного эффекта: changed/no-change/unknown. «Binding сохранён» не значит «dashboard получил строки»; static preflight не значит render verified |
+| Error/recovery | Стабильный code, исходное сообщение, existing typed failure/retry policy, при необходимости исправляемое поле и допустимые значения. `retryable` не должен независимо противоречить policy. Ошибка не становится другой при replay/compaction |
+| Observation | Semantic target, representation, coverage, completeness, body delivery/currentness. Runtime identity/revision/guards остаются typed internal evidence |
+| Content | Отдельный domain payload: точный source/text, structured rows/columns или computation value. Его произвольные business keys не фильтруются как runtime metadata |
+| Produced resources | Readable target, resource purpose/type, supported representations; для binding — source target и выбранный view/policy |
+
+Переиспользовать `ToolRecoveryContract`, `ResourceEvidence`, `ResourceCoverage`,
+`ResourceEffect` и `ResourceTableBatch`; не строить параллельную иерархию статусов.
+Model projection формируется из typed metadata и неизменённого domain payload;
+compiler/compactor потребляют те же факты до сериализации. Поля и casing меняются
+атомарно со schema/skill/prompt consumers; несовместимые старые streams явно
+reset/skip по действующему правилу, без alias/dual-write путей.
+
+Приёмка — сравнение exact next request с исходным result, три result roles,
+target round-trip, согласованность read/bind/JS и сохранение произвольных business
+keys. Inventory/hash test полезен для обнаружения дрейфа схемы, но не заменяет эти
+сценарии. Сначала исправляются потеря ошибок/фактов и повтор без прогресса из
+общего плана; публичные переименования и уменьшение core — после измерения пользы.

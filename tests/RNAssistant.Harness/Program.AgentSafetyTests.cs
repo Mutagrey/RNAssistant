@@ -50,6 +50,7 @@ namespace RNAssistant.Harness
             session.Messages.Add(ContextAcceptedCall("before_compaction"));
             session.Messages[3].RunId = "current_turn";
             session.Messages.Add(AgentJsonProtocol.CreateToolResultMessage(new ToolInvocation { ToolCallId = "before_compaction", ToolId = "excel.inspect" }, TerminalToolResult.Ok("ok")));
+            session.Messages[4].ExecutionProgress = new ToolExecutionProgress(ToolExecutionOutcome.Ok);
             var pending = ContextAcceptedCall("pending_id", ToolResultRoles.Tool, FixtureCallOrigin("step"));
             pending.RunId = "resume_1";
             pending.ExcludeFromModelContext = true;
@@ -396,6 +397,8 @@ namespace RNAssistant.Harness
                 session.Messages.Add(ContextAcceptedCall(batchIds[index], origin: FixtureCallOrigin("batch-step", batchAttempt, index)));
             foreach (var id in batchIds)
                 session.Messages.Add(AgentJsonProtocol.CreateToolResultMessage(new ToolInvocation { ToolCallId = id, ToolId = "excel.inspect" }, TerminalToolResult.Ok("read")));
+            foreach (var result in session.Messages.Where(m => m.ToolResultProtocolVersion == ToolResultWire.CurrentVersion))
+                result.ExecutionProgress = new ToolExecutionProgress(ToolExecutionOutcome.Ok);
             var before = JsonConvert.SerializeObject(session);
             var continuation = ConversationProtocolContext.RestoreContinuation(session, ContextPendingCommand());
             AssertTrue(continuation.AcceptedCallIds.SequenceEqual(new[] { "batch_1", "batch_2", "before_compaction", "pending_id" }),
@@ -439,6 +442,9 @@ namespace RNAssistant.Harness
             var missing = ContextContinuationSession();
             missing.Messages.RemoveAt(missing.Messages.Count - 1);
             invalid.Add(missing);
+            var missingProgress = ContextContinuationSession();
+            missingProgress.Messages[4].ExecutionProgress = null;
+            invalid.Add(missingProgress);
             var missingResult = ContextContinuationSession();
             missingResult.Messages.RemoveAt(4);
             invalid.Add(missingResult);

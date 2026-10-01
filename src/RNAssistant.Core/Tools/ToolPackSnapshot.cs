@@ -177,6 +177,11 @@ namespace RNAssistant.Core.Tools
             };
         }
 
+        internal static string JsonFingerprint(string json)
+        {
+            return Hash(Canonicalize(RNAssistant.Core.ModelProtocol.ToolResultWire.ParseData(json)).ToString(Formatting.None));
+        }
+
         private static JToken Canonicalize(JToken token)
         {
             var value = token as JObject;

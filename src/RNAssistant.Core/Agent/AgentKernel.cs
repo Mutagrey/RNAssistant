@@ -211,14 +211,21 @@ namespace RNAssistant.Core.Agent
                 await RecordNotDispatchedAsync(state, call, policy, stepId, "Tool step limit reached.", confirmed).ConfigureAwait(false);
                 return state.Summary(RunLifecycle.Failed, "tool_step_limit", "Tool step limit reached.");
             }
-            var callSignature = call.Name + "\n" + call.ArgumentsJson;
-            if (!confirmed && state.UnknownCallSignatures.Contains(callSignature))
+            string progressReason, progressMessage;
+            int retryDelay = 0;
+            if (!confirmed && !state.Progress.CanDispatch(call, out progressReason, out progressMessage, out retryDelay))
             {
-                await RecordNotDispatchedAsync(state, call, policy, stepId,
-                    "An identical call with an unknown effect was already attempted.").ConfigureAwait(false);
-                return state.Summary(RunLifecycle.Failed,
-                    "repeated_unknown_tool_call",
-                    "The previous call may have had an effect; it cannot be repeated automatically.");
+                await RecordNotDispatchedAsync(state, call, policy, stepId, progressMessage).ConfigureAwait(false);
+                return state.Summary(RunLifecycle.Failed, progressReason, progressMessage);
+            }
+            if (retryDelay > 0)
+            {
+                try { await Task.Delay(retryDelay, cancellationToken).ConfigureAwait(false); }
+                catch (OperationCanceledException)
+                {
+                    await RecordNotDispatchedAsync(state, call, policy, stepId, "Cancelled before retry dispatch.").ConfigureAwait(false);
+                    return state.Summary(RunLifecycle.Cancelled, "cancelled", "Run cancelled.");
+                }
             }
             var context = new ToolExecutionContext(call, policy, state.RunId, state.TurnId, stepId,
                 _utcNow(), confirmed, remaining, preparedStateJson);
@@ -263,7 +270,6 @@ namespace RNAssistant.Core.Agent
             if (record.ToolStepsConsumed > remaining) stop = RunLifecycle.Failed;
             if (record.Outcome == ToolExecutionOutcome.Unknown)
             {
-                state.UnknownCallSignatures.Add(callSignature);
                 state.UnknownEffectObserved = state.UnknownEffectObserved ||
                     policy.MayHaveSideEffects;
             }
@@ -275,6 +281,8 @@ namespace RNAssistant.Core.Agent
                 state.Messages.Add(AgentMessage.ToolResult(record));
             await AppendAsync(state, new AgentRunEvent(AgentRunEventKind.ToolCompleted, state.Summary(),
                 stepId, execution: record)).ConfigureAwait(false);
+            var stalled = state.Progress.Observe(call, ToolExecutionProgress.Capture(record), record.Message,
+                record.ResourceEvidence, record.ResourceEffect);
             if (stop.HasValue || cancellationToken.IsCancellationRequested)
             {
                 if (state.Pending != null)
@@ -293,6 +301,8 @@ namespace RNAssistant.Core.Agent
             }
             if (record.AwaitingUser)
                 return state.Summary(RunLifecycle.Completed, "awaiting_user", record.Message);
+            if (stalled != null)
+                return state.Summary(RunLifecycle.Failed, "repeated_tool_no_progress", stalled);
             return null;
         }
 
@@ -349,8 +359,7 @@ namespace RNAssistant.Core.Agent
             internal long Revision;
             internal PendingConfirmation Pending;
             internal bool UnknownEffectObserved;
-            internal readonly HashSet<string> UnknownCallSignatures =
-                new HashSet<string>(StringComparer.Ordinal);
+            internal readonly AgentProgressTracker Progress = new AgentProgressTracker();
 
             internal State(AgentRunRequest request)
             {
@@ -368,6 +377,7 @@ namespace RNAssistant.Core.Agent
                 TurnId = continuation.Summary.TurnId;
                 Limits = continuation.Limits;
                 Messages = continuation.AcceptedMessages.ToList();
+                Progress.Restore(Messages);
                 AcceptedIds = new HashSet<string>(continuation.AcceptedCallIds, StringComparer.OrdinalIgnoreCase);
                 Counts = continuation.Summary.ToolCounts;
                 UnknownEffectObserved = Counts.WriteUnknown > 0;

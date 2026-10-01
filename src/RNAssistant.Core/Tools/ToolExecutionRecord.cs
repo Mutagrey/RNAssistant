@@ -54,6 +54,34 @@ namespace RNAssistant.Core.Tools
 
     public enum ToolExecutionOutcome { Ok, Error, Unknown, AwaitingConfirmation, NotDispatched }
 
+    // Small terminal metadata carried by the existing accepted result event.
+    // Bodies, resource evidence and effects retain their existing owners.
+    public sealed class ToolExecutionProgress
+    {
+        public ToolExecutionOutcome Outcome { get; private set; }
+        public ToolRecoveryContract Recovery { get; private set; }
+        public string ResultFingerprint { get; private set; }
+
+        [JsonConstructor]
+        public ToolExecutionProgress(ToolExecutionOutcome outcome, ToolRecoveryContract recovery = null,
+            string resultFingerprint = null)
+        {
+            Outcome = outcome; Recovery = recovery; ResultFingerprint = resultFingerprint;
+        }
+
+        public static ToolExecutionProgress Capture(ToolExecutionRecord record)
+        {
+            string fingerprint = null;
+            try { if (record.Result != null) fingerprint = ToolPackSnapshot.JsonFingerprint(record.Result.DataJson); }
+            catch (ArgumentException)
+            {
+                // Invalid domain JSON is handled by result delivery. Optional
+                // progress metadata must not prevent recording an actual effect.
+            }
+            return new ToolExecutionProgress(record.Outcome, record.Recovery, fingerprint);
+        }
+    }
+
     public sealed class ToolExecutionContext
     {
         public ToolCall Call { get; private set; }

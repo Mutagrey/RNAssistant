@@ -311,6 +311,7 @@ namespace RNAssistant.Office.Services
             {
                 descriptor.Metadata["bindingPolicy"] = member.Binding.Policy;
                 descriptor.Metadata["bindingView"] = member.Binding.View;
+                descriptor.Metadata["bindingPath"] = member.Binding.ViewPath;
                 descriptor.Metadata["boundResource"] = member.Binding.Resource?.Uri;
             }
             return descriptor;
@@ -391,5 +392,52 @@ namespace RNAssistant.Office.Services
             public DateTime UpdatedUtc { get; set; }
             public HtmlWorkspaceDataBinding Binding { get; set; }
         }
+    }
+
+    // Semantic model metadata. Exact binding authority stays in the workspace.
+    internal sealed class HtmlResourceBindingInfo
+    {
+        [JsonProperty("name")] public string Name { get; set; }
+        [JsonProperty("sourceTarget", NullValueHandling = NullValueHandling.Ignore)] public string SourceTarget { get; set; }
+        [JsonProperty("view")] public string View { get; set; }
+        [JsonProperty("path", NullValueHandling = NullValueHandling.Ignore)] public string Path { get; set; }
+        [JsonProperty("policy")] public string Policy { get; set; }
+        [JsonProperty("usage")] public string Usage { get; set; }
+        [JsonProperty("sourceUnavailable", NullValueHandling = NullValueHandling.Ignore)] public string SourceUnavailable { get; set; }
+
+        internal static HtmlResourceBindingInfo Create(string name, HtmlWorkspaceDataBinding binding, ResourceDescriptor source)
+        {
+            return new HtmlResourceBindingInfo {
+                Name = name, SourceTarget = source == null ? null : ResourceGatewayService.IntentTarget(source),
+                View = binding.View, Path = binding.ViewPath, Policy = binding.Policy,
+                Usage = "Existing binding: open RN.resources.open(name) in page code. This metadata is not the source values. " +
+                    "For an explicit model/JS read or a deliberate rebind, use sourceTarget. " +
+                    (binding.View == "text" || binding.View == "source"
+                        ? "Stream batches contain text chunks; concatenate batch.text before parsing JSON."
+                        : binding.View == "table" || binding.View == "records"
+                        ? "Stream batches contain rows and columns; consume batch.rows. Column keys are declared by batch.columns, not inferred from headers."
+                        : "Consume the advertised view's batch format.") };
+        }
+    }
+
+    internal sealed class HtmlWorkspaceResourceManifest
+    {
+        [JsonProperty("resources")] public List<ResourceDescriptor> Resources { get; set; }
+    }
+
+    internal sealed class HtmlWorkspaceReadInfo
+    {
+        [JsonProperty("type")] public string Type { get { return "rnassistant.htmlWorkspaceManifest"; } }
+        [JsonProperty("members")] public List<HtmlResourceMemberInfo> Members { get; set; }
+    }
+
+    internal sealed class HtmlResourceMemberInfo
+    {
+        [JsonProperty("target")] public string Target { get; set; }
+        [JsonProperty("type")] public string Type { get; set; }
+        [JsonProperty("name")] public string Name { get; set; }
+        [JsonProperty("active")] public bool Active { get; set; }
+        [JsonProperty("representations")] public List<string> Representations { get; set; }
+        [JsonProperty("binding", NullValueHandling = NullValueHandling.Ignore)] public HtmlResourceBindingInfo Binding { get; set; }
     }
 }

@@ -70,6 +70,15 @@ namespace RNAssistant.Harness
                 settings.EnableAgentJavaScript = true;
                 AssertTrue(catalog.GetVisibleTools().Any(item => item.Id == JsToolHandler.RunId),
                     "enabled JS run appears in the agent catalog");
+                var jsInput = JObject.Parse(catalog.GetVisibleTools().Single(item => item.Id == JsToolHandler.RunId)
+                    .ArgumentSchemaJson).SelectToken("properties.resources.items") as JObject;
+                var htmlInput = JObject.Parse(HtmlWorkspaceToolService.BindSchema());
+                foreach (var key in new[] { "name", "target", "view", "path", "pageIndex" })
+                    AssertTrue(JToken.DeepEquals(jsInput["properties"][key], htmlInput["properties"][key]),
+                        "JS and HTML share the exact selector contract for " + key);
+                string selectorError;
+                AssertTrue(!ToolSchemaSupport.ValidateArguments(new JObject { ["name"] = "page", ["target"] = "File: report.pdf",
+                    ["view"] = "render-page", ["path"] = "0" }, jsInput, false, out selectorError), "page number cannot be confused with a record path");
                 var enabledSchema = JObject.Parse(catalog.GetVisibleTools()
                     .Single(item => item.Id == ToolAuthoringCatalog.UpsertToolId).ArgumentSchemaJson);
                 AssertTrue(enabledSchema.SelectToken("properties.executor.enum") is JArray &&
@@ -1641,7 +1650,7 @@ namespace RNAssistant.Harness
                     Host = "Common",
                     Name = "Reference test",
                     Description = "Test progressive skill references.",
-                    BodyMarkdown = "# Reference test\n\nRead [details](references/details.md) when needed.",
+                    BodyMarkdown = "# Reference test\n\nRead [details](references/details.md) when needed.\n" + new string('A', 70000) + "CORE_TAIL",
                     Enabled = true
                 });
                 var stored = store.Load().Single(item => item.Id == "common.reference_test");
@@ -1700,6 +1709,7 @@ namespace RNAssistant.Harness
                 AssertTrue(main.Success, "published skill body read: " + main.ErrorCode + " " + main.Message + " " + main.DataJson);
                 var mainData = JObject.Parse(main.DataJson);
                 AssertEqual(true, (bool)mainData["loaded"], "complete core read declares loaded state");
+                AssertEqual(stored.BodyMarkdown, (string)mainData["bodyMarkdown"], "core exceeding one provider page is loaded completely");
                 AssertEqual("references/details.md", (string)mainData.SelectToken("references[0].path"),
                     "core read lists references without their bodies");
 

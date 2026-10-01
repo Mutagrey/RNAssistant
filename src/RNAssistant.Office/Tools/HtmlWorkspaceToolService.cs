@@ -125,7 +125,8 @@ namespace RNAssistant.Office.Tools
                     var data = UpsertDataSource(session, name, json);
                     return WithAutomaticPreflight(session,
                         HtmlWorkspaceToolOutcome.Ok(
-                            "HTML workspace data saved: " + data.Name,
+                            "HTML workspace data saved and bound: " + data.Name +
+                            ". RN.resources.open(name) is ready with view=text; no additional bind is needed.",
                             WorkspaceMutationJson(session, "data", data.Name),
                             HtmlWorkspaceEffect.VerifiedChange),
                         cancellationToken);
@@ -418,10 +419,11 @@ namespace RNAssistant.Office.Tools
             return data;
         }
 
-        private static string WorkspaceMutationJson(ChatSession session, string itemType, string itemId)
+        private static string WorkspaceMutationJson(ChatSession session, string itemType, string itemId,
+            ResourceDescriptor boundSource = null)
         {
             var workspace = NormalizedWorkspaceCopy(session == null ? null : session.HtmlWorkspace);
-            return AddWorkspaceResourceRefs(session, new JObject
+            var result = AddWorkspaceResourceRefs(session, new JObject
             {
                 ["type"] = "rnassistant.htmlWorkspaceMutation",
                 ["version"] = 2,
@@ -434,7 +436,20 @@ namespace RNAssistant.Office.Tools
                 ["dataSourceCount"] = workspace.DataSources.Count,
                 ["boundDataSourceCount"] = workspace.DataSources.Count(item => item != null && item.Binding != null),
                 ["updatedUtc"] = workspace.UpdatedUtc
-            }).ToString(Formatting.None);
+            });
+            var source = itemType == "data" ? workspace.DataSources.SingleOrDefault(item => item.Name == itemId) : null;
+            if (source?.Binding != null)
+            {
+                string artifactId;
+                if (boundSource == null && ChatResourceUri.TryGetArtifactId(session, source.Binding.Resource, out artifactId))
+                {
+                    var artifact = session.Artifacts.SingleOrDefault(item => item.Id == artifactId);
+                    if (artifact != null) boundSource = new ResourceDescriptor {
+                        Kind = artifact.Kind, Title = artifact.Title, CreatedUtc = artifact.CreatedUtc };
+                }
+                result["binding"] = JToken.FromObject(HtmlResourceBindingInfo.Create(source.Name, source.Binding, boundSource));
+            }
+            return result.ToString(Formatting.None);
         }
 
         private static JObject AddWorkspaceResourceRefs(ChatSession session, JObject data)
@@ -458,6 +473,7 @@ namespace RNAssistant.Office.Tools
                         memberType = string.Equals(item.Kind, ChatHtmlResourceCatalog.FileKind, StringComparison.Ordinal)
                             ? "file" : "data",
                         path = item.Title,
+                        target = ResourceGatewayService.IntentTarget(item),
                         uri = item.Reference.Uri,
                         revision = item.Reference.Revision
                     })

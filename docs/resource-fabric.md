@@ -749,6 +749,23 @@ HTML bindings hold ResourceRef, head/exact policy, view/path and optional schema
 mapping refs, never current dataset JSON or executable tool calls. Head policy is
 resolved on open; existing handles remain exact. Static JSON is a chat resource.
 
+`common.html_data_write` stores JSON and immediately creates a named `text`
+binding. Its result exposes the readable JSON `sourceTarget`, view and policy;
+no second bind is needed. Mutation member entries and model workspace-structure
+reads expose directly readable semantic targets. `scope=html` includes the
+document-owned workspace root as well as its members. The prompt working set
+omits superseded HTML snapshots already known in the chat; their history remains
+durable, but current discovery cannot resolve those old root targets.
+
+An `HTML data` member is binding metadata, not the dataset. Model text reads expose
+name/view/path/policy/sourceTarget instead of internal references. Bind refuses a
+workspace or binding member as a data source before mutation; structured model and
+JS reads of those targets direct the caller to the source. An identical binding is
+a verified no-op. Binding metadata is not restored as raw source after compaction.
+Page stream views are fixed at binding/open: `text/source` yields `batch.text`,
+while `table/records` yields `batch.rows` and `batch.columns`. The HTML skill does
+not override a records/text binding with a hard-coded table stream view.
+
 `RN.resources` opens named capabilities, reads bounded batches/streams and closes
 them. `ResourceDataPlaneService`/`ResourceDataRouter` serve the internal
 `https://rnassistant.local-resource/v1/<opaque-lease>` WebView route, not a server.
@@ -1084,3 +1101,18 @@ MASTER waves are one dependency-ordered implementation: shared foundation →
 mutation/evidence → frozen compiler → reference-first HTML/viewers → schema/derived/
 catalog/retention cleanup. Host-neutral checks do not close real Windows x64 +
 Office x64 + VS 2022/WebView2 qualification or any release gate.
+
+## Shared selectors and retained context — 2026-10-01
+
+Read, HTML binding and JS share `ResourceSelectorContract`: semantic target,
+explicit value view, optional record-array path and separate integer `pageIndex`
+for rendered pages. Office record paths are runtime-owned; omit path. HTML's view
+is required and binding policy defaults to head, with explicit exact snapshots.
+Whole resource and core skill reads use the same bounded, revision-pinned Gateway
+assembler; partial pages cannot masquerade as complete loads.
+
+After compaction `ContextWorkingSet` reuses current exact CAS evidence for source,
+text, structure and record coverage plus complete skill bodies. It never rereads
+Office to construct a prompt and never replays mutations. Bodies may leave the
+request budget without changing their original terminal outcome or existence.
+See the [continuity contract](conversation-protocol.md#agent-continuity-audit--2026-10-01).

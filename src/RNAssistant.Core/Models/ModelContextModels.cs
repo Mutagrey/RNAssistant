@@ -71,6 +71,35 @@ namespace RNAssistant.Core.Models
         public long HydratedBytes { get; set; }
         public int EstimatedTokens { get; set; }
         public bool CompactionApplied { get; set; }
+        public int RejectedClaims { get; set; }
+        public int OperationReceipts { get; set; }
+        public int RetainedBodies { get; set; }
+        public int EvictedBodies { get; set; }
+    }
+
+    // Historical outcome and observation currency are independent. This detached
+    // projection is reconstructed from terminal events, never inferred by an LLM.
+    public sealed class CompletedToolOperation
+    {
+        public string ToolCallId { get; set; }
+        public string ToolName { get; set; }
+        public RNAssistant.Core.Tools.Contracts.ToolResultStatus Status { get; set; }
+        public string Message { get; set; }
+        public string DataJson { get; set; }
+    }
+
+    public sealed class ResourceObservationNotice
+    {
+        [JsonProperty("target")]
+        public string Target { get; set; }
+        [JsonProperty("state")]
+        public EvidenceState State { get; set; }
+        [JsonProperty("bodyIncluded")]
+        public bool BodyIncluded { get; set; }
+        [JsonProperty("reason")]
+        public string Reason { get; set; }
+        [JsonProperty("nextAction")]
+        public string NextAction { get; set; }
     }
 
     public sealed class ModelContextSnapshot

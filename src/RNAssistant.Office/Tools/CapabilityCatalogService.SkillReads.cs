@@ -38,9 +38,8 @@ namespace RNAssistant.Office.Tools
             if (HasArgument(arguments, "offset") || HasArgument(arguments, "maxChars"))
                 return CapabilityToolOutcome.Error("Offsets and page sizes belong to resource continuation.", null, "capability_runtime_state_not_allowed", false);
             var exact = CatalogResourceProvider.SkillResource(skill);
-            var result = _resources.Read(session, new ResourceReadRequest { Reference = exact, Representation = "text", MaxChars = 24000 }).Result;
-            return CapabilityToolOutcome.Ok(result.Complete ? "Skill loaded: " + skill.Id + ". No tool schema was admitted by this resource read." :
-                "Partial skill body. Read the skill target through common.resources_read for complete content.",
+            var result = _resources.ReadWhole(session, exact, "text").Result;
+            return CapabilityToolOutcome.Ok("Skill loaded: " + skill.Id + ". No tool schema was admitted by this resource read.",
                 JsonConvert.SerializeObject(new {
                     kind = "skill", loaded = result.Complete, complete = result.Complete, truncated = !result.Complete,
                     id = skill.Id, host = skill.Host, name = skill.Name, description = skill.Description,

@@ -24,8 +24,20 @@ namespace RNAssistant.Office.Tools
         internal static readonly ToolPolicy Policy = new ToolPolicy(ToolEffect.Read, ToolVerification.None,
             false, false, new[] { "agent" });
         internal static readonly ToolDescriptor Descriptor = new ToolDescriptor(RunId,
-            "Run read-only JavaScript over named semantic resources. Return a JSON value. Use await RN.resources.open(name) and for await (const batch of handle.stream({limit:500})). No document writes, network, filesystem or CLR access.",
-            "{\"type\":\"object\",\"properties\":{\"code\":{\"type\":\"string\",\"description\":\"Body of an async JavaScript function; return a JSON-serializable value.\",\"minLength\":1,\"maxLength\":1000000},\"resources\":{\"type\":\"array\",\"description\":\"Named inputs resolved before execution.\",\"maxItems\":32,\"items\":{\"type\":\"object\",\"properties\":{\"name\":{\"type\":\"string\",\"minLength\":1,\"maxLength\":128},\"target\":{\"type\":\"string\",\"minLength\":1,\"maxLength\":1024},\"view\":{\"type\":\"string\",\"enum\":[\"text\",\"source\",\"table\",\"records\",\"raw\",\"image\",\"thumbnail\",\"render-page\",\"page-thumbnail\"]},\"path\":{\"type\":\"string\",\"maxLength\":256}},\"required\":[\"name\",\"target\",\"view\"],\"additionalProperties\":false}}},\"required\":[\"code\",\"resources\"],\"additionalProperties\":false}");
+            "Run read-only JavaScript over the explicit resources inputs for this call. It does not execute page scripts or inherit HTML workspace bindings. Use data source targets; an HTML data target is binding metadata, whose text supplies sourceTarget. Return a JSON value. Use await RN.resources.open(name) and for await (const batch of handle.stream({limit:500})); records/table batches expose rows and columns, text/source batches expose text chunks. No document writes, network, filesystem or CLR access.",
+            Parameters());
+
+        private static string Parameters()
+        {
+            return new JObject { ["type"] = "object", ["properties"] = new JObject {
+                ["code"] = new JObject { ["type"] = "string", ["minLength"] = 1, ["maxLength"] = 1000000,
+                    ["description"] = "Body of an async JavaScript function; return a JSON-serializable value." },
+                ["resources"] = new JObject { ["type"] = "array", ["maxItems"] = 32,
+                    ["description"] = "Explicit named inputs for this invocation. Use [] if no inputs are needed; HTML bindings are not inherited.",
+                    ["items"] = ResourceSelectorContract.NamedInput(false) } },
+                ["required"] = new JArray("code", "resources"), ["additionalProperties"] = false }.ToString(Formatting.None);
+        }
+
 
         private readonly ResourceGatewayService _gateway;
         private readonly ChatSession _session;
@@ -86,8 +98,7 @@ namespace RNAssistant.Office.Tools
                             string.IsNullOrWhiteSpace(view) || resources.ContainsKey(name))
                             throw new InvalidOperationException("Invalid or duplicate JS resource binding.");
                         var selected = _gateway.ResolveIntentTarget(_session, target);
-                        var viewPath = view == "table" || view == "records"
-                            ? ResourceGatewayService.ResolveStructuralViewPath(selected, path) : path;
+                        var viewPath = ResourceSelectorContract.ResolvePath(selected, view, path, (int?)item?["pageIndex"]);
                         // A complete resource body is never materialized here. Capture only an exact view revision.
                         var first = _gateway.Read(_session, new ResourceReadRequest {
                             Reference = selected.Descriptor.Mutable ? new ResourceRef(selected.Reference.Uri) : selected.Reference,

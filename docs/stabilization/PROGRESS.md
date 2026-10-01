@@ -28,7 +28,7 @@ severity, not a new phase queue):
 
 | Priority | Next concrete step | Owner / evidence |
 |---|---|---|
-| P1 | Correlate the reported Agent/Excel/VBA/HTML loops and missing or repeated changes with accepted calls, exact result bytes shown to the model, source revisions, effects and Task List state. Fix a reproduced remaining cause, not the screenshot's inferred cause. | Conversation/model context + domain owners; [R78 and related incidents](RISK_REGISTER.md), redacted trajectory and exact Windows build |
+| P1 | Validate the implemented context-continuity invariants on the original Excel/VBA/HTML trajectories: compare terminal events with exact next-request bytes and actual rendered/Office state. Core host-neutral regressions are covered; incident attribution still needs real Windows/model evidence. | Conversation/model context + kernel/Resource owners; [analysis and implementation slices](../conversation-protocol.md#agent-continuity-audit--2026-10-01), [active incident](RISK_REGISTER.md#agent-continuity-and-deterministic-read-loops--2026-10-01) |
 | P1 | Verify pane switch/shutdown draining and Outlook Explorer/Inspector activation on Windows; fix a reproduced failure in the bound host path. | Bridge/HostRuntime/Outlook; [current risks](RISK_REGISTER.md), Windows x64 + Office x64 + WebView2 |
 | P1 | Use existing stage timings on the affected Windows chat to locate persistent chat-switch and completion stalls before changing storage or request limits. | ChatStore / bridge / model request path; [navigation evidence](RISK_REGISTER.md), exact build and same chat |
 | P2 | Reconcile the remaining host-neutral fixture/prompt checks and bounded resource gaps as separately scoped slices. | Owners and triggers in [BACKLOG](BACKLOG.md) |
@@ -49,6 +49,34 @@ deleted. Formal exact-build Windows/Office evidence remains open; the release ow
 records it directly and reviews the signed release payload before finalization.
 
 ## Implementation log — includes current in-flight work and earlier entries
+
+Agent continuity implementation (2026-10-01): terminal errors/actions now survive
+context projection and compaction with typed provenance. Existing event messages
+retain typed progress for canonical-call guards and confirmation restoration.
+A budgeted `ContextWorkingSet` replaces unconditional archived-source carry-forward,
+restoring current skills and structured observations from CAS. Gateway whole reads
+and read/HTML/JS selectors are shared; prompt schema 33 removes redundant rereads,
+readmission and compulsory duplicate planning artifacts. Existing custom prompts
+remain intact and require the existing review action. See
+[the implemented contract and audit](../conversation-protocol.md#agent-continuity-audit--2026-10-01)
+and [tool contracts](../tool-library.md#tool-ergonomics-audit--2026-10-01).
+Focused host-neutral checks cover context, kernel, confirmation, skills, HTML and
+schema inventory. Original Windows/Office/WebView2/model trajectories remain open.
+Three unrelated checks also fail in clean HEAD `dfa154e2`: prompt-resource tests
+observe mutable settings reloads (50/8), and copied derived-workspace restore fails.
+They are tracked separately; no Windows/VSTO qualification is claimed.
+
+Resource/context repetition correction (2026-10-01): evidence deduplication no
+longer turns repeated successful reads into stale errors or drops different JS
+results over the same source. Completed mutations retain `tool_call_id`. HTML
+results/read metadata now expose usable member/source targets and the automatic
+text binding created by JSON writes; known superseded workspace roots leave the
+prompt index, and HTML discovery includes document-owned roots. Invalid binding
+of workspace/binding metadata is rejected before writes; identical rebinds are
+no-ops. The HTML skill no longer forces a table stream on another bound view.
+Focused host-neutral context, capability and HTML tests pass; the six-photo
+incident's exact trajectory and real Office/WebView2/model behavior remain open
+under [the current incident](RISK_REGISTER.md#repeated-resource-reads-and-html-binding-failures--2026-10-01).
 
 Excel literal search correction (2026-09-30): `excel.find_cells` previously captured
 every cell in the requested sheet/workbook before matching, so an ordinary heading

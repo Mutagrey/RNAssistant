@@ -74,9 +74,6 @@ namespace RNAssistant.Core.Models
         public string Text { get; set; }
         public List<ResourceEvidence> Evidence { get; set; } = new List<ResourceEvidence>();
         public List<string> SourceMessageIds { get; set; } = new List<string>();
-        public string ToolGeneration { get; set; }
-        public string SkillGeneration { get; set; }
-        public string SchemaGeneration { get; set; }
 
         public static bool SupportsKind(string kind)
         {

@@ -2064,7 +2064,7 @@ namespace RNAssistant.Harness
                 session.Messages.Add(new ChatMessage { Role = "user", Content = "Continue editing." });
                 var active = PromptBudgetComposer.ConversationHistory(session, true, false);
                 AssertTrue(!active.Any(item => item.Id == history.Last().Id), "checkpoint removes the write frame");
-                var archived = ConversationModelSession.ArchivedCurrentSources(session, active);
+                var archived = ContextWorkingSet.Restore(session, active, authority, new AppSettings(), 100000).Messages.Where(m => m.SyntheticResourceObservation).ToList();
                 AssertEqual(1, archived.Count, "only the latest source is carried across compaction");
                 foreach (var protocol in new[] { false, true })
                 {
@@ -2072,7 +2072,7 @@ namespace RNAssistant.Harness
                         Content = "Continue with the already edited module.",
                         ResourceEvidence = history.Last().ResourceEvidence.ToList() };
                     var withInput = active.Concat(new[] { inputOnly }).ToList();
-                    var retained = ConversationModelSession.ArchivedCurrentSources(session, withInput, authority.Resources);
+                    var retained = ContextWorkingSet.Restore(session, withInput, authority, new AppSettings(), 100000).Messages.Where(m => m.SyntheticResourceObservation).ToList();
                     AssertEqual(1, retained.Count,
                         "current input references on later assistant messages cannot stand in for visible source bytes");
                     var request = compiler.Compile(authority, new ChatMessage[0], withInput.Concat(retained).ToList(),
@@ -2087,11 +2087,12 @@ namespace RNAssistant.Harness
                         resourceEvidence: new[] { history[1].ResourceEvidence.Single() }), int.MaxValue, "tool");
                 historicalRead.RunId = "run";
                 session.Messages.Add(historicalRead);
-                AssertEqual(1, ConversationModelSession.ArchivedCurrentSources(session, active, authority.Resources).Count,
+                AssertEqual(1, ContextWorkingSet.Restore(session, active, authority, new AppSettings(), 100000).Messages.Where(m => m.SyntheticResourceObservation).ToList().Count,
                     "historical read in archived history cannot displace the current source");
                 AssertEqual(currentPayload.Sha256,
-                    ConversationModelSession.ArchivedCurrentSources(session,
-                        active.Concat(new[] { historicalRead }).ToList(), authority.Resources)
+                    ContextWorkingSet.Restore(session,
+                        active.Concat(new[] { historicalRead }).ToList(), authority, new AppSettings(), 100000)
+                        .Messages.Where(m => m.SyntheticResourceObservation).ToList()
                         .Single().ResourceEvidence.Single().Payload.Sha256,
                     "stale active evidence cannot suppress the archived current source");
                 session.Messages.Remove(historicalRead);
@@ -2104,8 +2105,11 @@ namespace RNAssistant.Harness
                         new JObject { ["type"] = "shared context" }.ToString()),
                         resourceEvidence: new[] { sharedEvidence }), int.MaxValue, "tool");
                 session.Messages.Insert(0, sharedResult);
-                AssertEqual(1, ConversationModelSession.ArchivedCurrentSources(session, active).Count,
+                AssertEqual(1, ContextWorkingSet.Restore(session, active, authority, new AppSettings(), 100000).Messages.Where(m => m.SyntheticResourceObservation).ToList().Count,
                     "shared-context archives never bypass their claim projection through source carry-forward");
+                sharedResult.Content = sharedResult.Content.Replace("shared context", "HTML data");
+                AssertEqual(1, ContextWorkingSet.Restore(session, active, authority, new AppSettings(), 100000).Messages.Where(m => m.SyntheticResourceObservation).ToList().Count,
+                    "HTML binding metadata never reappears as raw URI-bearing source after compaction");
                 var afterCompaction = compiler.Compile(authority, new ChatMessage[0], active.Concat(archived).ToList(),
                     null, new ToolCatalogEntry[0], new AppSettings(), 4096);
                 var replay = string.Join("\n", afterCompaction.Messages.Select(item => item.Content));
@@ -2208,22 +2212,14 @@ namespace RNAssistant.Harness
             var text = string.Join("\n", compiled.Messages.Select(item => item.Content));
             AssertTrue(!text.Contains("OBSOLETE_BODY"), "stale payload excluded before tight budget");
             AssertTrue(!text.Contains(r1.Uri), "stale evidence marker hides runtime-owned resource identity");
-            AssertEqual(2, compiled.Messages.Count, "causal call/result pair retained");
+            AssertEqual(1, compiled.Messages.Count, "obsolete native exchange becomes one closed receipt");
             AssertEqual(1, compiled.Receipt.ExcludedSuperseded, "receipt explains exclusion");
-            ToolResultWireReadResult staleWire;
-            string staleError;
-            AssertTrue(ToolResultHistoryReader.TryRead(
-                    compiled.Messages[1], out staleWire, out staleError),
-                "stale request projection remains a strict Tool Result: " + staleError);
-            AssertEqual(RNAssistant.Core.Tools.Contracts.ToolResultStatus.Error,
-                staleWire.Result.Status,
-                "stale evidence is not presented to the model as a successful read");
-            AssertEqual("resource_evidence_stale",
-                (string)JObject.Parse(staleWire.Result.DataJson)["code"],
-                "stale evidence exposes the exact reread reason");
-            var staleData = JObject.Parse(staleWire.Result.DataJson);
-            AssertEqual("VBA module: Module1", (string)staleData["target"], "stale read retains only its semantic recovery target");
-            AssertContains((string)staleData["next_action"], "common.resources_find", "currentness loss requests rediscovery before a new read");
+            AssertEqual(RNAssistant.Core.Tools.Contracts.ToolResultStatus.Ok,
+                compiled.Messages[0].CompletedOperation.Status, "a historical successful read does not become a failed invocation");
+            var staleData = JObject.Parse(compiled.Messages[0].Content.Split(new[] { '\n' }, 2)[1]);
+            AssertEqual("Superseded", (string)staleData["observation"]?["state"], "observation currency is separate");
+            AssertEqual("VBA module: Module1", (string)staleData["observation"]?["target"], "semantic target survives");
+            AssertTrue(!(bool)staleData["observation"]["bodyIncluded"], "obsolete content is not delivered");
             var changed = compiled.Messages;
             changed[0].Content = "mutated";
             AssertTrue(compiled.Messages[0].Content != "mutated", "request projection is detached from frozen snapshot");
@@ -2241,6 +2237,44 @@ namespace RNAssistant.Harness
                 ToolResultWire.Read(fresh.Messages.Last().Content).Result.Status,
                 "a fresh read result is not invalidated by its call's older input evidence");
             AssertContains(fresh.Messages.Last().Content, "CURRENT_READ", "fresh read body reaches the model");
+
+            // Equal observations must not turn earlier successes into errors or
+            // erase different computations over the same exact input snapshot.
+            foreach (var toolId in new[] { "common.resources_read", "common.js_run" })
+            {
+                var repeatedFacts = new List<ChatMessage>();
+                foreach (var index in new[] { 1, 2 })
+                {
+                    var id = "repeat-" + index;
+                    repeatedFacts.Add(new ChatMessage { Role = "assistant", ProtocolMessage = true,
+                        ToolCallId = id, ToolName = toolId });
+                    repeatedFacts.Add(AgentJsonProtocol.CreateToolResultMessage(new ToolInvocation {
+                        ToolId = toolId, ToolCallId = id }, new ToolResultMaterialization(
+                            RNAssistant.Core.Tools.Contracts.ToolResult.Ok("read", new JObject {
+                                ["target"] = "VBA module: Module1", ["text"] = "RESULT_" + index }.ToString()),
+                            resourceEvidence: new[] { currentEvidence }), int.MaxValue, "tool"));
+                }
+                var repeated = new ModelContextCompiler().Compile(authority, new ChatMessage[0],
+                    repeatedFacts, null, new ToolCatalogEntry[0], new AppSettings(), 4096);
+                var repeatedText = string.Join("\n", repeated.Messages.Select(item => item.Content));
+                AssertContains(repeatedText, "RESULT_1", "earlier result survives equal evidence for " + toolId);
+                AssertContains(repeatedText, "RESULT_2", "latest result survives equal evidence for " + toolId);
+                AssertTrue(!repeatedText.Contains("resource_evidence_stale"), "equal current evidence is not a stale read");
+                foreach (var reply in repeated.Messages.Where(item => item.Role == "tool"))
+                    AssertEqual(RNAssistant.Core.Tools.Contracts.ToolResultStatus.Ok,
+                        ToolResultWire.Read(reply.Content).Result.Status, "repeated read retains its actual outcome");
+                if (toolId == "common.resources_read")
+                {
+                    repeatedFacts[3].Content = repeatedFacts[3].Content.Replace("RESULT_2", "RESULT_1");
+                    var identical = new ModelContextCompiler().Compile(authority, new ChatMessage[0],
+                        repeatedFacts, null, new ToolCatalogEntry[0], new AppSettings(), 4096);
+                    AssertEqual(3, identical.Messages.Count, "identical read folds only the earlier call/result pair");
+                    var prior = JObject.Parse(identical.Messages[0].Content.Split(new[] { '\n' }, 2)[1]);
+                    AssertEqual("Ok", (string)prior["outcome"], "a deduplicated read remains a successful completed action");
+                    AssertEqual("repeat-2", (string)prior["retained_result"]["tool_call_id"], "duplicate points to the full retained result");
+                    AssertContains(identical.Messages.Last().Content, "RESULT_1", "complete evidence remains in this exact request");
+                }
+            }
 
             WithTempPaths(paths =>
             {
@@ -2270,6 +2304,8 @@ namespace RNAssistant.Harness
                         new[] { mutationCall, failure }, null, new[] { mutationTool }, new AppSettings(), 16000);
                     var frame = replay.Messages.Single().Content;
                     var frameData = JObject.Parse(frame.Substring(frame.IndexOf('\n') + 1));
+                    AssertEqual(mutationCall.ToolCallId, (string)frameData["tool_call_id"],
+                        "completed mutation keeps the runtime call/result correlation");
                     AssertEqual("Error", (string)frameData["outcome"], "actual failure status survives folding");
                     AssertEqual("vba_patch_ambiguous", (string)frameData["data"]?["code"],
                         "folded failure retains the real patch recovery code in " + role);

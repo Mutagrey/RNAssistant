@@ -154,7 +154,7 @@ empty built-ins and prevents retired `TOOL_RESULT ok=true` guidance from returni
 
 - Chat has an empty capability catalog and cannot load skills.
 - Plan and Agent receive enabled skill metadata only: exact id, `kind:"skill"`,
-  summary, package revision, body size and reference count.
+  summary, body size and reference count; package revision remains runtime-only.
 - When the user names a skill or its summary clearly matches the task, the model
   reads the exact id through `common.capabilities_read`.
 - A core read returns complete revision-matched Markdown and reference metadata. A
@@ -162,6 +162,9 @@ empty built-ins and prevents retired `TOOL_RESULT ok=true` guidance from returni
 - Reading a skill does not activate a router, load tool schemas, add callable tools
   or weaken confirmation/safety policy. Compaction, lost complete evidence or a
   catalog revision mismatch requires another exact read.
+- Complete skill results are retained in the normal history/CAS path, not a second
+  loaded-skill store. Re-reading the same publication must not mark the earlier
+  successful read stale. See [context retention](conversation-protocol.md#conversation-context).
 - Under Host Fabric, the capability catalog comes from the selected execution
   endpoint. A window hosted by Excel but targeting Word receives `Common + Word`
   skills, never skills chosen from the window-owner host.
@@ -251,3 +254,12 @@ core/reference fingerprint drift, compaction reload, stale editor conflict, atom
 multi-file manual save, restore/delete replay, import of malicious paths/front
 matter, chat deletion independence and fail-closed GC. Real editor/clipboard/file
 dialog behavior remains a Windows WebView2 qualification gate.
+
+### Continuity after compaction — 2026-10-01
+
+Core bodies use Gateway whole-read assembly, including bodies larger than one
+provider page. The bounded context working set restores complete current skill
+results and needed reference coverage from saved events/CAS. Compaction alone is
+not a reason to load a skill or admit an already callable schema again. Body
+omission/staleness is distinct from the historical successful load. Prompt schema
+33 requires review of saved prompts; custom text is preserved.

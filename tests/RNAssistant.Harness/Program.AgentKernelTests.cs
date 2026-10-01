@@ -28,13 +28,13 @@ namespace RNAssistant.Harness
         private static ToolExecutionRecord KernelRecord(ToolExecutionContext context,
             ToolExecutionOutcome outcome = ToolExecutionOutcome.Ok, bool awaitingUser = false,
             ToolRecoveryContract recovery = null,
-            IReadOnlyList<ResourceEvidence> resourceEvidence = null)
+            IReadOnlyList<ResourceEvidence> resourceEvidence = null, ResourceEffect resourceEffect = null)
         {
             var pending = outcome == ToolExecutionOutcome.AwaitingConfirmation;
             return new ToolExecutionRecord(context, outcome, context.StartedUtc.AddMilliseconds(1),
                 "Runtime evidence.", "{\"source\":\"runtime\"}", mayHaveDispatched: !pending,
                 pendingId: pending ? "pending-" + context.Call.Id : null, awaitingUser: awaitingUser,
-                recovery: recovery, resourceEvidence: resourceEvidence);
+                recovery: recovery, resourceEvidence: resourceEvidence, resourceEffect: resourceEffect);
         }
 
         private static string KernelCounts(RunSummary summary)
@@ -118,7 +118,7 @@ namespace RNAssistant.Harness
                 "the completion gate does not invent tool effects");
         }
 
-        private static async Task KernelRetriesIdenticalDefiniteFailure()
+        private static async Task KernelBlocksIdenticalDefiniteFailure()
         {
             const string arguments = "{\"target\":\"same invalid target\"}";
             var f = new KernelFixture(
@@ -132,10 +132,8 @@ namespace RNAssistant.Harness
 
             var result = await f.RunAsync();
 
-            AssertEqual(RunLifecycle.Completed, result.Summary.Lifecycle,
-                "a definite no-effect error does not terminate a recoverable run");
-            AssertEqual(2, f.Tools.Calls.Count,
-                "the same call may succeed when its underlying state changes");
+            AssertEqual("repeated_tool_failure", result.Summary.Reason, "unchanged invalid request is not redispatched");
+            AssertEqual(1, f.Tools.Calls.Count, "one original error reaches the model");
         }
 
         private static async Task KernelContinuesChangedConflicts()
@@ -154,10 +152,8 @@ namespace RNAssistant.Harness
 
             var result = await f.RunAsync();
 
-            AssertEqual(RunLifecycle.Completed, result.Summary.Lifecycle,
-                "changed rejected writes do not impose a separate retry cap");
-            AssertEqual(3, f.Tools.Calls.Count, "all three refusals are recorded once");
-            AssertEqual(4, f.Model.Requests.Count, "model may replan or finish after refusals");
+            AssertEqual("repeated_tool_no_progress", result.Summary.Reason, "changed patch text cannot bypass required refresh");
+            AssertEqual(2, f.Tools.Calls.Count, "second conflict stops the cycle");
         }
 
         private static async Task KernelAllowsFailedCallAfterInterveningSuccess()
@@ -176,7 +172,8 @@ namespace RNAssistant.Harness
                 ToolExecutionOutcome.Ok
             });
             f.Tools.OnExecute = (context, token) => Task.FromResult(
-                KernelRecord(context, outcomes.Dequeue()));
+                KernelRecord(context, outcomes.Dequeue(), resourceEffect: context.Call.ArgumentsJson == save
+                    ? new ResourceEffect("saved", context.Call.Id, ResourceEffectOutcome.VerifiedChanged) : null));
 
             var result = await f.RunAsync();
 
@@ -202,10 +199,8 @@ namespace RNAssistant.Harness
 
             var result = await f.RunAsync();
 
-            AssertEqual(RunLifecycle.Completed, result.Summary.Lifecycle,
-                "definite failures leave the model free to choose a next step");
-            AssertEqual(3, f.Tools.Calls.Count,
-                "same no-effect call may be attempted again without a kernel cap");
+            AssertEqual("repeated_tool_failure", result.Summary.Reason, "alternating invalid calls cannot bypass the guard");
+            AssertEqual(2, f.Tools.Calls.Count, "only distinct invalid requests are dispatched");
         }
 
         private static async Task KernelAllowsDefiniteRetryAfterRead()
@@ -222,8 +217,15 @@ namespace RNAssistant.Harness
                 ToolExecutionOutcome.Ok,
                 ToolExecutionOutcome.Ok
             });
-            f.Tools.OnExecute = (context, token) => Task.FromResult(
-                KernelRecord(context, outcomes.Dequeue()));
+            var identity = new ResourceRef("rna://vba/continuity/module", "r1");
+            f.Tools.OnExecute = (context, token) => {
+                var outcome = outcomes.Dequeue();
+                return Task.FromResult(KernelRecord(context, outcome,
+                    recovery: outcome == ToolExecutionOutcome.Error ? new ToolRecoveryContract(ToolFailureKind.ConflictNoEffect,
+                        ToolRetryPolicy.RefreshRequired, identity.Identity, "source", "VBA module: module") : null,
+                    resourceEvidence: context.Call.Name == "read" ? new[] { new ResourceEvidence(context.Call.Id,
+                        new ResourceAuthorityScopeId("document", "continuity"), identity, "source", ResourceCoverage.Whole(), true, 1) } : null));
+            };
 
             var result = await f.RunAsync();
 
@@ -578,11 +580,13 @@ namespace RNAssistant.Harness
         {
             var f = new KernelFixture(
                 KernelResponse(KernelCall()),
-                KernelResponse(KernelCall("confirm")));
+                KernelResponse(KernelCall("confirm")),
+                KernelResponse(KernelCall()));
             var outcomes = new Queue<ToolExecutionOutcome>(new[]
             {
                 ToolExecutionOutcome.Unknown,
-                ToolExecutionOutcome.AwaitingConfirmation
+                ToolExecutionOutcome.AwaitingConfirmation,
+                ToolExecutionOutcome.Ok
             });
             f.Tools.OnExecute = (context, token) => Task.FromResult(
                 KernelRecord(context, outcomes.Dequeue()));
@@ -597,6 +601,13 @@ namespace RNAssistant.Harness
                 "later confirmation-required mutation reaches runtime");
             AssertEqual(ExecutionHealth.Unknown, result.Summary.ExecutionHealth,
                 "pending confirmation keeps prior unknown health visible");
+            var restored = AgentRunContinuation.Restore(result.Summary, result.Continuation.Limits,
+                result.Continuation.Revision, result.AcceptedMessages);
+            var resumed = await f.Kernel.ResumeAsync("resumed", result.Summary.PendingConfirmation.PendingId,
+                restored, CancellationToken.None);
+            AssertEqual("repeated_unknown_tool_call", resumed.Summary.Reason,
+                "restored terminal facts block unknown replay even after another confirmed write");
+            AssertEqual(3, f.Tools.Calls.Count, "only the unrelated confirmed call is dispatched on resume");
         }
 
         private static async Task KernelRejectsAllocationCollisionAfterConfirmation()

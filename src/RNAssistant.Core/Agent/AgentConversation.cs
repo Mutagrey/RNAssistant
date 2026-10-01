@@ -86,6 +86,9 @@ namespace RNAssistant.Core.Agent
         public string ToolCallId { get; private set; }
         public string ResultJson { get; private set; }
         public ToolExecutionRecord Execution { get; private set; }
+        public ToolExecutionProgress Progress { get; private set; }
+        public IReadOnlyList<RNAssistant.Core.Models.ResourceEvidence> ResourceEvidence { get; private set; }
+        public RNAssistant.Core.Models.ResourceEffect ResourceEffect { get; private set; }
 
         private AgentMessage(AgentMessageKind kind, string text, IReadOnlyList<ToolCall> calls,
             string toolCallId = null, string resultJson = null, ToolExecutionRecord execution = null)
@@ -111,17 +114,24 @@ namespace RNAssistant.Core.Agent
 
         // Already validated, materialized history from an earlier user turn.
         // It cannot seed current execution counts or authorize a dispatch.
-        public static AgentMessage AcceptedToolResult(string callId, string message, string resultJson)
+        public static AgentMessage AcceptedToolResult(string callId, string message, string resultJson,
+            ToolExecutionProgress progress = null,
+            IEnumerable<RNAssistant.Core.Models.ResourceEvidence> evidence = null,
+            RNAssistant.Core.Models.ResourceEffect effect = null)
         {
             if (string.IsNullOrWhiteSpace(callId)) throw new ArgumentException("Call id is required.", nameof(callId));
-            return new AgentMessage(AgentMessageKind.ToolResult, message, null, callId, resultJson);
+            return new AgentMessage(AgentMessageKind.ToolResult, message, null, callId, resultJson) {
+                Progress = progress, ResourceEvidence = (evidence ?? new RNAssistant.Core.Models.ResourceEvidence[0]).ToArray(),
+                ResourceEffect = effect };
         }
 
         public static AgentMessage ToolResult(ToolExecutionRecord execution)
         {
             if (execution == null) throw new ArgumentNullException(nameof(execution));
             return new AgentMessage(AgentMessageKind.ToolResult, execution.Message, null,
-                execution.Context.Call.Id, execution.ModelResultJson, execution);
+                execution.Context.Call.Id, execution.ModelResultJson, execution) {
+                    Progress = ToolExecutionProgress.Capture(execution), ResourceEvidence = execution.ResourceEvidence,
+                    ResourceEffect = execution.ResourceEffect };
         }
     }
 }

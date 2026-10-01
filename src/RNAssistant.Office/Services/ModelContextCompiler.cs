@@ -63,8 +63,11 @@ namespace RNAssistant.Office.Services
             authority = authority ?? new ModelAuthoritySnapshot(new ResourceAuthoritySnapshotSet(new ResourceAuthoritySnapshot[0]),
                 CallableToolPack.Create(mode, session?.Host, null, tools).Revision, new SkillCatalogSnapshot(skills), null,
                 session?.Revision ?? 0);
-            var snapshot = Compile(authority, required, history, context?.Notes, tools, settings,
-                historyBudgetTokens > 0 ? historyBudgetTokens : ModelContextBudget.InputBudgetTokens(settings));
+            var budget = historyBudgetTokens > 0 ? historyBudgetTokens : ModelContextBudget.InputBudgetTokens(settings);
+            var workingSet = ContextWorkingSet.Restore(session, history, authority, settings,
+                Math.Max(0, Math.Min(budget / 3, budget - ContextWorkingSet.EstimateCost(required.Concat(history), settings))));
+            history.AddRange(workingSet.Messages);
+            var snapshot = Compile(authority, required, history, context?.Notes, tools, settings, budget, workingSet: workingSet);
             recordReceipt?.Invoke(snapshot.Receipt);
             return snapshot.Messages.ToList();
         }
@@ -72,7 +75,7 @@ namespace RNAssistant.Office.Services
         internal ModelContextSnapshot Compile(ModelAuthoritySnapshot authority,
             IReadOnlyList<ChatMessage> required, IReadOnlyList<ChatMessage> facts,
             IReadOnlyList<ContextNote> notes, IReadOnlyList<ToolCatalogEntry> tools,
-            AppSettings settings, int budget, bool enforceBudget = true)
+            AppSettings settings, int budget, bool enforceBudget = true, ContextWorkingSet workingSet = null)
         {
             IReadOnlyList<SkillDefinition> projectionSkills = null;
             var receipt = new ContextReceipt
@@ -82,6 +85,8 @@ namespace RNAssistant.Office.Services
                 SkillGeneration = authority.Skills.Generation,
                 SchemaGeneration = authority.SchemaGeneration,
                 ConversationHighWaterMark = authority.ConversationHighWaterMark,
+                RetainedBodies = workingSet?.IncludedBodies ?? 0,
+                EvictedBodies = workingSet?.OmittedBodies ?? 0,
                 ResourceGenerations = authority.Resources.Snapshots.ToDictionary(item => item.Key, item => item.Value.Generation)
             };
             var atoms = new List<ContextAtom>();
@@ -132,7 +137,7 @@ namespace RNAssistant.Office.Services
             {
                 if (consumed.Contains(fact.Id)) continue;
                 ChatMessage result;
-                if (fact.Role == "assistant" && !string.IsNullOrWhiteSpace(fact.ToolCallId) &&
+                if (fact.Role == "assistant" && fact.CompletedOperation == null && !string.IsNullOrWhiteSpace(fact.ToolCallId) &&
                     results.TryGetValue(fact.ToolCallId, out result))
                 {
                     var frame = new ToolInteractionFrame { Call = fact, Result = result };
@@ -149,12 +154,17 @@ namespace RNAssistant.Office.Services
                     AddCurrentMutationSources(atoms, frame, authority.Resources, maximumPayloadBytes);
                     consumed.Add(result.Id);
                 }
-                else atoms.Add(Atom(fact.ProtocolMessage ? "protocol-fact" : "dialogue", fact, !fact.ProtocolMessage));
+                else atoms.Add(Atom(fact.SyntheticResourceObservation ? "current-source" :
+                    fact.ProtocolMessage ? "protocol-fact" : "dialogue", fact, !fact.ProtocolMessage));
             }
 
             // Correctness before collapse, deduplication, relevance, hydration or budget.
             foreach (var atom in atoms)
             {
+                // A failed invocation has no successful observation to invalidate.
+                // Never replace its actionable error/recovery with a freshness error.
+                if (atom.Messages.Last().CompletedOperation != null || IsFailedResult(atom.Messages.Last()))
+                    continue;
                 if (atom.Evidence.Count == 0 && atom.Messages.Any(message =>
                     message.ToolName == "common.resources_read" && message.ToolResultProtocolVersion == ToolResultWire.CurrentVersion))
                 {
@@ -192,16 +202,15 @@ namespace RNAssistant.Office.Services
                 {
                     if (message.ContextClaims == null || message.ContextClaims.Count == 0) continue;
                     if (message.ToolResultProtocolVersion == ToolResultWire.CurrentVersion) continue;
-                    var current = message.ContextClaims.Where(claim => claim != null && claim.HasTypedProvenance() &&
-                        (string.IsNullOrEmpty(claim.ToolGeneration) || claim.ToolGeneration == authority.ToolGeneration) &&
-                        (string.IsNullOrEmpty(claim.SkillGeneration) || claim.SkillGeneration == authority.Skills.Generation) &&
-                        (string.IsNullOrEmpty(claim.SchemaGeneration) || claim.SchemaGeneration == authority.SchemaGeneration) &&
-                        (claim.Evidence ?? new List<ResourceEvidence>()).All(e => _reducer.Reduce(e, authority.Resources).State == EvidenceState.Current))
+                    var current = message.ContextClaims.Where(claim => ContextCompactionService.CurrentClaim(claim, authority))
                         .ToArray();
+                    receipt.RejectedClaims += message.ContextClaims.Count - current.Length;
+                    message.ContextClaims = current.ToList();
                     message.Content = "STRUCTURED_CONTEXT_CLAIMS (reference only; kinds preserve source roles, not proof of entailment; interpretations are not observations and next_action is proposed work):\n" +
                         string.Join("\n", current.Select(claim =>
                             JsonConvert.SerializeObject(new { kind = claim.Kind, sourceRoles = claim.SourceRoles,
-                                text = ModelToolResultProjection.SanitizeClaimText(claim) })));
+                                text = ModelToolResultProjection.SanitizeClaimText(claim) }))) +
+                        "\n" + ContextCompactionService.CapabilityContextNotice;
                 }
             }
 
@@ -227,10 +236,12 @@ namespace RNAssistant.Office.Services
                     {
                         atom.Kind = "omitted-source";
                         atom.Messages.Clear();
+                        receipt.Deduplicated++;
                     }
-                    else Mark(atom, "Exact observation already represented by a later causal frame.",
-                            "resource_evidence_stale");
-                    receipt.Deduplicated++;
+                    // Equal input evidence does not make a completed call stale or
+                    // its result redundant: different computations can read the same
+                    // snapshot. Keep actual outcomes and bodies; only synthetic
+                    // copies of a current source may be omitted.
                 }
             }
             atoms.RemoveAll(item => item.Kind == "omitted-source");
@@ -331,23 +342,45 @@ namespace RNAssistant.Office.Services
                 ToolResultWireReadResult wire;
                 string error;
                 if (!ToolResultHistoryReader.TryRead(result, out wire, out error)) continue;
-                var effect = result.ResourceEffect;
+                atom.Messages = new List<ChatMessage> { CompleteOperation(result, wire) };
+            }
+            // Compare complete projected results, not merely their input evidence.
+            // Keep one full identical read and a truthful completed-operation
+            // record for each earlier call. A missing/oversized/stale body cannot
+            // be used as the retained copy because only hydrated Ok results enter.
+            var completeReads = new Dictionary<string, string>(StringComparer.Ordinal);
+            foreach (var atom in atoms.AsEnumerable().Reverse().Where(item => item.Kind == "tool-interaction" && item.Messages.Count == 2))
+            {
+                var result = atom.Messages[1];
+                ToolResultWireReadResult wire;
+                string error;
+                if (!ToolResultHistoryReader.TryRead(result, out wire, out error) ||
+                    wire.Result.Status != RNAssistant.Core.Tools.Contracts.ToolResultStatus.Ok ||
+                    !ToolResultResourceService.IsExactReadEvidence(new ToolInvocation { ToolId = wire.Name })) continue;
+                var key = wire.Name + "\n" + wire.Result.Message + "\n" + wire.Result.DataJson + "\n" +
+                    string.Join("\n", atom.Evidence.Select(e => e.Resource.Uri + "@" + e.Resource.Revision +
+                        ":" + e.View + ":" + JsonConvert.SerializeObject(e.Coverage)).OrderBy(value => value, StringComparer.Ordinal));
+                string retainedCall;
+                if (!completeReads.TryGetValue(key, out retainedCall))
+                {
+                    completeReads.Add(key, wire.ToolCallId);
+                    continue;
+                }
+                atom.Kind = "repeated-read";
                 atom.Messages = new List<ChatMessage> { new ChatMessage {
                     Id = result.Id, Role = "assistant", ProtocolMessage = true,
+                    ToolName = wire.Name, ToolCallId = wire.ToolCallId,
+                    CompletedOperation = new CompletedToolOperation { ToolCallId = wire.ToolCallId,
+                        ToolName = wire.Name, Status = wire.Result.Status, Message = "Identical complete read retained in this request." },
                     Content = "TOOL_INTERACTION (completed causal frame):\n" + JsonConvert.SerializeObject(new {
-                        tool = wire.Name, outcome = wire.Result.Status.ToString(), message = wire.Result.Message,
-                        data = ToolResultWire.ParseData(wire.Result.DataJson),
-                        effect = effect == null ? null : new {
-                            operation = effect.Operation,
-                            outcome = effect.Outcome.ToString(),
-                            verification = ModelToolResultProjection.SanitizeOperationalText(effect.Verification),
-                            impacts = effect.Impacts.Select(impact => new {
-                                relation = impact.Relation.ToString(), coverage = impact.Coverage,
-                                changeKind = ModelToolResultProjection.SanitizeOperationalText(impact.ChangeKind)
-                            })
-                        } }) } };
+                        tool_call_id = wire.ToolCallId, tool = wire.Name, outcome = "Ok",
+                        message = "Read completed. The identical complete result is retained later in this request; reuse it without another read.",
+                        retained_result = new { tool_call_id = retainedCall }
+                    }) } };
+                receipt.Deduplicated++;
             }
             var messages = atoms.SelectMany(item => item.Messages).ToList();
+            receipt.OperationReceipts = messages.Count(message => message.CompletedOperation != null);
             receipt.EstimatedTokens = ModelContextBudget.EstimateMessagesTokens(messages, settings);
             receipt.AtomCounts = atoms.GroupBy(item => item.Kind).ToDictionary(group => group.Key, group => group.Count());
             if (enforceBudget && receipt.EstimatedTokens > budget)
@@ -403,7 +436,7 @@ namespace RNAssistant.Office.Services
             var member = (data?["members"] as JArray ?? new JArray()).OfType<JObject>()
                 .FirstOrDefault(item => string.Equals((string)item["uri"],
                     evidence.Resource.Uri, StringComparison.Ordinal));
-            var label = (string)member?["path"] ?? (string)data?["target"];
+            var label = (string)member?["target"] ?? (string)member?["path"] ?? (string)data?["target"];
             if (label != null) return label;
             var module = (string)data?["moduleName"];
             return module == null ? (string)data?["title"] : "VBA module: " + module;
@@ -439,11 +472,8 @@ namespace RNAssistant.Office.Services
             var available = archive?.Version == ContextCheckpoint.CurrentPromptVersion && archive.Claims != null &&
                 archive.Claims.Count <= 64 && archive.Sources != null && (bool?)data["claimsUnavailable"] != true;
             var claims = available
-                ? archive.Claims.Where(claim => claim != null && claim.HasTypedProvenance() &&
+                ? archive.Claims.Where(claim => ContextCompactionService.CurrentClaim(claim, authority) &&
                     claim.SourceMessageIds.All(id => archive.Sources.Count(source => source != null && source.MessageId == id) == 1) &&
-                    (claim.ToolGeneration == null || claim.ToolGeneration == authority.ToolGeneration) &&
-                    (claim.SkillGeneration == null || claim.SkillGeneration == authority.Skills.Generation) &&
-                    (claim.SchemaGeneration == null || claim.SchemaGeneration == authority.SchemaGeneration) &&
                     claim.Evidence.All(e => _reducer.Reduce(e, authority.Resources).State == EvidenceState.Current &&
                         (e.Payload == null || _payloads != null && _payloads.HasStoredReference(e.Payload.ToBlobReference())))).ToList()
                 : new List<StructuredContextClaim>();
@@ -569,6 +599,39 @@ namespace RNAssistant.Office.Services
         private static ChatMessage Clone(ChatMessage message)
         { return JsonConvert.DeserializeObject<ChatMessage>(JsonConvert.SerializeObject(message)); }
 
+        private static bool IsFailedResult(ChatMessage message)
+        {
+            ToolResultWireReadResult wire; string error;
+            return ToolResultHistoryReader.TryRead(message, out wire, out error) &&
+                wire.Result.Status != RNAssistant.Core.Tools.Contracts.ToolResultStatus.Ok;
+        }
+
+        internal static ChatMessage CompleteOperation(ChatMessage result, ToolResultWireReadResult wire,
+            ResourceObservationNotice observation = null)
+        {
+            var effect = result.ResourceEffect;
+            var fact = new CompletedToolOperation { ToolCallId = wire.ToolCallId, ToolName = wire.Name,
+                Status = wire.Result.Status, Message = wire.Result.Message,
+                DataJson = observation == null ? wire.Result.DataJson : null };
+            return new ChatMessage {
+                Id = result.Id, RunId = result.RunId, CreatedUtc = result.CreatedUtc,
+                Role = "assistant", ProtocolMessage = true, ToolCallId = wire.ToolCallId,
+                ToolName = wire.Name, ResourceEffect = effect, CompletedOperation = fact,
+                Content = "TOOL_INTERACTION (completed causal frame; historical outcome, not current source):\n" +
+                    JsonConvert.SerializeObject(new {
+                        tool_call_id = fact.ToolCallId, tool = fact.ToolName,
+                        outcome = fact.Status.ToString(), message = fact.Message,
+                        data = ToolResultWire.ParseData(fact.DataJson), observation,
+                        effect = effect == null ? null : new {
+                            operation = effect.Operation, outcome = effect.Outcome.ToString(),
+                            verification = ModelToolResultProjection.SanitizeOperationalText(effect.Verification),
+                            impacts = effect.Impacts.Select(impact => new {
+                                relation = impact.Relation.ToString(), coverage = impact.Coverage,
+                                changeKind = ModelToolResultProjection.SanitizeOperationalText(impact.ChangeKind) })
+                        }
+                    }) };
+        }
+
         private static void MarkUnavailable(ContextAtom atom, string reason)
         {
             if (atom.ContextRole != ContextNoteRole.Unspecified) MarkContextUnavailable(atom, reason);
@@ -598,21 +661,15 @@ namespace RNAssistant.Office.Services
             if (message.ToolResultProtocolVersion == ToolResultWire.CurrentVersion &&
                 ToolResultHistoryReader.TryRead(message, out wire, out error))
             {
-                var data = new JObject { ["code"] = code, ["evidence_available"] = false,
-                    ["complete"] = false, ["reason"] = reason,
-                    ["next_action"] = "Read the required current resource explicitly." };
-                if (wire.Name == "common.resources_read")
-                {
-                    var original = ToolResultWire.ParseData(wire.Result.DataJson) as JObject;
-                    var target = original?["target"];
-                    if (target?.Type == JTokenType.String && !((string)target).Contains("://"))
-                        data["target"] = target.DeepClone();
-                    data["next_action"] = "If still needed, use common.resources_find to rediscover this resource, then common.resources_read on its advertised target. Prior text, section titles and summaries are not current evidence; do not retry a missing target unchanged.";
-                }
-                var result = RNAssistant.Core.Tools.Contracts.ToolResult.Error(
-                    "Prior observation is not current evidence.", data.ToString(Formatting.None));
-                var json = ToolResultWire.WriteParsed(wire.ToolCallId, wire.Name, result, data, null);
-                message.Content = message.Role == "tool" ? json : "TOOL_RESULT:\n" + json;
+                // Drop the obsolete body, not the fact that the call succeeded.
+                // Native call/result pairs become one closed historical receipt.
+                var projected = ModelToolResultProjection.Project(message);
+                ToolResultHistoryReader.TryRead(projected, out wire, out error);
+                var semanticData = ToolResultWire.ParseData(wire.Result.DataJson) as JObject;
+                atom.Messages = new List<ChatMessage> { CompleteOperation(projected, wire,
+                    new ResourceObservationNotice { Target = (string)semanticData?["target"],
+                        State = code == "resource_evidence_stale" ? EvidenceState.Superseded : EvidenceState.Unavailable, Reason = reason,
+                        NextAction = "Use an included current observation when available; otherwise read the needed known target. Rediscover only when its identity is unavailable." }) };
             }
             else message.Content = "RESOURCE_CHANGE: " + reason + " Re-read only if needed.";
         }

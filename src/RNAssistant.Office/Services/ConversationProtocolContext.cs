@@ -142,7 +142,14 @@ namespace RNAssistant.Office.Services
                     history.Add(AgentMessage.Assistant(parsed.Response));
                 }
                 else if (message.ProtocolMessage && !string.IsNullOrWhiteSpace(message.ToolCallId))
-                    history.Add(AgentMessage.AcceptedToolResult(message.ToolCallId, string.Empty, message.Content));
+                {
+                    ToolResultWireReadResult wire; string error;
+                    if (!ToolResultHistoryReader.TryRead(message, out wire, out error)) throw HistoryFailure(error);
+                    if (message.ExecutionProgress == null)
+                        throw HistoryFailure("Continuation lacks typed terminal progress; the previous effects cannot be safely replayed.");
+                    history.Add(AgentMessage.AcceptedToolResult(message.ToolCallId, wire.Result.Message, message.Content,
+                        message.ExecutionProgress, message.ResourceEvidence, message.ResourceEffect));
+                }
             }
             try { return AgentRunContinuation.Restore(state.Summary, state.Limits, session.Revision, history); }
             catch (InvalidOperationException ex) { throw HistoryFailure(ex.Message); }

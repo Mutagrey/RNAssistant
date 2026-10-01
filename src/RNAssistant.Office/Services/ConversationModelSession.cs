@@ -273,7 +273,7 @@ namespace RNAssistant.Office.Services
                 data: data,
                 resourceEvidence: source.ResourceEvidence,
                 resourceEffect: source.ResourceEffect,
-                authorityCommitId: source.AuthorityCommitId);
+                authorityCommitId: source.AuthorityCommitId) { ExecutionProgress = source.ExecutionProgress };
         }
 
         internal void AppendToolResult(ToolInvocation command, PreparedToolResult prepared)
@@ -455,7 +455,7 @@ namespace RNAssistant.Office.Services
                 ? Enumerable.Empty<ResourceEvidence>()
                 : (_session.Messages ?? new List<ChatMessage>())
                     .SelectMany(item => item.ResourceEvidence ?? new List<ResourceEvidence>())
-                    .Where(IsCompleteCurrentView);
+                    .Where(item => item != null);
             var scopes = facts.SelectMany(item => item.ResourceEvidence ?? new List<ResourceEvidence>())
                 .Concat(archivedEvidence)
                 .Concat((_context?.Notes ?? new List<ContextNote>()).Where(item => item.Evidence != null).Select(item => item.Evidence))
@@ -475,79 +475,18 @@ namespace RNAssistant.Office.Services
                     "RESOURCE_CATALOG_CHANGED", true);
             var frozen = new ModelAuthoritySnapshot(resources, toolGeneration, skills, ResourceStateProvider.CaptureSchemas(resources),
                 _session.Revision);
-            facts.AddRange(ArchivedCurrentSources(_session, facts, resources));
             if (retainAuthority) _currentAuthority = frozen;
             var required = new ConversationPromptComposer().BuildRequiredMessages(_mode, _userText, null,
                 tools, skillDefinitions, null, _settings, _session, null, true, 0,
                 _toolPack.CapabilityContext(skillDefinitions, tools));
             if (packState != null) required.Add(packState);
+            var budget = RequestMessageBudget(tools);
+            var workingSet = ContextWorkingSet.Restore(_session, facts, frozen, _settings,
+                Math.Max(0, Math.Min(budget / 3, budget - ContextWorkingSet.EstimateCost(required.Concat(facts), _settings))));
+            facts.AddRange(workingSet.Messages);
             return _compiler.Compile(frozen, required, facts, _context?.Notes, _runnableCatalog,
-                _settings, RequestMessageBudget(tools), enforceBudget);
+                _settings, budget, enforceBudget, workingSet);
         }
-
-        internal static List<ChatMessage> ArchivedCurrentSources(ChatSession session, IReadOnlyList<ChatMessage> active,
-            ResourceAuthoritySnapshotSet resources = null)
-        {
-            if (ContextCompactionService.ActiveCheckpoint(session) == null) return new List<ChatMessage>();
-            var reducer = new EvidenceStateReducer();
-            var activeIds = new HashSet<string>(active.Where(item => item != null)
-                .Select(item => item.Id), StringComparer.Ordinal);
-            var activeKeys = new HashSet<string>(active.Where(ExposesSourceObservation)
-                .SelectMany(item => item.ResourceEvidence ?? new List<ResourceEvidence>())
-                .Where(item => IsCompleteCurrentView(item) && (resources == null ||
-                    reducer.Reduce(item, resources).State == EvidenceState.Current))
-                .Select(ObservationKey), StringComparer.Ordinal);
-            var selected = new HashSet<string>(StringComparer.Ordinal);
-            var sources = new List<ChatMessage>();
-            foreach (var result in (session.Messages ?? new List<ChatMessage>()).AsEnumerable().Reverse())
-            {
-                if (!ContextCompactionService.IsReplayMessage(result) || activeIds.Contains(result.Id) ||
-                    !ExposesSourceObservation(result)) continue;
-                foreach (var evidence in (result.ResourceEvidence ?? new List<ResourceEvidence>()).Where(item =>
-                    IsCompleteCurrentView(item) && (resources == null ||
-                        reducer.Reduce(item, resources).State == EvidenceState.Current)))
-                {
-                    var key = ObservationKey(evidence);
-                    if (activeKeys.Contains(key) || !selected.Add(key)) continue;
-                    sources.Add(new ChatMessage {
-                        Role = "assistant", ProtocolMessage = true, SyntheticResourceObservation = true,
-                        Content = JsonConvert.SerializeObject(new {
-                            target = ModelContextCompiler.CurrentSourceLabel(result, evidence) ?? result.ToolName,
-                            view = evidence.View }),
-                        ResultPayload = evidence.Payload,
-                        ResourceEvidence = new List<ResourceEvidence> { evidence }
-                    });
-                }
-            }
-            sources.Reverse();
-            return sources;
-        }
-
-        private static bool ExposesSourceObservation(ChatMessage message)
-        {
-            if (message == null || message.ExcludeFromModelContext) return false;
-            if (message.SyntheticResourceObservation) return true;
-            ToolResultWireReadResult wire;
-            string error;
-            if (message.ToolResultProtocolVersion != ToolResultWire.CurrentVersion ||
-                !ToolResultHistoryReader.TryRead(message, out wire, out error)) return false;
-            if (message.ToolName == ResourceToolCatalog.ReadToolId)
-                return wire.Result.Status == RNAssistant.Core.Tools.Contracts.ToolResultStatus.Ok &&
-                    (string)(ToolResultWire.ParseData(wire.Result.DataJson) as JObject)?["type"] != "shared context";
-            return message.ResourceEffect != null &&
-                (message.ResourceEffect.Outcome == ResourceEffectOutcome.VerifiedChanged ||
-                 message.ResourceEffect.Outcome == ResourceEffectOutcome.Restored);
-        }
-
-        private static bool IsCompleteCurrentView(ResourceEvidence evidence)
-        {
-            return evidence != null && evidence.Complete && evidence.Payload != null &&
-                evidence.Coverage.Kind == ResourceCoverageKinds.Whole &&
-                (evidence.View == ResourceRepresentations.Source || evidence.View == ResourceRepresentations.Text);
-        }
-
-        private static string ObservationKey(ResourceEvidence evidence)
-        { return evidence.Resource.Uri + "\n" + evidence.View; }
 
         private ChatMessage MaterializeToolResultMessage(
             ToolInvocation command, ToolResultMaterialization result, out ChatMessage modelMessage)
@@ -585,6 +524,7 @@ namespace RNAssistant.Office.Services
                 if (HtmlWorkspaceToolCatalog.Owns(command.ToolId) && sourceData?["members"] is JArray)
                     compact["members"] = new JArray(((JArray)sourceData["members"]).OfType<JObject>()
                         .Select(item => new JObject { ["path"] = item["path"]?.DeepClone(),
+                            ["target"] = item["target"]?.DeepClone(),
                             ["uri"] = item["uri"]?.DeepClone() }));
                 var envelope = new RNAssistant.Core.Tools.Contracts.ToolResult(result.Result.Status,
                     result.Result.Message, compact.ToString(Formatting.None), result.Result.Resources);

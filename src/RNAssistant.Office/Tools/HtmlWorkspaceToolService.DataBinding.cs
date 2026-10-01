@@ -14,55 +14,16 @@ namespace RNAssistant.Office.Tools
     {
         internal string BuildBindDescription()
         {
-            return "Workspace: Bind a semantic target returned by common.resources_find. " +
+            return "Workspace: Bind a source target returned by common.resources_find or a binding's sourceTarget. " +
                 "The workspace stores only a canonical resource reference, view and head/exact policy. " +
+                "HTML workspace and HTML data targets describe the workspace/binding, not its source values; never bind them. html_data_write already creates a text binding. " +
                 "For Excel chart/report data, bind an Excel range, table, or name target with table/records; an Excel search scope is discovery output, not a tabular data source. " +
                 "Page code opens RN.resources.open(name) and consumes bounded read/stream batches. " +
-                "head resolves current state on open; exact retains an immutable revision.";
+                "Choose view explicitly. policy=head (default) resolves current state on open; exact retains an immutable revision.";
         }
 
         internal static string BindSchema()
-        {
-            var schema = new JObject {
-                ["type"] = "object",
-                ["properties"] = new JObject {
-                    ["name"] = new JObject { ["type"] = "string", ["description"] = "Stable binding name opened through RN.resources.", ["minLength"] = 1, ["maxLength"] = 128 },
-                    ["target"] = new JObject { ["type"] = "string", ["minLength"] = 1, ["maxLength"] = 1024,
-                        ["description"] = "Exact semantic target copied verbatim from common.resources_find. It never contains ://; do not construct it from a title." },
-                    ["view"] = new JObject { ["type"] = "string", ["description"] = "Bounded resource view. raw returns exact original attachment bytes as inert binary (up to 20 MiB); text is extracted content. Page views use a zero-based page index in path.", ["enum"] = new JArray("text", "source", "table", "records", "raw", "image", "thumbnail", "render-page", "page-thumbnail"), ["default"] = "text" },
-                    ["path"] = new JObject { ["type"] = "string", ["description"] = "For table/records use $ or an object-property path such as $.records. Page views require a zero-based integer page index.", ["maxLength"] = 256 },
-                    ["policy"] = new JObject { ["type"] = "string", ["description"] = "Resolve current head on open, or retain the exact observed revision.", ["enum"] = new JArray("head", "exact"), ["default"] = "exact" }
-                },
-                ["required"] = new JArray("name", "target"), ["additionalProperties"] = false,
-                ["anyOf"] = new JArray(
-                    BindBranch(new[] { "text", "source", "raw", "image", "thumbnail" }),
-                    BindBranch(new[] { "table", "records" },
-                        @"^\$(?:\.[A-Za-z_][A-Za-z0-9_]*)*$",
-                        "Root array $ or an explicit object-property path to a record array; brackets, indexes, and wildcards are unsupported.", false),
-                    BindBranch(new[] { "render-page", "page-thumbnail" },
-                        @"^(0|[1-9][0-9]{0,5})$", "Zero-based page index.", true))
-            };
-            return schema.ToString(Formatting.None);
-        }
-
-        private static JObject BindBranch(string[] views, string pathPattern = null,
-            string pathDescription = null, bool requirePath = false)
-        {
-            var properties = new JObject {
-                ["name"] = new JObject { ["type"] = "string", ["minLength"] = 1, ["maxLength"] = 128 },
-                ["target"] = new JObject { ["type"] = "string", ["minLength"] = 1, ["maxLength"] = 1024 },
-                ["view"] = new JObject { ["type"] = "string", ["enum"] = new JArray(views) },
-                ["policy"] = new JObject { ["type"] = "string", ["enum"] = new JArray("head", "exact"), ["default"] = "exact" }
-            };
-            if (pathPattern != null)
-                properties["path"] = new JObject { ["type"] = "string", ["description"] = pathDescription,
-                    ["pattern"] = pathPattern, ["maxLength"] = 256 };
-            var required = new JArray("name", "target");
-            if (pathPattern != null) required.Add("view");
-            if (requirePath) required.Add("path");
-            return new JObject { ["type"] = "object", ["properties"] = properties,
-                ["required"] = required, ["additionalProperties"] = false };
-        }
+        { return ResourceSelectorContract.NamedInput(true).ToString(Formatting.None); }
 
         private HtmlWorkspaceToolOutcome BindDataSource(ChatSession session,
             IDictionary<string, object> arguments, Action markDispatchPossible, CancellationToken cancellationToken)
@@ -70,8 +31,13 @@ namespace RNAssistant.Office.Tools
             RequireGateway();
             var name = NormalizeDataName(ToolArgumentReader.String(arguments, "name", string.Empty));
             var target = _resources.ResolveIntentTarget(session, ToolArgumentReader.String(arguments, "target", string.Empty));
+            if (target.Type == "HTML workspace" || target.Type == "HTML data")
+                throw new ResourceRequestException(
+                    "This target describes an HTML workspace or an existing binding, not source values. " +
+                    "html_data_write already binds JSON: use RN.resources.open(name). To change its view, read the HTML data target as text and bind its sourceTarget instead.",
+                    "html_binding_target_invalid", false);
             var view = ToolArgumentReader.String(arguments, "view", "text");
-            var policy = ToolArgumentReader.String(arguments, "policy", "exact");
+            var policy = ToolArgumentReader.String(arguments, "policy", "head");
             if (policy != "head" && policy != "exact") throw new InvalidOperationException("Invalid binding policy.");
             if (target.Type == "Excel search scope" && (view == "table" || view == "records"))
                 throw new ResourceRequestException(
@@ -79,15 +45,20 @@ namespace RNAssistant.Office.Tools
                     "RESOURCE_VIEW_UNSUPPORTED", false);
             var requestedPath = ToolArgumentReader.String(arguments, "path", null);
             var binding = new HtmlWorkspaceDataBinding { Resource = target.Reference, Policy = "head", View = view,
-                ViewPath = view == "table" || view == "records"
-                    ? ResourceGatewayService.ResolveStructuralViewPath(target, requestedPath)
-                    : requestedPath };
+                ViewPath = ResourceSelectorContract.ResolvePath(target, view, requestedPath,
+                    arguments.ContainsKey("pageIndex") ? (int?)ToolArgumentReader.Int32(arguments, "pageIndex", 0) : null) };
             var exact = ReadBinding(session, binding, cancellationToken).Resource.Reference;
             binding.Resource = policy == "head" ? new ResourceRef(exact.Identity.Uri) : exact.Copy();
             binding.Policy = policy;
             NormalizeBinding(binding, null);
             var workspace = NormalizedWorkspaceCopy(session.HtmlWorkspace);
             var id = DataSourceId(name);
+            var previous = workspace.DataSources.SingleOrDefault(item => item.Id == id)?.Binding;
+            if (previous != null && previous.Policy == binding.Policy && previous.View == binding.View &&
+                previous.ViewPath == binding.ViewPath && previous.Resource.Uri == binding.Resource.Uri &&
+                previous.Resource.Revision == binding.Resource.Revision)
+                return HtmlWorkspaceToolOutcome.Ok("HTML resource is already bound: " + name + ".",
+                    WorkspaceMutationJson(session, "data", name, target.Descriptor), HtmlWorkspaceEffect.VerifiedNoChange);
             ValidateWorkspaceCapacity(workspace, null, null, id, null);
             markDispatchPossible();
             session.HtmlWorkspace = NormalizeWorkspace(session.HtmlWorkspace);
@@ -101,7 +72,7 @@ namespace RNAssistant.Office.Tools
             session.HtmlWorkspace.UpdatedUtc = data.UpdatedUtc;
             HtmlWorkspaceArtifactService.CaptureCurrent(session, "HTML resource binding: " + name);
             return HtmlWorkspaceToolOutcome.Ok("HTML resource bound: " + name + ".",
-                WorkspaceMutationJson(session, "data", name), HtmlWorkspaceEffect.VerifiedChange);
+                WorkspaceMutationJson(session, "data", name, target.Descriptor), HtmlWorkspaceEffect.VerifiedChange);
         }
 
         private HtmlWorkspaceToolOutcome RefreshDataSources(ChatSession session,

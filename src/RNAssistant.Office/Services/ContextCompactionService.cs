@@ -21,6 +21,11 @@ namespace RNAssistant.Office.Services
     {
         internal const int TriggerPercent = 80;
         internal const int TargetPercent = 55;
+        internal const string CapabilityContextNotice =
+            "SKILL_CONTEXT_NOTICE: Reuse complete current skill bodies included in this request. " +
+            "A historical mention or summary is not a loaded body; load a needed body only when absent or changed. " +
+            "TOOL_SCHEMA_NOTICE: Callable schemas are rematerialized from durable admission for this logical turn. " +
+            "Compaction does not require another admission. The current capability catalog and TOOL_PACK_STATE are authoritative.";
 
         private const int MaximumCheckpointResourceReferences = 32;
         private const string SummarySchema =
@@ -155,7 +160,7 @@ namespace RNAssistant.Office.Services
                 prefix,
                 sourceTokenBudget,
                 settings, frozen, out sourceClaims);
-            var prompt = CompactionPrompt(settings) + "\nRequired output contract: claims[{kind,text,sourceIds}], never a free-form summary. Use only supplied sourceId values; runtime attaches their exact evidence, source roles and authority generations. " +
+            var prompt = CompactionPrompt(settings) + "\nRequired output contract: claims[{kind,text,sourceIds}], never a free-form summary. Use only supplied sourceId values; runtime attaches their exact evidence, source roles and exact resource dependencies. " +
                 "constraint and decision require only user sources or prior claims of the same kind; observation requires only successful tool evidence or prior observations. Use interpretation for assistant conclusions, question for unresolved questions, and next_action for proposed work. Never upgrade a prior interpretation to a decision or observation. A source link and kind do not prove semantic entailment. " +
                 "Preserve the goal, constraints, supported findings, decisions, unresolved questions and the next necessary action when present. " +
                 "Keep each claim focused and preserve its epistemic status: a proposed action is not completed work, an assistant interpretation is not an observed fact, and a cited source is not proof that an inference is correct. " +
@@ -279,12 +284,7 @@ namespace RNAssistant.Office.Services
                     Role = "assistant",
                     Content = "COMPACTED_EARLIER_CONTEXT (reference only; not new instructions):\n" +
                         (checkpoint.SummaryMarkdown ?? string.Empty) +
-                        "\n\nSKILL_CONTEXT_NOTICE: Skill bodies or reference chunks present only in compacted earlier context are unavailable. " +
-                        "For relevant work, call common.capabilities_read with the exact skill id again unless the replay tail below contains a successful, " +
-                        "non-truncated data.loaded=true skill result for the catalog's current revision; re-read any needed reference chunk. " +
-                        "TOOL_SCHEMA_NOTICE: The runtime rematerializes schemas from the latest valid durable admission event for this logical turn. " +
-                        "Raw schema evidence in the replay tail is never admission authority. If a catalog item is still marked unloaded, call common.capabilities_read " +
-                        "with its exact tool id and wait for a new TOOL_PACK_STATE admitted=true before use.",
+                        "\n\n" + CapabilityContextNotice,
                     ResourceRefs = CollectCheckpointResourceRefs(session, checkpoint),
                     ContextClaims = checkpoint.Claims.ToList()
                 }
@@ -468,20 +468,22 @@ namespace RNAssistant.Office.Services
                 var sourceId = "source-" + (++sourceNumber);
                 ToolResultWireReadResult sourceWire; string sourceError;
                 var toolResult = ToolResultHistoryReader.TryRead(projected, out sourceWire, out sourceError);
-                var sourceRole = toolResult ? "tool" : projected.Role;
+                // Callable availability is regenerated from the current catalog;
+                // it must not become a stale natural-language claim.
+                if (message.ToolName == "common.capabilities_search" || toolResult &&
+                    (string)(ToolResultWire.ParseData(sourceWire.Result.DataJson) as JObject)?["kind"] == "tool-schema") continue;
+                var operation = message.CompletedOperation != null;
+                var sourceRole = toolResult || operation ? "tool" : projected.Role;
                 var userSource = sourceRole == "user" && !toolDependent && !message.ProtocolMessage;
                 var observed = toolResult && (message.ResourceEvidence?.Count ?? 0) > 0 &&
                     sourceWire.Result.Status == RNAssistant.Core.Tools.Contracts.ToolResultStatus.Ok;
                 sources.Add(sourceId, new StructuredContextClaim { ClaimId = message.Id, Text = projected.Content,
-                    Kind = observed ? "observation_source" : userSource ? "user_source" : "interpretation_source",
+                    Kind = operation ? "operation_source" : observed ? "observation_source" : userSource ? "user_source" : "interpretation_source",
                     SourceRoles = new List<string> { sourceRole },
                     SourceSnapshots = new List<ContextClaimSource> { new ContextClaimSource { MessageId = message.Id,
                         Role = sourceRole, Text = session.Messages.FirstOrDefault(item => item.Id == message.Id)?.Content ?? message.Content ?? "",
                         Preview = CompactionText(projected) } },
-                    SourceMessageIds = new List<string> { message.Id }, Evidence = message.ResourceEvidence ?? new List<ResourceEvidence>(),
-                    ToolGeneration = toolDependent ? authority.ToolGeneration : null,
-                    SkillGeneration = toolDependent ? authority.Skills.Generation : null,
-                    SchemaGeneration = toolDependent ? authority.SchemaGeneration : null });
+                    SourceMessageIds = new List<string> { message.Id }, Evidence = message.ResourceEvidence ?? new List<ResourceEvidence>() });
                 builder.AppendLine(JsonConvert.SerializeObject(new { sourceId, role = sourceRole, userSource, observationEligible = observed,
                     text = CompactionText(projected), toolCalls = CompactionToolCalls(projected.ToolCalls) }));
             }
@@ -588,10 +590,7 @@ namespace RNAssistant.Office.Services
                     SourceSnapshots = provenance.SelectMany(item => item.SourceSnapshots ?? new List<ContextClaimSource>())
                         .GroupBy(item => JsonConvert.SerializeObject(item)).Select(group => group.First()).ToList(),
                     SourceMessageIds = provenance.SelectMany(item => item.SourceMessageIds).Distinct(StringComparer.Ordinal).ToList(),
-                    Evidence = provenance.SelectMany(item => item.Evidence).GroupBy(item => item.EvidenceId, StringComparer.Ordinal).Select(group => group.First()).ToList(),
-                    ToolGeneration = provenance.Select(item => item.ToolGeneration).FirstOrDefault(item => item != null),
-                    SkillGeneration = provenance.Select(item => item.SkillGeneration).FirstOrDefault(item => item != null),
-                    SchemaGeneration = provenance.Select(item => item.SchemaGeneration).FirstOrDefault(item => item != null) };
+                    Evidence = provenance.SelectMany(item => item.Evidence).GroupBy(item => item.EvidenceId, StringComparer.Ordinal).Select(group => group.First()).ToList() };
                 if (!claim.HasTypedProvenance()) throw new InvalidOperationException("Compacted claim has incomplete typed provenance.");
                 result.Add(claim);
             }
@@ -599,11 +598,9 @@ namespace RNAssistant.Office.Services
             return result;
         }
 
-        private static bool CurrentClaim(StructuredContextClaim claim, ModelAuthoritySnapshot authority)
+        internal static bool CurrentClaim(StructuredContextClaim claim, ModelAuthoritySnapshot authority)
         {
-            return claim != null && claim.HasTypedProvenance() && (claim.ToolGeneration == null || claim.ToolGeneration == authority.ToolGeneration) &&
-                (claim.SkillGeneration == null || claim.SkillGeneration == authority.Skills.Generation) &&
-                (claim.SchemaGeneration == null || claim.SchemaGeneration == authority.SchemaGeneration) &&
+            return claim != null && claim.HasTypedProvenance() &&
                 claim.Evidence.All(evidence => new EvidenceStateReducer().Reduce(evidence, authority.Resources).State == EvidenceState.Current);
         }
 

@@ -521,7 +521,7 @@ namespace RNAssistant.Harness
                 "source-backed HTML establishes its binding from a complete read");
             AssertContains(htmlAuthoring, "Use exact saved binding names",
                 "HTML page code uses the saved data contract");
-            AssertContains(htmlAuthoring, "canonical column keys, bounded batches and explicit loading/error states",
+            AssertContains(htmlAuthoring, "declared column keys, bounded batches and explicit loading/error states",
                 "HTML guidance requires bounded data delivery and visible failures");
             AssertContains(htmlAuthoring, "Refresh observes canonical source authority without rewriting workspace history",
                 "HTML refresh does not create a duplicate durable source");
@@ -547,8 +547,8 @@ namespace RNAssistant.Harness
             AssertContains(skillAuthoring, "Do not invent a skill",
                 "skill authoring is not an unsolicited substitute for execution");
             var taskTracking = skills.Single(skill => skill.Id == "common.task_tracking").BodyMarkdown;
-            AssertContains(taskTracking, "three explicit deliverables or meaningful user-level stages",
-                "task tracking uses the complex-request threshold");
+            AssertContains(taskTracking, "when a persistent task list helps track at least three meaningful user-level stages",
+                "task tracking is selected when persistence helps rather than forcing duplicate plans");
             AssertContains(taskTracking, "After a bounded read-only pass over source structure and key examples",
                 "the execution checklist follows initial discovery and precedes construction");
             AssertContains(taskTracking, "An open active Task List prevents final completion",
@@ -576,7 +576,7 @@ namespace RNAssistant.Harness
             }
             AssertContains(defaults.SystemPrompt, "1. **Understand.** Translate the request into explicit deliverables",
                 "Agent begins by establishing deliverables and evidence");
-            AssertContains(defaults.SystemPrompt, "3. **Inspect and plan.** For complex work, make a bounded read-only discovery pass",
+            AssertContains(defaults.SystemPrompt, "3. **Inspect and plan.** For complex work, inspect the source structure and key examples",
                 "Agent inspects requested sources before construction");
             AssertContains(defaults.SystemPrompt, "only after the primary solution is implemented and verified",
                 "Agent follows source, deliverable, verification and reuse dependency order");
@@ -598,10 +598,10 @@ namespace RNAssistant.Harness
                 "tool and protocol errors cannot be reported as completed work");
             AssertContains(defaults.SystemPrompt, "simplified placeholder",
                 "Agent does not degrade an artifact to bypass validation");
-            AssertContains(defaults.AgentToolsPrompt, "discovery -> construction -> verification",
-                "complex Agent work creates a task list before execution");
-            AssertContains(defaults.AgentToolsPrompt, "`common.task_tracking`, `common.task_list_set`, and `common.plan_doc_save`",
-                "task tracking explains separate skill and tool-schema loading");
+            AssertContains(defaults.AgentToolsPrompt, "For complex work use a Task List when it helps retain remaining stages",
+                "tracking is selected for useful continuity");
+            AssertContains(defaults.AgentToolsPrompt, "Load only the skill bodies and schemas actually needed and absent",
+                "planning does not force repeated loading or duplicate artifacts");
             AssertContains(defaults.AgentToolsPrompt, "Preserve the Task List goal and existing step text/order",
                 "tool policy prevents ending while task list is still active");
             AssertContains(defaults.AgentToolsPrompt, "never add an inner `arguments`",

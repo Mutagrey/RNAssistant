@@ -547,6 +547,7 @@ namespace RNAssistant.Harness
                 var responses = new Queue<string>(new[]
                 {
                     "{\"message\":\"Читаю подходящий skill.\",\"final\":false,\"tool_calls\":[{\"name\":\"common.capabilities_read\",\"arguments\":{\"id\":\"common.test\"}}]}",
+                    "{\"message\":\"Повторное чтение для проверки контекста.\",\"final\":false,\"tool_calls\":[{\"name\":\"common.capabilities_read\",\"arguments\":{\"id\":\"common.test\"}}]}",
                     "{\"message\":\"Инструкции учтены.\",\"final\":true,\"tool_calls\":[]}"
                 });
                 var calls = new List<IReadOnlyList<ChatMessage>>();
@@ -574,6 +575,8 @@ namespace RNAssistant.Harness
                 AssertTrue(FlattenSimple(calls[0]).IndexOf(revision, StringComparison.Ordinal) < 0,
                     "catalog hides skill revision");
                 var replay = FlattenSimple(calls.Last());
+                AssertTrue(!replay.Contains("resource_evidence_stale"),
+                    "repeated skill load does not turn the earlier complete read into a stale error");
                 AssertContains(replay, "TEST_SKILL_SENTINEL", "full instructions returned by tool");
                 AssertContains(replay, "TEST_SKILL_END", "skill body is not cut by the generic tool-result limit");
                 AssertContains(replay, "\"format\":\"markdown\"", "loaded skill format");
@@ -2928,8 +2931,8 @@ namespace RNAssistant.Harness
             AssertTrue(request.IndexOf("\"goals\"", StringComparison.Ordinal) < 0, "no fixed summary sections");
             AssertContains(
                 ContextCompactionService.BuildActiveWindow(session)[0].Content,
-                "Skill bodies or reference chunks present only in compacted earlier context are unavailable",
-                "compacted context invalidates skill body loading");
+                "Reuse complete current skill bodies included in this request",
+                "compaction reuses restored current bodies without repeated loading");
             var activeCheckpointMessage = ContextCompactionService.BuildActiveWindow(session)[0];
             AssertTrue(activeCheckpointMessage.ResourceRefs.Any(reference => reference.Uri == compactedReference.Uri),
                 "compaction deterministically carries exact resource references into the active window");

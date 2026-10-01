@@ -8,6 +8,61 @@ retired or deferred is not an active P0/P1 implementation defect merely because
 that original severity remains in the table. Release qualification is a separate
 exact-build gate.
 
+## Agent continuity and deterministic read loops — 2026-10-01
+
+P1 incident evidence remains open; shared host-neutral fixes are implemented.
+Owner: Conversation/model context, Core kernel and Resource Gateway.
+The additional two Windows photos show the same `resources_read` path rejection
+repeated for minutes, followed by an explanation naming a different error. Five
+host-neutral probes established pre-fix defects independent of model quality:
+the compiler replaces an original failed read with `resource_evidence_unavailable`
+in all three result roles; unrelated tool admission drops a resource claim;
+folded mutation provenance becomes assistant interpretation at compaction;
+compaction notices disappear; six identical failed calls dispatch until the test's
+iteration limit. The shared compiler/progress/working-set corrections now cover
+these mechanisms, with exact terminal facts retained independently of source bodies.
+
+The [canonical analysis and ordered implementation plan](../conversation-protocol.md#agent-continuity-audit--2026-10-01)
+separates operation facts from observation freshness, keeps typed provenance through
+compaction and uses existing typed recovery for bounded progress. The
+[tool audit](../tool-library.md#tool-ergonomics-audit--2026-10-01) covers current
+schemas, contradictory guidance, result contracts and merge/split decisions.
+Do not add another per-tool reread prompt as the primary remedy. Original accepted
+calls/next-request bytes and exact Windows/Office/WebView2/model evidence remain
+needed to attribute and close each photographed incident. Host-neutral passes do
+not establish live provider or target-model behavior.
+
+## Repeated resource reads and HTML binding failures — 2026-10-01
+
+Six Windows photos show repeated capability loads, reads/rewrites, missing HTML or
+Excel targets, and `records` requests failing with an unavailable `text` view.
+Owners: model context compiler, semantic Resource Gateway and HTML workspace.
+Code/host-neutral reproductions establish separate causes:
+
+- Evidence deduplication changed an earlier successful read to
+  `resource_evidence_stale` merely because a later call used the same snapshot.
+  It could also erase different JS outputs. Different results now retain status/data;
+  equal complete read results retain one body plus successful linked causal frames,
+  avoiding repeated skill bodies consuming the request budget. Completed mutation frames
+  retain their runtime `tool_call_id` correlation.
+- The prompt index could advertise superseded document HTML snapshots that current
+  discovery no longer resolved. Those known old roots are omitted, with history
+  retained. HTML scope now includes the document-owned workspace root.
+- Static JSON writes already created a text binding, but results did not supply a
+  readable source target. Binding/manifest reads exposed runtime metadata instead
+  of usable source/member targets. Explicit semantic projections now separate the
+  source values from workspace/binding metadata; invalid self-binding is rejected
+  before mutation, and an identical rebind is a verified no-op.
+- The HTML skill hard-coded `stream({view:'table'})`, conflicting with records/text
+  bindings. Guidance now consumes the bound view and describes actual batch fields.
+  JS worker reads are separate from page execution and cannot verify its render.
+
+The exact original model requests and accepted arguments are absent from the
+photos. Repeated loading after a new user turn or skill-body compaction can be
+intentional; same-turn repetition after complete current evidence still needs the
+affected trajectory to distinguish model behavior from another delivery defect.
+Windows Office/WebView2 and the target model remain open evidence.
+
 ## Office panel switch and shutdown race — 2026-09-30
 
 Windows photos show repeated bridge switch-busy errors during chat navigation and
@@ -470,12 +525,13 @@ budget explicitly. Host-neutral tests cover the next HTML overwrite with this
 observation; the reported run's historical cause and live model/Windows result
 are still open.
 
-R78 follow-up: write results now summarize saved files and the source hash for the
-next model step. Three distinct `ConflictNoEffect/RefreshRequired` calls for the
-same resource without a satisfying read terminate the run with
-`repeated_refresh_required_failure`. This bounds a model that changes proposed
-content while ignoring the source-read instruction; it does not explain why the
-original model repeated successful writes.
+Historical R78 follow-up described a `repeated_refresh_required_failure` guard
+after three `ConflictNoEffect/RefreshRequired` calls without a satisfying read.
+The 2026-10-01 source audit finds no such guard/code in the current runtime;
+`AgentKernel` has an identical-unknown-call guard and overall iteration limits.
+Do not count the historical statement as current protection. The shared recovery
+and no-progress work is open in the current continuity incident above. Model
+projection now omits source hashes; exact evidence remains runtime-owned.
 
 ## Архитектурный аудит 2026-08-28
 
@@ -517,3 +573,14 @@ R29 зафиксирован отдельным багом, а не допуст
 
 Новые дефекты вне текущей фазы фиксировать здесь или в [BACKLOG.md](BACKLOG.md),
 не исправлять попутно. Исключение P0 требует отдельного явно ограниченного изменения.
+
+## Baseline checks isolated during continuity work — 2026-10-01
+
+Clean source archive of HEAD `dfa154e28e0d90c4195f01fdab6dd4243e70b13c`
+reproduces three failures also seen with the continuity changes:
+`PromptResourcesReadPublishedTemplates` (50 mutable settings loads, expected 0),
+`PromptResourcesFailClosed` (8 loads, expected 0), and
+`ResourceSchemaMappingDerivedPublication` (old copied workspace restore fails).
+Owner: catalog/settings read boundary and resource fork/restore. Investigate as
+separate slices; do not waive these tests or label the full harness green. No user
+history or copied artifact was deleted to make the checks pass.

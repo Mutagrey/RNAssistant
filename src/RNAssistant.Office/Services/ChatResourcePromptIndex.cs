@@ -24,6 +24,19 @@ namespace RNAssistant.Office.Services
                     .Where(ChatArtifactResourceProvider.IsDiscoverableArtifact)
                     .Where(item => !PlanDocumentService.IsRemoved(session, item) && !ArtifactWorkingSet.IsDetached(session, item))
                     .ToList();
+            // Discovery resolves document workspace heads, not every retained
+            // snapshot. Do not advertise an older snapshot as an addressable
+            // target after this chat has already observed a newer revision.
+            var htmlHeads = artifacts.Where(item => !string.IsNullOrWhiteSpace(item.DocumentAuthorityId) &&
+                    item.Kind == ChatArtifactKinds.HtmlWorkspace && HtmlWorkspaceIdentity.LogicalId(item.Id) != null)
+                .GroupBy(item => item.DocumentAuthorityId + ":" + HtmlWorkspaceIdentity.LogicalId(item.Id))
+                .ToDictionary(group => group.Key, group => group.Max(item => item.Revision));
+            artifacts = artifacts.Where(item => {
+                var logicalId = item.Kind == ChatArtifactKinds.HtmlWorkspace ? HtmlWorkspaceIdentity.LogicalId(item.Id) : null;
+                int latest;
+                return logicalId == null || !htmlHeads.TryGetValue(item.DocumentAuthorityId + ":" + logicalId, out latest) ||
+                    item.Revision == latest;
+            }).ToList();
             var unavailable = artifacts.Count(item => !string.IsNullOrEmpty(item.AvailabilityIssue));
             artifacts = artifacts.Where(item => string.IsNullOrEmpty(item.AvailabilityIssue)).ToList();
             if (artifacts.Count == 0 && unavailable == 0 || maxTokens <= 0) return string.Empty;

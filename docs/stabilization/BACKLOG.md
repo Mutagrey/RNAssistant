@@ -26,6 +26,11 @@ without solving coverage. Real Excel `Find` behavior remains Windows evidence.
 
 ## Large resource working set and compacted action memory — 2026-09-29
 
+The shared working-set/action-memory implementation is complete host-neutral; its
+remaining live validation is tracked in the
+[continuity incident](RISK_REGISTER.md#agent-continuity-and-deterministic-read-loops--2026-10-01).
+The PDF-specific bounded-view extension below remains a separate Resource Fabric slice.
+
 Owner: Resource Fabric / model context compiler / context compaction. A model-facing
 `common.resources_read` assembles a complete text view (up to 2,000,000 characters)
 from internal 32,000-character pages. A large PDF can therefore exceed the model
@@ -36,12 +41,6 @@ budgeted current excerpt working set. Keep extracted originals in CAS and older
 read findings in provenance-checked claims; never label an excerpt as the entire
 PDF or silently drop a selected view.
 
-Completed mutations are folded into short model-visible `TOOL_INTERACTION` text.
-The compaction source currently sees those folded frames as assistant text, so a
-checkpoint has no distinct typed completed-action claim. Preserve verified action
-outcomes and unfinished next steps with typed provenance while keeping recent
-causal frames and one current source view. Do not retain every old source version
-or let a model summary upgrade an unverified action to a verified outcome.
 
 ## Outlook attachment follow-ups — 2026-09-08
 

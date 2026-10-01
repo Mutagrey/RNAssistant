@@ -85,7 +85,7 @@ namespace RNAssistant.Harness
                     }, bindSchema, false, out bindError), "HTML binding rejects structural selectors on complete views");
                     AssertTrue(ToolSchemaSupport.ValidateArguments(new JObject {
                         ["name"] = "page", ["target"] = "File: report.pdf",
-                        ["view"] = "render-page", ["path"] = "0"
+                        ["view"] = "render-page", ["pageIndex"] = 0
                     }, bindSchema, false, out bindError), "HTML binding admits an explicit page index");
                     AssertEqual(@"^\$(?:\.[A-Za-z_][A-Za-z0-9_]*)*$",
                         (string)ToolSchemaSupport.ForStructuredOutput(bindSchema)
@@ -242,7 +242,7 @@ namespace RNAssistant.Harness
                     session.Artifacts.Add(sourceArtifact);
                     var target = executor.ResourceGateway.Find(session, "native-sales.json", "conversation").Items.Single().Target;
                     var bind = ExecuteHtmlNative(runtime, HtmlWorkspaceToolCatalog.BindDataToolId,
-                        new JObject { ["name"] = "sales", ["target"] = target, ["policy"] = "head" });
+                        new JObject { ["name"] = "sales", ["target"] = target, ["view"] = "text", ["policy"] = "head" });
                     AssertEqual(ToolExecutionOutcome.Ok, bind.Outcome, "native canonical binding succeeds: " + bind.Result.Message + " " + bind.Result.DataJson);
                     AssertEqual(ToolEffectEvidence.VerifiedChange, bind.Evidence.Effect, "binding change is verified");
                     var binding = session.HtmlWorkspace.DataSources.Single(item => item.Name == "sales").Binding;
@@ -631,6 +631,87 @@ namespace RNAssistant.Harness
                 invocation, result, ToolResultRoles.User);
             acceptedResult.RunId = runId;
             session.Messages.Add(acceptedResult);
+        }
+
+        private static void HtmlDataBindingExposesReadableSource()
+        {
+            WithTempExecutor(FakeOfficeAdapter.ForHost("Excel"), (executor, adapter) =>
+            {
+                var session = NewSession(adapter);
+                var definitions = OfficeToolCatalog.ForHost(adapter.HostName).Concat(executor.GetControllerTools()).ToList();
+                var runtime = executor.CreateNativeRuntime(session, definitions, new AppSettings(), "agent", false);
+                const string json = "[{\"year\":2026,\"value\":42}]";
+                var saved = ExecuteHtmlNative(runtime, HtmlWorkspaceToolCatalog.WriteDataToolId,
+                    new JObject { ["name"] = "dashboardData", ["json"] = json });
+                AssertEqual(ToolExecutionOutcome.Ok, saved.Outcome, "JSON publication succeeds: " + saved.Result.Message);
+                var data = JObject.Parse(saved.Result.DataJson);
+                var sourceTarget = (string)data["binding"]?["sourceTarget"];
+                var oldWorkspaceTarget = executor.ResourceGateway.Find(session, null, "all").Items
+                    .Single(item => item.Type == "HTML workspace").Target;
+                AssertTrue(!string.IsNullOrWhiteSpace(sourceTarget), "write returns a readable source target without rediscovery");
+                AssertEqual("text", (string)data["binding"]["view"], "write describes the actual automatic binding view");
+                AssertContains(saved.Result.Message, "no additional bind", "write prevents redundant self-binding");
+                var memberTarget = (string)((JArray)data["members"]).Single(item => (string)item["memberType"] == "data")["target"];
+                var sourceRead = ExecuteHtmlNative(runtime, ResourceToolCatalog.ReadToolId,
+                    new JObject { ["target"] = sourceTarget, ["representation"] = "text" });
+                AssertEqual(ToolExecutionOutcome.Ok, sourceRead.Outcome, "created source resolves immediately");
+                AssertEqual(json, (string)JObject.Parse(sourceRead.Result.DataJson)["text"], "read returns the actual JSON, not binding metadata");
+
+                ExecuteHtmlNative(runtime, HtmlWorkspaceToolCatalog.WriteFileToolId,
+                    new JObject { ["path"] = "index.html", ["content"] = "<main>Dashboard</main>" });
+                var promptIndex = ChatResourcePromptIndex.Build(session, 4000);
+                AssertTrue(!promptIndex.Contains(oldWorkspaceTarget), "prompt index does not advertise superseded workspace targets");
+                var bindingRead = ExecuteHtmlNative(runtime, ResourceToolCatalog.ReadToolId,
+                    new JObject { ["target"] = memberTarget, ["representation"] = "text" });
+                AssertEqual(ToolExecutionOutcome.Ok, bindingRead.Outcome, "member target survives an unrelated HTML write");
+                var info = JObject.Parse((string)JObject.Parse(bindingRead.Result.DataJson)["text"]);
+                AssertEqual(sourceTarget, (string)info["sourceTarget"], "binding read exposes the same readable source");
+                AssertTrue(!info.ToString().Contains("rna://") && info["revision"] == null, "binding metadata keeps exact authority runtime-only");
+                var projected = ModelToolResultProjection.Project(AgentJsonProtocol.CreateToolResultMessage(
+                    new ToolInvocation { ToolCallId = "binding-read", ToolId = ResourceToolCatalog.ReadToolId },
+                    bindingRead.Result, ToolResultRoles.Tool));
+                AssertContains(projected.Content, sourceTarget, "source target reaches model result projection");
+
+                var workspaceTarget = executor.ResourceGateway.Find(session, null, "all").Items
+                    .Single(item => item.Type == "HTML workspace").Target;
+                AssertTrue(executor.ResourceGateway.Find(session, null, "html").Items.Any(item => item.Target == workspaceTarget),
+                    "HTML scope includes the document-owned workspace root advertised by guidance");
+                var structure = ExecuteHtmlNative(runtime, ResourceToolCatalog.ReadToolId,
+                    new JObject { ["target"] = workspaceTarget, ["representation"] = "structure" });
+                AssertEqual(ToolExecutionOutcome.Ok, structure.Outcome, "workspace structure remains readable");
+                var manifest = JObject.Parse((string)JObject.Parse(structure.Result.DataJson)["text"]);
+                AssertTrue(!manifest.ToString().Contains("rna://"), "model manifest has semantic targets, not opaque references");
+                AssertTrue(((JArray)manifest["members"]).Any(item => (string)item["target"] == memberTarget),
+                    "manifest supplies directly readable member targets");
+
+                foreach (var wrongTarget in new[] { memberTarget, workspaceTarget })
+                {
+                    var previousHead = session.ActiveHtmlArtifactId;
+                    var wrong = ExecuteHtmlNative(runtime, HtmlWorkspaceToolCatalog.BindDataToolId,
+                        new JObject { ["name"] = "dashboardData", ["target"] = wrongTarget, ["view"] = "text" });
+                    AssertEqual(ToolExecutionOutcome.Error, wrong.Outcome, "workspace/binding metadata cannot replace source values");
+                    AssertEqual(previousHead, session.ActiveHtmlArtifactId, "invalid binding retains the working data source");
+                    var records = ExecuteHtmlNative(runtime, ResourceToolCatalog.ReadToolId,
+                        new JObject { ["target"] = wrongTarget, ["representation"] = "records" });
+                    AssertContains(records.Result.Message, "sourceTarget", "wrong structural read gives an actionable source route");
+                }
+
+                var bindArgs = new JObject { ["name"] = "dashboardData", ["target"] = sourceTarget, ["view"] = "records" };
+                var rebound = ExecuteHtmlNative(runtime, HtmlWorkspaceToolCatalog.BindDataToolId, bindArgs);
+                AssertEqual(ToolExecutionOutcome.Ok, rebound.Outcome, "explicit source can be rebound as records");
+                var binding = session.HtmlWorkspace.DataSources.Single().Binding;
+                using (var plane = new ResourceDataPlaneService(executor.ResourceGateway))
+                {
+                    var opened = plane.Open(session, "binding-test", binding.Resource, binding.View, binding.ViewPath);
+                    var batch = JObject.Parse(System.Text.Encoding.UTF8.GetString(plane.Read(opened.LeaseId, 0, 500, CancellationToken.None)));
+                    AssertEqual(42, (int)batch["rows"][0]["value"], "HTML data plane returns actual bound records");
+                    plane.Close(session.Id, "binding-test", opened.LeaseId);
+                }
+                var head = session.ActiveHtmlArtifactId;
+                var repeated = ExecuteHtmlNative(runtime, HtmlWorkspaceToolCatalog.BindDataToolId, bindArgs);
+                AssertEqual(ToolEffectEvidence.VerifiedNoChange, repeated.Evidence.Effect, "identical rebind is an explicit no-op");
+                AssertEqual(head, session.ActiveHtmlArtifactId, "identical rebind does not create another workspace revision");
+            });
         }
 
         private static ToolExecutionRecord ExecuteHtmlNative(

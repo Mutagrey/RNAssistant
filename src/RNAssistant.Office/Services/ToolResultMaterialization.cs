@@ -18,6 +18,7 @@ namespace RNAssistant.Office.Services
         internal IReadOnlyList<ChatAttachment> ModelAttachments { get; private set; }
         internal IReadOnlyList<ResourceEvidence> ResourceEvidence { get; private set; }
         internal ResourceEffect ResourceEffect { get; private set; }
+        internal RNAssistant.Core.Tools.ToolExecutionProgress ExecutionProgress { get; set; }
         internal string AuthorityCommitId { get; private set; }
         internal ResourceRef ResultResource
         {

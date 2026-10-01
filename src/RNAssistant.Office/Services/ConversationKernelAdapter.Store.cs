@@ -190,7 +190,11 @@ namespace RNAssistant.Office.Services
             // non-dispatch is kept in the record, independently of the error payload.
             if (record.Outcome == ToolExecutionOutcome.AwaitingConfirmation || record.AwaitingUser) return null;
             ToolResultMaterialization result;
-            if (_results.TryGetValue(record.Context.Call.Id, out result)) return result;
+            if (_results.TryGetValue(record.Context.Call.Id, out result))
+            {
+                result.ExecutionProgress = ToolExecutionProgress.Capture(record);
+                return result;
+            }
             var terminal = record.Result;
             if (terminal == null)
             {
@@ -204,6 +208,7 @@ namespace RNAssistant.Office.Services
             result = new ToolResultMaterialization(terminal,
                 resourceEvidence: record.ResourceEvidence, resourceEffect: record.ResourceEffect,
                 authorityCommitId: record.AuthorityCommitId);
+            result.ExecutionProgress = ToolExecutionProgress.Capture(record);
             _results[record.Context.Call.Id] = result;
             return result;
         }

@@ -1,7 +1,6 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
-using System.Text;
 using Newtonsoft.Json;
 using RNAssistant.Core.ModelProtocol;
 using RNAssistant.Core.Models;
@@ -14,11 +13,9 @@ namespace RNAssistant.Office.Tools
     internal sealed class ResourceReadToolHandler : ResourceToolHandlerBase
     {
         private const int InternalReadCharacters = ResourceReadRequest.MaximumCharacters;
-        private const int MaximumWholeReadCharacters = ChatArtifactLimits.MaximumTextCharacters;
-        private const int MaximumWholeReadPages = 128;
         internal static readonly ToolDescriptor Descriptor = new ToolDescriptor(
             ResourceToolCatalog.ReadToolId,
-            "Read-only: Read a semantic target supplied by RUNTIME_CONTEXT or common.resources_find. Copy target verbatim, follow its usage and supported representations; it never contains :// and must not be constructed from a title. Do not read an Excel search scope to enumerate worksheet data: use excel.find_cells for discovery or an Excel range/table/name target for values. table/records return bounded row coverage with optional fields, offset and limit; omit path for Office targets because runtime applies their canonical record view. Text/source/structure read a complete representation by default. For document Markdown/Plans, section with representation=text selects a unique ATX heading and its nested subsections, bounded to 32000 characters. Section coverage never proves a whole-resource read; duplicate/missing/oversized sections fail explicitly. For a project-wide VBA request, read RUNTIME_CONTEXT.document.vba_project_target with representation=structure first. Exact URI, revision, cursor and guards remain runtime-owned. Media is hydrated only for the next model step; base64 is never embedded in JSON.",
+            "Read-only: Read a semantic target supplied by RUNTIME_CONTEXT, common.resources_find, workspace member results or binding sourceTarget. Copy target verbatim, follow its usage and supported representations; it never contains :// and must not be constructed from a title. Do not read an Excel search scope to enumerate worksheet data: use excel.find_cells for discovery or an Excel range/table/name target for values. table/records return bounded row coverage with optional fields, offset and limit; omit path for Office targets because runtime applies their canonical record view. Text/source/structure read a complete representation by default. For document Markdown/Plans, section with representation=text selects a unique ATX heading and its nested subsections, bounded to 32000 characters. Section coverage never proves a whole-resource read; duplicate/missing/oversized sections fail explicitly. For a project-wide VBA request, read RUNTIME_CONTEXT.document.vba_project_target with representation=structure first. Exact URI, revision, cursor and guards remain runtime-owned. Media is hydrated only for the next model step; base64 is never embedded in JSON.",
             Parameters());
         internal static readonly ToolPolicy Policy = new ToolPolicy(ToolEffect.Read, ToolVerification.None,
             false, true, new[] { "agent", "plan", "chat" });
@@ -55,7 +52,7 @@ namespace RNAssistant.Office.Tools
             if (!structured && new[] { "limit", "offset", "path", "fields" }.Any(context.Arguments.ContainsKey))
                 throw new ResourceRequestException("Structural selectors require representation=table or records.", "RESOURCE_VIEW_UNSUPPORTED", false);
             var viewPath = structured
-                ? ResourceGatewayService.ResolveStructuralViewPath(selected,
+                ? ResourceSelectorContract.ResolvePath(selected, representation,
                     ToolArgumentReader.String(context.Arguments, "path", null))
                 : null;
             var selection = section != null
@@ -66,13 +63,28 @@ namespace RNAssistant.Office.Tools
                     RowOffset = ToolArgumentReader.Int32(context.Arguments, "offset", 0),
                     ViewPath = viewPath,
                     Fields = Fields(context.Arguments) })
-                : ReadWhole(reference, representation);
+                : Gateway.ReadWhole(Session, reference, representation);
             var projection = Project(
                 selection,
                 selected.Target,
                 selected.Type,
                 selected.Scope);
             projection.Section = section;
+            // These bodies are runtime metadata, not user JSON/source. Publish
+            // addressable semantic targets instead of opaque resource references.
+            if (selected.Type == "HTML data" && selection.Result.Representation == "text")
+            {
+                var binding = JsonConvert.DeserializeObject<HtmlWorkspaceDataBinding>(selection.Result.Text);
+                projection.Text = Serialize(Gateway.DescribeHtmlBinding(Session, selected.Descriptor.Title, binding));
+                projection.ReturnedCharacters = projection.TotalCharacters = projection.Text.Length;
+            }
+            else if (selected.Type == "HTML workspace" && selection.Result.Representation == "structure")
+            {
+                var manifest = JsonConvert.DeserializeObject<HtmlWorkspaceResourceManifest>(selection.Result.Text);
+                projection.Text = Serialize(new HtmlWorkspaceReadInfo {
+                    Members = manifest.Resources.Select(member => Gateway.DescribeHtmlMember(Session, member)).ToList() });
+                projection.ReturnedCharacters = projection.TotalCharacters = projection.Text.Length;
+            }
             var result = RuntimeResult.Ok(
                 htmlFileStructureAsSource
                     ? "HTML file has no structure view; returned its complete source representation instead. The HTML workspace root has the structure view."
@@ -83,160 +95,6 @@ namespace RNAssistant.Office.Tools
             if (_captureAttachments != null && attachments.Count > 0)
                 _captureAttachments(context.Execution.Call.Id, attachments);
             return new ToolHandlerResult(result, ToolEffectEvidence.None, resourceEvidence: Gateway.Evidence(Session, selection.Result));
-        }
-
-        private ResourceReadSelection ReadWhole(
-            ResourceRef reference,
-            string representation)
-        {
-            var cursor = string.Empty;
-            var seenCursors = new HashSet<string>(StringComparer.Ordinal);
-            var text = new StringBuilder();
-            var references = new List<ResourceRef>();
-            var attachments = new List<ChatAttachment>();
-            var related = new List<ResourceRef>();
-            ResourceReadResult first = null;
-            ResourceReadResult last = null;
-            var hydratedForNextModelStep = false;
-            var rawContentIncluded = false;
-            var pages = 0;
-            while (true)
-            {
-                pages++;
-                if (pages > MaximumWholeReadPages)
-                {
-                    throw new ResourceRequestException(
-                        "The provider exceeded the bounded internal page count. No partial content was returned to the model.",
-                        "resource_whole_read_incomplete",
-                        false);
-                }
-                var page = Gateway.Read(
-                    Session,
-                    new ResourceReadRequest
-                    {
-                        Reference = reference,
-                        Representation = first == null
-                            ? representation
-                            : first.Representation,
-                        Cursor = cursor,
-                        MaxChars = InternalReadCharacters
-                    });
-                if (page == null || page.Result == null)
-                {
-                    throw new InvalidOperationException(
-                        "Resource provider returned no read result.");
-                }
-                var result = page.Result;
-                if (first == null)
-                {
-                    first = result;
-                    reference = result.Resource.Reference.Copy();
-                }
-                else if (!string.Equals(
-                    first.Representation,
-                    result.Representation,
-                    StringComparison.Ordinal))
-                {
-                    throw WholeReadFailure(
-                        "Resource provider changed representation during one whole read.");
-                }
-                if (first.Resource.Reference.Revision != result.Resource.Reference.Revision)
-                    throw WholeReadFailure("Resource provider crossed exact revisions during one whole read.");
-                var pageText = result.Text ?? string.Empty;
-                if (result.Offset != text.Length ||
-                    result.ReturnedCharacters != pageText.Length ||
-                    result.TotalCharacters < 0 ||
-                    first.TotalCharacters != result.TotalCharacters)
-                {
-                    throw WholeReadFailure(
-                        "Resource provider returned a non-contiguous whole-read page.");
-                }
-                if (result.TotalCharacters > MaximumWholeReadCharacters ||
-                    text.Length + pageText.Length > MaximumWholeReadCharacters)
-                {
-                    throw new ResourceRequestException(
-                        "The complete resource representation exceeds the " +
-                        MaximumWholeReadCharacters +
-                        "-character whole-read safety bound. Use a narrower semantic resource or a domain-specific read.",
-                        "resource_whole_read_too_large",
-                        false);
-                }
-                text.Append(pageText);
-                references.AddRange(page.ResourceRefs ?? new ResourceRef[0]);
-                attachments.AddRange(page.ModelAttachments ?? new ChatAttachment[0]);
-                related.AddRange(result.Related ?? new List<ResourceRef>());
-                hydratedForNextModelStep = hydratedForNextModelStep ||
-                    result.HydratedForNextModelStep;
-                rawContentIncluded = rawContentIncluded || result.RawContentIncluded;
-                last = result;
-                if (result.Complete)
-                {
-                    if (result.Truncated ||
-                        !string.IsNullOrWhiteSpace(result.NextCursor) ||
-                        text.Length != result.TotalCharacters)
-                    {
-                        throw WholeReadFailure(
-                            "Resource provider marked an incomplete representation as complete.");
-                    }
-                    break;
-                }
-                cursor = result.NextCursor;
-                if (!result.Truncated || pageText.Length == 0 ||
-                    text.Length >= result.TotalCharacters ||
-                    string.IsNullOrWhiteSpace(cursor) ||
-                    !seenCursors.Add(cursor))
-                {
-                    throw new ResourceRequestException(
-                        "The provider could not materialize this representation completely. No partial content was returned to the model.",
-                        "resource_whole_read_incomplete",
-                        false);
-                }
-            }
-            return new ResourceReadSelection
-            {
-                Result = new ResourceReadResult
-                {
-                    Resource = first.Resource,
-                    Representation = first.Representation,
-                    // Body-free metadata must not acquire an empty CAS text payload
-                    // when the completed view is retained again as tool evidence.
-                    Text = first.Text == null && text.Length == 0 ? null : text.ToString(),
-                    ContentSha256 = last.ContentSha256,
-                    AuthorityGeneration = first.AuthorityGeneration,
-                    Offset = 0,
-                    ReturnedCharacters = text.Length,
-                    TotalCharacters = last.TotalCharacters,
-                    Complete = true,
-                    Truncated = false,
-                    HydratedForNextModelStep = hydratedForNextModelStep,
-                    RawContentIncluded = rawContentIncluded,
-                    Related = related
-                        .Where(item => item != null &&
-                            !string.IsNullOrWhiteSpace(item.Uri))
-                        .GroupBy(item => item.Uri + "\n" +
-                            (item.Revision ?? string.Empty), StringComparer.Ordinal)
-                        .Select(group => group.First())
-                        .ToList()
-                },
-                ModelAttachments = attachments
-                    .Where(item => item != null)
-                    .GroupBy(item => item.Id ?? string.Empty, StringComparer.Ordinal)
-                    .Select(group => group.First())
-                    .ToList(),
-                ResourceRefs = references
-                    .Where(item => item != null && !string.IsNullOrWhiteSpace(item.Uri))
-                    .GroupBy(item => item.Uri + "\n" + (item.Revision ?? string.Empty), StringComparer.Ordinal)
-                    .Select(group => group.First())
-                    .ToList()
-            };
-        }
-
-        private static ResourceRequestException WholeReadFailure(string message)
-        {
-            return new ResourceRequestException(
-                message + " No partial content was returned to the model.",
-                "resource_whole_read_invalid",
-                false);
         }
 
         private static ResourceReadProjection Project(
@@ -269,10 +127,10 @@ namespace RNAssistant.Office.Tools
 
         private static string Parameters()
         {
-            const string target = "\"target\":{\"type\":\"string\",\"description\":\"Exact readable target copied verbatim from RUNTIME_CONTEXT or common.resources_find. It never contains ://; do not construct it from a title.\",\"minLength\":1,\"maxLength\":1000}";
+            var target = "\"target\":" + ResourceSelectorContract.Target().ToString(Formatting.None);
             const string representation = "\"representation\":{\"type\":\"string\",\"description\":\"Representation to read. Complete views cannot be combined with table/records selectors.\",\"enum\":[\"metadata\",\"text\",\"structure\",\"source\",\"media\",\"formulas\",\"table\",\"records\"]}";
             const string section = "\"section\":{\"type\":\"string\",\"description\":\"Exact unique ATX heading title copied from Markdown, without leading #. Includes nested subsections; maximum selected text is 32000 characters. Does not grant whole-resource read evidence.\",\"minLength\":1,\"maxLength\":200}";
-            const string selectors = "\"limit\":{\"type\":\"integer\",\"description\":\"Maximum rows in this table/records batch.\",\"minimum\":1,\"maximum\":5000},\"offset\":{\"type\":\"integer\",\"description\":\"Zero-based table/records row offset.\",\"minimum\":0},\"path\":{\"type\":\"string\",\"description\":\"Optional record-array path for generic JSON resources. Omit it for Office targets; runtime applies their canonical record view. Otherwise use $ or an explicit object-property path such as $.records. Brackets, indexes, and wildcards are unsupported.\",\"pattern\":\"^\\\\$(?:\\\\.[A-Za-z_][A-Za-z0-9_]*)*$\",\"maxLength\":256},\"fields\":{\"type\":\"array\",\"description\":\"Structural field keys to project.\",\"maxItems\":128,\"items\":{\"type\":\"string\",\"maxLength\":128}}";
+            var selectors = "\"limit\":{\"type\":\"integer\",\"description\":\"Maximum rows in this table/records batch.\",\"minimum\":1,\"maximum\":5000},\"offset\":{\"type\":\"integer\",\"description\":\"Zero-based table/records row offset.\",\"minimum\":0}" + ",\"path\":" + ResourceSelectorContract.RecordPath().ToString(Formatting.None) + ",\"fields\":{\"type\":\"array\",\"description\":\"Exact column keys from returned columns metadata, not display headings or translated aliases.\",\"maxItems\":128,\"items\":{\"type\":\"string\",\"maxLength\":128}}";
             return "{\"type\":\"object\",\"properties\":{" + target + "," + representation + "," + section + "," + selectors +
                 "},\"required\":[\"target\"],\"additionalProperties\":false,\"anyOf\":[" +
                 "{\"type\":\"object\",\"description\":\"Read one complete metadata, text, structure, source, media, or formulas representation. Do not send limit, offset, path, or fields.\",\"properties\":{" + target + "," +

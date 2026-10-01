@@ -119,6 +119,11 @@ namespace RNAssistant.Core.Models
         public PayloadRef AcceptedCallPayload { get; set; }
         public PayloadRef ResultPayload { get; set; }
         public ResourceEffect ResourceEffect { get; set; }
+        [JsonProperty(NullValueHandling = NullValueHandling.Ignore)]
+        public RNAssistant.Core.Tools.ToolExecutionProgress ExecutionProgress { get; set; }
+        // Derived request projection only. Durable terminal events remain authoritative.
+        [JsonProperty(NullValueHandling = NullValueHandling.Ignore)]
+        public CompletedToolOperation CompletedOperation { get; set; }
         public string AuthorityCommitId { get; set; }
         public ResourceRef HtmlWorkspaceCheckpoint { get; set; }
         public ChatActivity Activity { get; set; }
@@ -304,7 +309,7 @@ namespace RNAssistant.Core.Models
 
     public sealed class ContextCheckpoint
     {
-        public const string CurrentPromptVersion = "context-claims-v4";
+        public const string CurrentPromptVersion = "context-claims-v5";
         public ResourceRef SharedResource { get; set; }
         public string SharedPublicationIssue { get; set; }
 

@@ -68,7 +68,7 @@ namespace RNAssistant.Office.Services
             AssignIntentTargets(states);
 
             var selected = states
-                .Where(state => ScopeMatches(scope, state.Scope))
+                .Where(state => ScopeMatches(scope, state.Scope) || scope == "html" && state.Type == "HTML workspace")
                 .Where(state => query.Length == 0 ||
                     matches.ContainsKey(state.Reference.Uri) ||
                     IntentMetadata(state).IndexOf(
@@ -683,9 +683,9 @@ namespace RNAssistant.Office.Services
             if (type == "HTML file")
                 return "Read source for the complete file contents. Structure belongs to the HTML workspace root; a structure request on this file returns source explicitly.";
             if (type == "HTML workspace")
-                return "Read structure for the file inventory, then find an exact HTML file target and read source for its contents.";
+                return "Read structure for member targets and binding sourceTarget metadata, then read an exact HTML file target with source. The workspace itself is not a dataset.";
             if (type == "HTML data")
-                return "Read text for the workspace's data binding metadata. To inspect the bound values, find and read the binding's source target; this member is not a copy of the data.";
+                return "Existing binding, not data values: read text for name/view/policy/sourceTarget. Page code already opens RN.resources.open(name). Do not bind this metadata or request records on it; use its sourceTarget for data reads or a deliberate rebind.";
             if (type == "Outlook mail")
                 return "Read structure for attachment metadata and targets without reading the mail body. Pass a copied attachment target to common.resources_find, then read its text or media.";
             if (type == "Outlook attachment")
@@ -707,6 +707,12 @@ namespace RNAssistant.Office.Services
             ResourceIntentTarget target,
             string requestedPath)
         {
+            if (target?.Type == "HTML workspace" || target?.Type == "HTML data")
+                throw new ResourceRequestException(
+                    "This target is HTML workspace/binding metadata, not a record array. " +
+                    "Read the HTML data target with representation=text for sourceTarget, then read that source. " +
+                    "An existing page binding is opened by RN.resources.open(name); do not recreate it to inspect data.",
+                    "RESOURCE_VIEW_UNSUPPORTED", false);
             var canonical = IntentRecordsPath(target == null
                 ? null
                 : target.Descriptor);
@@ -722,6 +728,39 @@ namespace RNAssistant.Office.Services
                     false);
             }
             return requestedPath;
+        }
+
+        internal HtmlResourceBindingInfo DescribeHtmlBinding(ChatSession session, string name, HtmlWorkspaceDataBinding binding)
+        {
+            var info = HtmlResourceBindingInfo.Create(name, binding, null);
+            try
+            {
+                var descriptor = Resolve(session, binding.Resource.Uri).Resource;
+                info.SourceTarget = IntentTarget(descriptor);
+            }
+            catch (Exception ex) when (IsIntentAvailabilityFailure(ex))
+            {
+                info.SourceUnavailable = "The binding is retained, but source metadata is unavailable. Restore the source before changing or retrying the binding.";
+            }
+            return info;
+        }
+
+        internal HtmlResourceMemberInfo DescribeHtmlMember(ChatSession session, ResourceDescriptor member)
+        {
+            var info = new HtmlResourceMemberInfo {
+                Target = IntentTarget(member), Type = IntentType(member), Name = member.Title,
+                Active = member.Metadata.ContainsKey("active") && member.Metadata["active"] == "true",
+                Representations = member.Representations };
+            string source;
+            if (member.Kind == ChatHtmlResourceCatalog.DataKind && member.Metadata.TryGetValue("boundResource", out source))
+            {
+                string path;
+                member.Metadata.TryGetValue("bindingPath", out path);
+                info.Binding = DescribeHtmlBinding(session, member.Title, new HtmlWorkspaceDataBinding {
+                    Resource = new ResourceRef(source), View = member.Metadata["bindingView"],
+                    Policy = member.Metadata["bindingPolicy"], ViewPath = path });
+            }
+            return info;
         }
 
         private static string IntentRecordsPath(ResourceDescriptor descriptor)
