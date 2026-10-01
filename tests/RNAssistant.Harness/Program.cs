@@ -45,6 +45,7 @@ namespace RNAssistant.Harness
                 Test("architecture: Office conversation consumers use typed port", OfficeConversationConsumersUseTypedPort),
                 Test("architecture: run view consumers use typed projection", RunViewConsumersUseTypedProjection),
                 Test("architecture: mandatory dependency direction", MandatoryDependencyDirection),
+                Test("architecture: mandatory dependency direction token boundaries", MandatoryDependencyDirectionUsesTokenBoundaries),
                 Test("run view: runtime evidence projection", RunViewStateProjectsRuntimeEvidence),
                 Test("run view: pending confirmation projection", RunViewStateProjectsPendingConfirmation),
                 Test("run view: replay equality and immutable wire", RunViewStateReplayEqualityAndImmutableWire),

@@ -795,6 +795,49 @@ namespace RNAssistant.Harness
                 "UI and bridge code must use application contracts instead of domain executors");
         }
 
+        private static void MandatoryDependencyDirectionUsesTokenBoundaries()
+        {
+            var path = Path.GetTempFileName();
+            var root = Path.GetDirectoryName(path);
+            var paths = new[] { path };
+            var forbiddenTokens = new[] { "DocumentIdentity." };
+            const string boundary = "host-specific helper fixture";
+            try
+            {
+                foreach (var source in new[]
+                {
+                    "MarkdownDocumentIdentity.Identity();",
+                    "_DocumentIdentity.Identity();",
+                    "DocumentIdentityXIdentity();",
+                    "documentIdentity.Identity();"
+                })
+                {
+                    File.WriteAllText(path, source);
+                    AssertNoForbiddenDependencies(root, paths, forbiddenTokens, boundary);
+                }
+
+                foreach (var source in new[]
+                {
+                    "DocumentIdentity.Identity();",
+                    "var identity = DocumentIdentity.Identity();",
+                    "RNAssistant.OfficeHosts.DocumentIdentity.Identity();",
+                    "@DocumentIdentity.Identity();",
+                    "MarkdownDocumentIdentity.Identity(); DocumentIdentity.Identity();"
+                })
+                {
+                    File.WriteAllText(path, source);
+                    var error = RuntimeThrows<InvalidOperationException>(() =>
+                        AssertNoForbiddenDependencies(root, paths, forbiddenTokens, boundary));
+                    AssertContains(error.Message, Path.GetFileName(path) + ": DocumentIdentity.",
+                        "dependency scan must report the actual forbidden identifier: " + source);
+                }
+            }
+            finally
+            {
+                File.Delete(path);
+            }
+        }
+
         private static IEnumerable<string> SourceFiles(string directory)
         {
             return Directory.GetFiles(directory, "*.cs", SearchOption.AllDirectories)
@@ -813,7 +856,7 @@ namespace RNAssistant.Harness
                 var source = File.ReadAllText(path);
                 foreach (var token in forbiddenTokens ?? new string[0])
                 {
-                    if (source.IndexOf(token, StringComparison.Ordinal) < 0) continue;
+                    if (!Regex.IsMatch(source, @"\b" + Regex.Escape(token))) continue;
                     offenders.Add(Path.GetRelativePath(root, path).Replace('\\', '/') + ": " + token);
                 }
             }

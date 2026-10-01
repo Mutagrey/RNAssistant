@@ -62,14 +62,6 @@ evidence before enabling those reads; preserve the no-EntryID model boundary and
 verify on real Outlook. Until then, use the mailbox chat archive scan for full
 mailbox analysis.
 
-## Dependency-direction substring false positives — 2026-09-08
-
-Owner: architecture harness. `architecture: mandatory dependency direction` reports
-six Office files for `DocumentIdentity.` because the text scan also matches
-`MarkdownDocumentIdentity.`. All six matching lines exist unchanged in base HEAD
-`670301c9`; the Outlook attachment slice adds none. Correct identifier matching in a
-separate approved test correction; do not treat this failed gate as passed.
-
 ## Resource read prompt wording — 2026-09-28
 
 Owner: Agent/Chat prompt defaults and Resource Fabric. Current Chat instructions
