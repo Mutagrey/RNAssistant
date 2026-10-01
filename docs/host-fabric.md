@@ -6,19 +6,26 @@ This is a deferred product target contract, not part of the working baseline or 
 prerequisite for ordinary bug fixes. It requires an explicit user scope and owner;
 the design does not qualify existing Office/COM behavior.
 
-The goal is one RNAssistant window, opened from any supported Office host, that can
-list and select documents/items owned by other running Excel, Word, PowerPoint and
-Outlook processes. The visible window is a client of the selected target; it does
-not acquire the target's COM objects.
+The user-facing cross-host workflow already exists: Desktop, VSTO and the
+in-process NativeHostCli panel can create document-bound chats for Excel, Word,
+PowerPoint and Outlook and switch the current pane to an existing chat's open
+target. The accepted run stays pinned to its exact document session. See
+[Desktop runtime](desktop-runtime.md#runtime-path).
 
-Current behavior is narrower:
+Current selection uses `OfficeHostChatCoordinator` and
+`OfficeComAdapterProvider`: they discover or activate an Office target, bind a new
+COM adapter/controller, verify the selected document/chat, then rebind the pane.
+NativeHostCli is still a DLL loaded into one Office process; its panel starts at
+the supplied host/HWND but can switch to a different host/document adapter.
+Desktop has a cross-host picker. Discovery/attach uses Office COM/ROT and, for
+Excel, an HWND path; multi-instance enumeration remains best-effort. The adapter
+retains a bound document session, but cross-process work is not routed through an
+endpoint running in the selected document's owning Office process.
 
-- `RNAssistant.NativeHostCli` is a DLL loaded into one Office process, not an EXE.
-  Its single static `InProcessPanelSession` is bound to the supplied host kind and
-  HWND.
-- `RNAssistant.Desktop` has a cross-host target picker, but refresh is best-effort
-  ROT discovery. Exact Excel attach can use HWND; multiple instances and the other
-  hosts are not a complete cross-process registry.
+Host Fabric is the deferred replacement for that discovery/routing boundary. Its
+goal is an exact registry of live host endpoints and typed requests executed on
+the selected owner's UI STA. It keeps the existing document chats, panel workflow,
+`AgentKernel`, `ToolRuntime`, `HostRuntime` and durable event/CAS ownership.
 
 ## Target ownership
 

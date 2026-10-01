@@ -54,7 +54,8 @@ user-scoped named pipe.
 
 Target registry хранит только descriptors: host, hwnd, process id, document
 path/title, folder/mail id и selection reference. Долгоживущие COM-объекты в нём
-не сохраняются; bound adapter разрешает live object во время операции.
+не сохраняются; при attach новый adapter разрешает и удерживает exact Office target,
+а HostRuntime проверяет эту привязку перед операцией.
 
 - `Manual` — первый target выбирается автоматически, последующие activation только
   обновляют список. Пользователь явно меняет рабочий документ.

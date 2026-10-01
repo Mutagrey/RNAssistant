@@ -14,14 +14,15 @@
 
 ## Large Excel search without manual range slicing — 2026-09-30
 
-Owner: Excel search / Resource Fabric. `excel.find_cells` needs one complete exact
-snapshot and rejects scopes above 100,000 cells or one million characters. Current
-recovery exposes a path through sheet UsedRange inspection and explicit smaller
-range calls. Evaluate runtime-owned bounded chunk traversal for workbook-wide
-discovery with exact coverage, revision/drift handling, and an explicit incomplete
-result if a chunk fails. Keep per-chunk capture bounds; a single larger configurable
-snapshot would increase COM time, memory and prompt pressure without solving
-coverage.
+Owner: Excel search / Resource Fabric. Literal queries up to 255 characters without
+newlines now use bound Excel `Find`/`FindNext`; the prior whole-scope snapshot limit
+no longer applies to that path. Regex, longer literals and other exact snapshot
+reads still reject scopes above 100,000 cells or one million characters. Recovery
+uses sheet UsedRange inspection and explicit smaller ranges. Evaluate runtime-owned
+bounded chunk traversal only for searches that still need it, with exact coverage,
+revision/drift handling and an explicit incomplete result if a chunk fails. Keep
+per-chunk capture bounds; a single larger snapshot increases COM time and memory
+without solving coverage. Real Excel `Find` behavior remains Windows evidence.
 
 ## Large resource working set and compacted action memory — 2026-09-29
 
@@ -208,28 +209,6 @@ transport alone does not qualify source allocation.
   or trigger automatic replay. Explicit `postMessage` exceptions are now handled
   by the shared send boundary; ready/queued/init regressions pass host-neutral.
 
-- Review verification (2026-09-08, base `c3273e4972fb357d153ac7e3cba545804977e2c2`):
-  `AgentKernel.ExecuteOneAsync` clears both failed
-  call collections after any `Ok` tool with `MayHaveSideEffects`, without proving a
-  relevant dependency changed. An unrelated successful mutation, including a no-op,
-  can therefore re-admit the unchanged failed call and bypass a `RefreshRequired`
-  dependency. Unknown-effect blocking is separate and remains intact. Owner:
-  kernel/domain recovery contract. Replace the blanket reset with domain-owned
-  correction evidence, preserve relevant correction/whole-view refresh behavior,
-  and align the canonical conversation contract. Existing corrective-success
-  coverage passes but does not cover unrelated/no-op mutation interleaving.
-
-- Host-neutral `artifacts: historical attachments stay reference-only` was rerun
-  without rebuilding on 2026-09-08 (same base; no newer Core/Office/harness C# sources).
-  The historical-attachment removal assertion now passes. The first failure is the
-  stale `target=attachment: Untitled` expectation: the actual index quotes the full
-  target and includes its creation discriminator. The later compaction stub still
-  uses the removed free-form `summary` shape and was not reached. Owner:
-  artifact/model-context regression fixture. Update target-format and structured
-  compaction setup, then rerun the complete case while retaining the body/analysis
-  exclusion and semantic discovery assertions; do not classify this failure as
-  evidence that historical attachment bodies still replay.
-
 - Tool package README leading `U+FEFF`: `StorageFileSystem` writes a UTF-8 sidecar
   without a separate BOM, while `ToolStore.TryReadUtf8` strips its first BOM-shaped
   character. A literal leading `U+FEFF` therefore yields a different read-back and
@@ -240,8 +219,8 @@ transport alone does not qualify source allocation.
 
 ## Chat / diagnostics UX follow-ups — 2026-09-07
 
-The user-authorized 11E presentation slice is implemented host-neutral on
-`stab/11-chat-projection-ux`. Lifecycle/history separation, RunId grouping,
+The user-authorized 11E presentation slice is implemented host-neutral.
+Lifecycle/history separation, RunId grouping,
 semantic targets, one current-action shimmer, disclosure retention and readable
 cause cards with lazy technical JSON replace the reviewed presentation paths.
 Canonical behavior: [conversation projection](../conversation-protocol.md#effect-mapping-and-ui-projection)
@@ -311,10 +290,11 @@ claim of measured UI cost. Current priority remains chat navigation/persistence.
 - **Result representations:** owner `ModelToolResultProjection` /
   `ConversationModelSession`. Family-specific JSON cleanup and exact-read exclusion
   from generic artifact wrapping still exist. Results above 8192 characters are
-  archived through `ResultPayload`, then selected compiler atoms hydrate CAS.
-  The 2026-09-07 correction removes the unused pre-archival model-message copy and
-  capability-admission wire parsing for ordinary results; capability reads retain
-  exact pre-archival descriptor checks. Before replacing a family cleanup path,
+  archived through `ResultPayload`; selected non-folded results now hydrate the
+  complete CAS payload when the calibrated request budget permits. The 2026-09-07
+  correction removed the unused pre-archival model-message copy and capability-
+  admission wire parsing for ordinary results; capability reads retain exact
+  pre-archival descriptor checks. Before replacing a family cleanup path,
   measure parse/clone/serialization cost;
   preserve one execution result and exact evidence, and remove its old projection
   branch with focused wire/provenance checks. Do not add a second durable store.

@@ -521,7 +521,9 @@ artifact.
 ## R56 Tool Library slices and gates
 
 1. Read-only selected-endpoint Tool Inspector and capability/availability DTO.
-2. Exact run/result/evidence links and host capability matrix in the Issue Center.
+2. Exact run/result/evidence links through the existing chat history and trajectory
+   detail; selected-endpoint host capability matrix in the Tool Inspector. No
+   separate Issue Center is planned.
 3. Append-only custom package revisions, restore/tombstone and import/export.
 4. Guarded Library editor switch, conflicts and disposable-document test flow.
 5. Model authoring switch and later-run catalog refresh.

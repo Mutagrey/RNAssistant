@@ -13,8 +13,12 @@ The allowed main sequence is `v16.1.0-alpha.1` (testable alpha),
 Stages may be skipped. Additional beta/rc numbers require a substantial fix and
 a new build for testers, not merely completion of an internal phase.
 
-Before release, record the applicable acceptance matrix and gates from
-[master plan sections 17–18](../stabilization/STABILIZATION_MASTER_PLAN.md).
+Before release, record the applicable scenario matrix and open gates from the
+[current Windows runbook](../stabilization/WINDOWS_QUALIFICATION_RUNBOOK.md),
+[PROGRESS](../stabilization/PROGRESS.md) and
+[RISK_REGISTER](../stabilization/RISK_REGISTER.md). The
+[master plan sections 17–18](../stabilization/STABILIZATION_MASTER_PLAN.md)
+retain migration rationale and historical acceptance evidence.
 Run Windows x64 + Office x64 + VS 2022 qualification, including VSTO/ClickOnce
 installation/update, assembly binding, target switching, VBA and write-fault cases.
 Record evidence and remaining risks in `PROGRESS.md` / `RISK_REGISTER.md`.

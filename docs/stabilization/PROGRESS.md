@@ -23,13 +23,20 @@ of breadth. Targeted checks follow the changed behavior. Missing Windows/Office,
 WebView2 and live-provider evidence stays open and is required when qualifying a
 formal release or claiming those environments are verified.
 
-Immediate priorities: resolve the reported Agent loop/missing-change incident with
-causal evidence (R78); fix demonstrated no-effect/false-success and repeated-call
-risks; measure reported chat/navigation stalls on the actual host before optimizing
-storage; reconcile known host-neutral test drift. Detailed risks remain in the
-entries below and [RISK_REGISTER](RISK_REGISTER.md) / [BACKLOG](BACKLOG.md).
-Qualification scenarios retain the [Windows runbook](WINDOWS_QUALIFICATION_RUNBOOK.md),
-independently of daily work.
+Current order of work (the numbered R entries below retain their historical
+severity, not a new phase queue):
+
+| Priority | Next concrete step | Owner / evidence |
+|---|---|---|
+| P1 | Correlate the reported Agent/Excel/VBA/HTML loops and missing or repeated changes with accepted calls, exact result bytes shown to the model, source revisions, effects and Task List state. Fix a reproduced remaining cause, not the screenshot's inferred cause. | Conversation/model context + domain owners; [R78 and related incidents](RISK_REGISTER.md), redacted trajectory and exact Windows build |
+| P1 | Verify pane switch/shutdown draining and Outlook Explorer/Inspector activation on Windows; fix a reproduced failure in the bound host path. | Bridge/HostRuntime/Outlook; [current risks](RISK_REGISTER.md), Windows x64 + Office x64 + WebView2 |
+| P1 | Use existing stage timings on the affected Windows chat to locate persistent chat-switch and completion stalls before changing storage or request limits. | ChatStore / bridge / model request path; [navigation evidence](RISK_REGISTER.md), exact build and same chat |
+| P2 | Reconcile the remaining host-neutral fixture/prompt checks and bounded resource gaps as separately scoped slices. | Owners and triggers in [BACKLOG](BACKLOG.md) |
+| Release gate | Run the exact-build Windows/Office matrix and review signed evidence for a chosen release candidate. | Release owner; [runbook](WINDOWS_QUALIFICATION_RUNBOOK.md) and [release process](../operations/RELEASE_PROCESS.md) |
+
+No new P0 implementation defect is established by the available screenshots alone.
+Wrong-target, data-loss and false-success evidence still takes precedence if it is
+reproduced. The release gate does not block the P1/P2 work above.
 
 Diagnostics simplification (2026-09-30): Qualification Center, its embedded packs,
 Excel identity helper and in-app release admission are removed. The maintainer
@@ -467,7 +474,8 @@ missing body; origin deletion/GC retain HTML and authored JSON. No separate HTML
 store or compatibility fallback is introduced; old chat-owned mutation is rejected.
 Checks: HTML 33/33, chat lifecycle 2/2, logical restore and fork refusal, document
 Plan 2/2, originals 2/2 and source inclusion pass. Artifact filter: 27/28; the
-unchanged unquoted prompt-target assertion is tracked in [backlog](BACKLOG.md#resource-prompt-test-expectation--2026-09-08).
+then-unquoted prompt-target assertion was later updated in the harness; this 27/28
+result is historical and does not state the current gate outcome.
 Working-set, library, Plan and HTML-action browser checks pass.
 The later Markdown slice above closes independent MD authoring; indexed
 discovery/recovery and richer resource context remain open. Windows/Office/WebView2, target-model and Playwright layout
