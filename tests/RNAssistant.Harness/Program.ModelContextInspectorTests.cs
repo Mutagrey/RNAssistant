@@ -71,7 +71,7 @@ namespace RNAssistant.Harness
                 if (formats.Count == 2)
                     throw new LlmRequestException(LlmFailureKind.ResponseFormatUnsupported, "schema rejected during repair");
                 return System.Threading.Tasks.Task.FromResult(new LlmCompletionResult
-                    { Content = "{\"message\":\"Done.\",\"final\":true,\"tool_calls\":[]}" });
+                    { Content = "{\"message\":\"Done.\",\"action\":\"done\",\"tool_calls\":[]}" });
             });
             var result = protocol.GetResponseAsync(request, null, CancellationToken.None).GetAwaiter().GetResult();
             AssertTrue(result.Failure == null, "strict repair falls back and accepts a valid object response");
@@ -101,7 +101,7 @@ namespace RNAssistant.Harness
                 AssertEqual(LlmResponseFormats.JsonObject, currentOptions.ResponseFormat, "direct object mode stays selected");
                 AssertEqual(fullPrompt, messages.First().Content, "direct json_object retains exact parameter contracts");
                 return System.Threading.Tasks.Task.FromResult(new LlmCompletionResult
-                    { Content = "{\"message\":\"Done.\",\"final\":true,\"tool_calls\":[]}" });
+                    { Content = "{\"message\":\"Done.\",\"action\":\"done\",\"tool_calls\":[]}" });
             });
             AssertTrue(objectProtocol.GetResponseAsync(objectRequest, null, CancellationToken.None)
                 .GetAwaiter().GetResult().Failure == null, "json_object mode accepts the shared v5 response");

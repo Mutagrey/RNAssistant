@@ -20,7 +20,7 @@ namespace RNAssistant.Office.Tools
         internal static IEnumerable<ToolCatalogEntry> GetTools()
         {
             yield return Projection(SetToolId,
-                "Task list: Save or revise your plan, update progress by current 1-based index, or record an outcome. Statuses express your assessment, not verified tool effects. An open list does not prevent a final answer. Runtime owns list and step identity.",
+                "Task list: Save or revise your plan, update progress and durable step notes by current 1-based index, or record an outcome. Statuses express your assessment, not verified tool effects. An open list does not prevent a final answer. Runtime owns list and step identity.",
                 Schema(), "task_list_set");
         }
 
@@ -37,7 +37,7 @@ namespace RNAssistant.Office.Tools
         private static JObject NoteSchema()
         {
             return new JObject { ["type"] = "string", ["maxLength"] = TaskListService.MaxStepCharacters,
-                ["description"] = "Optional result, remaining work or reason no change was needed. Omit to preserve an unchanged stage note; empty clears it." };
+                ["description"] = "Optional concise finding or decision with evidence, uncertainty or remaining dependency; keep only what later steps need. Omit to preserve an unchanged stage note; empty clears it." };
         }
 
         internal static string Schema()
@@ -75,7 +75,7 @@ namespace RNAssistant.Office.Tools
                 ["updates"] = new JObject
                 {
                     ["type"] = "array",
-                    ["description"] = "Statuses to change on the active list. Index is the current 1-based step position, not a stable id. Unmentioned steps keep their statuses.",
+                    ["description"] = "Status or note updates on the active list. Pass the current status when updating only its note. Index is the current 1-based step position, not a stable id. Unmentioned steps keep their statuses and notes.",
                     ["minItems"] = 1,
                     ["maxItems"] = TaskListService.MaxSteps,
                     ["items"] = new JObject
@@ -110,7 +110,7 @@ namespace RNAssistant.Office.Tools
             };
             var statusProperties = new JObject
             {
-                ["action"] = new JObject { ["type"] = "string", ["const"] = "update_statuses", ["description"] = "Change only existing step statuses on the active list." },
+                ["action"] = new JObject { ["type"] = "string", ["const"] = "update_statuses", ["description"] = "Update existing step statuses and optional durable notes on the active list." },
                 ["goal"] = properties["goal"].DeepClone(),
                 ["updates"] = properties["updates"].DeepClone()
             };

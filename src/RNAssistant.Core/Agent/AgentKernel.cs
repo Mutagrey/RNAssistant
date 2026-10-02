@@ -66,11 +66,12 @@ namespace RNAssistant.Core.Agent
 
         private async Task<AgentRunResult> LoopAsync(State state, CancellationToken cancellationToken)
         {
+            var consecutiveNarrativeSteps = 0;
             while (state.Iterations < state.Limits.MaxIterations)
             {
                 if (cancellationToken.IsCancellationRequested)
                     return await FinishAsync(state, RunLifecycle.Cancelled, "cancelled", "Run cancelled.").ConfigureAwait(false);
-                await TakeInputAsync(state, cancellationToken).ConfigureAwait(false);
+                if (await TakeInputAsync(state, cancellationToken).ConfigureAwait(false)) consecutiveNarrativeSteps = 0;
                 state.Iterations++;
                 var stepId = state.RunId + ":" + state.Iterations;
                 await AppendAsync(state, new AgentRunEvent(AgentRunEventKind.ModelStepStarted, state.Summary(), stepId)).ConfigureAwait(false);
@@ -133,11 +134,21 @@ namespace RNAssistant.Core.Agent
                 await AppendAsync(state, new AgentRunEvent(AgentRunEventKind.ResponseAccepted,
                     state.Summary(), stepId, response: response)).ConfigureAwait(false);
                 state.Progress.BeginStep();
-                if (response.ToolCalls.Count == 0 && response.Final)
+                if (response.Final)
                 {
                     if (_input != null && !_input.TryCloseInput()) continue;
-                    return await FinishAsync(state, RunLifecycle.Completed, "model_loop_ended", response.Message).ConfigureAwait(false);
+                    var reason = response.Action == ConversationResponse.BlockedAction ? "model_blocked" :
+                        response.Action == ConversationResponse.NeedsInputAction ? "model_needs_input" : "model_done";
+                    return await FinishAsync(state, RunLifecycle.Completed, reason, response.Message).ConfigureAwait(false);
                 }
+                if (response.Action == ConversationResponse.ContinueAction)
+                {
+                    if (++consecutiveNarrativeSteps >= 3)
+                        return await FinishAsync(state, RunLifecycle.Failed, "no_tool_progress",
+                            "Model repeated progress without a tool call or terminal decision.").ConfigureAwait(false);
+                    continue;
+                }
+                consecutiveNarrativeSteps = 0;
 
                 for (var index = 0; index < response.ToolCalls.Count; index++)
                 {
@@ -167,11 +178,13 @@ namespace RNAssistant.Core.Agent
             return await FinishAsync(state, RunLifecycle.Failed, "iteration_limit", "Model iteration limit reached.").ConfigureAwait(false);
         }
 
-        private async Task TakeInputAsync(State state, CancellationToken token)
+        private async Task<bool> TakeInputAsync(State state, CancellationToken token)
         {
-            if (_input == null) return;
-            foreach (var message in await _input.TakeInputAsync(token).ConfigureAwait(false))
+            if (_input == null) return false;
+            var messages = await _input.TakeInputAsync(token).ConfigureAwait(false);
+            foreach (var message in messages)
                 state.Messages.Add(message);
+            return messages.Count > 0;
         }
 
         private AgentResponse AssignCallIds(State state, AgentResponseDraft response)
@@ -187,13 +200,17 @@ namespace RNAssistant.Core.Agent
                     throw new InvalidOperationException("Runtime call id allocation returned an invalid or duplicate identity.");
                 calls.Add(new ToolCall(id, draft.Name, draft.ArgumentsJson));
             }
-            return new AgentResponse(response.Message, calls, response.Final);
+            return new AgentResponse(response.Message, calls, response.Action);
         }
 
         private ToolPolicySnapshot[] ValidateResponse(AgentResponse response)
         {
-            if (!response.Final && response.ToolCalls.Count == 0)
-                throw new InvalidOperationException("final=false requires at least one tool call.");
+            if (!ConversationResponse.IsValidAction(response.Action, response.ToolCalls.Count))
+                throw new InvalidOperationException("Accepted action and tool calls disagree.");
+            if ((response.Action == ConversationResponse.ContinueAction ||
+                response.Action == ConversationResponse.BlockedAction ||
+                response.Action == ConversationResponse.NeedsInputAction) && string.IsNullOrWhiteSpace(response.Message))
+                throw new InvalidOperationException("Progress and unfinished outcomes require a concrete message.");
             var policies = new List<ToolPolicySnapshot>();
             foreach (var call in response.ToolCalls)
             {

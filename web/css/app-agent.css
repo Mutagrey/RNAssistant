@@ -9,6 +9,19 @@
   background: transparent;
 }
 
+.agent-result-card {
+  margin: 8px 0;
+  padding: 9px 11px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--surface, transparent);
+}
+
+.agent-result-title { font-size: 13px; }
+.agent-result-evidence,
+.agent-result-plan,
+.agent-result-last-step { margin: 5px 0 0; color: var(--muted); font-size: 12px; }
+
 .message.assistant.is-compaction-message {
   display: block;
   padding: 7px 0 3px;

@@ -144,7 +144,7 @@ namespace RNAssistant.Harness
             return JsonConvert.SerializeObject(new
             {
                 message = "Загружаю схему инструмента.",
-                final = false,
+                action = "tool",
                 tool_calls = new[]
                 {
                     new

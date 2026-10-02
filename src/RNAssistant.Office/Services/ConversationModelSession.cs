@@ -207,6 +207,17 @@ namespace RNAssistant.Office.Services
             _lastSnapshot = null;
         }
 
+        internal void AppendNarrativeStep(string message, LlmCompletionResult completion)
+        {
+            var accepted = AgentTranscript.CreateAssistantMessage(
+                ModelProtocolWire.WriteAction(message, ConversationResponse.ContinueAction), completion,
+                null, AgentResponseStatuses.InProgress);
+            accepted.ProtocolMessage = true;
+            AttachResponseEvidence(accepted);
+            _session.Messages.Add(accepted);
+            _lastSnapshot = null;
+        }
+
         internal void AttachResponseEvidence(ChatMessage message)
         {
             if (message != null) message.ResourceEvidence = _responseEvidence.ToList();

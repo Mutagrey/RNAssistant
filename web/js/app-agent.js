@@ -398,6 +398,60 @@ function agentRunId(items, finalMessage) {
   return "";
 }
 
+function appendAgentResultCard(parent, runViewState, timeline, steps) {
+  if (!runViewState) return;
+  var card = document.createElement("section");
+  card.className = "agent-result-card";
+  card.setAttribute("data-run-result-card", "true");
+  var title = document.createElement("strong");
+  title.className = "agent-result-title";
+  title.textContent = window.RNAssistantRunViewState.outcomeLabel(runViewState);
+  card.appendChild(title);
+  var facts = [];
+  if (runViewState.verifiedWrites) facts.push("Подтверждено изменений: " + runViewState.verifiedWrites);
+  if (runViewState.noChangeWrites) facts.push("Подтверждено без изменений: " + runViewState.noChangeWrites);
+  if (runViewState.unverifiedWrites) facts.push("Без проверки результата: " + runViewState.unverifiedWrites);
+  if (runViewState.failedCalls) facts.push("Неудачных вызовов: " + runViewState.failedCalls);
+  if (runViewState.unknownEffects > runViewState.unverifiedWrites)
+    facts.push("Действий с неизвестным эффектом: " + (runViewState.unknownEffects - runViewState.unverifiedWrites));
+  if (facts.length) {
+    var evidence = document.createElement("p");
+    evidence.className = "agent-result-evidence";
+    evidence.textContent = facts.join(" · ");
+    card.appendChild(evidence);
+  }
+  var task = null;
+  if (window.RNAssistantTaskList) {
+    (timeline || []).forEach(function (item) {
+      var activity = item && item.activity;
+      if (activity && activityToolId(activity) === "common.task_list_set" && activityStatus(activity) === "completed") {
+        var next = window.RNAssistantTaskList.fromActivity(activity);
+        if (next) task = next;
+      }
+    });
+  }
+  if (task) {
+    var open = (task.steps || []).filter(function (step) {
+      var status = String(step.Status || step.status || "pending").toLowerCase();
+      return status !== "completed" && status !== "cancelled";
+    });
+    var plan = document.createElement("p");
+    plan.className = "agent-result-plan";
+    plan.textContent = open.length ? "В списке осталось: " + open.length + " из " + task.steps.length +
+      " · " + open.slice(0, 2).map(function (step) { return step.Text || step.text || "Шаг"; }).join("; ") :
+      "Шаги списка выполнены: " + task.steps.length + ".";
+    card.appendChild(plan);
+  }
+  var messages = (steps || []).map(function (step) { return (step.message || "").trim(); }).filter(Boolean);
+  if (messages.length) {
+    var last = document.createElement("p");
+    last.className = "agent-result-last-step";
+    last.textContent = "Последний шаг: " + messages[messages.length - 1];
+    card.appendChild(last);
+  }
+  parent.appendChild(card);
+}
+
 function renderAgentRunArticle(run) {
   var items = run.items || [];
   var finalMessage = run.finalMessage || null;
@@ -427,6 +481,7 @@ function renderAgentRunArticle(run) {
     appendAgentRunOverview(process, steps, timeline, stats);
   }
   if (process.childNodes.length) body.appendChild(process);
+  if (!run.live) appendAgentResultCard(body, runViewState, timeline, steps);
   // This warning is outside collapsed trace and never derived from the model's prose.
   if (!run.live) appendAgentRunViewState(body, runViewState, agentRunId(items, finalMessage));
   if (finalMessage) {

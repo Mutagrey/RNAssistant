@@ -206,7 +206,7 @@ namespace RNAssistant.Office.Services
             if (string.Equals(source.ToolResultRole, ToolResultRoles.Tool, StringComparison.Ordinal))
                 return SanitizeOperationalText(source.Content);
 
-            // The non-native accepted call is a canonical v5 envelope. Preserve the
+            // The non-native accepted call is a canonical v6 envelope. Preserve the
             // exact tool_calls suffix: it may contain literal source text or hashes.
             const string prefix = "{\"message\":";
             var content = source.Content ?? string.Empty;

@@ -196,7 +196,7 @@ namespace RNAssistant.Harness
             {
                 adapter.VbaModuleCode = "Sub Main()\nDebug.Print \"CURRENT_BODY\"\nEnd Sub";
                 Func<string, JObject, string> response = (tool, arguments) => new JObject {
-                    ["message"] = "Читаю модуль.", ["final"] = false,
+                    ["message"] = "Читаю модуль.", ["action"] = "tool",
                     ["tool_calls"] = new JArray(new JObject { ["name"] = tool, ["arguments"] = arguments })
                 }.ToString();
                 var invalidRead = response("common.resources_read", new JObject {
@@ -204,7 +204,7 @@ namespace RNAssistant.Harness
                 var responses = new Queue<string>(new[] { invalidRead, invalidRead,
                     response("common.resources_find", new JObject { ["scope"] = "vba", ["query"] = "Module1" }),
                     response("common.resources_read", new JObject { ["target"] = "VBA module: Module1", ["representation"] = "source" }),
-                    "{\"message\":\"Прочитано.\",\"final\":true,\"tool_calls\":[]}" });
+                    "{\"message\":\"Прочитано.\",\"action\":\"done\",\"tool_calls\":[]}" });
                 var requests = new List<IReadOnlyList<ChatMessage>>();
                 var service = CreateConversationRunService(adapter, executor, (settings, messages, options, stream, token) =>
                 {

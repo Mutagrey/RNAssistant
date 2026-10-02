@@ -138,7 +138,6 @@ namespace RNAssistant.Office.Services
 
         internal ChatTurnResult Result(RunSummary summary)
         {
-            var status = ConversationRunProjection.Status(summary);
             return new ChatTurnResult
             {
                 AssistantText = ConversationRunProjection.AssistantMessage(summary),
@@ -147,7 +146,10 @@ namespace RNAssistant.Office.Services
                 WaitingForConfirmation = summary.Lifecycle == RunLifecycle.AwaitingConfirmation,
                 ResponseProtocolVersion = AgentResponseProtocol.CurrentVersion,
                 ResponseStatus = summary.Reason == "provider_refused" ? AgentResponseStatuses.Refused
-                    : summary.Lifecycle == RunLifecycle.Completed ? status : null,
+                    : summary.Lifecycle == RunLifecycle.Completed ?
+                        summary.Reason == "model_blocked" ? AgentResponseStatuses.Blocked :
+                        summary.Reason == "model_needs_input" ? AgentResponseStatuses.AwaitingUser :
+                        AgentResponseStatuses.Completed : null,
                 RunViewState = RunViewStateProjector.Create(_session)
             };
         }

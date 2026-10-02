@@ -14,10 +14,10 @@ namespace RNAssistant.Core.ModelProtocol
             IEnumerable<ToolCatalogEntry> runnableCatalog, ModelProtocolCallContext context)
         {
             if (context == null || !context.IsComplete)
-                return ConversationResponseParseResult.Fail("v5 requires a complete local sequential-batch context: " +
+                return ConversationResponseParseResult.Fail("v6 requires a complete local sequential-batch context: " +
                     (context == null ? "missing context" : context.Error));
             if (callableTools == null || runnableCatalog == null)
-                return ConversationResponseParseResult.Fail("v5 parsing requires explicit callable/catalog and sequential-batch context.");
+                return ConversationResponseParseResult.Fail("v6 parsing requires explicit callable/catalog and sequential-batch context.");
             var parsed = ConversationResponseJson.Read(content);
             if (!parsed.Success) return parsed;
 

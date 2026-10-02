@@ -532,10 +532,10 @@ namespace RNAssistant.Harness
                 const string optionalId = "common.html_workspace_write_file";
                 var responses = new Queue<string>(new[]
                 {
-                    "{\"message\":\"Создаю сразу.\",\"final\":false,\"tool_calls\":[{\"name\":\"common.html_workspace_write_file\",\"arguments\":{\"path\":\"progressive.html\",\"content\":\"<main>Ready</main>\"}}]}",
+                    "{\"message\":\"Создаю сразу.\",\"action\":\"tool\",\"tool_calls\":[{\"name\":\"common.html_workspace_write_file\",\"arguments\":{\"path\":\"progressive.html\",\"content\":\"<main>Ready</main>\"}}]}",
                     LoadToolSchemaResponse(optionalId),
-                    "{\"message\":\"Создаю после admission.\",\"final\":false,\"tool_calls\":[{\"name\":\"common.html_workspace_write_file\",\"arguments\":{\"path\":\"progressive.html\",\"content\":\"<main>Ready</main>\"}}]}",
-                    "{\"message\":\"HTML создан.\",\"final\":true,\"tool_calls\":[]}"
+                    "{\"message\":\"Создаю после admission.\",\"action\":\"tool\",\"tool_calls\":[{\"name\":\"common.html_workspace_write_file\",\"arguments\":{\"path\":\"progressive.html\",\"content\":\"<main>Ready</main>\"}}]}",
+                    "{\"message\":\"HTML создан.\",\"action\":\"done\",\"tool_calls\":[]}"
                 });
                 var requests = new List<IReadOnlyList<ChatMessage>>();
                 var options = new List<LlmRequestOptions>();

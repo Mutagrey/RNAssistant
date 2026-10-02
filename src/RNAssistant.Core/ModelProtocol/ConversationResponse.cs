@@ -6,23 +6,38 @@ using Newtonsoft.Json.Linq;
 
 namespace RNAssistant.Core.ModelProtocol
 {
-    // Status-free wire contract, separate from runtime lifecycle/effect projections.
+    // Model intent is separate from runtime lifecycle/effect projections.
     public sealed class ConversationResponse
     {
-        public const int ProtocolVersion = 5;
+        public const int ProtocolVersion = 6;
+
+        public const string ToolAction = "tool";
+        public const string ContinueAction = "continue";
+        public const string DoneAction = "done";
+        public const string BlockedAction = "blocked";
+        public const string NeedsInputAction = "needs_input";
 
         public string Message { get; private set; }
-        public bool Final { get; private set; }
+        public string Action { get; private set; }
+        public bool Final { get { return Action == DoneAction || Action == BlockedAction || Action == NeedsInputAction; } }
         public IReadOnlyList<ConversationToolCall> ToolCalls { get; private set; }
 
-        internal ConversationResponse(string message, IEnumerable<ConversationToolCall> calls, bool final)
+        internal ConversationResponse(string message, IEnumerable<ConversationToolCall> calls, string action)
         {
             var snapshot = (calls ?? new ConversationToolCall[0]).ToArray();
-            if (final && snapshot.Length > 0) throw new ArgumentException("A final response cannot contain tool calls.", nameof(final));
-            if (!final && snapshot.Length == 0) throw new ArgumentException("A non-final response requires a tool call.", nameof(final));
+            if (!IsValidAction(action, snapshot.Length)) throw new ArgumentException("Action and tool calls disagree.", nameof(action));
+            if ((action == ContinueAction || action == BlockedAction || action == NeedsInputAction) &&
+                string.IsNullOrWhiteSpace(message))
+                throw new ArgumentException("A progress or unfinished action requires a concrete message.", nameof(message));
             Message = message;
-            Final = final;
+            Action = action;
             ToolCalls = Array.AsReadOnly(snapshot);
+        }
+
+        public static bool IsValidAction(string action, int callCount)
+        {
+            return action == ToolAction ? callCount > 0 :
+                (action == ContinueAction || action == DoneAction || action == BlockedAction || action == NeedsInputAction) && callCount == 0;
         }
 
         // Use this canonical writer for model envelopes, not serialization of a runtime DTO.
@@ -31,7 +46,7 @@ namespace RNAssistant.Core.ModelProtocol
             return new JObject
             {
                 ["message"] = Message,
-                ["final"] = Final,
+                ["action"] = Action,
                 ["tool_calls"] = new JArray(ToolCalls.Select(call => new JObject
                 {
                     ["name"] = call.Name,

@@ -88,9 +88,9 @@ namespace RNAssistant.Harness
                 var record = ExecuteNative(runtime, call, runtime.Describe(call));
                 AssertEqual(ToolExecutionOutcome.Ok, record.Outcome, "native reader reaches document-owned archive");
                 var replies = new Queue<string>(new[] {
-                    new JObject { ["message"] = "Read shared context.", ["final"] = false, ["tool_calls"] = new JArray(new JObject {
+                    new JObject { ["message"] = "Read shared context.", ["action"] = "tool", ["tool_calls"] = new JArray(new JObject {
                         ["name"] = tool.Id, ["arguments"] = JObject.Parse(call.ArgumentsJson) }) }.ToString(),
-                    "{\"message\":\"Shared context read.\",\"final\":true,\"tool_calls\":[]}" });
+                    "{\"message\":\"Shared context read.\",\"action\":\"done\",\"tool_calls\":[]}" });
                 var requests = new List<IReadOnlyList<ChatMessage>>();
                 b.Mode = ChatModes.Chat;
                 var runService = CreateConversationRunService(adapter, executor, (settings, messages, options, stream, cancellationToken) => {

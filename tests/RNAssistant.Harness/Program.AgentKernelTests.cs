@@ -85,19 +85,34 @@ namespace RNAssistant.Harness
                 AssertEqual("0,0,0,0,0", KernelCounts(result.Summary), "no invented writes");
                 AssertEqual(message, result.Summary.AssistantMessage, "narrative preserved");
             }
+            foreach (var intent in new[] { ConversationResponse.BlockedAction, ConversationResponse.NeedsInputAction })
+            {
+                var f = new KernelFixture(new AgentResponseDraft("Unfinished work remains.", new ToolCallDraft[0], intent));
+                var result = await f.RunAsync();
+                AssertEqual(RunLifecycle.Completed, result.Summary.Lifecycle, "a terminal model decision closes the loop");
+                AssertEqual(intent == ConversationResponse.BlockedAction ? "model_blocked" : "model_needs_input",
+                    result.Summary.Reason, "unfinished outcome remains distinct from done");
+            }
         }
 
         private static async Task KernelRejectsNoToolNonFinal()
         {
             var f = new KernelFixture(
-                new AgentResponseDraft("Составляю итог.", new ToolCallDraft[0], false),
+                new AgentResponseDraft("Продолжаю анализ.", new ToolCallDraft[0], ConversationResponse.ContinueAction),
                 KernelResponse());
             var result = await f.RunAsync();
-            AssertEqual(RunLifecycle.Failed, result.Summary.Lifecycle, "invalid accepted intent fails closed");
-            AssertEqual("invalid_accepted_response", result.Summary.Reason, "kernel rejects a bypassed parser");
-            AssertEqual(1, f.Model.Requests.Count, "kernel does not continue an invalid no-tool response");
-            AssertEqual(0, f.Store.Events.Count(e => e.Kind == AgentRunEventKind.ResponseAccepted),
-                "invalid response is never persisted as accepted");
+            AssertEqual(RunLifecycle.Completed, result.Summary.Lifecycle, "a no-tool progress step does not finish the run");
+            AssertEqual(2, f.Model.Requests.Count, "kernel requests a next decision after progress");
+            AssertEqual(2, f.Store.Events.Count(e => e.Kind == AgentRunEventKind.ResponseAccepted),
+                "progress and terminal decisions are both accepted facts");
+
+            var loop = new KernelFixture(
+                new AgentResponseDraft("Шаг 1.", new ToolCallDraft[0], ConversationResponse.ContinueAction),
+                new AgentResponseDraft("Шаг 2.", new ToolCallDraft[0], ConversationResponse.ContinueAction),
+                new AgentResponseDraft("Шаг 3.", new ToolCallDraft[0], ConversationResponse.ContinueAction));
+            var stopped = await loop.RunAsync();
+            AssertEqual(RunLifecycle.Failed, stopped.Summary.Lifecycle, "repeated no-call progress stops without false completion");
+            AssertEqual("no_tool_progress", stopped.Summary.Reason, "bounded no-call loop has an explicit reason");
         }
 
         private static async Task KernelBlocksIdenticalDefiniteFailure()

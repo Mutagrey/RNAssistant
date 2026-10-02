@@ -74,7 +74,8 @@ namespace RNAssistant.Core.Services
         private static string Lifecycle(RunSummary summary)
         {
             if (summary.Lifecycle == RunLifecycle.AwaitingConfirmation) return RunViewLifecycles.AwaitingConfirmation;
-            if (summary.Lifecycle == RunLifecycle.Completed && summary.Reason == "awaiting_user") return RunViewLifecycles.AwaitingUser;
+            if (summary.Lifecycle == RunLifecycle.Completed &&
+                (summary.Reason == "awaiting_user" || summary.Reason == "model_needs_input")) return RunViewLifecycles.AwaitingUser;
             if (summary.Lifecycle == RunLifecycle.Completed) return RunViewLifecycles.Completed;
             if (summary.Lifecycle == RunLifecycle.Cancelled) return RunViewLifecycles.Cancelled;
             if (summary.Lifecycle == RunLifecycle.Failed) return RunViewLifecycles.Failed;

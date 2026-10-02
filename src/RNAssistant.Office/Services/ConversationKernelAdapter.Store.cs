@@ -41,6 +41,15 @@ namespace RNAssistant.Office.Services
                             index == 0 ? fact.Response.Message : string.Empty,
                             index == 0 ? _lastModel.Completion : null,
                             new AcceptedToolCallOrigin(fact.StepId, _lastModel.SourceModelAttemptId, index));
+                    if (fact.Response.Action == ConversationResponse.ContinueAction)
+                    {
+                        _modelSession.AppendNarrativeStep(fact.Response.Message, _lastModel.Completion);
+                        activity = new ChatMessage { Role = "assistant", Content = string.Empty,
+                            ExcludeFromModelContext = true, Activity = new ChatActivity
+                            { Kind = "step", StepId = fact.StepId, StepMessage = fact.Response.Message,
+                                Title = fact.Response.Message, Status = "completed" } };
+                        _session.Messages.Add(activity);
+                    }
                     break;
                 case AgentRunEventKind.ToolStarted:
                     run.Phase = "executing";
@@ -191,7 +200,9 @@ namespace RNAssistant.Office.Services
             ChatActivity diagnostic = null;
             string responseStatus = null;
             if (summary.Reason == "provider_refused") responseStatus = AgentResponseStatuses.Refused;
-            else if (summary.Lifecycle == RunLifecycle.Completed) responseStatus = AgentResponseStatuses.Completed;
+            else if (summary.Lifecycle == RunLifecycle.Completed)
+                responseStatus = summary.Reason == "model_blocked" ? AgentResponseStatuses.Blocked :
+                    summary.Reason == "model_needs_input" ? AgentResponseStatuses.AwaitingUser : AgentResponseStatuses.Completed;
             else diagnostic = new ChatActivity
             {
                 Kind = "diagnostic", Title = "Выполнение остановлено", Status = ConversationRunProjection.Status(summary),
@@ -222,7 +233,7 @@ namespace RNAssistant.Office.Services
             if (_progress == null) return;
             if (fact.Kind == AgentRunEventKind.ModelStepStarted)
                 _progress("thinking", "Модель выбирает следующий шаг...", null);
-            else if (fact.Kind == AgentRunEventKind.ResponseAccepted && fact.Response.ToolCalls.Count > 0 && !string.IsNullOrWhiteSpace(_stepMessage))
+            else if (fact.Kind == AgentRunEventKind.ResponseAccepted && !fact.Response.Final && !string.IsNullOrWhiteSpace(_stepMessage))
                 _progress("acting", _stepMessage, new ChatActivity { StepId = fact.StepId, StepMessage = _stepMessage,
                     Kind = "step", Title = _stepMessage, Status = "running" });
             else if (activity != null)
@@ -256,7 +267,8 @@ namespace RNAssistant.Office.Services
         internal static string Status(RunSummary summary)
         {
             if (summary.Lifecycle == RunLifecycle.AwaitingConfirmation) return "waiting_confirmation";
-            if (summary.Lifecycle == RunLifecycle.Completed && summary.Reason == "awaiting_user") return "awaiting_user";
+            if (summary.Lifecycle == RunLifecycle.Completed &&
+                (summary.Reason == "awaiting_user" || summary.Reason == "model_needs_input")) return "awaiting_user";
             return summary.Lifecycle.ToString().ToLowerInvariant();
         }
 

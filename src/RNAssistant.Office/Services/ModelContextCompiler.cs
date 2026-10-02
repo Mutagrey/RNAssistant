@@ -393,7 +393,7 @@ namespace RNAssistant.Office.Services
                 var invariantCost = ModelContextBudget.EstimateMessagesTokens(atoms.Where(a => a.Kind == "system-invariant" ||
                     a.Kind == "user-instruction").SelectMany(a => a.Messages), settings);
                 foreach (var atom in atoms.Where(a => ModelContextBudget.EstimateMessagesTokens(a.Messages, settings) + invariantCost > budget))
-                    OmitSourceBody(atom);
+                    if (!OmitSourceBody(atom)) ReplaceOversizedExactReadEvidence(atom);
                 messages = atoms.SelectMany(item => item.Messages).ToList();
             }
             receipt.Messages = DescribeMessages(atoms, required, facts);

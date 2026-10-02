@@ -183,7 +183,11 @@
     if (viewState.lifecycle === "failed") return viewState.executionHealth === "unknown"
       ? "Работа остановлена · результат действия неизвестен"
       : viewState.reason === "provider_refused" ? "Отказ провайдера" : "Ошибка выполнения";
-    if (viewState.lifecycle === "completed") return "Готово";
+    if (viewState.lifecycle === "completed") {
+      if (viewState.reason === "model_blocked") return "Работа заблокирована";
+      if (viewState.reason === "model_needs_input") return "Нужен ответ";
+      return "Ответ завершён";
+    }
     return "Выполняется";
   }
 

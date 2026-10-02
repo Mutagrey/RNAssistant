@@ -620,7 +620,8 @@ failed synopsis must not hide a valid artifact or masquerade as current content.
 Use small relevant descriptions and deterministic headings first; embeddings or
 an additional model call on every save are not prerequisites.
 
-`message` remains visible prose in conversation-response v5. For a tool turn it
+`message` remains visible prose in conversation-response v6. For a tool or
+no-call progress turn it
 should briefly connect an observed finding, the purpose of the actual upcoming
 calls, and the question their result will resolve. Empty parts are omitted. It is
 not private reasoning, a fixed multi-section essay, proof of effect, or a source

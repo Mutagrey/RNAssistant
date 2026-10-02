@@ -96,11 +96,11 @@ ModelProtocol.
 
 - Protocol version меняется атомарно: parser, schema, prompts, history preflight и
   consumers переключаются вместе, без dual-write и скрытой нормализации.
-- Текущий model response — conversation-response v5: `message`, `final` и
+- Текущий model response — conversation-response v6: `message`, `action` и
   `tool_calls`; call содержит только `name` и `arguments`. Runtime назначает IDs.
-- Только `final=true` с пустым `tool_calls` завершает model loop. `final=false`
-  требует непустой `tool_calls`; пустой массив получает format repair до
-  acceptance. Эффект ответом модели не доказывается.
+- `action=tool` требует непустой `tool_calls`; `continue` с пустым массивом
+  сохраняет шаг и продолжает цикл, с ограничением повторов. `done`, `blocked`
+  и `needs_input` завершают ход без вызовов. Эффект ответом модели не доказывается.
 - `ok` означает успешное выполнение контракта tool, но не обязательно изменение.
   Изменение доказывается отдельным dispatch/read-back evidence.
 - Возможный внешний эффект после dispatch, который нельзя подтвердить, имеет
@@ -113,7 +113,7 @@ ModelProtocol.
 
 Точный wire contract хранится в
 [conversation-protocol.md](conversation-protocol.md) и
-[CONVERSATION_RESPONSE_V5.md](protocols/CONVERSATION_RESPONSE_V5.md).
+[CONVERSATION_RESPONSE_V6.md](protocols/CONVERSATION_RESPONSE_V6.md).
 
 ## 6. Persistence, target и concurrency
 

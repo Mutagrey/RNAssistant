@@ -87,7 +87,7 @@ namespace RNAssistant.Office.Services
             if (_lastModel.ProviderRefusal != null) return AgentModelResult.Refused(_lastModel.ProviderRefusal);
             var response = _lastModel.Response;
             return AgentModelResult.Accepted(new AgentResponseDraft(response.Message, response.ToolCalls.Select(call =>
-                new ToolCallDraft(call.Name, call.Arguments.ToString(Formatting.None))), response.Final));
+                new ToolCallDraft(call.Name, call.Arguments.ToString(Formatting.None))), response.Action));
         }
 
         private async Task EnsureModelSessionAsync(CancellationToken cancellationToken)

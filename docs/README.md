@@ -29,7 +29,7 @@ direct cutover объясняют порядок уже выполненной �
 | Область | Владелец текущего контракта |
 |---|---|
 | Model loop, modes, tool result/effect | [Conversation protocol](conversation-protocol.md) |
-| Wire JSON v5 | [Conversation response v5](protocols/CONVERSATION_RESPONSE_V5.md) |
+| Wire JSON v6 | [Conversation response v6](protocols/CONVERSATION_RESPONSE_V6.md) |
 | Resources, URI, providers, ingestion | [Resource Fabric](resource-fabric.md) |
 | Tool catalog, schemas, authoring | [Tool Library](tool-library.md) |
 | Skills | [Skill Library](skills.md) |

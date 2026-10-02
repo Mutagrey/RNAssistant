@@ -359,6 +359,14 @@ Evidence исходного аудита: вызовы shipped UI functions из
   тексты перед записью settings. Canonical docs и reviewed inventory обновлены
   вместе со схемой tool.
 
+Дополнение (2026-10-02): response v6 и prompt schema 38 разделили вызов
+инструмента, продолжение без вызова, завершение, блокировку и ожидание ответа.
+Шаг `continue` теперь сохраняется и виден следующему запросу; повторение без
+действий ограничено. Итоговая карточка показывает эффект и известный остаток
+Task List отдельно от решения модели. Это устраняет неоднозначность wire-формата,
+но не доказывает, что target model выберет `done` только после фактического
+выполнения всех требований. Исходный Windows/HTML-инцидент остаётся открытым.
+
 Focused evidence после пересмотра: `agent continuity:` 5/5, `task lists:` 4/4;
 пересмотр плана и rationale после save/reload/compaction, open/blocked final в двух
 запусках, CSS-only правка без лишней записи JS, read summary/CAS и excerpts.
@@ -768,7 +776,7 @@ real WebView2 responsiveness, Windows/Office or a release candidate.
 | ID | Priority | Риск | Владелец | Защита / фаза | Статус |
 |---|---|---|---|---|---|
 | R01 | P0 | Model completed скрывает write error/unknown или отсутствие write | AgentKernel / Application / UI | Phase 1C warning + Phase 3B2 shared kernel summary, actual event replay; production delivery R21 | contained host-neutral 1C; Windows qualification open |
-| R02 | P1 | tLLM protection вместо JSON | ModelProtocol | 2A/2B: typed boundary, clean repair, общий лимит и fake protection/HTML tests; former v4 validation/repair проверены 2C3C + R29; current v5 contract описан в canonical protocol, live endpoint qualification отдельно | contained for fake content; live-provider gate open |
+| R02 | P1 | tLLM protection вместо JSON | ModelProtocol | 2A/2B: typed boundary, clean repair, общий лимит и fake protection/HTML tests; former v4 validation/repair проверены 2C3C + R29; current v6 contract описан в canonical protocol, live endpoint qualification отдельно | contained for fake content; live-provider gate open |
 | R03 | P0 | Write применён, ответ потерян | Domain/Host | 6D–6J contain typed VBA writes; 7C and 11T1–11T8 move every current Office mutation family to exact typed owners with precondition/read-back verification and a dispatch marker before the first possible effect. 11T9–11T10 complete VBA/controller/custom switches and delete the result fallback. Verified no-op/change are distinct; apply/read-back failure after possible dispatch is non-retryable unknown | contained host-neutral for all current mutation families through 11T10; real Windows partial-effect/rollback/read-back qualification remains open |
 | R04 | P0 | Patch направлен не в ту книгу | HostRuntime | 5B1: общий operation gate до guard/preparation, manual/resource/editor reads, повторная проверка после ожидания/confirmation и нейтральный session port. 5B2: direct selection/context/catalog reads switched host-neutral. 11T0/7D–11T8 bind exact Excel/Word/PowerPoint/Outlook objects or windows for their retained lifetime and remove execution-time active-document/window fallback; WQ0/WQ-SESSION квалифицируют принятое identity assumption | open evidence; all current host target fallbacks are removed host-neutral, but real COM proxy identity, close/reopen, Save As, multi-window and desktop/VSTO/native composition remain unverified |
 | R05 | P1 | Schema исчезла из контекста либо snapshot изменился под тем же tool ID | ToolPack | 8A pins descriptor/schema + typed policy + handler/entry point/scope/host + package fingerprint in one immutable execution snapshot. 8B replaces callable LRU with atomic full-budget extensions/new revisions and no eviction/partial publication. 8C persists accepted/rejected decisions before publication and rematerializes only the exact accepted `TurnId` extension chain; drift/broken chain visibly falls to core until an accepted rebase, while raw/rejected evidence has no authority. [8A](PHASE_8A_TOOL_PACK_SNAPSHOT.md), [8B](PHASE_8B_CALLABLE_TOOL_PACK.md), [8C](PHASE_8C_TOOL_PACK_EVENTS.md) | contained host-neutral through confirmation/compaction/crash replay; Windows/live-provider WQ-PACK open |

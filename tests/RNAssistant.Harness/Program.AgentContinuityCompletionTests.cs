@@ -193,14 +193,14 @@ namespace RNAssistant.Harness
         {
             foreach (var blocked in new[] { false, true })
             WithTempExecutor(FakeOfficeAdapter.ForHost("Excel"), (executor, adapter) => {
-                Func<JObject, string> taskCall = args => new JObject { ["message"] = "Сохраняю состояние задачи.", ["final"] = false,
+                Func<JObject, string> taskCall = args => new JObject { ["message"] = "Сохраняю состояние задачи.", ["action"] = "tool",
                     ["tool_calls"] = new JArray(new JObject { ["name"] = TaskListToolCatalog.SetToolId, ["arguments"] = args }) }.ToString();
                 var responses = new Queue<string>(new[] {
                     LoadToolSchemaResponse(TaskListToolCatalog.SetToolId),
                     taskCall(new JObject { ["action"] = "save", ["goal"] = "Two deliverables", ["steps"] = new JArray(
                         new JObject { ["text"] = "First result" }, new JObject { ["text"] = "Second result" }) }) });
                 if (blocked) responses.Enqueue(taskCall(new JObject { ["action"] = "close", ["outcome"] = "blocked", ["reason"] = "Need the missing input" }));
-                const string final = "{\"message\":\"Нужны исходные данные; результаты ещё не готовы.\",\"final\":true,\"tool_calls\":[]}";
+                const string final = "{\"message\":\"Нужны исходные данные; результаты ещё не готовы.\",\"action\":\"done\",\"tool_calls\":[]}";
                 responses.Enqueue(final); responses.Enqueue(final);
                 var requests = new List<IReadOnlyList<ChatMessage>>();
                 var service = CreateConversationRunService(adapter, executor, (settings, messages, options, stream, token) => {
@@ -237,7 +237,7 @@ namespace RNAssistant.Harness
                         () => HtmlWorkspaceToolService.UpsertFile(session, file[0], file[1], file[2], true));
                 var cssTarget = executor.ResourceGateway.Find(session, "styles.css", "html").Items.Single(i => i.Type == "HTML file").Target;
                 var jsTarget = executor.ResourceGateway.Find(session, "app.js", "html").Items.Single(i => i.Type == "HTML file").Target;
-                Func<string, JObject, string> call = (tool, args) => new JObject { ["message"] = "Выполняю следующий шаг.", ["final"] = false,
+                Func<string, JObject, string> call = (tool, args) => new JObject { ["message"] = "Выполняю следующий шаг.", ["action"] = "tool",
                     ["tool_calls"] = new JArray(new JObject { ["name"] = tool, ["arguments"] = args }) }.ToString();
                 var close = call(TaskListToolCatalog.SetToolId, new JObject { ["action"] = "close", ["outcome"] = "completed",
                     ["updates"] = new JArray(new JObject { ["index"] = 1, ["status"] = "completed" }, new JObject { ["index"] = 2, ["status"] = "completed", ["note"] = "Reviewed JS; no change needed." }) });
@@ -250,7 +250,7 @@ namespace RNAssistant.Harness
                     LoadToolSchemaResponse(HtmlWorkspaceToolCatalog.WriteFileToolId),
                     call(HtmlWorkspaceToolCatalog.WriteFileToolId, new JObject { ["path"] = "styles.css", ["content"] = "body{color:blue}" }),
                     close,
-                    "{\"message\":\"Изменён CSS; JS проверен, правка не потребовалась.\",\"final\":true,\"tool_calls\":[]}" });
+                    "{\"message\":\"Изменён CSS; JS проверен, правка не потребовалась.\",\"action\":\"done\",\"tool_calls\":[]}" });
                 var requests = new List<IReadOnlyList<ChatMessage>>();
                 var service = CreateConversationRunService(adapter, executor, (settings, messages, options, stream, token) => {
                     requests.Add(messages.ToList());

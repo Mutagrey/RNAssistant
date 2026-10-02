@@ -6,22 +6,23 @@ RNAssistant has three explicit modes and one `Core/Agent/AgentKernel` loop, invo
 - `plan`: the editable `PlanSystemPrompt`, read-only discovery, enabled skills, exact native `common.questions_ask`, one revisioned Markdown plan through `common.plan_doc_save/restore/delete`, and an optional checklist through `common.task_list_set`. The question handler returns typed `AwaitingUser`; Plan and Task List mutations carry source-owned verified-write evidence. Message prose cannot pause a run. Office/shared mutations and confirmation are unavailable by runtime policy.
 - `agent`: the same structured loop with progressive tool discovery and enabled skill metadata. Complex work can save the revisioned document Plan as well as a chat Task List. The complete mode/session-filtered catalog remains local execution authority; the model receives only the current callable schema working set. The runtime does not route the request, select a phase, activate skills, retry tools, or verify mutations as a separate stage.
 
-All modes return conversation-response v5: `message` (string), `final` (boolean)
+All modes return conversation-response v6: `message` (string), `action` (enum)
 and `tool_calls` (array); calls contain `name` and `arguments`, never a
 model-owned ID. The shared ModelProtocol boundary owns strict parsing/schema,
 bounded repair and provider compatibility; the kernel receives one validated
 draft, separate provider-native refusal, or typed failure. Model wording and
-`final` are never execution evidence.
+`action` are never execution evidence.
 
 Prompt schema 30 requires one mutation per model response; only independent local
 reads may share a batch. The next mutation is proposed after the previous result
 reaches the model. Reuse its included complete current after-state; read again only
 when the required source body is absent or invalidated.
 Unknown mutation effects remain visible in cumulative run health and the terminal
-summary, but do not stop the current run by themselves. Schema 28 made tool-turn `message` a concise operational summary linking
-an observed finding (when present), the purpose of the actual upcoming calls and
-what their result will determine. It does not request private reasoning, introduce
-wire fields, or turn narrative into execution evidence. The current settings
+summary, but do not stop the current run by themselves. Schema 37 and v6 require
+an explicit model action: `tool`, `continue`, `done`, `blocked` or `needs_input`.
+Tool and no-call progress messages briefly record actual findings, decisions,
+next actions and reasons; an initial read names the question it will answer.
+They do not request private reasoning or turn narrative into execution evidence. The current settings
 migration selects built-in defaults for an older schema and archives the prior
 prompt texts on save; see [prompt migration](skills.md#continuity-after-compaction--2026-10-01).
 Resource descriptions/snippets aid discovery but do not prove complete content.
@@ -32,8 +33,9 @@ the prior checkpoint rather than silently accepting a partial extraction.
 
 Agent readiness precedes mutation. The model first maps explicit deliverables,
 required source/current-artifact inspection, dependency order, applicable catalog skills
-and tool schemas, and useful completion evidence. A concise Task List is optional
-when it helps retain remaining work; multiple files do not require a checklist.
+and tool schemas, and useful completion evidence. A concise Task List is expected
+for multi-deliverable or staged Agent work after bounded discovery; a short
+single-step task does not require one.
 A separate Markdown Plan is created only when requested or needed as a design
 artifact, without duplicating execution stages.
 Source inspection precedes the primary deliverable; binding/testing
@@ -61,6 +63,12 @@ for a planning status. Notes can explain that an anticipated edit was unnecessar
 or that verification remains unavailable. A blocked plan is not bound to one run;
 a status update or revised save resumes it.
 
+At a meaningful status change or decision, the agent records a short step note
+with the decisive finding or choice, its evidence or uncertainty, and what
+remains. Routine tool narration stays in the run trace. A note may be updated
+with the current status when only its content changes; it is an agent assessment,
+not independent proof of a tool effect.
+
 `RUNTIME_CONTEXT.active_task_list` pins the exact current goal, ordered steps,
 statuses, notes, revision reason and blocker independently of history compaction
 and the bounded discovery index. It projects the existing selected revision,
@@ -68,9 +76,9 @@ not another durable store; its budget is reserved before source bodies.
 `statusSource=agent_assessment` distinguishes planning conclusions from actual
 tool effects. Successful task-list writes verify saving the list only.
 
-An open or blocked list never overrides `final=true`. There is no completion gate,
-deferred-final rewrite or corrective continuation based on checklist state.
-Final leaves the plan unchanged; the next run receives its remaining work.
+An open or blocked list never overrides a terminal model action. There is no
+completion gate or corrective continuation based only on checklist state.
+Terminal answers leave the plan unchanged; the next run receives remaining work.
 The model decides whether the goal is met from user intent, context and results,
 continues feasible authorized work and reports gaps honestly. Kernel `Completed`
 means the answer ended, not proven semantic success. Actual tool receipts,
@@ -83,7 +91,8 @@ to v4 and removed the model-ID parser/context path; only the kernel creates
 accepted IDs. R72 switches the active response intent contract from v4 to v5 by
 adding required `final`. Full-history/context preflight rejects incompatible
 chats before preparation or confirmation; no historical migration or dual-write is
-performed. See the [canonical v5 contract](protocols/CONVERSATION_RESPONSE_V5.md).
+performed. v6 replaces `final` with explicit action and permits bounded no-call
+continuation; see the [canonical v6 contract](protocols/CONVERSATION_RESPONSE_V6.md).
 
 ## Conversation context
 
@@ -202,7 +211,7 @@ migration persist normally until the next schema change. Library → Prompts has
 one optional **«Вернуть встроенный текст»** action for the selected prompt.
 The strict response parser remains authoritative; migration does not validate
 authored instruction semantics. See
-[history and prompts](protocols/CONVERSATION_RESPONSE_V5.md#history-and-prompts).
+[history and prompts](protocols/CONVERSATION_RESPONSE_V6.md#parsing-history-and-recovery).
 
 Agent bootstrap schemas are `common.resources_find/read` and `common.capabilities_search/read`. The final R61 Excel Agent core adds the exact 15 built-in `excel.*` schemas plus routine VBA editing intents `common.vba_write_module` and `common.vba_apply_patch` (21 schemas total). Word and PowerPoint add the same two VBA editing schemas when present; their host tools remain optional. `common.vba_rename_module`, `common.vba_restore_backup`, `common.vba_delete_module` and `common.office_run_macro` require exact capability admission because they represent explicit identity, rollback, destructive or arbitrary-execution intent. Outlook Agent and other hosts keep only bootstrap unless an optional schema is admitted. Chat keeps only the two read-only resource schemas, while Plan keeps the four bootstrap schemas in core. These finite exact-ID profiles are intersected with the filtered run catalog. `RUNTIME_CONTEXT.capabilities.items` exposes the complete compact schema-free index of exact public runnable tool and enabled skill ids; it carries no catalog/package/descriptor revision. Already callable tools use `schemaLoaded:true`; unloaded tools and skills retain bounded selection metadata.
 
@@ -218,7 +227,7 @@ Format repair explicitly maps `$ contains unsupported property arguments` to a
 removed wrapper, moving declared fields up first only when necessary, and forbids
 repeating the rejected object unchanged.
 
-A descriptor over 24,000 compact JSON characters is omitted from the runnable catalog rather than being partially advertised. Complete resource/capability bodies count as observed evidence only when they fit with request options and both reserves. A successful complete source that cannot fit becomes an operation receipt with a `bodyIncluded=false` notice and bounded-read recovery, preserving outcome/effect without granting source authority. Other oversized exact reads/capabilities return explicit `resource_evidence_context_too_large` or `capability_evidence_context_too_large`; a later media/materialization failure likewise changes an otherwise successful read projection to `status:error`. Budget exhaustion is `PromptBudgetExceeded`, not infrastructure failure. Incomplete schema evidence cannot enter an extension. Prompt schema 23 introduced readiness-before-domain-work, dependency-ordered Task List/skill/tool loading, root tool arguments and evidence-reconciled completion. Schema 24 made that contract an explicit Understand → Prepare → Inspect → Execute → Verify → Finish workflow and assigned non-overlapping authority: system prompt owns universal lifecycle, skill bodies own domain workflow/quality, and current tool descriptions/schemas own exact calls, arguments and evidence. Schema 25 strengthens the finish gate and HTML binding guidance. Schema 26 adds the explicit v5 `final` response intent. Schema 27 requires final read-back, regression review and a quality decision. Schema 28 added the operational-summary/discovery guidance. Schema 29 allowed ordered managed-mutation batches. Schema 30 restricts multi-call responses to independent local reads. Schema 31 permits bounded source discovery before Task List/Plan creation and requires durable planning for complex Agent work. Schema 32 requires `final=true` for an answer without tool calls. Schema 33 reuses current source and durable tool admission. Schema 34 pinned task state and introduced source checks. Schema 35 introduced automatic default migration with a recovery copy of prior texts on settings save. Current schema 36 keeps exact planning context but removes source-hash checks and final gates: the model may revise plans, explain no-ops and decide completion from actual context and outcomes.
+A descriptor over 24,000 compact JSON characters is omitted from the runnable catalog rather than being partially advertised. Complete resource/capability bodies count as observed evidence only when they fit with request options and both reserves. A successful complete source that cannot fit becomes an operation receipt with a `bodyIncluded=false` notice and bounded-read recovery, preserving outcome/effect without granting source authority. Other oversized exact reads/capabilities return explicit `resource_evidence_context_too_large` or `capability_evidence_context_too_large`; a later media/materialization failure likewise changes an otherwise successful read projection to `status:error`. Budget exhaustion is `PromptBudgetExceeded`, not infrastructure failure. Incomplete schema evidence cannot enter an extension. Prompt schema 23 introduced readiness-before-domain-work, dependency-ordered Task List/skill/tool loading, root tool arguments and evidence-reconciled completion. Schema 24 made that contract an explicit Understand → Prepare → Inspect → Execute → Verify → Finish workflow and assigned non-overlapping authority: system prompt owns universal lifecycle, skill bodies own domain workflow/quality, and current tool descriptions/schemas own exact calls, arguments and evidence. Schema 25 strengthens the finish gate and HTML binding guidance. Schema 26 adds the explicit v5 `final` response intent. Schema 27 requires final read-back, regression review and a quality decision. Schema 28 added the operational-summary/discovery guidance. Schema 29 allowed ordered managed-mutation batches. Schema 30 restricts multi-call responses to independent local reads. Schema 31 permits bounded source discovery before Task List/Plan creation and requires durable planning for complex Agent work. Schema 32 requires `final=true` for an answer without tool calls. Schema 33 reuses current source and durable tool admission. Schema 34 pinned task state and introduced source checks. Schema 35 introduced automatic default migration with a recovery copy of prior texts on settings save. Schema 36 removed source-hash checks and final gates. Schema 37 adds explicit actions, bounded no-call progress and Task List guidance for staged Agent work. Current schema 38 clarifies meaningful step messages and durable Task List notes.
 
 Planning and execution tracking are separate. Exact native `common.plan_doc_save` accepts complete title/Markdown/status intent in Plan and Agent. It creates an active plan when absent, updates the guarded selected head, or creates an independent plan with `startNew=true` for a different task while retaining the previous lineage. `common.plan_doc_restore` and `common.plan_doc_delete` remain Plan-only. `RUNTIME_CONTEXT.active_plan` exposes only current readable metadata, while the body is found and read through the semantic resource pair. `common.questions_ask` accepts prompt/options without question or option ids; runtime generates UI-only ids, and submitted answers return question text plus selected labels/free text. `common.task_list_set` has typed `save`, `update_statuses`, and `close` branches; runtime owns active-list and stable step ids while the model supplies complete goal/ordered steps for creation or append, sparse indexed status changes, or a terminal outcome with optional final status changes. Model Tool Results omit all these internal identities and guards. A ready-plan handoff revalidates the exact selected revision internally, switches to Agent, and submits a semantic instruction to find/read the active plan; no URI enters the model request.
 
@@ -328,7 +337,7 @@ When `FallbackToJsonObject` is enabled and the endpoint explicitly rejects `json
 For `json_schema`, the wire-only projection of the generated `RUNTIME_CONTEXT.tools`
 omits `function.parameters` after checking that every callable name and its exact
 structured argument contract matches `response_format.json_schema`. Descriptions,
-safety metadata, capability membership, document policy and the v5 envelope stay
+safety metadata, capability membership, document policy and the v6 envelope stay
 in the request. The accepted prompt retains full parameters: a schema-rejection
 retry and direct `json_object` mode send those same contracts without recompiling
 or changing the accepted messages. If the generated context or schema cannot be
@@ -356,8 +365,8 @@ Tool call (target copied from current runtime context or resource discovery):
 
 ```json
 {
-  "message": "Читаю диапазон.",
-  "final": false,
+  "message": "Предыдущее чтение выявило две формулы итога. Читаю связанные ячейки, чтобы определить используемый расчёт.",
+  "action": "tool",
   "tool_calls": [
     {
       "name": "common.resources_read",
@@ -371,13 +380,13 @@ Final answer:
 
 ```json
 {
-  "message": "Готово.",
-  "final": true,
+  "message": "Проверил используемую формулу итога по связанным ячейкам; изменений не потребовалось.",
+  "action": "done",
   "tool_calls": []
 }
 ```
 
-The v5 parser rejects every extra root/call field in every response mode. Each of at most 32 calls contains only an exact callable `name` and object `arguments`; `id` is forbidden. Duplicate JSON/argument names and unsupported JSON extensions are rejected. Rejected attempts execute nothing. The string `message` may be empty; text, punctuation and `final` never classify effects.
+The v6 parser rejects every extra root/call field in every response mode. Each of at most 32 calls contains only an exact callable `name` and object `arguments`; `id` is forbidden. Duplicate JSON/argument names and unsupported JSON extensions are rejected. Rejected attempts execute nothing. `continue` requires a nonblank message. Text and model action never classify effects.
 
 After whole-response validation, `AgentKernel` converts ID-less `ToolCallDraft` records to accepted `ToolCall` records. It allocates IDs once, before accepted persistence, confirmation and dispatch; IDs remain unique across the accepted user run. An allocator exception, invalid ID or collision fails before acceptance without asking the model to regenerate content. Identical calls still represent separate accepted positions; IDs do not authorize automatic retries or deduplicate effects.
 
@@ -391,9 +400,25 @@ propose another edit. Confirmation-required, external, opaque and unclassified c
 also remain singleton. Effective batch authority comes from the current local policy
 snapshot, not tool-name guesses, serialized catalog flags or model claims.
 
-Empty calls mean only that the model proposed ending its loop. The fixed response schema tells the model to compare every requested deliverable with the turn's tool results before returning `[]`; one successful intermediate call is not completion. This is guidance rather than a semantic verifier: the generic kernel cannot infer whether an arbitrary Office task is complete from prose or invocation count. Since Phase 3B2 the kernel's `RunSummary` owns lifecycle and execution counts; Phase 9D5 projects the UI through immutable `RunViewState` plus source-owned effect evidence. A final empty-call response reaches `completed` only when no active Task List blocks it, independently of errors/unknown effects. Provider-native refusal is a separate ModelProtocol result classified as `failed / provider_refused`; retained accepted-history metadata may say `refused`, but the UI lifecycle comes from `RunViewState`. Model-authored refusal or question text remains ordinary `message` text. `common.questions_ask`, confirmation and technical failures retain typed runtime control signals; text never sets those outcomes.
+Empty calls are valid for `continue`, `done`, `blocked` and `needs_input`.
+`continue` persists a visible step and requests another model response; three
+consecutive no-call steps fail as `no_tool_progress`. The other actions end the
+turn with distinct reasons. The prompt asks the model to reconcile requested
+outcomes against results before `done`; the kernel cannot prove arbitrary Office
+task completion from prose or invocation count. `RunSummary` owns lifecycle and
+execution counts, while immutable `RunViewState` projects source-owned effect
+evidence. Open Task Lists do not gate terminal actions. Provider-native refusal,
+`common.questions_ask`, confirmation and technical failures retain typed runtime
+control signals.
 
-Accepted history is marked protocol `5`: ID-less v5 JSON call envelopes plus mandatory runtime metadata, native history with matching runtime IDs/canonical names, or plain final text. A dedicated history reader reconstructs accepted calls from metadata; the wire reader never reads IDs. Both service entries and controller preparation check full history, not a truncated prompt window. Unmarked/v2/v3/v4, incomplete v5 or ambiguous mappings block dispatch and require an explicit new chat/reset. Confirmation validates the complete accepted-turn seed before consuming pending state or executing the tool; old pending actions can still be cancelled. No stream is converted, truncated, relabeled or deleted automatically.
+Accepted history is marked protocol `6`: ID-less v6 call envelopes with
+runtime metadata, persisted no-call checkpoints, native history with matching
+runtime IDs/canonical names, or plain terminal text. A dedicated history reader
+reconstructs accepted calls from metadata; the wire reader never reads IDs. Both
+service entries and controller preparation check full history. Older or malformed
+history blocks dispatch and requires explicit new chat/reset. Confirmation
+validates the accepted-turn seed before tool entry. No stream is converted,
+truncated, relabeled or deleted automatically.
 
 A confirmation pause persists its pending id, cumulative iteration/tool-step counters and execution fingerprint. A native preparable handler may additionally persist one bounded opaque prepared-state payload and a separate bounded confirmation preview. The state belongs to the exact accepted call/policy: accepted argument JSON is not rewritten, confirmed execution does not re-prepare live state, and missing/oversized/mismatched state fails before dispatch. After the singleton call is confirmed, its result returns to the same logical user run. A new request stays blocked until confirmation or cancellation; replaced definitions cannot execute. There is no persistent batch state.
 
@@ -515,10 +540,10 @@ history. A missing/incomplete snapshot fails with typed
 checks run before send/edit/retry preparation and manual compaction; confirmation
 also validates the accepted-turn seed before consuming pending state or executing
 the tool. Incompatible/unmarked history requires an explicit new chat or reset,
-without automatic truncation, conversion or deletion. The v5 parser enforces
+without automatic truncation, conversion or deletion. The v6 parser enforces
 ID-less shape, explicit final intent and batch rules on every attempt; the
 kernel owns ID allocation. See the canonical
-[preflight and remaining gates](protocols/CONVERSATION_RESPONSE_V5.md#remaining-gates).
+[preflight and remaining gates](protocols/CONVERSATION_RESPONSE_V6.md#parsing-history-and-recovery).
 
 The loop owns step ids, tool execution, summaries and presentation timing.
 `ConversationModelSession` appends accepted model messages; `AgentTranscript`
@@ -590,7 +615,7 @@ See [ADR-0003](decisions/ADR-0003-tool-result-three-states.md#phase-4b-wire-gate
 - `user` (default) / `developer`: result JSON follows the `TOOL_RESULT:` prefix;
 - `tool`: the same raw JSON follows a matching `assistant.tool_calls` entry;
   that accepted-history entry carries the exact public tool id and only the
-  schema-valid semantic arguments accepted from conversation-response v5. RNAssistant
+  schema-valid semantic arguments accepted from conversation-response v6. RNAssistant
   does not advertise a second native function catalog. The result message contains
   exactly `role`, `tool_call_id` and `content`, with no message-level `name`; the
   same public id remains inside Tool Result v1 and local replay metadata. Stored
@@ -651,7 +676,7 @@ existing Resource Fabric/CAS. Cross-chat reads explicitly select it; the compile
 filters current claims and projects safe source excerpts, retaining raw source
 snapshots only as runtime provenance. Oversized archives may be hydrated within a
 fixed bound before model budget selection; direct result projections mask raw
-archives. This preserves conversation-response v5 and runtime lifecycle; see [claim semantics](artifact-library.md#discovery-descriptions-and-model-context).
+archives. This preserves conversation-response v6 and runtime lifecycle; see [claim semantics](artifact-library.md#discovery-descriptions-and-model-context).
 Semantic artifact search indexes public title/type/MIME/description only; raw
 artifact metadata, storage ids and provenance cannot become a returned snippet.
 
@@ -670,7 +695,7 @@ markers, roles, runtime ID/name pairing and one present result per accepted call
 within its user run, including suppressed/compacted history. Old result envelopes
 and old pending calls require an explicit new chat/reset before preparation or
 confirmation; no conversion, repair, fallback or automatic deletion is performed.
-Plain current-v5 history without tools can continue. Fork rebasing covers all three
+Plain current-v6 history without tools can continue. Fork rebasing covers all three
 roles without changing runtime IDs or resource revision; it rewrites the resource
 URI into the new chat scope. Missing terminal results
 alone do not invent a failure: in-flight calls and typed confirmation/user-input
@@ -750,14 +775,12 @@ Phase 1B left the v2 response, retry limits and outcome behavior unchanged. See 
 `Core/Agent/AgentKernel` accepts generic messages through `IModelProtocol.SendAsync`.
 It does not own prompt composition, compaction, callable ToolPack/capability lifecycle, media or provider
 metadata. The materialized boundary above remains the current endpoint owner;
-its rename does not change the active v5 wire or retry behavior.
+its rename does not change retry behavior.
 
-`RunSummary` has independent lifecycle and execution health. `final=true`
-with empty calls ends the loop (`completed`) only when the active Task List is closed;
-this does not certify effects.
-`final=false` with empty calls is rejected before acceptance and receives format
-repair; AgentKernel also rejects a parser bypass. An answer without tools uses
-`final=true`. Health comes only from
+`RunSummary` has independent lifecycle and execution health. `done`, `blocked`
+and `needs_input` end the model loop with distinct reasons; they do not certify
+effects or require a closed Task List. `continue` with no calls advances once;
+three consecutive such steps fail without false completion. Health comes only from
 immutable execution records: unknown write/external effect dominates errors, then
 clean.
 Narrative is preserved but cannot set either axis. Typed model failures end the

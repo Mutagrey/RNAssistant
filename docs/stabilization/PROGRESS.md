@@ -50,6 +50,19 @@ records it directly and reviews the signed release payload before finalization.
 
 ## Implementation log — includes current in-flight work and earlier entries
 
+Agent response intent and result card (2026-10-02): conversation-response v6
+replaces the ambiguous `final` flag with explicit `tool`, `continue`, `done`,
+`blocked` and `needs_input` actions. A no-call progress checkpoint is persisted
+and fed into the next request; three consecutive checkpoints fail without a false
+completion. Multi-deliverable Agent guidance now expects a concise Task List,
+and the run card separates model outcome, source-owned effect counts and known
+remaining list steps. Existing v5 chats require explicit new chat/reset. Focused
+host-neutral protocol/kernel/UI checks are recorded with this change; live
+target-model and Windows/Office/WebView2 evidence remains open.
+The final context budget pass also converts an oversized exact capability read
+to a typed `capability_evidence_context_too_large` result before rejecting the
+whole request; the corresponding host-neutral test now passes.
+
 Large-chat SQLite projection (2026-10-02): JSONL remains the authenticated source;
 a rebuildable per-chat SQLite sidecar now indexes header state, messages, artifacts
 and exact tail cursor. Routine reads check the tail and catch up from a validated

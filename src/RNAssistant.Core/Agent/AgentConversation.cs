@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using RNAssistant.Core.Tools;
+using RNAssistant.Core.ModelProtocol;
 
 namespace RNAssistant.Core.Agent
 {
@@ -25,17 +26,31 @@ namespace RNAssistant.Core.Agent
     public sealed class AgentResponseDraft
     {
         public string Message { get; private set; }
+        public string Action { get; private set; }
         public bool Final { get; private set; }
         public IReadOnlyList<ToolCallDraft> ToolCalls { get; private set; }
 
-        public AgentResponseDraft(string message, IEnumerable<ToolCallDraft> calls, bool? final = null)
+        public AgentResponseDraft(string message, IEnumerable<ToolCallDraft> calls)
+            : this(message, calls, (string)null)
+        {
+        }
+
+        public AgentResponseDraft(string message, IEnumerable<ToolCallDraft> calls, bool final)
+            : this(message, calls, !final && calls != null && !calls.Any()
+                ? ConversationResponse.ContinueAction : null)
+        {
+            if (final && ToolCalls.Count > 0) throw new ArgumentException("A final response cannot contain tool calls.", nameof(final));
+        }
+
+        public AgentResponseDraft(string message, IEnumerable<ToolCallDraft> calls, string action)
         {
             var snapshot = (calls ?? throw new ArgumentNullException(nameof(calls))).ToArray();
             if (snapshot.Any(call => call == null)) throw new ArgumentException("Calls cannot contain null.", nameof(calls));
-            var isFinal = final ?? snapshot.Length == 0;
-            if (isFinal && snapshot.Length > 0) throw new ArgumentException("A final response cannot contain tool calls.", nameof(final));
+            action = action ?? (snapshot.Length == 0 ? ConversationResponse.DoneAction : ConversationResponse.ToolAction);
             Message = message ?? string.Empty;
-            Final = isFinal;
+            Action = action;
+            Final = action == ConversationResponse.DoneAction || action == ConversationResponse.BlockedAction ||
+                action == ConversationResponse.NeedsInputAction;
             ToolCalls = Array.AsReadOnly(snapshot);
         }
     }
@@ -61,17 +76,31 @@ namespace RNAssistant.Core.Agent
     public sealed class AgentResponse
     {
         public string Message { get; private set; }
+        public string Action { get; private set; }
         public bool Final { get; private set; }
         public IReadOnlyList<ToolCall> ToolCalls { get; private set; }
 
-        public AgentResponse(string message, IEnumerable<ToolCall> calls, bool? final = null)
+        public AgentResponse(string message, IEnumerable<ToolCall> calls)
+            : this(message, calls, (string)null)
+        {
+        }
+
+        public AgentResponse(string message, IEnumerable<ToolCall> calls, bool final)
+            : this(message, calls, !final && calls != null && !calls.Any()
+                ? ConversationResponse.ContinueAction : null)
+        {
+            if (final && ToolCalls.Count > 0) throw new ArgumentException("A final response cannot contain tool calls.", nameof(final));
+        }
+
+        public AgentResponse(string message, IEnumerable<ToolCall> calls, string action)
         {
             var snapshot = (calls ?? throw new ArgumentNullException(nameof(calls))).ToArray();
             if (snapshot.Any(call => call == null)) throw new ArgumentException("Calls cannot contain null.", nameof(calls));
-            var isFinal = final ?? snapshot.Length == 0;
-            if (isFinal && snapshot.Length > 0) throw new ArgumentException("A final response cannot contain tool calls.", nameof(final));
+            action = action ?? (snapshot.Length == 0 ? ConversationResponse.DoneAction : ConversationResponse.ToolAction);
             Message = message ?? string.Empty;
-            Final = isFinal;
+            Action = action;
+            Final = action == ConversationResponse.DoneAction || action == ConversationResponse.BlockedAction ||
+                action == ConversationResponse.NeedsInputAction;
             ToolCalls = Array.AsReadOnly(snapshot);
         }
     }
@@ -82,6 +111,7 @@ namespace RNAssistant.Core.Agent
     {
         public AgentMessageKind Kind { get; private set; }
         public string Text { get; private set; }
+        public string Action { get; private set; }
         public IReadOnlyList<ToolCall> ToolCalls { get; private set; }
         public string ToolCallId { get; private set; }
         public string ResultJson { get; private set; }
@@ -91,11 +121,13 @@ namespace RNAssistant.Core.Agent
         public RNAssistant.Core.Models.ResourceEffect ResourceEffect { get; private set; }
 
         private AgentMessage(AgentMessageKind kind, string text, IReadOnlyList<ToolCall> calls,
-            string toolCallId = null, string resultJson = null, ToolExecutionRecord execution = null)
+            string toolCallId = null, string resultJson = null, ToolExecutionRecord execution = null,
+            string action = null)
         {
             Kind = kind;
             Text = text ?? string.Empty;
             ToolCalls = calls ?? Array.AsReadOnly(new ToolCall[0]);
+            Action = action;
             ToolCallId = toolCallId;
             ResultJson = resultJson;
             Execution = execution;
@@ -109,7 +141,8 @@ namespace RNAssistant.Core.Agent
         public static AgentMessage Assistant(AgentResponse response)
         {
             if (response == null) throw new ArgumentNullException(nameof(response));
-            return new AgentMessage(AgentMessageKind.Assistant, response.Message, response.ToolCalls);
+            return new AgentMessage(AgentMessageKind.Assistant, response.Message, response.ToolCalls,
+                action: response.Action);
         }
 
         // Already validated, materialized history from an earlier user turn.

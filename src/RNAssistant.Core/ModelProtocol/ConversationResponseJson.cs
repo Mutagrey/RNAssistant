@@ -46,24 +46,25 @@ namespace RNAssistant.Core.ModelProtocol
             }
 
             var unsupported = root.Properties().FirstOrDefault(property =>
-                property.Name != "message" && property.Name != "final" && property.Name != "tool_calls");
+                property.Name != "message" && property.Name != "action" && property.Name != "tool_calls");
             if (unsupported != null)
                 return ConversationResponseParseResult.Fail("Conversation response contains unsupported root field: " + unsupported.Name + ".");
             if (root["message"] == null || root["message"].Type != JTokenType.String)
                 return ConversationResponseParseResult.Fail("Conversation response requires a string message field.");
-            if (root["final"] == null || root["final"].Type != JTokenType.Boolean)
-                return ConversationResponseParseResult.Fail("Conversation response requires a boolean final field.");
+            if (root["action"] == null || root["action"].Type != JTokenType.String)
+                return ConversationResponseParseResult.Fail("Conversation response requires a string action field.");
             var calls = root["tool_calls"] as JArray;
             if (calls == null)
                 return ConversationResponseParseResult.Fail("Conversation response requires a tool_calls array.");
             if (calls.Count > ConversationResponseSchemaBuilder.MaximumToolCalls)
                 return ConversationResponseParseResult.Fail("tool_calls exceeds the maximum of " +
                     ConversationResponseSchemaBuilder.MaximumToolCalls + " calls per response.");
-            var final = (bool)root["final"];
-            if (final && calls.Count > 0)
-                return ConversationResponseParseResult.Fail("final=true is valid only with an empty tool_calls array.");
-            if (!final && calls.Count == 0)
-                return ConversationResponseParseResult.Fail("final=false requires at least one tool call. Use final=true for an answer without tools.");
+            var action = (string)root["action"];
+            if (!ConversationResponse.IsValidAction(action, calls.Count))
+                return ConversationResponseParseResult.Fail("action must be tool with calls, or continue/done/blocked/needs_input with no calls.");
+            if ((action == ConversationResponse.ContinueAction || action == ConversationResponse.BlockedAction ||
+                action == ConversationResponse.NeedsInputAction) && string.IsNullOrWhiteSpace((string)root["message"]))
+                return ConversationResponseParseResult.Fail("action=continue/blocked/needs_input requires a concrete message.");
 
             var parsedCalls = new List<ConversationToolCall>();
             foreach (var token in calls)
@@ -80,7 +81,7 @@ namespace RNAssistant.Core.ModelProtocol
                 call.Property("arguments").Value = JValue.CreateNull();
                 parsedCalls.Add(new ConversationToolCall { Name = name, Arguments = arguments });
             }
-            return ConversationResponseParseResult.Ok(new ConversationResponse((string)root["message"], parsedCalls, final));
+            return ConversationResponseParseResult.Ok(new ConversationResponse((string)root["message"], parsedCalls, action));
         }
 
         // Json.NET also accepts JavaScript syntax. Reject those extensions before its
