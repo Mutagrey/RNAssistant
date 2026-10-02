@@ -137,6 +137,71 @@ namespace RNAssistant.Core.Storage
             };
         }
 
+        // This state is a disposable read projection. The event stream remains authoritative.
+        internal JObject ToCheckpoint()
+        {
+            return new JObject
+            {
+                ["Messages"] = JArray.FromObject(_messages.Items),
+                ["Artifacts"] = JArray.FromObject(_artifacts.Items),
+                ["CasReferences"] = JObject.FromObject(_casReferences),
+                ["ConflictingCasReferences"] = JArray.FromObject(_conflictingCasReferences),
+                ["Seeded"] = _seeded,
+                ["Invalid"] = _invalid,
+                ["Id"] = _id,
+                ["Host"] = _host,
+                ["DocumentKey"] = _documentKey,
+                ["DocumentTitle"] = _documentTitle,
+                ["DocumentPath"] = _documentPath,
+                ["Title"] = _title,
+                ["Model"] = _model,
+                ["Mode"] = _mode,
+                ["ReasoningEnabled"] = _reasoningEnabled,
+                ["CreatedUtc"] = _createdUtc,
+                ["UpdatedUtc"] = _updatedUtc,
+                ["ActiveHtmlArtifactId"] = _activeHtmlArtifactId,
+                ["LastRun"] = _lastRun == null ? null : JObject.FromObject(_lastRun),
+                ["CasLogicalByteLength"] = _casLogicalByteLength,
+                ["InvalidCasReferenceCount"] = _invalidCasReferenceCount
+            };
+        }
+
+        internal static ChatHeaderReducer FromCheckpoint(ChatBlobStore blobs, JObject checkpoint)
+        {
+            if (checkpoint == null) throw new JsonException("Chat header checkpoint is missing.");
+            return new ChatHeaderReducer(blobs)
+            {
+                _messages = new HeaderReplayList<HeaderMessage>(
+                    (checkpoint["Messages"] ?? new JArray()).ToObject<List<HeaderMessage>>()),
+                _artifacts = new HeaderReplayList<HeaderArtifact>(
+                    (checkpoint["Artifacts"] ?? new JArray()).ToObject<List<HeaderArtifact>>()),
+                _casReferences = (checkpoint["CasReferences"] ?? new JObject())
+                    .ToObject<Dictionary<string, CasUsageEntry>>()
+                    .ToDictionary(item => item.Key, item => item.Value, StringComparer.OrdinalIgnoreCase),
+                _conflictingCasReferences = new HashSet<string>(
+                    (checkpoint["ConflictingCasReferences"] ?? new JArray()).ToObject<List<string>>(),
+                    StringComparer.OrdinalIgnoreCase),
+                _seeded = (bool?)checkpoint["Seeded"] == true,
+                _invalid = (bool?)checkpoint["Invalid"] == true,
+                _id = (string)checkpoint["Id"],
+                _host = (string)checkpoint["Host"],
+                _documentKey = (string)checkpoint["DocumentKey"],
+                _documentTitle = (string)checkpoint["DocumentTitle"],
+                _documentPath = (string)checkpoint["DocumentPath"],
+                _title = (string)checkpoint["Title"],
+                _model = (string)checkpoint["Model"],
+                _mode = (string)checkpoint["Mode"],
+                _reasoningEnabled = (bool?)checkpoint["ReasoningEnabled"] == true,
+                _createdUtc = (DateTime?)checkpoint["CreatedUtc"] ?? default(DateTime),
+                _updatedUtc = (DateTime?)checkpoint["UpdatedUtc"] ?? default(DateTime),
+                _activeHtmlArtifactId = (string)checkpoint["ActiveHtmlArtifactId"],
+                _lastRun = checkpoint["LastRun"] == null || checkpoint["LastRun"].Type == JTokenType.Null
+                    ? null : checkpoint["LastRun"].ToObject<ChatRunRecord>(),
+                _casLogicalByteLength = (long?)checkpoint["CasLogicalByteLength"] ?? 0,
+                _invalidCasReferenceCount = (int?)checkpoint["InvalidCasReferenceCount"] ?? 0
+            };
+        }
+
         public ChatSessionHeader CreateHeader(
             ChatBlobStore.StorageSizeSnapshot storageSizes,
             long revision,

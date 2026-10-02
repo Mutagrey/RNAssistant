@@ -39,6 +39,14 @@ namespace RNAssistant.Core.Storage
             _store.Save(session);
         }
 
+        public void SetTitle(ChatSession session, string title) { _store.SetTitle(session, title); }
+        public void SetModel(ChatSession session, string model) { _store.SetModel(session, model); }
+        public void SetReasoningEnabled(ChatSession session, bool enabled) { _store.SetReasoningEnabled(session, enabled); }
+        public ConversationMessageWindow ReadMessageWindow(string chatId, int beforeIndex, int pageSize)
+        {
+            return _store.ReadMessageWindow(chatId, beforeIndex, pageSize);
+        }
+
         public bool IsPersisted(ChatSession session)
         {
             return _store.IsPersisted(session);

@@ -80,6 +80,7 @@ function fixture() {
     assert.equal(context.loadModelCatalog(false), loading, "discovery shares one pending request");
     assert.equal(calls[0].payload.apiKey, null, "chat picker must not use an unsaved settings-form key");
     const switching = context.navigateChat("selectChat", { chatId: "outlook-chat" });
+    assert.equal(context.state.chatNavigationTargetId, "outlook-chat", "the pending selection has a visible loading target");
     await tick();
     assert.deepEqual(calls.map(call => call.type), ["getModelCatalog", "cancel"]);
     assert.equal(calls[1].id, "catalog");
@@ -92,6 +93,7 @@ function fixture() {
     assert.equal(calls[2].type, "selectChat");
     assert.equal(context.state.activeChatId, "outlook-chat");
     assert.equal(context.state.chatNavigationPending, 0);
+    assert.equal(context.state.chatNavigationTargetId, "", "the loading target clears after selection");
     assert.equal(context.state.modelCatalogRequest, null);
     console.log("PASS models: navigation cancels and drains discovery, ignores racing success and never uses an unsaved API key");
   }

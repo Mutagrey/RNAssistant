@@ -46,6 +46,11 @@
     </Reference>
   </ItemGroup>
   <ItemGroup>
+    <PackageReference Include="Microsoft.Data.Sqlite.Core" Version="10.0.12" />
+    <PackageReference Include="SQLitePCLRaw.provider.winsqlite3" Version="3.0.5" />
+    <PackageReference Include="SQLitePCLRaw.provider.sqlite3" Version="3.0.5" />
+  </ItemGroup>
+  <ItemGroup>
     <Compile Include="..\..\src\RNAssistant.Core\Models\*.cs" Link="Core\Models\%(Filename)%(Extension)" />
     <Compile Include="..\..\src\RNAssistant.Core\Llm\*.cs" Link="Core\Llm\%(Filename)%(Extension)" />
     <Compile Include="..\..\src\RNAssistant.Core\ModelProtocol\*.cs" Link="Core\ModelProtocol\%(Filename)%(Extension)" />

@@ -643,20 +643,22 @@ function renderChatTreeRow(chat) {
   var persistedRun = chatSummaryRunViewState(chat);
   var persistedRunStatus = persistedRun ? persistedRun.lifecycle : "";
   var hasActiveRun = !!run || persistedRunStatus === "running";
+  var loading = id === state.chatNavigationTargetId && !!state.chatNavigationPending;
   if (hasActiveRun) {
     row.classList.add("has-active-run");
   }
+  if (loading) row.classList.add("is-loading");
   button.appendChild(title);
   if (storageBadge) {
     button.appendChild(storageBadge);
   }
   row.appendChild(button);
-  if (hasActiveRun) {
+  if (hasActiveRun || loading) {
     var status = document.createElement("span");
     status.className = "chat-row-status";
-    status.title = state.activeSends[id] && state.activeSends[id].canceling
-      ? "Запрос останавливается"
-      : "Запрос выполняется";
+    status.title = loading ? "Подготовка истории чата" :
+      state.activeSends[id] && state.activeSends[id].canceling
+        ? "Запрос останавливается" : "Запрос выполняется";
     status.setAttribute("aria-label", status.title);
     var spinner = document.createElement("span");
     spinner.className = "chat-run-spinner";

@@ -477,6 +477,18 @@ namespace RNAssistant.Core.Storage
                                     "The chat event stream cannot be projected.");
                                 continue;
                             }
+                            try { AuditSqliteProjection(path, log); }
+                            catch (Exception ex)
+                            {
+                                scan.Issues.Add(new CasHealthIssue
+                                {
+                                    Kind = CasHealthIssueKinds.ProjectionIndexUnavailable,
+                                    SourceType = "chat",
+                                    SourceId = sourceId,
+                                    Message = "The chat projection index could not be audited or repaired: " + ex.Message,
+                                    BlocksGarbageCollection = false
+                                });
+                            }
                             var canonicalPath = GetSessionPath(projected.Host, projected.DocumentKey, projected.Id);
                             if (!string.Equals(Path.GetFullPath(path), Path.GetFullPath(canonicalPath), StringComparison.OrdinalIgnoreCase))
                             {
@@ -593,6 +605,7 @@ namespace RNAssistant.Core.Storage
                             }
                             Directory.CreateDirectory(Path.GetDirectoryName(newPath));
                             File.Move(oldPath, newPath);
+                            MoveSqliteProjection(oldPath, newPath);
                             MoveProjectionCache(oldPath, newPath);
                             MoveHeaderCache(oldPath, newPath);
                         }
@@ -661,6 +674,7 @@ namespace RNAssistant.Core.Storage
                 using (AcquireDocumentLock(host, documentKey))
                 {
                     if (!File.Exists(path)) return false;
+                    DeleteSqliteProjection(path);
                     File.Delete(path);
                     RemoveProjectionCache(path);
                     RemoveHeaderCache(path);
@@ -835,7 +849,11 @@ namespace RNAssistant.Core.Storage
             try
             {
                 var pending = new List<PendingSessionEvent>();
-                var projectedBefore = exists ? ToProjectionToken(stored) : null;
+                ProjectionCacheEntry cachedBefore;
+                var projectedBefore = exists && TryGetProjectionCache(path, out cachedBefore) &&
+                    cachedBefore.Sequence == storedRevision &&
+                    string.Equals(cachedBefore.HeadHash, stored.StorageHeadHash, StringComparison.OrdinalIgnoreCase)
+                    ? cachedBefore.Root : exists ? ToProjectionToken(stored) : null;
                 var projectedAfter = ToProjectionToken(session);
                 var projectionMs = timer.ElapsedMilliseconds - externalizeMs - readMs;
                 if (!exists)
@@ -1001,6 +1019,7 @@ namespace RNAssistant.Core.Storage
                 }
                 stream.Flush(true);
             }
+            AdvanceSqliteProjection(path, appended);
             return appended;
         }
 
@@ -1030,16 +1049,7 @@ namespace RNAssistant.Core.Storage
         {
             try
             {
-                var result = ReadHeader(path);
-                return result == null || result.Tail == null || result.Reducer == null
-                    ? null
-                    : result.Reducer.CreateHeader(
-                        storageSizes,
-                        result.Tail.Sequence,
-                        result.ByteLength,
-                        host,
-                        documentKey,
-                        documentTitle);
+                return ReadSqliteHeader(path, host, documentKey, documentTitle, storageSizes);
             }
             catch (IOException) { return null; }
             catch (UnauthorizedAccessException) { return null; }
@@ -1069,6 +1079,7 @@ namespace RNAssistant.Core.Storage
         {
             var timer = Stopwatch.StartNew();
             validatedLog = null;
+            if (!File.Exists(path)) return null;
             ProjectionCacheEntry cached;
             if (TryReadProjectionCache(path, out cached))
             {
@@ -1081,6 +1092,8 @@ namespace RNAssistant.Core.Storage
             }
 
             var replay = new ProjectionReplayCursor(null);
+            var indexed = ReadSqliteSession(path, hydrateActiveArtifacts, rebuildDerivedProjections);
+            if (indexed != null) return indexed;
             validatedLog = ReadEventLog(path, 0, null, replay.Apply);
             if (validatedLog == null || validatedLog.Events.Count == 0) return null;
             var replayMs = timer.ElapsedMilliseconds;

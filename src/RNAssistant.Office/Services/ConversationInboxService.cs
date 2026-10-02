@@ -72,6 +72,14 @@ namespace RNAssistant.Office.Services
         private readonly string _epoch = Guid.NewGuid().ToString("N");
         internal ConversationInboxService(IEventStore events) { _events = events; }
 
+        internal bool HasActiveWork(string chatId)
+        {
+            Inbox box;
+            lock (_sync)
+                if (!_inboxes.TryGetValue(chatId ?? string.Empty, out box)) return false;
+            lock (box.Sync) return box.Worker || box.Running;
+        }
+
         internal Inbox Get(ChatSession session)
         {
             Inbox box;

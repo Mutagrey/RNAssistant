@@ -365,6 +365,11 @@ old argument. Existing Outlook tool cases also check bound-STA/closed-window sea
 | HTML, plans and charts | `Program.HtmlArtifactStorageTests.cs`, `Program.PlanToolTests.cs`, `Program.ChartArtifactTests.cs` | `artifacts:`, `plans:`, `chart:` |
 | Desktop/WebView-neutral | `Program.ParserDesktopTests.cs`, `Program.WebViewSecurityTests.cs` | `desktop target:`, `webview:` |
 
+For the derived chat index, run `storage: sqlite`, `storage: corrupt sqlite`,
+`storage: CAS` and `node tests/web/model-navigation.test.js`. The opt-in
+`RNA_CHAT_PERF=1` case `storage perf: large chat profile` records first index
+build, indexed cold/warm reads and save times on temporary 30/50 MiB chats.
+
 The `harness:` slice also verifies that every production `.cs` file is explicitly included in its old-style `.csproj`, preventing source-linked harness globs from hiding a broken production project.
 
 The bound-session fixtures test operation ownership, STA handoff/cancellation,

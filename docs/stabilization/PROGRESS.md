@@ -50,6 +50,17 @@ records it directly and reviews the signed release payload before finalization.
 
 ## Implementation log — includes current in-flight work and earlier entries
 
+Large-chat SQLite projection (2026-10-02): JSONL remains the authenticated source;
+a rebuildable per-chat SQLite sidecar now indexes header state, messages, artifacts
+and exact tail cursor. Routine reads check the tail and catch up from a validated
+suffix; message history pages query only their requested rows. Scalar chat preference
+writes append direct typed metadata commits. A full CAS maintenance audit validates
+the complete stream against the sidecar and repairs divergence. Synthetic 30/50 MiB
+fixtures with 6,000 messages: first index build 1.23/1.27 s, indexed cold load
+0.34/0.26 s, warm load 16/24 ms, generic save 0.23/0.29 s on this host. First
+conversion still scans the entire stream; real Windows/Office/WebView2 timing and
+system `winsqlite3.dll` delivery remain open evidence.
+
 Cross-turn capability reuse (2026-10-02): unchanged optional tool schemas now carry
 to later turns of the same chat from exact durable admissions and retained read
 frames. Edited history, schema drift and budget overflow fall back to core; the

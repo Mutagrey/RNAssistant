@@ -120,21 +120,23 @@ that COM wait and attach preparation still require a separate Desktop owner chan
 and Windows timing evidence.
 
 Large-chat follow-up (2026-10-02): a 30–50 MiB JSONL file does not cross the
-bridge whole; the initial message page is 80 items. Cold integrity validation and
-projection replay remain proportional to stream size, while the former 4-million-
-character cache ceiling caused repeat replays for larger projections. The in-memory
-ceiling is now 16 million characters per entry/32 million total, and document
-writes no longer share an exclusive process-wide lock. Selection sends a bound
-loading shell followed by full detail from the same loaded session; UI detail
-refresh omits a duplicate header catalog. Model/reasoning preference responses
-avoid full chat-state projection. Stage timing is now recorded without content.
-Temporary synthetic 30/50 MiB fixtures show cold load 1.53/1.70 s, warm load
-14/21 ms and title save 428/417 ms on this host, with 6,000 messages and nine HTML
-revisions. This is not a before/after speedup or Windows/WebView2 qualification;
-the real reported chat is unavailable, so its bottleneck remains open evidence.
-Library/usage/HTML stages took at most 7/11/1 ms on these fixtures. A separate
-cross-response cache for those mutable projections was therefore not added without
-evidence of a benefit and an invalidation rule for same-revision live sessions.
+bridge whole; the initial message page is 80 items. A rebuildable per-chat SQLite
+projection now holds header state and normalized message/artifact rows. The first
+index build still validates the entire event stream on a bridge worker, with a
+chat-list loading indicator; subsequent reads check an exact tail cursor, read
+only validated suffixes and query history pages by ordinal. JSONL remains the
+authority and the explicit CAS health audit detects/repairs a divergent index.
+Scalar preference writes avoid a full message diff; generic aggregate writes
+still compare all messages. The earlier 16-million-character in-memory cache,
+document-scoped write locks, bound selection shell, deferred chat detail and
+bounded UI projection remain in place. Temporary synthetic 30/50 MiB fixtures
+with 6,000 messages and nine HTML revisions show index build 1.23/1.27 s,
+indexed cold load 0.34/0.26 s, warm load 16/24 ms and generic save 0.23/0.29 s
+on this host. These are host-neutral synthetic measurements; the reported chat
+and Windows/WebView2 delivery have not been measured. First conversion, packaging
+of `winsqlite3.dll` from Windows, and real cross-tab responsiveness remain open
+evidence. See [the storage contract](../session-events.md) and
+[ADR-0012](../decisions/ADR-0012-chat-sqlite-projection.md).
 
 ## Agent continuity and deterministic read loops — 2026-10-01
 

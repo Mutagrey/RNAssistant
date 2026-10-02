@@ -5,6 +5,7 @@ namespace RNAssistant.Core.Models
 {
     public static class CasHealthIssueKinds
     {
+        public const string ProjectionIndexUnavailable = "projection_index_unavailable";
         public const string SourceUnreadable = "source_unreadable";
         public const string SourceInvalid = "source_invalid";
         public const string IncompleteTail = "incomplete_tail";

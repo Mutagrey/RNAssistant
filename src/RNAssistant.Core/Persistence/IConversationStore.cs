@@ -10,6 +10,10 @@ namespace RNAssistant.Core.Persistence
         ChatSession Load(string host, string documentKey, string sessionId);
         ChatSession Load(string sessionId);
         void Save(ChatSession session);
+        void SetTitle(ChatSession session, string title);
+        void SetModel(ChatSession session, string model);
+        void SetReasoningEnabled(ChatSession session, bool enabled);
+        ConversationMessageWindow ReadMessageWindow(string chatId, int beforeIndex, int pageSize);
         bool IsPersisted(ChatSession session);
         IReadOnlyList<ChatSessionHeader> ListHeaders();
         IReadOnlyList<ChatSessionHeader> ListHeaders(string host, string documentKey, string documentTitle);
@@ -30,5 +34,13 @@ namespace RNAssistant.Core.Persistence
         // reports whether the retained stream contained an open tool execution.
         // Projection repair and the final conversation save remain application policy.
         bool PrepareInterruptedRunRecovery(ChatSession session, string runId);
+    }
+
+    public sealed class ConversationMessageWindow
+    {
+        public ChatSession Session { get; set; }
+        public IReadOnlyList<ChatMessage> PageMessages { get; set; }
+        public int StartIndex { get; set; }
+        public int TotalCount { get; set; }
     }
 }

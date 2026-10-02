@@ -46,6 +46,10 @@ direct cutover объясняют порядок уже выполненной �
 `host-fabric.md` и `local-automation-agent.md` описывают отложенные контуры, а не
 действующий stable-core scope.
 
+Причина производной SQLite-проекции чатов —
+[ADR-0012](decisions/ADR-0012-chat-sqlite-projection.md); текущий контракт чтения
+и восстановления остаётся в [Session events](session-events.md).
+
 ## Куда писать
 
 | Информация | Место |

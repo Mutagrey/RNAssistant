@@ -13,3 +13,5 @@ packages/PDFtoImage.*/
 packages/SkiaSharp.3.*/
 packages/SkiaSharp.NativeAssets.Win32.*/
 packages/bblanchon.PDFium.Win32.*/
+/vendor/sqlite/
+*.events.jsonl.projection.sqlite*

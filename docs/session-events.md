@@ -2,31 +2,36 @@
 
 ## Decision
 
-RNAssistant uses one append-only event stream per chat as its durable source of truth. There is no mutable chat snapshot, summary index, separate HTML-body store, or migration from the previous v1-v3 snapshot formats.
+RNAssistant uses one append-only event stream per chat as its durable source of truth. A disposable SQLite projection indexes messages, artifacts, header state and the validated event cursor. It can be deleted and rebuilt from JSONL. There is no writable chat snapshot, separate HTML-body store, or migration from the previous v1-v3 snapshot formats.
 
 ```text
 %AppData%/RNAssistant/
   chats/<document-hash>/<session-hash>.events.jsonl
+  chats/<document-hash>/<session-hash>.events.jsonl.projection.sqlite
   chat-blobs/<sha-prefix>/<sha256>.blob
   attachments/staging/...
   history-protection.salt
   history-secret.bin
 ```
 
-`ChatSession` is an in-memory projection rebuilt by replay. Its `Revision` is the last durable event sequence, not an independently stored counter.
+`ChatSession` is an in-memory projection. Its `Revision` is the last durable event sequence, not an independently stored counter. The SQLite sidecar stores encrypted payload blobs when history protection is enabled; its table keys, counts and cursor metadata are not encrypted. Windows uses the OS `winsqlite3.dll` through managed NuGet assemblies, without a bundled SQLite native binary. The host-neutral harness uses the platform `sqlite3` provider.
 
-Cold projection reads validate and replay the complete stream. Within one running process, up to 16 recently used canonical projection roots are cached in memory (maximum about 16 million characters each and 32 million in total). A same-head read verifies the exact final record at its byte offset. An append completed by that same `ChatStore` instance advances the cache from the exact returned events while the document persistence lease is held. Any externally observed length or mtime change discards the cache and performs a complete replay: validating only a known tail plus a new suffix cannot prove that older prefix bytes were not changed. Shrink, replacement, malformed/incomplete tail, or protection mismatch has the same fallback. This cache is disposable, is never written as another index/snapshot, and is not used by trajectory export, CAS reachability, or other operations that require a fresh complete stream scan.
+The first read of an older chat builds the index by validating and replaying its complete JSONL stream on the bridge worker. The UI shows navigation progress while it waits. This one-time conversion remains proportional to file size; it does not delete or rewrite the source. Later reads verify the exact last indexed record at its byte offset and load normalized rows. A longer stream is caught up from the validated suffix; shrink, same-length replacement, incomplete tail or protection mismatch triggers a complete rebuild. Append first flushes JSONL to stable storage, then advances the derived index transactionally. Failure to advance the index never replaces a successful JSONL append; the next read catches up or rebuilds it.
+
+Within one process, up to 16 recently used canonical projection roots are also cached in memory (maximum about 16 million characters each and 32 million in total). An unchanged warm read checks the exact final record. The cache and SQLite projection are disposable and do not serve trajectory export or CAS reachability. Routine tail checks are a checkpoint trust boundary: a changed prefix that preserves the exact tail and file metadata is detected by the explicit full maintenance audit, not by every navigation read. That audit validates every JSONL event, compares the canonical projection with SQLite and repairs divergence. This preserves fast routine reads without presenting the sidecar as an independent authority.
 
 Writes to separate documents may proceed concurrently under their existing ordered
 cross-process document locks. A shared reader/writer gate excludes CAS reachability
 scans from writes without serializing ordinary writes across documents. Slow
-projection reads, trace appends and saves report stage timings without chat content. A cold read
-still has work proportional to the JSONL size; the larger cache targets repeated
-loads of an unchanged large chat, not removal of integrity validation.
+projection reads, trace appends and saves report stage timings without chat content. An
+indexed cold read still materializes all messages needed by an active conversation;
+the bridge sends only the newest 80 and requests older pages by ordinal from SQLite.
+Paged artifact presentation checks retained source-message IDs separately, so a
+model-linked tombstone outside the page does not disappear from its resource cards.
 
-Chat-list/header reads use a separate streaming reducer: a cold read still validates every event and hash, but retains only scalar header/run metadata, message ids/protocol flags, and minimal active-HTML artifact references/counts. It never deserializes `KernelState`, execution arguments or prepared bodies and never hydrates CAS. It does not build `ChatSession`, message/tool bodies, context, or the general artifact projection. HTML counts come only from artifact event metadata; old events without that metadata report zero counts. Up to 64 reducer states are cached in memory (maximum about 512 thousand characters each and 4 million in total). Same-instance appends advance a warm reducer from the trusted local suffix; externally changed files receive a complete replay. The cache is disposable and never becomes a durable header index.
+Chat-list/header reads use a separate reducer checkpoint in SQLite. It retains scalar header/run metadata, message ids/protocol flags, minimal active-HTML artifact references/counts and CAS reference metadata. It does not materialize message/tool bodies or context or hydrate CAS. HTML counts come only from artifact event metadata; old events without that metadata report zero counts. Up to 64 reducer states are also cached in memory (maximum about 512 thousand characters each and 4 million in total).
 
-The same validated header scan derives per-chat storage usage without a second durable index. `JsonlByteLength` is the exact event file length. CAS totals deduplicate retained references by plaintext SHA-256: `CasLogicalByteLength` sums declared plaintext lengths, while `CasStoredByteLength` sums actual compressed/encrypted blob file lengths without loading their bodies. Shared blobs are counted for every chat that references them, so per-chat totals are diagnostic attribution rather than globally additive disk usage. Missing, invalid, or length-conflicting references raise a critical warning. Healthy chats warn at 64 MiB JSONL, 256 MiB combined JSONL plus stored CAS, or 512 MiB logical CAS; critical size thresholds are 256 MiB, 1 GiB, and 2 GiB respectively. These warnings are advisory: RNAssistant has no event retention or automatic history deletion.
+The indexed header derives per-chat storage usage. `JsonlByteLength` is the exact event file length. CAS totals deduplicate retained references by plaintext SHA-256: `CasLogicalByteLength` sums declared plaintext lengths, while `CasStoredByteLength` sums actual compressed/encrypted blob file lengths without loading their bodies. Shared blobs are counted for every chat that references them, so per-chat totals are diagnostic attribution rather than globally additive disk usage. Missing, invalid, or length-conflicting references raise a critical warning. Healthy chats warn at 64 MiB JSONL, 256 MiB combined JSONL plus stored CAS, or 512 MiB logical CAS; critical size thresholds are 256 MiB, 1 GiB, and 2 GiB respectively. These warnings are advisory: RNAssistant has no event retention or automatic history deletion.
 
 Each header listing shares a fresh, in-memory CAS size snapshot: each referenced
 SHA prefix directory is enumerated once, using file lengths from directory metadata
@@ -36,7 +41,7 @@ is discarded after that listing, so deletion/restoration is observed on the next
 poll even when JSONL has not changed. It is advisory metadata only, never read
 authority or a reachability/GC index.
 
-Cold chat projection reads apply only `session.created`, `session.forked` and `session.commit` while validating the stream. They retain the final event and resulting projection, rather than accumulating every diagnostic event or hydrating its payload. Raw trajectory/export reads still use their full event path.
+Index building applies only `session.created`, `session.forked` and `session.commit` to the chat projection while validating every event. Diagnostic events advance its cursor and header metadata without accumulating their bodies. Raw trajectory/export reads still use their full event path.
 
 ## Event contract
 
@@ -122,8 +127,10 @@ policy and the final projection save.
 
 Artifact-body hydration, HTML revision activation, raw event/payload operations,
 projection reducers and CAS health/GC are not exposed by this port. Replaced broad
-conversation methods are Core-internal. No format, replay rule, stream, durable index,
-writable snapshot, fallback or dual-write changes. See
+conversation methods are Core-internal. The port now also exposes bounded message
+windows and direct scalar metadata commits from the derived index. The original
+9D4 cutover changed no format, replay rule, stream, writable snapshot or dual-write
+path. See
 [Phase 9D4 evidence](stabilization/PHASE_9D4_CONVERSATION_STORE.md).
 
 Phase 1B adds metadata-only causal observations in this same stream: top-level
@@ -261,7 +268,7 @@ Current history encryption does not cover transient attachment staging, settings
 - The final materialized model request remains a synchronous durability barrier before network dispatch. Model response/failure is another barrier: every earlier queued `assistant.chunk` batch for that session is durable before the terminal event is appended.
 - Adjacent lifecycle and trace/commit records remain separate hash-linked lines but share one locked durable append batch.
 - Only an unterminated syntactically incomplete final JSONL fragment is recoverable and ignored; a valid unterminated final row remains readable. A complete row rejected by the event contract, even without a final newline, invalidates the stream and is never discarded. Any terminated blank or malformed row also invalidates the stream. The next successful append adds a newline to a valid unterminated row or atomically copies only the validated byte prefix over an incomplete fragment; it does not deserialize and rewrite the full history.
-- A cold load validates sequence continuity and the complete hash-chain. An unchanged warm load revalidates its exact final record; a same-instance append advances the cache from events returned by the locked append. Any external file change forces complete validation. A corrupt stream is not projected or listed.
+- First indexing and explicit maintenance audit validate sequence continuity and the complete hash-chain. Routine reads revalidate the exact indexed final record; a longer file validates only its suffix. Shrink, replacement and incompatible protection rebuild the index. A corrupt stream is not projected or listed once validation reaches the corrupt record.
 - Startup recovery marks tool effect as unknown only when the stream contains `tool.execution.started` without the matching `tool.execution.finished` for that run.
 - Recovery closes open model steps with `step.ended { Status: "interrupted", Synthetic: true }`, then closes the logical turn through the normal persisted run transition.
 - Missing or corrupt CAS content leaves its metadata visible but is never hydrated as trusted content.
@@ -306,7 +313,7 @@ remains separate; full context downloads respect the shared 50 MiB transfer budg
 
 ## Format policy
 
-`ChatSession.CurrentFormatVersion` is 6 and `SessionEvent.CurrentSchemaVersion` is 3. The active conversation protocol is independently versioned as v5 inside typed message/run operations; R29 adds accepted-call origins without a new event envelope or second durable store, and R72 adds explicit response-final intent. Unversioned/v2/v3/v4 model history is not converted or inferred from prose: full-history preflight requires an explicit new chat/reset before model preparation. A pending confirmation without current-v5 history, complete call origins and `KernelState` cannot continue and must be cancelled or resubmitted in a new chat. Unsupported event schemas and old snapshot files are refused rather than guessed or migrated. Reset is explicit; upgrades and protocol failures never automatically delete user chats, CAS, settings or keys. See [the current conversation contract](protocols/CONVERSATION_RESPONSE_V5.md).
+`ChatSession.CurrentFormatVersion` is 6 and `SessionEvent.CurrentSchemaVersion` is 4. The active conversation protocol is independently versioned as v5 inside typed message/run operations; R29 adds accepted-call origins without a new event envelope, and R72 adds explicit response-final intent. Unversioned/v2/v3/v4 model history is not converted or inferred from prose: full-history preflight requires an explicit new chat/reset before model preparation. A pending confirmation without current-v5 history, complete call origins and `KernelState` cannot continue and must be cancelled or resubmitted in a new chat. Unsupported event schemas and old snapshot files are refused rather than guessed or migrated. Reset is explicit; upgrades and protocol failures never automatically delete user chats, CAS, settings or keys. See [the current conversation contract](protocols/CONVERSATION_RESPONSE_V5.md).
 
 ## Conversation input queue
 

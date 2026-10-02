@@ -119,8 +119,10 @@ ModelProtocol.
 
 - Единственный durable источник чата — append-only typed event stream. Session,
   history, headers, UI state и trajectory являются replayable projections.
-- Большие неизменяемые payloads хранятся в SHA-256 CAS. Второй durable индекс или
-  mutable snapshot не вводится без отдельного архитектурного решения.
+- Большие неизменяемые payloads хранятся в SHA-256 CAS. Производная SQLite-проекция
+  чатов допускается по [ADR-0012](decisions/ADR-0012-chat-sqlite-projection.md):
+  её можно удалить и пересоздать из JSONL; она не становится источником истины.
+  Другой durable индекс или mutable snapshot требует отдельного решения.
 - Materialized model request сохраняется до network dispatch.
 - Write target выбирается до run и закрепляется за exact document session.
   Переключение активного окна не меняет target уже принятой операции.

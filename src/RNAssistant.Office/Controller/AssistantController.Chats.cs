@@ -359,6 +359,25 @@ namespace RNAssistant.Office
         {
             if (string.IsNullOrWhiteSpace(chatId))
                 throw new ArgumentException("A chat id is required.", nameof(chatId));
+            if (!_chatRuns.IsRunning(chatId) && !_inbox.HasActiveWork(chatId))
+            {
+                var window = _conversationStore.ReadMessageWindow(chatId, beforeIndex, 80);
+                if (window != null)
+                {
+                    var visible = ChatCloneService.CloneMessagesForBridge(window.PageMessages);
+                    var presentation = ArtifactLibraryProjectionService.ProjectMessagePage(window.Session, visible);
+                    return new ChatMessagePageDto
+                    {
+                        ChatId = window.Session.Id,
+                        SessionRevision = window.Session.Revision,
+                        StartIndex = window.StartIndex,
+                        TotalCount = window.TotalCount,
+                        Messages = visible,
+                        Artifacts = presentation.Artifacts,
+                        RemovedResourceUris = presentation.Library.RemovedResourceUris
+                    };
+                }
+            }
             var session = LoadAddressedSession(chatId);
             var page = ChatCloneService.ClonePreviousMessagesForBridge(
                 session.Id, session.Revision, session.Messages, beforeIndex);
@@ -486,7 +505,11 @@ namespace RNAssistant.Office
                 if (!string.IsNullOrWhiteSpace(title))
                 {
                     session.Title = title.Trim();
-                    SaveSessionChanges(session);
+                    if (_conversationStore.IsPersisted(session))
+                    {
+                        _conversationStore.SetTitle(session, session.Title);
+                        _chatSessions.NotifySaved(session);
+                    }
                 }
             });
         }
@@ -496,7 +519,11 @@ namespace RNAssistant.Office
             return WithReservedChatPreference(LoadAddressedSession(chatId), session =>
             {
                 session.Model = string.IsNullOrWhiteSpace(model) ? null : model.Trim();
-                SaveSessionChanges(session);
+                if (_conversationStore.IsPersisted(session))
+                {
+                    _conversationStore.SetModel(session, session.Model);
+                    _chatSessions.NotifySaved(session);
+                }
             }, true);
         }
 
@@ -517,7 +544,11 @@ namespace RNAssistant.Office
             return WithReservedChatPreference(LoadAddressedSession(chatId), session =>
             {
                 session.ReasoningEnabled = enabled;
-                SaveSessionChanges(session);
+                if (_conversationStore.IsPersisted(session))
+                {
+                    _conversationStore.SetReasoningEnabled(session, enabled);
+                    _chatSessions.NotifySaved(session);
+                }
             }, false);
         }
 

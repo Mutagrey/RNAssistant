@@ -212,7 +212,8 @@
   background: transparent;
 }
 
-.chat-session-row.has-active-run .chat-session-select {
+.chat-session-row.has-active-run .chat-session-select,
+.chat-session-row.is-loading .chat-session-select {
   padding-right: 28px;
 }
 
@@ -439,7 +440,8 @@
     opacity: 0;
   }
 
-  .chat-session-row.has-active-run .chat-session-select {
+  .chat-session-row.has-active-run .chat-session-select,
+  .chat-session-row.is-loading .chat-session-select {
     padding-right: 58px;
   }
 }

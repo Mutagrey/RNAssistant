@@ -10,6 +10,7 @@ using System.Security.Cryptography;
 using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
+using Microsoft.Data.Sqlite;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
 using RNAssistant.Core.Agent;
@@ -635,15 +636,15 @@ namespace RNAssistant.Harness
 
                 var reader = new ChatStore(paths);
                 var loaded = reader.Load(created.Host, created.DocumentKey, created.Id);
-                AssertEqual(1L, reader.ProjectionFullReplayCount, "first load validates the complete stream");
-                AssertEqual("seed", loaded.Messages.Single().Content, "full replay seeds the cached projection");
+                AssertTrue(reader.SqliteProjectionHitCount > 0, "first load uses the indexed cursor");
+                AssertEqual("seed", loaded.Messages.Single().Content, "indexed projection retains the message");
 
                 loaded.Title = "Reader save";
                 reader.Save(loaded);
-                AssertEqual(1L, reader.ProjectionFullReplayCount,
-                    "save uses the verified baseline instead of replaying the complete stream");
+                AssertEqual(0L, reader.SqliteProjectionFullBuildCount,
+                    "save does not rebuild the indexed prefix");
                 AssertEqual("Reader save", reader.Load(loaded.Id).Title, "same-head cache hit projects current state");
-                AssertEqual(1L, reader.ProjectionFullReplayCount, "same-head cache hit avoids a full replay");
+                AssertEqual(0L, reader.ProjectionFullReplayCount, "same-head cache hit avoids a full replay");
 
                 var external = new ChatStore(paths);
                 var externalSession = external.Load(created.Id);
@@ -652,8 +653,8 @@ namespace RNAssistant.Harness
 
                 var refreshed = reader.Load(created.Id);
                 AssertEqual("External append", refreshed.Title, "new commit replays from the cached byte boundary");
-                AssertEqual(2L, reader.ProjectionFullReplayCount,
-                    "growth from another store fully validates the durable prefix");
+                AssertEqual(0L, reader.SqliteProjectionFullBuildCount,
+                    "external append keeps the trusted indexed prefix");
                 AssertEqual(0L, reader.ProjectionIncrementalReplayCount,
                     "unowned growth is never accepted as a trusted suffix");
 
@@ -663,19 +664,228 @@ namespace RNAssistant.Harness
                 AssertEqual("External append", refreshed.Title, "owned trace append leaves canonical state unchanged");
                 AssertEqual(1L, reader.ProjectionIncrementalReplayCount,
                     "owned trace append advances the verified cache directly");
-                AssertEqual(2L, reader.ProjectionFullReplayCount,
+                AssertEqual(0L, reader.ProjectionFullReplayCount,
                     "owned append does not rescan the prefix");
 
                 refreshed.Title = "Saved after trace";
                 reader.Save(refreshed);
-                AssertEqual(2L, reader.ProjectionFullReplayCount,
+                AssertEqual(0L, reader.ProjectionFullReplayCount,
                     "save after incremental trace replay still uses the verified baseline");
 
                 var path = SessionEventFile(paths, refreshed);
                 File.SetLastWriteTimeUtc(path, DateTime.UtcNow.AddMinutes(-10));
                 AssertEqual("Saved after trace", reader.Load(created.Id).Title,
                     "metadata rewrite falls back to a complete verified replay");
-                AssertEqual(3L, reader.ProjectionFullReplayCount, "non-append change invalidates the cache");
+                AssertEqual(1L, reader.SqliteProjectionFullBuildCount,
+                    "non-append metadata change rebuilds the trusted index");
+            });
+        }
+
+        private static void SqliteProjectionPagesMessages()
+        {
+            WithTempPaths(paths =>
+            {
+                var writer = new ChatStore(paths);
+                var chat = writer.Create("Word", "indexed-pages", "Pages.docx", "Pages");
+                for (var index = 0; index < 190; index++)
+                    chat.Messages.Add(new ChatMessage { Id = Guid.NewGuid().ToString("N"),
+                        Role = "user", Content = "message-" + index });
+                writer.Save(chat);
+
+                var reader = new ChatStore(paths);
+                AssertTrue(reader.Load("Word", "indexed-pages", "missing") == null,
+                    "a missing chat does not create an orphan SQLite index");
+                var page = reader.ReadMessageWindow(chat.Id, 190, 80);
+                AssertTrue(page != null, "persisted chat has an indexed message page");
+                AssertEqual(110, page.StartIndex, "page starts at the requested bounded window");
+                AssertEqual(190, page.TotalCount, "page reports complete transcript count");
+                AssertEqual(80, page.Session.Messages.Count, "page materializes only requested messages");
+                AssertEqual("message-110", page.Session.Messages[0].Content, "first row matches storage order");
+                AssertEqual("message-189", page.Session.Messages[79].Content, "last row matches storage order");
+                AssertEqual(0L, reader.ProjectionFullReplayCount, "indexed page does not replay the JSONL prefix");
+
+                page = reader.ReadMessageWindow(chat.Id, page.StartIndex, 80);
+                AssertEqual(30, page.StartIndex, "previous page uses logical transcript positions");
+                AssertEqual("message-30", page.Session.Messages[0].Content, "older page stays ordered");
+            });
+        }
+
+        private static void SqlitePagePreservesTombstoneContext()
+        {
+            WithTempPaths(paths =>
+            {
+                var store = new ChatStore(paths);
+                var chat = store.Create("Word", "indexed-tombstone", "Tombstone.docx", "Tombstone");
+                for (var index = 0; index < 190; index++)
+                    chat.Messages.Add(new ChatMessage { Id = Guid.NewGuid().ToString("N"),
+                        Role = "user", Content = "message-" + index });
+                var tombstone = new ChatArtifact
+                {
+                    Id = Guid.NewGuid().ToString("N"),
+                    Kind = ChatArtifactKinds.PlanDocument,
+                    Title = "Removed plan",
+                    Revision = 2,
+                    SourceMessageId = chat.Messages[0].Id,
+                    MetadataJson = "{\"planId\":\"plan-1\",\"removed\":true}"
+                };
+                chat.Artifacts.Add(tombstone);
+                chat.Messages[189].ResourceRefs.Add(ChatResourceUri.CreateArtifactRevision(chat, tombstone));
+                store.Save(chat);
+
+                var reader = new ChatStore(paths);
+                var full = reader.Load(chat.Id);
+                var page = reader.ReadMessageWindow(chat.Id, 190, 80);
+                var expected = ArtifactLibraryProjectionService.ProjectMessagePage(full,
+                    ChatCloneService.CloneMessagesForBridge(full.Messages.Skip(110)));
+                var actual = ArtifactLibraryProjectionService.ProjectMessagePage(page.Session,
+                    ChatCloneService.CloneMessagesForBridge(page.PageMessages));
+                AssertEqual(80, page.PageMessages.Count, "the bridge page stays bounded");
+                AssertTrue(expected.Library.RemovedResourceUris.Count > 0,
+                    "the fixture exposes a removed resource on the requested page");
+                AssertEqual(JsonConvert.SerializeObject(expected.Library.RemovedResourceUris),
+                    JsonConvert.SerializeObject(actual.Library.RemovedResourceUris),
+                    "indexed page retains the old source-message existence needed by tombstones");
+            });
+        }
+
+        private static void SqliteMetadataCommitAvoidsFullDiff()
+        {
+            WithTempPaths(paths =>
+            {
+                var store = new ChatStore(paths);
+                var chat = store.Create("Word", "indexed-metadata", "Meta.docx", "Original");
+                chat.Messages.Add(new ChatMessage { Id = Guid.NewGuid().ToString("N"),
+                    Role = "user", Content = new string('x', 1024) });
+                store.Save(chat);
+                var previous = chat.Revision;
+                chat.Title = "Renamed";
+                store.SetTitle(chat, chat.Title);
+                AssertEqual(previous + 1, chat.Revision, "metadata change appends one event");
+                var reader = new ChatStore(paths);
+                var loaded = reader.Load(chat.Id);
+                AssertEqual("Renamed", loaded.Title, "metadata change is recovered from SQLite");
+                AssertEqual(1, loaded.Messages.Count, "metadata change preserves messages");
+                AssertEqual("Renamed", reader.ListHeaders().Single().Title,
+                    "catalog uses updated indexed header");
+                AssertEqual(0L, reader.ProjectionFullReplayCount,
+                    "metadata commit and indexed reads avoid a full replay");
+            });
+        }
+
+        private static void SqliteCursorCatchesUpAfterLag()
+        {
+            WithTempPaths(paths =>
+            {
+                var writer = new ChatStore(paths);
+                var chat = writer.Create("Word", "indexed-lag", "Lag.docx", "Before");
+                var indexPath = SessionEventFile(paths, chat) + ".projection.sqlite";
+                var backup = indexPath + ".backup";
+                File.Copy(indexPath, backup);
+                writer.AppendTrace(chat, SessionEventTypes.AssistantChunk,
+                    new { Part = "new" }, null, null, "run-lag", "turn-lag", "step-lag");
+                File.Copy(backup, indexPath, true);
+                var reader = new ChatStore(paths);
+                var loaded = reader.Load(chat.Id);
+                AssertEqual(chat.Revision, loaded.Revision, "indexed cursor advances to durable trace tail");
+                AssertEqual("Before", loaded.Title, "non-projecting trace preserves chat state");
+                AssertEqual(1L, reader.SqliteProjectionSuffixCount,
+                    "recovery validates and reads only the missing suffix");
+                AssertEqual(0L, reader.SqliteProjectionFullBuildCount,
+                    "lag does not force a prefix replay");
+            });
+        }
+
+        private static void CorruptSqliteIndexRebuildsFromEvents()
+        {
+            WithTempPaths(paths =>
+            {
+                var writer = new ChatStore(paths);
+                var chat = writer.Create("Word", "indexed-corrupt", "Index.docx", "Recovered");
+                var indexPath = SessionEventFile(paths, chat) + ".projection.sqlite";
+                File.WriteAllText(indexPath, "corrupt derived index");
+                var reader = new ChatStore(paths);
+                AssertEqual("Recovered", reader.Load(chat.Id).Title,
+                    "corrupt derived index rebuilds from the authoritative event log");
+                AssertEqual(1L, reader.SqliteProjectionFullBuildCount,
+                    "corrupt index causes one complete verified rebuild");
+            });
+        }
+
+        private static void CorruptSqliteRowRebuildsFromEvents()
+        {
+            WithTempPaths(paths =>
+            {
+                var writer = new ChatStore(paths);
+                var chat = writer.Create("Word", "indexed-corrupt-row", "Row.docx", "Recovered");
+                chat.Messages.Add(new ChatMessage { Id = Guid.NewGuid().ToString("N"),
+                    Role = "user", Content = "canonical body" });
+                writer.Save(chat);
+                var indexPath = SessionEventFile(paths, chat) + ".projection.sqlite";
+                Action damage = () =>
+                {
+                    using (var connection = new SqliteConnection(new SqliteConnectionStringBuilder
+                    {
+                        DataSource = indexPath,
+                        Pooling = false
+                    }.ToString()))
+                    {
+                        connection.Open();
+                        using (var command = connection.CreateCommand())
+                        {
+                            command.CommandText = "UPDATE messages SET payload=$payload";
+                            command.Parameters.AddWithValue("$payload", Encoding.UTF8.GetBytes("{broken"));
+                            command.ExecuteNonQuery();
+                        }
+                    }
+                };
+                damage();
+                var reader = new ChatStore(paths);
+                AssertEqual("canonical body", reader.ReadMessageWindow(chat.Id, 1, 80).Session.Messages[0].Content,
+                    "a damaged indexed page is rebuilt from the event stream");
+                damage();
+                reader = new ChatStore(paths);
+                AssertEqual("canonical body", reader.Load(chat.Id).Messages[0].Content,
+                    "a damaged indexed full projection is rebuilt from the event stream");
+                AssertEqual(1L, reader.SqliteProjectionFullBuildCount,
+                    "damaged payload triggers one complete verified rebuild");
+            });
+        }
+
+        private static void SqliteAuditRepairsDivergentProjection()
+        {
+            WithTempPaths(paths =>
+            {
+                var writer = new ChatStore(paths);
+                var chat = writer.Create("Word", "indexed-audit", "Audit.docx", "Audit");
+                chat.Messages.Add(new ChatMessage { Id = Guid.NewGuid().ToString("N"),
+                    Role = "user", Content = "canonical body" });
+                writer.Save(chat);
+                var indexPath = SessionEventFile(paths, chat) + ".projection.sqlite";
+                using (var connection = new SqliteConnection(new SqliteConnectionStringBuilder
+                {
+                    DataSource = indexPath,
+                    Pooling = false
+                }.ToString()))
+                {
+                    connection.Open();
+                    using (var command = connection.CreateCommand())
+                    {
+                        command.CommandText = "UPDATE messages SET payload=$payload";
+                        command.Parameters.AddWithValue("$payload", Encoding.UTF8.GetBytes(new JObject
+                        {
+                            ["Id"] = chat.Messages[0].Id,
+                            ["Role"] = "user",
+                            ["Content"] = "divergent index body"
+                        }.ToString(Formatting.None)));
+                        command.ExecuteNonQuery();
+                    }
+                }
+                var reader = new ChatStore(paths);
+                CasService(paths, reader, new VbaJournalStore(paths), () => StorageProtector.None).Audit();
+                AssertEqual("canonical body", reader.Load(chat.Id).Messages[0].Content,
+                    "explicit full audit repairs a divergent index from authenticated JSONL");
+                AssertEqual(1L, reader.SqliteProjectionFullBuildCount,
+                    "audit performs one complete index rebuild after detecting divergence");
             });
         }
 
@@ -751,15 +961,19 @@ namespace RNAssistant.Harness
                         writer.AppendTrace(chat, SessionEventTypes.AssistantChunk,
                             new { Padding = padding }, null, null, "perf-run", "perf-turn", "perf-step");
 
-                    var reader = new ChatStore(paths);
+                    File.Delete(path + ".projection.sqlite");
                     var timer = Stopwatch.StartNew();
+                    new ChatStore(paths).Load(chat.Id);
+                    var indexBuildMs = timer.ElapsedMilliseconds;
+                    var reader = new ChatStore(paths);
+                    timer.Restart();
                     var loaded = reader.Load(chat.Id);
                     var coldMs = timer.ElapsedMilliseconds;
                     timer.Restart();
                     reader.Load(chat.Id);
                     var warmMs = timer.ElapsedMilliseconds;
-                    AssertEqual(1L, reader.ProjectionFullReplayCount,
-                        "large projected chat uses the bounded warm cache");
+                    AssertTrue(reader.SqliteProjectionHitCount >= 1,
+                        "large projected chat uses the durable indexed cursor");
                     int startIndex;
                     var visible = ChatCloneService.CloneRecentMessagesForBridge(loaded.Messages, out startIndex);
                     timer.Restart();
@@ -775,8 +989,13 @@ namespace RNAssistant.Harness
                     timer.Restart();
                     reader.Save(loaded);
                     var saveMs = timer.ElapsedMilliseconds;
+                    loaded.Title = "Synthetic direct metadata";
+                    timer.Restart();
+                    reader.SetTitle(loaded, loaded.Title);
+                    var metadataMs = timer.ElapsedMilliseconds;
                     Console.WriteLine("PROFILE chatMiB=" + (new FileInfo(path).Length / 1048576.0).ToString("F1", CultureInfo.InvariantCulture) +
-                        " coldMs=" + coldMs + " warmMs=" + warmMs + " saveMs=" + saveMs +
+                        " indexBuildMs=" + indexBuildMs + " coldMs=" + coldMs + " warmMs=" + warmMs + " saveMs=" + saveMs +
+                        " metadataMs=" + metadataMs +
                         " libraryMs=" + libraryMs + " usageMs=" + usageMs + " htmlMs=" + htmlMs +
                         " messages=" + loaded.Messages.Count + " artifacts=" + loaded.Artifacts.Count);
                 });
@@ -1383,11 +1602,11 @@ namespace RNAssistant.Harness
                 AssertEqual("runtime-header", header.RunRuntimeId, "minimal reducer retains run header fields");
                 AssertEqual(0, header.HtmlFileCount,
                     "invalid legacy metadata does not hydrate the active CAS body during header replay");
-                AssertEqual(1L, reader.HeaderFullReplayCount, "cold header read validates the complete stream once");
+                AssertTrue(reader.SqliteProjectionHitCount > 0, "cold header reads the indexed reducer");
                 AssertEqual(0L, reader.ProjectionFullReplayCount, "header read does not build a full projection");
 
                 header = reader.ListHeaders(session.Host, session.DocumentKey, session.DocumentTitle).Single();
-                AssertEqual(1L, reader.HeaderFullReplayCount, "unchanged header uses its byte-offset cache");
+                AssertEqual(0L, reader.HeaderFullReplayCount, "unchanged header avoids a full replay");
 
                 session.Title = "Appended";
                 session.Messages.RemoveAt(0);
@@ -1402,8 +1621,8 @@ namespace RNAssistant.Harness
                 AssertEqual(2, header.MessageCount, "full replay applies message upsert/remove/reorder operations");
                 AssertEqual(1, header.HtmlDataSourceCount, "full replay follows a new active HTML artifact");
                 AssertEqual(session.Revision, header.Revision, "header revision follows the validated stream tail");
-                AssertEqual(2L, reader.HeaderFullReplayCount,
-                    "growth from another store fully validates the durable prefix");
+                AssertEqual(0L, reader.SqliteProjectionFullBuildCount,
+                    "growth from another store retains the indexed prefix");
                 AssertEqual(0L, reader.HeaderIncrementalReplayCount,
                     "unowned growth is never accepted as a trusted suffix");
                 AssertEqual(0L, reader.ProjectionFullReplayCount, "header replay remains projection-free");
@@ -1413,17 +1632,15 @@ namespace RNAssistant.Harness
                     new { chunkCount = 1 }, null, null, "run-header", "turn-header", "step-header");
                 header = reader.ListHeaders(session.Host, session.DocumentKey, session.DocumentTitle).Single();
                 AssertEqual(owned.Revision, header.Revision, "owned trace append advances the header revision");
-                AssertEqual(1L, reader.HeaderIncrementalReplayCount,
-                    "owned trace append advances the header reducer from its byte boundary");
+                AssertEqual(0L, reader.HeaderFullReplayCount,
+                    "owned trace append advances the indexed reducer without replay");
 
                 owned.Title = "Owned save";
                 reader.Save(owned);
                 header = reader.ListHeaders(session.Host, session.DocumentKey, session.DocumentTitle).Single();
                 AssertEqual("Owned save", header.Title, "owned commit advances the cached header reducer");
-                AssertEqual(2L, reader.HeaderIncrementalReplayCount,
-                    "owned projection append also advances the header reducer");
-                AssertEqual(2L, reader.HeaderFullReplayCount,
-                    "owned header advances do not rescan the prefix");
+                AssertEqual(0L, reader.HeaderFullReplayCount,
+                    "owned projection append avoids a prefix replay");
             });
         }
 
@@ -2411,6 +2628,11 @@ namespace RNAssistant.Harness
                 AssertTrue(eventText.IndexOf(messageMarker, StringComparison.Ordinal) < 0, "message is not plaintext");
                 AssertTrue(eventText.IndexOf(artifactMarker, StringComparison.Ordinal) < 0, "artifact is not in event plaintext");
                 AssertTrue(eventText.IndexOf(payloadMarker, StringComparison.Ordinal) < 0, "model payload is not in event plaintext");
+                var projectionBytes = File.ReadAllBytes(SessionEventFile(paths, session) + ".projection.sqlite");
+                AssertTrue(!ContainsBytes(projectionBytes, Encoding.UTF8.GetBytes(titleMarker)),
+                    "SQLite projection does not expose the encrypted title");
+                AssertTrue(!ContainsBytes(projectionBytes, Encoding.UTF8.GetBytes(messageMarker)),
+                    "SQLite projection does not expose encrypted messages");
                 foreach (var path in Directory.GetFiles(paths.ChatBlobDirectory, "*.blob", SearchOption.AllDirectories))
                 {
                     var raw = File.ReadAllBytes(path);

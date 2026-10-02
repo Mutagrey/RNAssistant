@@ -28,8 +28,10 @@ function navigateChat(type, payload) {
   if (type === "selectChat") {
     state.chatSelectionRequestVersion = (state.chatSelectionRequestVersion || 0) + 1;
     selectionVersion = state.chatSelectionRequestVersion;
+    state.chatNavigationTargetId = payload.chatId;
   }
   state.chatNavigationPending = (state.chatNavigationPending || 0) + 1;
+  if (selectionVersion && typeof renderChatSessions === "function") renderChatSessions();
   if (typeof renderSendControls === "function") renderSendControls();
   var startedAt = window.performance && window.performance.now ? window.performance.now() : Date.now();
   var navigation = (async function () {
@@ -68,6 +70,10 @@ function navigateChat(type, payload) {
   var finished = function () {
     state.chatNavigationPending -= 1;
     if (state.chatNavigationPromise === navigation) state.chatNavigationPromise = null;
+    if (selectionVersion && selectionVersion === state.chatSelectionRequestVersion) {
+      state.chatNavigationTargetId = "";
+      if (typeof renderChatSessions === "function") renderChatSessions();
+    }
     if (typeof renderSendControls === "function") renderSendControls();
   };
   navigation.then(finished, function (error) {

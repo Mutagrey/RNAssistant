@@ -5,6 +5,12 @@ NuGet packages are committed in `packages/`:
 - `Microsoft.Web.WebView2 1.0.2903.40`
 - `Newtonsoft.Json 13.0.3`
 - `PdfPig 0.1.15` and its managed dependencies
+- `Microsoft.Data.Sqlite.Core 10.0.12`, `SQLitePCLRaw.core/provider.winsqlite3 3.0.5`
+  and their managed dependencies; the host-neutral harness also uses
+  `SQLitePCLRaw.provider.sqlite3 3.0.5`
+
+Chat indexing uses the Windows system `winsqlite3.dll`; no SQLite native binary is
+committed. Optional local SQLite files under `vendor/sqlite/` are ignored by Git.
 
 Media/PDF rendering dependencies are committed as selected binaries in
 `vendor/pdf-rendering/` and referenced directly by `RNAssistant.Office`:
