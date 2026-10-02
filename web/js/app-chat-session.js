@@ -321,7 +321,6 @@ async function deleteMessage(message, index) {
     if (message.Failed) {
       clearSendError();
     }
-    updateEstimatedContextUsage();
     renderMessages();
     renderChatSessions();
     renderContextMeter();
@@ -407,8 +406,6 @@ function applyInitState(init) {
   state.skillsPath = init.skillsPath || "";
   state.context = init.context || {};
   state.contextUsage = init.contextUsage || {};
-  state.contextUsageBase = typeof cloneContextUsage === "function" ? cloneContextUsage(state.contextUsage) : state.contextUsage;
-  state.contextUsageBaseContextSignature = typeof contextUsageContextSignature === "function" ? contextUsageContextSignature() : "";
   state.htmlWorkspace = init.htmlWorkspace || init.HtmlWorkspace || { activeFileId: "", files: [], dataSources: [], history: [], redoHistory: [], redoBranches: [], recovery: { status: "empty", canMutate: true, candidates: [] } };
   state.htmlWorkspaceDirty = false;
   state.activeChatId = nextChatId;
@@ -499,8 +496,6 @@ function applyBridgeUnavailableState(error) {
   state.skillsPath = "";
   state.context = {};
   state.contextUsage = { usedChars: 0, limitChars: 0, percent: 0, actual: false };
-  state.contextUsageBase = state.contextUsage;
-  state.contextUsageBaseContextSignature = "";
   state.htmlWorkspace = { activeFileId: "", files: [], dataSources: [], history: [], redoHistory: [], redoBranches: [], recovery: { status: "empty", canMutate: true, candidates: [] } };
   state.htmlWorkspaceDirty = false;
   restoreChatDraft("");

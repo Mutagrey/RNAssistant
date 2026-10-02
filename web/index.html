@@ -40,7 +40,7 @@
   <link rel="stylesheet" href="css/app-tools.css?v=json-height-20260929-1">
   <link rel="stylesheet" href="css/app-vba.css?v=json-height-20260929-1">
   <link rel="stylesheet" href="css/app-context-panel.css?v=json-height-20260929-1">
-  <link rel="stylesheet" href="css/app-context-inspector.css?v=json-height-20260929-1">
+  <link rel="stylesheet" href="css/app-context-inspector.css?v=json-height-20260929-1-usage-20261002-1">
   <link rel="stylesheet" href="css/app-chart-artifacts.css?v=chatui-20260622-3">
   <link rel="stylesheet" href="css/app-artifacts.css?v=artifact-links-20260908-1">
   <link rel="stylesheet" href="css/app-tree-adapter.css?v=tree-adapter-20260829-1">
@@ -187,10 +187,10 @@
               <button type="button" class="composer-icon-button" id="addSelectionContextButton" title="Добавить выделение документа" aria-label="Добавить выделение документа">
                 <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="4" y="4" width="16" height="16" rx="2" stroke-dasharray="3 3"/><path d="m10 9 7 7"/><path d="M12 16h5v-5"/></svg>
               </button>
-              <button class="context-meter" id="contextMeter" type="button" title="Что увидит модель в следующем запросе" aria-label="Что увидит модель в следующем запросе" aria-expanded="false" aria-controls="promptContextInspector">
+              <button class="context-meter" id="contextMeter" type="button" title="Токены API и состав контекста" aria-label="Токены API и состав контекста" aria-expanded="false" aria-controls="promptContextInspector">
                 <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m12 3 8 4-8 4-8-4 8-4Z"/><path d="m20 12-8 4-8-4"/><path d="m20 17-8 4-8-4"/></svg>
-                <strong id="contextMeterValue">0%</strong>
-                <em id="contextMeterDetail">≈0 / 0</em>
+                <strong id="contextMeterValue">API</strong>
+                <em id="contextMeterDetail">нет usage</em>
               </button>
               <button type="button" class="composer-icon-button context-compact-button" id="compactContextButton" title="Сжать ранний контекст" aria-label="Сжать ранний контекст" hidden>
                 <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m7 4 5 5 5-5"/><path d="m7 20 5-5 5 5"/></svg>
@@ -238,8 +238,8 @@
         <aside class="prompt-context-inspector hidden" id="promptContextInspector" aria-hidden="true" aria-label="Состав контекста запроса">
           <div class="prompt-context-inspector-head">
             <div class="prompt-context-inspector-heading">
-              <strong>Что увидит модель</strong>
-              <span id="promptContextInspectorSubtitle">Состав следующего запроса</span>
+              <strong>Контекст и токены</strong>
+              <span id="promptContextInspectorSubtitle">API usage</span>
             </div>
             <div class="prompt-context-inspector-head-actions">
               <button type="button" class="icon-button" id="refreshPromptContextInspectorButton" title="Обновить снимок" aria-label="Обновить снимок">
@@ -254,32 +254,55 @@
             <div class="prompt-context-inspector-state" id="promptContextInspectorLoading" role="status">Собираю снимок контекста…</div>
             <div class="prompt-context-inspector-state prompt-context-inspector-error hidden" id="promptContextInspectorError" role="alert"></div>
             <div class="prompt-context-inspector-body hidden" id="promptContextInspectorBody">
-              <p class="prompt-context-inspector-notice">Это снимок следующего запроса. Подписи действий в чате не заменяют результаты для модели; технические данные журнала могут отличаться от включённого контекста.</p>
-              <div class="prompt-context-inspector-notice" id="promptContextInspectorNotice"></div>
-              <section class="prompt-context-budget" aria-label="Лимит контекста">
+              <section class="prompt-context-budget" aria-label="Последний API usage">
                 <div class="prompt-context-budget-head">
-                  <strong id="promptContextInspectorUsage">≈ 0 / 0 токенов</strong>
-                  <span id="promptContextInspectorPercent">0%</span>
+                  <strong id="promptContextInspectorUsage">Нет данных usage</strong>
                 </div>
-                <div class="prompt-context-budget-track" id="promptContextInspectorTrack" role="progressbar" aria-label="Использование входного контекста" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0">
-                  <i id="promptContextInspectorFill"></i>
-                </div>
-                <div class="prompt-context-budget-grid">
-                  <div><span>Окно</span><strong id="promptContextInspectorWindow">0</strong></div>
-                  <div><span>Ответ</span><strong id="promptContextInspectorOutput">0</strong></div>
-                  <div><span>Safety</span><strong id="promptContextInspectorSafety">0</strong></div>
-                  <div><span>Осталось</span><strong id="promptContextInspectorRemaining">0</strong></div>
-                </div>
-                <div class="prompt-context-last-usage hidden" id="promptContextInspectorLastUsage"></div>
+                <div class="prompt-context-last-usage" id="promptContextInspectorLastUsage"></div>
               </section>
-              <div class="prompt-context-section-heading">
-                <strong>Состав</strong>
-                <span>по вкладу</span>
-              </div>
-              <div class="prompt-context-sections" id="promptContextInspectorSections"></div>
-              <details class="prompt-context-raw hidden" id="promptContextInspectorRaw">
-                <summary>Структура запроса JSON</summary>
-                <div class="prompt-context-raw-viewer" id="promptContextInspectorRawText"></div>
+              <details class="prompt-context-estimate" id="promptContextInspectorEstimate">
+                <summary>Оценка следующего запроса</summary>
+                <div class="prompt-context-estimate-body">
+                  <div class="prompt-context-section-heading" id="promptContextInspectorEstimateSubtitle"></div>
+                  <p class="prompt-context-inspector-notice">Это прогноз будущего запроса. Точный вход завершённого вызова указан выше по API usage; API не сообщает токены по отдельным разделам.</p>
+                  <div class="prompt-context-inspector-notice" id="promptContextInspectorNotice"></div>
+                  <section class="prompt-context-budget" aria-label="Лимит контекста">
+                    <div class="prompt-context-budget-head">
+                      <strong id="promptContextInspectorEstimateUsage">Вход ≈ 0 / 0 токенов</strong>
+                    </div>
+                    <div class="prompt-context-budget-admission">
+                      <span id="promptContextInspectorAdmission"></span>
+                      <strong id="promptContextInspectorPercent">0%</strong>
+                    </div>
+                    <div class="prompt-context-budget-track" id="promptContextInspectorTrack" role="progressbar" aria-label="Расход входного бюджета с резервами" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0">
+                      <i id="promptContextInspectorFill"></i>
+                    </div>
+                    <div class="prompt-context-budget-summary" id="promptContextInspectorSummary"></div>
+                    <div class="prompt-context-budget-grid">
+                      <div><span>Окно</span><strong id="promptContextInspectorWindow">0</strong></div>
+                      <div><span>Ответ до</span><strong id="promptContextInspectorOutput">0</strong></div>
+                      <div><span>Запас безопасности</span><strong id="promptContextInspectorSafety">0</strong></div>
+                      <div><span>Свободно с резервами</span><strong id="promptContextInspectorRemaining">0</strong></div>
+                    </div>
+                  </section>
+                  <div class="prompt-context-section-heading">
+                    <strong>Вход следующего запроса</strong>
+                    <span>≈ по вкладу</span>
+                  </div>
+                  <div class="prompt-context-sections" id="promptContextInspectorSections"></div>
+                  <div class="prompt-context-section-group hidden" id="promptContextInspectorReserveGroup">
+                    <div class="prompt-context-section-heading"><strong>Резерв бюджета</strong><span>не отправляется сейчас</span></div>
+                    <div class="prompt-context-sections" id="promptContextInspectorReserves"></div>
+                  </div>
+                  <div class="prompt-context-section-group hidden" id="promptContextInspectorLocalGroup">
+                    <div class="prompt-context-section-heading"><strong>Локально вне запроса</strong><span>токены 0</span></div>
+                    <div class="prompt-context-sections" id="promptContextInspectorLocal"></div>
+                  </div>
+                  <details class="prompt-context-raw hidden" id="promptContextInspectorRaw">
+                    <summary>Структура запроса JSON</summary>
+                    <div class="prompt-context-raw-viewer" id="promptContextInspectorRawText"></div>
+                  </details>
+                </div>
               </details>
             </div>
           </div>
@@ -983,7 +1006,7 @@
   <script src="js/app-vba-completion.js?v=vba-completion-20260903-1"></script>
   <script src="js/app-editors.js?v=ui-lazy-20260903-1"></script>
   <script src="js/app-markdown.js?v=chat-message-cleanup-20260908-1"></script>
-  <script src="js/app-settings.js?v=desktop-width-20260930-1"></script>
+  <script src="js/app-settings.js?v=desktop-width-20260930-1-usage-20261002-1"></script>
   <script src="js/app-logs.js?v=diagnostics-clarity-20260930-1"></script>
   <script src="js/app-diagnostics.js?v=diagnostics-clarity-20260930-1"></script>
   <script src="js/app-viewer-registry.js?v=artifact-preview-20260902-2"></script>
@@ -1001,9 +1024,9 @@
   <script src="js/app-model-picker.js?v=model-modules-20260823-2"></script>
   <script src="js/app-model-capabilities.js?v=model-capability-inline-20260826-1"></script>
   <script src="js/app-model-render.js?v=model-settings-20260930-1"></script>
-  <script src="js/app-models.js?v=ui-lazy-20260903-1"></script>
+  <script src="js/app-models.js?v=ui-lazy-20260903-1-usage-20261002-1"></script>
   <script src="js/app-context-data.js"></script>
-  <script src="js/app-chat-state.js?v=office-chat-20260930-3-chat-paging-1"></script>
+  <script src="js/app-chat-state.js?v=office-chat-20260930-3-chat-paging-1-usage-20261002-1"></script>
   <script src="js/app-resource-list.js?v=resource-navigation-20260826-1"></script>
   <script src="js/app-tools-structured.js?v=library-ux-20260903-1"></script>
   <script src="js/app-tools-actions.js?v=manual-tool-chat-20260908-1"></script>
@@ -1025,8 +1048,8 @@
   <script src="js/app-artifact-viewer-actions.js?v=binary-chunks-20260906-1"></script>
   <script src="js/app-html-workspace-actions.js?v=html-action-guard-20260908-1"></script>
   <script src="js/app-html-workspace.js?v=html-read-20260906-1"></script>
-  <script src="js/app-context.js?v=ui-lazy-20260903-1"></script>
-  <script src="js/app-context-inspector.js?v=context-download-20260906-1"></script>
+  <script src="js/app-context.js?v=ui-lazy-20260903-1-usage-20261002-1"></script>
+  <script src="js/app-context-inspector.js?v=context-download-20260906-1-usage-20261002-1"></script>
   <script src="js/app-tool-result-preview.js?v=typed-step-results-20260908-1"></script>
   <script src="js/app-agent-data.js?v=step-results-20260908-1"></script>
   <script src="js/app-agent-model.js?v=catalog-display-chat-20260908-1"></script>
@@ -1040,11 +1063,11 @@
   <script src="js/app-messages.js?v=action-severity-20260930-1-chat-paging-1"></script>
   <script src="js/app-reasoning.js?v=chat-projection-20260907-1"></script>
   <script src="js/app-attachments.js?v=vba-upload-20260906-1"></script>
-  <script src="js/app-chat-session.js?v=office-chat-20260930-4-chat-paging-1"></script>
+  <script src="js/app-chat-session.js?v=office-chat-20260930-4-chat-paging-1-usage-20261002-1"></script>
   <script src="js/app-chat-composer.js?v=multi-chat-20260902-1"></script>
-  <script src="js/app-chat-run.js?v=response-render-timing-20260928-1"></script>
+  <script src="js/app-chat-run.js?v=response-render-timing-20260928-1-usage-20261002-1"></script>
   <script src="js/app-chat.js?v=office-chat-20260930-3"></script>
-  <script src="js/app-chat-edit.js?v=chat-sync-20260903-1"></script>
-  <script src="js/app.js?v=chat-poll-20260928-1"></script>
+  <script src="js/app-chat-edit.js?v=chat-sync-20260903-1-usage-20261002-1"></script>
+  <script src="js/app.js?v=chat-poll-20260928-1-usage-20261002-1"></script>
 </body>
 </html>

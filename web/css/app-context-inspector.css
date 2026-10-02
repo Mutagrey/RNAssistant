@@ -120,9 +120,61 @@ button.context-meter {
   color: var(--danger);
 }
 
+.prompt-context-estimate > summary {
+  cursor: pointer;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.prompt-context-estimate-body {
+  display: grid;
+  gap: 12px;
+  padding-top: 12px;
+}
+
 .prompt-context-budget {
   display: grid;
   gap: 6px;
+}
+
+.prompt-context-budget-admission {
+  display: flex;
+  gap: 8px;
+  align-items: baseline;
+  justify-content: space-between;
+  color: var(--muted);
+  font-size: 10.5px;
+  font-variant-numeric: tabular-nums;
+  line-height: 1.35;
+}
+
+.prompt-context-budget-admission strong {
+  flex: 0 0 auto;
+  color: var(--accent-strong);
+  font-size: 12px;
+}
+
+.prompt-context-budget-summary {
+  display: grid;
+  gap: 4px;
+  padding: 7px 9px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: var(--secondary-bg);
+}
+
+.prompt-context-budget-summary > div {
+  display: flex;
+  gap: 8px;
+  justify-content: space-between;
+  color: var(--muted);
+  font-size: 10.5px;
+}
+
+.prompt-context-budget-summary strong {
+  color: var(--text);
+  font-variant-numeric: tabular-nums;
+  font-weight: var(--label-font-weight);
 }
 
 .prompt-context-budget-head {
@@ -134,13 +186,6 @@ button.context-meter {
 
 .prompt-context-budget-head strong {
   font-size: 13px;
-  font-variant-numeric: tabular-nums;
-  font-weight: var(--title-font-weight);
-}
-
-.prompt-context-budget-head span {
-  color: var(--accent-strong);
-  font-size: 12px;
   font-variant-numeric: tabular-nums;
   font-weight: var(--title-font-weight);
 }
@@ -204,8 +249,19 @@ button.context-meter {
 }
 
 .prompt-context-last-usage {
-  color: var(--muted);
-  font-size: 10.5px;
+  padding: 9px 10px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: var(--secondary-bg);
+  color: var(--text);
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+  line-height: 1.4;
+}
+
+.prompt-context-section-group {
+  display: grid;
+  gap: 7px;
 }
 
 .prompt-context-section-heading {

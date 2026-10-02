@@ -37,7 +37,6 @@ async function saveChatModelSelection(value) {
   try {
     var response = await send("setChatModel", { chatId: targetChatId, model: value });
     if (!applyChatStateForChat(response, targetChatId)) return false;
-    updateEstimatedContextUsage();
     renderContextMeter();
     log(value ? ("Chat model selected: " + value) : "Chat model uses default.");
     return activeChatModel() === value;

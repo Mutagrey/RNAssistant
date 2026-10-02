@@ -160,13 +160,35 @@ namespace RNAssistant.Harness
                 }
             };
             var messages = new[] { new ChatMessage { Role = "user", Content = "hello" } };
-            var actual = JObject.FromObject(ContextUsageEstimator.FromPrompt(messages, settings, 321));
+            var actual = JObject.FromObject(ContextUsageEstimator.FromPrompt(messages, settings, 321, null, 12, 333));
             AssertEqual(321, actual["usedTokens"].Value<int>(), "API prompt usage bypasses calibration and remains exact");
             AssertTrue(actual["actual"].Value<bool>(), "API prompt usage is marked actual");
+            AssertEqual("request", actual["scope"].Value<string>(), "completed request scope is explicit");
+            AssertEqual(321, actual["lastPromptTokens"].Value<int>(), "live API input is available without transcript lookup");
+            AssertEqual(12, actual["lastCompletionTokens"].Value<int>(), "live API output is preserved");
+            AssertEqual(333, actual["lastTotalTokens"].Value<int>(), "live API total is preserved");
 
             var estimated = JObject.FromObject(ContextUsageEstimator.FromPrompt(messages, settings, null));
             AssertTrue(!estimated["actual"].Value<bool>(), "missing API usage remains approximate");
             AssertTrue(estimated["usedTokens"].Value<int>() > 0, "missing API usage has an estimate");
+            AssertTrue(estimated["lastPromptTokens"].Type == JTokenType.Null, "estimate cannot become API usage");
+
+            var partial = JObject.FromObject(ContextUsageEstimator.FromPrompt(messages, settings, null, null, 0, 333));
+            AssertTrue(partial["lastPromptTokens"].Type == JTokenType.Null, "partial usage does not invent input tokens");
+            AssertEqual(0, partial["lastCompletionTokens"].Value<int>(), "zero output remains exact");
+            AssertEqual(333, partial["lastTotalTokens"].Value<int>(), "partial total is retained");
+
+            var session = new ChatSession();
+            session.Messages.Add(new ChatMessage
+            {
+                Role = "assistant", Content = "done", PromptTokens = 321,
+                CompletionTokens = 12, TotalTokens = 333
+            });
+            var reloaded = JObject.FromObject(ContextUsageEstimator.FromSession(session, settings));
+            AssertTrue(!reloaded["actual"].Value<bool>(), "reloaded history remains an estimate");
+            AssertEqual("chat_context", reloaded["scope"].Value<string>(), "reloaded partial context scope is explicit");
+            AssertEqual(321, reloaded["lastPromptTokens"].Value<int>(), "reloaded API input stays exact");
+            AssertEqual(12, reloaded["lastCompletionTokens"].Value<int>(), "reloaded API output stays exact");
         }
 
         private static void AssertNear(double expected, double actual, double tolerance, string message)

@@ -5,6 +5,7 @@ using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 using RNAssistant.Core.Llm;
+using RNAssistant.Core.ModelProtocol;
 using RNAssistant.Core.Models;
 using RNAssistant.Office.Contracts;
 using RNAssistant.Office.Services;
@@ -41,7 +42,8 @@ namespace RNAssistant.Harness
             session.Messages.Add(new ChatMessage
             {
                 Role = "assistant", Content = "Диапазон прочитан.",
-                ResponseProtocolVersion = AgentResponseProtocol.CurrentVersion
+                ResponseProtocolVersion = AgentResponseProtocol.CurrentVersion,
+                PromptTokens = 1234, CompletionTokens = 56, TotalTokens = 1290
             });
             session.Artifacts.Add(new ChatArtifact
             {
@@ -89,6 +91,12 @@ namespace RNAssistant.Harness
                 false);
 
             AssertTrue(result.UsedTokens > 0, "inspector estimates prompt tokens");
+            AssertEqual(result.UsedTokens + ModelProtocolClient.EstimateFormatRepairOverheadTokens(settings) +
+                ModelContextBudget.ContinuationReserveTokens(settings), result.AdmissionTokens,
+                "admission reserves are separate from the estimated API input");
+            AssertEqual(1234, result.LastPromptTokens.Value, "last completed API input is exact");
+            AssertEqual(56, result.LastCompletionTokens.Value, "last completed API output is exact");
+            AssertEqual(1290, result.LastTotalTokens.Value, "last completed API total is exact");
             AssertTrue(result.Sections.Any(section => section.Id == "tool_instructions"), "separate tool prompt cost is visible");
             AssertTrue(result.Sections.Any(section => section.Id == "skill_instructions"), "separate skill prompt cost is visible");
             AssertTrue(result.Sections.Any(section => section.Id == "capabilities"),
@@ -100,14 +108,21 @@ namespace RNAssistant.Harness
             AssertTrue(result.Sections.Any(section => section.Id == "continuation_reserve" &&
                 section.Tokens == ModelContextBudget.ContinuationReserveTokens(settings)),
                 "inspector exposes the same continuation reserve used by admission");
-            var capabilities = result.Sections.Single(section => section.Id == "capabilities");
-            AssertTrue(capabilities.Items.Any(item => item.Kind == "tool"), "tool ids are visible in the unified catalog");
-            AssertTrue(capabilities.Items.Any(item => item.Kind == "skill"), "skill ids are visible in the unified catalog");
+            AssertTrue(result.Sections.Single(section => section.Id == "catalog_tools").Items
+                .Any(item => item.Kind == "tool"), "compact tool ids are separate from callable schemas");
+            AssertTrue(result.Sections.Single(section => section.Id == "catalog_skills").Items
+                .Any(item => item.Kind == "skill"), "compact skill ids have their own token section");
             AssertTrue(result.Sections.Any(section => section.Id == "tool_history"), "tool protocol history is visible");
             AssertTrue(result.Sections.Any(section => section.Id == "document_context"), "document context is visible");
             AssertTrue(result.Sections.Any(section => section.Id == "artifacts"), "artifact index is visible");
-            AssertEqual(result.UsedTokens, result.Sections.Where(section => section.Included).Sum(section => section.Tokens),
-                "included section totals match prompt estimate");
+            AssertEqual(result.UsedTokens, result.Sections.Where(section => section.Included &&
+                section.Id != "format_repair_reserve" && section.Id != "continuation_reserve")
+                .Sum(section => section.Tokens), "request sections match the estimated API input");
+            AssertEqual(result.AdmissionTokens, result.Sections.Where(section => section.Included).Sum(section => section.Tokens),
+                "request and reserve sections match admission budget");
+            AssertTrue(result.Sections.Any(section => section.Id == "stored_resources" && !section.Included &&
+                section.Items.Any(item => item.Id == "plan_r1" && item.Tokens == 0 && item.SizeBytes > 0)),
+                "local artifact bytes are separate from prompt tokens");
             AssertTrue(result.RawRequestJson == null, "raw request is not built by default");
             AssertTrue(result.ResourceContextReceipt != null, "inspector exposes the same frozen compiler receipt");
             });
@@ -149,7 +164,7 @@ namespace RNAssistant.Harness
                 AssertContains(raw.RawRequestJson, "Новый вопрос", "raw structure is generated explicitly");
                 AssertTrue(raw.Sections.Any(section => section.Id == "tools"),
                     "chat inspector shows read-only resource schemas");
-                AssertTrue(!raw.Sections.Any(section => section.Id == "skills"),
+                AssertTrue(!raw.Sections.Any(section => section.Id == "catalog_skills"),
                     "chat inspector excludes skills");
                 AssertContains(raw.RawRequestJson, "common.resources_read", "chat raw request includes resource reads");
                 AssertTrue(raw.RawRequestJson.IndexOf("excel.inspect", StringComparison.OrdinalIgnoreCase) < 0,

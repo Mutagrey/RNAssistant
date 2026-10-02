@@ -30,7 +30,6 @@ function createContext(stageFails) {
   context.renderMessages = () => {};
   context.renderChatSessions = () => {};
   context.renderContextMeter = () => {};
-  context.updateEstimatedContextUsage = () => {};
   context.clearSendError = () => {};
   context.hasActiveMessageEdit = () => false;
   context.pendingAgentApprovalActivity = () => null;

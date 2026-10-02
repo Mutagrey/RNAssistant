@@ -345,7 +345,6 @@ async function persistSettingsFromForm(reviewAgentPrompts) {
       log("Настройка сохранена, но список инструментов не обновился: " + error.message, "error");
     }
   }
-  updateEstimatedContextUsage();
   renderContextMeter();
   return state.settings;
 }

@@ -308,8 +308,6 @@ function applyChatState(response) {
   }
   if (response.contextUsage || response.ContextUsage) {
     state.contextUsage = response.contextUsage || response.ContextUsage || {};
-    state.contextUsageBase = cloneContextUsage(state.contextUsage);
-    state.contextUsageBaseContextSignature = contextUsageContextSignature();
     syncTokenEstimateCalibrationFromUsage();
   }
   if ((response.htmlWorkspace || response.HtmlWorkspace) && (chatChanged || !state.htmlWorkspaceDirty)) {
@@ -324,7 +322,7 @@ function applyChatState(response) {
   renderChatSessions();
   if (libraryChanged && typeof renderInstructions === "function") renderInstructions();
   renderMessages();
-  renderContext(true);
+  renderContext();
   renderContextMeter();
   renderModelControls();
   if ($("chatModeSelect")) {
@@ -706,246 +704,51 @@ function logToolResults(results) {
   });
 }
 
-function cloneContextUsage(usage) {
-  var source = usage || {};
-  var clone = {};
-  Object.keys(source).forEach(function (key) { clone[key] = source[key]; });
-  return clone;
+function modelUsageFromContext(base) {
+  base = base || {};
+  var basePrompt = base.lastPromptTokens !== undefined ? base.lastPromptTokens : base.LastPromptTokens;
+  var baseCompletion = base.lastCompletionTokens !== undefined ? base.lastCompletionTokens : base.LastCompletionTokens;
+  var baseTotal = base.lastTotalTokens !== undefined ? base.lastTotalTokens : base.LastTotalTokens;
+  if (basePrompt !== null && basePrompt !== undefined ||
+      baseCompletion !== null && baseCompletion !== undefined || baseTotal !== null && baseTotal !== undefined)
+    return { prompt: basePrompt == null ? null : basePrompt,
+      completion: baseCompletion == null ? null : baseCompletion, total: baseTotal == null ? null : baseTotal };
+  return null;
 }
 
-function lastTokenUsageText() {
-  for (var i = state.messages.length - 1; i >= 0; i -= 1) {
-    var total = messageTotalTokens(state.messages[i]);
-    if (total !== null && total !== undefined) {
-      return " · последнее " + total + " токенов";
-    }
-  }
-  return "";
-}
-
-function formatCompactTokenCount(value) {
-  value = Number(value || 0);
-  if (value >= 1000000) return (Math.round(value / 100000) / 10) + "M";
-  if (value >= 1000) return (Math.round(value / 100) / 10) + "K";
-  return formatNumber(value);
+function lastModelUsage() {
+  return modelUsageFromContext(state.contextUsage);
 }
 
 function renderContextMeter() {
   if (typeof isPanelActive === "function" && !isPanelActive("chat")) return;
-  var usage = state.contextUsage || {};
-  var used = Number(usage.usedTokens || usage.UsedTokens || 0);
-  var limit = Number(usage.limitTokens || usage.LimitTokens || 0);
-  var windowTokens = Number(usage.contextWindowTokens || usage.ContextWindowTokens || 0);
-  var reservedOutput = Number(usage.reservedOutputTokens || usage.ReservedOutputTokens || 0);
-  var percent = Number(usage.percent || usage.Percent || (limit ? Math.round(used * 100 / limit) : 0));
   var value = $("contextMeterValue");
   var detail = $("contextMeterDetail");
   var meter = $("contextMeter");
   if (!value || !detail || !meter) {
     return;
   }
-
-  percent = Math.max(0, Math.min(100, percent));
-  var actual = !!(usage.actual || usage.Actual);
-  var compactDetail = (actual ? "" : "≈") + formatCompactTokenCount(used) + " / " + formatCompactTokenCount(limit);
-  var detailText = (actual ? "" : "≈") + formatNumber(used) + " / " + formatNumber(limit) + " вход";
-  if (windowTokens) detailText += " · окно " + formatNumber(windowTokens);
-  if (reservedOutput) detailText += " · ответ до " + formatNumber(reservedOutput);
-  detailText += (actual ? " · API usage" : "") + lastTokenUsageText();
-  var level = percent >= 90 ? "danger" : (percent >= 70 ? "warn" : "ok");
-  meter.dataset.level = level;
-  meter.style.setProperty("--context-meter-percent", percent + "%");
-  meter.style.setProperty("--context-meter-color", level === "danger" ? "var(--danger)" : (level === "warn" ? "#b7791f" : "var(--success)"));
-  value.textContent = percent + "%";
-  detail.textContent = compactDetail;
-  meter.title = "Контекст модели: " + percent + "%\n" + detailText + "\nНажмите, чтобы увидеть состав следующего запроса модели.";
-  meter.setAttribute("aria-label", meter.title);
-}
-
-function updateEstimatedContextUsage() {
-  var base = state.contextUsageBase || state.contextUsage || {};
-  var baseUsed = Number(base.usedTokens || base.UsedTokens || 0);
-  var used = baseUsed;
-  var localDelta = 0;
-  var scanned = 0;
-  for (var index = (state.messages || []).length - 1; index >= 0 && scanned < 128; index -= 1, scanned += 1) {
-    var message = state.messages[index];
-    if (!(message && (message.Local || message.local || message.Pending || message.pending || message.Failed || message.failed))) {
-      continue;
-    }
-    if (messageActivity(message) || message.ExcludeFromModelContext || message.excludeFromModelContext) continue;
-    var role = messageRole(message).toLowerCase();
-    var protocol = !!(message.ProtocolMessage || message.protocolMessage);
-    if (role !== "user" && role !== "assistant" &&
-        !(protocol && (role === "tool" || role === "developer"))) continue;
-    var content = messageContent(message);
-    var pending = message.Local || message.local || message.Pending || message.pending;
-    var toolCalls = message.ToolCalls || message.toolCalls || [];
-    if (!content.trim() && !pending && !toolCalls.length && role !== "tool") continue;
-    localDelta += 4 + estimateTextTokens(role) + estimateTextTokens(content);
-    if (toolCalls.length) {
-      localDelta += 8;
-      toolCalls.forEach(function (call) {
-        call = call || {};
-        localDelta += 4 + estimateTextTokens(call.Id || call.id || "") +
-          estimateTextTokens(call.Name || call.name || "") +
-          estimateTextTokens(call.ArgumentsJson || call.argumentsJson || "");
-      });
-    }
-    if (role === "tool") {
-      localDelta += 2 + estimateTextTokens(message.ToolCallId || message.toolCallId || "") +
-        estimateTextTokens(message.ToolName || message.toolName || "");
-    }
-    messageAttachments(message).forEach(function (attachment) {
-      var extracted = String(attachment.ExtractedText || attachment.extractedText || "");
-      var chars = Math.max(Number(attachment.ExtractedCharCount || attachment.extractedCharCount || 0), extracted.length);
-      localDelta += estimateCharacterCountTokens(chars);
-      if (attachmentKind(attachment) === "image") localDelta += 4096;
-      if (attachmentKind(attachment) === "audio") {
-        localDelta += Math.ceil(Number(attachment.Size || attachment.size || 0) / 512);
-      }
-    });
-  }
-  var contextDelta = contextUsageContextSignature() === state.contextUsageBaseContextSignature
-    ? 0
-    : estimateCurrentContextTokens();
-  used += localDelta + contextDelta;
-  if (used > 0 && !baseUsed) used += effectiveTokenEstimateIntercept();
-
-  var settings = state.settings || {};
-  var override = Number(settings.ContextWindowOverrideTokens || settings.contextWindowOverrideTokens || 0);
-  var modelName = activeChatModel() || settingsModel();
-  var model = typeof findModel === "function" ? findModel(modelName) : null;
-  var configuredWindow = typeof effectiveModelCapabilityValue === "function"
-    ? effectiveModelCapabilityValue(modelName, "MaxContextTokens", "maxContextTokens", model && model.maxContextTokens)
-    : (model && model.maxContextTokens);
-  var windowTokens = override || Number(configuredWindow || 32768);
-  var requestedOutput = Number(settings.MaxTokens || settings.maxTokens || 3072);
-  var configuredOutput = typeof effectiveModelCapabilityValue === "function"
-    ? effectiveModelCapabilityValue(modelName, "MaxOutputTokens", "maxOutputTokens", model && model.maxOutputTokens)
-    : (model && model.maxOutputTokens);
-  var modelOutputLimit = Number(configuredOutput || 0);
-  var maxOutput = modelOutputLimit > 0 ? Math.min(requestedOutput, modelOutputLimit) : requestedOutput;
-  var safety = Math.max(1024, Math.min(16384, Math.ceil(windowTokens * 0.02)));
-  var reservedOutput = Math.min(Math.max(1, maxOutput), Math.max(1, windowTokens - safety - 1024));
-  var limit = Math.max(1024, windowTokens - reservedOutput - safety);
-  state.contextUsage = {
-    usedTokens: used,
-    limitTokens: limit,
-    percent: limit ? Math.min(100, Math.round(used * 100 / limit)) : 0,
-    actual: false,
-    clientEstimated: true,
-    baseUsedTokens: baseUsed,
-    localDeltaTokens: localDelta,
-    contextDeltaTokens: contextDelta,
-    contextWindowTokens: windowTokens,
-    reservedOutputTokens: reservedOutput,
-    maxOutputTokens: maxOutput,
-    safetyTokens: safety,
-    availableOutputTokens: Math.max(0, windowTokens - safety - used),
-    estimateMultiplier: effectiveTokenEstimateMultiplier(),
-    estimateInterceptTokens: effectiveTokenEstimateIntercept(),
-    estimateModel: modelName,
-    manualEstimateMultiplier: Number(settings.TokenEstimateMultiplier || settings.tokenEstimateMultiplier || 1),
-    autoCalibrateEstimate: settings.AutoCalibrateTokenEstimate !== false && settings.autoCalibrateTokenEstimate !== false
-  };
-}
-
-function contextUsageContextSignature() {
-  return contextNotes().map(function (note) {
-    return [
-      noteId(note),
-      noteHost(note),
-      noteKind(note),
-      noteReference(note),
-      noteText(note).length
-    ].join("|");
-  }).join("\n");
-}
-
-function estimateCurrentContextTokens() {
-  var includedContext = {};
-  var used = 0;
-  contextNotes().forEach(function (note) {
-    var text = noteText(note);
-    var reference = noteReference(note);
-    var identity = reference
-      ? [noteHost(note), noteKind(note), reference].join("|").toLowerCase()
-      : noteId(note);
-    if (!text.trim() || includedContext[identity]) return;
-    includedContext[identity] = true;
-    used += estimateTextTokens(text);
-  });
-  return used;
-}
-
-function estimateTextTokens(text) {
-  text = String(text || "");
-  if (!text) return 0;
-  var bytes;
-  if (window.TextEncoder) {
-    bytes = new TextEncoder().encode(text).length;
+  var last = lastModelUsage();
+  if (last) {
+    var parts = [];
+    if (last.prompt !== null) parts.push("↑" + formatNumber(last.prompt));
+    if (last.completion !== null) parts.push("↓" + formatNumber(last.completion));
+    if (!parts.length && last.total !== null) parts.push(formatNumber(last.total) + " всего");
+    value.textContent = "API";
+    detail.textContent = parts.join(" · ");
+    meter.title = "Последние данные API usage: " +
+      (last.prompt === null ? "" : "вход " + formatNumber(last.prompt) + " · ") +
+      (last.completion === null ? "" : "выход " + formatNumber(last.completion) + " · ") +
+      (last.total === null ? "" : "всего " + formatNumber(last.total) + " · ") +
+      "токенов. Откройте данные usage и состав контекста.";
   } else {
-    bytes = unescape(encodeURIComponent(text)).length;
+    value.textContent = "API";
+    detail.textContent = "нет usage";
+    meter.title = "Точное число токенов не получено от API. Откройте состав контекста.";
   }
-  return Math.max(1, Math.ceil(Math.ceil(bytes / 4) * effectiveTokenEstimateMultiplier()));
-}
-
-function estimateCharacterCountTokens(characters) {
-  characters = Number(characters || 0);
-  if (characters <= 0) return 0;
-  return Math.max(1, Math.ceil(Math.ceil(characters / 2) * effectiveTokenEstimateMultiplier()));
-}
-
-function effectiveTokenEstimateMultiplier() {
-  var settings = state.settings || {};
-  var manual = Number(settings.TokenEstimateMultiplier || settings.tokenEstimateMultiplier || 1);
-  if (!isFinite(manual) || manual <= 0) manual = 1;
-  manual = Math.max(0.25, Math.min(4, manual));
-  var automatic = settings.AutoCalibrateTokenEstimate !== false && settings.autoCalibrateTokenEstimate !== false;
-  var usage = state.contextUsage || {};
-  var modelName = String(activeChatModel() || settingsModel() || "");
-  var usageModel = String(usage.estimateModel || usage.EstimateModel || "");
-  var usageMultiplier = Number(usage.estimateMultiplier || usage.EstimateMultiplier || 0);
-  var usageManual = Number(usage.manualEstimateMultiplier || usage.ManualEstimateMultiplier || 0);
-  var usageAutomatic = usage.autoCalibrateEstimate !== false && usage.AutoCalibrateEstimate !== false;
-  if (usageMultiplier > 0 && usageModel.toLowerCase() === modelName.toLowerCase() &&
-      Math.abs(usageManual - manual) < 0.0001 && usageAutomatic === automatic) {
-    return Math.max(0.25, Math.min(4, usageMultiplier));
-  }
-  if (!automatic) return manual;
-  var model = modelName.toLowerCase();
-  var calibrations = settings.TokenEstimateCalibrations || settings.tokenEstimateCalibrations || {};
-  var key = Object.keys(calibrations).filter(function (item) {
-    return String(item || "").toLowerCase() === model;
-  })[0];
-  var calibration = key ? calibrations[key] : null;
-  var samples = Number((calibration && (calibration.SampleCount || calibration.sampleCount)) || 0);
-  var relative = Number((calibration && (calibration.Multiplier || calibration.multiplier)) || 1);
-  if (!samples || !isFinite(relative) || relative <= 0) return manual;
-  return Math.max(0.25, Math.min(4, relative));
-}
-
-function effectiveTokenEstimateIntercept() {
-  var settings = state.settings || {};
-  var automatic = settings.AutoCalibrateTokenEstimate !== false && settings.autoCalibrateTokenEstimate !== false;
-  if (!automatic) return 0;
-  var usage = state.contextUsage || {};
-  var modelName = String(activeChatModel() || settingsModel() || "");
-  var usageModel = String(usage.estimateModel || usage.EstimateModel || "");
-  var usageIntercept = Number(usage.estimateInterceptTokens || usage.EstimateInterceptTokens || 0);
-  if (usageModel.toLowerCase() === modelName.toLowerCase() && isFinite(usageIntercept) && usageIntercept >= 0) {
-    return Math.min(65536, Math.ceil(usageIntercept));
-  }
-  var calibrations = settings.TokenEstimateCalibrations || settings.tokenEstimateCalibrations || {};
-  var model = modelName.toLowerCase();
-  var key = Object.keys(calibrations).filter(function (item) {
-    return String(item || "").toLowerCase() === model;
-  })[0];
-  var calibration = key ? calibrations[key] : null;
-  var samples = Number((calibration && (calibration.SampleCount || calibration.sampleCount)) || 0);
-  var intercept = Number((calibration && (calibration.InterceptTokens || calibration.interceptTokens)) || 0);
-  return samples > 0 && isFinite(intercept) && intercept > 0 ? Math.min(65536, Math.ceil(intercept)) : 0;
+  meter.dataset.level = "ok";
+  meter.style.setProperty("--context-meter-percent", "0%");
+  meter.setAttribute("aria-label", meter.title);
 }
 
 function syncTokenEstimateCalibrationFromUsage() {

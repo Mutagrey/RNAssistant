@@ -61,6 +61,7 @@ function assertClosed(f) {
   await success.c.loadPromptContextInspector(true);
   assert.equal(success.c.promptContextInspectorRawText, raw);
   assert.equal(success.renders.length, 1);
+  assert.equal(success.node("promptContextInspectorEstimate").open, true, "raw JSON opens its preview section");
   assert.ok(success.fetches.length > 1, "source uses bounded chunks and bound native fetch");
   assertClosed(success);
   success.c.closePromptContextInspector();

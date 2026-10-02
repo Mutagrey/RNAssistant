@@ -806,7 +806,9 @@ namespace RNAssistant.Harness
                     Content = calls <= invalid.Length ? invalid[calls - 1] :
                         "{\"message\":\"  Accepted.  \",\"final\":true,\"tool_calls\":[]}",
                     ReasoningContent = calls <= invalid.Length ? "REJECTED_REASONING" : "accepted reasoning",
-                    PromptTokens = calls * 10
+                    PromptTokens = calls * 10,
+                    CompletionTokens = calls,
+                    TotalTokens = calls * 11
                 });
             });
             var result = await protocol.GetResponseAsync(request, new ModelProtocolProgress
@@ -819,6 +821,10 @@ namespace RNAssistant.Harness
             AssertEqual(successfulAttemptId, result.SourceModelAttemptId,
                 "accepted source identity is a snapshot unaffected by optional trace changes to reused options");
             AssertEqual("accepted reasoning", result.Completion.ReasoningContent, "only accepted completion metadata leaves protocol");
+            var usage = JObject.FromObject(result.ContextUsage);
+            AssertEqual(calls * 10, usage["lastPromptTokens"].Value<int>(), "latest attempt supplies exact context input");
+            AssertEqual(calls, usage["lastCompletionTokens"].Value<int>(), "latest attempt supplies exact output");
+            AssertEqual(calls * 11, usage["lastTotalTokens"].Value<int>(), "usage is not summed across repairs");
             AssertEqual(invalid.Length + 1, calls, "valid response ends the protocol operation");
             AssertEqual(calls, started, "each raw attempt resets presentation");
             AssertEqual(calls, completed, "each completed response flushes presentation");

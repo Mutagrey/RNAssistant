@@ -71,7 +71,6 @@ async function sendChat(text, attachments, targetChatId) {
         if (!$("chatInput").value.trim()) setChatInputText(text, false);
         state.draftAttachments = attachments.slice();
         renderAttachmentDrafts();
-        updateEstimatedContextUsage();
         renderContextMeter();
         clearSendError();
       }
@@ -201,7 +200,6 @@ async function submitChatInput() {
   clearSendError();
   state.messages.push({ Id: "local-" + Date.now(), Role: "user", Content: text, Attachments: attachments, Local: true, Pending: true });
   clearDraftAttachments();
-  updateEstimatedContextUsage();
   renderMessages({ forceScroll: true });
   renderChatSessions();
   renderContextMeter();

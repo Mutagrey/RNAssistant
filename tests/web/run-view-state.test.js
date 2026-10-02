@@ -133,9 +133,6 @@ function state(runId, lifecycle = "completed", health = "clean", pending = null)
   assert.ok(index.includes("app-core.js?v=office-chat-20260930-3"), "core uses the current cache key");
   assert.ok(index.includes("app-chat-state.js?v=office-chat-20260930-3"), "chat state uses the current cache key");
   assert.ok(index.includes("app-messages.js?v=action-severity-20260930-1"), "messages uses the transcript incremental cache key");
-  assert.equal(/function updateEstimatedContextUsage\(\)[\s\S]*?state\.messages\.forEach/.test(chatState), false,
-    "context meter does not scan and encode the whole transcript");
-  assert.match(chatState, /localDeltaTokens/, "context meter exposes presentation-only local delta");
   ["app-chat.css", "app-agent.css"].forEach(asset => {
     assert.ok(index.includes(asset + "?v=action-severity-20260930-1"), asset + " uses the current layout cache key");
   });

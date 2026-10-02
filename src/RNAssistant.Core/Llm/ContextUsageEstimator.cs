@@ -17,7 +17,8 @@ namespace RNAssistant.Core.Llm
             return FromPrompt(promptMessages, settings, actualPromptTokens, null);
         }
 
-        public static object FromPrompt(IEnumerable<ChatMessage> promptMessages, AppSettings settings, int? actualPromptTokens, LlmRequestOptions requestOptions)
+        public static object FromPrompt(IEnumerable<ChatMessage> promptMessages, AppSettings settings, int? actualPromptTokens,
+            LlmRequestOptions requestOptions, int? actualCompletionTokens = null, int? actualTotalTokens = null)
         {
             var limit = ModelContextBudget.InputBudgetTokens(settings);
             var usedChars = 0;
@@ -67,7 +68,8 @@ namespace RNAssistant.Core.Llm
                 ? TokenEstimateCalibration.AddPromptIntercept(settings, estimatedTokens) +
                     ModelContextBudget.EstimateRequestOptionsTokens(requestOptions, settings)
                 : TokenEstimateCalibration.PredictPromptTokens(settings, baseEstimatedTokens + baseOptionsTokens);
-            return Usage(usedChars, actualPromptTokens ?? estimatedTokens, limit, count, actualPromptTokens.HasValue, settings);
+            return Usage(usedChars, actualPromptTokens ?? estimatedTokens, limit, count,
+                actualPromptTokens.HasValue, settings, "request", actualPromptTokens, actualCompletionTokens, actualTotalTokens);
         }
 
         public static object FromSession(ChatSession session, AppSettings settings)
@@ -141,7 +143,11 @@ namespace RNAssistant.Core.Llm
             }
 
             usedTokens = TokenEstimateCalibration.PredictPromptTokens(settings, baseTokens);
-            return Usage(usedChars, usedTokens, limit, count, false, settings);
+            var lastUsage = (session == null ? null : session.Messages)?.LastOrDefault(message =>
+                message != null && (message.PromptTokens.HasValue || message.CompletionTokens.HasValue ||
+                    message.TotalTokens.HasValue));
+            return Usage(usedChars, usedTokens, limit, count, false, settings, "chat_context",
+                lastUsage?.PromptTokens, lastUsage?.CompletionTokens, lastUsage?.TotalTokens);
         }
 
         private static bool IsAnalyzedAttachment(ChatMessage message, ChatAttachment attachment)
@@ -152,7 +158,8 @@ namespace RNAssistant.Core.Llm
                     .Contains(attachment.Id, StringComparer.OrdinalIgnoreCase);
         }
 
-        private static object Usage(int usedChars, int usedTokens, int limitTokens, int count, bool actual, AppSettings settings)
+        private static object Usage(int usedChars, int usedTokens, int limitTokens, int count, bool actual,
+            AppSettings settings, string scope, int? lastPromptTokens, int? lastCompletionTokens, int? lastTotalTokens)
         {
             var contextWindowTokens = Math.Max(4096, ModelContextBudget.ContextWindowTokens(settings));
             var safetyTokens = ModelContextBudget.SafetyReserveTokens(contextWindowTokens);
@@ -168,6 +175,10 @@ namespace RNAssistant.Core.Llm
                 percent = limitTokens <= 0 ? 0 : Math.Min(100, (int)Math.Round(usedTokens * 100.0 / limitTokens)),
                 messageCount = count,
                 actual = actual,
+                scope = scope,
+                lastPromptTokens = lastPromptTokens,
+                lastCompletionTokens = lastCompletionTokens,
+                lastTotalTokens = lastTotalTokens,
                 contextWindowTokens = contextWindowTokens,
                 reservedOutputTokens = reservedOutputTokens,
                 maxOutputTokens = ModelContextBudget.RequestedOutputTokens(settings),

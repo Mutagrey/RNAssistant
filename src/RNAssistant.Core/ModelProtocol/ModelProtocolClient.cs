@@ -102,7 +102,8 @@ namespace RNAssistant.Core.ModelProtocol
                     }
 
                     var sourceModelAttemptId = options.TraceModelAttemptId;
-                    contextUsage = ContextUsageEstimator.FromPrompt(attemptMessages, settings, completion.PromptTokens, options);
+                    contextUsage = ContextUsageEstimator.FromPrompt(attemptMessages, settings, completion.PromptTokens,
+                        options, completion.CompletionTokens, completion.TotalTokens);
                     if (!string.IsNullOrWhiteSpace(completion.RefusalContent))
                     {
                         TraceAccepted(options, true, progress);

@@ -114,6 +114,23 @@ Every request contains one editable instruction followed by one dynamic `RUNTIME
 - one compact `capabilities` catalog with exact `id`, explicit `kind` (`tool` or `skill`), summary, revision, and kind-specific safety/body metadata in Agent, or an empty catalog in Chat;
 - chat-owned user context and artifact references.
 
+Token reporting separates three quantities. The chat button and the inspector's
+primary counter show the same exact input and output counts from API usage,
+without an approximation mark or calibration. Missing usage is shown explicitly;
+partial usage never substitutes a total or an estimate for missing input. Live
+model results carry all supplied usage fields; the UI neither recomputes counts
+from drafts nor searches paged history for usage. When a newer chat revision arrives, an open
+inspector updates its usage counter while its next-request preview stays a manual
+snapshot. The estimated *next* model input is in a separate, initially collapsed
+inspector section. Its request sections (history, instructions, tool schemas,
+compact skill/tool catalog, attachments and response format) sum to the estimated
+input; per-section attribution is approximate because the provider reports only
+the aggregate. Format-repair and continuation reserves are admission capacity,
+not bytes sent in the first request. The inspector adds them only in its budget
+line and remaining-capacity calculation. Full artifacts and historical attachments
+are shown as local resource sizes; only their model-visible representations, often
+compact references, count toward the next request.
+
 Explicitly addressed background work (runs, context operations, diagnostics, resource staging) loads its target session without changing the user's selected chat. Only navigation actions such as select/create/activate change the active session.
 
 The Agent sections and Plan/Chat prompts use one explicit settings schema version.

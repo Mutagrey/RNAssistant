@@ -148,7 +148,8 @@ namespace RNAssistant.Office.Services
                     runnableTools, enabledSkills, attachments, RelaxedHistoryBudgetTokens, capabilityCatalog);
             }
 
-            var usedTokens = ModelContextBudget.EstimateAdmittedRequestTokens(
+            var requestTokens = ModelContextBudget.EstimateRequestTokens(messages, options, settings);
+            var admissionTokens = ModelContextBudget.EstimateAdmittedRequestTokens(
                 messages,
                 options,
                 settings,
@@ -171,13 +172,12 @@ namespace RNAssistant.Office.Services
                 capabilityCatalog,
                 attachments,
                 draftText,
-                usedTokens,
+                requestTokens,
                 repairReserveTokens,
                 continuationReserveTokens);
             var lastUsage = (session.Messages ?? new List<ChatMessage>())
-                .Where(item => item != null && item.PromptTokens.HasValue)
-                .OrderByDescending(item => item.CreatedUtc)
-                .FirstOrDefault();
+                .LastOrDefault(item => item != null &&
+                    (item.PromptTokens.HasValue || item.CompletionTokens.HasValue || item.TotalTokens.HasValue));
             var estimateMultiplier = TokenEstimateCalibration.EffectiveMultiplier(settings);
             var estimateIntercept = TokenEstimateCalibration.EffectiveInterceptTokens(settings);
             var calibrationSamples = settings.AutoCalibrateTokenEstimate
@@ -197,15 +197,16 @@ namespace RNAssistant.Office.Services
                 SessionRevision = session.Revision,
                 Mode = mode,
                 Model = settings.Model ?? session.Model ?? string.Empty,
-                UsedTokens = usedTokens,
+                UsedTokens = requestTokens,
+                AdmissionTokens = admissionTokens,
                 InputLimitTokens = inputLimit,
                 ContextWindowTokens = contextWindow,
                 ReservedOutputTokens = reservedOutput,
                 SafetyTokens = safety,
-                RemainingInputTokens = Math.Max(0, inputLimit - usedTokens),
-                Percent = inputLimit <= 0 ? 0 : Math.Min(100, (int)Math.Round(usedTokens * 100.0 / inputLimit)),
+                RemainingInputTokens = Math.Max(0, inputLimit - admissionTokens),
+                Percent = inputLimit <= 0 ? 0 : Math.Min(100, (int)Math.Round(admissionTokens * 100.0 / inputLimit)),
                 MessageCount = messages.Count,
-                OverBudget = relaxed || usedTokens > inputLimit,
+                OverBudget = relaxed || admissionTokens > inputLimit,
                 Estimated = true,
                 EstimateMultiplier = estimateMultiplier,
                 EstimateInterceptTokens = estimateIntercept,
@@ -216,9 +217,11 @@ namespace RNAssistant.Office.Services
                 CalibrationSamples = calibrationSamples,
                 EstimateMethod = "utf8_bytes_div_4_linear_calibrated",
                 LastPromptTokens = lastUsage == null ? null : lastUsage.PromptTokens,
+                LastCompletionTokens = lastUsage == null ? null : lastUsage.CompletionTokens,
+                LastTotalTokens = lastUsage == null ? null : lastUsage.TotalTokens,
                 LastPromptUtc = lastUsage == null ? null : (DateTime?)lastUsage.CreatedUtc,
                 LastRunId = lastUsage == null ? string.Empty : lastUsage.RunId ?? string.Empty,
-                Notice = relaxed || usedTokens > inputLimit
+                Notice = relaxed || admissionTokens > inputLimit
                     ? "Оценочный состав с обязательными schemas/reserves превышает лимит. Runtime попробует допустимое сжатие истории, а если этого недостаточно — остановит основной запрос; сократите историю или выберите модель с большим контекстом. " + estimateNotice
                     : estimateNotice + " Снимок обновляется только вручную.",
                 Sections = sections,
@@ -275,7 +278,7 @@ namespace RNAssistant.Office.Services
             JObject capabilityCatalog,
             IReadOnlyList<ChatAttachment> attachments,
             string draftText,
-            int usedTokens,
+            int requestTokens,
             int repairReserveTokens,
             int continuationReserveTokens)
         {
@@ -416,6 +419,8 @@ namespace RNAssistant.Office.Services
 
             var excluded = BuildExcludedSection(sourceSession, previewSession, true);
             if (excluded != null) sections.Add(excluded);
+            var storedResources = BuildStoredResourcesSection(sourceSession);
+            if (storedResources != null) sections.Add(storedResources);
 
             var estimateIntercept = TokenEstimateCalibration.EffectiveInterceptTokens(settings);
             if (estimateIntercept > 0)
@@ -436,14 +441,30 @@ namespace RNAssistant.Office.Services
                 });
             }
 
-            var included = sections.Where(section => section.Included).OrderByDescending(section => section.Tokens).ToList();
-            var difference = usedTokens - included.Sum(section => section.Tokens);
-            if (difference != 0 && included.Count > 0)
+            var requestSections = sections.Where(section => section.Included && !IsBudgetReserve(section)).ToList();
+            var requestSectionTotal = requestSections.Sum(section => section.Tokens);
+            if (requestSectionTotal > 0 && requestSectionTotal != requestTokens)
             {
-                included[0].Tokens = Math.Max(0, included[0].Tokens + difference);
+                var remaining = requestTokens;
+                for (var index = 0; index < requestSections.Count; index++)
+                {
+                    var section = requestSections[index];
+                    var tokens = index == requestSections.Count - 1
+                        ? remaining
+                        : Math.Min(remaining, (int)Math.Floor((double)requestTokens * section.Tokens / requestSectionTotal));
+                    section.Tokens = tokens;
+                    section.Items = BoundItems(section.Items, tokens);
+                    remaining -= tokens;
+                }
             }
+            var included = sections.Where(section => section.Included).OrderByDescending(section => section.Tokens).ToList();
             included.AddRange(sections.Where(section => !section.Included));
             return included;
+        }
+
+        private static bool IsBudgetReserve(PromptContextSectionDto section)
+        {
+            return section != null && (section.Id == "format_repair_reserve" || section.Id == "continuation_reserve");
         }
 
         private List<SectionSeed> BuildRuntimeSeeds(
@@ -539,22 +560,45 @@ namespace RNAssistant.Office.Services
 
             if (capabilities.HasValues)
             {
+                var catalogItems = capabilityItems.OfType<JObject>().ToList();
+                var toolItems = catalogItems.Where(item => string.Equals((string)item["kind"], "tool", StringComparison.OrdinalIgnoreCase)).ToList();
+                var skillItems = catalogItems.Where(item => string.Equals((string)item["kind"], "skill", StringComparison.OrdinalIgnoreCase)).ToList();
+                var catalogEnvelope = (JObject)capabilities.DeepClone();
+                catalogEnvelope["items"] = new JArray();
                 seeds.Add(new SectionSeed
                 {
                     Id = "capabilities",
-                    Title = "Capability catalog",
+                    Title = "Обвязка каталога",
                     Detail = capabilityItems.Count + "/" + ((int?)capabilities["total"] ?? capabilityItems.Count) +
-                        " compact exact-id tools and skills",
-                    RawTokens = Math.Max(1, EstimateTextTokens(capabilities.ToString(Formatting.None))),
-                    Count = capabilityItems.Count,
-                    Items = capabilityItems.OfType<JObject>().Select(item => Item(
-                        (string)item["id"],
-                        (string)item["kind"] ?? "capability",
-                        (string)item["name"] ?? (string)item["id"] ?? "Capability",
-                        ((string)item["kind"] ?? "capability") + ": " + ((string)item["id"] ?? string.Empty),
-                        EstimateTextTokens(item.ToString(Formatting.None)),
-                        (string)item["summary"] ?? string.Empty)).ToList()
+                        " компактных описаний",
+                    RawTokens = Math.Max(1, EstimateTextTokens(catalogEnvelope.ToString(Formatting.None))),
+                    Count = 1,
+                    Items = new List<PromptContextItemDto> { Item("catalog-envelope", "catalog", "Метаданные каталога", string.Empty,
+                        EstimateTextTokens(catalogEnvelope.ToString(Formatting.None)), catalogEnvelope.ToString(Formatting.Indented)) }
                 });
+                foreach (var group in new[]
+                {
+                    new { Id = "catalog_tools", Title = "Tools в каталоге", Kind = "tool", Values = toolItems },
+                    new { Id = "catalog_skills", Title = "Skills в каталоге", Kind = "skill", Values = skillItems }
+                })
+                {
+                    if (group.Values.Count == 0) continue;
+                    seeds.Add(new SectionSeed
+                    {
+                        Id = group.Id,
+                        Title = group.Title,
+                        Detail = "Только компактные описания; полные тела загружаются по запросу",
+                        RawTokens = Math.Max(1, EstimateTextTokens(new JArray(group.Values).ToString(Formatting.None))),
+                        Count = group.Values.Count,
+                        Items = group.Values.Select(item => Item(
+                            (string)item["id"],
+                            group.Kind,
+                            (string)item["name"] ?? (string)item["id"] ?? "Capability",
+                            group.Kind + ": " + ((string)item["id"] ?? string.Empty),
+                            EstimateTextTokens(item.ToString(Formatting.None)),
+                            (string)item["summary"] ?? string.Empty)).ToList()
+                    });
+                }
             }
             else
             {
@@ -792,6 +836,54 @@ namespace RNAssistant.Office.Services
                 Tokens = 0,
                 Count = excluded.Count,
                 Detail = "История сохранена локально, но не входит в активный prompt",
+                Included = false,
+                Items = BoundItems(items)
+            };
+        }
+
+        private PromptContextSectionDto BuildStoredResourcesSection(ChatSession session)
+        {
+            var items = new List<PromptContextItemDto>();
+            foreach (var artifact in session.Artifacts ?? new List<ChatArtifact>())
+            {
+                if (artifact == null) continue;
+                items.Add(new PromptContextItemDto
+                {
+                    Id = artifact.Id,
+                    Kind = "artifact",
+                    Title = artifact.Title ?? artifact.Id ?? "Артефакт",
+                    Subtitle = artifact.Kind ?? string.Empty,
+                    SizeBytes = ArtifactStoredBytes(session, artifact),
+                    Reason = "Содержимое хранится локально; возможная краткая ссылка учтена в запросе выше"
+                });
+            }
+            var attachments = (session.Messages ?? new List<ChatMessage>())
+                .Where(message => message != null)
+                .SelectMany(message => message.Attachments ?? new List<ChatAttachment>())
+                .Where(attachment => attachment != null)
+                .GroupBy(attachment => attachment.Id ?? attachment.FileName ?? string.Empty,
+                    StringComparer.OrdinalIgnoreCase)
+                .Select(group => group.First());
+            foreach (var attachment in attachments)
+            {
+                items.Add(new PromptContextItemDto
+                {
+                    Id = attachment.Id,
+                    Kind = "attachment",
+                    Title = attachment.FileName ?? "Вложение",
+                    Subtitle = attachment.Kind ?? string.Empty,
+                    SizeBytes = Math.Max(0, attachment.Size),
+                    Reason = "Локальный ресурс; в запросе учитывается только реально отправленная форма"
+                });
+            }
+            if (items.Count == 0) return null;
+            return new PromptContextSectionDto
+            {
+                Id = "stored_resources",
+                Title = "Ресурсы чата на диске",
+                Tokens = 0,
+                Count = items.Count,
+                Detail = "Объём файлов не равен расходу токенов; в запросе учитываются только включённые представления",
                 Included = false,
                 Items = BoundItems(items)
             };

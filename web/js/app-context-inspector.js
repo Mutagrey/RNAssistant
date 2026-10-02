@@ -107,7 +107,9 @@ async function loadPromptContextInspector(includeRaw) {
       throw new Error("RESOURCE_DOWNLOAD_INVALID");
     }
     promptContextInspectorSnapshot = response || {};
+    if (includeRaw) $("promptContextInspectorEstimate").open = true;
     renderPromptContextInspector(promptContextInspectorSnapshot);
+    syncPromptContextInspectorState();
   } catch (requestError) {
     if (!current()) return;
     promptContextInspectorRawText = "";
@@ -129,8 +131,9 @@ async function loadPromptContextInspector(includeRaw) {
 function renderPromptContextInspector(snapshot) {
   snapshot = snapshot || {};
   var used = Number(promptContextInspectorValue(snapshot, "usedTokens", "UsedTokens", 0) || 0);
+  var admission = Number(promptContextInspectorValue(snapshot, "admissionTokens", "AdmissionTokens", used) || 0);
   var limit = Number(promptContextInspectorValue(snapshot, "inputLimitTokens", "InputLimitTokens", 0) || 0);
-  var percent = Number(promptContextInspectorValue(snapshot, "percent", "Percent", limit ? Math.round(used * 100 / limit) : 0) || 0);
+  var percent = Number(promptContextInspectorValue(snapshot, "percent", "Percent", limit ? Math.round(admission * 100 / limit) : 0) || 0);
   var windowTokens = Number(promptContextInspectorValue(snapshot, "contextWindowTokens", "ContextWindowTokens", 0) || 0);
   var outputTokens = Number(promptContextInspectorValue(snapshot, "reservedOutputTokens", "ReservedOutputTokens", 0) || 0);
   var safetyTokens = Number(promptContextInspectorValue(snapshot, "safetyTokens", "SafetyTokens", 0) || 0);
@@ -143,13 +146,17 @@ function renderPromptContextInspector(snapshot) {
   var intercept = Number(promptContextInspectorValue(snapshot, "estimateInterceptTokens", "EstimateInterceptTokens", 0) || 0);
   var calibrationSamples = Number(promptContextInspectorValue(snapshot, "calibrationSamples", "CalibrationSamples", 0) || 0);
   var generatedUtc = promptContextInspectorValue(snapshot, "generatedUtc", "GeneratedUtc", "");
-  var subtitle = ["Следующий запрос", mode === "chat" ? "Chat" : "Agent", model,
+  var subtitle = [mode === "chat" ? "Chat" : mode === "plan" ? "Plan" : "Agent", model,
     generatedUtc ? "снимок " + formatPromptContextTime(generatedUtc) : ""].filter(Boolean).join(" · ");
 
   percent = Math.max(0, Math.min(100, percent));
-  $("promptContextInspectorSubtitle").textContent = subtitle;
-  $("promptContextInspectorUsage").textContent = (estimated ? "≈ " : "") + formatNumber(used) + " / " + formatNumber(limit) + " токенов";
+  $("promptContextInspectorSubtitle").textContent = "Последний API usage";
+  $("promptContextInspectorEstimateSubtitle").textContent = subtitle;
+  $("promptContextInspectorEstimateUsage").textContent = "Вход " + (estimated ? "≈ " : "") +
+    formatNumber(used) + " / " + formatNumber(limit) + " токенов";
   $("promptContextInspectorPercent").textContent = percent + "%";
+  $("promptContextInspectorAdmission").textContent = "С резервами ≈ " + formatNumber(admission) +
+    " / " + formatNumber(limit) + " · резерв " + formatNumber(Math.max(0, admission - used));
   $("promptContextInspectorWindow").textContent = formatNumber(windowTokens);
   $("promptContextInspectorOutput").textContent = formatNumber(outputTokens);
   $("promptContextInspectorSafety").textContent = formatNumber(safetyTokens);
@@ -169,36 +176,91 @@ function renderPromptContextInspector(snapshot) {
       : "");
   notice.classList.toggle("is-over-budget", overBudget);
 
-  var lastPrompt = promptContextInspectorValue(snapshot, "lastPromptTokens", "LastPromptTokens", null);
-  var lastPromptUtc = promptContextInspectorValue(snapshot, "lastPromptUtc", "LastPromptUtc", "");
-  var lastUsage = $("promptContextInspectorLastUsage");
-  if (lastPrompt !== null && lastPrompt !== undefined) {
-    lastUsage.textContent = "Последний API prompt: " + formatNumber(lastPrompt) + " токенов" +
-      (lastPromptUtc ? " · " + formatPromptContextTime(lastPromptUtc) : "");
-    lastUsage.classList.remove("hidden");
-  } else {
-    lastUsage.classList.add("hidden");
-  }
+  renderPromptContextUsage(modelUsageFromContext(snapshot),
+    promptContextInspectorValue(snapshot, "lastPromptUtc", "LastPromptUtc", ""));
 
-  renderPromptContextSections(
-    promptContextInspectorValue(snapshot, "sections", "Sections", []),
-    Math.max(1, used));
+  var sections = promptContextInspectorValue(snapshot, "sections", "Sections", []);
+  renderPromptContextSummary(sections, used);
+  renderPromptContextSections(sections, Math.max(1, used));
   renderPromptContextRaw(snapshot);
   $("promptContextInspectorLoading").classList.add("hidden");
   $("promptContextInspectorError").classList.add("hidden");
   $("promptContextInspectorBody").classList.remove("hidden");
 }
 
-function renderPromptContextSections(sections, usedTokens) {
-  var root = $("promptContextInspectorSections");
+function renderPromptContextUsage(last, lastPromptUtc) {
+  var lastUsage = $("promptContextInspectorLastUsage");
+  if (last) {
+    $("promptContextInspectorUsage").textContent = last.prompt === null
+      ? "Вход: API не сообщил число токенов"
+      : "Вход " + formatNumber(last.prompt) + " токенов";
+    var parts = ["API usage"];
+    if (last.completion !== null) parts.push("выход " + formatNumber(last.completion));
+    if (last.total !== null) parts.push("всего " + formatNumber(last.total));
+    lastUsage.textContent = parts.join(" · ") + (parts.length > 1 ? " токенов" : "") +
+      (lastPromptUtc ? " · " + formatPromptContextTime(lastPromptUtc) : "");
+  } else {
+    $("promptContextInspectorUsage").textContent = "Нет данных usage";
+    lastUsage.textContent = "Точное число токенов появится после ответа с usage.";
+  }
+}
+
+function renderPromptContextSummary(sections, usedTokens) {
+  var root = $("promptContextInspectorSummary");
   root.replaceChildren();
-  (sections || []).forEach(function (section, index) {
+  var chatIds = { history: true, tool_history: true, current_request: true };
+  var resourceIds = { document_context: true, attachments: true, artifacts: true };
+  var chat = 0;
+  var resources = 0;
+  (sections || []).forEach(function (section) {
+    if (promptContextInspectorValue(section, "included", "Included", true) === false) return;
+    var id = promptContextInspectorValue(section, "id", "Id", "");
+    var tokens = Number(promptContextInspectorValue(section, "tokens", "Tokens", 0) || 0);
+    if (chatIds[id]) chat += tokens;
+    else if (resourceIds[id]) resources += tokens;
+  });
+  [
+    ["Диалог и текущий запрос", chat],
+    ["Ресурсы в запросе", resources],
+    ["Инструкции, tools и skills", Math.max(0, usedTokens - chat - resources)]
+  ].forEach(function (entry) {
+    var row = document.createElement("div");
+    var label = document.createElement("span");
+    var value = document.createElement("strong");
+    label.textContent = entry[0];
+    value.textContent = "≈" + formatNumber(entry[1]);
+    row.appendChild(label);
+    row.appendChild(value);
+    root.appendChild(row);
+  });
+}
+
+function renderPromptContextSections(sections, usedTokens) {
+  var roots = {
+    request: $("promptContextInspectorSections"),
+    reserve: $("promptContextInspectorReserves"),
+    local: $("promptContextInspectorLocal")
+  };
+  Object.keys(roots).forEach(function (key) { roots[key].replaceChildren(); });
+  var reserveTokens = 0;
+  (sections || []).forEach(function (section) {
+    var id = promptContextInspectorValue(section, "id", "Id", "");
+    if (id === "format_repair_reserve" || id === "continuation_reserve") {
+      reserveTokens += Number(promptContextInspectorValue(section, "tokens", "Tokens", 0) || 0);
+    }
+  });
+  (sections || []).forEach(function (section) {
     var included = promptContextInspectorValue(section, "included", "Included", true) !== false;
+    var id = promptContextInspectorValue(section, "id", "Id", "");
+    var category = !included ? "local" :
+      (id === "format_repair_reserve" || id === "continuation_reserve" ? "reserve" : "request");
+    var estimated = category === "request";
+    var root = roots[category];
     var tokens = Number(promptContextInspectorValue(section, "tokens", "Tokens", 0) || 0);
     var count = Number(promptContextInspectorValue(section, "count", "Count", 0) || 0);
     var details = document.createElement("details");
     details.className = "prompt-context-section" + (included ? "" : " is-excluded");
-    details.open = included && index === 0;
+    details.open = category === "request" && root.childElementCount === 0;
 
     var summary = document.createElement("summary");
     var title = document.createElement("span");
@@ -208,7 +270,7 @@ function renderPromptContextSections(sections, usedTokens) {
     var meta = document.createElement("span");
     meta.className = "prompt-context-section-meta";
     meta.textContent = included
-      ? "≈" + formatNumber(tokens) + " ток. · " + formatNumber(count)
+      ? (estimated ? "≈" : "") + formatNumber(tokens) + " ток. · " + formatNumber(count)
       : formatNumber(count) + " элементов";
     summary.appendChild(meta);
     var detailText = promptContextInspectorValue(section, "detail", "Detail", "");
@@ -222,8 +284,9 @@ function renderPromptContextSections(sections, usedTokens) {
       var track = document.createElement("span");
       track.className = "prompt-context-section-track";
       var fill = document.createElement("i");
-      fill.style.setProperty("--prompt-context-section-percent", Math.min(100, Math.round(tokens * 100 / usedTokens)) + "%");
-      track.style.setProperty("--prompt-context-section-percent", Math.min(100, Math.round(tokens * 100 / usedTokens)) + "%");
+      var denominator = category === "reserve" ? Math.max(1, reserveTokens) : usedTokens;
+      fill.style.setProperty("--prompt-context-section-percent", Math.min(100, Math.round(tokens * 100 / denominator)) + "%");
+      track.style.setProperty("--prompt-context-section-percent", Math.min(100, Math.round(tokens * 100 / denominator)) + "%");
       track.appendChild(fill);
       summary.appendChild(track);
     }
@@ -238,14 +301,16 @@ function renderPromptContextSections(sections, usedTokens) {
       empty.textContent = "Нет элементов.";
       items.appendChild(empty);
     } else {
-      values.forEach(function (item) { items.appendChild(renderPromptContextItem(item, included)); });
+      values.forEach(function (item) { items.appendChild(renderPromptContextItem(item, included, estimated)); });
     }
     details.appendChild(items);
     root.appendChild(details);
   });
+  $("promptContextInspectorReserveGroup").classList.toggle("hidden", !roots.reserve.childElementCount);
+  $("promptContextInspectorLocalGroup").classList.toggle("hidden", !roots.local.childElementCount);
 }
 
-function renderPromptContextItem(item, included) {
+function renderPromptContextItem(item, included, estimated) {
   var preview = promptContextInspectorValue(item, "preview", "Preview", "");
   var reason = promptContextInspectorValue(item, "reason", "Reason", "");
   var subtitle = promptContextInspectorValue(item, "subtitle", "Subtitle", "");
@@ -262,9 +327,9 @@ function renderPromptContextItem(item, included) {
   var value = document.createElement("span");
   value.className = "prompt-context-item-value";
   var values = [];
-  if (included && tokens) values.push("≈" + formatNumber(tokens) + " ток.");
+  if (included && tokens) values.push((estimated ? "≈" : "") + formatNumber(tokens) + " ток.");
   if (size) values.push(formatPromptContextSize(size));
-  value.textContent = values.join(" · ") || (included ? "≈0 ток." : "");
+  value.textContent = values.join(" · ") || (included ? (estimated ? "≈" : "") + "0 ток." : "");
   row.appendChild(value);
   if (subtitle) {
     var subtitleNode = document.createElement("span");
@@ -390,6 +455,7 @@ function syncPromptContextInspectorState() {
   var activeRevision = Number(promptContextInspectorValue(active, "revision", "Revision", 0) || 0);
   var snapshotRevision = Number(promptContextInspectorValue(promptContextInspectorSnapshot, "sessionRevision", "SessionRevision", 0) || 0);
   if (activeRevision && snapshotRevision && activeRevision !== snapshotRevision) {
+    if (activeRevision > snapshotRevision) renderPromptContextUsage(lastModelUsage(), "");
     var notice = $("promptContextInspectorNotice");
     if (notice && notice.textContent.indexOf("Состояние чата изменилось") < 0) {
       notice.textContent += " Состояние чата изменилось — нажмите «Обновить».";

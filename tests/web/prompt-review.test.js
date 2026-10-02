@@ -25,7 +25,7 @@ function fixture(loadPrompts = true) {
     $: get, document: { querySelectorAll: () => [], querySelector: () => null, addEventListener() {} }, isPanelActive: () => false, markdown: text => text,
     createResourceGroup: () => { const group = new Element(); group.treeChildren = new Element(); return group; }, createResourceListItem: () => new Element(),
     modelImageSupportOverrides: () => ({}), modelAudioSupportOverrides: () => ({}), modelCapabilitiesForSettings: () => ({}), attachmentModelPriorityForSettings: () => [], textToHeaders: () => ({}),
-    updateEstimatedContextUsage() {}, renderContextMeter() {}, clearRuntimeData() {}, setControlBusy: (id, busy) => { get(id).disabled = busy; },
+    renderContextMeter() {}, clearRuntimeData() {}, setControlBusy: (id, busy) => { get(id).disabled = busy; },
     log: (message, level) => { if (level === "error") errors.push(message); }, confirm: () => true, cancelBridgeRequest: async () => {},
     fetch: async (url, options) => {
       const uri = new URL(url), id = uri.pathname.split("/").pop(), offset = Number(uri.searchParams.get("offset")), count = Number(uri.searchParams.get("count"));

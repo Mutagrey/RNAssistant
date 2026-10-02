@@ -23,7 +23,7 @@ function switchTab(name) {
   if (name === "chat") {
     renderChatSessions();
     renderMessages();
-    renderContext(true);
+    renderContext();
     renderContextMeter();
     renderModelControls();
   } else if (name === "instructions" && typeof renderInstructions === "function") {

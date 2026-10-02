@@ -188,15 +188,12 @@ function renderContextList(notes) {
   });
 }
 
-function renderContext(skipUsageEstimate) {
+function renderContext() {
   if (typeof isPanelActive === "function" && !isPanelActive("chat")) return;
   var notes = contextNotes();
   renderContextChips(notes);
   renderContextList(notes);
   renderContextJson(state.context || {});
-  if (!skipUsageEstimate) {
-    updateEstimatedContextUsage();
-  }
   renderContextMeter();
 }
 

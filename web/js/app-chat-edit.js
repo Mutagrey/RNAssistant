@@ -161,7 +161,6 @@ function applyEditedMessagePreview(target, text) {
   state.liveActivity = null;
   state.liveAgentRun = null;
   state.liveStreamContent = null;
-  updateEstimatedContextUsage();
   renderMessages();
   renderContextMeter();
   if (typeof renderHtmlWorkspace === "function") {

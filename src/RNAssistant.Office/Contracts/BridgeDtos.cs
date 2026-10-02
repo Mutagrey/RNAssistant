@@ -171,6 +171,9 @@ namespace RNAssistant.Office.Contracts
         [JsonProperty("usedTokens")]
         public int UsedTokens { get; set; }
 
+        [JsonProperty("admissionTokens")]
+        public int AdmissionTokens { get; set; }
+
         [JsonProperty("inputLimitTokens")]
         public int InputLimitTokens { get; set; }
 
@@ -218,6 +221,12 @@ namespace RNAssistant.Office.Contracts
 
         [JsonProperty("lastPromptTokens")]
         public int? LastPromptTokens { get; set; }
+
+        [JsonProperty("lastCompletionTokens")]
+        public int? LastCompletionTokens { get; set; }
+
+        [JsonProperty("lastTotalTokens")]
+        public int? LastTotalTokens { get; set; }
 
         [JsonProperty("lastPromptUtc")]
         public System.DateTime? LastPromptUtc { get; set; }
