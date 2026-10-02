@@ -386,6 +386,59 @@
       ]
     },
     {
+      "id": "pdf-fontkit",
+      "npmPackage": "@pdf-lib/fontkit",
+      "version": "1.1.1",
+      "license": "MIT (fontkit) AND OFL-1.1 (Noto Sans)",
+      "sourceRevision": "npm-tarball-only",
+      "sourceRevisionNotes": "The published 1.1.1 tarball has no npm gitHead or matching upstream Git tag; its exact npm integrity and embedded hashes are authoritative.",
+      "npmTarball": "https://registry.npmjs.org/@pdf-lib/fontkit/-/fontkit-1.1.1.tgz",
+      "npmIntegrity": "sha512-KjMd7grNapIWS/Dm0gvfHEilSyAmeLvrEGVcqLGi0VYebuqqzTbgF29efCx7tvx+IEbG3zQciRSWl3GkUSvjZg==",
+      "packageDependencies": {
+        "pako": "^1.0.6"
+      },
+      "browserRuntimeDependencies": [],
+      "dependencyNotes": "The standalone UMD embeds pako. Noto Sans 2.015 TrueType bytes are embedded as base64 in the same inert source carrier; no font URL, worker or runtime fetch is used.",
+      "fontSource": {
+        "family": "Noto Sans",
+        "version": "2.015",
+        "format": "ttf",
+        "bytes": 616116,
+        "sha256": "141494de430d4f68e13c91138e10ae755909de8f5ff274db6f17becd393a2898",
+        "provenanceUrl": "https://notofonts.github.io/latin-greek-cyrillic/fonts/NotoSans/hinted/ttf/NotoSans-Regular.ttf",
+        "licenseSourceCommit": "023d7b73d5c1a5ed6489bd04a120244c1f2bff3f"
+      },
+      "htmlWorkspace": {
+        "global": "RNAPdfFont",
+        "purpose": "Локальный шрифт Noto Sans и fontkit для PDF",
+        "whenUseful": "Нужен русский или другой поддерживаемый Unicode-текст в PDF.",
+        "dependencyFile": "pdf-fontkit.min.js",
+        "sourceCarrier": "js/vendor/pdf-fontkit.source.js",
+        "scriptOnly": true,
+        "requires": [
+          "pdf-lib"
+        ]
+      },
+      "upstreamAssets": [
+        {
+          "role": "js",
+          "path": "dist/fontkit.umd.min.js",
+          "sha256": "d8df561b9fba98e24f2e5130e40948809281bbbc55a20c412359f1a0a5eb35a6",
+          "embeddedSha256": "f0ffe30c7a0d0b690c2b975264641288add984763ac2012bc607ff52a2b1c242"
+        }
+      ],
+      "licenseFiles": [
+        {
+          "path": "licenses/pdf-fontkit-1.1.1/README.md",
+          "sha256": "7315fcc54511f5ffc906969c39333f93cd47f5217ab014fe45acff14bd5ec4c0"
+        },
+        {
+          "path": "licenses/pdf-fontkit-1.1.1/NotoSans-OFL.txt",
+          "sha256": "cee9892f9f0cc8fe882c9e9537ee6a89621d86ee7ceaf70b02e2b2b1c25c061a"
+        }
+      ]
+    },
+    {
       "id": "jszip",
       "npmPackage": "jszip",
       "version": "3.10.2",
@@ -805,6 +858,14 @@
       "sha256": "9150582d5cb49e9d4ea89f5ef133d845f74a36f72ffaaabc0927edc05296ea1c",
       "provenanceUrl": "https://registry.npmjs.org/jszip/-/jszip-3.10.2.tgz",
       "localTransform": "Wrap pinned standalone browser JS as inert source text and remove source-map trailer for on-demand HTML workspace assembly."
+    },
+    {
+      "path": "js/vendor/pdf-fontkit.source.js",
+      "package": "pdf-fontkit",
+      "bytes": 1604233,
+      "sha256": "5c507afa505e8da7c2d6bebf47bfc2b2249bce207c723f85806b196e0dfae29d",
+      "provenanceUrl": "https://registry.npmjs.org/@pdf-lib/fontkit/-/fontkit-1.1.1.tgz",
+      "localTransform": "Wrap standalone fontkit UMD and exact Noto Sans TTF bytes as inert source text; attach the OFL notice for standalone exports."
     }
   ]
 }

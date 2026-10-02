@@ -10,6 +10,7 @@
     return { id: item.id, version: item.version, global: item.global,
       purpose: item.purpose, whenUseful: item.whenUseful, file: item.file,
       loader: item.loader, scriptOnly: item.scriptOnly,
+      requires: item.requires || [],
       source: new RegExp("\\b" + activation + "\\b") };
   });
   var registered = Object.create(null);
@@ -35,9 +36,16 @@
         scripts.push(content);
       }
     });
-    return vendors.filter(function (vendor) {
-      return (vendor.scriptOnly ? scripts : contents).some(function (content) { return vendor.source.test(content); });
+    var selected = Object.create(null);
+    vendors.forEach(function (vendor) {
+      if ((vendor.scriptOnly ? scripts : contents).some(function (content) { return vendor.source.test(content); }))
+        selected[vendor.id] = true;
     });
+    // Catalog prerequisites are earlier than their consumers, so a reverse walk closes the set.
+    vendors.slice().reverse().forEach(function (vendor) {
+      if (selected[vendor.id]) vendor.requires.forEach(function (id) { selected[id] = true; });
+    });
+    return vendors.filter(function (vendor) { return selected[vendor.id]; });
   }
 
   function ready(vendor) {

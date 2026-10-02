@@ -1059,8 +1059,10 @@ are preview frames, never child artifacts or independently durable revisions.
   graphs, `PDFLib` 1.17.1 for PDF creation/modification, or `JSZip` 3.10.2 for
   general ZIP reading/creation. JSZip is not required for SheetJS spreadsheet
   parsing. PDF/ZIP generation in the sandbox cannot download a file; a standalone
-  HTML export can offer a Blob download. pdf-lib's standard fonts do not encode
-  Cyrillic without separately supplied fontkit and local font bytes. Current live
+  HTML export can offer a Blob download. `RNAPdfFont` (fontkit 1.1.1 plus embedded
+  Noto Sans Regular 2.015) is a separate lazy option for Cyrillic PDF text; it
+  includes its `PDFLib` prerequisite and exposes local font bytes without a fetch.
+  Other scripts require glyph coverage in the chosen font. Current live
   Excel ranges remain Resource Fabric table/
   records bindings; file parsing does not replace Excel document authority. The on-demand
   registry embeds selected classic JavaScript and CSS before workspace scripts in

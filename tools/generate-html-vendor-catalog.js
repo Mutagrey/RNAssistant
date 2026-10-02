@@ -9,6 +9,7 @@ const manifest = JSON.parse(fs.readFileSync(path.join(root, "web/vendor-manifest
 const outputPath = path.join(root, "web/js/app-html-vendor-catalog.js");
 const files = new Map(manifest.files.map(file => [file.path, file]));
 const globals = new Set();
+const priorIds = new Set();
 const catalog = manifest.packages.filter(item => item.htmlWorkspace).map(item => {
   const option = item.htmlWorkspace;
   assert.match(item.id, /^[a-z][a-z0-9-]*$/);
@@ -23,8 +24,12 @@ const catalog = manifest.packages.filter(item => item.htmlWorkspace).map(item =>
       !/https?:\/\//i.test(option[field]), "short offline selection metadata is required for " + item.id);
   assert.match(option.dependencyFile, /^[A-Za-z0-9._-]+\.js$/);
   assert.equal(typeof option.scriptOnly, "boolean");
+  const requires = option.requires || [];
+  assert.ok(Array.isArray(requires) && requires.every(id => priorIds.has(id)),
+    "HTML vendor prerequisites must precede " + item.id);
   assert.equal(globals.has(option.global), false, "duplicate HTML vendor global " + option.global);
   globals.add(option.global);
+  priorIds.add(item.id);
   if (option.sourceCarrier === "echarts-factory") {
     assert.equal(item.id, "echarts");
     assert.equal(files.get("js/vendor/echarts.min.js").package, item.id);
@@ -36,7 +41,7 @@ const catalog = manifest.packages.filter(item => item.htmlWorkspace).map(item =>
   return { id: item.id, version: item.version, global: option.global,
     purpose: option.purpose, whenUseful: option.whenUseful,
     file: option.dependencyFile, loader: option.sourceCarrier, scriptOnly: option.scriptOnly,
-    activation: option.activation || option.global };
+    activation: option.activation || option.global, requires: requires };
 });
 
 const source = "/* Generated from web/vendor-manifest.json by tools/generate-html-vendor-catalog.js. */\n" +

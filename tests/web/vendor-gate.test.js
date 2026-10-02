@@ -38,7 +38,9 @@ assert.equal(manifest.schemaVersion, 1);
 assert.equal(manifest.sourceUrlsAreProvenanceOnly, true);
 const packages = new Map();
 for (const item of manifest.packages) {
-  assert.ok(item.id && item.version && item.license && item.gitHead && item.npmTarball && item.npmIntegrity);
+  assert.ok(item.id && item.version && item.license && item.npmTarball && item.npmIntegrity);
+  assert.ok(item.gitHead || (item.sourceRevision === "npm-tarball-only" && item.sourceRevisionNotes),
+    "exact source provenance is required for " + item.id);
   assert.equal(packages.has(item.id), false, "duplicate package " + item.id);
   packages.set(item.id, item);
   assert.ok(item.licenseFiles.length > 0, "license files missing for " + item.id);
@@ -49,7 +51,7 @@ for (const item of manifest.packages) {
   }
   assert.deepEqual(item.browserRuntimeDependencies, [], "browser dependency must be bundled or separately manifested: " + item.id);
 }
-console.log("PASS vendor gate: exact package versions, tarball integrity, commits and license texts are recorded");
+console.log("PASS vendor gate: package versions, tarball integrity, source provenance and license evidence are recorded");
 
 const entries = new Map();
 for (const item of manifest.files) {
@@ -89,6 +91,15 @@ for (const item of manifest.packages.filter(packageItem => packageItem.htmlWorks
       "embedded source hash " + id + "/" + asset.role);
     assert.match(asset.sha256, /^[a-f0-9]{64}$/, "upstream source hash is recorded");
   }
+  if (item.fontSource) {
+    const encoded = source.js.match(/var fontBase64="([A-Za-z0-9+/=]+)";/);
+    assert.ok(encoded, "embedded font must be present in " + id);
+    const font = Buffer.from(encoded[1], "base64");
+    assert.equal(font.length, item.fontSource.bytes);
+    assert.equal(crypto.createHash("sha256").update(font).digest("hex"), item.fontSource.sha256,
+      "embedded font hash " + id);
+    assert.match(item.fontSource.provenanceUrl, /^https:\/\//);
+  }
   assert.doesNotMatch(source.js + source.css, /sourceMappingURL=/, "source maps must not trigger extra loads");
   assert.doesNotMatch(source.css, /url\s*\(/i, "workspace CSS must not request unmanifested assets");
 }
@@ -96,7 +107,7 @@ console.log("PASS vendor gate: HTML source carriers match pinned embedded hashes
 
 execFileSync(process.execPath, [path.join(root, "tools/generate-html-vendor-catalog.js"), "--check"]);
 assert.deepEqual(manifest.packages.filter(item => item.htmlWorkspace).map(item => item.id),
-  ["echarts", "fuse", "tabulator", "sheetjs", "vis-network", "pdf-lib", "jszip"]);
+  ["echarts", "fuse", "tabulator", "sheetjs", "vis-network", "pdf-lib", "pdf-fontkit", "jszip"]);
 console.log("PASS vendor gate: HTML runtime catalog is generated from the pinned manifest");
 
 let cssDependencyCount = 0;

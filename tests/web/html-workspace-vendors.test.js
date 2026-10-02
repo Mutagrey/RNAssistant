@@ -94,5 +94,26 @@ vm.runInContext(read("js/app-html-workspace-preview.js"), context);
   assert.equal(pageCount, 1, "embedded pdf-lib creates and reads a PDF without a fetch");
   const zipText = await vm.runInContext("(async function(){var z=new JSZip();z.file('hello.txt','offline');var b=await z.generateAsync({type:'uint8array'});return (await JSZip.loadAsync(b)).file('hello.txt').async('string');})()", child);
   assert.equal(zipText, "offline", "embedded JSZip creates and reads an archive without a fetch");
-  console.log("PASS HTML vendors: lazy offline pool, spreadsheet, graph, PDF and ZIP bundles");
+  const unicode = [{ kind: "script", path: "unicode.js", content:
+    "var pdf = await PDFLib.PDFDocument.create(); RNAPdfFont.register(pdf); var font = await pdf.embedFont(RNAPdfFont.bytes());" }];
+  assert.deepEqual(Array.from(context.RNAssistantHtmlVendorRuntime.used(unicode), item => item.id),
+    ["pdf-lib", "pdf-fontkit"], "Unicode font use includes its PDF prerequisite");
+  await preview.ensureVendors(unicode);
+  assert.equal(loaded[6], "js/vendor/pdf-fontkit.source.js");
+  const unicodeHtml = preview.build({ files: unicode, hostBridge: false });
+  assert.ok(unicodeHtml.indexOf('data-rn-vendor="pdf-lib-1.17.1"') <
+    unicodeHtml.indexOf('data-rn-vendor="pdf-fontkit-1.1.1"'));
+  assert.doesNotMatch(unicodeHtml, /<script[^>]+src=/i, "Unicode PDF export embeds font and fontkit");
+  const fontSource = unicodeHtml.match(/<script data-rn-vendor="pdf-fontkit-1\.1\.1">([\s\S]*?)<\/script>/)[1];
+  const fontContext = vm.createContext({ atob: value => Buffer.from(value, "base64").toString("binary"),
+    setTimeout, clearTimeout });
+  fontContext.window = fontContext;
+  fontContext.self = fontContext;
+  vm.runInContext(report.match(/<script data-rn-vendor="pdf-lib-1\.17\.1">([\s\S]*?)<\/script>/)[1], fontContext, { timeout: 5000 });
+  vm.runInContext(fontSource, fontContext, { timeout: 5000 });
+  const fontResult = await vm.runInContext("(async function(){var p=await PDFLib.PDFDocument.create();RNAPdfFont.register(p);var f=await p.embedFont(RNAPdfFont.bytes(),{subset:true});p.addPage([250,120]).drawText('Привет, мир! Ёж',{font:f,size:16,x:10,y:70});var bytes=await p.save();return [bytes.length,(await PDFLib.PDFDocument.load(bytes)).getPageCount(),fontkit.create(RNAPdfFont.bytes()).hasGlyphForCodePoint(0x401)];})()", fontContext);
+  assert.equal(fontResult[1], 1, "offline fontkit produces a readable Cyrillic PDF");
+  assert.equal(fontResult[2], true, "bundled Noto Sans covers Ё");
+  assert.ok(fontResult[0] > 1000);
+  console.log("PASS HTML vendors: lazy offline pool, spreadsheet, graph, PDF, Unicode font and ZIP bundles");
 })().catch(error => { console.error(error.stack || error); process.exitCode = 1; });
