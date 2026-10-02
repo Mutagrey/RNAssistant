@@ -41,6 +41,9 @@ namespace RNAssistant.Office.Contracts
         [JsonProperty("dataJson")]
         public string DataJson { get; set; }
 
+        [JsonProperty("resultSummary", NullValueHandling = NullValueHandling.Ignore)]
+        public ToolResultSummary ResultSummary { get; set; }
+
         [JsonProperty("toolStepsConsumed")]
         public int ToolStepsConsumed { get; set; }
 

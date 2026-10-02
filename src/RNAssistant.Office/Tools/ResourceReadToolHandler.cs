@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using Newtonsoft.Json;
+using Newtonsoft.Json.Linq;
 using RNAssistant.Core.ModelProtocol;
 using RNAssistant.Core.Models;
 using RNAssistant.Core.Tools;
@@ -134,6 +135,29 @@ namespace RNAssistant.Office.Tools
                 Complete = result.Complete,
                 HydratedForNextModelStep = result.HydratedForNextModelStep,
                 RawContentIncluded = result.RawContentIncluded
+            };
+        }
+
+        internal static ToolResultSummary Summarize(JObject data)
+        {
+            if (data?["kind"]?.Type != JTokenType.String ||
+                (string)data["kind"] != "resource-read" ||
+                data["representation"]?.Type != JTokenType.String ||
+                data["complete"]?.Type != JTokenType.Boolean) return null;
+            var representation = data.Value<string>("representation");
+            if (representation.Length > 32) return null;
+            var rows = (data["table"] as JObject)?["rows"] as JArray;
+            var characters = data["returnedCharacters"]?.Type == JTokenType.Integer
+                ? data.Value<int?>("returnedCharacters") : null;
+            return new ToolResultSummary {
+                Kind = "resource-read",
+                Representation = representation,
+                ReturnedCharacters = characters,
+                ReturnedRows = rows?.Count,
+                Complete = data.Value<bool>("complete"),
+                HydratedForNextModelStep = representation == "media" &&
+                    data["hydratedForNextModelStep"]?.Type == JTokenType.Boolean &&
+                    data.Value<bool>("hydratedForNextModelStep")
             };
         }
 

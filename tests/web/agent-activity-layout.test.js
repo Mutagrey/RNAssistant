@@ -35,13 +35,13 @@ const read = file => fs.readFileSync(path.join(root, file), "utf8");
       await page.addScriptTag({ content: read("js/" + file) });
     await page.evaluate(() => {
       const fixtures = [
-        { ToolId: "common.capabilities_read", Subtitle: "excel.write_range", ResultMessage: "Loaded catalogRevision=private-id", DataJson: '{"kind":"tool-schema","complete":true}' },
-        { ToolId: "common.resources_find", Subtitle: "Таблицы с продажами · Документ", DataJson: '{"items":[{},{},{},{}],"complete":true}' },
-        { ToolId: "common.resources_read", Subtitle: "Продажи!A1:D120 · Таблица", DataJson: JSON.stringify({ kind: "resource-read", table: { rows: Array.from({ length: 120 }, () => ({})) }, complete: true }) },
+        { ToolId: "common.capabilities_read", Subtitle: "excel.write_range", ResultMessage: "Loaded catalogRevision=private-id", ResultSummary: { Kind: "capability-read", Representation: "tool-schema", Complete: true } },
+        { ToolId: "common.resources_find", Subtitle: "Таблицы с продажами · Документ", ResultSummary: { Kind: "resource-find", ReturnedItems: 4, Complete: true } },
+        { ToolId: "common.resources_read", Subtitle: "Продажи!A1:D120 · Таблица", ResultSummary: { Kind: "resource-read", Representation: "table", ReturnedRows: 120, Complete: true } },
         { ToolId: "excel.write_range", Subtitle: "Продажи!B2:D121", ExecutionEvidence: { Dispatch: "MayHaveDispatched", Effect: "VerifiedChange" } },
         { ToolId: "excel.add_sheet", Subtitle: "Отчёт", Status: "failed", ErrorCode: "excel_sheet_already_exists", ExecutionEvidence: { Dispatch: "NotDispatched", Effect: "None" }, ResultMessage: "Sheet already exists: raw error" },
         { ToolId: "common.office_run_macro", Subtitle: "ОбновитьОтчёт", Status: "failed", ExecutionEvidence: { Dispatch: "MayHaveDispatched", Effect: "Unknown" } },
-        { ToolId: "common.resources_find", Subtitle: "Архив отчётов", DataJson: '{"items":[],"complete":false,"partial":true}' },
+        { ToolId: "common.resources_find", Subtitle: "Архив отчётов", ResultSummary: { Kind: "resource-find", ReturnedItems: 0, Complete: false, Partial: true } },
         { ToolId: "common.resources_read", Subtitle: "Папка документа / Очень длинное название раздела с аналитикой продаж по регионам / Итоговые данные за последний квартал!A1:F180", Status: "running" }
       ];
       const displays = [

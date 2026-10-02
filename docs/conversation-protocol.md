@@ -910,21 +910,26 @@ charts and other operations. The display classifies icons only, never tool effec
 Word insertion locations, PowerPoint slide/shape targets and Outlook draft
 subjects/recipients, without resource lookup or new authority.
 
-Read captions use a bounded typed `ChatActivity.ReadSummary`, captured before
-body truncation/externalization and retained through event replay and UI cloning.
-It contains representation, returned characters/rows and completeness, without a
-source body or runtime reference. Large reads therefore retain the same count as
-small reads. Lazy result preview reads the exact `ResultPayload` through
+Resource and capability captions use `ChatActivity.ResultSummary`, projected from
+the original terminal result by the four owning built-in readers/searchers during
+`ToolRunResult` materialization, before transcript truncation or externalization.
+It retains representation, returned counts, complete coverage, the separate
+resource-find partial-availability flag and next-step media preparation, without a
+source body or runtime reference. Large results therefore retain the same caption
+as small results. Historical resource reads with only `ReadSummary` still replay;
+other old activities without a summary use a generic label. Lazy result preview
+reads the exact `ResultPayload` through
 `ChatBlobStore`; missing/corrupt bodies are shown as unavailable without changing
 the recorded operation outcome. Preview has its own display limits and never
-authorizes a model write. Old activities without a summary retain a generic label.
+authorizes a model write.
 
 Short Russian result captions use typed status/error/effect evidence. Unknown effects
-win over success/error wording; failed no-ops remain failures. Bounded, cached reads
-of the documented resource/capability result fields add returned element/row counts,
-text/source/structure and explicit incompleteness. Metadata says the body was not
-loaded; media says it is prepared for the next model request only when the resource
-owner reports hydration. This is not proof of delivery or model perception. A PDF
+win over success/error wording; failed no-ops remain failures. The UI uses the typed
+summary for returned element/row counts, text/source/structure and explicit
+incompleteness; it does not parse Resource/Capability business JSON. Metadata says
+the body was not loaded; media says it is prepared for the next model request only
+when the resource owner reports hydration. This is not proof of delivery or model
+perception. A PDF
 text read and a media read therefore have different captions. Empty collections
 never claim global absence. Reserved resource/capability fields are interpreted only
 for their owning gateways; arbitrary custom JSON cannot claim media hydration or

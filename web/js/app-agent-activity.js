@@ -243,9 +243,21 @@ function activityPrimaryText(activity) {
   return labels[activityKind(activity)] || toolId || title || "Выполняю шаг";
 }
 
+function activityTypedResultSummary(activity) {
+  var kinds = {
+    "common.resources_find": "resource-find",
+    "common.resources_read": "resource-read",
+    "common.capabilities_search": "capability-search",
+    "common.capabilities_read": "capability-read"
+  };
+  var kind = kinds[activityToolId(activity)];
+  var summary = activityValue(activity, "ResultSummary", "resultSummary", null);
+  return kind && summary && activityValue(summary, "Kind", "kind", "") === kind ? summary : null;
+}
+
 function activityReadSummary(activity) {
   return activityToolId(activity) === "common.resources_read"
-    ? activityValue(activity, "ReadSummary", "readSummary", null) : null;
+    ? activityTypedResultSummary(activity) || activityValue(activity, "ReadSummary", "readSummary", null) : null;
 }
 
 function activityReadCaption(summary) {
@@ -266,34 +278,33 @@ function activityReadCaption(summary) {
 
 function activityResultCaption(activity) {
   var toolId = activityToolId(activity);
+  var summary = activityTypedResultSummary(activity);
+  if (summary) {
+    if (toolId === "common.resources_read") return activityReadCaption(summary);
+    if (toolId === "common.capabilities_read") return activityValue(summary, "Complete", "complete", true)
+      ? "Загружено" : "Загружена часть описания";
+    var count = activityValue(summary, "ReturnedItems", "returnedItems", null);
+    if (Number.isSafeInteger(count) && count >= 0) return "Получено элементов: " + count +
+      (activityValue(summary, "Complete", "complete", true) === false ||
+        activityValue(summary, "Partial", "partial", false) === true ? " · неполный список" : "");
+  }
   var read = activityReadSummary(activity);
-  if (read) return activityReadCaption(read);
+  if (read) return activityReadCaption(read); // Historical read activity.
+  if (["common.resources_find", "common.resources_read", "common.capabilities_search", "common.capabilities_read"].indexOf(toolId) >= 0) return "";
   var source = activityDataJson(activity);
   if (!source || source.length > 32768) return "";
   var cached = activityPresentationCache.get(activity);
   if (cached && cached.source === source && cached.toolId === toolId) return cached.caption;
   var caption = "";
-  var partial = false;
   try {
-    // Generic JSON needs no tool-specific renderer. Reserved resource/capability
-    // claims require their source owner: arbitrary custom JSON cannot assert media
-    // hydration, capability admission or search coverage. Neither establishes effects.
     var data = JSON.parse(source);
-    if (toolId === "common.capabilities_read" && data && (data.kind === "tool-schema" || data.kind === "skill" || data.kind === "reference") && typeof data.complete === "boolean") {
-      partial = !data.complete;
-      caption = partial ? "Загружена часть описания" : "Загружено";
-    } else if (data && typeof data === "object" && (data.truncated || data.externalized)) {
+    if (data && typeof data === "object" && (data.truncated || data.externalized)) {
       caption = data.externalized ? "Результат сохранён отдельно" : "В журнале показана часть результата";
-    } else if ((toolId === "common.resources_find" || toolId === "common.capabilities_search") && data && Array.isArray(data.items) && typeof data.complete === "boolean") {
-      var count = data.items.length;
-      partial = !data.complete || data.partial === true;
-      // An empty arbitrary collection is not evidence that a search found nothing.
-      caption = "Получено элементов: " + count + (partial ? " · неполный список" : "");
     } else if (Array.isArray(data)) caption = "Получен список · элементов: " + data.length;
     else if (typeof data === "string") caption = "Получен текстовый ответ";
     else caption = "Получены данные JSON";
   } catch (ignore) { /* Invalid/large data remains available in the existing details. */ }
-  activityPresentationCache.set(activity, { toolId: toolId, source: source, caption: caption, partial: partial });
+  activityPresentationCache.set(activity, { toolId: toolId, source: source, caption: caption });
   return caption;
 }
 
@@ -346,11 +357,9 @@ function activityPresentationState(activity) {
   if (effect === "Unknown") return "unknown";
   var status = activityStatus(activity);
   if (status === "completed") {
-    var read = activityReadSummary(activity);
-    if (read) return activityValue(read, "Complete", "complete", true) === false ? "partial" : status;
-    activityResultCaption(activity);
-    var display = activityPresentationCache.get(activity);
-    if (display && display.source === activityDataJson(activity) && display.partial) return "partial";
+    var summary = activityTypedResultSummary(activity) || activityReadSummary(activity);
+    if (summary && (activityValue(summary, "Complete", "complete", true) === false ||
+      activityValue(summary, "Partial", "partial", false) === true)) return "partial";
   }
   if (status === "failed" || status === "completed_with_errors") {
     var code = String(activityValue(activity, "ErrorCode", "errorCode", "") || "").toLowerCase();

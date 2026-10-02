@@ -97,6 +97,16 @@ and parser. Schema 34 also removes the contradictory demand for readmission afte
 compaction. Authored custom helper text is preserved; focused prompt/context checks
 cover the defaults, while saved helper text must be reviewed separately.
 
+## Artifact pagination integration evidence — 2026-10-02
+
+Owner: Artifact Library pagination. During concurrent pagination changes,
+`node tests/web/artifact-library-projection.test.js` fails at
+`refreshLibraryHeadSelection()` (expected `true`, received `false`). The same test
+passed before those changes. Reconcile the historical-selection fixture and paged
+head metadata before closing this integration check. Catalog/transfer-specific
+Harness, UI and real-controller checks pass independently; they do not close this
+shared projection check or Windows/WebView2 qualification.
+
 ## Resource context fixture drift — 2026-09-08
 
 Owner: resource context / harness. On the `d29b1f58` branch, unchanged provider
@@ -213,6 +223,8 @@ The user-authorized 11E presentation slice is implemented host-neutral.
 Lifecycle/history separation, RunId grouping,
 semantic targets, one current-action shimmer, disclosure retention and readable
 cause cards with lazy technical JSON replace the reviewed presentation paths.
+Typed Resource/Capability result summaries now survive transcript budgeting and
+replay; the UI no longer parses their result JSON for captions.
 Canonical behavior: [conversation projection](../conversation-protocol.md#effect-mapping-and-ui-projection)
 and [trajectory query](../trajectory-query.md).
 
@@ -222,16 +234,6 @@ Remaining bounded follow-ups:
   correlated target/inspection evidence. Do not infer resolution from model prose
   or later unrelated success. Native counts/history and unknown-effect warnings
   remain intact. Owner: kernel/evidence projection in a separately scoped slice.
-- **Typed result summaries before budgeting:** owner domain result producers /
-  ToolRunResult materialization / AgentTranscript. Catalog-owned action/icon/target
-  metadata is implemented; web tool-name dictionaries are removed. Remaining work
-  is a typed result summary before transcript truncation, replacing the four
-  source-checked Resource/Capability JSON caption branches atomically. Preserve
-  representation, coverage and next-request media preparation independently of model
-  `message/data/resources` and effect evidence. No arbitrary business-field parsing,
-  second result store or promise that every binary format is previewable. Acceptance:
-  large results and replay retain accurate summaries; exact model wire, body refs,
-  partial coverage and mutation uncertainty stay unchanged.
 - **Delivery qualification:** local browser component scenarios cover narrow
   320/400/600px layouts, themes and disclosure transitions; actual Office/WebView2,
   DPI, keyboard focus during live replacement, multi-window replay/confirmation

@@ -665,6 +665,7 @@ namespace RNAssistant.Office
             target.RuntimeGuardJson = source.RuntimeGuardJson;
             target.ResultMessage = source.ResultMessage;
             target.DataJson = source.DataJson;
+            target.ResultSummary = source.ResultSummary;
             target.ReadSummary = source.ReadSummary;
             target.Children = source.Children ?? new List<ChatActivity>();
         }

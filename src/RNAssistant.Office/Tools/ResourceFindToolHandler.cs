@@ -1,4 +1,6 @@
 using System.Linq;
+using Newtonsoft.Json.Linq;
+using RNAssistant.Core.Models;
 using RNAssistant.Core.Tools;
 using RNAssistant.Office.Services;
 using RuntimeResult = RNAssistant.Core.Tools.Contracts.ToolResult;
@@ -46,6 +48,20 @@ namespace RNAssistant.Office.Tools
                 Serialize(result),
                 ExactReferences(result.ResourceRefs)), ToolEffectEvidence.None, resourceEvidence: result.Items.SelectMany(item => item.Evidence ??
                     new RNAssistant.Core.Models.ResourceEvidence[0]));
+        }
+
+        internal static ToolResultSummary Summarize(JObject data)
+        {
+            var items = data?["items"] as JArray;
+            if (items == null || data["complete"]?.Type != JTokenType.Boolean ||
+                data["partial"]?.Type != JTokenType.Boolean) return null;
+            return new ToolResultSummary {
+                Kind = "resource-find",
+                ReturnedItems = items.Count,
+                TotalItems = data["total"]?.Type == JTokenType.Integer ? data.Value<int?>("total") : null,
+                Complete = data.Value<bool>("complete"),
+                Partial = data.Value<bool>("partial")
+            };
         }
 
         private static string Parameters()

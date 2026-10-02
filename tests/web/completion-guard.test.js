@@ -222,22 +222,49 @@ tests.push(["tool rows preserve action target and result without rewriting model
 }]);
 tests.push(["search and read captions distinguish complete empty and partial data", () => {
   const search = { Kind: "tool", ToolId: "common.resources_find", Status: "completed",
-    DataJson: '{"items":[],"complete":false,"partial":true}' };
+    ResultSummary: { Kind: "resource-find", ReturnedItems: 0, Complete: false, Partial: true },
+    DataJson: '{"truncated":true,"preview":"not a search result"}' };
   assert.equal(context.activityDisplayResult(search), "Получено элементов: 0 · неполный список");
   assert.equal(context.activityPresentationState(search), "partial");
-  search.DataJson = '{"items":[{},{}],"complete":true}';
-  assert.equal(context.activityDisplayResult(search), "Получено элементов: 2", "cached caption follows replaced payload");
+  search.ResultSummary = { Kind: "resource-find", ReturnedItems: 2, Complete: true, Partial: false };
+  assert.equal(context.activityDisplayResult(search), "Получено элементов: 2", "caption follows typed replacement");
   assert.equal(context.activityPresentationState(search), "completed");
-  search.DataJson = '{"items":[],"complete":true}';
+  search.ResultSummary.ReturnedItems = 0;
   assert.equal(context.activityDisplayResult(search), "Получено элементов: 0");
+  delete search.ResultSummary;
+  search.DataJson = '{"items":[{},{}],"complete":false,"partial":true}';
+  assert.equal(context.activityDisplayResult(search), "Завершено", "legacy search JSON is not parsed for coverage");
+  assert.equal(context.activityPresentationState(search), "completed");
   const read = { Kind: "tool", ToolId: "common.resources_read", Status: "completed",
-    ReadSummary: { ReturnedRows: 2, Complete: false } };
+    ResultSummary: { Kind: "resource-read", ReturnedRows: 2, Complete: false } };
   assert.equal(context.activityDisplayResult(read), "Получено строк: 2 · часть данных");
   read.DataJson = '{"truncated":true,"preview":"not the model result"}';
   assert.equal(context.activityPresentationState(read), "partial");
   assert.equal(context.activityDisplayResult(read), "Получено строк: 2 · часть данных", "storage encoding cannot hide read coverage");
-  delete read.ReadSummary;
-  assert.equal(context.activityDisplayResult(read), "В журнале показана часть результата");
+  delete read.ResultSummary;
+  assert.equal(context.activityDisplayResult(read), "Завершено", "old record without summary uses a generic label");
+  read.ReadSummary = { Representation: "source", ReturnedCharacters: 12, Complete: false };
+  assert.equal(context.activityDisplayResult(read), "Получен исходный код · символов: 12 · часть данных", "legacy read summary replays");
+  const capabilitySearch = { Kind: "tool", ToolId: "common.capabilities_search", Status: "completed",
+    ResultSummary: { Kind: "capability-search", ReturnedItems: 0, Complete: true },
+    DataJson: "x".repeat(130000) };
+  assert.equal(context.activityDisplayResult(capabilitySearch), "Получено элементов: 0");
+  capabilitySearch.ResultSummary = { Kind: "capability-search", ReturnedItems: 1, Complete: false };
+  assert.equal(context.activityDisplayResult(capabilitySearch), "Получено элементов: 1 · неполный список");
+  assert.equal(context.activityPresentationState(capabilitySearch), "partial");
+  const capabilityRead = { Kind: "tool", ToolId: "common.capabilities_read", Status: "completed",
+    ResultSummary: { Kind: "capability-read", Representation: "reference", Complete: false },
+    DataJson: "x".repeat(130000) };
+  assert.equal(context.activityDisplayResult(capabilityRead), "Загружена часть описания");
+  assert.equal(context.activityPresentationState(capabilityRead), "partial");
+  capabilityRead.ResultSummary.Complete = true;
+  assert.equal(context.activityDisplayResult(capabilityRead), "Загружено");
+  capabilityRead.ExecutionEvidence = { Effect: "Unknown" };
+  assert.match(context.activityDisplayResult(capabilityRead), /не подтверждён/, "effect evidence wins over display summary");
+  delete capabilityRead.ExecutionEvidence;
+  delete capabilityRead.ResultSummary;
+  capabilityRead.DataJson = '{"kind":"skill","complete":false}';
+  assert.equal(context.activityDisplayResult(capabilityRead), "Завершено", "legacy capability JSON is not parsed for coverage");
 }]);
 tests.push(["result representations work for new tools without identity-specific renderers", () => {
   const activity = { Kind: "tool", ToolId: "custom.read_table", Title: "Пересчёт отчёта", Status: "completed", Subtitle: '`[Отчёт](https://example.com)` <b>Лист</b>' };
@@ -269,8 +296,10 @@ tests.push(["result representations work for new tools without identity-specific
   }
   activity.ToolId = "common.capabilities_read";
   activity.DataJson = '{"kind":"skill","complete":false,"truncated":true}';
+  activity.ResultSummary = { Kind: "capability-read", Representation: "skill", Complete: false };
   assert.equal(context.activityDisplayResult(activity), "Загружена часть описания");
   activity.ToolId = "custom.read_table";
+  delete activity.ResultSummary;
   const row = context.renderActivityRow(activity, false, true, null);
   const target = walk(row).find(node => node.tagName === "code");
   assert.equal(target.textContent, activity.Subtitle);
@@ -283,7 +312,7 @@ tests.push(["result representations work for new tools without identity-specific
 tests.push(["read metadata survives absent and large bodies without granting effects", () => {
   for (const DataJson of [null, JSON.stringify({ text: "x".repeat(40000) })]) {
     const read = { Kind: "tool", ToolId: "common.resources_read", Status: "completed", DataJson,
-      ReadSummary: { Representation: "source", ReturnedCharacters: 40000, Complete: true } };
+      ResultSummary: { Kind: "resource-read", Representation: "source", ReturnedCharacters: 40000, Complete: true } };
     assert.equal(context.activityDisplayResult(read), "Получен исходный код · символов: 40000");
     read.ExecutionEvidence = { Effect: "Unknown" };
     assert.match(context.activityDisplayResult(read), /не подтверждён/);

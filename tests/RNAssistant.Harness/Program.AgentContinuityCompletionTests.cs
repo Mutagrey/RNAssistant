@@ -29,8 +29,7 @@ namespace RNAssistant.Harness
                 {
                     var data = JsonConvert.SerializeObject(new { kind = "resource-read", representation = "source",
                         text = new string('x', size), returnedCharacters = size, complete = true });
-                    var activity = AgentTranscript.CreateToolActivity(new ToolInvocation {
-                        ToolId = "common.resources_read", ToolCallId = "read" + size }, ToolRunResult.Ok("Read", data), "tool");
+                    var activity = SummaryActivity("common.resources_read", data, "read" + size);
                     activity.RunId = "run";
                     session.Messages.Add(new ChatMessage { Role = "assistant", RunId = "run", ExcludeFromModelContext = true, Activity = activity });
                 }
@@ -39,8 +38,8 @@ namespace RNAssistant.Harness
                 foreach (var message in loaded.Messages.Where(m => m.Activity != null))
                 {
                     var activity = message.Activity;
-                    var size = activity.ReadSummary.ReturnedCharacters.Value;
-                    AssertEqual("source", activity.ReadSummary.Representation, "summary survives event replay");
+                    var size = activity.ResultSummary.ReturnedCharacters.Value;
+                    AssertEqual("source", activity.ResultSummary.Representation, "summary survives event replay");
                     AssertTrue(size < 8192 || activity.DataJson == null && activity.ResultPayload != null, "large body is externalized");
                     var preview = new ToolResultPresentationService(null, payloads).Read(loaded, "run", activity.ToolCallId);
                     var block = preview.Blocks.OfType<ToolTextBlockDto>().Single();
@@ -49,9 +48,104 @@ namespace RNAssistant.Harness
                     activity.ResultPayload = new PayloadRef(new string('e', 64), 20000, "application/json");
                     var missing = new ToolResultPresentationService(null, payloads).Read(loaded, "run", activity.ToolCallId);
                     AssertContains(missing.Blocks.OfType<ToolTextBlockDto>().Single().Text, "недоступно", "missing CAS is explicit");
-                    AssertEqual(size, activity.ReadSummary.ReturnedCharacters.Value, "missing body does not rewrite the read outcome");
+                    AssertEqual(size, activity.ResultSummary.ReturnedCharacters.Value, "missing body does not rewrite the read outcome");
                 }
+                var cases = new[] {
+                    new { Tool = "common.resources_find", Name = "find-empty", Data = JsonConvert.SerializeObject(new
+                        { items = new object[0], total = 0, complete = true, partial = false }), Count = (int?)0, Rows = (int?)null,
+                        Complete = true, Partial = false, Representation = (string)null },
+                    new { Tool = "common.resources_find", Name = "find-partial", Data = JsonConvert.SerializeObject(new
+                        { items = new[] { new { target = "document: A" } }, total = 1, complete = false, partial = true }), Count = (int?)1, Rows = (int?)null,
+                        Complete = false, Partial = true, Representation = (string)null },
+                    new { Tool = "common.resources_read", Name = "read-empty", Data = JsonConvert.SerializeObject(new
+                        { kind = "resource-read", representation = "text", text = "", returnedCharacters = 0, complete = true }), Count = (int?)null, Rows = (int?)null,
+                        Complete = true, Partial = false, Representation = "text" },
+                    new { Tool = "common.resources_read", Name = "read-partial", Data = JsonConvert.SerializeObject(new
+                        { kind = "resource-read", representation = "table", table = new { rows = new[] { new { value = 1 } } }, complete = false }), Count = (int?)null, Rows = (int?)1,
+                        Complete = false, Partial = false, Representation = "table" },
+                    new { Tool = "common.capabilities_search", Name = "cap-empty", Data = JsonConvert.SerializeObject(new
+                        { kind = "capability-search", items = new object[0], total = 0, complete = true }), Count = (int?)0, Rows = (int?)null,
+                        Complete = true, Partial = false, Representation = (string)null },
+                    new { Tool = "common.capabilities_search", Name = "cap-incomplete", Data = JsonConvert.SerializeObject(new
+                        { kind = "capability-search", items = new[] { new { id = "sample" } }, total = 2, complete = false }), Count = (int?)1, Rows = (int?)null,
+                        Complete = false, Partial = false, Representation = (string)null },
+                    new { Tool = "common.capabilities_read", Name = "cap-read", Data = JsonConvert.SerializeObject(new
+                        { kind = "skill", complete = true, bodyMarkdown = "" }), Count = (int?)null, Rows = (int?)null,
+                        Complete = true, Partial = false, Representation = "skill" },
+                    new { Tool = "common.capabilities_read", Name = "cap-reference", Data = JsonConvert.SerializeObject(new
+                        { kind = "reference", complete = false, returnedChars = 5, content = "hello" }), Count = (int?)null, Rows = (int?)null,
+                        Complete = false, Partial = false, Representation = "reference" }
+                };
+                foreach (var item in cases)
+                {
+                    var activity = SummaryActivity(item.Tool, item.Data, item.Name);
+                    AssertTrue(activity.ResultSummary != null, item.Name + " has a typed summary");
+                    AssertEqual(item.Count, activity.ResultSummary.ReturnedItems, item.Name + " count");
+                    AssertEqual(item.Rows, activity.ResultSummary.ReturnedRows, item.Name + " rows");
+                    AssertEqual(item.Complete, activity.ResultSummary.Complete, item.Name + " coverage");
+                    AssertEqual(item.Partial, activity.ResultSummary.Partial, item.Name + " unavailable-source flag");
+                    AssertEqual(item.Representation, activity.ResultSummary.Representation, item.Name + " representation");
+                    session.Messages.Add(new ChatMessage { Role = "assistant", RunId = "run", ExcludeFromModelContext = true, Activity = activity });
+                }
+                var large = new[] {
+                    new { Tool = "common.resources_find", Name = "large-find", Data = JsonConvert.SerializeObject(new
+                        { items = new[] { new { target = "document: A" } }, total = 1, complete = false, partial = true, padding = new string('x', 130000) }) },
+                    new { Tool = "common.resources_read", Name = "large-read", Data = JsonConvert.SerializeObject(new
+                        { kind = "resource-read", representation = "source", text = new string('x', 130000), returnedCharacters = 130000, complete = false }) },
+                    new { Tool = "common.capabilities_search", Name = "large-cap-search", Data = JsonConvert.SerializeObject(new
+                        { kind = "capability-search", items = new[] { new { id = "sample" } }, total = 2, complete = false, padding = new string('x', 130000) }) },
+                    new { Tool = "common.capabilities_read", Name = "large-cap-read", Data = JsonConvert.SerializeObject(new
+                        { kind = "skill", complete = true, bodyMarkdown = new string('x', 130000) }) }
+                };
+                foreach (var item in large)
+                {
+                    AssertTrue(item.Data.Length > 128000, item.Name + " crosses transcript bound");
+                    var activity = SummaryActivity(item.Tool, item.Data, item.Name);
+                    AssertTrue(activity.ResultSummary != null, item.Name + " retains typed metadata");
+                    AssertTrue(JObject.Parse(activity.DataJson).Value<bool>("truncated"), item.Name + " transcript is bounded");
+                    session.Messages.Add(new ChatMessage { Role = "assistant", RunId = "run", ExcludeFromModelContext = true, Activity = activity });
+                }
+                var readContext = new ToolRuntimeFixture().Context(toolId: "common.resources_read");
+                var originalRead = ToolResult.Ok("Read", large[1].Data);
+                var readRecord = new ToolExecutionRecord(readContext, ToolExecutionOutcome.Ok,
+                    readContext.StartedUtc, "Read", result: originalRead);
+                var prepared = new ToolResultMaterialization(originalRead);
+                prepared.ReplaceResult(ToolResult.Ok("Prepared", "{\"externalized\":true}"));
+                var projectedRead = ToolRunResultFactory.Create(readRecord, prepared);
+                AssertEqual(130000, projectedRead.ResultSummary.ReturnedCharacters.Value,
+                    "summary comes from terminal data before request-local replacement");
+                AssertEqual("{\"externalized\":true}", projectedRead.DataJson,
+                    "request-local data remains separate from summary");
+                AssertEqual(large[1].Data, readRecord.Result.DataJson, "durable terminal data stays exact");
+                var media = SummaryActivity("common.resources_read", JsonConvert.SerializeObject(new
+                    { kind = "resource-read", representation = "media", complete = true, hydratedForNextModelStep = true }), "media");
+                AssertTrue(media.ResultSummary.HydratedForNextModelStep, "media preparation is retained separately from effects");
+                AssertTrue(media.ExecutionEvidence == null, "summary does not invent effect evidence");
+                var legacy = new ChatActivity { Kind = "tool", ToolId = "common.resources_read", ToolCallId = "legacy",
+                    ReadSummary = new ResourceReadSummary { Representation = "source", ReturnedCharacters = 12, Complete = false } };
+                session.Messages.Add(new ChatMessage { Role = "assistant", RunId = "run", ExcludeFromModelContext = true, Activity = legacy });
+                store.Save(session);
+                loaded = store.Load(session.Id);
+                AssertEqual(12, loaded.Messages.Last().Activity.ReadSummary.ReturnedCharacters.Value,
+                    "legacy read summary survives replay");
+                AssertTrue(loaded.Messages.Last().Activity.ResultSummary == null,
+                    "replay does not synthesize a new summary from old business JSON");
+                foreach (var name in cases.Select(item => item.Name).Concat(large.Select(item => item.Name)))
+                    AssertTrue(loaded.Messages.Any(message => message.Activity?.ToolCallId == name &&
+                        message.Activity.ResultSummary != null), name + " summary survives replay");
             });
+        }
+
+        private static ChatActivity SummaryActivity(string toolId, string data, string callId)
+        {
+            var context = new ToolRuntimeFixture().Context(toolId: toolId);
+            var terminal = ToolResult.Ok("Read", data);
+            var record = new ToolExecutionRecord(context, ToolExecutionOutcome.Ok,
+                context.StartedUtc, "Read", result: terminal);
+            var projected = ToolRunResultFactory.Create(record);
+            AssertEqual(data, projected.DataJson, callId + " preserves the raw result");
+            return AgentTranscript.CreateToolActivity(new ToolInvocation {
+                ToolId = toolId, ToolCallId = callId }, projected, "tool");
         }
 
         private static void AgentContinuityTaskContext()

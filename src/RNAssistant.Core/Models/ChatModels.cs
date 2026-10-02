@@ -202,14 +202,28 @@ namespace RNAssistant.Core.Models
         }
     }
 
-    // Bounded presentation metadata survives result-body externalization. It is
-    // not evidence that a body was included in a later model request.
+    // Historical read activities retain this field for replay.
     public sealed class ResourceReadSummary
     {
         public string Representation { get; set; }
         public int? ReturnedCharacters { get; set; }
         public int? ReturnedRows { get; set; }
         public bool Complete { get; set; }
+        public bool HydratedForNextModelStep { get; set; }
+    }
+
+    // Bounded presentation only. Coverage and next-step preparation are not
+    // execution-effect evidence or proof that a body reached the model.
+    public sealed class ToolResultSummary
+    {
+        public string Kind { get; set; }
+        public string Representation { get; set; }
+        public int? ReturnedItems { get; set; }
+        public int? TotalItems { get; set; }
+        public int? ReturnedCharacters { get; set; }
+        public int? ReturnedRows { get; set; }
+        public bool Complete { get; set; }
+        public bool Partial { get; set; }
         public bool HydratedForNextModelStep { get; set; }
     }
 
@@ -243,6 +257,9 @@ namespace RNAssistant.Core.Models
         public string RuntimeGuardJson { get; set; }
         public string ResultMessage { get; set; }
         public string DataJson { get; set; }
+        [JsonProperty(NullValueHandling = NullValueHandling.Ignore)]
+        public ToolResultSummary ResultSummary { get; set; }
+        // Historical read activities may carry this field without ResultSummary.
         [JsonProperty(NullValueHandling = NullValueHandling.Ignore)]
         public ResourceReadSummary ReadSummary { get; set; }
         public List<ChatActivity> Children { get; set; }

@@ -307,6 +307,36 @@ namespace RNAssistant.Office.Tools
             }.ToString(Formatting.None));
         }
 
+        internal static ToolResultSummary SummarizeSearch(JObject data)
+        {
+            var items = data?["items"] as JArray;
+            if (items == null || data["kind"]?.Type != JTokenType.String ||
+                (string)data["kind"] != "capability-search" ||
+                data["complete"]?.Type != JTokenType.Boolean) return null;
+            return new ToolResultSummary {
+                Kind = "capability-search",
+                ReturnedItems = items.Count,
+                TotalItems = data["total"]?.Type == JTokenType.Integer ? data.Value<int?>("total") : null,
+                Complete = data.Value<bool>("complete")
+            };
+        }
+
+        internal static ToolResultSummary SummarizeRead(JObject data)
+        {
+            if (data?["kind"]?.Type != JTokenType.String ||
+                data["complete"]?.Type != JTokenType.Boolean) return null;
+            var kind = data.Value<string>("kind");
+            if (kind != "tool-schema" && kind != "skill" && kind != "reference") return null;
+            var characters = data["returnedChars"]?.Type == JTokenType.Integer
+                ? data.Value<int?>("returnedChars") : null;
+            return new ToolResultSummary {
+                Kind = "capability-read",
+                Representation = kind,
+                ReturnedCharacters = characters,
+                Complete = data.Value<bool>("complete")
+            };
+        }
+
         private static IEnumerable<CapabilityRecord> Records(
             IEnumerable<ToolCatalogEntry> tools,
             IEnumerable<SkillDefinition> skills)

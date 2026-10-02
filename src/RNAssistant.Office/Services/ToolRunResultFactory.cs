@@ -2,6 +2,7 @@ using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
 using RNAssistant.Core.Tools;
 using RNAssistant.Office.Contracts;
+using RNAssistant.Office.Tools;
 
 namespace RNAssistant.Office.Services
 {
@@ -57,6 +58,8 @@ namespace RNAssistant.Office.Services
                         : "tool_execution_failed"), retryable ?? false);
             }
             result.ToolStepsConsumed = record.ToolStepsConsumed;
+            if (record.Outcome == ToolExecutionOutcome.Ok && !record.AwaitingUser && record.Result != null)
+                result.ResultSummary = Summarize(record.Context.Call.Name, record.Result.DataJson);
             if (terminal != null) result.ModelResourceRefs = terminal.Resources;
             if (materialized != null)
             {
@@ -66,6 +69,23 @@ namespace RNAssistant.Office.Services
                     materialized.ResultResourceKind;
             }
             return result;
+        }
+
+        private static RNAssistant.Core.Models.ToolResultSummary Summarize(string toolId, string dataJson)
+        {
+            if (string.IsNullOrWhiteSpace(dataJson)) return null;
+            if (toolId != ResourceToolCatalog.FindToolId && toolId != ResourceToolCatalog.ReadToolId &&
+                toolId != CapabilityToolCatalog.SearchToolId && toolId != CapabilityToolCatalog.ReadToolId) return null;
+            try
+            {
+                var data = JObject.Parse(dataJson);
+                if (toolId == ResourceToolCatalog.FindToolId) return ResourceFindToolHandler.Summarize(data);
+                if (toolId == ResourceToolCatalog.ReadToolId) return ResourceReadToolHandler.Summarize(data);
+                if (toolId == CapabilityToolCatalog.SearchToolId) return CapabilityCatalogService.SummarizeSearch(data);
+                return CapabilityCatalogService.SummarizeRead(data);
+            }
+            catch (JsonException) { return null; }
+            catch (System.OverflowException) { return null; }
         }
 
         private static void ReadErrorMetadata(string data, out string code,
