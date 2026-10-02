@@ -30,6 +30,8 @@ assert.deepEqual([builds, closes, loads], [5, 5, 5], "source, exact binding and 
 ready = false; editor.renderPreview(); ready = true; editor.renderPreview();
 assert.deepEqual([builds, closes, loads], [6, 7, 7], "source invalidation cannot reuse an old preview");
 state.htmlWorkspaceMode = "edit"; editor.renderPreview();
+for (let i = 0; i < 200; i++) editor.renderPreview();
+assert.deepEqual([builds, closes, loads], [6, 8, 8], "edit updates do not repeatedly navigate an empty iframe");
 state.htmlWorkspaceMode = "preview"; editor.renderPreview();
 assert.deepEqual([builds, closes, loads], [7, 9, 9], "return from cleared edit preview rebuilds");
 console.log("PASS HTML preview: unchanged updates reuse iframe; source/binding/owner/mode invalidation replaces it");

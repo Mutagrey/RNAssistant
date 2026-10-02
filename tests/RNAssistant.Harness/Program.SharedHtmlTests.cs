@@ -219,6 +219,8 @@ namespace RNAssistant.Harness
                 AssertEqual("<main>first</main>", b.HtmlWorkspace.Files.Single().Content, "restored aggregate is verified");
                 chats.Save(b);
                 b = chats.Load(b.Id);
+                AssertEqual(1, b.Artifacts.Count(item => item.Kind == ChatArtifactKinds.HtmlWorkspace && item.InlineText != null),
+                    "shared HTML restart loads only the active body, including after restore");
                 b.Artifacts.RemoveAll(item => item.Id == first.Id);
                 HtmlWorkspaceArtifactService.RebuildNavigation(b);
                 AssertEqual(HtmlWorkspaceRecoveryIssues.ParentArtifactMissing, b.HtmlWorkspaceRecovery.Issue,

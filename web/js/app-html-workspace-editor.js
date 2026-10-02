@@ -11,10 +11,20 @@
     var workspaceArtifacts = options.artifacts;
     var htmlPreviewRefreshTimer = 0;
     var renderedPreviewKey = null;
+    var renderedPreviewContents = null;
+    var previewCleared = false;
 
     function invalidatePreview() {
       renderedPreviewKey = null;
+      renderedPreviewContents = null;
       if (options.closeResources) options.closeResources();
+    }
+    function clearPreview(frame) {
+      if (previewCleared) return;
+      invalidatePreview();
+      frame.removeAttribute("src");
+      frame.srcdoc = "";
+      previewCleared = true;
     }
     var workspace = model.workspace;
     var files = model.files;
@@ -67,6 +77,7 @@
     }
 
     function syncHtmlEditorToState() {
+      if (state.htmlWorkspaceMode !== "edit") return;
       var selected = selectedItem();
       if (!selected) {
         return;
@@ -87,6 +98,7 @@
     }
 
     function markHtmlWorkspaceDirty() {
+      if (state.htmlWorkspaceMode !== "edit") return;
       var selected = selectedItem();
       if (!selected || selected.type === "artifact" || selected.type === "collection" || selected.type === "data") return;
       if (recoveryBlocked() && selected.type !== "plan") return;
@@ -156,7 +168,7 @@
       if ($("refreshHtmlDataButton")) {
         var boundCount = boundDataSources().length;
         $("refreshHtmlDataButton").disabled = state.bridgeUnavailable || blocked || !!state.htmlWorkspaceDirty || !!state.htmlWorkspaceRefreshPending || !boundCount;
-        $("refreshHtmlDataButton").textContent = state.htmlWorkspaceRefreshPending ? "Обновляю…" : "Данные ↻";
+        $("refreshHtmlDataButton").textContent = state.htmlWorkspaceRefreshPending ? "Обновляю данные…" : "Обновить данные";
         $("refreshHtmlDataButton").title = boundCount ? "Перечитать " + boundCount + " привязанных наборов из Office" : "Нет привязанных данных";
       }
       if ($("exportHtmlWorkspaceButton")) {
@@ -165,7 +177,7 @@
         $("exportHtmlWorkspaceButton").disabled = exportBlocked;
         $("exportHtmlWorkspaceButton").title = state.htmlWorkspaceDirty
           ? "Сначала сохраните текущие изменения"
-          : "Зафиксировать exact workspace revision и скачать автономный HTML";
+          : "Скачать сохранённую версию как автономный HTML";
       }
       if ($("deleteHtmlWorkspaceButton")) {
         $("deleteHtmlWorkspaceButton").disabled = state.bridgeUnavailable || !selected ||
@@ -179,7 +191,7 @@
           (selected.type === "plan" || selected.type === "artifact" || selected.type === "collection"));
         $("undoHtmlWorkspaceButton").disabled = state.bridgeUnavailable || blocked || !historyItems().length;
         $("undoHtmlWorkspaceButton").title = historyItems().length
-          ? "Вернуть: " + snapshotLabel(historyItems()[0])
+          ? "Восстановить предыдущую версию: " + snapshotLabel(historyItems()[0])
           : "Нет предыдущих версий";
       }
       if ($("redoHtmlWorkspaceButton")) {
@@ -189,9 +201,9 @@
           (selected.type === "plan" || selected.type === "artifact" || selected.type === "collection"));
         $("redoHtmlWorkspaceButton").disabled = state.bridgeUnavailable || blocked || !branches.length;
         $("redoHtmlWorkspaceButton").title = branches.length > 1
-          ? "Повторить выбранную ветку"
+          ? "Восстановить выбранную ветку"
           : branches.length
-            ? "Повторить: " + snapshotLabel(branches[0])
+            ? "Вернуть отменённую версию: " + snapshotLabel(branches[0])
           : "Нет отмененных версий";
       }
     }
@@ -319,14 +331,24 @@
       }
       if (isPlan && artifactInlineTruncated(selected.item)) state.htmlWorkspaceMode = "preview";
       if (isArtifact || isCollection) state.htmlWorkspaceMode = "preview";
+      var isWorkspace = !!selected && !isPlan && !isArtifact && !isCollection;
+      ["refreshHtmlDataButton", "reloadHtmlWorkspaceSourceButton", "exportHtmlWorkspaceButton"].forEach(function (id) {
+        if ($(id)) $(id).classList.toggle("hidden", !isWorkspace);
+      });
+      if ($("refreshHtmlDataButton")) $("refreshHtmlDataButton").classList.toggle("hidden", !isWorkspace || !dataSources().length);
+      if ($("htmlWorkspaceMoreActions")) $("htmlWorkspaceMoreActions").classList.toggle("hidden", !isWorkspace && !isPlan);
       if ($("saveHtmlWorkspaceButton")) $("saveHtmlWorkspaceButton").classList.toggle("hidden", isArtifact || isCollection || selected && selected.type === "data");
       if ($("deleteHtmlWorkspaceButton")) $("deleteHtmlWorkspaceButton").classList.toggle("hidden", isArtifact || isCollection);
+      var editing = state.htmlWorkspaceMode === "edit";
+      var editorValue = editing ? selectedEditorValue(selected) : "";
+      var editorKey = editing && selected ? JSON.stringify([state.activeChatId, selected.type,
+        selected.item.id || selected.item.Id, selected.type === "file" ? selected.item.sourceReadKey : artifactRevision(selected.item)]) : "";
       if (typeof setCodeEditorValue === "function") {
-        setCodeEditorValue("htmlWorkspaceEditorInput", isArtifact || isCollection ? "" : selectedEditorValue(selected));
+        setCodeEditorValue("htmlWorkspaceEditorInput", editorValue, editorKey);
       } else if ($("htmlWorkspaceEditorInput")) {
-        $("htmlWorkspaceEditorInput").value = isArtifact || isCollection ? "" : selectedEditorValue(selected);
+        $("htmlWorkspaceEditorInput").value = editorValue;
       }
-      renderedFile = selected && selected.type === "file" && source.ready(selected.item) ? selected.item : null;
+      renderedFile = editing && selected && selected.type === "file" && source.ready(selected.item) ? selected.item : null;
       renderedSourceKey = renderedFile ? renderedFile.sourceReadKey : null;
       if (typeof setCodeEditorReadOnly === "function") setCodeEditorReadOnly("htmlWorkspaceEditorInput",
         isArtifact || isCollection || selected && selected.type === "data" || (blocked && !isPlan) ||
@@ -345,19 +367,15 @@
       frame.classList.toggle("hidden", !!special);
       detail.classList.toggle("hidden", !special);
       if (special) {
-        invalidatePreview();
+        clearPreview(frame);
         workspaceArtifacts.renderDetail(detail, selected, selectedEditorValue(selected), options.artifactActions);
-        frame.removeAttribute("src");
-        frame.srcdoc = "";
         return;
       }
       detail.replaceChildren();
-      if (state.htmlWorkspaceMode === "edit") { invalidatePreview(); frame.removeAttribute("src"); frame.srcdoc = ""; return; }
+      if (state.htmlWorkspaceMode === "edit") { clearPreview(frame); return; }
       var workspaceFiles = files();
       if (!source.current(workspace()) || !workspaceFiles.every(source.ready)) {
-        invalidatePreview();
-        frame.removeAttribute("src");
-        frame.srcdoc = "";
+        clearPreview(frame);
         detail.classList.remove("hidden"); detail.textContent = source.message(); frame.classList.add("hidden");
         return;
       }
@@ -366,6 +384,7 @@
         invalidatePreview();
         frame.removeAttribute("src");
         frame.srcdoc = "<!doctype html><html><body style=\"font-family:Segoe UI,Arial,sans-serif;padding:24px;color:#475467\">Загрузка диаграммы...</body></html>";
+        previewCleared = false;
         htmlPreview.ensureECharts().then(function () {
           if (typeof window.renderHtmlWorkspace === "function") window.renderHtmlWorkspace();
           else renderHtmlWorkspacePreview();
@@ -384,13 +403,21 @@
       };
       // Include exact binding/source metadata and owner, not just generated HTML:
       // identical markup in another workspace must never retain the old leases.
-      var previewKey = JSON.stringify([state.activeChatId, state.activeHtmlArtifactId, previewInput]);
-      if (renderedPreviewKey === previewKey) return;
+      var previewKey = JSON.stringify([state.activeChatId, state.activeHtmlArtifactId,
+        previewInput.activeFileId, previewInput.dataSources, workspaceFiles.map(function (file) {
+          return [file.id, file.path, file.kind, file.source, file.sourceReadKey, file.sha256, file.byteLength, file.characters];
+        })]);
+      // Compare source strings directly instead of serializing another complete
+      // copy of the workspace on every chat-state update.
+      if (renderedPreviewKey === previewKey && renderedPreviewContents &&
+          workspaceFiles.every(function (file, index) { return renderedPreviewContents[index] === file.content; })) return;
       var previewHtml = htmlPreview.build(previewInput);
       invalidatePreview();
       frame.removeAttribute("src");
       frame.srcdoc = previewHtml;
+      previewCleared = false;
       renderedPreviewKey = previewKey;
+      renderedPreviewContents = workspaceFiles.map(function (file) { return file.content; });
     }
 
     return {

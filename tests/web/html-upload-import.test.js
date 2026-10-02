@@ -132,11 +132,11 @@ vm.runInContext(source, context, { filename: "app-html-workspace-actions.js" });
   const index = fs.readFileSync(path.join(root, "web/index.html"), "utf8");
   assert.ok(index.includes("app-artifact-viewer-actions.js?v=binary-chunks-20260906-1"));
   assert.ok(index.includes("app-html-workspace-actions.js?v=html-action-guard-20260908-1"));
-  assert.ok(index.includes("app-html-workspace-editor.js?v=preview-reuse-20260907-1"));
+  assert.ok(index.includes("app-html-workspace-editor.js?v=html-memory-20261002-1"));
   assert.ok(index.includes(
     "app-html-workspace-artifacts.js?v=binary-chunks-20260906-1"));
-  assert.ok(index.includes("app-html-workspace.js?v=html-read-20260906-1"));
-  assert.ok(index.includes("app-html-workspace.css?v=html-export-20260831-1"));
+  assert.ok(index.includes("app-html-workspace.js?v=html-memory-20261002-1"));
+  assert.ok(index.includes("app-html-workspace.css?v=html-memory-20261002-1"));
   console.log("PASS HTML upload import: changed UI graph uses one cache key");
   console.log("OK 5/5");
 }()).catch(error => {

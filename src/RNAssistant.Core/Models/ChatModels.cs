@@ -457,8 +457,6 @@ namespace RNAssistant.Core.Models
         public const string ActiveBodyUnavailable = "active_body_unavailable";
         public const string ActiveBodyInvalid = "active_body_invalid";
         public const string ParentArtifactMissing = "parent_artifact_missing";
-        public const string ParentBodyUnavailable = "parent_body_unavailable";
-        public const string ParentBodyInvalid = "parent_body_invalid";
         public const string LineageCycle = "lineage_cycle";
     }
 

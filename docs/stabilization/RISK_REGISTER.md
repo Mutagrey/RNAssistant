@@ -8,6 +8,28 @@ retired or deferred is not an active P0/P1 implementation defect merely because
 that original severity remains in the table. Release qualification is a separate
 exact-build gate.
 
+## HTML editing memory growth — 2026-10-02
+
+Owner: HTML navigation/source projection and WebView editor.
+The user reports progressive slowdown after many HTML revisions in a long chat.
+Code inspection and focused checks reproduce eager ancestor-body hydration and
+full source replacements accumulating in CodeMirror undo history, including its
+hidden editor. Empty source-cache entries also had no count limit.
+
+Navigation now carries at most 20 metadata summaries; restart hydrates only the
+active aggregate and restore reads its exact source on demand. CodeMirror clears
+history on programmatic source/document changes, retains local typing undo, and
+releases its hidden buffer in Preview. Source caching is capped at 200 files and
+3 million characters. Preview comparisons avoid another serialized source copy;
+an already cleared iframe is not navigated again on every edit render.
+
+Targeted storage/shared HTML checks and a real Chromium/CodeMirror stress case
+cover 160 large source replacements, local undo, source cleanup and narrow-panel
+layout. This is not a memory profile or qualification of the reported Windows
+session. Exact Windows/WebView2 long-chat evidence remains open. Full library
+metadata enumeration and authority-journal startup still scale with history;
+metadata pagination remains a separate Resource/Library owner task.
+
 ## Agent continuity and deterministic read loops — 2026-10-01
 
 P1 incident evidence remains open; shared host-neutral fixes are implemented.

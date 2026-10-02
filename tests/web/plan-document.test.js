@@ -70,15 +70,15 @@ vm.runInContext(source, context, { filename: "app-html-workspace-artifacts.js" }
     "artifact actions have the current artifact cache key");
   assert.ok(index.includes("app-html-workspace-artifacts.js?v=binary-chunks-20260906-1"),
     "artifact detail has the current artifact cache key");
-  assert.ok(index.includes("app-html-workspace-editor.js?v=preview-reuse-20260907-1"));
+  assert.ok(index.includes("app-html-workspace-editor.js?v=html-memory-20261002-1"));
   ["app-task-list.js", "app-agent-activity.js"].forEach(asset => {
     assert.ok(index.includes(asset + "?v=" + (asset === "app-agent-activity.js" ? "action-severity-20260930-1" : "task-close-state-20260929-1")), asset + " has the current planning-intent cache key");
   });
   assert.ok(index.includes("app-html-workspace-actions.js?v=html-action-guard-20260908-1"),
     "app-html-workspace-actions.js has the current preview cache key");
-  assert.ok(index.includes("app-html-workspace.js?v=html-read-20260906-1"),
+  assert.ok(index.includes("app-html-workspace.js?v=html-memory-20261002-1"),
     "app-html-workspace.js has the current preview cache key");
-  assert.ok(index.includes("app-html-workspace.css?v=json-height-20260929-1"), "Plan/HTML actions have the matching CSS cache key");
+  assert.ok(index.includes("app-html-workspace.css?v=html-memory-20261002-1"), "Plan/HTML actions have the matching CSS cache key");
   assert.match(workspace, /switchChatMode:\s*function\s*\(mode\)/);
   assert.doesNotMatch(workspace, /switchChatMode:\s*saveChatMode/);
   assert.match(workspace, /result\.expectedRevisionArtifactId = artifactId\(selected\.item\)/);

@@ -511,6 +511,7 @@ namespace RNAssistant.Harness
                 AssertEqual(1, loaded.HtmlWorkspace.Files.Count, "html workspace preserved");
                 AssertEqual("index.html", loaded.HtmlWorkspace.ActiveFileId, "active html preserved");
                 AssertEqual(1, loaded.HtmlWorkspace.History.Count, "html history preserved");
+                AssertTrue(store.LoadArtifactBody(loaded, loaded.HtmlWorkspace.History[0].Id), "restore reads only its selected source");
                 RestoreHtmlFixtureSnapshot(loaded, loaded.HtmlWorkspace.History[0].Id);
                 AssertEqual("<h1>Saved</h1>", loaded.HtmlWorkspace.Files[0].Content, "persisted html history supports undo");
 
@@ -569,14 +570,30 @@ namespace RNAssistant.Harness
 
             var storedCharacters = largeSession.HtmlWorkspace.History
                 .Sum(snapshot => HtmlWorkspaceHistoryPolicy.EstimateContentCharacters(snapshot));
-            AssertTrue(largeSession.HtmlWorkspace.History.Count < HtmlWorkspaceHistoryPolicy.MaxItems, "large html history is pruned before item limit");
+            AssertEqual(11, largeSession.HtmlWorkspace.History.Count, "source size does not evict navigation metadata");
             AssertTrue(storedCharacters <= HtmlWorkspaceHistoryPolicy.MaxContentCharacters, "large html history stays within character budget");
-            AssertEqual('k', largeSession.HtmlWorkspace.History[0].Files[0].Content[0], "latest undo snapshot is retained");
+            AssertTrue(largeSession.HtmlWorkspace.History.All(snapshot => snapshot.Files.Count == 0 && snapshot.DataSources.Count == 0),
+                "navigation never materializes old source bodies or bindings");
 
             RestoreHtmlFixtureSnapshot(largeSession, largeSession.HtmlWorkspace.History[0].Id);
             AssertEqual('k', largeSession.HtmlWorkspace.Files[0].Content[0], "bounded history still supports undo");
             RedoHtmlFixtureSnapshot(largeSession, largeSession.HtmlWorkspace.RedoBranches[0].Id);
             AssertEqual('l', largeSession.HtmlWorkspace.Files[0].Content[0], "bounded history still supports redo");
+
+            WithTempPaths(paths =>
+            {
+                var store = new ChatStore(paths);
+                store.Save(largeSession);
+                var loaded = store.Load(largeSession.Id);
+                AssertEqual(1, loaded.Artifacts.Count(item => item.Kind == ChatArtifactKinds.HtmlWorkspace && item.InlineText != null),
+                    "reopening a large workspace hydrates only its active revision");
+                AssertTrue(loaded.HtmlWorkspace.History.All(snapshot => snapshot.Files.Count == 0 && snapshot.DataSources.Count == 0),
+                    "replay preserves metadata-only navigation");
+                var priorId = loaded.HtmlWorkspace.History[0].Id;
+                AssertTrue(store.LoadArtifactBody(loaded, priorId), "selected undo source loads on demand");
+                RestoreHtmlFixtureSnapshot(loaded, priorId);
+                AssertEqual('k', loaded.HtmlWorkspace.Files.Single().Content[0], "lazy restore preserves exact large source");
+            });
 
             var transportSession = new ChatSession { Title = "HTML compact transport" };
             HtmlWorkspaceToolService.UpsertFile(transportSession, "index.html", "html", "CURRENT_FIRST", true);

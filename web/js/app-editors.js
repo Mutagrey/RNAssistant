@@ -158,7 +158,7 @@
     return node ? node.value : "";
   };
 
-  window.setCodeEditorValue = function (id, value) {
+  window.setCodeEditorValue = function (id, value, documentKey) {
     value = value || "";
     if (editors[id]) {
       var changed = editors[id].getValue() !== value;
@@ -169,6 +169,12 @@
         } finally {
           editors[id]._rnSettingValue = false;
         }
+      }
+      // Loading another saved source must not become an undoable full-document
+      // edit. Preserve local typing history across unchanged projection renders.
+      if (documentKey !== undefined && (changed || editors[id]._rnDocumentKey !== documentKey)) {
+        editors[id].clearHistory();
+        editors[id]._rnDocumentKey = documentKey;
       }
       editors[id].save();
       if (changed) editors[id].refresh();

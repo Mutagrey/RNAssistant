@@ -253,52 +253,7 @@ namespace RNAssistant.Office.Services
                     false);
                 return;
             }
-            var navigationId = (string)JObject.Parse(active.MetadataJson ?? "{}")["navigationBaseArtifactId"];
-            var current = string.IsNullOrEmpty(navigationId) ? active : FindArtifact(session, navigationId);
-            if (current != null && !string.IsNullOrEmpty(current.AvailabilityIssue)) current = null;
-            var visited = new HashSet<string>(StringComparer.OrdinalIgnoreCase) { current?.Id ?? active.Id };
-            string issue = current == null ? HtmlWorkspaceRecoveryIssues.ParentArtifactMissing : null;
-            string message = current == null ? "The restored HTML navigation source is unavailable. The active revision is readable, but undo history is incomplete." : null;
-            string problemArtifactId = current == null ? navigationId : null;
-            while (current != null && !string.IsNullOrWhiteSpace(current.ParentArtifactId))
-            {
-                problemArtifactId = current.ParentArtifactId;
-                if (!visited.Add(problemArtifactId))
-                {
-                    issue = HtmlWorkspaceRecoveryIssues.LineageCycle;
-                    message = "The HTML workspace revision lineage contains a cycle. The active revision is readable, but older undo history is incomplete.";
-                    break;
-                }
-                current = FindArtifact(session, problemArtifactId);
-                if (current == null)
-                {
-                    issue = HtmlWorkspaceRecoveryIssues.ParentArtifactMissing;
-                    message = "An older HTML workspace revision is missing. The active revision is readable, but undo history is incomplete.";
-                    break;
-                }
-                var snapshot = ParseSnapshot(current);
-                if (snapshot == null)
-                {
-                    var missing = string.IsNullOrWhiteSpace(current.InlineText);
-                    issue = missing ? HtmlWorkspaceRecoveryIssues.ParentBodyUnavailable : HtmlWorkspaceRecoveryIssues.ParentBodyInvalid;
-                    message = missing
-                        ? "An older HTML workspace body is unavailable. The active revision is readable, but undo history is incomplete."
-                        : "An older HTML workspace body is invalid. The active revision is readable, but undo history is incomplete.";
-                    break;
-                }
-                session.HtmlWorkspace.History.Add(snapshot);
-            }
-            session.HtmlWorkspace.History = HtmlWorkspaceHistoryPolicy.Trim(session.HtmlWorkspace.History);
-
-            session.HtmlWorkspace.RedoBranches = HtmlWorkspaceNavigationService.GetRedoBranches(session);
-            session.HtmlWorkspaceRecovery = HtmlWorkspaceNavigationService.CreateRecoveryState(
-                session,
-                issue == null ? HtmlWorkspaceRecoveryStatuses.Healthy : HtmlWorkspaceRecoveryStatuses.Degraded,
-                issue,
-                message,
-                active.Id,
-                problemArtifactId,
-                true);
+            HtmlWorkspaceNavigationService.RebuildHistory(session, active);
         }
 
         public static string CheckpointAtOrBefore(ChatSession session, IReadOnlyList<ChatMessage> messages, int index)

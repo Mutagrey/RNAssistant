@@ -152,9 +152,9 @@ function fixture(text = "<main>before</main>") {
   const index = read("index.html");
   ["app-html-workspace-actions.js", "app-html-workspace.js", "app-chat-state.js", "app-chat-session.js"]
     .forEach(file => assert.ok(index.includes(file + "?v=" + (
-      file === "app-chat-state.js" ? "html-source-reuse-20260928-1" :
-      file === "app-chat-session.js" ? "startup-timing-20260928-1" :
-      file === "app-html-workspace-actions.js" ? "html-action-guard-20260908-1" : "html-read-20260906-1"))));
+      file === "app-chat-state.js" ? "office-chat-20260930-3" :
+      file === "app-chat-session.js" ? "office-chat-20260930-4" :
+      file === "app-html-workspace-actions.js" ? "html-action-guard-20260908-1" : "html-memory-20261002-1"))));
   assert.ok(index.indexOf("app-resource-upload.js?v=") < index.indexOf("app-html-workspace-actions.js?v="));
   assert.match(read("js/app-html-workspace.js"), /addEventListener\("pagehide", workspaceActions.cancelWrite\)/);
   ["app-chat-state.js", "app-chat-session.js"].forEach(file => assert.match(read("js/" + file), /window.cancelHtmlWorkspaceWrite\(\)/));

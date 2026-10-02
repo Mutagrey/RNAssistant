@@ -5,7 +5,7 @@
 
   function create(options) {
     var state = options.state, pending = null;
-    var maxCachedCharacters = 3000000, cachedCharacters = 0, sourceCache = new Map();
+    var maxCachedCharacters = 3000000, maxCachedFiles = 200, cachedCharacters = 0, sourceCache = new Map();
     function cacheKey(file) {
       return file && file.source && state.activeChatId + "|" + key(file) + "|" +
         file.sha256 + "|" + file.byteLength + "|" + file.characters;
@@ -24,7 +24,7 @@
       var identity = cacheKey(file), previous = sourceCache.get(identity);
       if (previous !== undefined) { cachedCharacters -= previous.length; sourceCache.delete(identity); }
       sourceCache.set(identity, content); cachedCharacters += content.length;
-      while (cachedCharacters > maxCachedCharacters) {
+      while (cachedCharacters > maxCachedCharacters || sourceCache.size > maxCachedFiles) {
         var oldest = sourceCache.keys().next().value;
         cachedCharacters -= sourceCache.get(oldest).length; sourceCache.delete(oldest);
       }
@@ -134,7 +134,7 @@
     function message() {
       if (!currentWorkspace(state.htmlWorkspace || {})) return "Workspace изменился. Скопируйте правки и перезагрузите исходники.";
       var error = (state.htmlWorkspace.files || []).find(function (file) { return file.sourceError; });
-      return error ? "Исходник не загружен: " + error.sourceError + ". Нажмите «Исходники ↻»." : "Загрузка исходников…";
+      return error ? "Исходник не загружен: " + error.sourceError + ". В меню ⋯ выберите «Перезагрузить исходники»." : "Загрузка исходников…";
     }
     return { ensure: ensure, ready: ready, current: currentWorkspace, exportSources: exportSources,
       message: message, release: function () { cancel(false); sourceCache.clear(); cachedCharacters = 0; } };

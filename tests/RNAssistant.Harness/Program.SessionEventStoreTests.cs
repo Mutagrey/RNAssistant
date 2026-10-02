@@ -3191,6 +3191,8 @@ namespace RNAssistant.Harness
                 var loaded = store.Load(session.Host, session.DocumentKey, session.Id);
                 AssertEqual("version two", loaded.HtmlWorkspace.Files.Single().Content, "active revision projected");
                 AssertEqual(firstId, loaded.HtmlWorkspace.History.Single().Id, "undo points to parent artifact");
+                AssertTrue(loaded.Artifacts.Single(item => item.Id == firstId).InlineText == null, "undo body is not prefetched");
+                AssertTrue(store.LoadArtifactBody(loaded, firstId), "selected undo body loads lazily");
                 RestoreHtmlFixtureSnapshot(loaded, firstId);
                 AssertEqual(firstId, loaded.ActiveHtmlArtifactId, "undo activates prior artifact");
                 AssertEqual(secondId, loaded.HtmlWorkspace.RedoBranches.Single().Id, "redo points to direct child artifact");

@@ -12,6 +12,52 @@ namespace RNAssistant.Core.Services
     {
         private const int MaxRecoveryCandidates = 100;
 
+        // The caller validates the active body. Navigation needs only metadata;
+        // a selected restore source is read and validated at the mutation boundary.
+        public static void RebuildHistory(ChatSession session, ChatArtifact active)
+        {
+            var artifacts = UniqueArtifacts(session).Where(item =>
+                string.Equals(item.Kind, ChatArtifactKinds.HtmlWorkspace, StringComparison.OrdinalIgnoreCase) &&
+                string.IsNullOrEmpty(item.AvailabilityIssue))
+                .ToDictionary(item => item.Id, StringComparer.OrdinalIgnoreCase);
+            var history = new List<HtmlWorkspaceSnapshot>();
+            var navigationId = (string)JObject.Parse(active.MetadataJson ?? "{}")["navigationBaseArtifactId"];
+            ChatArtifact current = active;
+            if (!string.IsNullOrEmpty(navigationId)) artifacts.TryGetValue(navigationId, out current);
+            var visited = new HashSet<string>(StringComparer.OrdinalIgnoreCase) { current?.Id ?? active.Id };
+            string issue = current == null ? HtmlWorkspaceRecoveryIssues.ParentArtifactMissing : null;
+            string message = current == null ? "The restored HTML navigation source is unavailable. The active revision is readable, but undo history is incomplete." : null;
+            string problemArtifactId = current == null ? navigationId : null;
+            while (current != null && !string.IsNullOrWhiteSpace(current.ParentArtifactId) &&
+                history.Count < HtmlWorkspaceHistoryPolicy.MaxItems)
+            {
+                problemArtifactId = current.ParentArtifactId;
+                if (!visited.Add(problemArtifactId))
+                {
+                    issue = HtmlWorkspaceRecoveryIssues.LineageCycle;
+                    message = "The HTML workspace revision lineage contains a cycle. The active revision is readable, but older undo history is incomplete.";
+                    break;
+                }
+                if (!artifacts.TryGetValue(problemArtifactId, out current))
+                {
+                    issue = HtmlWorkspaceRecoveryIssues.ParentArtifactMissing;
+                    message = "An older HTML workspace revision is missing. The active revision is readable, but undo history is incomplete.";
+                    break;
+                }
+                history.Add(new HtmlWorkspaceSnapshot
+                {
+                    Id = current.Id,
+                    Label = string.IsNullOrWhiteSpace(current.Title) ? "HTML workspace" : current.Title,
+                    CreatedUtc = current.CreatedUtc
+                });
+            }
+            session.HtmlWorkspace.History = history;
+            session.HtmlWorkspace.RedoBranches = GetRedoBranches(session);
+            session.HtmlWorkspaceRecovery = CreateRecoveryState(session,
+                issue == null ? HtmlWorkspaceRecoveryStatuses.Healthy : HtmlWorkspaceRecoveryStatuses.Degraded,
+                issue, message, active.Id, issue == null ? null : problemArtifactId, true);
+        }
+
         public static List<HtmlWorkspaceRedoBranch> GetRedoBranches(ChatSession session)
         {
             if (session == null || string.IsNullOrWhiteSpace(session.ActiveHtmlArtifactId))

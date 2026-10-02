@@ -6,7 +6,7 @@
   }
 
   function firstLine(value) {
-    return String(value || "").split(/\r?\n/)[0].trim().slice(0, 140);
+    return String(value || "").slice(0, 140).split(/\r?\n/)[0].trim();
   }
 
   function bindingValue(binding, pascal, camel, fallback) {
@@ -156,7 +156,7 @@
 
   function fileGroup(label, key, items, query) {
     var matched = items.filter(function (file) {
-      return matchesText([file.path, file.kind, file.content].join(" "), query);
+      return !query || matchesText([file.path, file.kind, file.content].join(" "), query);
     });
     if (!matched.length) return null;
     return groupNode(key, label, matched.length, fileTreeNodes(key, buildFileTree(matched)), "folder");

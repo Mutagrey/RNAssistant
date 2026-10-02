@@ -107,8 +107,9 @@ bindings retain exact dependency evidence; supported `head` bindings remain dyna
 identities resolved through the existing Gateway/data plane at read/export time.
 The WebView keeps already loaded source objects across full chat-state updates only
 when the selected revision and every file's exact ref, size and SHA-256 agree. A
-bounded in-memory cache (3 million UTF-16 characters) reuses verified exact source
-on chat revisit; new revisions and explicit source reloads obtain fresh source.
+bounded in-memory cache (3 million UTF-16 characters and 200 files, including empty
+files) reuses verified exact source on chat revisit; new revisions and explicit
+source reloads obtain fresh source.
 Uploaded HTML remains an immutable original; authored JSON is an ordinary file
 artifact. Export requires a saved document snapshot and does not create a revision.
 
@@ -123,6 +124,15 @@ provenance, including the corresponding logical revision. Navigation/redo metada
 survives restart. Rewriting dialogue and fork preserve selection and historical
 message refs without publishing rollback or copying shared HTML/JSON identities.
 Origin-chat deletion and CAS collection retain historical snapshots and bindings.
+
+HTML navigation is metadata-only (2026-10-02): `HtmlWorkspaceNavigationService`
+reconstructs at most 20 ancestor summaries for the current navigation position.
+Chat reconstruction loads only the selected aggregate body; restore/redo validates
+and loads its exact source at the existing mutation boundary. Old source bodies
+are not parsed or copied into `HtmlWorkspace.History`. Missing/cyclic metadata
+still degrades navigation; body corruption is reported when that revision is read.
+The full library metadata catalog still scales with revision count; this does not
+claim paginated metadata enumeration or bounded authority-journal startup.
 
 `shared HTML:`, HTML runtime/replay and resource chat-lifecycle checks cover this
 host-neutral slice. Windows/Office/WebView2 and Playwright layout qualification
@@ -815,7 +825,14 @@ renders and tab revisits when the exact source/binding inputs and chat/workspace
 owner are unchanged. Source or binding changes, owner changes, unavailable source
 and edit/detail transitions invalidate reuse; replacement closes the previous
 leases before installing the new document. The reuse key is transient UI state,
-not resource authority. Real Office/WebView2 responsiveness remains unqualified.
+not resource authority. Source strings are compared directly without serializing
+another full aggregate for each render. CodeMirror loads source only in Code mode;
+programmatic source/revision/chat changes clear its undo history, while unchanged
+renders preserve undo for local typing. Preview releases the hidden code buffer.
+An already cleared preview iframe is not navigated again by edit/detail renders.
+Version restore/redo use labelled icon buttons; creation and secondary actions
+live in menus, with HTML-only actions hidden for other artifact types.
+Real Office/WebView2 responsiveness remains unqualified.
 
 ## Library and revision display
 
@@ -1082,7 +1099,7 @@ cleanup, exact resource/hash/length checks and strict decoding precede hydration
 Unloaded or not-yet-rendered source cannot be synchronized from an old editor
 placeholder into a draft, edited or saved as empty.
 Same-chat metadata pushes preserve dirty source and its original revision guard;
-they cannot silently rebase it. `Исходники ↻` explicitly reloads/retries, confirms
+they cannot silently rebase it. `⋯` → `Перезагрузить исходники` explicitly reloads/retries, confirms
 discarding dirty edits, and preserves edits made while the reload was in flight.
 Real Windows/WebView2 render, reload/cancel, export and multi-window qualification
 remain open.

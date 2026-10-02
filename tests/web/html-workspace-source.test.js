@@ -73,6 +73,19 @@ function fixture(texts = ["\ufeff<main>\r\n" + "я".repeat(140000) + "😀</main
     console.log("PASS HTML source: selected-only hydration, bounded exact bytes and revisited chat cache");
   }
   {
+    const f = fixture([""]);
+    for (let revision = 1; revision <= 201; revision++) {
+      f.files[0].source.revision = String(revision);
+      delete f.files[0].content; delete f.files[0].sourceReadKey;
+      await f.load(f.files);
+    }
+    f.files[0].source.revision = "1";
+    delete f.files[0].content; delete f.files[0].sourceReadKey;
+    await f.load(f.files);
+    assert.equal(f.opens().length, 202, "even zero-length sources have a bounded cache entry count");
+    console.log("PASS HTML source: empty historical revisions cannot grow the cache indefinitely");
+  }
+  {
     for (const type of ["corrupt", "foreign", "oversized", "inline"]) {
       const f = fixture(["source"]);
       if (type === "corrupt") f.corrupt = true;
@@ -132,31 +145,36 @@ function fixture(texts = ["\ufeff<main>\r\n" + "я".repeat(140000) + "😀</main
     f.context.document = { querySelector: () => node, querySelectorAll: () => [] };
     f.state.htmlWorkspaceMode = "edit";
     vm.runInContext(read("js/app-html-workspace-editor.js"), f.context);
-    const editor = f.context.RNAssistantHtmlWorkspaceEditor.create({ state: f.state, source: f.source, preview: {}, artifacts: {},
+    const editor = f.context.RNAssistantHtmlWorkspaceEditor.create({ state: f.state, source: f.source, preview: { build: () => "preview" }, artifacts: {},
       model: { selectedItem: () => ({ type: "file", item: f.files[0] }), setFileContent: (_, value) => { writes++; f.files[0].content = value; },
-        recoveryBlocked: () => false, workspace: () => f.state.htmlWorkspace, files: () => f.files, filePath: file => file.path,
+        recoveryBlocked: () => false, workspace: () => f.state.htmlWorkspace, files: () => f.files, dataSources: () => [], filePath: file => file.path,
         fileKind: file => file.kind, fileContent: file => file.content } });
     editor.sync(); editor.markDirty(); assert.equal(writes, 0, "unloaded source cannot become an empty/stale draft");
     await f.load(f.files); editor.sync(); assert.equal(writes, 0, "cache hydration cannot sync the still-displayed placeholder into source");
     editor.render(); assert.equal(node.value, "source"); node.value = "edited"; editor.sync(); assert.equal(writes, 1);
     assert.equal(f.files[0].content, "edited");
+    f.state.htmlWorkspaceMode = "preview"; editor.render();
+    assert.equal(node.value, "", "preview releases the hidden editor copy");
+    editor.sync(); assert.equal(f.files[0].content, "edited", "preview cannot synchronize an empty editor into source");
+    f.state.htmlWorkspaceMode = "edit"; editor.render();
+    assert.equal(node.value, "edited", "return to code preserves the draft");
     console.log("PASS HTML source: editor sync requires verified source actually rendered, never its old placeholder");
   }
   const index = read("index.html");
   ["source", "model", "editor", "actions"].map(part => "app-html-workspace-" + part + ".js")
     .forEach(file => {
-      const version = file === "app-html-workspace-editor.js" ? "preview-reuse-20260907-1" :
+      const version = file === "app-html-workspace-editor.js" ? "html-memory-20261002-1" :
         file === "app-html-workspace-actions.js" ? "html-action-guard-20260908-1" :
-        file === "app-html-workspace-source.js" ? "html-source-timing-20260928-1" : "html-read-20260906-1";
+        file === "app-html-workspace-source.js" ? "html-memory-20261002-1" : "html-read-20260906-1";
       assert.ok(index.includes(file + "?v=" + version), file);
     });
   assert.ok(index.includes("app-html-workspace-preview.js?v=binary-chunks-20260906-1"));
-  assert.ok(index.includes("app-html-workspace-source.js?v=html-source-timing-20260928-1"));
-  assert.ok(index.includes("app-html-workspace.js?v=html-read-20260906-1"));
+  assert.ok(index.includes("app-html-workspace-source.js?v=html-memory-20261002-1"));
+  assert.ok(index.includes("app-html-workspace.js?v=html-memory-20261002-1"));
   assert.ok(index.includes("app-chat-state.js?v=office-chat-20260930-3"));
   assert.ok(index.includes("app-chat-session.js?v=office-chat-20260930-4"));
   assert.ok(index.includes('id="reloadHtmlWorkspaceSourceButton"'));
   assert.ok(index.indexOf("app-resource-download.js?v=") < index.indexOf("app-html-workspace-source.js?v="));
   console.log("PASS HTML source: source/editor/preview/export and lifecycle delivery graph is switched together");
-  console.log("OK 8/8");
+  console.log("OK 9/9");
 }()).catch(error => { console.error(error.stack || error); process.exitCode = 1; });

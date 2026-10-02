@@ -44,7 +44,7 @@
   <link rel="stylesheet" href="css/app-chart-artifacts.css?v=chatui-20260622-3">
   <link rel="stylesheet" href="css/app-artifacts.css?v=artifact-links-20260908-1">
   <link rel="stylesheet" href="css/app-tree-adapter.css?v=tree-adapter-20260829-1">
-  <link rel="stylesheet" href="css/app-html-workspace.css?v=json-height-20260929-1">
+  <link rel="stylesheet" href="css/app-html-workspace.css?v=html-memory-20261002-1">
   <link rel="stylesheet" href="css/app-responsive.css?v=library-layout-20260907-1">
   <link rel="stylesheet" href="css/app-agent.css?v=action-severity-20260930-1">
   <link rel="stylesheet" href="css/app-agent-data.css?v=json-height-20260929-1">
@@ -564,13 +564,16 @@
             <div class="tool-list-status" id="htmlWorkspaceStatus">Ресурсов пока нет.</div>
             <div class="tool-list-controls">
               <input class="tool-search" id="htmlWorkspaceSearchInput" placeholder="Поиск артефактов..." autocomplete="off">
-              <div class="tool-list-actions html-workspace-add-actions">
-                <button class="secondary" id="addPlanButton" type="button">План</button>
-                <button class="secondary" id="addHtmlFileButton" type="button">HTML</button>
-                <button class="secondary" id="addCssFileButton" type="button">CSS</button>
-                <button class="secondary" id="addJsFileButton" type="button">JS</button>
-                <button class="secondary" id="addHtmlDataButton" type="button">JSON</button>
-              </div>
+              <details class="html-workspace-menu html-workspace-create-menu">
+                <summary>＋ Создать</summary>
+                <div class="html-workspace-menu-items">
+                  <button id="addPlanButton" type="button">План</button>
+                  <button id="addHtmlFileButton" type="button">HTML-страницу</button>
+                  <button id="addCssFileButton" type="button">Стили CSS</button>
+                  <button id="addJsFileButton" type="button">Скрипт JS</button>
+                  <button id="addHtmlDataButton" type="button">Данные JSON</button>
+                </div>
+              </details>
               <div class="html-workspace-create hidden" id="htmlWorkspaceCreateBox">
                 <input class="tool-search" id="htmlWorkspaceCreateNameInput" autocomplete="off">
                 <div class="tool-list-actions">
@@ -584,31 +587,48 @@
           <div class="splitter" role="separator" aria-orientation="vertical" aria-label="Изменить ширину списка артефактов"></div>
           <section class="html-workspace-editor surface-panel padded tool-editor" id="htmlWorkspaceEditor">
             <div class="resource-editor-head html-workspace-head">
-              <button class="icon-button chatbar-icon-button html-sidebar-toggle-button" id="toggleHtmlSidebarButton" type="button" title="Скрыть список" aria-label="Скрыть список">
-                <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m14 6-6 6 6 6"/></svg>
-              </button>
-              <div class="resource-editor-titlebox">
-                <div class="resource-editor-title" id="htmlWorkspaceTitle">Артефакт не выбран</div>
-                <div class="resource-editor-meta" id="htmlWorkspaceMeta"></div>
+              <div class="html-workspace-titlebar">
+                <button class="icon-button chatbar-icon-button html-sidebar-toggle-button" id="toggleHtmlSidebarButton" type="button" title="Скрыть список" aria-label="Скрыть список">
+                  <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m14 6-6 6 6 6"/></svg>
+                </button>
+                <div class="resource-editor-titlebox">
+                  <div class="resource-editor-title" id="htmlWorkspaceTitle">Артефакт не выбран</div>
+                  <div class="resource-editor-meta" id="htmlWorkspaceMeta"></div>
+                </div>
               </div>
-              <div class="mode-toggle html-workspace-mode-toggle" role="group" aria-label="Режим артефакта">
-                <button class="mode-button html-workspace-mode-button active" type="button" data-html-mode="preview">Просмотр</button>
-                <button class="mode-button html-workspace-mode-button" type="button" data-html-mode="edit">Код</button>
-              </div>
-              <div class="resource-editor-actions">
-                <button class="secondary" id="refreshHtmlDataButton" type="button">Данные ↻</button>
-                <button class="secondary" id="reloadHtmlWorkspaceSourceButton" type="button" title="Загрузить текущую ревизию и повторить чтение исходников">Исходники ↻</button>
-                <button class="secondary" id="exportHtmlWorkspaceButton" type="button">Экспорт</button>
-                <button class="secondary" id="undoHtmlWorkspaceButton" type="button">Отменить</button>
-                <select class="html-redo-branch hidden" id="redoHtmlWorkspaceBranchSelect" aria-label="Ветка повтора"></select>
-                <button class="secondary" id="redoHtmlWorkspaceButton" type="button">Повторить</button>
-                <button class="secondary danger-soft" id="deleteHtmlWorkspaceButton" type="button">Удалить</button>
-                <button class="accent-soft" id="saveHtmlWorkspaceButton" type="button">Сохранить</button>
+              <div class="html-workspace-toolbar">
+                <div class="mode-toggle html-workspace-mode-toggle" role="group" aria-label="Режим артефакта">
+                  <button class="mode-button html-workspace-mode-button active" type="button" data-html-mode="preview">Просмотр</button>
+                  <button class="mode-button html-workspace-mode-button" type="button" data-html-mode="edit">Код</button>
+                </div>
+                <div class="resource-editor-actions">
+                  <button class="icon-button html-workspace-icon" id="undoHtmlWorkspaceButton" type="button" title="Восстановить предыдущую версию" aria-label="Восстановить предыдущую версию">
+                    <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 5 4 10l5 5M4 10h10a6 6 0 0 1 0 12" transform="translate(0 -2)"/></svg>
+                  </button>
+                  <select class="html-redo-branch hidden" id="redoHtmlWorkspaceBranchSelect" aria-label="Ветка повтора"></select>
+                  <button class="icon-button html-workspace-icon" id="redoHtmlWorkspaceButton" type="button" title="Вернуть отменённую версию" aria-label="Вернуть отменённую версию">
+                    <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m15 5 5 5-5 5m5-5H10a6 6 0 0 0 0 12" transform="translate(0 -2)"/></svg>
+                  </button>
+                  <button class="icon-button html-workspace-icon" id="exportHtmlWorkspaceButton" type="button" title="Скачать HTML" aria-label="Скачать HTML">
+                    <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3v12m-4-4 4 4 4-4M5 16v4h14v-4"/></svg>
+                  </button>
+                  <button class="accent-soft" id="saveHtmlWorkspaceButton" type="button">Сохранить</button>
+                  <details class="html-workspace-menu" id="htmlWorkspaceMoreActions">
+                    <summary class="html-workspace-icon" title="Другие действия" aria-label="Другие действия">
+                      <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="5" cy="12" r="1"/><circle cx="12" cy="12" r="1"/><circle cx="19" cy="12" r="1"/></svg>
+                    </summary>
+                    <div class="html-workspace-menu-items">
+                      <button id="reloadHtmlWorkspaceSourceButton" type="button" title="Загрузить текущую версию и повторить чтение исходников">Перезагрузить исходники</button>
+                      <button id="refreshHtmlDataButton" type="button">Обновить данные</button>
+                      <button class="danger-soft" id="deleteHtmlWorkspaceButton" type="button">Удалить выбранное</button>
+                    </div>
+                  </details>
+                </div>
               </div>
             </div>
             <div class="html-workspace-recovery hidden" id="htmlWorkspaceRecovery" role="status">
               <div class="html-workspace-recovery-copy">
-                <strong>HTML recovery</strong>
+                <strong>Восстановление HTML</strong>
                 <span id="htmlWorkspaceRecoveryMessage"></span>
               </div>
               <select id="htmlWorkspaceRecoverySelect" aria-label="Ревизия HTML для восстановления"></select>
@@ -1004,7 +1024,7 @@
   <script src="js/app-run-view-state.js?v=action-severity-20260930-1"></script>
   <script src="js/app-layout.js"></script>
   <script src="js/app-vba-completion.js?v=vba-completion-20260903-1"></script>
-  <script src="js/app-editors.js?v=ui-lazy-20260903-1"></script>
+  <script src="js/app-editors.js?v=html-memory-20261002-1"></script>
   <script src="js/app-markdown.js?v=chat-message-cleanup-20260908-1"></script>
   <script src="js/app-settings.js?v=desktop-width-20260930-1-usage-20261002-1"></script>
   <script src="js/app-logs.js?v=diagnostics-clarity-20260930-1"></script>
@@ -1040,14 +1060,14 @@
   <script src="js/app-html-resource-export.js?v=binary-chunks-20260906-1"></script>
   <script src="js/app-html-workspace-preview.js?v=binary-chunks-20260906-1"></script>
   <script src="js/app-html-workspace-artifacts.js?v=binary-chunks-20260906-1"></script>
-  <script src="js/app-html-workspace-source.js?v=html-source-timing-20260928-1"></script>
+  <script src="js/app-html-workspace-source.js?v=html-memory-20261002-1"></script>
   <script src="js/app-html-workspace-model.js?v=html-read-20260906-1"></script>
-  <script src="js/app-html-workspace-editor.js?v=preview-reuse-20260907-1"></script>
+  <script src="js/app-html-workspace-editor.js?v=html-memory-20261002-1"></script>
   <script src="js/app-tree-adapter.js?v=artifact-gallery-20260902-1"></script>
-  <script src="js/app-html-workspace-tree.js?v=html-echarts-20260903-1"></script>
+  <script src="js/app-html-workspace-tree.js?v=html-memory-20261002-1"></script>
   <script src="js/app-artifact-viewer-actions.js?v=binary-chunks-20260906-1"></script>
   <script src="js/app-html-workspace-actions.js?v=html-action-guard-20260908-1"></script>
-  <script src="js/app-html-workspace.js?v=html-read-20260906-1"></script>
+  <script src="js/app-html-workspace.js?v=html-memory-20261002-1"></script>
   <script src="js/app-context.js?v=ui-lazy-20260903-1-usage-20261002-1"></script>
   <script src="js/app-context-inspector.js?v=context-download-20260906-1-usage-20261002-1"></script>
   <script src="js/app-tool-result-preview.js?v=typed-step-results-20260908-1"></script>

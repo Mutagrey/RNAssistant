@@ -179,69 +179,8 @@ namespace RNAssistant.Core.Storage
 
             var workspace = HtmlWorkspaceCopyService.CreateWorkspaceFromSnapshot(activeSnapshot);
             workspace.UpdatedUtc = active.CreatedUtc;
-            var navigationId = (string)JObject.Parse(active.MetadataJson ?? "{}")["navigationBaseArtifactId"];
-            var current = string.IsNullOrEmpty(navigationId) ? active : FindHtmlArtifact(session, navigationId);
-            if (current != null && !string.IsNullOrEmpty(current.AvailabilityIssue)) current = null;
-            var visited = new HashSet<string>(StringComparer.OrdinalIgnoreCase) { current?.Id ?? active.Id };
-            string issue = current == null ? HtmlWorkspaceRecoveryIssues.ParentArtifactMissing : null;
-            string message = current == null ? "The restored HTML navigation source is unavailable. The active revision is readable, but undo history is incomplete." : null;
-            string problemArtifactId = current == null ? navigationId : null;
-            long historyCharacters = 0;
-            while (current != null && !string.IsNullOrWhiteSpace(current.ParentArtifactId))
-            {
-                if (workspace.History.Count >= HtmlWorkspaceHistoryPolicy.MaxItems ||
-                    historyCharacters >= HtmlWorkspaceHistoryPolicy.MaxContentCharacters)
-                {
-                    break;
-                }
-                problemArtifactId = current.ParentArtifactId;
-                if (!visited.Add(problemArtifactId))
-                {
-                    issue = HtmlWorkspaceRecoveryIssues.LineageCycle;
-                    message = "The HTML workspace revision lineage contains a cycle. The active revision is readable, but older undo history is incomplete.";
-                    break;
-                }
-                current = FindHtmlArtifact(session, problemArtifactId);
-                if (current == null)
-                {
-                    issue = HtmlWorkspaceRecoveryIssues.ParentArtifactMissing;
-                    message = "An older HTML workspace revision is missing. The active revision is readable, but undo history is incomplete.";
-                    break;
-                }
-                if (!HydrateArtifact(current))
-                {
-                    issue = HtmlWorkspaceRecoveryIssues.ParentBodyUnavailable;
-                    message = "An older HTML workspace body is unavailable. The active revision is readable, but undo history is incomplete.";
-                    break;
-                }
-                var snapshot = ParseWorkspaceSnapshot(current);
-                if (snapshot == null)
-                {
-                    issue = HtmlWorkspaceRecoveryIssues.ParentBodyInvalid;
-                    message = "An older HTML workspace body is invalid. The active revision is readable, but undo history is incomplete.";
-                    break;
-                }
-                var snapshotCharacters = HtmlWorkspaceHistoryPolicy.EstimateContentCharacters(snapshot);
-                if (snapshotCharacters > HtmlWorkspaceHistoryPolicy.MaxContentCharacters ||
-                    historyCharacters + snapshotCharacters > HtmlWorkspaceHistoryPolicy.MaxContentCharacters)
-                {
-                    problemArtifactId = null;
-                    break;
-                }
-                workspace.History.Add(snapshot);
-                historyCharacters += snapshotCharacters;
-            }
-
-            workspace.RedoBranches = HtmlWorkspaceNavigationService.GetRedoBranches(session);
             session.HtmlWorkspace = workspace;
-            session.HtmlWorkspaceRecovery = HtmlWorkspaceNavigationService.CreateRecoveryState(
-                session,
-                issue == null ? HtmlWorkspaceRecoveryStatuses.Healthy : HtmlWorkspaceRecoveryStatuses.Degraded,
-                issue,
-                message,
-                active.Id,
-                problemArtifactId,
-                true);
+            HtmlWorkspaceNavigationService.RebuildHistory(session, active);
         }
 
         private static HtmlWorkspaceSnapshot ParseWorkspaceSnapshot(ChatArtifact artifact)

@@ -14,12 +14,12 @@ assert.equal(index.includes('<script src="js/vendor/echarts.min.js"></script>'),
   "the 1 MiB chart vendor must not block WebView startup");
 assert.match(index, /app-echarts-sandbox-runtime\.js\?v=ui-lazy-20260903-1/);
 ["app-messages.js", "app-context.js", "app-model-render.js", "app-html-workspace-editor.js"].forEach(asset => {
-  const version = asset === "app-html-workspace-editor.js" ? "preview-reuse-20260907-1" :
+  const version = asset === "app-html-workspace-editor.js" ? "html-memory-20261002-1" :
     (asset === "app-model-render.js" ? "model-settings-20260930-1" :
       (asset === "app-messages.js" ? "action-severity-20260930-1" : "ui-lazy-20260903-1"));
   assert.ok(index.includes(asset + "?v=" + version), asset + " uses the current UI cache key");
 });
-assert.ok(index.includes("app-html-workspace.js?v=html-read-20260906-1"), "HTML workspace uses the resource source cache key");
+assert.ok(index.includes("app-html-workspace.js?v=html-memory-20261002-1"), "HTML workspace uses the resource source cache key");
 assert.ok(index.includes("app-chat-session.js?v=office-chat-20260930-4"), "chat session uses the current cache key");
 assert.ok(index.includes("app.js?v=chat-poll-20260928-1"), "app boot uses the current cache key");
 assert.doesNotMatch(app, /initializeCodeEditors\(\);/,
