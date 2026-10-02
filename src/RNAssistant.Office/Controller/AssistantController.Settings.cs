@@ -87,7 +87,7 @@ namespace RNAssistant.Office
                         var changes = new PromptEditorResourceService(_toolExecutor.ResourceGateway, _resourceData).ReadMutation(session, request, token);
                         token.ThrowIfCancellationRequested();
                         _toolExecutor.SaveSettingsControls(_settingsService.Load(), request, changes,
-                            intended => _settingsService.Save(intended, request.ApiKey, request.HistorySecret, request.ReviewAgentPrompts));
+                            intended => _settingsService.Save(intended, request.ApiKey, request.HistorySecret));
                         return true;
                     });
                 }

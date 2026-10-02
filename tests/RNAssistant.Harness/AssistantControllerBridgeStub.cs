@@ -211,7 +211,6 @@ namespace RNAssistant.Office
         public CasGarbageCollectionResponse CollectCasGarbage() { return new CasGarbageCollectionResponse { Completed = true, Health = GetCasHealth() }; }
         public Task<ModelCatalogResponse> GetModelCatalogAsync(AppSettings settings, string apiKey) { return Task.FromResult(new ModelCatalogResponse { Catalog = new JObject() }); }
 
-        public bool LastReviewAgentPrompts { get; private set; }
         public SaveSettingsPayload LastSettingsRequest { get; private set; }
 
         public SettingsResponse SaveSettings(SaveSettingsPayload request, CancellationToken token)
@@ -221,7 +220,6 @@ namespace RNAssistant.Office
             LastSettings = request.Settings.ApplyTo(new AppSettings());
             LastApiKey = request.ApiKey;
             LastHistorySecret = request.HistorySecret;
-            LastReviewAgentPrompts = request.ReviewAgentPrompts;
             return GetSettings();
         }
 

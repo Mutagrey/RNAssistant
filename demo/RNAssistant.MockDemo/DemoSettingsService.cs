@@ -43,17 +43,16 @@ namespace RNAssistant.Core.Storage
             Save(settings, null, null);
         }
 
-        public void Save(AppSettings settings, string apiKey, string historySecret, bool reviewAgentPrompts = false)
+        public void Save(AppSettings settings, string apiKey, string historySecret)
         {
             var normalized = Normalize((settings ?? new AppSettings()).Clone());
-            var current = Load();
-            if (reviewAgentPrompts)
+            var stored = _json.Load<AppSettings>(_paths.SettingsFile, null);
+            if (stored != null && stored.AgentPromptSchemaVersion != AppSettings.CurrentAgentPromptSchemaVersion)
             {
-                normalized.AgentPromptSchemaVersion = AppSettings.CurrentAgentPromptSchemaVersion;
-            }
-            else if (current.AgentPromptSchemaVersion != AppSettings.CurrentAgentPromptSchemaVersion)
-            {
-                normalized.AgentPromptSchemaVersion = current.AgentPromptSchemaVersion;
+                var directory = Path.Combine(_paths.Root, "prompt-backups");
+                Directory.CreateDirectory(directory);
+                File.Copy(_paths.SettingsFile, Path.Combine(directory, "mock-settings-v" +
+                    stored.AgentPromptSchemaVersion + "-" + Guid.NewGuid().ToString("N") + ".json"));
             }
             if (apiKey != null) _apiKey = apiKey;
             if (historySecret != null) _historySecret = historySecret;
@@ -101,6 +100,7 @@ namespace RNAssistant.Core.Storage
         private static AppSettings Normalize(AppSettings settings)
         {
             var defaults = new AppSettings();
+            settings.NormalizeAgentPrompts();
             if (settings.CustomHeaders == null)
             {
                 settings.CustomHeaders = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);

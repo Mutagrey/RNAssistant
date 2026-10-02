@@ -1,3 +1,18 @@
+function createResourceIcon(kind) {
+  var paths = {
+    prompt: '<path d="M7 4h8l3 3v13H7z"/><path d="M15 4v3h3M10 11h5M10 15h5"/>',
+    skill: '<path d="m12 3 1.8 6.2L20 11l-6.2 1.8L12 19l-1.8-6.2L4 11l6.2-1.8z"/><path d="m19 18 .5 1.5L21 20l-1.5.5L19 22l-.5-1.5L17 20l1.5-.5z"/>',
+    tool: '<path d="M14 5a5 5 0 0 0-6 6L3 16l5 5 5-5a5 5 0 0 0 6-6l-3 3-3-3z"/>',
+    host: '<rect x="3" y="5" width="18" height="14" rx="2"/><path d="M3 10h18"/>',
+    section: '<path d="M3 7a2 2 0 0 1 2-2h5l2 2h7a2 2 0 0 1 2 2v10H3z"/>'
+  };
+  var icon = document.createElement("span");
+  icon.className = "resource-tree-icon resource-tree-icon-" + (paths[kind] ? kind : "section");
+  icon.setAttribute("aria-hidden", "true");
+  icon.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">' + (paths[kind] || paths.section) + '</svg>';
+  return icon;
+}
+
 function createResourceListItem(options) {
   options = options || {};
 
@@ -17,10 +32,7 @@ function createResourceListItem(options) {
   top.className = "tool-list-top";
 
   if (options.icon) {
-    var icon = document.createElement("span");
-    icon.className = "tool-list-icon";
-    icon.textContent = options.icon;
-    top.appendChild(icon);
+    top.appendChild(createResourceIcon(options.icon));
   }
 
   var title = document.createElement("div");
@@ -70,6 +82,7 @@ function createResourceGroup(options) {
 
   var summary = document.createElement("summary");
   summary.className = "resource-tree-group-title";
+  if (options.icon) summary.appendChild(createResourceIcon(options.icon));
   var title = document.createElement("span");
   title.textContent = options.title || "";
   title.title = options.title || "";

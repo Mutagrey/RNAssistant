@@ -51,7 +51,6 @@ namespace RNAssistant.Office
                 }
                 ConversationProtocolContext.EnsureCanContinue(session, pending.Command, _toolExecutor.Payloads);
                 var settings = ResolveChatSettings(session);
-                settings.EnsureAgentPromptsReviewed();
                 var documentRuntimeKey = CaptureExpectedRuntimeDocumentKey(session);
                 if (!MarkPendingActivityExecuting(session, pending.PendingId, runId))
                 {

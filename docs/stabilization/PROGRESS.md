@@ -50,6 +50,14 @@ records it directly and reviews the signed release payload before finalization.
 
 ## Implementation log — includes current in-flight work and earlier entries
 
+Library and prompt migration (2026-10-02): Library now shows separate icon-marked
+Prompt, Skill and Tool trees with clearer host nesting. The prompt action menu
+retains only a selected-prompt return to defaults. Prompt schema 35 automatically
+selects current built-in texts on load; the next settings save archives the old
+eight texts before persisting the new marker. User skills/tools and other settings
+are unchanged. Focused host-neutral checks cover the editor and settings path;
+Windows/WebView2 qualification remains open.
+
 Recovery flexibility and mutation receipts (2026-10-02): a repeated-call rejection
 now returns to the model with its specific reason before any dispatch. It does not
 terminate the run or prevent another tool/corrected request; only three consecutive

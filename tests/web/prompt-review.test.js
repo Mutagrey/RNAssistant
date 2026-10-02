@@ -17,13 +17,14 @@ class Element {
   setAttribute() {} removeAttribute() {}
 }
 function fixture(loadPrompts = true) {
-  const elements = new Map(), calls = [], errors = [], downloads = new Map(), uploads = new Map(); let next = 1, revision = 1;
+  const elements = new Map(), calls = [], errors = [], downloads = new Map(), uploads = new Map(), groups = [], items = []; let next = 1, revision = 1;
   const get = id => { if (!ids.has(id)) return null; if (!elements.has(id)) elements.set(id, new Element()); return elements.get(id); };
   const bodies = Object.fromEntries(keys.map(key => [key, " custom " + key + " "]));
   const context = vm.createContext({ AbortController, TextEncoder, TextDecoder, Uint8Array, Blob, Response, setTimeout, clearTimeout, crypto: crypto.webcrypto,
     state: { settings: { AgentPromptSchemaVersion: 0 }, prompts: metadata(), activeChatId: "chat", promptDrafts: {}, selectedInstructionKind: "prompt", selectedPromptIndex: 0, skills: [], tools: [] },
-    $: get, document: { querySelectorAll: () => [], querySelector: () => null, addEventListener() {} }, isPanelActive: () => false, markdown: text => text,
-    createResourceGroup: () => { const group = new Element(); group.treeChildren = new Element(); return group; }, createResourceListItem: () => new Element(),
+    $: get, document: { querySelectorAll: () => [], querySelector: () => null, addEventListener() {} }, isPanelActive: () => !!context.libraryVisible, markdown: text => text,
+    createResourceGroup: options => { const group = new Element(); group.treeChildren = new Element(); group.options = options; groups.push(options); return group; },
+    createResourceListItem: options => { items.push(options); return new Element(); },
     modelImageSupportOverrides: () => ({}), modelAudioSupportOverrides: () => ({}), modelCapabilitiesForSettings: () => ({}), attachmentModelPriorityForSettings: () => [], textToHeaders: () => ({}),
     renderContextMeter() {}, clearRuntimeData() {}, setControlBusy: (id, busy) => { get(id).disabled = busy; },
     log: (message, level) => { if (level === "error") errors.push(message); }, confirm: () => true, cancelBridgeRequest: async () => {},
@@ -55,7 +56,7 @@ function fixture(loadPrompts = true) {
         context.uploadedBody.changes.forEach(change => { bodies[change.resource.uri.split("/").pop()] = change.value || "default reset"; }); revision++;
       }
       if (context.beforeSaveResponse) context.beforeSaveResponse();
-      const saved = copy(payload.settings); if (payload.reviewAgentPrompts) saved.AgentPromptSchemaVersion = 37;
+      const saved = copy(payload.settings);
       return { settings: saved, prompts: metadata("r" + revision) };
     }
   });
@@ -64,12 +65,12 @@ function fixture(loadPrompts = true) {
     .forEach(file => vm.runInContext(read("js/" + file), context, { filename: file }));
   context.renderSettings = () => { if (loadPrompts) context.renderPromptSettings(context.state.prompts); };
   if (loadPrompts) { context.renderSettings(); context.bindSettingsActions(); }
-  return { context, get, calls, errors, bodies, downloads, uploads, load: async index => { context.state.selectedPromptIndex = index; return context.renderPromptEditor(); }, saves: () => calls.filter(call => call.type === "saveSettings") };
+  return { context, get, calls, errors, bodies, downloads, uploads, groups, items, load: async index => { context.state.selectedPromptIndex = index; return context.renderPromptEditor(); }, saves: () => calls.filter(call => call.type === "saveSettings") };
 }
 (async () => {
   {
     const f = fixture(); assert.equal(f.calls.length, 0); await f.context.persistSettingsFromForm();
-    assert.equal(f.saves()[0].payload.uploadLeaseId, null); assert.equal(f.saves()[0].payload.reviewAgentPrompts, false); assert.equal(f.saves()[0].payload.settings.AgentPromptSchemaVersion, 0);
+    assert.equal(f.saves()[0].payload.uploadLeaseId, null); assert.equal(f.saves()[0].payload.reviewAgentPrompts, undefined); assert.equal(f.saves()[0].payload.settings.AgentPromptSchemaVersion, 0);
     console.log("PASS settings metadata does not prefetch or clear unloaded prompts");
   }
   {
@@ -86,21 +87,30 @@ function fixture(loadPrompts = true) {
     console.log("PASS exact Unicode source, one clean cache and changed-only upload");
   }
   {
-    const f = fixture(); f.bodies.systemPrompt = ""; await f.load(0); assert.equal(f.get("promptEditInput").readOnly, false); assert.equal(f.get("copyPromptButton").disabled, false);
-    f.context.confirm = () => false; await f.get("reviewAgentPromptsButton").handlers.click(); assert.equal(f.saves().length, 0);
-    f.context.confirm = () => true; await f.get("reviewAgentPromptsButton").handlers.click(); assert.equal(f.saves()[0].payload.reviewAgentPrompts, true); assert.equal(f.saves()[0].payload.uploadLeaseId, null); assert.equal(f.context.state.settings.AgentPromptSchemaVersion, 37);
-    await f.context.persistSettingsFromForm(); assert.equal(f.saves()[1].payload.reviewAgentPrompts, false);
-    console.log("PASS empty source and explicit request-local prompt review");
+    const f = fixture(); f.bodies.systemPrompt = ""; await f.load(0);
+    assert.equal(f.get("promptEditInput").readOnly, false);
+    assert.equal(f.get("copyPromptButton").disabled, false);
+    await f.context.persistSettingsFromForm();
+    assert.equal(f.saves()[0].payload.uploadLeaseId, null);
+    assert.equal(f.saves()[0].payload.reviewAgentPrompts, undefined);
+    console.log("PASS empty source and ordinary metadata-only save");
   }
   {
-    const f = fixture(); await f.load(0); f.get("promptEditInput").value = "unsaved"; f.context.markPromptEditorDirty(); f.context.failSave = true;
-    await f.get("reviewAgentPromptsButton").handlers.click(); assert.equal(f.context.state.promptDrafts.systemPrompt, "unsaved"); assert.equal(f.context.state.settings.AgentPromptSchemaVersion, 0); assert.equal(f.uploads.size, 0); assert.equal(f.get("reviewAgentPromptsButton").disabled, false); assert.deepEqual(f.errors, ["fixture save failure"]);
+    const f = fixture(); await f.load(0); f.get("promptEditInput").value = "unsaved";
+    f.context.markPromptEditorDirty(); f.context.failSave = true;
+    await f.get("savePromptButton").handlers.click();
+    assert.equal(f.context.state.promptDrafts.systemPrompt, "unsaved");
+    assert.equal(f.uploads.size, 0);
+    assert.deepEqual(f.errors, ["fixture save failure"]);
     console.log("PASS failed save retains drafts and closes upload");
   }
   {
-    const f = fixture(); f.get("resetAllPromptsButton").handlers.click(); assert.equal(f.calls.length, 0); await f.get("reviewAgentPromptsButton").handlers.click();
-    assert.equal(f.context.uploadedBody.changes.length, 8); f.context.uploadedBody.changes.forEach(change => assert.equal(change.value, "")); assert.equal(f.saves()[0].payload.reviewAgentPrompts, true);
-    console.log("PASS reset-all is an explicit eight-field draft");
+    const f = fixture(); await f.load(0); f.get("resetCurrentPromptButton").handlers.click();
+    assert.equal(f.calls.filter(call => call.type === "saveSettings").length, 0);
+    await f.context.persistSettingsFromForm();
+    assert.equal(f.context.uploadedBody.changes.length, 1);
+    assert.equal(f.context.uploadedBody.changes[0].value, "");
+    console.log("PASS returning one prompt to built-in is an explicit draft");
   }
   {
     const f = fixture(); let release; f.context.holdRead = () => new Promise(resolve => { release = resolve; }); const pending = f.load(0);
@@ -113,13 +123,7 @@ function fixture(loadPrompts = true) {
     await assert.rejects(f.context.persistSettingsFromForm(), /устарел/); assert.equal(f.context.state.promptDrafts.systemPrompt, "keep my draft"); assert.equal(f.saves().length, 0);
     f.context.state.prompts = metadata(); f.context.renderSettings(); f.context.beforeSaveResponse = () => { f.get("promptEditInput").value = "typed during save"; f.context.markPromptEditorDirty(); };
     await f.context.persistSettingsFromForm(); assert.equal(f.context.state.promptDrafts.systemPrompt, "typed during save");
-    let release; f.context.holdSettings = () => new Promise(resolve => { release = resolve; });
-    const reload = f.get("reloadPromptSettingsButton").handlers.click();
-    f.get("promptEditInput").value = "typed during reload"; f.context.markPromptEditorDirty(); release(); await reload;
-    assert.equal(f.context.state.promptDrafts.systemPrompt, "typed during reload");
-    delete f.context.holdSettings; await f.get("reloadPromptSettingsButton").handlers.click();
-    assert.deepEqual(Object.keys(f.context.state.promptDrafts), [], "explicit later reload can discard unchanged drafts");
-    console.log("PASS stale and concurrently edited drafts survive refresh/save");
+    console.log("PASS stale and concurrently edited drafts survive save");
   }
   {
     const f = fixture(); f.get("resetCurrentPromptButton").handlers.click(); let release; f.context.holdUpload = () => new Promise(resolve => { release = resolve; }); const pending = f.context.persistSettingsFromForm();
@@ -128,11 +132,26 @@ function fixture(loadPrompts = true) {
     console.log("PASS cancelled upload closes late lease without save dispatch");
   }
   {
-    ["app-prompts.js", "app-settings.js", "app-chat-state.js", "app-chat-session.js"].forEach(file => assert.ok(read("index.html").includes(file + "?v=" +
-      (file === "app-chat-state.js" ? "html-source-reuse-20260928-1" :
-       file === "app-chat-session.js" ? "startup-timing-20260928-1" : "prompt-source-20260906-1"))));
+    const f = fixture(); f.context.state.skills = [{ Id: "excel.audit", Host: "Excel", BuiltIn: false, Enabled: true }];
+    f.context.state.tools = [{ Id: "excel.validate", Host: "Excel", BuiltIn: true, Enabled: true }];
+    f.context.libraryVisible = true; f.context.renderInstructions();
+    assert.deepEqual(f.get("instructionsList").childNodes.map(group => group.options.title), ["Промпты", "Навыки", "Инструменты"]);
+    assert.deepEqual(f.groups.filter(group => ["Промпты", "Навыки", "Инструменты"].includes(group.title)).map(group => group.icon), ["prompt", "skill", "tool"]);
+    assert.ok(f.groups.some(group => group.title === "Excel" && group.icon === "host"));
+    assert.ok(f.items.some(item => item.title === "excel.audit" && item.icon === "skill"));
+    assert.ok(f.items.some(item => item.title === "excel.validate" && item.icon === "tool"));
+    console.log("PASS library has three icon-marked sections and host groups");
+  }
+  {
+    ["app-prompts.js", "app-settings.js", "app-resource-list.js", "app-tools.css"].forEach(file =>
+      assert.ok(read("index.html").includes(file + "?v=") &&
+        read("index.html").includes(file + "?v=" +
+          (file === "app-prompts.js" ? "prompt-source-20260906-1-library-20261002-1" :
+           file === "app-settings.js" ? "desktop-width-20260930-1-usage-20261002-1-library-20261002-1" :
+           file === "app-resource-list.js" ? "resource-navigation-20260826-1-library-20261002-1" :
+           "json-height-20260929-1-library-20261002-1"))));
     assert.ok(read("js/app-prompts.js").includes("fetch: window.fetch.bind(window)"));
     assert.ok(!read("js/app-settings.js").includes("readPromptSettings")); console.log("PASS direct-cutover delivery keys and retired form reader removal");
   }
-  console.log("OK passed=10 failed=0 total=10");
+  console.log("OK passed=11 failed=0 total=11");
 })().catch(error => { console.error(error); process.exitCode = 1; });

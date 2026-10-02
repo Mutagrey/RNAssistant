@@ -262,4 +262,5 @@ provider page. The bounded context working set restores complete current skill
 results and needed reference coverage from saved events/CAS. Compaction alone is
 not a reason to load a skill or admit an already callable schema again. Body
 omission/staleness is distinct from the historical successful load. Prompt schema
-33 requires review of saved prompts; custom text is preserved.
+33 originally required manual review; schema 35 replaces that flow with automatic
+default migration and a recovery copy before the next settings save.

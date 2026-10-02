@@ -133,28 +133,19 @@ compact references, count toward the next request.
 
 Explicitly addressed background work (runs, context operations, diagnostics, resource staging) loads its target session without changing the user's selected chat. Only navigation actions such as select/create/activate change the active session.
 
-The Agent sections and Plan/Chat prompts use one explicit settings schema version.
-Missing, older or unknown markers require review: normalization preserves authored
-text and the marker, filling only blank fields with defaults. It never merges or
-silently approves an older contract. Ordinary saves can change unrelated settings
-but cannot approve stored unreviewed prompts, including when a caller supplies a
-fresh current marker. `SettingsService.Save` stages normalization/review on a clone.
-
-In Library → Prompts → actions, **«Подтвердить проверку»** explicitly saves the
-current form and approves the five conversation instructions after confirmation.
-Existing **«Сбросить все промпты»** clears drafts; save/review then selects defaults.
-The typed `saveSettings.reviewAgentPrompts` flag defaults to false, is request-local,
-and is never persisted as a setting. Normal saves, diagnostics and
-`common.prompts_save` do not opt in. The form preserves PlanSystemPrompt and retains
-stored text if the prompt editor is unavailable.
-
-`EnsureAgentPromptsReviewed` runs before controller turn preparation, attachment
-analysis/compaction, and before confirmation consumes pending state. The neutral
-loop also guards direct entry/continuation before materialization. A mismatch is
-an actionable configuration error, not a model response to repair. Fixed endpoint
-probes remain available. This does not validate the user's instruction semantics;
-the active strict response parser remains authoritative. See
-[prompt review](protocols/CONVERSATION_RESPONSE_V5.md#history-and-prompts).
+The eight built-in Markdown prompts share one settings schema version. On load,
+an absent, older or unknown marker selects the current defaults for all eight
+prompts and updates the marker in memory, so a protocol update does not block a
+run or require Library actions. The neutral run input also normalizes a copy before
+model dispatch. The original settings file is left intact until
+the next save. Before that save replaces it, `SettingsService` writes the previous
+prompt texts to a separate JSON recovery file under `prompt-backups/`. Other
+settings, user skills and user tools are untouched. Edits made to prompts after
+migration persist normally until the next schema change. Library → Prompts has
+one optional **«Вернуть встроенный текст»** action for the selected prompt.
+The strict response parser remains authoritative; migration does not validate
+authored instruction semantics. See
+[history and prompts](protocols/CONVERSATION_RESPONSE_V5.md#history-and-prompts).
 
 Agent bootstrap schemas are `common.resources_find/read` and `common.capabilities_search/read`. The final R61 Excel Agent core adds the exact 15 built-in `excel.*` schemas plus routine VBA editing intents `common.vba_write_module` and `common.vba_apply_patch` (21 schemas total). Word and PowerPoint add the same two VBA editing schemas when present; their host tools remain optional. `common.vba_rename_module`, `common.vba_restore_backup`, `common.vba_delete_module` and `common.office_run_macro` require exact capability admission because they represent explicit identity, rollback, destructive or arbitrary-execution intent. Outlook Agent and other hosts keep only bootstrap unless an optional schema is admitted. Chat keeps only the two read-only resource schemas, while Plan keeps the four bootstrap schemas in core. These finite exact-ID profiles are intersected with the filtered run catalog. `RUNTIME_CONTEXT.capabilities.items` exposes the complete compact schema-free index of exact public runnable tool and enabled skill ids; it carries no catalog/package/descriptor revision. Already callable tools use `schemaLoaded:true`; unloaded tools and skills retain bounded selection metadata.
 
@@ -374,9 +365,9 @@ The UI retains one selected clean source plus at most eight explicit dirty draft
 Chat/selection changes and page teardown cancel reads and close late leases;
 stale revisions and edits made during save remain drafts, not silently rebased text.
 Unloaded fields are omitted from writes, never interpreted as empty strings.
-Reset-current/all remains an explicit empty-value draft; existing settings
-normalization selects defaults only on save. Review still requires explicit user
-confirmation and the request-local flag described above.
+Returning the selected prompt to its built-in text remains an explicit empty-value
+draft; settings normalization selects the default on save. Protocol-version
+updates use the automatic migration above.
 
 Changed fields use a single-use, chat/consumer-scoped upload: typed
 `rnassistant.promptMutation` v1 JSON with one to eight unique exact field refs and
@@ -391,8 +382,7 @@ prepared/dispatch/read-back commit barrier remains the only publication owner;
 possible effect without successful read-back is `unknown`, never automatically
 retried. Uploads create neither authority nor model observations.
 
-Explicit settings/prompt reload requires confirmation before discarding drafts and
-refuses to discard edits made while the reload is in flight. The frozen compiler
+The frozen compiler
 and model-facing confirmed save path are unchanged. Real Windows settings/DPAPI,
 multi-window and WebView2 editor/save/cancellation qualification remains open.
 

@@ -34,20 +34,10 @@ namespace RNAssistant.Core.Storage
             Save(settings, null, null);
         }
 
-        public void Save(AppSettings settings, string apiKey, string historySecret, bool reviewAgentPrompts = false)
+        public void Save(AppSettings settings, string apiKey, string historySecret)
         {
             var normalized = Normalize((settings ?? new AppSettings()).Clone());
             var current = Load();
-            if (reviewAgentPrompts)
-            {
-                normalized.AgentPromptSchemaVersion = AppSettings.CurrentAgentPromptSchemaVersion;
-            }
-            else if (current.AgentPromptSchemaVersion != AppSettings.CurrentAgentPromptSchemaVersion)
-            {
-                // Unrelated saves cannot acknowledge old prompts, even if their
-                // caller constructed fresh settings with the current marker.
-                normalized.AgentPromptSchemaVersion = current.AgentPromptSchemaVersion;
-            }
             var currentApiKey = LoadApiKey();
             var currentHistorySecret = LoadHistorySecret();
             var effectiveApiKey = apiKey == null ? currentApiKey : apiKey;
@@ -66,10 +56,45 @@ namespace RNAssistant.Core.Storage
                     "Clear Chats/Data first, then save the new protection settings.");
             }
 
+            ArchiveLegacyPrompts();
             if (apiKey != null) _secretStore.SaveSecret(apiKey);
             if (historySecret != null) _historySecretStore.SaveSecret(historySecret);
             _json.Save(_paths.SettingsFile, normalized);
             InvalidateProtectionCache();
+        }
+
+        private void ArchiveLegacyPrompts()
+        {
+            var stored = _json.Load<AppSettings>(_paths.SettingsFile, null);
+            if (stored == null || stored.AgentPromptSchemaVersion == AppSettings.CurrentAgentPromptSchemaVersion) return;
+            var directory = Path.Combine(_paths.Root, "prompt-backups");
+            var path = Path.Combine(directory, "prompts-v" + stored.AgentPromptSchemaVersion + "-" +
+                DateTime.UtcNow.ToString("yyyyMMddTHHmmss") + "-" + Guid.NewGuid().ToString("N") + ".json");
+            _json.Save(path, new PromptMigrationBackup
+            {
+                AgentPromptSchemaVersion = stored.AgentPromptSchemaVersion,
+                SystemPrompt = stored.SystemPrompt,
+                AgentToolsPrompt = stored.AgentToolsPrompt,
+                AgentSkillsPrompt = stored.AgentSkillsPrompt,
+                ChatSystemPrompt = stored.ChatSystemPrompt,
+                PlanSystemPrompt = stored.PlanSystemPrompt,
+                ChatTitlePrompt = stored.ChatTitlePrompt,
+                ContextCompactionPrompt = stored.ContextCompactionPrompt,
+                AttachmentAnalysisPrompt = stored.AttachmentAnalysisPrompt
+            });
+        }
+
+        private sealed class PromptMigrationBackup
+        {
+            public int AgentPromptSchemaVersion { get; set; }
+            public string SystemPrompt { get; set; }
+            public string AgentToolsPrompt { get; set; }
+            public string AgentSkillsPrompt { get; set; }
+            public string ChatSystemPrompt { get; set; }
+            public string PlanSystemPrompt { get; set; }
+            public string ChatTitlePrompt { get; set; }
+            public string ContextCompactionPrompt { get; set; }
+            public string AttachmentAnalysisPrompt { get; set; }
         }
 
         public string LoadApiKey()

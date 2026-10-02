@@ -27,7 +27,8 @@ namespace RNAssistant.Office.Services
         public ConversationRunInput(AppSettings settings, DocumentContext context, IReadOnlyList<ToolCatalogEntry> tools,
             IReadOnlyList<SkillDefinition> skills = null, IReadOnlyList<ChatAttachment> attachments = null)
         {
-            Settings = settings ?? new AppSettings();
+            Settings = (settings ?? new AppSettings()).Clone();
+            Settings.NormalizeAgentPrompts();
             Context = context;
             Tools = tools ?? new ToolCatalogEntry[0];
             Skills = skills ?? new SkillDefinition[0];

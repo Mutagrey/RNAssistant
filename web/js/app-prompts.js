@@ -209,19 +209,20 @@
     });
   }
 
-  function resourceGroup(key, title, count, nested) {
-    var group = createResourceGroup({ key: key, title: title, count: count });
+  function resourceGroup(key, title, count, nested, icon) {
+    var group = createResourceGroup({ key: key, title: title, count: count, icon: icon || "section" });
     if (nested) group.className += " resource-tree-subgroup";
     return group;
   }
 
   function appendInstructionItem(parent, row, activeKey) {
     var value = row.value || {};
-    var meta = "Промпт";
+    var meta = "";
     if (row.kind === "skill") meta = value.BuiltIn ? "Встроенный" : "Пользовательский";
     if (row.kind === "tool") meta = value.BuiltIn ? "Встроенный" : (value.Executor || "vba");
     parent.appendChild(createResourceListItem({
       title: row.kind === "prompt" ? value.label : (value.Id || value.Name || (row.kind === "tool" ? "Инструмент" : "Навык")),
+      icon: row.kind,
       meta: meta,
       description: row.kind === "prompt" ? value.description : (value.Description || (row.kind === "tool" ? "Office-инструмент" : "Инструкция навыка")),
       enabled: row.kind === "prompt" ? null : value.Enabled !== false,
@@ -236,19 +237,19 @@
   }
 
   function appendPromptGroups(parent, rows, activeKey) {
-    var prompts = resourceGroup("library:instructions:prompts", "Промпты", rows.length, true);
+    var prompts = resourceGroup("library:prompts", "Промпты", rows.length, false, "prompt");
     parent.appendChild(prompts);
     ["Основные", "Служебные"].forEach(function (name) {
       var grouped = rows.filter(function (row) { return row.value.group === name; });
       if (!grouped.length) return;
-      var group = resourceGroup("library:prompts:" + name, name, grouped.length, true);
+      var group = resourceGroup("library:prompts:" + name, name, grouped.length, true, "section");
       prompts.treeChildren.appendChild(group);
       grouped.forEach(function (row) { appendInstructionItem(group.treeChildren, row, activeKey); });
     });
   }
 
   function appendHostedGroups(parent, key, title, rows, activeKey) {
-    var root = resourceGroup("library:" + key, title, rows.length, true);
+    var root = resourceGroup("library:" + key, title, rows.length, false, key === "skills" ? "skill" : "tool");
     parent.appendChild(root);
     appendHostGroups(root.treeChildren, key, rows, activeKey);
   }
@@ -256,7 +257,7 @@
   function appendHostGroups(parent, key, rows, activeKey) {
     orderedHosts(rows).forEach(function (host) {
       var hosted = rows.filter(function (row) { return hostName(row) === host; });
-      var group = resourceGroup("library:" + key + ":" + host, host, hosted.length, true);
+      var group = resourceGroup("library:" + key + ":" + host, host, hosted.length, true, "host");
       parent.appendChild(group);
       hosted.forEach(function (row) { appendInstructionItem(group.treeChildren, row, activeKey); });
     });
@@ -281,14 +282,10 @@
     var prompts = rows.filter(function (row) { return row.kind === "prompt"; });
     var skills = rows.filter(function (row) { return row.kind === "skill"; });
     var tools = rows.filter(function (row) { return row.kind === "tool"; });
-    if (prompts.length || skills.length) {
-      var instructions = resourceGroup("library:instructions", "Инструкции", prompts.length + skills.length, false);
-      list.appendChild(instructions);
-      if (prompts.length) appendPromptGroups(instructions.treeChildren, prompts, key);
-      if (skills.length) appendHostedGroups(instructions.treeChildren, "skills", "Навыки", skills, key);
-    }
+    if (prompts.length) appendPromptGroups(list, prompts, key);
+    if (skills.length) appendHostedGroups(list, "skills", "Навыки", skills, key);
     if (tools.length) {
-      var toolRoot = resourceGroup("library:tools", "Инструменты", tools.length, false);
+      var toolRoot = resourceGroup("library:tools", "Инструменты", tools.length, false, "tool");
       list.appendChild(toolRoot);
       appendHostGroups(toolRoot.treeChildren, "tools", tools, key);
     }
@@ -405,7 +402,7 @@
     var loaded = !!promptSources[def.key], metadata = promptMetadata(def.key);
     if (promptReading && (promptReading.key !== def.key || promptReading.chatId !== state.activeChatId)) cancelPromptSourceRead();
     var stale = loaded && (!metadata || !sameResource(metadata.resource, promptSources[def.key].resource));
-    $("promptMeta").textContent = stale ? "Черновик устарел. Скопируйте правки и перезагрузите настройки перед сохранением." :
+    $("promptMeta").textContent = stale ? "Черновик устарел. Скопируйте правки и перезапустите панель перед сохранением." :
       def.group + " · Markdown · " + def.field + ".md";
     setPromptEditorValue(promptText(def));
     $("promptEditInput").readOnly = !loaded || !!state.bridgeUnavailable;
@@ -413,7 +410,6 @@
     $("copyPromptButton").disabled = !loaded;
     $("addPromptToChatButton").disabled = !loaded || !!state.bridgeUnavailable;
     $("resetCurrentPromptButton").disabled = !metadata || !!state.bridgeUnavailable;
-    $("resetAllPromptsButton").disabled = !promptLibrary || !!state.bridgeUnavailable;
     renderPromptPreview(def);
     applyPromptMode();
     updatePromptSaveButton();
@@ -497,7 +493,7 @@
     if (operation.requestId) cancelBridgeRequest(operation.requestId).catch(function () {});
   }
 
-  async function saveSettingsWithPromptChanges(settings, apiKey, historySecret, review) {
+  async function saveSettingsWithPromptChanges(settings, apiKey, historySecret) {
     if (promptWriting || !promptLibrary || !state.activeChatId || state.bridgeUnavailable)
       throw new Error("Настройки ещё не загружены или сохранение уже выполняется.");
     syncSelectedPromptFromEditor();
@@ -507,7 +503,7 @@
       if (new TextDecoder("utf-8", { fatal: true, ignoreBOM: true }).decode(new TextEncoder().encode(value)) !== value)
         throw new Error("Некорректный Unicode в промпте.");
       if (promptSources[key].resource.revision !== promptLibrary.publication.revision)
-        throw new Error("Черновик промпта устарел. Скопируйте правки и перезагрузите настройки.");
+        throw new Error("Черновик промпта устарел. Скопируйте правки и перезапустите панель.");
       return { resource: promptSources[key].resource, value: value };
     });
     var operation = { chatId: state.activeChatId, abort: new AbortController(), publication: promptLibrary.publication };
@@ -537,7 +533,7 @@
       }
       active();
       var saving = send("saveSettings", { chatId: operation.chatId, settings: settings, apiKey: apiKey || null,
-        historySecret: historySecret || null, reviewAgentPrompts: review === true, expectedPromptPublication: operation.publication,
+        historySecret: historySecret || null, expectedPromptPublication: operation.publication,
         uploadLeaseId: operation.lease ? operation.lease.leaseId : null, sha256: hash });
       operation.requestId = saving.requestId;
       var response = await saving; operation.requestId = null; active();
@@ -605,34 +601,7 @@
       renderPromptEditor();
       updateSettingsSaveButton();
       updatePromptSaveButton();
-      log("Промпт будет сброшен после сохранения.");
-    });
-    $("resetAllPromptsButton").addEventListener("click", function () {
-      cancelPromptSourceRead();
-      promptDefinitions.forEach(resetPrompt);
-      setPromptEditorValue("");
-      settingsDirty = true;
-      renderPromptList();
-      updateSettingsSaveButton();
-      updatePromptSaveButton();
-      log("Все промпты будут сброшены после сохранения.");
-    });
-    $("reloadPromptSettingsButton").addEventListener("click", async function () {
-      if (!window.confirm("Перезагрузить настройки и промпты? Несохранённые правки будут отброшены.")) return;
-      if (promptWriting) { log("Дождитесь завершения сохранения.", "error"); return; }
-      try {
-        syncSelectedPromptFromEditor();
-        var chat = state.activeChatId, drafts = JSON.stringify(state.promptDrafts), controls = JSON.stringify(readSettings());
-        var response = await send("getSettings", {});
-        validatePromptLibrary(response.prompts);
-        if (!response.settings) throw new Error("Настройки не получены.");
-        syncSelectedPromptFromEditor();
-        if (chat !== state.activeChatId || promptWriting || state.bridgeUnavailable || drafts !== JSON.stringify(state.promptDrafts) || controls !== JSON.stringify(readSettings()))
-          throw new Error("Правки или активный чат изменились во время загрузки. Перезагрузка отменена.");
-        cancelPromptSourceRead(); promptSources = {}; state.promptDrafts = {};
-        state.settings = response.settings; state.prompts = response.prompts;
-        renderSettings();
-      } catch (error) { log(error.message, "error"); }
+      log("Встроенный текст будет восстановлен после сохранения.");
     });
     $("savePromptButton").addEventListener("click", async function () {
       setControlBusy("savePromptButton", true);

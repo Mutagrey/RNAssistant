@@ -360,115 +360,61 @@ namespace RNAssistant.Harness
                 .GetAwaiter().GetResult();
         }
 
-        private static void SettingsRequireExplicitPromptReview()
+        private static void SettingsMigratePromptsOnSchemaChange()
         {
             foreach (var version in new[] { 0, AppSettings.CurrentAgentPromptSchemaVersion - 1,
                 AppSettings.CurrentAgentPromptSchemaVersion, AppSettings.CurrentAgentPromptSchemaVersion + 1 })
             {
-                var json = "{\"SystemPrompt\":\" custom general \",\"AgentToolsPrompt\":\"custom tools\"," +
-                    "\"AgentSkillsPrompt\":\"custom skills\",\"ChatSystemPrompt\":\"custom chat\"," +
-                    "\"PlanSystemPrompt\":\"custom plan\"" +
-                    (version == 0 ? string.Empty : ",\"AgentPromptSchemaVersion\":" + version) + "}";
+                var json = "{\"SystemPrompt\":\"custom general\",\"AgentToolsPrompt\":\"custom tools\"," +
+                    "\"ChatSystemPrompt\":\"custom chat\",\"PlanSystemPrompt\":\"custom plan\"," +
+                    "\"AgentPromptSchemaVersion\":" + version + "}";
                 var settings = JsonConvert.DeserializeObject<AppSettings>(json);
                 settings.NormalizeAgentPrompts();
-                var blocked = false;
-                try { settings.EnsureAgentPromptsReviewed(); }
-                catch (InvalidOperationException) { blocked = true; }
-                AssertEqual(version != AppSettings.CurrentAgentPromptSchemaVersion, blocked, "only a reviewed schema is runnable");
-                AssertEqual(version, settings.AgentPromptSchemaVersion, "normalization never approves an unreviewed schema");
-                AssertEqual(" custom general ", settings.SystemPrompt, "custom text and whitespace are preserved");
-                AssertEqual("custom tools", settings.AgentToolsPrompt, "custom tool instructions survive normalization");
-                AssertEqual("custom skills", settings.AgentSkillsPrompt, "custom skill instructions survive normalization");
-                AssertEqual("custom chat", settings.ChatSystemPrompt, "custom Chat instructions survive normalization");
-                AssertEqual("custom plan", settings.PlanSystemPrompt, "custom Plan instructions survive normalization");
-
-                var restored = JsonConvert.DeserializeObject<AppSettings>(JsonConvert.SerializeObject(settings.Clone()));
-                restored.NormalizeAgentPrompts();
-                AssertEqual(version, restored.AgentPromptSchemaVersion, "clone and JSON roundtrip do not approve the schema");
-                AssertEqual(settings.PlanSystemPrompt, restored.PlanSystemPrompt, "Plan text survives roundtrip");
-                restored.SystemPrompt = string.Empty;
-                restored.ChatSystemPrompt = null;
-                restored.NormalizeAgentPrompts();
-                AssertEqual(AgentPromptDefaults.GeneralInstructions, restored.SystemPrompt, "explicit blank uses the current default");
-                AssertEqual(AgentPromptDefaults.ChatInstructions, restored.ChatSystemPrompt, "missing prompt uses the current default");
-                AssertEqual(version, restored.AgentPromptSchemaVersion, "default substitution does not imply review");
+                AssertEqual(AppSettings.CurrentAgentPromptSchemaVersion, settings.AgentPromptSchemaVersion,
+                    "normalization selects the active built-in schema");
+                AssertEqual(version == AppSettings.CurrentAgentPromptSchemaVersion ? "custom general" : AgentPromptDefaults.GeneralInstructions,
+                    settings.SystemPrompt, "only an unchanged schema retains a custom prompt");
+                AssertEqual(version == AppSettings.CurrentAgentPromptSchemaVersion ? "custom chat" : AgentPromptDefaults.ChatInstructions,
+                    settings.ChatSystemPrompt, "Chat prompt follows the same migration");
+                AssertEqual(version == AppSettings.CurrentAgentPromptSchemaVersion ? "custom plan" : AgentPromptDefaults.PlanInstructions,
+                    settings.PlanSystemPrompt, "Plan prompt follows the same migration");
             }
         }
 
-        private static void SettingsPromptReviewPreservesStoredText()
+        private static void SettingsPromptMigrationArchivesStoredText()
         {
-            foreach (var oldVersion in new[] { 0, 11, 12, 13, 14 })
             WithTempPaths(paths =>
             {
                 var service = new SettingsService(paths);
                 var legacy = new AppSettings
                 {
-                    AgentPromptSchemaVersion = oldVersion,
-                    SystemPrompt = " custom general ", AgentToolsPrompt = "custom tools",
-                    AgentSkillsPrompt = "custom skills", ChatSystemPrompt = "custom chat", PlanSystemPrompt = "custom plan",
-                    ContextCompactionPrompt = "custom compaction", ChatTitlePrompt = "custom title",
-                    AttachmentAnalysisPrompt = "custom media", Model = "before"
+                    AgentPromptSchemaVersion = 12,
+                    SystemPrompt = "custom general", ChatSystemPrompt = "custom chat",
+                    PlanSystemPrompt = "custom plan", ContextCompactionPrompt = "custom compaction",
+                    ChatTitlePrompt = "custom title", AttachmentAnalysisPrompt = "custom media", Model = "before"
                 };
-                Func<AppSettings, string[]> prompts = value => new[] { value.SystemPrompt, value.AgentToolsPrompt,
-                    value.AgentSkillsPrompt, value.ChatSystemPrompt, value.PlanSystemPrompt };
                 new JsonFileStore().Save(paths.SettingsFile, legacy);
                 var originalFile = File.ReadAllText(paths.SettingsFile);
                 var loaded = service.Load();
-                AssertTrue(prompts(legacy).SequenceEqual(prompts(loaded)), "loading preserves all five saved prompts");
-                AssertEqual(originalFile, File.ReadAllText(paths.SettingsFile), "loading never rewrites the settings file");
-
+                AssertEqual(AgentPromptDefaults.GeneralInstructions, loaded.SystemPrompt, "load uses current built-in Agent prompt");
+                AssertEqual(new AppSettings().ContextCompactionPrompt, loaded.ContextCompactionPrompt,
+                    "helper prompts are migrated too");
+                AssertEqual(originalFile, File.ReadAllText(paths.SettingsFile), "load leaves the durable source available until save");
                 loaded.Model = "after";
-                loaded.AgentPromptSchemaVersion = AppSettings.CurrentAgentPromptSchemaVersion;
                 service.Save(loaded);
-                loaded = service.Load();
-                AssertEqual(oldVersion, loaded.AgentPromptSchemaVersion, "ordinary save cannot approve stored legacy prompts using a fresh marker");
-                AssertEqual("after", loaded.Model, "unrelated settings can still be saved before review");
-                AssertTrue(prompts(legacy).SequenceEqual(prompts(loaded)), "ordinary save preserves custom prompts");
-
-                foreach (var requestReview in new[] { false, true })
-                {
-                    var rejected = loaded.Clone();
-                    rejected.HistoryIntegrityMode = HistoryIntegrityModes.HmacSha256;
-                    rejected.HistoryKeySource = HistoryKeySources.CustomSecret;
-                    var rejectedFile = File.ReadAllText(paths.SettingsFile);
-                    var failed = false;
-                    try { service.Save(rejected, null, null, requestReview); }
-                    catch (InvalidOperationException) { failed = true; }
-                    AssertTrue(failed, "invalid protection settings reject the whole save, review=" + requestReview);
-                    AssertEqual(oldVersion, rejected.AgentPromptSchemaVersion, "failed save does not mutate the caller's marker");
-                    AssertTrue(prompts(legacy).SequenceEqual(prompts(rejected)), "failed save preserves the caller's custom prompts");
-                    AssertEqual(rejectedFile, File.ReadAllText(paths.SettingsFile), "failed save does not alter durable settings");
-                }
-
-                service.Save(loaded, null, null, true);
-                var reviewed = service.Load();
-                reviewed.EnsureAgentPromptsReviewed();
-                AssertEqual(oldVersion, loaded.AgentPromptSchemaVersion, "save stages review on a copy, not the caller's draft");
-                AssertTrue(prompts(legacy).SequenceEqual(prompts(reviewed)), "explicit review preserves custom text");
-                AssertEqual(AppSettings.CurrentAgentPromptSchemaVersion, reviewed.AgentPromptSchemaVersion,
-                    "explicit review persists the current prompt schema");
-                AssertTrue(File.ReadAllText(paths.SettingsFile).IndexOf("reviewAgentPrompts", StringComparison.OrdinalIgnoreCase) < 0,
-                    "review command is transient, not a sticky settings flag");
-
-                // Keep future-marker reset coverage once, and reset the actual legacy schemas too.
-                legacy.AgentPromptSchemaVersion = oldVersion == 0 ? AppSettings.CurrentAgentPromptSchemaVersion + 1 : oldVersion;
-                new JsonFileStore().Save(paths.SettingsFile, legacy);
-                var reset = service.Load();
-                reset.SystemPrompt = reset.AgentToolsPrompt = reset.AgentSkillsPrompt = reset.ChatSystemPrompt = reset.PlanSystemPrompt = string.Empty;
-                service.Save(reset, null, null, true);
-                var defaults = service.Load();
-                defaults.EnsureAgentPromptsReviewed();
-                AssertEqual(AppSettings.CurrentAgentPromptSchemaVersion, defaults.AgentPromptSchemaVersion,
-                    "explicit reset persists the current prompt schema");
-                foreach (var instruction in new[] { defaults.SystemPrompt, defaults.ChatSystemPrompt, defaults.PlanSystemPrompt })
-                {
-                    AssertContains(instruction, "conversation-response-v5", "explicit reset installs actual v5 defaults");
-                    AssertContains(instruction, "`TOOL_RESULT` v1", "explicit reset installs Tool Result v1 in every mode");
-                }
-                AssertTrue(prompts(new AppSettings()).SequenceEqual(prompts(defaults)), "explicit cleared prompts and review select current defaults");
-                AssertEqual("custom compaction", defaults.ContextCompactionPrompt, "conversation review leaves helper instructions alone");
-                AssertEqual("custom title", defaults.ChatTitlePrompt, "title prompt is not implicitly reset");
-                AssertEqual("custom media", defaults.AttachmentAnalysisPrompt, "media prompt is not implicitly reset");
+                var saved = service.Load();
+                AssertEqual("after", saved.Model, "unrelated controls survive prompt migration");
+                AssertEqual(AppSettings.CurrentAgentPromptSchemaVersion, saved.AgentPromptSchemaVersion,
+                    "save persists the migrated schema");
+                var directory = Path.Combine(paths.Root, "prompt-backups");
+                var backups = Directory.GetFiles(directory, "prompts-v12-*.json");
+                AssertEqual(1, backups.Length, "one recovery copy is written before migration");
+                var backup = JObject.Parse(File.ReadAllText(backups[0]));
+                AssertEqual("custom general", backup.Value<string>("SystemPrompt"), "previous Agent text is recoverable");
+                AssertEqual("custom compaction", backup.Value<string>("ContextCompactionPrompt"),
+                    "previous helper text is recoverable");
+                service.Save(saved);
+                AssertEqual(1, Directory.GetFiles(directory, "*.json").Length, "later saves do not duplicate the backup");
             });
         }
 

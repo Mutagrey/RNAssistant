@@ -1,7 +1,7 @@
 # Conversation Response v5
 
 Status: **active R72 response-intent contract**. Response protocol is `5`;
-current prompt schema is `32` (`AppSettings.CurrentAgentPromptSchemaVersion`).
+current prompt schema is `35` (`AppSettings.CurrentAgentPromptSchemaVersion`).
 Product version is independent and unchanged by this switch. The
 [v4 specification](CONVERSATION_RESPONSE_V4.md) is historical, not a
 runtime compatibility path. This document records host-neutral behavior; Windows,
@@ -91,8 +91,9 @@ responses, not a second model-facing response format. Unmarked, older or malform
 assistant history requires explicit reset/new chat; RNAssistant does not sniff,
 convert, dual-write or delete user data automatically.
 
-Agent, Chat and Plan defaults use the same current prompt schema `32`. Missing,
-older or future stored markers require explicit review/reset before execution.
+Agent, Chat and Plan defaults use the same current prompt schema `35`. Missing,
+older or future stored markers select current built-in prompts automatically;
+the previous texts are archived before the next settings save.
 Prompt guidance must describe `final` as response intent only; tool results and
 read-back evidence remain the authority for effects.
 

@@ -323,14 +323,15 @@ function readSettings() {
   };
 }
 
-async function persistSettingsFromForm(reviewAgentPrompts) {
+async function persistSettingsFromForm() {
   var apiKey = $("apiKeyInput").value;
   var historySecret = $("historySecretInput").value;
   var nextSettings = readSettings();
   var javascriptWasEnabled = compatibilityValue(state.settings, "EnableAgentJavaScript", "enableAgentJavaScript", false) === true;
-  var response = await saveSettingsWithPromptChanges(nextSettings, apiKey, historySecret, reviewAgentPrompts);
+  var response = await saveSettingsWithPromptChanges(nextSettings, apiKey, historySecret);
   state.appVersion = response.appVersion || response.AppVersion || state.appVersion;
   state.settings = response.settings;
+  if (typeof resetModelCatalog === "function") resetModelCatalog();
   state.prompts = response.prompts;
   state.hasApiKey = !!(response.hasApiKey || response.HasApiKey);
   state.hasHistorySecret = !!(response.hasHistorySecret || response.HasHistorySecret);
@@ -514,14 +515,6 @@ function bindSettingsActions() {
       updateSettingsSaveButton();
       log(error.message, "error");
     }
-  });
-  $("reviewAgentPromptsButton").addEventListener("click", async function () {
-    if (!window.confirm("Вы проверили Agent (общие/tools/skills), Chat и Plan на соответствие текущему протоколу?\n\n" +
-      "Сохранить текущие настройки и тексты, подтвердив проверку? Для встроенных инструкций сначала выберите «Сбросить все промпты».")) return;
-    setControlBusy("reviewAgentPromptsButton", true);
-    try { await persistSettingsFromForm(true); log("Промпты сохранены; проверка текущей схемы подтверждена."); }
-    catch (error) { log(error.message, "error"); }
-    finally { setControlBusy("reviewAgentPromptsButton", false); }
   });
   $("testModelCompatibilityButton").addEventListener("click", async function () {
     var button = $("testModelCompatibilityButton");

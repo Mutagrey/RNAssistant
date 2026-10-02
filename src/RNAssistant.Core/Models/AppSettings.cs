@@ -266,7 +266,7 @@ namespace RNAssistant.Core.Models
         public const int DefaultDesktopWindowWidth = 1600;
         public const int MinimumDesktopWindowWidth = 900;
         public const int MaximumDesktopWindowWidth = 3840;
-        public const int CurrentAgentPromptSchemaVersion = 33;
+        public const int CurrentAgentPromptSchemaVersion = 35;
         public const int DefaultMaxTokens = 3072;
         public const int DefaultMaxImagesPerPrompt = 5;
         public const int DefaultRequestTimeoutSeconds = 1800;
@@ -415,22 +415,24 @@ namespace RNAssistant.Core.Models
 
         public void NormalizeAgentPrompts()
         {
-            // A schema mismatch requires explicit review, never replacement of
-            // saved instructions or automatic approval during load/save.
+            if (AgentPromptSchemaVersion != CurrentAgentPromptSchemaVersion)
+            {
+                var defaults = new AppSettings();
+                SystemPrompt = defaults.SystemPrompt;
+                AgentToolsPrompt = defaults.AgentToolsPrompt;
+                AgentSkillsPrompt = defaults.AgentSkillsPrompt;
+                ChatSystemPrompt = defaults.ChatSystemPrompt;
+                PlanSystemPrompt = defaults.PlanSystemPrompt;
+                ChatTitlePrompt = defaults.ChatTitlePrompt;
+                ContextCompactionPrompt = defaults.ContextCompactionPrompt;
+                AttachmentAnalysisPrompt = defaults.AttachmentAnalysisPrompt;
+                AgentPromptSchemaVersion = CurrentAgentPromptSchemaVersion;
+            }
             SystemPrompt = DefaultPrompt(SystemPrompt, AgentPromptDefaults.GeneralInstructions);
             AgentToolsPrompt = DefaultPrompt(AgentToolsPrompt, AgentPromptDefaults.ToolInstructions);
             AgentSkillsPrompt = DefaultPrompt(AgentSkillsPrompt, AgentPromptDefaults.SkillInstructions);
             ChatSystemPrompt = DefaultPrompt(ChatSystemPrompt, AgentPromptDefaults.ChatInstructions);
             PlanSystemPrompt = DefaultPrompt(PlanSystemPrompt, AgentPromptDefaults.PlanInstructions);
-        }
-
-        public void EnsureAgentPromptsReviewed()
-        {
-            if (AgentPromptSchemaVersion == CurrentAgentPromptSchemaVersion) return;
-            throw new InvalidOperationException(
-                "Промпты требуют проверки для текущего протокола. Откройте «Библиотека → Промпты», " +
-                "проверьте Agent (общие/tools/skills), Chat и Plan, затем выберите «Подтвердить проверку». " +
-                "Для встроенных инструкций сначала используйте «Сбросить все промпты». Сохранённые тексты не удалены.");
         }
 
         internal void NormalizeSamplingAndUiValues()

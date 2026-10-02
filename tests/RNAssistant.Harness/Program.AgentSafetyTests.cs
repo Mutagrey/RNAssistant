@@ -65,66 +65,37 @@ namespace RNAssistant.Harness
             return session;
         }
 
-        private static void SettingsPromptReviewGatesConversationDispatch()
+        private static void SettingsPromptMigrationAllowsConversationDispatch()
         {
             WithTempExecutor(FakeOfficeAdapter.ForHost("Excel"), (executor, adapter) =>
             {
                 var rawCalls = 0;
-                var boundaryCalls = 0;
-                var progressCalls = 0;
                 LlmCompletionDelegate completion = (settings, messages, options, stream, token) =>
                 {
                     rawCalls++;
+                    AssertEqual(AppSettings.CurrentAgentPromptSchemaVersion, settings.AgentPromptSchemaVersion,
+                        "model boundary receives migrated prompt schema");
+                    AssertEqual(AgentPromptDefaults.GeneralInstructions, settings.SystemPrompt,
+                        "model boundary receives current built-in instructions");
                     return Task.FromResult(new LlmCompletionResult
                     {
                         Content = "{\"message\":\"Done\",\"final\":true,\"tool_calls\":[]}"
                     });
                 };
                 var service = CreateConversationRunService(adapter, executor, completion, null,
-                    () => { boundaryCalls++; return new ModelProtocolClient(completion); });
+                    () => new ModelProtocolClient(completion));
                 var tools = OfficeToolCatalog.ForHost(adapter.HostName).Concat(executor.GetControllerTools()).ToList();
-                var settingsForRun = new AppSettings { AgentPromptSchemaVersion = 0 };
-                Action<Action> expectReview = attempt =>
-                {
-                    var blocked = false;
-                    try { attempt(); }
-                    catch (InvalidOperationException ex)
-                    {
-                        AssertContains(ex.Message, "Подтвердить проверку", "actionable review guidance");
-                        blocked = true;
-                    }
-                    AssertTrue(blocked, "unreviewed prompts must block the run");
-                };
-                foreach (var mode in new[] { ChatModes.Agent, ChatModes.Chat, ChatModes.Plan })
-                {
-                    var session = NewSession(adapter);
-                    session.Mode = mode;
-                    var before = JsonConvert.SerializeObject(session);
-                    expectReview(() => service.ExecuteAsync(mode, "Request", session, NewContext(adapter), settingsForRun, tools,
-                        (phase, message, activity) => progressCalls++).GetAwaiter().GetResult());
-                    AssertEqual(before, JsonConvert.SerializeObject(session), "direct blocked entry does not append a user message or mutate history");
-                }
-                var continuation = ContextContinuationSession();
-                var continuationBefore = JsonConvert.SerializeObject(continuation);
-                expectReview(() => service.ConfirmAsync("pending_fixture", new ToolInvocation { ToolCallId = "pending_id" },
-                    continuation, new ConversationRunInput(settingsForRun, NewContext(adapter), tools),
-                    (phase, message, activity) => progressCalls++).GetAwaiter().GetResult());
-                AssertEqual(continuationBefore, JsonConvert.SerializeObject(continuation), "blocked continuation does not rewrite accepted history");
-                AssertEqual(0, rawCalls, "no model or auxiliary request before review");
-                AssertEqual(0, boundaryCalls, "guard runs before materialization reaches the model boundary");
-                AssertEqual(0, progressCalls, "no execution progress is published for a blocked entry");
-
-                settingsForRun.AgentPromptSchemaVersion = AppSettings.CurrentAgentPromptSchemaVersion;
+                var settingsForRun = new AppSettings { AgentPromptSchemaVersion = 0, SystemPrompt = "retired text" };
                 foreach (var mode in new[] { ChatModes.Agent, ChatModes.Chat, ChatModes.Plan })
                 {
                     var session = NewSession(adapter);
                     session.Mode = mode;
                     var result = service.ExecuteAsync(mode, "Request", session, NewContext(adapter), settingsForRun, tools, null)
                         .GetAwaiter().GetResult();
-                    AssertEqual("Done", result.AssistantText, "reviewed settings retain the current conversation behavior");
-                    AssertEqual(AgentResponseProtocol.CurrentVersion, result.ResponseProtocolVersion, "reviewed prompts use the active v5 protocol");
+                    AssertEqual("Done", result.AssistantText, "migrated settings allow a normal run");
+                    AssertEqual(AgentResponseProtocol.CurrentVersion, result.ResponseProtocolVersion, "all modes retain v5");
                 }
-                AssertEqual(3, rawCalls, "each reviewed mode makes one normal request");
+                AssertEqual(3, rawCalls, "each mode makes one normal request");
             });
         }
 
