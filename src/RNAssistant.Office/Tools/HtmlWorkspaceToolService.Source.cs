@@ -127,17 +127,20 @@ namespace RNAssistant.Office.Tools
             CancellationToken cancellationToken)
         {
             HtmlWorkspaceFile file = null;
+            HtmlWorkspace workspace = null;
+            List<StructuredTextPatchOperation> operations = null;
             string before = null;
             try
             {
                 cancellationToken.ThrowIfCancellationRequested();
                 var name = ToolArgumentReader.String(
                     arguments, "path", string.Empty);
-                var workspace = NormalizedWorkspaceCopy(session.HtmlWorkspace);
+                workspace = NormalizedWorkspaceCopy(session.HtmlWorkspace);
                 file = FindFile(workspace, name, false);
                 before = file.Content ?? string.Empty;
+                operations = ReadPatchOperations(arguments);
                 var patch = StructuredTextPatchEngine.Apply(
-                    before, ReadPatchOperations(arguments), MaxHtmlChars);
+                    before, operations, MaxHtmlChars);
                 ValidateFile(file.Path, file.Kind, patch.Text);
                 ValidateWorkspaceCapacity(workspace, file.Id, patch.Text, null, null);
                 var changed = !string.Equals(before, patch.Text, StringComparison.Ordinal);
@@ -202,18 +205,40 @@ namespace RNAssistant.Office.Tools
                         identity, ResourceRepresentations.Source,
                         "HTML file: " + file.Path,
                         complete ? before : null, complete);
+                    var matchingPaths = new List<string>();
+                    if (ex.ErrorCode == "text_patch_not_found" && operations != null &&
+                        ex.OperationIndex > 0 && ex.OperationIndex <= operations.Count)
+                    {
+                        var find = operations[ex.OperationIndex - 1].Find;
+                        if (!string.IsNullOrEmpty(find))
+                        {
+                            matchingPaths = (workspace.Files ?? new List<HtmlWorkspaceFile>())
+                                .Where(item => item != null && item.Id != file.Id &&
+                                    (item.Content ?? string.Empty).IndexOf(find,
+                                        StringComparison.Ordinal) >= 0)
+                                .Select(item => item.Path).Take(5).ToList();
+                        }
+                    }
+                    var details = new JObject
+                    {
+                        ["path"] = file.Path,
+                        ["hunkIndex"] = ex.OperationIndex,
+                        ["sourceCharacters"] = before.Length,
+                        ["inspectTool"] = "common.resources_read"
+                    };
+                    if (matchingPaths.Count > 0)
+                        details["matchingPaths"] = new JArray(matchingPaths);
                     return HtmlWorkspaceToolOutcome.Error(
-                        ex.Message + " Nothing was written. " + (complete
+                        ex.Message + " Nothing was written. " +
+                        (matchingPaths.Count > 0
+                            ? "The missing find text occurs in " +
+                              string.Join(", ", matchingPaths) +
+                              "; patch each file separately. "
+                            : string.Empty) + (complete
                             ? "Use the complete current source in recovery to revise the patch."
                             : "Read current source with common.resources_read or find a unique snippet with common.resources_find, then revise the patch.") +
                         " Do not repeat the same patch unchanged.",
-                        new JObject
-                        {
-                            ["path"] = file.Path,
-                            ["hunkIndex"] = ex.OperationIndex,
-                            ["sourceCharacters"] = before.Length,
-                            ["inspectTool"] = "common.resources_read"
-                        }.ToString(Formatting.None),
+                        details.ToString(Formatting.None),
                         ex.ErrorCode, true, recovery);
                 }
                 return HtmlWorkspaceToolOutcome.Error(

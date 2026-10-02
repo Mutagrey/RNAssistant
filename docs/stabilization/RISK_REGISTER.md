@@ -8,6 +8,21 @@ retired or deferred is not an active P0/P1 implementation defect merely because
 that original severity remains in the table. Release qualification is a separate
 exact-build gate.
 
+## HTML patch `replace` mismatch — 2026-10-02
+
+Owner: Core text patch engine and HTML workspace tools. The photo shows a
+two-hunk patch for `app.js`; the second `find` is CSS-shaped and returns
+`text_patch_not_found`. No write occurred. The user's exact workspace source is
+unavailable, so the photo alone does not establish whether that anchor belongs
+to another file or differs from current source.
+
+Host-neutral code review found a separate reproducible failure: when `find`
+contains normalized newlines and source mixes LF/CRLF, fallback matching could
+miss a present span. It now maps newline-equivalent matches back to original
+source offsets. A missing exact anchor found in another workspace file reports
+that path, while retaining the atomic no-write failure. The focused HTML patch
+harness passes; the photographed Windows/model trajectory remains unverified.
+
 ## HTML editing memory growth — 2026-10-02
 
 Owner: HTML navigation/source projection and WebView editor.

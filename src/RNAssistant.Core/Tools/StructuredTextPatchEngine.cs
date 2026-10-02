@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Text;
 
 namespace RNAssistant.Core.Tools
 {
@@ -107,27 +108,26 @@ namespace RNAssistant.Core.Tools
             var op = (operation.Op ?? string.Empty).Trim();
             var normalized = op.ToLowerInvariant();
             var text = MatchLineEndings(operation.Text ?? string.Empty, current);
-            var find = operation.Find != null && current.Contains(operation.Find)
-                ? operation.Find : MatchLineEndings(operation.Find, current);
+            var find = operation.Find;
             switch (normalized)
             {
                 case "replace":
                     RequireFind(find);
-                    var exactCount = CountOccurrences(current, find);
-                    if (exactCount == 0) throw Error("text_patch_not_found", "Patch find text was not found.");
-                    if (exactCount != 1)
+                    var exactMatches = FindMatches(current, find);
+                    if (exactMatches.Count == 0) throw Error("text_patch_not_found", "Patch find text was not found.");
+                    if (exactMatches.Count != 1)
                     {
-                        throw Error("text_patch_ambiguous", "Patch replace requires one exact match but found " + exactCount + ". Use a narrower find or replaceAll explicitly.");
+                        throw Error("text_patch_ambiguous", "Patch replace requires one match but found " + exactMatches.Count + ". Use a narrower find or replaceAll explicitly.");
                     }
-                    step = Step(op, 1, "Replaced one exact occurrence.");
-                    return ReplaceFirst(current, find, text);
+                    step = Step(op, 1, "Replaced one occurrence.");
+                    return ReplaceMatches(current, exactMatches, text);
 
                 case "replaceall":
                     RequireFind(find);
-                    var allCount = CountOccurrences(current, find);
-                    if (allCount == 0) throw Error("text_patch_not_found", "Patch find text was not found.");
-                    step = Step(op, allCount, "Replaced " + allCount + " occurrence(s).");
-                    return current.Replace(find, text);
+                    var allMatches = FindMatches(current, find);
+                    if (allMatches.Count == 0) throw Error("text_patch_not_found", "Patch find text was not found.");
+                    step = Step(op, allMatches.Count, "Replaced " + allMatches.Count + " occurrence(s).");
+                    return ReplaceMatches(current, allMatches, text);
 
                 case "insertbefore":
                     return InsertAtUniqueMatch(current, find, text, true, op, out step);
@@ -184,14 +184,13 @@ namespace RNAssistant.Core.Tools
         {
             RequireFind(find);
             if (string.IsNullOrEmpty(text)) throw Error("text_patch_invalid", "Patch insertion requires non-empty text.");
-            var count = CountOccurrences(current, find);
-            if (count == 0) throw Error("text_patch_not_found", "Patch insertion anchor was not found.");
-            if (count != 1)
+            var matches = FindMatches(current, find);
+            if (matches.Count == 0) throw Error("text_patch_not_found", "Patch insertion anchor was not found.");
+            if (matches.Count != 1)
             {
-                throw Error("text_patch_ambiguous", "Patch insertion anchor occurs " + count + " times. Use a unique anchor or replaceLines.");
+                throw Error("text_patch_ambiguous", "Patch insertion anchor occurs " + matches.Count + " times. Use a unique anchor.");
             }
-            var index = current.IndexOf(find, StringComparison.Ordinal);
-            var insertionIndex = before ? index : index + find.Length;
+            var insertionIndex = before ? matches[0].Start : matches[0].Start + matches[0].Length;
             step = Step(op, 1, "Inserted text " + (before ? "before" : "after") + " one unique anchor.");
             return current.Insert(insertionIndex, text);
         }
@@ -251,22 +250,69 @@ namespace RNAssistant.Core.Tools
             return new StructuredTextPatchException(code, message, operationIndex);
         }
 
-        private static int CountOccurrences(string value, string find)
+        private struct PatchMatch
         {
-            var count = 0;
-            var index = 0;
-            while ((index = value.IndexOf(find, index, StringComparison.Ordinal)) >= 0)
-            {
-                count++;
-                index += find.Length;
-            }
-            return count;
+            internal int Start;
+            internal int Length;
         }
 
-        private static string ReplaceFirst(string current, string find, string replacement)
+        private static List<PatchMatch> FindMatches(string source, string find)
         {
-            var index = current.IndexOf(find, StringComparison.Ordinal);
-            return current.Substring(0, index) + replacement + current.Substring(index + find.Length);
+            var exact = new List<PatchMatch>();
+            for (var index = 0; (index = source.IndexOf(find, index, StringComparison.Ordinal)) >= 0;
+                 index += find.Length)
+            {
+                exact.Add(new PatchMatch { Start = index, Length = find.Length });
+            }
+            if (exact.Count > 0 ||
+                (find.IndexOf('\n') < 0 && find.IndexOf('\r') < 0))
+                return exact;
+
+            // A copied anchor wins above. If a read normalized its line endings,
+            // map each normalized match back to exact source character offsets.
+            var normalized = new StringBuilder(source.Length);
+            var offsets = new List<int>(source.Length + 1);
+            for (var index = 0; index < source.Length; index++)
+            {
+                offsets.Add(index);
+                if (source[index] == '\r')
+                {
+                    normalized.Append('\n');
+                    if (index + 1 < source.Length && source[index + 1] == '\n') index++;
+                }
+                else
+                {
+                    normalized.Append(source[index]);
+                }
+            }
+            offsets.Add(source.Length);
+            var normalizedSource = normalized.ToString();
+            var normalizedFind = NormalizeLineEndings(find);
+            var result = new List<PatchMatch>();
+            for (var index = 0; (index = normalizedSource.IndexOf(normalizedFind,
+                     index, StringComparison.Ordinal)) >= 0; index += normalizedFind.Length)
+            {
+                result.Add(new PatchMatch
+                {
+                    Start = offsets[index],
+                    Length = offsets[index + normalizedFind.Length] - offsets[index]
+                });
+            }
+            return result;
+        }
+
+        private static string ReplaceMatches(string current, List<PatchMatch> matches, string replacement)
+        {
+            var result = new StringBuilder(current.Length);
+            var offset = 0;
+            foreach (var match in matches)
+            {
+                result.Append(current, offset, match.Start - offset);
+                result.Append(replacement);
+                offset = match.Start + match.Length;
+            }
+            result.Append(current, offset, current.Length - offset);
+            return result.ToString();
         }
 
         private static string MatchLineEndings(string value, string current)

@@ -324,6 +324,61 @@ namespace RNAssistant.Harness
                         "const first = 4;\r\nconst third = 3;",
                         "replacement affects only the copied block");
 
+                    var mixedSource = "const a = 1;\nconst b = 2;\r\nconst c = 3;";
+                    var mixed = ExecuteHtmlNative(runtime,
+                        HtmlWorkspaceToolCatalog.WriteFileToolId,
+                        new JObject { ["path"] = "mixed.js", ["content"] = mixedSource });
+                    AssertEqual(ToolExecutionOutcome.Ok, mixed.Outcome,
+                        "second mixed-newline file is created");
+                    var normalizedAnchor = ExecuteHtmlNative(runtime,
+                        HtmlWorkspaceToolCatalog.ApplyPatchToolId,
+                        new JObject { ["path"] = "mixed.js",
+                            ["patch"] = new JArray(new JObject { ["op"] = "replace",
+                                ["find"] = "const a = 1;\nconst b = 2;\nconst c = 3;",
+                                ["text"] = "const fixed = 4;" }) });
+                    AssertEqual(ToolExecutionOutcome.Ok, normalizedAnchor.Outcome,
+                        "replace finds a normalized anchor in mixed line endings");
+                    AssertEqual("const fixed = 4;",
+                        session.HtmlWorkspace.Files.Single(item => item.Path == "mixed.js").Content,
+                        "normalized anchor replaces the exact original span");
+
+                    var css = ExecuteHtmlNative(runtime,
+                        HtmlWorkspaceToolCatalog.WriteFileToolId,
+                        new JObject { ["path"] = "styles.css",
+                            ["content"] = ".legend-item:hover { border-color: blue; }" });
+                    AssertEqual(ToolExecutionOutcome.Ok, css.Outcome,
+                        "CSS file is created for cross-file diagnostic");
+                    var wrongFileRevision = session.ActiveHtmlArtifactId;
+                    var wrongFile = ExecuteHtmlNative(runtime,
+                        HtmlWorkspaceToolCatalog.ApplyPatchToolId,
+                        new JObject { ["path"] = "app.js",
+                            ["patch"] = new JArray(new JObject { ["op"] = "replace",
+                                ["find"] = ".legend-item:hover { border-color: blue; }",
+                                ["text"] = ".legend-item:hover { border-color: red; }" }) });
+                    AssertEqual(ToolExecutionOutcome.Error, wrongFile.Outcome,
+                        "CSS anchor in a JavaScript patch is rejected");
+                    AssertEqual(wrongFileRevision, session.ActiveHtmlArtifactId,
+                        "wrong-file patch does not write");
+                    AssertEqual("styles.css",
+                        (string)JObject.Parse(wrongFile.Result.DataJson)["matchingPaths"][0],
+                        "mismatch points to the file with the exact anchor");
+                    AssertContains(wrongFile.Result.Message, "patch each file separately",
+                        "wrong-file repair guidance is visible without expanding data");
+
+                    var ambiguousSource = "x\r\ny\nx\ry";
+                    try
+                    {
+                        StructuredTextPatchEngine.Apply(ambiguousSource,
+                            new[] { new StructuredTextPatchOperation { Op = "replace",
+                                Find = "x\ny", Text = "z" } }, 100);
+                        throw new Exception("newline-equivalent duplicate was accepted");
+                    }
+                    catch (StructuredTextPatchException ex)
+                    {
+                        AssertEqual("text_patch_ambiguous", ex.ErrorCode,
+                            "newline-equivalent duplicate remains ambiguous");
+                    }
+
                     var largeSource = string.Concat(Enumerable.Repeat("// source line\n", 900));
                     var large = ExecuteHtmlNative(runtime,
                         HtmlWorkspaceToolCatalog.WriteFileToolId,
