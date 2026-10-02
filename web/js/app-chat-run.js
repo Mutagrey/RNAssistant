@@ -143,6 +143,7 @@ async function refreshChatAfterSendFailure(chatId) {
 }
 
 async function submitChatInput() {
+  if (state.chatNavigationPending || state.initializePromise) return;
   if (hasActiveMessageEdit()) {
     if (!currentActiveSend() && !state.modelSaving && !state.modeSaving && !state.reasoningSaving) {
       state.editingText = $("chatInput").value;

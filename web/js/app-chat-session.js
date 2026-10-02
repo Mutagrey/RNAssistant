@@ -8,25 +8,65 @@ function applyChatNavigationState(response, version) {
   return applyChatState(response);
 }
 
+function navigateChat(type, payload) {
+  var previous = state.chatNavigationPromise;
+  var selectionVersion = 0;
+  if (type === "selectChat") {
+    state.chatSelectionRequestVersion = (state.chatSelectionRequestVersion || 0) + 1;
+    selectionVersion = state.chatSelectionRequestVersion;
+  }
+  state.chatNavigationPending = (state.chatNavigationPending || 0) + 1;
+  if (typeof renderSendControls === "function") renderSendControls();
+  var startedAt = window.performance && window.performance.now ? window.performance.now() : Date.now();
+  var navigation = (async function () {
+    if (previous) await previous.catch(function () {});
+    if (state.chatSyncPromise) await state.chatSyncPromise;
+    if (selectionVersion && selectionVersion !== state.chatSelectionRequestVersion) return null;
+    var version = beginChatNavigation();
+    var response = await send(type, payload);
+    var bridgeMs = (window.performance && window.performance.now ? window.performance.now() : Date.now()) - startedAt;
+    // Apply each completed switch before dispatching the next. If the next request
+    // fails, the visible chat still matches the controller's committed binding.
+    if (type === "init" || response.init) applyInitState(response.init || response);
+    else if (response.state || response.State) applyChatNavigationState(response.state || response.State, version);
+    else if (response.activeChatId !== undefined || response.ActiveChatId !== undefined)
+      applyChatNavigationState(response, version);
+    var renderMs = (window.performance && window.performance.now ? window.performance.now() : Date.now()) - startedAt - bridgeMs;
+    if (bridgeMs + renderMs >= (type === "init" ? 500 : 250)) send("reportClientTiming", {
+      kind: type === "init" ? "startup" : "chatNavigation",
+      bridgeMs: Math.round(bridgeMs), renderMs: Math.round(renderMs), messages: (state.messages || []).length
+    }).catch(function () {});
+    return response;
+  })();
+  state.chatNavigationPromise = navigation;
+  var finished = function () {
+    state.chatNavigationPending -= 1;
+    if (state.chatNavigationPromise === navigation) state.chatNavigationPromise = null;
+    if (typeof renderSendControls === "function") renderSendControls();
+  };
+  navigation.then(finished, finished);
+  return navigation;
+}
+
 function isOutlookMailboxKey(key) {
   return typeof key === "string" && key.indexOf("outlook-mailbox:") === 0;
 }
 
 async function attachOutlookMailbox(key, chatIdValue, createNew) {
-  await send("attachOutlookMailbox", {
+  await navigateChat("attachOutlookMailbox", {
     documentKey: key, chatId: chatIdValue || "", createNew: !!createNew
   });
 }
 
 async function createChat() {
+  if (state.chatNavigationPending) return;
   if (typeof confirmDiscardHtmlWorkspaceChanges === "function" &&
       !confirmDiscardHtmlWorkspaceChanges("Создать новый чат")) {
     return;
   }
-  var navigationVersion = beginChatNavigation();
   setControlBusy("newChatButton", true);
   try {
-    applyChatNavigationState(await send("createChat", { title: "Новый чат" }), navigationVersion);
+    await navigateChat("createChat", { title: "Новый чат" });
     clearSendError();
     log("Чат создан.");
   } catch (error) {
@@ -37,26 +77,25 @@ async function createChat() {
 }
 
 async function createDocumentChat(documentItem) {
-  if (!documentItem || !documentItem.documentKey ||
+  if (state.chatNavigationPending || !documentItem || !documentItem.documentKey ||
       (typeof confirmDiscardHtmlWorkspaceChanges === "function" &&
        !confirmDiscardHtmlWorkspaceChanges("Создать новый чат"))) {
     return;
   }
 
   delete state.collapsedChatDocuments[documentItem.key];
-  var navigationVersion = beginChatNavigation();
   try {
     if (isOutlookMailboxKey(documentItem.documentKey)) {
       await attachOutlookMailbox(documentItem.documentKey, "", true);
       return;
     }
-    applyChatNavigationState(await send("createDocumentChat", {
+    await navigateChat("createDocumentChat", {
       title: "Новый чат",
       host: documentItem.host,
       documentKey: documentItem.documentKey,
       documentTitle: documentItem.title,
       documentPath: documentItem.path || ""
-    }), navigationVersion);
+    });
     clearSendError();
     log("Чат для документа создан.");
   } catch (error) {
@@ -65,7 +104,7 @@ async function createDocumentChat(documentItem) {
 }
 
 async function selectChat(id) {
-  if (!id || (id === state.activeChatId && !state.pendingChatSelectionId)) {
+  if (!id || (id === state.activeChatId && !state.chatNavigationPending)) {
     return;
   }
   if (typeof confirmDiscardHtmlWorkspaceChanges === "function" &&
@@ -74,37 +113,13 @@ async function selectChat(id) {
     return;
   }
 
-  var navigationVersion = beginChatNavigation();
-  state.pendingChatSelectionId = id;
-  var startedAt = window.performance && window.performance.now ? window.performance.now() : Date.now();
   try {
-    if (state.chatSyncPromise) await state.chatSyncPromise;
-    if (navigationVersion !== state.chatNavigationVersion) return;
-    var response = await send("selectChat", { chatId: id });
-    var bridgeMs = (window.performance && window.performance.now ? window.performance.now() : Date.now()) - startedAt;
-    var applied;
-    if (response.init) {
-      applied = navigationVersion === state.chatNavigationVersion;
-      if (applied) applyInitState(response.init);
-    } else {
-      applied = applyChatNavigationState(response.state || response, navigationVersion);
-    }
-    var renderMs = (window.performance && window.performance.now ? window.performance.now() : Date.now()) - startedAt - bridgeMs;
-    if (applied && bridgeMs + renderMs >= 250 && window.console && window.console.info) {
-      window.console.info("RNAssistant chat select timing", {
-        bridgeMs: Math.round(bridgeMs), renderMs: Math.round(renderMs),
-        messages: (state.messages || []).length
-      });
-    }
+    if (!await navigateChat("selectChat", { chatId: id })) return;
     clearSendError();
     log("Чат открыт.");
   } catch (error) {
     log(error.detail || error.message, "error");
     renderChatSessions();
-  } finally {
-    if (navigationVersion === state.chatNavigationVersion) {
-      state.pendingChatSelectionId = "";
-    }
   }
 }
 
@@ -169,7 +184,6 @@ async function openActiveDocument(chatIdValue) {
   if (!targetChatId) {
     return;
   }
-  var navigationVersion = beginChatNavigation();
   setControlBusy("openDocumentButton", true);
   try {
     var mailboxChat = (state.chats || []).find(function (chat) { return chatId(chat) === targetChatId; });
@@ -177,11 +191,7 @@ async function openActiveDocument(chatIdValue) {
       await attachOutlookMailbox(chatDocumentKey(mailboxChat), targetChatId, false);
       return;
     }
-    var result = await send("openDocument", { chatId: targetChatId });
-    var chatState = result && (result.state || result.State);
-    if (chatState) {
-      applyChatNavigationState(chatState, navigationVersion);
-    }
+    var result = await navigateChat("openDocument", { chatId: targetChatId });
     log(result && result.launched ? "Документ открыт." : "Документ уже активен.");
   } catch (error) {
     log(error.detail || error.message, "error");
@@ -197,13 +207,12 @@ async function activateDocument(documentKey) {
       !confirmDiscardHtmlWorkspaceChanges("Переключить документ")) {
     return;
   }
-  var navigationVersion = beginChatNavigation();
   try {
     if (isOutlookMailboxKey(documentKey)) {
       await attachOutlookMailbox(documentKey, "", false);
       return;
     }
-    applyChatNavigationState(await send("activateDocument", { documentKey: documentKey }), navigationVersion);
+    await navigateChat("activateDocument", { documentKey: documentKey });
     log("Документ активирован.");
   } catch (error) {
     log(error.detail || error.message, "error");
@@ -219,9 +228,8 @@ async function deleteDocument(host, documentKey, title) {
     return;
   }
 
-  var navigationVersion = beginChatNavigation();
   try {
-    applyChatNavigationState(await send("deleteDocument", { host: host, documentKey: documentKey }), navigationVersion);
+    await navigateChat("deleteDocument", { host: host, documentKey: documentKey });
     clearSendError();
     log("История документа удалена.");
   } catch (error) {
@@ -248,9 +256,8 @@ async function renameChat(chatIdValue) {
     return;
   }
 
-  var navigationVersion = beginChatNavigation();
   try {
-    applyChatNavigationState(await send("renameChat", { chatId: targetChatId, title: title.trim() }), navigationVersion);
+    await navigateChat("renameChat", { chatId: targetChatId, title: title.trim() });
     log("Чат переименован.");
   } catch (error) {
     log(error.detail || error.message, "error");
@@ -258,7 +265,7 @@ async function renameChat(chatIdValue) {
 }
 
 async function clearChat() {
-  if (!state.activeChatId ||
+  if (state.chatNavigationPending || !state.activeChatId ||
       (typeof confirmDiscardHtmlWorkspaceChanges === "function" &&
        !confirmDiscardHtmlWorkspaceChanges("Очистить чат")) ||
       !window.confirm("Очистить этот чат?")) {
@@ -268,7 +275,7 @@ async function clearChat() {
   setControlBusy("clearChatButton", true);
   var targetChatId = state.activeChatId;
   try {
-    applyChatStateForChat(await send("clearChat", { chatId: targetChatId }), targetChatId);
+    await navigateChat("clearChat", { chatId: targetChatId });
     clearSendError();
     log("Чат очищен.");
   } catch (error) {
@@ -305,9 +312,8 @@ async function deleteChat(chatIdValue) {
     return;
   }
 
-  var navigationVersion = beginChatNavigation();
   try {
-    applyChatNavigationState(await send("deleteChat", { chatId: targetChatId }), navigationVersion);
+    await navigateChat("deleteChat", { chatId: targetChatId });
     clearSendError();
     log("Чат удален.");
   } catch (error) {
@@ -339,13 +345,12 @@ async function deleteMessage(message, index) {
 }
 
 async function forkChatAtMessage(message, index) {
-  if (!state.activeChatId) {
+  if (!state.activeChatId || state.chatNavigationPending) {
     return;
   }
 
-  var navigationVersion = beginChatNavigation();
   try {
-    applyChatNavigationState(await send("forkChat", { chatId: state.activeChatId, id: messageId(message), index: index }), navigationVersion);
+    await navigateChat("forkChat", { chatId: state.activeChatId, id: messageId(message), index: index });
     clearSendError();
     log("Ветка чата создана.");
   } catch (error) {
@@ -572,12 +577,15 @@ async function loadChatState(chatIdValue) {
 }
 
 async function synchronizeChatState(force) {
-  if (state.bridgeUnavailable || state.pendingChatSelectionId || state.officeHostChatPending ||
+  // DOM focus events are not an explicit forced refresh.
+  force = force === true;
+  if (state.bridgeUnavailable || state.chatNavigationPending || state.initializePromise || state.officeHostChatPending ||
       (!force && (document.hidden || !document.hasFocus() || currentActiveSend()))) return;
   if (state.chatSyncPromise) {
     var pendingSync = state.chatSyncPromise;
     if (!force) return pendingSync;
     await pendingSync;
+    if (state.chatNavigationPending || state.initializePromise || state.officeHostChatPending) return;
     if (state.chatSyncPromise && state.chatSyncPromise !== pendingSync) return state.chatSyncPromise;
   }
   var navigationVersion = state.chatNavigationVersion || 0;
@@ -586,7 +594,7 @@ async function synchronizeChatState(force) {
     try {
       var response = await send("listChats", {});
       var current = { activeChatId: state.activeChatId, chats: state.chats, documents: state.documents };
-      if (navigationVersion === state.chatNavigationVersion &&
+      if (!state.chatNavigationPending && navigationVersion === state.chatNavigationVersion &&
           stateApplyVersion === state.chatStateApplyVersion &&
           chatNavigationSignature(response) !== chatNavigationSignature(current)) {
         var responseChatId = payloadActiveChatId(response);
@@ -595,7 +603,7 @@ async function synchronizeChatState(force) {
         if (reloadDetail) {
           var detailNavigationVersion = state.chatNavigationVersion || 0;
           var detail = await loadChatState(responseChatId);
-          if (detailNavigationVersion === state.chatNavigationVersion && !currentActiveSend()) {
+          if (!state.chatNavigationPending && detailNavigationVersion === state.chatNavigationVersion && !currentActiveSend()) {
             applyChatState(detail);
           }
         }
@@ -615,22 +623,14 @@ async function initialize() {
       !confirmDiscardHtmlWorkspaceChanges("Обновить состояние")) {
     return;
   }
-  var navigationVersion = beginChatNavigation();
-  var startedAt = window.performance && window.performance.now ? window.performance.now() : Date.now();
   state.initializePromise = (async function () {
     try {
-      var init = await send("init");
-      var bridgeMs = (window.performance && window.performance.now ? window.performance.now() : Date.now()) - startedAt;
-      if (navigationVersion === state.chatNavigationVersion) applyInitState(init);
-      var renderMs = (window.performance && window.performance.now ? window.performance.now() : Date.now()) - startedAt - bridgeMs;
-      if (bridgeMs + renderMs >= 500) send("reportClientTiming", {
-        kind: "startup", bridgeMs: Math.round(bridgeMs), renderMs: Math.round(renderMs),
-        messages: (state.messages || []).length
-      }).catch(function () {});
+      await navigateChat("init");
     } catch (error) {
-      if (navigationVersion === state.chatNavigationVersion) applyBridgeUnavailableState(error);
+      applyBridgeUnavailableState(error);
     } finally {
       state.initializePromise = null;
+      if (typeof renderSendControls === "function") renderSendControls();
     }
   })();
   return state.initializePromise;

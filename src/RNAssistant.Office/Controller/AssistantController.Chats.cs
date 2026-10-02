@@ -314,6 +314,7 @@ namespace RNAssistant.Office
         public ChatStateResponse ListChats()
         {
             var timer = Stopwatch.StartNew();
+            EnsureStartupRecovery();
             var session = _chatSessions.GetActiveSessionForOfficeState();
             var loadMs = timer.ElapsedMilliseconds;
             var fullReplays = _chatStore.HeaderFullReplayCount;
@@ -355,6 +356,7 @@ namespace RNAssistant.Office
 
         public ChatStateResponse CreateChat(string title)
         {
+            EnsureStartupRecovery();
             using (_chatRuns.ReserveMaintenance())
             {
                 var session = _chatSessions.CreateChat(title);
@@ -364,6 +366,7 @@ namespace RNAssistant.Office
 
         public ChatStateResponse CreatePersistentChat(string title)
         {
+            EnsureStartupRecovery();
             using (_chatRuns.ReserveMaintenance())
             {
                 var bound = _adapter as IOfficeDocumentSessionProvider;
@@ -384,6 +387,7 @@ namespace RNAssistant.Office
 
         public ChatStateResponse CreateDocumentChat(string title, string host, string documentKey, string documentTitle, string documentPath)
         {
+            EnsureStartupRecovery();
             using (_chatRuns.ReserveMaintenance())
             {
                 var session = _chatSessions.CreateChatForDocument(title, host, documentKey, documentTitle, documentPath);
@@ -410,6 +414,7 @@ namespace RNAssistant.Office
 
         public ChatStateResponse TrySelectCurrentDocumentChat(string chatId)
         {
+            EnsureStartupRecovery();
             var session = _chatSessions.TryLoadCurrentDocumentChat(chatId);
             if (session == null) return null;
             _chatSessions.SetActiveSession(session);
@@ -526,6 +531,7 @@ namespace RNAssistant.Office
 
         public ChatStateResponse DeleteDocument(string host, string documentKey)
         {
+            EnsureStartupRecovery();
             if (string.IsNullOrWhiteSpace(host) || string.IsNullOrWhiteSpace(documentKey))
             {
                 throw new InvalidOperationException("Документ не указан.");
@@ -557,11 +563,13 @@ namespace RNAssistant.Office
 
         private ChatSession LoadSession(string requestedSessionId, bool allowMissingRequestedFallback)
         {
+            EnsureStartupRecovery();
             return _chatSessions.LoadSession(requestedSessionId, allowMissingRequestedFallback);
         }
 
         private ChatSession LoadAddressedSession(string requestedSessionId)
         {
+            EnsureStartupRecovery();
             return _chatSessions.LoadAddressedSession(requestedSessionId);
         }
 

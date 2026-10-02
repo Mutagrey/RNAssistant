@@ -601,6 +601,59 @@ namespace RNAssistant.Harness
             }
         }
 
+        private static void BridgeNavigationLeavesCallerContext()
+        {
+            var previousContext = SynchronizationContext.Current;
+            var uiContext = new SynchronizationContext();
+            var calls = 0;
+            Action navigationWork = () =>
+            {
+                AssertTrue(!ReferenceEquals(uiContext, SynchronizationContext.Current),
+                    "chat storage and host coordinator work must leave the UI callback");
+                Interlocked.Increment(ref calls);
+            };
+            try
+            {
+                SynchronizationContext.SetSynchronizationContext(uiContext);
+                using (var bridge = new AssistantWebBridge(new AssistantController
+                    { NavigationWork = navigationWork }, null))
+                {
+                    var token = BridgeToken(bridge);
+                    foreach (var type in new[] { "createChat", "createDocumentChat", "selectChat", "openDocument", "activateDocument" })
+                    {
+                        var result = JObject.Parse(bridge.HandleMessageAsync(JsonConvert.SerializeObject(new
+                        {
+                            id = type, type = type, bridgeToken = token,
+                            payload = new { chatId = "chat-a", title = "New", host = "Excel", documentKey = "book" }
+                        })).GetAwaiter().GetResult());
+                        AssertTrue((bool)result["ok"], type + " completes outside the caller context");
+                    }
+                    bridge.OfficeHostChatRequested = host =>
+                    {
+                        navigationWork();
+                        return Task.FromResult(new OfficeHostChatResponse { Host = host, ChatId = "chat-b" });
+                    };
+                    bridge.OfficeChatSelectionRequested = chatId =>
+                    {
+                        navigationWork();
+                        return Task.FromResult(new OfficeHostChatResponse { Host = "Excel", ChatId = chatId,
+                            State = new ChatStateResponse { ActiveChatId = chatId } });
+                    };
+                    foreach (var type in new[] { "createOfficeHostChat", "selectChat" })
+                    {
+                        var result = JObject.Parse(bridge.HandleMessageAsync(JsonConvert.SerializeObject(new
+                        {
+                            id = type + "-coordinator", type = type, bridgeToken = token,
+                            payload = new { chatId = "chat-b", host = "Excel" }
+                        })).GetAwaiter().GetResult());
+                        AssertTrue((bool)result["ok"], type + " coordinator completes outside the caller context");
+                    }
+                    AssertEqual(7, calls, "all navigation entry points exercised");
+                }
+            }
+            finally { SynchronizationContext.SetSynchronizationContext(previousContext); }
+        }
+
         private static void BridgeInitReturnsToken()
         {
             var controller = new AssistantController();

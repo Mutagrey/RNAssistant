@@ -68,6 +68,7 @@ namespace RNAssistant.Office
         internal ManualResetEventSlim RunToolRelease { get; set; }
         internal ManualResetEventSlim SendChatEntered { get; set; }
         internal ManualResetEventSlim SendChatRelease { get; set; }
+        internal Action NavigationWork { get; set; }
 
         public InitResponse Initialize()
         {
@@ -136,15 +137,16 @@ namespace RNAssistant.Office
                     Url = "https://rnassistant.local-resource/v1/download/" + new string('a', 64), MaxChunkBytes = 262144,
                     Payload = new PayloadRef(new string('b', 64), 2, "text/plain; charset=utf-8") } });
         }
-        public ChatStateResponse CreateChat(string title) { return ChatState(title); }
+        public ChatStateResponse CreateChat(string title) { NavigationWork?.Invoke(); return ChatState(title); }
         public ChatStateResponse CreateDocumentChat(string title, string host, string documentKey, string documentTitle, string documentPath)
         {
+            NavigationWork?.Invoke();
             LastDocumentHost = host;
             return ChatState(title, documentKey);
         }
-        public ChatStateResponse SelectChat(string chatId) { return ChatState(null, chatId); }
-        public OpenDocumentResponse OpenDocument(string chatId) { return new OpenDocumentResponse { Path = string.Empty, Launched = false }; }
-        public ChatStateResponse ActivateDocument(string documentKey) { return ChatState(null, documentKey); }
+        public ChatStateResponse SelectChat(string chatId) { NavigationWork?.Invoke(); return ChatState(null, chatId); }
+        public OpenDocumentResponse OpenDocument(string chatId) { NavigationWork?.Invoke(); return new OpenDocumentResponse { Path = string.Empty, Launched = false }; }
+        public ChatStateResponse ActivateDocument(string documentKey) { NavigationWork?.Invoke(); return ChatState(null, documentKey); }
         public ChatStateResponse DeleteDocument(string host, string documentKey)
         {
             LastDocumentHost = host;

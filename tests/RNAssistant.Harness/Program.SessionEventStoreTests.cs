@@ -1402,6 +1402,10 @@ namespace RNAssistant.Harness
 
                 var storedBlob = File.ReadAllBytes(blobPath);
                 File.Delete(blobPath);
+                var sizeSnapshot = new ChatBlobStore(paths).CreateStorageSizeSnapshot();
+                long size;
+                AssertTrue(!sizeSnapshot.TryGetStoredByteLength(artifact.ContentSha256, out size),
+                    "catalog metadata observes a missing blob");
                 header = reader.ListHeaders(session.Host, session.DocumentKey, session.DocumentTitle).Single();
                 AssertEqual(1, header.CasMissingBlobCount,
                     "warm header cache refreshes missing referenced CAS state");
@@ -1412,6 +1416,8 @@ namespace RNAssistant.Harness
 
                 Directory.CreateDirectory(Path.GetDirectoryName(blobPath));
                 File.WriteAllBytes(blobPath, storedBlob);
+                AssertTrue(sizeSnapshot.TryGetStoredByteLength(artifact.ContentSha256, out size) && size == storedBlob.Length,
+                    "late publication in an enumerated prefix is checked before reporting missing CAS");
                 header = reader.ListHeaders(session.Host, session.DocumentKey, session.DocumentTitle).Single();
                 AssertEqual(0, header.CasMissingBlobCount,
                     "warm header cache notices a restored referenced CAS blob");

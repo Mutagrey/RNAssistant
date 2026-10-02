@@ -75,6 +75,8 @@ function createSyncContext() {
     context.activeSend = { requestId: "running" };
     await context.synchronizeChatState(false);
     assert.equal(calls.length, 0, "background catalog scan waits for the active send");
+    await context.synchronizeChatState({ type: "focus" });
+    assert.equal(calls.length, 0, "focus event does not force a scan during an active send");
     context.nextCatalog = { activeChatId: "chat-a", chats: context.state.chats, documents: context.state.documents };
     await context.synchronizeChatState(true);
     assert.deepEqual(calls.map(call => call.type), ["listChats"], "explicit refresh still runs");
@@ -171,6 +173,7 @@ function createSyncContext() {
     chatContext.send = async () => ({ host: "Outlook", chatId: "outlook-chat", init: {
       host: "Outlook", activeChatId: "outlook-chat"
     } });
+    vm.runInContext(fs.readFileSync(path.join(root, "web/js/app-chat-session.js"), "utf8"), chatContext);
     chatContext.applyInitState = init => applied.push(init);
     chatContext.applyChatNavigationState = () => { throw new Error("old host state applied"); };
     chatContext.synchronizeChatState = () => { throw new Error("catalog-only update applied"); };
@@ -181,6 +184,82 @@ function createSyncContext() {
     assert.equal(applied.length, 1, "cross-host creation applies full target initialization");
     assert.equal(applied[0].activeChatId, "outlook-chat");
     console.log("PASS Office host chat: current pane applies target initialization");
+  }
+
+  {
+    const { context, calls } = createSyncContext();
+    const replies = [];
+    context.send = (type, payload) => {
+      calls.push({ type, payload });
+      return new Promise((resolve, reject) => replies.push({ resolve, reject }));
+    };
+    const first = context.navigateChat("selectChat", { chatId: "chat-b" });
+    const skipped = context.navigateChat("selectChat", { chatId: "chat-c" });
+    const last = context.navigateChat("selectChat", { chatId: "chat-d" });
+    await context.synchronizeChatState(true);
+    assert.equal(calls.length, 1, "switches and catalog refresh cannot overlap");
+    replies[0].resolve({ activeChatId: "chat-b", messages: [] });
+    await first;
+    assert.equal(await skipped, null, "superseded queued selection is not dispatched");
+    await new Promise(setImmediate);
+    assert.equal(calls.length, 2);
+    assert.equal(calls[1].payload.chatId, "chat-d", "latest requested selection runs next");
+    assert.equal(context.state.activeChatId, "chat-b", "completed binding is visible before next switch");
+    replies[1].reject(new Error("document closed"));
+    await assert.rejects(last, /document closed/);
+    assert.equal(context.state.activeChatId, "chat-b", "failed switch retains the last committed binding");
+    assert.equal(context.state.chatNavigationPending, 0);
+    const retry = context.navigateChat("selectChat", { chatId: "chat-e" });
+    assert.equal(calls.length, 3, "failed navigation does not poison the queue");
+    replies[2].resolve({ activeChatId: "chat-e", messages: [] });
+    await retry;
+    assert.equal(context.state.activeChatId, "chat-e");
+    console.log("PASS chat navigation: serialized switches coalesce and recover from failure");
+  }
+
+  {
+    const { context, calls } = createSyncContext();
+    let releaseSync;
+    context.state.chatSyncPromise = new Promise(resolve => { releaseSync = resolve; });
+    context.setControlBusy = () => {};
+    context.clearSendError = () => {};
+    context.log = () => {};
+    context.send = async (type, payload) => {
+      calls.push({ type, payload });
+      return { activeChatId: "new-chat", messages: [] };
+    };
+    const creating = context.createChat();
+    await context.createChat();
+    await context.synchronizeChatState(true);
+    assert.equal(calls.length, 0, "new chat waits for sync and suppresses duplicate creation");
+    releaseSync();
+    await creating;
+    assert.deepEqual(calls.map(call => call.type), ["createChat"]);
+    assert.equal(context.state.activeChatId, "new-chat");
+    console.log("PASS chat creation: drains catalog sync before creating once");
+  }
+
+  {
+    const { context, calls } = createSyncContext();
+    let releaseInit;
+    context.applyInitState = response => { context.state.activeChatId = response.activeChatId; };
+    context.applyBridgeUnavailableState = () => { throw new Error("unexpected init failure"); };
+    context.send = (type, payload) => {
+      calls.push({ type, payload });
+      if (type === "init") return new Promise(resolve => { releaseInit = resolve; });
+      return Promise.resolve({ activeChatId: payload.chatId, messages: [] });
+    };
+    const initializing = context.initialize();
+    const selecting = context.navigateChat("selectChat", { chatId: "chat-b" });
+    await context.synchronizeChatState(true);
+    assert.deepEqual(calls.map(call => call.type), ["init"], "startup is exclusive with navigation and polling");
+    releaseInit({ activeChatId: "chat-a" });
+    await initializing;
+    await selecting;
+    assert.equal(context.state.activeChatId, "chat-b", "startup cannot overwrite a subsequent selection");
+    assert.equal(context.state.initializePromise, null);
+    assert.equal(context.state.chatNavigationPending, 0);
+    console.log("PASS chat startup: initialization drains before navigation");
   }
 
   {
@@ -220,7 +299,7 @@ function createSyncContext() {
   assert.ok(index.includes("app-chat-session.js?v=office-chat-20260930-4"), "chat session cache key was bumped");
   assert.ok(fs.readFileSync(path.join(root, "web/js/app.js"), "utf8")
     .includes("window.setInterval(synchronizeChatState, 60000)"), "background catalog scan is limited to once per minute");
-  console.log("OK 7/7");
+  console.log("OK 10/10");
 }()).catch(error => {
   console.error(error.stack || error);
   process.exitCode = 1;

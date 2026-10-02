@@ -50,6 +50,7 @@ namespace RNAssistant.Office
         private readonly ToolCatalogService _toolCatalog;
         private readonly SkillCatalogService _skillCatalog;
         private readonly ChatSessionService _chatSessions;
+        private readonly Lazy<bool> _startupRecovery;
         private readonly ChatHistoryEditService _chatHistoryEditService;
         private readonly ConversationRunService _conversationRunService;
         private readonly ContextCompactionService _contextCompactionService;
@@ -140,7 +141,14 @@ namespace RNAssistant.Office
                 "recover_" + Guid.NewGuid().ToString("N"),
                 session);
             _chatSessions.MaintenanceLeaseProvider = _chatRuns.ReserveMaintenance;
-            _chatSessions.ReconcileInterruptedRuns(_runtimeId);
+            _startupRecovery = new Lazy<bool>(() =>
+            {
+                var recoveryTimer = Stopwatch.StartNew();
+                _chatSessions.ReconcileInterruptedRuns(_runtimeId);
+                if (recoveryTimer.ElapsedMilliseconds >= 250)
+                    RuntimeLog.Info("Chat startup recovery timing: " + recoveryTimer.ElapsedMilliseconds + "ms.");
+                return true;
+            });
             _chatHistoryEditService = new ChatHistoryEditService(
                 RemovePendingAgentToolsForSession,
                 CancelPendingActivities,
@@ -215,6 +223,13 @@ namespace RNAssistant.Office
         private void ConfigureModelTrace(LlmRequestOptions options)
         {
             _modelTracePersistence.Configure(options);
+        }
+
+        private void EnsureStartupRecovery()
+        {
+            // Construction runs on the Office UI thread. Recover at the first chat request,
+            // behind the bridge worker boundary, before exposing or mutating any chat state.
+            _ = _startupRecovery.Value;
         }
 
         public string HostName { get { return _adapter.HostName; } }
@@ -328,6 +343,7 @@ namespace RNAssistant.Office
 
         private ChatStateResponse CreateStoredChatState(string host, string documentKey, string documentTitle)
         {
+            EnsureStartupRecovery();
             var activeId = _conversationStore.LoadActiveSessionId(host, documentKey);
             var active = string.IsNullOrWhiteSpace(activeId)
                 ? null

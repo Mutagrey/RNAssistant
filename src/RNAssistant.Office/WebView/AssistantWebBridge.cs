@@ -145,6 +145,7 @@ namespace RNAssistant.Office.WebView
                         var clientTiming = Payload<ClientTimingPayload>(payload);
                         if ((string.Equals(clientTiming.Kind, "startup", StringComparison.Ordinal) ||
                                 string.Equals(clientTiming.Kind, "chatResponse", StringComparison.Ordinal) ||
+                                string.Equals(clientTiming.Kind, "chatNavigation", StringComparison.Ordinal) ||
                                 string.Equals(clientTiming.Kind, "skillSource", StringComparison.Ordinal)) &&
                             clientTiming.BridgeMs >= 0 && clientTiming.BridgeMs <= 600000 &&
                             clientTiming.RenderMs >= 0 && clientTiming.RenderMs <= 600000 &&
@@ -194,16 +195,17 @@ namespace RNAssistant.Office.WebView
                         break;
                     case "createChat":
                         var createChat = Payload<CreateChatPayload>(payload);
-                        responsePayload = _controller.CreateChat(createChat.Title);
+                        responsePayload = await RunBridgeWorkAsync(
+                            () => _controller.CreateChat(createChat.Title), cancellationToken).ConfigureAwait(false);
                         break;
                     case "createDocumentChat":
                         var createDocumentChat = Payload<CreateDocumentChatPayload>(payload);
-                        responsePayload = _controller.CreateDocumentChat(
+                        responsePayload = await RunBridgeWorkAsync(() => _controller.CreateDocumentChat(
                             createDocumentChat.Title,
                             createDocumentChat.Host,
                             createDocumentChat.DocumentKey,
                             createDocumentChat.DocumentTitle,
-                            createDocumentChat.DocumentPath);
+                            createDocumentChat.DocumentPath), cancellationToken).ConfigureAwait(false);
                         break;
                     case "selectChat":
                         var selectChat = Payload<ChatPayload>(payload);
@@ -213,8 +215,8 @@ namespace RNAssistant.Office.WebView
                                 cancellationToken).ConfigureAwait(false);
                         else
                         {
-                            var selectedOfficeChat = await OfficeChatSelectionRequested(
-                                selectChat.ChatId).ConfigureAwait(false);
+                            var selectedOfficeChat = await Task.Run(() => OfficeChatSelectionRequested(
+                                selectChat.ChatId), cancellationToken).ConfigureAwait(false);
                             if (selectedOfficeChat == null ||
                                 !string.Equals(selectedOfficeChat.ChatId, selectChat.ChatId, StringComparison.Ordinal) ||
                                 string.IsNullOrWhiteSpace(selectedOfficeChat.Host) ||
@@ -229,10 +231,12 @@ namespace RNAssistant.Office.WebView
                         }
                         break;
                     case "openDocument":
-                        responsePayload = _controller.OpenDocument(Payload<ChatPayload>(payload).ChatId);
+                        responsePayload = await RunBridgeWorkAsync(
+                            () => _controller.OpenDocument(Payload<ChatPayload>(payload).ChatId), cancellationToken).ConfigureAwait(false);
                         break;
                     case "activateDocument":
-                        responsePayload = _controller.ActivateDocument(Payload<DocumentPayload>(payload).DocumentKey);
+                        responsePayload = await RunBridgeWorkAsync(
+                            () => _controller.ActivateDocument(Payload<DocumentPayload>(payload).DocumentKey), cancellationToken).ConfigureAwait(false);
                         break;
                     case "attachOutlookMailbox":
                         var mailbox = Payload<OutlookMailboxNavigationPayload>(payload);
@@ -246,7 +250,8 @@ namespace RNAssistant.Office.WebView
                         var hostChat = Payload<OfficeHostChatPayload>(payload);
                         if (OfficeHostChatRequested == null || !IsSupportedOfficeHost(hostChat.Host))
                             throw new InvalidOperationException("Office host chat creation is unavailable.");
-                        var createdHostChat = await OfficeHostChatRequested(hostChat.Host).ConfigureAwait(false);
+                        var createdHostChat = await Task.Run(() => OfficeHostChatRequested(hostChat.Host),
+                            cancellationToken).ConfigureAwait(false);
                         if (createdHostChat == null || string.IsNullOrWhiteSpace(createdHostChat.ChatId) ||
                             !string.Equals(createdHostChat.Host, hostChat.Host, StringComparison.Ordinal))
                             throw new InvalidOperationException("Office host chat creation returned no verified chat.");
@@ -261,11 +266,13 @@ namespace RNAssistant.Office.WebView
                         break;
                     case "deleteDocument":
                         var deleteDocument = Payload<DocumentPayload>(payload);
-                        responsePayload = _controller.DeleteDocument(deleteDocument.Host, deleteDocument.DocumentKey);
+                        responsePayload = await RunBridgeWorkAsync(
+                            () => _controller.DeleteDocument(deleteDocument.Host, deleteDocument.DocumentKey), cancellationToken).ConfigureAwait(false);
                         break;
                     case "renameChat":
                         var renameChat = Payload<RenameChatPayload>(payload);
-                        responsePayload = _controller.RenameChat(renameChat.ChatId, renameChat.Title);
+                        responsePayload = await RunBridgeWorkAsync(
+                            () => _controller.RenameChat(renameChat.ChatId, renameChat.Title), cancellationToken).ConfigureAwait(false);
                         break;
                     case "setChatModel":
                         var setChatModel = Payload<SetChatModelPayload>(payload);
@@ -286,7 +293,8 @@ namespace RNAssistant.Office.WebView
                         responsePayload = await _controller.HtmlFetchAsync(Payload<HtmlFetchRequest>(payload), cancellationToken);
                         break;
                     case "clearChat":
-                        responsePayload = _controller.ClearChat(Payload<ChatPayload>(payload).ChatId);
+                        responsePayload = await RunBridgeWorkAsync(
+                            () => _controller.ClearChat(Payload<ChatPayload>(payload).ChatId), cancellationToken).ConfigureAwait(false);
                         break;
                     case "compactChatContext":
                         var compactChat = Payload<ChatPayload>(payload);
@@ -296,7 +304,8 @@ namespace RNAssistant.Office.WebView
                             cancellationToken).ConfigureAwait(false);
                         break;
                     case "deleteChat":
-                        responsePayload = _controller.DeleteChat(Payload<ChatPayload>(payload).ChatId);
+                        responsePayload = await RunBridgeWorkAsync(
+                            () => _controller.DeleteChat(Payload<ChatPayload>(payload).ChatId), cancellationToken).ConfigureAwait(false);
                         break;
                     case "sendChat":
                         var sendChat = Payload<SendChatPayload>(payload);
@@ -330,7 +339,8 @@ namespace RNAssistant.Office.WebView
                         break;
                     case "forkChat":
                         var forkChat = Payload<MessageActionPayload>(payload);
-                        responsePayload = _controller.ForkChat(forkChat.Id, forkChat.Index ?? -1, forkChat.ChatId);
+                        responsePayload = await RunBridgeWorkAsync(
+                            () => _controller.ForkChat(forkChat.Id, forkChat.Index ?? -1, forkChat.ChatId), cancellationToken).ConfigureAwait(false);
                         break;
                     case "editMessage":
                         var editMessage = Payload<EditMessagePayload>(payload);

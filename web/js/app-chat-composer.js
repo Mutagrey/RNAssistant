@@ -62,6 +62,7 @@ function renderChatModePicker() {
 }
 
 function renderSendControls() {
+  var navigating = !!(state.chatNavigationPending || state.initializePromise);
   var activeSend = currentActiveSend();
   var isEditing = hasActiveMessageEdit();
   var isSending = !!activeSend;
@@ -78,6 +79,8 @@ function renderSendControls() {
   var editBar = $("messageEditBar");
   var cancelEditButton = $("cancelMessageEditButton");
   var currentDocumentAvailable = typeof activeChatUsesCurrentDocument !== "function" || activeChatUsesCurrentDocument();
+
+  if ($("newChatButton")) $("newChatButton").disabled = navigating || !!state.bridgeUnavailable;
 
   if (form) {
     form.classList.toggle("is-message-editing", isEditing);
@@ -103,9 +106,9 @@ function renderSendControls() {
     stopButton.setAttribute("aria-label", stopButton.title);
   }
   if (input) {
-    input.readOnly = isSending || isPreparingAttachments || approvalPending || state.modeSaving || state.reasoningSaving ||
+    input.readOnly = navigating || isSending || isPreparingAttachments || approvalPending || state.modeSaving || state.reasoningSaving ||
       state.bridgeUnavailable;
-    input.placeholder = isEditing
+    input.placeholder = navigating ? "Обновляю чат…" : isEditing
       ? "Измените сообщение или отправьте его заново..."
       : (state.bridgeUnavailable
         ? "Откройте RNAssistant внутри Office, чтобы начать чат..."
@@ -117,10 +120,10 @@ function renderSendControls() {
     clearButton.disabled = isSending || isPreparingAttachments || state.editingBusy;
   }
   if (modelSelect) {
-    modelSelect.disabled = isSending || isPreparingAttachments || isEditing || state.modelCatalog.loading || state.modelSaving || state.reasoningSaving || state.bridgeUnavailable || !state.activeChatId;
+    modelSelect.disabled = navigating || isSending || isPreparingAttachments || isEditing || state.modelCatalog.loading || state.modelSaving || state.reasoningSaving || state.bridgeUnavailable || !state.activeChatId;
   }
   if (modeSelect) {
-    modeSelect.disabled = isSending || isPreparingAttachments || isEditing || state.modeSaving || state.reasoningSaving || state.bridgeUnavailable || !state.activeChatId;
+    modeSelect.disabled = navigating || isSending || isPreparingAttachments || isEditing || state.modeSaving || state.reasoningSaving || state.bridgeUnavailable || !state.activeChatId;
   }
   renderChatModePicker();
   if (typeof renderChatModelPicker === "function") {
@@ -129,7 +132,7 @@ function renderSendControls() {
   if (typeof renderReasoningToggle === "function") {
     renderReasoningToggle();
   }
-  if (isPreparingAttachments) {
+  if (navigating || isPreparingAttachments) {
     if (typeof setComposerPickerDisabled === "function") {
       setComposerPickerDisabled($("chatModePicker"), true);
       setComposerPickerDisabled($("chatModelPicker"), true);
@@ -137,10 +140,10 @@ function renderSendControls() {
     if ($("chatReasoningToggle")) $("chatReasoningToggle").disabled = true;
   }
   if ($("addSelectionContextButton")) {
-    $("addSelectionContextButton").disabled = isSending || isPreparingAttachments || isEditing || state.bridgeUnavailable || !currentDocumentAvailable;
+    $("addSelectionContextButton").disabled = navigating || isSending || isPreparingAttachments || isEditing || state.bridgeUnavailable || !currentDocumentAvailable;
   }
   if ($("attachFileButton")) {
-    $("attachFileButton").disabled = isSending || isPreparingAttachments || approvalPending || isEditing || state.bridgeUnavailable || !state.activeChatId;
+    $("attachFileButton").disabled = navigating || isSending || isPreparingAttachments || approvalPending || isEditing || state.bridgeUnavailable || !state.activeChatId;
   }
   if (typeof renderPromptContextInspectorAvailability === "function") {
     renderPromptContextInspectorAvailability();
@@ -180,6 +183,7 @@ function updateSendButtonAvailability(hasContent) {
   var editingTarget = hasActiveMessageEdit() ? findEditingMessage() : null;
   var canSaveEdit = !!editingTarget && canSaveMessageEdit(editingTarget.message, editingTarget.index);
   sendButton.disabled =
+    !!state.chatNavigationPending || !!state.initializePromise ||
     !!currentActiveSend() ||
     isPendingChatSubmit(state.activeChatId) ||
     (!hasActiveMessageEdit() && typeof pendingAgentApprovalActivity === "function" && !!pendingAgentApprovalActivity()) ||

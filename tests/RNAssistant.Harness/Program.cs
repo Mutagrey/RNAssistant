@@ -801,6 +801,7 @@ namespace RNAssistant.Harness
                 Test("bridge: rejects missing token", BridgeRejectsMissingToken),
                 Test("bridge: long tool keeps controls responsive", BridgeLongToolKeepsControlsResponsive),
                 Test("bridge: agent run keeps controls responsive", BridgeAgentRunKeepsControlsResponsive),
+                Test("bridge: navigation leaves caller context", BridgeNavigationLeavesCallerContext),
                 Test("bridge: typed runTool", BridgeUsesTypedRunToolPayload),
                 Test("bridge: typed sendChat", BridgeUsesTypedSendChatPayloadAndProgress),
                 Test("bridge: typed resource ingestion", BridgeUsesTypedResourceIngestionPayloads),

@@ -138,7 +138,7 @@ namespace RNAssistant.Core.Storage
         }
 
         public ChatSessionHeader CreateHeader(
-            ChatBlobStore blobs,
+            ChatBlobStore.StorageSizeSnapshot storageSizes,
             long revision,
             long jsonlByteLength,
             string fallbackHost,
@@ -168,7 +168,7 @@ namespace RNAssistant.Core.Storage
             ReadWorkspaceCounts(out fileCount, out dataSourceCount);
             long casStoredByteLength;
             int casMissingBlobCount;
-            ReadCasStorageUsage(blobs ?? _blobs, out casStoredByteLength, out casMissingBlobCount);
+            ReadCasStorageUsage(storageSizes, out casStoredByteLength, out casMissingBlobCount);
             var run = _lastRun;
             var runViewState = run == null ? null : _messages.Items
                 .Where(item => item.Active && string.Equals(item.RunId, run.RunId, StringComparison.Ordinal))
@@ -293,14 +293,14 @@ namespace RNAssistant.Core.Storage
             _casLogicalByteLength = SaturatingAdd(_casLogicalByteLength, entry.LogicalByteLength);
         }
 
-        private void ReadCasStorageUsage(ChatBlobStore blobs, out long storedByteLength, out int missingBlobCount)
+        private void ReadCasStorageUsage(ChatBlobStore.StorageSizeSnapshot storageSizes, out long storedByteLength, out int missingBlobCount)
         {
             storedByteLength = 0;
             missingBlobCount = 0;
             foreach (var reference in _casReferences)
             {
                 long length;
-                if (blobs == null || !blobs.TryGetStoredByteLength(reference.Key, out length))
+                if (storageSizes == null || !storageSizes.TryGetStoredByteLength(reference.Key, out length))
                 {
                     missingBlobCount = SaturatingIncrement(missingBlobCount);
                     continue;

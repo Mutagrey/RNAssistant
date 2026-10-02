@@ -681,11 +681,12 @@ namespace RNAssistant.Core.Storage
         internal IReadOnlyList<ChatSessionHeader> ListHeaders()
         {
             if (!Directory.Exists(_paths.ChatDirectory)) return new List<ChatSessionHeader>();
+            var storageSizes = _blobs.CreateStorageSizeSnapshot();
             var headers = new List<ChatSessionHeader>();
             foreach (var directory in SafeGetDirectories(_paths.ChatDirectory))
             {
                 headers.AddRange(SafeGetSessionFiles(directory)
-                    .Select(path => LoadHeader(path, null, null, null))
+                    .Select(path => LoadHeader(path, null, null, null, storageSizes))
                     .Where(header => header != null));
             }
             return headers.OrderByDescending(header => header.UpdatedUtc).ToList();
@@ -695,8 +696,9 @@ namespace RNAssistant.Core.Storage
         {
             var directory = GetDocumentDirectory(host, documentKey);
             if (!Directory.Exists(directory)) return new List<ChatSessionHeader>();
+            var storageSizes = _blobs.CreateStorageSizeSnapshot();
             return SafeGetSessionFiles(directory)
-                .Select(path => LoadHeader(path, host, documentKey, documentTitle))
+                .Select(path => LoadHeader(path, host, documentKey, documentTitle, storageSizes))
                 .Where(header => header != null)
                 .OrderByDescending(header => header.UpdatedUtc)
                 .ToList();
@@ -967,7 +969,8 @@ namespace RNAssistant.Core.Storage
             string path,
             string host,
             string documentKey,
-            string documentTitle)
+            string documentTitle,
+            ChatBlobStore.StorageSizeSnapshot storageSizes)
         {
             try
             {
@@ -975,7 +978,7 @@ namespace RNAssistant.Core.Storage
                 return result == null || result.Tail == null || result.Reducer == null
                     ? null
                     : result.Reducer.CreateHeader(
-                        _blobs,
+                        storageSizes,
                         result.Tail.Sequence,
                         result.ByteLength,
                         host,

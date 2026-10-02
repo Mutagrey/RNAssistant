@@ -114,6 +114,8 @@ var state = {
   highlightLoadLogged: false,
   syncTimer: null,
   chatSyncPromise: null,
+  chatNavigationPromise: null,
+  chatNavigationPending: 0,
   initializePromise: null,
   chatNavigationVersion: 0,
   chatStateApplyVersion: 0

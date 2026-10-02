@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.IO;
 using System.Security.Cryptography;
 using System.Text;
@@ -116,24 +117,58 @@ namespace RNAssistant.Core.Storage
                 Matches(PathFor(reference.Sha256), reference.Sha256, reference.ByteLength, protector);
         }
 
-        internal bool TryGetStoredByteLength(string sha256, out long byteLength)
+        internal StorageSizeSnapshot CreateStorageSizeSnapshot()
         {
-            byteLength = 0;
-            if (!ValidSha256(sha256)) return false;
-            try
+            return new StorageSizeSnapshot(_rootDirectory);
+        }
+
+        // One catalog read owns this disposable metadata snapshot. Directory enumeration
+        // supplies cached file lengths on Windows without a separate stat per reference.
+        // Never use these advisory sizes to authorize reads, mutations or CAS deletion.
+        internal sealed class StorageSizeSnapshot
+        {
+            private readonly string _root;
+            private readonly Dictionary<string, Dictionary<string, long>> _prefixes =
+                new Dictionary<string, Dictionary<string, long>>(StringComparer.Ordinal);
+
+            internal StorageSizeSnapshot(string root) { _root = root; }
+
+            internal bool TryGetStoredByteLength(string sha256, out long byteLength)
             {
-                var file = new FileInfo(PathFor(sha256));
-                if (!file.Exists) return false;
-                byteLength = file.Length;
-                return true;
-            }
-            catch (IOException)
-            {
-                return false;
-            }
-            catch (UnauthorizedAccessException)
-            {
-                return false;
+                byteLength = 0;
+                if (!ValidSha256(sha256)) return false;
+                var hash = sha256.ToLowerInvariant();
+                var prefix = hash.Substring(0, 2);
+                Dictionary<string, long> sizes;
+                if (!_prefixes.TryGetValue(prefix, out sizes))
+                {
+                    sizes = new Dictionary<string, long>(StringComparer.Ordinal);
+                    try
+                    {
+                        foreach (var file in new DirectoryInfo(Path.Combine(_root, prefix)).EnumerateFiles("*.blob"))
+                        {
+                            var name = Path.GetFileNameWithoutExtension(file.Name);
+                            if (ValidSha256(name) && name.StartsWith(prefix, StringComparison.Ordinal))
+                                sizes[name] = file.Length;
+                        }
+                    }
+                    catch (IOException) { sizes.Clear(); }
+                    catch (UnauthorizedAccessException) { sizes.Clear(); }
+                    _prefixes.Add(prefix, sizes);
+                }
+                if (sizes.TryGetValue(hash, out byteLength)) return true;
+                // A later header in the same listing may reference a blob published
+                // after this prefix was enumerated. Recheck misses before warning.
+                try
+                {
+                    var file = new FileInfo(Path.Combine(_root, prefix, hash + ".blob"));
+                    if (!file.Exists) return false;
+                    byteLength = file.Length;
+                    sizes[hash] = byteLength;
+                    return true;
+                }
+                catch (IOException) { return false; }
+                catch (UnauthorizedAccessException) { return false; }
             }
         }
 

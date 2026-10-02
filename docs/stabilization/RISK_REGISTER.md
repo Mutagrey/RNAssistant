@@ -30,6 +30,49 @@ session. Exact Windows/WebView2 long-chat evidence remains open. Full library
 metadata enumeration and authority-journal startup still scale with history;
 metadata pagination remains a separate Resource/Library owner task.
 
+## Chat navigation and startup freezes — 2026-10-02
+
+Owner: WebView navigation/bridge, controller startup and ChatStore headers.
+The user reports the whole UI freezing during chat creation/selection and Office
+application changes. The supplied October 1 log photo shows roughly 300–500 ms
+warm header/catalog scans with zero full/incremental header replays, about 4,600
+CAS references across 18 chats, and roughly two seconds for init versus 64 ms for
+its WebView render. Model `headersWait` also reaches tens of seconds; those network
+waits do not establish a blocked UI thread or justify changing model/context limits.
+
+Code inspection confirmed synchronous chat creation/document navigation in bridge
+UI callbacks, a full interrupted-run scan in the controller constructor, and a
+filesystem metadata probe for every CAS reference on every catalog read. Rapid
+selections could race exclusive host rebinding: the newer request failed busy
+while the older successful response was discarded. Focus events were truthy
+`force` arguments and bypassed the active-send polling guard.
+
+The implementation now serializes navigation and init, drains catalog sync,
+coalesces not-yet-dispatched selections and applies each committed binding before
+the next request. Composer submission is paused during the transition. Navigation
+and Office coordinator dispatch leave the UI callback; startup recovery is lazy,
+single-execution and precedes chat reads/writes. Catalog size reporting shares a
+fresh prefix-directory metadata snapshot per listing, rechecks misses for concurrent
+publication and never reuses that snapshot as read/mutation/GC authority. Slow
+navigation now reaches the runtime log as `kind=chatNavigation`; recovery has its
+own timing. No event/CAS data or request limits were removed or relaxed.
+
+Focused Node checks cover switching/creation/init races, failed-next-switch recovery,
+focus polling, history paging and run revision ordering. Host-neutral harness checks
+cover caller-context isolation, coordinator rebinding, cancellation responsiveness,
+typed document dispatch, header cache integrity, CAS deletion/restoration and late
+publication, plus interrupted-run recovery. Controller construction/lazy wiring is
+source-reviewed: the bridge harness uses a controller stub, so it does not qualify
+the production controller or Office adapter.
+
+Remaining evidence: repeat cold start, rapid chat creation/selection and Excel ↔
+Word/Outlook activation on the exact Windows/Office/WebView2 build with the same
+history. Record recovery, header/catalog, bridge/render and COM/modal delays. Cold
+full replay and persistence lock waits remain possible. Desktop `MainForm` also
+marshals callbacks back to its UI thread and `AttachTarget` selects the requested
+chat synchronously before replacing the pane; a separate Desktop attach slice is
+still needed. No measured Windows speedup or complete freeze resolution is claimed.
+
 ## Agent continuity and deterministic read loops — 2026-10-01
 
 P1 incident evidence remains open; shared host-neutral fixes are implemented.
