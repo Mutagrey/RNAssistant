@@ -1,9 +1,0 @@
-<?xml version="1.0" encoding="utf-8"?>
-<coreProperties xmlns:dc="http://purl.org/dc/elements/1.1/" xmlns:dcterms="http://purl.org/dc/terms/" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns="http://schemas.openxmlformats.org/package/2006/metadata/core-properties">
-  <dc:creator>Eric Sink</dc:creator>
-  <dc:description>SQLitePCL.raw is a Portable Class Library (PCL) for low-level (raw) access to SQLite.  Packages named 'SQLitePCLRaw.provider.*' (like this one) are 'plugins' that allow SQLitePCLRaw.core to access the native SQLite library.  This provider does DllImport of 'sqlite3', to reference the 'system' SQLite.  One common use for this provider is to access the SQLite library provided with iOS.</dc:description>
-  <dc:identifier>SQLitePCLRaw.provider.sqlite3</dc:identifier>
-  <version>3.0.5</version>
-  <keywords>sqlite</keywords>
-  <lastModifiedBy>NuGet.Packaging, Version=7.6.0.0, Culture=neutral, PublicKeyToken=31bf3856ad364e35;.NET 8.0</lastModifiedBy>
-</coreProperties>

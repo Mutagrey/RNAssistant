@@ -45,19 +45,19 @@
       <Private>true</Private>
     </Reference>
     <Reference Include="Microsoft.Data.Sqlite">
-      <HintPath>..\..\packages\Microsoft.Data.Sqlite.Core.10.0.12\lib\net8.0\Microsoft.Data.Sqlite.dll</HintPath>
+      <HintPath>..\..\packages\Microsoft.Data.Sqlite.Core.10.0.10\lib\net8.0\Microsoft.Data.Sqlite.dll</HintPath>
       <Private>true</Private>
     </Reference>
     <Reference Include="SQLitePCLRaw.core">
-      <HintPath>..\..\packages\SQLitePCLRaw.core.3.0.5\lib\net8.0\SQLitePCLRaw.core.dll</HintPath>
+      <HintPath>..\..\packages\SQLitePCLRaw.core.2.1.11\lib\netstandard2.0\SQLitePCLRaw.core.dll</HintPath>
       <Private>true</Private>
     </Reference>
     <Reference Include="SQLitePCLRaw.provider.winsqlite3">
-      <HintPath>..\..\packages\SQLitePCLRaw.provider.winsqlite3.3.0.5\lib\netstandard2.0\SQLitePCLRaw.provider.winsqlite3.dll</HintPath>
+      <HintPath>..\..\packages\SQLitePCLRaw.provider.winsqlite3.2.1.11\lib\netstandard2.0\SQLitePCLRaw.provider.winsqlite3.dll</HintPath>
       <Private>true</Private>
     </Reference>
     <Reference Include="SQLitePCLRaw.provider.sqlite3">
-      <HintPath>..\..\packages\SQLitePCLRaw.provider.sqlite3.3.0.5\lib\net8.0\SQLitePCLRaw.provider.sqlite3.dll</HintPath>
+      <HintPath>..\..\packages\SQLitePCLRaw.provider.sqlite3.2.1.11\lib\net6.0\SQLitePCLRaw.provider.sqlite3.dll</HintPath>
       <Private>true</Private>
     </Reference>
   </ItemGroup>

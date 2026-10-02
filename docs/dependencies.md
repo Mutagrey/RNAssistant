@@ -11,12 +11,16 @@ feed is needed. The .NET Framework 4.8 Core build uses `System.Data` and the
 - `Microsoft.Web.WebView2 1.0.2903.40`
 - `Newtonsoft.Json 13.0.3`
 - `PdfPig 0.1.15` and its managed dependencies
-- `Microsoft.Data.Sqlite.Core 10.0.12`, `SQLitePCLRaw.core/provider.winsqlite3 3.0.5`
+- `Microsoft.Data.Sqlite.Core 10.0.10`, `SQLitePCLRaw.core/provider.winsqlite3 2.1.11`
   and their managed dependencies; the host-neutral harness also uses
-  `SQLitePCLRaw.provider.sqlite3 3.0.5`
+  `SQLitePCLRaw.provider.sqlite3 2.1.11`
 
 Chat indexing uses the Windows system `winsqlite3.dll`; no SQLite native binary is
 committed. Optional local SQLite files under `vendor/sqlite/` are ignored by Git.
+Desktop and VSTO outputs explicitly copy the pinned managed SQLite closure from
+`packages/`; the NativeHost portable manifest requires those DLLs from the Office
+output. A missing DLL fails the build/publish instead of producing an incomplete
+offline package. Exact Windows execution still requires separate qualification.
 
 Media/PDF rendering dependencies are committed as selected binaries in
 `vendor/pdf-rendering/` and referenced directly by `RNAssistant.Office`:

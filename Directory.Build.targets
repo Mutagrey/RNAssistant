@@ -115,6 +115,10 @@
       <Link>%(Filename)%(Extension)</Link>
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </Content>
+    <Content Include="$(MSBuildThisFileDirectory)packages/Microsoft.Data.Sqlite.Core.10.0.10/lib/netstandard2.0/Microsoft.Data.Sqlite.dll;$(MSBuildThisFileDirectory)packages/SQLitePCLRaw.core.2.1.11/lib/netstandard2.0/SQLitePCLRaw.core.dll;$(MSBuildThisFileDirectory)packages/SQLitePCLRaw.provider.winsqlite3.2.1.11/lib/netstandard2.0/SQLitePCLRaw.provider.winsqlite3.dll;$(MSBuildThisFileDirectory)packages/SQLitePCLRaw.provider.sqlite3.2.1.11/lib/netstandard2.0/SQLitePCLRaw.provider.sqlite3.dll;$(MSBuildThisFileDirectory)packages/Microsoft.Bcl.HashCode.6.0.0/lib/net462/Microsoft.Bcl.HashCode.dll;$(MSBuildThisFileDirectory)packages/System.Buffers.4.6.1/lib/net462/System.Buffers.dll;$(MSBuildThisFileDirectory)packages/System.Memory.4.6.3/lib/net462/System.Memory.dll;$(MSBuildThisFileDirectory)packages/System.Numerics.Vectors.4.6.1/lib/net462/System.Numerics.Vectors.dll;$(MSBuildThisFileDirectory)packages/System.Runtime.CompilerServices.Unsafe.6.1.2/lib/net462/System.Runtime.CompilerServices.Unsafe.dll">
+      <Link>%(Filename)%(Extension)</Link>
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
   </ItemGroup>
   <Target Name="BuildRNAssistantJsWorker" BeforeTargets="Build"
           Condition="'$(MSBuildProjectName)' == 'RNAssistant.Office'">
@@ -136,5 +140,22 @@
     <Error Condition="!Exists('%(RNAssistantJsWorkerFile.Identity)')"
            Text="Required JavaScript worker deployment file is missing: %(RNAssistantJsWorkerFile.Identity)" />
     <Copy SourceFiles="@(RNAssistantJsWorkerFile)" DestinationFolder="$(TargetDir)" SkipUnchangedFiles="true" />
+  </Target>
+  <Target Name="CopyRNAssistantSqlite" AfterTargets="CopyRNAssistantJsWorker"
+          Condition="'$(MSBuildProjectName)' == 'RNAssistant.Office' or '$(MSBuildProjectName)' == 'RNAssistant.Desktop' or '$(MSBuildProjectName)' == 'RNAssistant.ExcelAddIn' or '$(MSBuildProjectName)' == 'RNAssistant.WordAddIn' or '$(MSBuildProjectName)' == 'RNAssistant.PowerPointAddIn' or '$(MSBuildProjectName)' == 'RNAssistant.OutlookAddIn'">
+    <ItemGroup>
+      <RNAssistantSqliteFile Include="$(MSBuildThisFileDirectory)packages/Microsoft.Data.Sqlite.Core.10.0.10/lib/netstandard2.0/Microsoft.Data.Sqlite.dll" />
+      <RNAssistantSqliteFile Include="$(MSBuildThisFileDirectory)packages/SQLitePCLRaw.core.2.1.11/lib/netstandard2.0/SQLitePCLRaw.core.dll" />
+      <RNAssistantSqliteFile Include="$(MSBuildThisFileDirectory)packages/SQLitePCLRaw.provider.winsqlite3.2.1.11/lib/netstandard2.0/SQLitePCLRaw.provider.winsqlite3.dll" />
+      <RNAssistantSqliteFile Include="$(MSBuildThisFileDirectory)packages/SQLitePCLRaw.provider.sqlite3.2.1.11/lib/netstandard2.0/SQLitePCLRaw.provider.sqlite3.dll" />
+      <RNAssistantSqliteFile Include="$(MSBuildThisFileDirectory)packages/Microsoft.Bcl.HashCode.6.0.0/lib/net462/Microsoft.Bcl.HashCode.dll" />
+      <RNAssistantSqliteFile Include="$(MSBuildThisFileDirectory)packages/System.Buffers.4.6.1/lib/net462/System.Buffers.dll" />
+      <RNAssistantSqliteFile Include="$(MSBuildThisFileDirectory)packages/System.Memory.4.6.3/lib/net462/System.Memory.dll" />
+      <RNAssistantSqliteFile Include="$(MSBuildThisFileDirectory)packages/System.Numerics.Vectors.4.6.1/lib/net462/System.Numerics.Vectors.dll" />
+      <RNAssistantSqliteFile Include="$(MSBuildThisFileDirectory)packages/System.Runtime.CompilerServices.Unsafe.6.1.2/lib/net462/System.Runtime.CompilerServices.Unsafe.dll" />
+    </ItemGroup>
+    <Error Condition="!Exists('%(RNAssistantSqliteFile.Identity)')"
+           Text="Required SQLite deployment file is missing: %(RNAssistantSqliteFile.Identity)" />
+    <Copy SourceFiles="@(RNAssistantSqliteFile)" DestinationFolder="$(TargetDir)" SkipUnchangedFiles="true" />
   </Target>
 </Project>

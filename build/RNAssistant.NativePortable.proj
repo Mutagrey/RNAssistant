@@ -37,6 +37,10 @@
     <RequiredFile Include="$(OfficeOutput)Microsoft.Web.WebView2.WinForms.dll" />
     <RequiredFile Include="$(WebViewPackage)build\native\$(Architecture)\WebView2Loader.dll" />
     <RequiredFile Include="$(OfficeOutput)Microsoft.Bcl.HashCode.dll" />
+    <RequiredFile Include="$(OfficeOutput)Microsoft.Data.Sqlite.dll" />
+    <RequiredFile Include="$(OfficeOutput)SQLitePCLRaw.core.dll" />
+    <RequiredFile Include="$(OfficeOutput)SQLitePCLRaw.provider.winsqlite3.dll" />
+    <RequiredFile Include="$(OfficeOutput)SQLitePCLRaw.provider.sqlite3.dll" />
     <RequiredFile Include="$(OfficeOutput)System.Buffers.dll" />
     <RequiredFile Include="$(OfficeOutput)System.Memory.dll" />
     <RequiredFile Include="$(OfficeOutput)System.Numerics.Vectors.dll" />
