@@ -87,7 +87,7 @@ namespace RNAssistant.Office
             _artifactWorkingSet = new ArtifactWorkingSetService(_chatStore.DocumentArtifacts, new ResourceMutationJournal(_paths));
             _conversationStore = new ChatConversationStoreAdapter(_chatStore);
             _eventStore = new ChatEventStoreAdapter(_chatStore);
-            _inbox = new ConversationInboxService(_eventStore);
+            _inbox = ConversationInboxService.AcquireShared(_paths.Root, _eventStore);
             _modelTracePersistence = new ModelTracePersistenceService(_eventStore);
             _attachmentStore = new AttachmentStore(_paths, () => _settingsService.LoadStorageProtector());
             _chatResourceIngestion = new ChatResourceIngestionService(_attachmentStore, _chatStore.DocumentArtifacts);

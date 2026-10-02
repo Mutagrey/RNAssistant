@@ -42,7 +42,7 @@ version check still apply.
 Run the focused `inbox:` filter for cancellation isolation, stale responses, batch
 closure, final/approval races, durable FIFO editing, recovery and Stop behavior.
 `dotnet run --project demo/RNAssistant.MockDemo/RNAssistant.MockDemo.csproj -- --inbox-test`
-checks first-chat intake, actual controller execution and materialized model context
+checks first-chat intake, two controllers sharing one data root, actual controller execution and materialized model context
 without Office. Run `node tests/web/chat-inbox.test.js` for UI acknowledgement,
 idempotent retry, chat isolation and queue controls. Manual browser layout checks
 are distinct from Windows/Office/WebView2 qualification.

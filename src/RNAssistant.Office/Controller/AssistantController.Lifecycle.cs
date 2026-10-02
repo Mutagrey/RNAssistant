@@ -1,6 +1,7 @@
 using System;
 using System.Threading;
 using RNAssistant.Office.Contracts;
+using RNAssistant.Office.Services;
 
 namespace RNAssistant.Office
 {
@@ -40,6 +41,7 @@ namespace RNAssistant.Office
                 _pendingAgentTools.Clear();
             }
             _lifetimeCancellation.Dispose();
+            ConversationInboxService.ReleaseShared(_paths.Root, _inbox);
         }
     }
 }

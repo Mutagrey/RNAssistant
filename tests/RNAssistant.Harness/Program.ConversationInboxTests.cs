@@ -133,6 +133,40 @@ namespace RNAssistant.Harness
                 AssertEqual("edited", recovered.TakeNext(session, false).Text, "edit survives replay");
             });
         }
+        private static void InboxSharedLifetimeAndRecovery()
+        {
+            WithTempPaths(paths =>
+            {
+                var session = NewSession(FakeOfficeAdapter.ForHost("Excel"));
+                var firstStore = new ChatStore(paths);
+                firstStore.Save(session);
+                var first = ConversationInboxService.AcquireShared(paths.Root, new ChatEventStoreAdapter(firstStore));
+                var second = ConversationInboxService.AcquireShared(paths.Root,
+                    new ChatEventStoreAdapter(new ChatStore(paths)));
+                try
+                {
+                    AssertTrue(ReferenceEquals(first, second), "controllers share one live inbox");
+                    second.Submit(session, new ConversationInput { Id = "queued", Text = "retained", Delivery = InputDelivery.Queue });
+                    AssertEqual(1, first.Snapshot(session).Items.Count, "other controller observes accepted input");
+                }
+                finally
+                {
+                    ConversationInboxService.ReleaseShared(paths.Root, second);
+                    ConversationInboxService.ReleaseShared(paths.Root, first);
+                }
+                var restarted = ConversationInboxService.AcquireShared(paths.Root,
+                    new ChatEventStoreAdapter(new ChatStore(paths)));
+                try
+                {
+                    AssertTrue(!ReferenceEquals(first, restarted), "last controller release drops live projection");
+                    AssertTrue(restarted.Snapshot(session).Paused, "restart replays queue paused");
+                    AssertTrue(!restarted.TryStartWorker(session), "restart cannot dispatch without explicit resume");
+                    restarted.Resume(session);
+                    AssertEqual("retained", restarted.TakeNext(session, false).Text, "explicit resume retains FIFO input");
+                }
+                finally { ConversationInboxService.ReleaseShared(paths.Root, restarted); }
+            });
+        }
         private sealed class InboxFailingEvents : IEventStore
         {
             internal readonly IEventStore Inner;

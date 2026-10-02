@@ -92,6 +92,7 @@ namespace RNAssistant.Harness
                 Test("inbox: steer wins final race", InboxSteerWinsFinalRace),
                 Test("inbox: steer invalidates pending confirmation", InboxSteerSupersedesConfirmation),
                 Test("inbox: durable FIFO edit and recovery", InboxDurabilityAndQueue),
+                Test("inbox: shared controllers release and recover paused", InboxSharedLifetimeAndRecovery),
                 Test("inbox: failed pause append stops scheduling", InboxFailedPauseStillStopsScheduling),
                 Test("inbox: stop freezes queue and retains target", InboxStopAndDocumentIsolation),
                 Test("kernel: read ok", () => KernelAggregatesOutcome("read", ToolExecutionOutcome.Ok, ExecutionHealth.Clean, "1,0,0,0,0")),

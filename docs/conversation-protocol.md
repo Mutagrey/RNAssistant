@@ -1364,6 +1364,12 @@ holds queued work. After restart, all retained input is paused and requires expl
 resumption; no possible effect is replayed. A new explicit steer can run while older
 queued work remains paused. Removal changes queue state; it does not erase history.
 
+Controllers using one data root in the same process share one live inbox projection,
+run session cursor and model-interrupt token. Intake from another window therefore
+reaches the current run before any queue worker can claim it. The last controller
+release drops this projection; a new controller rebuilds it from events with pending
+input paused. The event log remains the only durable queue store.
+
 Validation: focused harness `inbox:` and mock demo `--inbox-test` cover kernel,
 replay and actual controller/materialized-request delivery. `tests/web/chat-inbox.test.js`
 covers acknowledgement/retry and UI isolation. These checks do not establish real

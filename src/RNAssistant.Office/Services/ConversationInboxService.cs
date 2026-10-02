@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.IO;
 using System.Linq;
 using System.Threading;
 using Newtonsoft.Json;
@@ -13,6 +14,47 @@ namespace RNAssistant.Office.Services
     // ChatStore serializes appends and advances the SAME live session's storage cursor.
     internal sealed class ConversationInboxService
     {
+        private sealed class SharedInbox
+        {
+            internal ConversationInboxService Service;
+            internal int Users;
+        }
+        private static readonly object SharedSync = new object();
+        private static readonly Dictionary<string, SharedInbox> Shared =
+            new Dictionary<string, SharedInbox>(Path.DirectorySeparatorChar == '\\'
+                ? StringComparer.OrdinalIgnoreCase : StringComparer.Ordinal);
+
+        // Controllers in one process must use the same live session cursor and interrupt
+        // token. The event log remains the only durable source; the last release drops
+        // this projection so a new controller replays pending input as paused.
+        internal static ConversationInboxService AcquireShared(string root, IEventStore events)
+        {
+            var key = Path.GetFullPath(root);
+            lock (SharedSync)
+            {
+                SharedInbox shared;
+                if (!Shared.TryGetValue(key, out shared))
+                {
+                    shared = new SharedInbox { Service = new ConversationInboxService(events) };
+                    Shared.Add(key, shared);
+                }
+                shared.Users++;
+                return shared.Service;
+            }
+        }
+
+        internal static void ReleaseShared(string root, ConversationInboxService service)
+        {
+            var key = Path.GetFullPath(root);
+            lock (SharedSync)
+            {
+                SharedInbox shared;
+                if (!Shared.TryGetValue(key, out shared) || !ReferenceEquals(shared.Service, service) || shared.Users <= 0)
+                    throw new InvalidOperationException("Conversation inbox lease is not owned by this controller.");
+                if (--shared.Users == 0) Shared.Remove(key);
+            }
+        }
+
         internal sealed class Inbox
         {
             internal readonly object Sync = new object();
