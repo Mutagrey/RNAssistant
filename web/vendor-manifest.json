@@ -300,6 +300,131 @@
       ]
     },
     {
+      "id": "vis-network",
+      "npmPackage": "vis-network",
+      "version": "10.1.2",
+      "license": "Apache-2.0 OR MIT",
+      "gitHead": "f2584c8d1264d8591e6c4d8f09e3a81d599ce1b8",
+      "npmTarball": "https://registry.npmjs.org/vis-network/-/vis-network-10.1.2.tgz",
+      "npmIntegrity": "sha512-1Kj7GD7XNjygliqRWXv/VPT1X/2eKz2e09PvwDtETHwuvKJ0emid7/PmWoFqCMypun8rLbjgmalSfPkiVZ8ZMg==",
+      "packageDependencies": {},
+      "browserRuntimeDependencies": [],
+      "dependencyNotes": "The pinned standalone UMD embeds its browser peers (hammerjs, component-emitter, keycharm, uuid, vis-data, vis-util). The source-map trailer is removed; the carrier registers inert source text. Local graph data/images require no network.",
+      "htmlWorkspace": {
+        "global": "vis",
+        "purpose": "Интерактивные графы связей",
+        "whenUseful": "Нужны узлы, связи, перетаскивание и обзор локального графа.",
+        "dependencyFile": "vis-network.min.js",
+        "sourceCarrier": "js/vendor/vis-network.source.js",
+        "scriptOnly": true,
+        "activation": "vis.Network"
+      },
+      "upstreamAssets": [
+        {
+          "role": "js",
+          "path": "standalone/umd/vis-network.min.js",
+          "sha256": "fc674cfa6cceb27a3b40ff4ea75c204a2d8570fb39b9a627127cf7039e141ad4",
+          "embeddedSha256": "433a41882bdc868fe88ca69c6105d1353d513caa48d99047e19747d27b9d8160"
+        }
+      ],
+      "licenseFiles": [
+        {
+          "path": "licenses/vis-network-10.1.2/LICENSE-MIT",
+          "sha256": "1f65085e54c036645082257618db2c7b787e68c3b02485e214ecd09e0834ee8f"
+        },
+        {
+          "path": "licenses/vis-network-10.1.2/LICENSE-APACHE-2.0",
+          "sha256": "1509904280a272780fd69c04b858f512cf216f8e3464a0dd98d8f34416feced9"
+        }
+      ],
+      "packagePeerDependencies": {
+        "@egjs/hammerjs": "^2.0.0",
+        "component-emitter": "^1.3.0 || ^2.0.0",
+        "keycharm": "^0.2.0 || ^0.3.0 || ^0.4.0",
+        "uuid": "^3.4.0 || ^7.0.0 || ^8.0.0 || ^9.0.0 || ^10.0.0 || ^11.0.0 || ^13.0.0 || ^14.0.0",
+        "vis-data": ">=8.0.0",
+        "vis-util": ">=6.0.0"
+      }
+    },
+    {
+      "id": "pdf-lib",
+      "npmPackage": "pdf-lib",
+      "version": "1.17.1",
+      "license": "MIT",
+      "gitHead": "4beebbef7a261ed0be089bb1d63a5b6e28cc488a",
+      "npmTarball": "https://registry.npmjs.org/pdf-lib/-/pdf-lib-1.17.1.tgz",
+      "npmIntegrity": "sha512-V/mpyJAoTsN4cnP31vc0wfNA1+p20evqqnap0KLoRUN0Yk/p3wN52DOEsL4oBFcLdb76hlpKPtzJIgo67j/XLw==",
+      "packageDependencies": {
+        "pako": "^1.0.11",
+        "tslib": "^1.11.1",
+        "@pdf-lib/upng": "^1.0.1",
+        "@pdf-lib/standard-fonts": "^1.0.0"
+      },
+      "browserRuntimeDependencies": [],
+      "dependencyNotes": "The pinned UMD embeds standard-fonts, upng, pako and tslib. Fontkit and custom Unicode fonts are not included. The source-map trailer is removed; the carrier registers inert source text.",
+      "htmlWorkspace": {
+        "global": "PDFLib",
+        "purpose": "Создание и изменение PDF из локальных данных",
+        "whenUseful": "Нужно собрать PDF, объединить страницы или встроить изображение.",
+        "dependencyFile": "pdf-lib.min.js",
+        "sourceCarrier": "js/vendor/pdf-lib.source.js",
+        "scriptOnly": true
+      },
+      "upstreamAssets": [
+        {
+          "role": "js",
+          "path": "dist/pdf-lib.min.js",
+          "sha256": "0f9a5cad07941f0826586c94e089d89b918c46e5c17cf2d5a3c6f666e3bc694f",
+          "embeddedSha256": "edf01e3eaf21153b0643675006d0045cdbb9670a683afc18c1213a1a7269e04b"
+        }
+      ],
+      "licenseFiles": [
+        {
+          "path": "licenses/pdf-lib-1.17.1/LICENSE.md",
+          "sha256": "f2c9fc00fdb66eb99ac156ba52d734af66d8d309f65753ae809ad34ee2883bcb"
+        }
+      ]
+    },
+    {
+      "id": "jszip",
+      "npmPackage": "jszip",
+      "version": "3.10.2",
+      "license": "MIT OR GPL-3.0-or-later",
+      "gitHead": "020fa3384c994f923123141bbeebae0c3a44dd0d",
+      "npmTarball": "https://registry.npmjs.org/jszip/-/jszip-3.10.2.tgz",
+      "npmIntegrity": "sha512-3l+rb15IOWtUhU0H5MFqES/T6Kh7abYwjosBey/vD6hDt8zoEffkSC5Ws5SGtgVw3gBx2NEbhTeSW1+kWkpyTQ==",
+      "packageDependencies": {
+        "lie": "~3.3.0",
+        "pako": "~1.0.2",
+        "setimmediate": "^1.0.5",
+        "readable-stream": "~2.3.6"
+      },
+      "browserRuntimeDependencies": [],
+      "dependencyNotes": "The pinned browser UMD embeds its browser dependencies. The carrier registers inert source text; no separate package loader or network access is used.",
+      "htmlWorkspace": {
+        "global": "JSZip",
+        "purpose": "Создание и чтение локальных ZIP-архивов",
+        "whenUseful": "Нужен пакетный экспорт файлов или чтение небольшого ZIP.",
+        "dependencyFile": "jszip.min.js",
+        "sourceCarrier": "js/vendor/jszip.source.js",
+        "scriptOnly": true
+      },
+      "upstreamAssets": [
+        {
+          "role": "js",
+          "path": "dist/jszip.min.js",
+          "sha256": "7f839b2d4688b845c105ebf5d2f9803075f91ea0fe72bdaac176c3a04dd3d2c1",
+          "embeddedSha256": "7f839b2d4688b845c105ebf5d2f9803075f91ea0fe72bdaac176c3a04dd3d2c1"
+        }
+      ],
+      "licenseFiles": [
+        {
+          "path": "licenses/jszip-3.10.2/LICENSE.markdown",
+          "sha256": "566c953c6090b1218ca6217dd7359d45dde46581968586dc607d59a78af6a9c4"
+        }
+      ]
+    },
+    {
       "id": "wunderbaum",
       "npmPackage": "wunderbaum",
       "version": "0.14.1",
@@ -656,6 +781,30 @@
       "bytes": 7451,
       "sha256": "a6588e8c990f85e4f1eb88dea73fee72ed3697943c7226558c84d3ee32ead406",
       "provenanceUrl": "https://unpkg.com/viewerjs@1.12.0/dist/viewer.min.css"
+    },
+    {
+      "path": "js/vendor/vis-network.source.js",
+      "package": "vis-network",
+      "bytes": 658431,
+      "sha256": "349ed3fb2ab159975dd055ec868ea113d0939973ff16d22821887344face2c63",
+      "provenanceUrl": "https://registry.npmjs.org/vis-network/-/vis-network-10.1.2.tgz",
+      "localTransform": "Wrap pinned standalone browser JS as inert source text and remove source-map trailer for on-demand HTML workspace assembly."
+    },
+    {
+      "path": "js/vendor/pdf-lib.source.js",
+      "package": "pdf-lib",
+      "bytes": 529308,
+      "sha256": "c8a5e03d59815a73dc6230d691661524e8c72f18c5e0c7298cbb52a0ee6a863f",
+      "provenanceUrl": "https://registry.npmjs.org/pdf-lib/-/pdf-lib-1.17.1.tgz",
+      "localTransform": "Wrap pinned standalone browser JS as inert source text and remove source-map trailer for on-demand HTML workspace assembly."
+    },
+    {
+      "path": "js/vendor/jszip.source.js",
+      "package": "jszip",
+      "bytes": 99442,
+      "sha256": "9150582d5cb49e9d4ea89f5ef133d845f74a36f72ffaaabc0927edc05296ea1c",
+      "provenanceUrl": "https://registry.npmjs.org/jszip/-/jszip-3.10.2.tgz",
+      "localTransform": "Wrap pinned standalone browser JS as inert source text and remove source-map trailer for on-demand HTML workspace assembly."
     }
   ]
 }

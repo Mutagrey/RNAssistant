@@ -67,5 +67,32 @@ vm.runInContext(read("js/app-html-workspace-preview.js"), context);
     "the offline full build reads spreadsheet formats without another package or request");
   assert.equal(preview.dependencies([{ kind: "html", path: "index.html", content: "<p>XLSX report</p>" }]).length, 0,
     "page text alone does not load the large parser");
-  console.log("PASS HTML vendors: lazy pool, offline export order, fuzzy search and spreadsheet parsing");
+  const extra = [
+    { kind: "html", path: "index.html", content: "<main id='graph'></main>" },
+    { kind: "script", path: "report.js", content:
+      "new vis.Network(node, {nodes: [], edges: []}); PDFLib.PDFDocument.create(); new JSZip();" }
+  ];
+  assert.equal(preview.missingVendors([{ kind: "script", path: "words.js", content: "const vis = 'visible';" }]).length, 0,
+    "a generic vis variable must not load the graph renderer");
+  assert.deepEqual(Array.from(preview.missingVendors(extra), item => item.id), ["vis-network", "pdf-lib", "jszip"]);
+  await preview.ensureVendors(extra);
+  assert.deepEqual(loaded.slice(3), ["js/vendor/vis-network.source.js", "js/vendor/pdf-lib.source.js",
+    "js/vendor/jszip.source.js"]);
+  const report = preview.build({ files: extra, hostBridge: false });
+  for (const id of ["vis-network-10.1.2", "pdf-lib-1.17.1", "jszip-3.10.2"])
+    assert.ok(report.indexOf('data-rn-vendor="' + id + '"') < report.indexOf('data-rn-path="report.js"'),
+      id + " must load before authored code");
+  assert.doesNotMatch(report, /<script[^>]+src=/i, "graph, PDF and ZIP exports remain self-contained");
+  child.setTimeout = setTimeout;
+  child.clearTimeout = clearTimeout;
+  for (const id of ["vis-network-10.1.2", "pdf-lib-1.17.1", "jszip-3.10.2"]) {
+    const source = report.match(new RegExp('<script data-rn-vendor="' + id.replace(/\./g, "\\.") + '">([\\s\\S]*?)<\\/script>'))[1];
+    vm.runInContext(source, child, { timeout: 5000 });
+  }
+  assert.equal(vm.runInContext("typeof vis.Network === 'function' && typeof vis.DataSet === 'function'", child), true);
+  const pageCount = await vm.runInContext("(async function(){var p=await PDFLib.PDFDocument.create();p.addPage([200,200]);return (await PDFLib.PDFDocument.load(await p.save())).getPageCount();})()", child);
+  assert.equal(pageCount, 1, "embedded pdf-lib creates and reads a PDF without a fetch");
+  const zipText = await vm.runInContext("(async function(){var z=new JSZip();z.file('hello.txt','offline');var b=await z.generateAsync({type:'uint8array'});return (await JSZip.loadAsync(b)).file('hello.txt').async('string');})()", child);
+  assert.equal(zipText, "offline", "embedded JSZip creates and reads an archive without a fetch");
+  console.log("PASS HTML vendors: lazy offline pool, spreadsheet, graph, PDF and ZIP bundles");
 })().catch(error => { console.error(error.stack || error); process.exitCode = 1; });

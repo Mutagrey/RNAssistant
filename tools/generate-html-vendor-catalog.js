@@ -13,6 +13,11 @@ const catalog = manifest.packages.filter(item => item.htmlWorkspace).map(item =>
   const option = item.htmlWorkspace;
   assert.match(item.id, /^[a-z][a-z0-9-]*$/);
   assert.match(option.global, /^[A-Za-z_][A-Za-z0-9_]*$/);
+  if (option.activation) {
+    assert.match(option.activation, /^[A-Za-z_][A-Za-z0-9_]*(?:\.[A-Za-z_][A-Za-z0-9_]*)+$/);
+    assert.ok(option.activation.startsWith(option.global + "."),
+      "activation must name a member of the declared global: " + item.id);
+  }
   for (const field of ["purpose", "whenUseful"])
     assert.ok(typeof option[field] === "string" && option[field].length > 0 && option[field].length <= 160 &&
       !/https?:\/\//i.test(option[field]), "short offline selection metadata is required for " + item.id);
@@ -30,7 +35,8 @@ const catalog = manifest.packages.filter(item => item.htmlWorkspace).map(item =>
   }
   return { id: item.id, version: item.version, global: option.global,
     purpose: option.purpose, whenUseful: option.whenUseful,
-    file: option.dependencyFile, loader: option.sourceCarrier, scriptOnly: option.scriptOnly };
+    file: option.dependencyFile, loader: option.sourceCarrier, scriptOnly: option.scriptOnly,
+    activation: option.activation || option.global };
 });
 
 const source = "/* Generated from web/vendor-manifest.json by tools/generate-html-vendor-catalog.js. */\n" +

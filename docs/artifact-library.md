@@ -1053,9 +1053,15 @@ are preview frames, never child artifacts or independently durable revisions.
   it does not manufacture a workspace revision or replace an exact binding. A
   workspace whose HTML/JavaScript references a supported vendor global receives
   only that pinned local dependency: `echarts` 5.6.0 for charts, `Tabulator` 6.5.0
-  with its CSS for local data grids, `Fuse` 7.1.0 for fuzzy search, or `XLSX`
+  with its CSS for local data grids, `Fuse` 7.1.0 for fuzzy search, `XLSX`
   (SheetJS CE 0.20.3 full browser build) for offline parsing of raw XLSX/XLSM/XLSB/
-  XLS/ODS/CSV originals. Current live Excel ranges remain Resource Fabric table/
+  XLS/ODS/CSV originals, `vis.Network` 10.1.2 for interactive local relationship
+  graphs, `PDFLib` 1.17.1 for PDF creation/modification, or `JSZip` 3.10.2 for
+  general ZIP reading/creation. JSZip is not required for SheetJS spreadsheet
+  parsing. PDF/ZIP generation in the sandbox cannot download a file; a standalone
+  HTML export can offer a Blob download. pdf-lib's standard fonts do not encode
+  Cyrillic without separately supplied fontkit and local font bytes. Current live
+  Excel ranges remain Resource Fabric table/
   records bindings; file parsing does not replace Excel document authority. The on-demand
   registry embeds selected classic JavaScript and CSS before workspace scripts in
   sandbox preview and standalone export. The tree projects each as a read-only

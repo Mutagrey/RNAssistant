@@ -74,12 +74,12 @@ assert.deepEqual(packages.get("wunderbaum").packageDependencies, {});
 assert.ok(packages.has("viewerjs"));
 assert.equal(packages.get("viewerjs").version, "1.12.0");
 assert.deepEqual(packages.get("viewerjs").packageDependencies, {});
-assert.equal(entries.size, 45);
-console.log("PASS vendor gate: 45 runtime files have exact size/hash and no unmanifested sibling");
+console.log("PASS vendor gate: " + entries.size + " runtime files have exact size/hash and no unmanifested sibling");
 
-for (const id of ["fuse", "tabulator", "sheetjs"]) {
-  const item = packages.get(id);
-  const carrier = fs.readFileSync(path.join(web, "js/vendor", id + ".source.js"), "utf8");
+for (const item of manifest.packages.filter(packageItem => packageItem.htmlWorkspace &&
+    packageItem.htmlWorkspace.sourceCarrier !== "echarts-factory")) {
+  const id = item.id;
+  const carrier = fs.readFileSync(path.join(web, item.htmlWorkspace.sourceCarrier), "utf8");
   const match = carrier.match(/\.register\("([^\"]+)", (\{[\s\S]+\})\);\s*$/);
   assert.ok(match, "source carrier must only register pinned source text: " + id);
   assert.equal(match[1], id);
@@ -96,7 +96,7 @@ console.log("PASS vendor gate: HTML source carriers match pinned embedded hashes
 
 execFileSync(process.execPath, [path.join(root, "tools/generate-html-vendor-catalog.js"), "--check"]);
 assert.deepEqual(manifest.packages.filter(item => item.htmlWorkspace).map(item => item.id),
-  ["echarts", "fuse", "tabulator", "sheetjs"]);
+  ["echarts", "fuse", "tabulator", "sheetjs", "vis-network", "pdf-lib", "jszip"]);
 console.log("PASS vendor gate: HTML runtime catalog is generated from the pinned manifest");
 
 let cssDependencyCount = 0;

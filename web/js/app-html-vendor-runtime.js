@@ -6,10 +6,11 @@
   if (!Array.isArray(window.RNAssistantHtmlVendorCatalog))
     throw new Error("Bundled HTML vendor catalog is unavailable.");
   var vendors = window.RNAssistantHtmlVendorCatalog.map(function (item) {
+    var activation = (item.activation || item.global).split(".").join("\\s*\\.\\s*");
     return { id: item.id, version: item.version, global: item.global,
       purpose: item.purpose, whenUseful: item.whenUseful, file: item.file,
       loader: item.loader, scriptOnly: item.scriptOnly,
-      source: new RegExp("\\b" + item.global + "\\b") };
+      source: new RegExp("\\b" + activation + "\\b") };
   });
   var registered = Object.create(null);
   var pending = Object.create(null);
