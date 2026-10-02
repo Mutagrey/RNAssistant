@@ -164,7 +164,7 @@ namespace RNAssistant.OfficeHosts
             _disposed = true;
             RuntimeLog.Info("Disposing in-process panel session.");
             var runtime = Runtime;
-            var shutdown = Task.FromResult(true);
+            Task shutdown = Task.FromResult(true);
             try
             {
                 if (runtime != null)
