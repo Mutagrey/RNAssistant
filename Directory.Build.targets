@@ -119,6 +119,16 @@
       <Link>%(Filename)%(Extension)</Link>
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </Content>
+    <Content Include="$(MSBuildThisFileDirectory)packages/Microsoft.Web.WebView2.1.0.2903.40/lib/net462/Microsoft.Web.WebView2.Core.dll;$(MSBuildThisFileDirectory)packages/Microsoft.Web.WebView2.1.0.2903.40/lib/net462/Microsoft.Web.WebView2.WinForms.dll;$(MSBuildThisFileDirectory)packages/Newtonsoft.Json.13.0.3/lib/net45/Newtonsoft.Json.dll;$(MSBuildThisFileDirectory)packages/PdfPig.0.1.15/lib/net471/UglyToad.PdfPig.dll;$(MSBuildThisFileDirectory)packages/PdfPig.0.1.15/lib/net471/UglyToad.PdfPig.Core.dll;$(MSBuildThisFileDirectory)packages/PdfPig.0.1.15/lib/net471/UglyToad.PdfPig.DocumentLayoutAnalysis.dll;$(MSBuildThisFileDirectory)packages/PdfPig.0.1.15/lib/net471/UglyToad.PdfPig.Fonts.dll;$(MSBuildThisFileDirectory)packages/PdfPig.0.1.15/lib/net471/UglyToad.PdfPig.Tokenization.dll;$(MSBuildThisFileDirectory)packages/PdfPig.0.1.15/lib/net471/UglyToad.PdfPig.Tokens.dll;$(MSBuildThisFileDirectory)vendor/pdf-rendering/managed/PDFtoImage.dll;$(MSBuildThisFileDirectory)vendor/pdf-rendering/managed/SkiaSharp.dll">
+      <Link>%(Filename)%(Extension)</Link>
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
+    <Content Include="$(MSBuildThisFileDirectory)packages/Microsoft.Web.WebView2.1.0.2903.40/build/native/x64/WebView2Loader.dll"><Link>x64\WebView2Loader.dll</Link><CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory></Content>
+    <Content Include="$(MSBuildThisFileDirectory)packages/Microsoft.Web.WebView2.1.0.2903.40/build/native/x86/WebView2Loader.dll"><Link>x86\WebView2Loader.dll</Link><CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory></Content>
+    <Content Include="$(MSBuildThisFileDirectory)vendor/pdf-rendering/runtimes/win-x64/native/pdfium.dll"><Link>x64\pdfium.dll</Link><CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory></Content>
+    <Content Include="$(MSBuildThisFileDirectory)vendor/pdf-rendering/runtimes/win-x64/native/libSkiaSharp.dll"><Link>x64\libSkiaSharp.dll</Link><CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory></Content>
+    <Content Include="$(MSBuildThisFileDirectory)vendor/pdf-rendering/runtimes/win-x86/native/pdfium.dll"><Link>x86\pdfium.dll</Link><CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory></Content>
+    <Content Include="$(MSBuildThisFileDirectory)vendor/pdf-rendering/runtimes/win-x86/native/libSkiaSharp.dll"><Link>x86\libSkiaSharp.dll</Link><CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory></Content>
   </ItemGroup>
   <Target Name="BuildRNAssistantJsWorker" BeforeTargets="Build"
           Condition="'$(MSBuildProjectName)' == 'RNAssistant.Office'">
@@ -157,5 +167,41 @@
     <Error Condition="!Exists('%(RNAssistantSqliteFile.Identity)')"
            Text="Required SQLite deployment file is missing: %(RNAssistantSqliteFile.Identity)" />
     <Copy SourceFiles="@(RNAssistantSqliteFile)" DestinationFolder="$(TargetDir)" SkipUnchangedFiles="true" />
+  </Target>
+  <Target Name="CopyRNAssistantManagedClosure" AfterTargets="CopyRNAssistantSqlite"
+          Condition="'$(MSBuildProjectName)' == 'RNAssistant.Desktop' or '$(MSBuildProjectName)' == 'RNAssistant.ExcelAddIn' or '$(MSBuildProjectName)' == 'RNAssistant.WordAddIn' or '$(MSBuildProjectName)' == 'RNAssistant.PowerPointAddIn' or '$(MSBuildProjectName)' == 'RNAssistant.OutlookAddIn'">
+    <ItemGroup>
+      <RNAssistantManagedFile Include="$(MSBuildThisFileDirectory)packages/Microsoft.Web.WebView2.1.0.2903.40/lib/net462/Microsoft.Web.WebView2.Core.dll" />
+      <RNAssistantManagedFile Include="$(MSBuildThisFileDirectory)packages/Microsoft.Web.WebView2.1.0.2903.40/lib/net462/Microsoft.Web.WebView2.WinForms.dll" />
+      <RNAssistantManagedFile Include="$(MSBuildThisFileDirectory)packages/Newtonsoft.Json.13.0.3/lib/net45/Newtonsoft.Json.dll" />
+      <RNAssistantManagedFile Include="$(MSBuildThisFileDirectory)packages/PdfPig.0.1.15/lib/net471/UglyToad.PdfPig.dll" />
+      <RNAssistantManagedFile Include="$(MSBuildThisFileDirectory)packages/PdfPig.0.1.15/lib/net471/UglyToad.PdfPig.Core.dll" />
+      <RNAssistantManagedFile Include="$(MSBuildThisFileDirectory)packages/PdfPig.0.1.15/lib/net471/UglyToad.PdfPig.DocumentLayoutAnalysis.dll" />
+      <RNAssistantManagedFile Include="$(MSBuildThisFileDirectory)packages/PdfPig.0.1.15/lib/net471/UglyToad.PdfPig.Fonts.dll" />
+      <RNAssistantManagedFile Include="$(MSBuildThisFileDirectory)packages/PdfPig.0.1.15/lib/net471/UglyToad.PdfPig.Tokenization.dll" />
+      <RNAssistantManagedFile Include="$(MSBuildThisFileDirectory)packages/PdfPig.0.1.15/lib/net471/UglyToad.PdfPig.Tokens.dll" />
+      <RNAssistantManagedFile Include="$(MSBuildThisFileDirectory)vendor/pdf-rendering/managed/PDFtoImage.dll" />
+      <RNAssistantManagedFile Include="$(MSBuildThisFileDirectory)vendor/pdf-rendering/managed/SkiaSharp.dll" />
+    </ItemGroup>
+    <Error Condition="!Exists('%(RNAssistantManagedFile.Identity)')"
+           Text="Required offline deployment file is missing: %(RNAssistantManagedFile.Identity)" />
+    <Copy SourceFiles="@(RNAssistantManagedFile)" DestinationFolder="$(TargetDir)" SkipUnchangedFiles="true" />
+  </Target>
+  <Target Name="CopyRNAssistantNativeClosure" AfterTargets="CopyRNAssistantManagedClosure"
+          Condition="'$(MSBuildProjectName)' == 'RNAssistant.Desktop' or '$(MSBuildProjectName)' == 'RNAssistant.ExcelAddIn' or '$(MSBuildProjectName)' == 'RNAssistant.WordAddIn' or '$(MSBuildProjectName)' == 'RNAssistant.PowerPointAddIn' or '$(MSBuildProjectName)' == 'RNAssistant.OutlookAddIn'">
+    <ItemGroup>
+      <RNAssistantNativeFile Include="$(MSBuildThisFileDirectory)packages/Microsoft.Web.WebView2.1.0.2903.40/build/native/x64/WebView2Loader.dll"><TargetPath>x64/WebView2Loader.dll</TargetPath></RNAssistantNativeFile>
+      <RNAssistantNativeFile Include="$(MSBuildThisFileDirectory)packages/Microsoft.Web.WebView2.1.0.2903.40/build/native/x86/WebView2Loader.dll"><TargetPath>x86/WebView2Loader.dll</TargetPath></RNAssistantNativeFile>
+      <RNAssistantNativeFile Include="$(MSBuildThisFileDirectory)vendor/pdf-rendering/runtimes/win-x64/native/pdfium.dll"><TargetPath>x64/pdfium.dll</TargetPath></RNAssistantNativeFile>
+      <RNAssistantNativeFile Include="$(MSBuildThisFileDirectory)vendor/pdf-rendering/runtimes/win-x64/native/libSkiaSharp.dll"><TargetPath>x64/libSkiaSharp.dll</TargetPath></RNAssistantNativeFile>
+      <RNAssistantNativeFile Include="$(MSBuildThisFileDirectory)vendor/pdf-rendering/runtimes/win-x86/native/pdfium.dll"><TargetPath>x86/pdfium.dll</TargetPath></RNAssistantNativeFile>
+      <RNAssistantNativeFile Include="$(MSBuildThisFileDirectory)vendor/pdf-rendering/runtimes/win-x86/native/libSkiaSharp.dll"><TargetPath>x86/libSkiaSharp.dll</TargetPath></RNAssistantNativeFile>
+    </ItemGroup>
+    <Error Condition="!Exists('%(RNAssistantNativeFile.Identity)')"
+           Text="Required offline native file is missing: %(RNAssistantNativeFile.Identity)" />
+    <MakeDir Directories="$(TargetDir)x64;$(TargetDir)x86" />
+    <Copy SourceFiles="@(RNAssistantNativeFile)"
+          DestinationFiles="@(RNAssistantNativeFile->'$(TargetDir)%(TargetPath)')"
+          SkipUnchangedFiles="true" />
   </Target>
 </Project>

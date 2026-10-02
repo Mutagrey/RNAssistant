@@ -17,10 +17,15 @@ feed is needed. The .NET Framework 4.8 Core build uses `System.Data` and the
 
 Chat indexing uses the Windows system `winsqlite3.dll`; no SQLite native binary is
 committed. Optional local SQLite files under `vendor/sqlite/` are ignored by Git.
-Desktop and VSTO outputs explicitly copy the pinned managed SQLite closure from
-`packages/`; the NativeHost portable manifest requires those DLLs from the Office
-output. A missing DLL fails the build/publish instead of producing an incomplete
-offline package. Exact Windows execution still requires separate qualification.
+Desktop and VSTO outputs explicitly copy the pinned managed SQLite, WebView2,
+PdfPig and PDF-rendering closure from local `packages/` and `vendor/`. The
+matching x64/x86 WebView2Loader, PDFium and SkiaSharp native files are copied
+into architecture subdirectories. The NativeHost portable manifest requires
+every managed DLL from the Office output.
+The JavaScript worker uses the same `System.Memory`, `System.Buffers` and `Unsafe`
+versions as Core; its generated binding redirects match the delivered DLLs. A
+missing file fails the build/publish instead of producing an incomplete offline
+package. Exact Windows execution still requires separate qualification.
 
 Media/PDF rendering dependencies are committed as selected binaries in
 `vendor/pdf-rendering/` and referenced directly by `RNAssistant.Office`:

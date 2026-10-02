@@ -8,6 +8,20 @@ retired or deferred is not an active P0/P1 implementation defect merely because
 that original severity remains in the table. Release qualification is a separate
 exact-build gate.
 
+## Offline managed dependency closure — 2026-10-02
+
+Owner: local packages and host delivery targets. The Windows photos show
+`Microsoft.Data.Sqlite` and `SQLitePCLRaw.core` missing at runtime. Host-neutral
+inspection found mismatched SQLite strong-name versions and a NativeHost portable
+manifest without the four SQLite DLLs. The pinned packages and manifest are now
+aligned. A full local assembly-reference audit found no missing non-framework DLL
+in the Office or JS worker outputs, but found older worker `System.Memory`,
+`System.Buffers` and `Unsafe` versions than the host copied beside it. Worker
+references and generated redirects now match Core. Desktop/VSTO targets explicitly
+copy the full managed and architecture-matched native closure. Local copy targets
+and package integrity passed; exact Windows Desktop, VSTO and NativeHost loading
+remain open evidence.
+
 ## Local-data reset and active WebView profile — 2026-10-02
 
 Owner: Core storage paths and Office controller lifecycle. The Windows log shows
