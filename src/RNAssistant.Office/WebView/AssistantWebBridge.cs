@@ -663,6 +663,17 @@ namespace RNAssistant.Office.WebView
                     case "getContext":
                         responsePayload = _controller.GetContext(Payload<ChatPayload>(payload).ChatId);
                         break;
+                    case "getModelContext":
+                        responsePayload = await _controller.GetModelContextAsync(Payload<ModelContextQuery>(payload), cancellationToken).ConfigureAwait(false);
+                        break;
+                    case "getModelContextPayload":
+                        responsePayload = await _controller.GetModelContextPayloadAsync(Payload<ModelContextPayloadQuery>(payload), cancellationToken).ConfigureAwait(false);
+                        break;
+                    case "inspectModelContextPreview":
+                        var modelPreview = Payload<PromptContextInspectorPayload>(payload);
+                        responsePayload = _controller.InspectPromptContext(modelPreview.ChatId, modelPreview.Text,
+                            modelPreview.ResourceDraftIds, true, true);
+                        break;
                     case "inspectPromptContext":
                         var inspectContext = Payload<PromptContextInspectorPayload>(payload);
                         responsePayload = _controller.InspectPromptContext(

@@ -44,6 +44,12 @@ Every `SessionEvent` contains `SchemaVersion`, `SessionId`, contiguous `Sequence
 - `turn.started` / `turn.ended` delimit one logical user turn. `TurnId` remains stable when a confirmation pause resumes under a new runtime `RunId`. Their data records the response protocol version; `turn.ended.Status` is a runtime-owned lifecycle projection, never a model-declared completion.
 - `step.started` / `step.ended` delimit one model request. Startup recovery appends a synthetic interrupted end for a request that never reached a terminal event.
 - `llm.request` records the exact final JSON body after messages, attachment parts, system instructions, tool schemas, and response schema are materialized. The body is serialized to UTF-8 once; those same bytes are written to CAS and then reused by HTTP without a duplicate JSON serialization or intermediate UTF-16 payload string. Persistence succeeds before HTTP dispatch.
+- `llm.request` diagnostic data may additionally carry typed `ContextMessages` and
+  `Streaming`. Compiler provenance is mapped to the final wire message indices;
+  excluded entries have no wire index. Per-message/part presentation and optional
+  existing `OriginalPayload` references remain outside the provider body. No new
+  body store is introduced. Missing provenance in older events means unknown,
+  not inferred full delivery.
 - `llm.response` records the raw non-stream response body or the normalized complete streaming result.
 - `assistant.chunk` records ordered provider SSE data frames in bounded JSON-array batches (up to roughly 64 KiB or one second while frames arrive). The event stores first frame index, count, completion marker, and a CAS payload. Batches enter one bounded ordered queue per session (up to 16 pending writes), so the SSE reader normally does not wait for `Flush(true)`; saturation applies backpressure instead of allowing unbounded memory growth.
 - `llm.failure` records endpoint/status/failure metadata and any bounded provider error body.
@@ -276,6 +282,16 @@ This changes presentation cost only, not event/CAS persistence or commit barrier
 ## Inspection
 
 Settings → Diagnostics → Trajectory queries the same stream through disposable `ITrajectoryQuery`. Raw results use exclusive sequence cursors, newest-first pages, tokenized text search and filters for sequence, event type, run/turn/step, tool call, artifact, status and reconstructed `current`/`shadowed`/`log-only` visibility. Retained `ResponseStatus` may be shown as raw accepted-history/provider diagnostic metadata, but it is not the lifecycle/effect source for `RunViewState`. Snapshot-paged derived views correlate model replay, tools, artifact lineage, confirmation pauses, failures/retries and per-turn timing/usage; every row carries its complete source event sequences and ids. Event metadata and state operations are inline; model payloads and streaming-frame batches are fetched lazily by event id and shown as a bounded preview. Selected chat rows can be exported as a bounded ZIP with metadata-only default, optional credential-field redaction, or explicit full decrypted data/CAS; protection keys never enter it. CAS storage audits all retained chat/VBA references and exposes an explicitly confirmed orphan cleanup. The bridge never includes API keys, history secrets or authorization headers. See [trajectory-query.md](trajectory-query.md) and [trajectory-export.md](trajectory-export.md).
+
+The composer’s model-context window reads this same stream through typed
+`getModelContext` / `getModelContextPayload` bridge requests. Attempt lists are
+metadata-only pages of 50; detailed exchange selection is bound to the exact request
+event, chat, run and recorded transport RequestId. Absent correlation IDs never
+join unrelated historical records. The selected body's complete CAS hash is verified
+before a disposable `model-context` download lease is published. Local-original reads
+resolve only the selected request's recorded provenance entry. Close/chat changes
+cancel pending UI work and release leases. The legacy bounded Diagnostics preview
+remains separate; full context downloads respect the shared 50 MiB transfer budget.
 
 Незавершённые lifecycle/evaluation решения вынесены в
 [backlog](stabilization/BACKLOG.md#deferred-product-decisions); этот документ

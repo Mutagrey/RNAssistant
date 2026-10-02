@@ -2971,11 +2971,13 @@ namespace RNAssistant.Harness
                         Model = "trace-model",
                         StreamResponses = false
                     },
-                    new[] { new ChatMessage { Role = "user", Content = "materialized prompt" } },
+                    new[] { new ChatMessage { Id = "trace-source", Role = "user", Content = "materialized prompt" } },
                     new LlmRequestOptions
                     {
                         ResponseFormat = LlmResponseFormats.JsonObject,
                         TracePurpose = "harness",
+                        TraceContextReceipt = new ContextReceipt { Messages = new List<ContextMessagePresentation> {
+                            new ContextMessagePresentation { SourceMessageId = "trace-source", MessageIndex = 0, Presentation = ContextPresentationKind.Full } } },
                         TraceSink = record =>
                         {
                             trace = record;
@@ -2992,6 +2994,8 @@ namespace RNAssistant.Harness
             AssertTrue(stopped, "trace persistence failure aborts before HTTP dispatch");
             AssertTrue(trace != null, "final request trace emitted");
             AssertEqual("request", trace.Type, "request trace type");
+            AssertEqual(ContextPresentationKind.Full, trace.ContextMessages.Single().Presentation, "compiler provenance reaches exact transport request");
+            AssertEqual(0, trace.ContextMessages.Single().MessageIndex.Value, "wire message index retained");
             AssertTrue(trace.PayloadUtf8Bytes != null && trace.PayloadUtf8Bytes.Length > 0,
                 "final request is materialized as reusable UTF-8 bytes");
             AssertTrue(!trace.PayloadTextMaterialized,
@@ -2999,6 +3003,8 @@ namespace RNAssistant.Harness
             var payload = JObject.Parse(trace.PayloadJson);
             AssertTrue(trace.PayloadUtf8Bytes.SequenceEqual(Encoding.UTF8.GetBytes(trace.PayloadJson)),
                 "trace bytes are exactly the JSON payload exposed to observers");
+            AssertTrue(payload["ContextMessages"] == null && payload["contextMessages"] == null && payload["messages"][0]["SourceMessageId"] == null,
+                "diagnostic provenance is never model-facing");
             AssertEqual("trace-model", (string)payload["model"], "materialized model recorded");
             AssertEqual("materialized prompt", (string)payload.SelectToken("messages[0].content"),
                 "materialized message recorded");

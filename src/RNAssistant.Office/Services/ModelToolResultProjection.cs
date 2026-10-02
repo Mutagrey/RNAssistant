@@ -23,7 +23,8 @@ namespace RNAssistant.Office.Services
         internal static ChatMessage Project(
             ChatMessage source,
             IEnumerable<ToolCatalogEntry> tools = null,
-            IEnumerable<SkillDefinition> skills = null)
+            IEnumerable<SkillDefinition> skills = null,
+            Action<List<ContextMessagePresentation>> recordPresentation = null)
         {
             var projected = HistoricalContextProjector.Project(source);
             if (projected == null) return null;
@@ -55,6 +56,7 @@ namespace RNAssistant.Office.Services
             var model = IsSwitchedResult(source)
                 ? ForModel(wire.Name, materialized, tools, skills)
                 : GenericForModel(wire.Name, materialized);
+            recordPresentation?.Invoke(DescribeProjectedData(data, model.Data));
             var json = ToolResultWire.WriteParsed(
                 wire.ToolCallId,
                 wire.Name,
@@ -65,6 +67,25 @@ namespace RNAssistant.Office.Services
                 ? json
                 : Prefix + json;
             return projected;
+        }
+
+        private static List<ContextMessagePresentation> DescribeProjectedData(JToken original, JToken visible)
+        {
+            var parts = new List<ContextMessagePresentation>();
+            if (JToken.DeepEquals(original, visible))
+                parts.Add(new ContextMessagePresentation { Kind = "data", Presentation = ContextPresentationKind.Full,
+                    Reason = "Все данные результата сохранены после model projection." });
+            else
+            {
+                var originalObject = original as JObject;
+                var visibleObject = visible as JObject;
+                if (originalObject != null && visibleObject != null)
+                    foreach (var property in originalObject.Properties())
+                        if (visibleObject.Property(property.Name) != null && JToken.DeepEquals(property.Value, visibleObject[property.Name]))
+                            parts.Add(new ContextMessagePresentation { Kind = "data." + property.Name,
+                                Presentation = ContextPresentationKind.Full, Reason = "Поле сохранено без изменений." });
+            }
+            return parts;
         }
 
         private static ToolResultMaterialization GenericForModel(

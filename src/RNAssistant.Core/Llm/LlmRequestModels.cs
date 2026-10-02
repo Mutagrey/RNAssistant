@@ -78,6 +78,8 @@ namespace RNAssistant.Core.Llm
         public string TraceModelAttemptId { get; set; }
         [JsonIgnore]
         public string TraceRequestId { get; set; }
+        [JsonIgnore]
+        public ContextReceipt TraceContextReceipt { get; set; }
 
         public LlmRequestOptions()
         {
@@ -89,6 +91,15 @@ namespace RNAssistant.Core.Llm
     {
         private string _payloadJson;
 
+        public string Stage { get; set; }
+        public string SessionId { get; set; }
+        public string RunId { get; set; }
+        public string TurnId { get; set; }
+        public string StepId { get; set; }
+        public string ModelAttemptId { get; set; }
+        public string DocumentRuntimeId { get; set; }
+        public List<ContextMessagePresentation> ContextMessages { get; set; }
+        public bool? Streaming { get; set; }
         public string Type { get; set; }
         public string RequestId { get; set; }
         public string ResponseStatus { get; set; }

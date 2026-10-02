@@ -106,6 +106,15 @@ search fails the existing
 before declaring this integration gate closed. This failure is not changed by the
 working-set purpose/read-hint implementation. This is not Windows evidence.
 
+Model-context inspection follow-up (2026-10-02):
+`resource cutover: correctness before budget` fails with
+`Expected PromptBudgetExceededException` in the current working tree and with
+`ModelContextCompiler.cs` plus its original fixture from `a6d56268` substituted in
+an isolated harness build. Owner: resource context / harness. Reconcile the old
+oversized-body exception expectation with the current explicit source-omission
+contract; this inspector change does not alter admission/omission policy. The new
+inspector-specific checks pass. Windows qualification remains separate.
+
 ## Plan operation identity edge case — 2026-09-08
 
 Owner: document artifact mutation domain. `PlanDocumentService.CreationId` hashes

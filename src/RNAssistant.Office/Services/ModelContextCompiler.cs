@@ -18,6 +18,8 @@ namespace RNAssistant.Office.Services
         internal string Kind;
         internal string CausalFrameId;
         internal bool MustKeep;
+        internal bool BodyOmitted;
+        internal Dictionary<string, List<ContextMessagePresentation>> BodyParts = new Dictionary<string, List<ContextMessagePresentation>>();
         internal ContextNoteRole ContextRole;
         internal string ContextTitle;
         internal List<ChatMessage> Messages = new List<ChatMessage>();
@@ -318,7 +320,8 @@ namespace RNAssistant.Office.Services
                         !string.Equals(message.Role, "assistant", StringComparison.OrdinalIgnoreCase))
                     {
                         if (projectionSkills == null) projectionSkills = authority.Skills.Skills;
-                        atom.Messages[index] = ModelToolResultProjection.Project(message, tools, projectionSkills);
+                        atom.Messages[index] = ModelToolResultProjection.Project(message, tools, projectionSkills,
+                            parts => atom.BodyParts[message.Id] = parts);
                     }
                     else if (message.ToolResultProtocolVersion == ToolResultWire.CurrentVersion &&
                         string.Equals(message.Role, "assistant", StringComparison.OrdinalIgnoreCase))
@@ -371,6 +374,7 @@ namespace RNAssistant.Office.Services
                     continue;
                 }
                 atom.Kind = "repeated-read";
+                atom.BodyParts.Clear();
                 atom.Messages = new List<ChatMessage> { new ChatMessage {
                     Id = result.Id, Role = "assistant", ProtocolMessage = true,
                     ToolName = wire.Name, ToolCallId = wire.ToolCallId,
@@ -392,6 +396,7 @@ namespace RNAssistant.Office.Services
                     OmitSourceBody(atom);
                 messages = atoms.SelectMany(item => item.Messages).ToList();
             }
+            receipt.Messages = DescribeMessages(atoms, required, facts);
             receipt.OperationReceipts = messages.Count(message => message.CompletedOperation != null);
             receipt.EstimatedTokens = ModelContextBudget.EstimateMessagesTokens(messages, settings);
             receipt.AtomCounts = atoms.GroupBy(item => item.Kind).ToDictionary(group => group.Key, group => group.Count());
@@ -546,6 +551,7 @@ namespace RNAssistant.Office.Services
                 catch (JsonException) { }
                 atom.Messages = new List<ChatMessage> { OmittedSourceNotice(target) };
                 atom.Kind = "observation-notice";
+                atom.BodyParts.Clear();
                 return true;
             }
             ToolResultWireReadResult wire; string error;
@@ -558,6 +564,7 @@ namespace RNAssistant.Office.Services
             atom.Messages = new List<ChatMessage> { CompleteOperation(projected, wire,
                 SourceOmission(RootTargetLabel(ToolResultWire.ParseData(wire.Result.DataJson) as JObject))) };
             atom.Kind = "completed-operation";
+            atom.BodyParts.Clear();
             return true;
         }
 
@@ -616,6 +623,7 @@ namespace RNAssistant.Office.Services
             result.ContextClaims.Clear();
             result.ResourceRefs = new List<ResourceRef>();
             result.ResourceEvidence = new List<ResourceEvidence>();
+            atom.BodyOmitted = true;
             return true;
         }
 
@@ -650,6 +658,57 @@ namespace RNAssistant.Office.Services
             return source == null || source[name] == null
                 ? JValue.CreateNull()
                 : source[name].DeepClone();
+        }
+
+        private static List<ContextMessagePresentation> DescribeMessages(List<ContextAtom> atoms,
+            IReadOnlyList<ChatMessage> required, IReadOnlyList<ChatMessage> facts)
+        {
+            var sources = (required ?? new ChatMessage[0]).Concat(facts ?? new ChatMessage[0])
+                .Where(m => m != null && !string.IsNullOrEmpty(m.Id)).GroupBy(m => m.Id)
+                .ToDictionary(g => g.Key, g => g.Last(), StringComparer.Ordinal);
+            var result = new List<ContextMessagePresentation>();
+            foreach (var atom in atoms)
+            foreach (var message in atom.Messages)
+            {
+                ChatMessage source;
+                sources.TryGetValue(message.Id ?? "", out source);
+                var summary = atom.BodyOmitted || message.CompletedOperation != null || (message.ContextClaims?.Count ?? 0) > 0 ||
+                    atom.Kind == "resource-change" || atom.Kind == "context-unavailable" ||
+                    atom.Kind == "observation-notice" || atom.Kind == "repeated-read";
+                var evidence = (message.ResourceEvidence ?? new List<ResourceEvidence>()).Where(e => e != null).ToArray();
+                List<ContextMessagePresentation> bodyParts;
+                atom.BodyParts.TryGetValue(message.Id ?? "", out bodyParts);
+                var unchangedData = bodyParts != null && bodyParts.Any(p => p.Kind == "data" && p.Presentation == ContextPresentationKind.Full);
+                var resourceBody = evidence.Length > 0 && !IsFailedResult(message) &&
+                    (message.SyntheticResourceObservation || unchangedData);
+                var presentation = summary ? ContextPresentationKind.Summary :
+                    resourceBody ? evidence.All(e => e.Complete && e.Coverage.Kind == ResourceCoverageKinds.Whole)
+                        ? ContextPresentationKind.Full : ContextPresentationKind.Fragment :
+                    source != null && source.Content == message.Content && source.ResultPayload == null
+                        ? ContextPresentationKind.Full : ContextPresentationKind.Unknown;
+                var entry = new ContextMessagePresentation { MessageIndex = result.Count,
+                    SourceMessageId = message.Id, Role = message.Role, Kind = atom.Kind,
+                    Presentation = presentation, OriginalPayload = source?.ResultPayload,
+                    Reason = summary ? "Сохранена сводка наблюдения/операции; исходное сообщение преобразовано." :
+                        presentation == ContextPresentationKind.Full ? "Содержимое сообщения сохранено полностью." :
+                        "Нет сведений о полноте исходного содержимого после преобразования." };
+                if (atom.Evidence.Count > 0 && !summary)
+                {
+                    // Coverage belongs to runtime evidence, not text heuristics.
+                    entry.Reason = "Выбранное представление ресурса: " + string.Join(", ", evidence.Select(e => e.Coverage.Kind).Distinct());
+                }
+                if (bodyParts != null) entry.Parts.AddRange(bodyParts);
+                if (message.CompletedOperation != null && message.CompletedOperation.DataJson != null && entry.Parts.Count == 0)
+                    entry.Parts.Add(new ContextMessagePresentation { Kind = "data", Presentation = ContextPresentationKind.Full,
+                        Reason = "Данные результата после model projection сохранены в сводке операции." });
+                result.Add(entry);
+            }
+            var retained = new HashSet<string>(result.Select(m => m.SourceMessageId).Where(id => id != null));
+            foreach (var source in sources.Values.Where(m => !retained.Contains(m.Id)))
+                result.Add(new ContextMessagePresentation { SourceMessageId = source.Id, Role = source.Role,
+                    Presentation = ContextPresentationKind.Excluded, OriginalPayload = source.ResultPayload,
+                    Reason = "Не включено отдельным сообщением: фильтрация, свёртка или замена устаревшего содержимого." });
+            return result;
         }
 
         private static ContextAtom Atom(string kind, ChatMessage message, bool mustKeep)

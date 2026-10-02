@@ -18,6 +18,8 @@ namespace RNAssistant.Office.WebView
             "getChatTrajectory",
             "exportChatTrajectory",
             "getChatEventPayload",
+            "getModelContext",
+            "getModelContextPayload",
             "getVbaModule",
             "readSkillSource",
             "readToolSource",

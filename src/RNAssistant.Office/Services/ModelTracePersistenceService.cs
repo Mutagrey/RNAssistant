@@ -48,45 +48,19 @@ namespace RNAssistant.Office.Services
             string runId, string turnId, string documentRuntimeId)
         {
             var descriptor = Descriptor(record.Type);
-            var data = new
-            {
-                Stage = Stage(descriptor.Kind),
-                SessionId = session.Id,
-                RunId = runId,
-                TurnId = turnId,
-                // Helper requests (title/compaction/media) have one transport attempt per step.
-                StepId = options.TraceStepId ?? record.RequestId,
-                ModelAttemptId = options.TraceModelAttemptId ?? record.RequestId,
-                DocumentRuntimeId = documentRuntimeId,
-                record.RequestId,
-                record.ResponseStatus,
-                record.ToolCallIds,
-                record.Purpose,
-                record.Endpoint,
-                record.Model,
-                record.ResponseFormat,
-                record.MessageCount,
-                record.Attempt,
-                record.EstimatedPromptTokens,
-                record.PromptTokens,
-                record.CompletionTokens,
-                record.TotalTokens,
-                record.ReasoningTokens,
-                record.UsageJson,
-                record.StatusCode,
-                record.FailureKind,
-                record.Error,
-                record.ChunkIndex,
-                record.ChunkCount,
-                record.Completed,
-                record.ChunkEncoding
-            };
+            record.Stage = Stage(descriptor.Kind);
+            record.SessionId = session.Id;
+            record.RunId = runId;
+            record.TurnId = turnId;
+            record.StepId = options.TraceStepId ?? record.RequestId;
+            record.ModelAttemptId = options.TraceModelAttemptId ?? record.RequestId;
+            record.DocumentRuntimeId = documentRuntimeId;
             var payload = record.PayloadUtf8Bytes == null
                 ? SessionEventPayload.FromText(record.PayloadJson, record.PayloadContentType)
                 : SessionEventPayload.FromBytes(record.PayloadUtf8Bytes, record.PayloadContentType);
             var write = new SessionEventWrite(
                 descriptor,
-                data,
+                record,
                 payload,
                 new SessionEventCorrelation(runId, turnId, record.RequestId));
             Action append = () => _eventStore.Append(session, write);

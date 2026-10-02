@@ -117,6 +117,8 @@ namespace RNAssistant.Core.Llm
                 Trace(requestOptions, new LlmTraceRecord
                 {
                     Type = "request",
+                    Streaming = settings.StreamResponses,
+                    ContextMessages = DescribeWireMessages(messageList, requestOptions.TraceContextReceipt),
                     RequestId = requestDiagnostics.RequestId,
                     Purpose = requestOptions.TracePurpose,
                     Endpoint = traceEndpoint,
@@ -636,6 +638,29 @@ namespace RNAssistant.Core.Llm
                 PayloadJson = payloadJson ?? JsonConvert.SerializeObject(result, Formatting.None),
                 PayloadContentType = "application/json"
             });
+        }
+
+        private static List<ContextMessagePresentation> DescribeWireMessages(IList<ChatMessage> messages, ContextReceipt receipt)
+        {
+            var entries = new List<ContextMessagePresentation>();
+            foreach (var message in messages.Where(m => m != null && !m.ExcludeFromModelContext && !string.IsNullOrWhiteSpace(m.Role)))
+            {
+                var source = receipt?.Messages?.FirstOrDefault(m => m.SourceMessageId == message.Id && m.MessageIndex.HasValue);
+                var entry = source == null ? new ContextMessagePresentation { SourceMessageId = message.Id,
+                    Role = message.Role, Presentation = ContextPresentationKind.Unknown, Reason = "Нет сведений сборщика для этого сообщения." }
+                    : JsonConvert.DeserializeObject<ContextMessagePresentation>(JsonConvert.SerializeObject(source));
+                entry.MessageIndex = entries.Count;
+                if ((message.Attachments?.Count ?? 0) > 0 || message.AttachmentAnalysis != null)
+                {
+                    entry.Parts.Add(new ContextMessagePresentation { Kind = "message", Presentation = entry.Presentation, Reason = entry.Reason });
+                    entry.Parts.Add(new ContextMessagePresentation { Kind = "attachments", Presentation = ContextPresentationKind.Unknown,
+                        Reason = "Текст и медиа выбраны transport; точные переданные части доступны в JSON запроса." });
+                    entry.Presentation = ContextPresentationKind.Unknown;
+                }
+                entries.Add(entry);
+            }
+            entries.AddRange((receipt?.Messages ?? new List<ContextMessagePresentation>()).Where(m => !m.MessageIndex.HasValue));
+            return entries;
         }
 
         private static void Trace(LlmRequestOptions requestOptions, LlmTraceRecord record)

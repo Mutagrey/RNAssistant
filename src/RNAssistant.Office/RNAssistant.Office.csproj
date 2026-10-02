@@ -295,6 +295,8 @@
     <Compile Include="Services\ContextCompactionService.cs" />
     <Compile Include="Services\PromptBudgetComposer.cs" />
     <Compile Include="Services\PromptContextInspectorService.cs" />
+    <Compile Include="Services\ModelContextInspectorService.cs" />
+    <Compile Include="Contracts\BridgeDtos.ModelContext.cs" />
     <Compile Include="Services\PromptContextInspectorDownloadService.cs" />
     <Compile Include="Services\AttachmentImageService.cs" />
     <Compile Include="Services\AttachmentAnalysisService.cs" />

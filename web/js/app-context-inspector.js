@@ -437,10 +437,13 @@ function renderPromptContextInspectorAvailability() {
   if (!trigger) return;
   var disabled = hasActiveMessageEdit() || state.bridgeUnavailable || !state.activeChatId;
   trigger.disabled = disabled;
+  var modelContextTrigger = $("openModelContextButton");
+  if (modelContextTrigger) modelContextTrigger.disabled = state.bridgeUnavailable || !state.activeChatId;
   if (disabled && promptContextInspectorOpen()) closePromptContextInspector();
 }
 
 function syncPromptContextInspectorState() {
+  if (window.RNAssistantModelContext) window.RNAssistantModelContext.sync();
   if (promptContextInspectorRequest && promptContextInspectorRequest.chatId !== state.activeChatId) {
     closePromptContextInspector();
     return;

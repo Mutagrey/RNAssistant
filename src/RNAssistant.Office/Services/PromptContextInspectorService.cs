@@ -59,7 +59,7 @@ namespace RNAssistant.Office.Services
             IReadOnlyList<ChatAttachment> attachments,
             string draftText,
             bool includeRaw,
-            SkillCatalogSnapshot publishedSkills = null)
+            SkillCatalogSnapshot publishedSkills = null, bool fullRaw = false)
         {
             settings = settings ?? new AppSettings();
             var inspection = new PromptContextInspectorService(_adapter, _paths, settings, _authority, _payloads);
@@ -71,7 +71,7 @@ namespace RNAssistant.Office.Services
                 skills,
                 attachments,
                 draftText,
-                includeRaw, publishedSkills);
+                includeRaw, publishedSkills, fullRaw);
         }
 
         private PromptContextInspectorResponse InspectCore(
@@ -82,7 +82,7 @@ namespace RNAssistant.Office.Services
             IReadOnlyList<SkillDefinition> skills,
             IReadOnlyList<ChatAttachment> attachments,
             string draftText,
-            bool includeRaw, SkillCatalogSnapshot publishedSkills)
+            bool includeRaw, SkillCatalogSnapshot publishedSkills, bool fullRaw)
         {
             settings = settings ?? new AppSettings();
             session = session ?? new ChatSession();
@@ -231,7 +231,7 @@ namespace RNAssistant.Office.Services
             if (includeRaw)
             {
                 bool truncated;
-                response.RawRequestJson = BuildRawRequest(mode, settings.Model, messages, options, out truncated);
+                response.RawRequestJson = BuildRawRequest(mode, settings.Model, messages, options, out truncated, fullRaw);
                 response.RawTruncated = truncated;
             }
 
@@ -1098,7 +1098,7 @@ namespace RNAssistant.Office.Services
             string mode,
             string model,
             IEnumerable<ChatMessage> messages,
-            LlmRequestOptions options, out bool truncated)
+            LlmRequestOptions options, out bool truncated, bool fullRaw = false)
         {
             var structure = new
             {
@@ -1131,6 +1131,12 @@ namespace RNAssistant.Office.Services
                     reasoningEnabled = options.ReasoningEnabled
                 }
             };
+            if (fullRaw)
+            {
+                truncated = false;
+                return JsonConvert.SerializeObject(structure, Formatting.Indented,
+                    new JsonSerializerSettings { NullValueHandling = NullValueHandling.Ignore });
+            }
             var output = new RawPreviewWriter();
             using (var writer = new RawPreviewJsonWriter(output) { Formatting = Formatting.Indented, AutoCompleteOnClose = false })
             {

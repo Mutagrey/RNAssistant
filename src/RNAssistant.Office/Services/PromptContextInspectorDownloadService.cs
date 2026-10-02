@@ -19,11 +19,12 @@ namespace RNAssistant.Office.Services
         }
 
         internal PromptContextInspectorResponse Open(ChatSession session,
-            Func<PromptContextInspectorResponse> capture, CancellationToken token)
+            Func<PromptContextInspectorResponse> capture, CancellationToken token, bool fullRaw = false)
         {
             if (capture == null) throw new ArgumentNullException(nameof(capture));
             PromptContextInspectorResponse response = null;
-            var lease = _data.OpenDownload(session, Owner, MaximumBytes, cancellation =>
+            var maximum = fullRaw ? RNAssistant.Core.Storage.AttachmentStore.MaxMessageBytes : MaximumBytes;
+            var lease = _data.OpenDownload(session, Owner, maximum, cancellation =>
             {
                 cancellation.ThrowIfCancellationRequested();
                 response = capture();
@@ -31,7 +32,7 @@ namespace RNAssistant.Office.Services
                 {
                     cancellation.ThrowIfCancellationRequested();
                     if (response == null || response.ChatId != session.Id || response.RawRequestJson == null ||
-                        Utf8.GetByteCount(response.RawRequestJson) > MaximumBytes)
+                        Utf8.GetByteCount(response.RawRequestJson) > maximum)
                         throw new InvalidOperationException("RESOURCE_SNAPSHOT_UNAVAILABLE: invalid Inspector capture.");
                     return new ResourceDownloadContent { Bytes = Utf8.GetBytes(response.RawRequestJson), ContentType = "text/plain; charset=utf-8" };
                 }

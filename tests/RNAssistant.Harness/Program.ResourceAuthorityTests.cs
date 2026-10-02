@@ -2269,6 +2269,9 @@ namespace RNAssistant.Harness
                     var identical = new ModelContextCompiler().Compile(authority, new ChatMessage[0],
                         repeatedFacts, null, new ToolCatalogEntry[0], new AppSettings(), 4096);
                     AssertEqual(3, identical.Messages.Count, "identical read folds only the earlier call/result pair");
+                    var presentation = identical.Receipt.Messages.Single(item => item.MessageIndex == 0);
+                    AssertEqual(ContextPresentationKind.Summary, presentation.Presentation, "deduplicated read is a diagnostic summary");
+                    AssertEqual(0, presentation.Parts.Count, "discarded body is not labelled as still fully delivered");
                     var prior = JObject.Parse(identical.Messages[0].Content.Split(new[] { '\n' }, 2)[1]);
                     AssertEqual("Ok", (string)prior["outcome"], "a deduplicated read remains a successful completed action");
                     AssertEqual("repeat-2", (string)prior["retained_result"]["tool_call_id"], "duplicate points to the full retained result");

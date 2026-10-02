@@ -40,6 +40,7 @@
   <link rel="stylesheet" href="css/app-tools.css?v=json-height-20260929-1-library-20261002-1">
   <link rel="stylesheet" href="css/app-vba.css?v=json-height-20260929-1">
   <link rel="stylesheet" href="css/app-context-panel.css?v=json-height-20260929-1">
+  <link rel="stylesheet" href="css/app-model-context.css?v=model-context-20261002-1">
   <link rel="stylesheet" href="css/app-context-inspector.css?v=json-height-20260929-1-usage-20261002-1">
   <link rel="stylesheet" href="css/app-chart-artifacts.css?v=chatui-20260622-3">
   <link rel="stylesheet" href="css/app-artifacts.css?v=artifact-links-20260908-1">
@@ -190,6 +191,7 @@
               <button type="button" class="composer-icon-button" id="addSelectionContextButton" title="Добавить выделение документа" aria-label="Добавить выделение документа">
                 <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="4" y="4" width="16" height="16" rx="2" stroke-dasharray="3 3"/><path d="m10 9 7 7"/><path d="M12 16h5v-5"/></svg>
               </button>
+              <button class="icon-button" id="openModelContextButton" type="button" title="Контекст модели" aria-label="Контекст модели" aria-expanded="false" aria-controls="modelContextDialog"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m8 5-6 7 6 7m8-14 6 7-6 7M14 3l-4 18"/></svg></button>
               <button class="context-meter" id="contextMeter" type="button" title="Токены API и состав контекста" aria-label="Токены API и состав контекста" aria-expanded="false" aria-controls="promptContextInspector">
                 <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m12 3 8 4-8 4-8-4 8-4Z"/><path d="m20 12-8 4-8-4"/><path d="m20 17-8 4-8-4"/></svg>
                 <strong id="contextMeterValue">API</strong>
@@ -244,11 +246,28 @@
             </div>
           </div>
         </form>
+        <section id="modelContextDialog" class="model-context-dialog hidden" role="dialog" aria-modal="true" aria-labelledby="modelContextTitle">
+          <div class="model-context-head"><strong id="modelContextTitle">Контекст модели</strong><button type="button" class="secondary compact" id="closeModelContextButton">Закрыть</button></div>
+          <div class="model-context-toolbar">
+            <select id="modelContextMode" aria-label="Источник контекста"><option value="actual">Фактический запрос / ответ</option><option value="preview">Предварительный контекст</option></select>
+            <button type="button" class="secondary compact" id="modelContextRefresh">Обновить</button>
+            <button type="button" class="secondary compact" id="modelContextDownload">Скачать запрос</button>
+          </div>
+          <div id="modelContextActualControls" class="model-context-toolbar">
+            <select id="modelContextAttempt" aria-label="Попытка запроса"></select>
+            <button type="button" class="secondary compact" id="modelContextLatest">К последнему</button>
+            <button type="button" class="secondary compact" id="modelContextOlder">Ранее</button>
+          </div>
+          <div class="model-context-toolbar"><select id="modelContextTab" aria-label="Представление"><option value="messages">Сообщения</option><option value="json">Запрос JSON</option><option value="response">Ответ</option></select></div>
+          <div id="modelContextStatus" class="model-context-status" role="status"></div>
+          <div id="modelContextBody" class="model-context-body"></div>
+        </section>
         <aside class="prompt-context-inspector hidden" id="promptContextInspector" aria-hidden="true" aria-label="Состав контекста запроса">
           <div class="prompt-context-inspector-head">
             <div class="prompt-context-inspector-heading">
               <strong>Контекст и токены</strong>
               <span id="promptContextInspectorSubtitle">API usage</span>
+              <button type="button" class="secondary compact" id="openModelContextFromTokens">Контекст модели · запрос / ответ</button>
             </div>
             <div class="prompt-context-inspector-head-actions">
               <button type="button" class="icon-button" id="refreshPromptContextInspectorButton" title="Обновить снимок" aria-label="Обновить снимок">
@@ -1081,7 +1100,8 @@
   <script src="js/app-html-workspace-actions.js?v=html-action-guard-20260908-1"></script>
   <script src="js/app-html-workspace.js?v=html-memory-20261002-1"></script>
   <script src="js/app-context.js?v=ui-lazy-20260903-1-usage-20261002-1-inbox-20261002-1"></script>
-  <script src="js/app-context-inspector.js?v=context-download-20260906-1-usage-20261002-1"></script>
+  <script src="js/app-model-context.js?v=model-context-20261002-1"></script>
+  <script src="js/app-context-inspector.js?v=context-download-20260906-1-usage-20261002-1-model-context-1"></script>
   <script src="js/app-tool-result-preview.js?v=typed-step-results-20260908-1"></script>
   <script src="js/app-agent-data.js?v=step-results-20260908-1"></script>
   <script src="js/app-agent-model.js?v=catalog-display-chat-20260908-1"></script>
@@ -1099,7 +1119,7 @@
   <script src="js/app-chat-composer.js?v=multi-chat-20260902-1-navigation-20261002-1-panel-model-20261002-1-inbox-20261002-1"></script>
   <script src="js/app-chat-inbox.js?v=inbox-1"></script>
   <script src="js/app-chat-run.js?v=response-render-timing-20260928-1-usage-20261002-1-navigation-20261002-1-inbox-20261002-1"></script>
-  <script src="js/app-chat.js?v=office-chat-20260930-3-navigation-20261002-1-panel-model-20261002-1-inbox-20261002-1"></script>
+  <script src="js/app-chat.js?v=office-chat-20260930-3-navigation-20261002-1-panel-model-20261002-1-context-20261002-1-inbox-20261002-1"></script>
   <script src="js/app-chat-edit.js?v=chat-sync-20260903-1-usage-20261002-1"></script>
   <script src="js/app.js?v=chat-poll-20260928-1-usage-20261002-1-panel-model-20261002-2"></script>
 </body>

@@ -54,8 +54,25 @@ namespace RNAssistant.Core.Models
         }
     }
 
+    [JsonConverter(typeof(Newtonsoft.Json.Converters.StringEnumConverter))]
+    public enum ContextPresentationKind { Unknown, Full, Fragment, Summary, Excluded }
+
+    // Diagnostic provenance only; never serialized into provider messages.
+    public sealed class ContextMessagePresentation
+    {
+        public int? MessageIndex { get; set; }
+        public string SourceMessageId { get; set; }
+        public string Role { get; set; }
+        public string Kind { get; set; }
+        public ContextPresentationKind Presentation { get; set; }
+        public string Reason { get; set; }
+        public PayloadRef OriginalPayload { get; set; }
+        public List<ContextMessagePresentation> Parts { get; set; } = new List<ContextMessagePresentation>();
+    }
+
     public sealed class ContextReceipt
     {
+        public List<ContextMessagePresentation> Messages { get; set; } = new List<ContextMessagePresentation>();
         public string SnapshotId { get; set; }
         public string ToolGeneration { get; set; }
         public string SkillGeneration { get; set; }

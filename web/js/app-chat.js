@@ -92,6 +92,7 @@ function bindChatActions() {
   bindMessageScrollControls();
   bindAttachmentActions();
   if (typeof bindChatResourceNavigation === "function") bindChatResourceNavigation();
+  if (typeof bindModelContextActions === "function") bindModelContextActions();
   if (typeof bindContextInspectorActions === "function") bindContextInspectorActions();
   $("chatSessionSelect").addEventListener("change", function () { selectChat($("chatSessionSelect").value); });
   $("newChatButton").addEventListener("click", createChat);

@@ -153,6 +153,39 @@ line and remaining-capacity calculation. Full artifacts and historical attachmen
 are shown as local resource sizes; only their model-visible representations, often
 compact references, count toward the next request.
 
+### Model context window
+
+The composer’s **Контекст модели** button and the token inspector open the same
+window. Its default view follows the latest saved model request; selecting an older
+attempt pauses following. Requests are paged newest first, including repair/helper
+attempts. The window keeps the original message order and renders messages lazily
+as lossless JSON or Markdown/source, with request parameters separate from messages.
+Changing chats closes the window and invalidates pending reads.
+
+**Фактический запрос / ответ** reads the immutable `llm.request` body, its correlated
+response/failure and optional SSE batches from the event stream/CAS. A prepared
+request alone proves neither dispatch nor provider receipt. Streaming responses are
+labelled as assembled results; source SSE data frames remain separately available.
+The request download preserves the recorded UTF-8 bytes, including numeric lexemes.
+Bodies use verified chunked downloads, without the older diagnostic 512 KiB preview
+clipping. The existing shared 50 MiB transfer ceiling still applies explicitly;
+rendering bounds do not truncate downloads. Large text has a labelled bounded
+rendering with full-source copy/download.
+
+**Предварительный контекст** uses the existing compiler snapshot with current draft
+and attachment metadata. It is explicitly not a sent HTTP body; transport materializes
+attachment parts later. Refresh is manual and changed drafts/revisions mark it stale.
+Token usage and admission estimates retain their existing separate meanings.
+
+Compiler/transport diagnostic provenance assigns final wire positions and records
+full content, fragments, summaries, excluded sources or unknown presentation. Exact
+resource coverage and unchanged projected data fields supply the evidence; stored
+CAS placement or text length alone do not establish what was delivered. Mixed
+messages expose part-level evidence. Original CAS bodies, when retained, are opened
+separately as local originals, never substituted into the displayed request. Old
+requests without provenance show unknown attribution. Diagnostic source references
+and labels never enter provider JSON and do not change context selection or execution.
+
 Explicitly addressed background work (runs, context operations, diagnostics, resource staging) loads its target session without changing the user's selected chat. Only navigation actions such as select/create/activate change the active session.
 
 The eight built-in Markdown prompts share one settings schema version. On load,

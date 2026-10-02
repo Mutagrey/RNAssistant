@@ -140,6 +140,11 @@ namespace RNAssistant.Office
                 CasPayloadsIncluded = LastTrajectoryExportCas
             });
         }
+        public Task<ModelContextResponse> GetModelContextAsync(ModelContextQuery query, CancellationToken token)
+        { return Task.FromResult(new ModelContextResponse { ChatId = query.ChatId }); }
+        public Task<ModelContextPayloadResponse> GetModelContextPayloadAsync(ModelContextPayloadQuery query, CancellationToken token)
+        { return Task.FromResult(new ModelContextPayloadResponse { ChatId = query.ChatId, EventId = query.EventId }); }
+
         public Task<ChatEventPayloadResponse> GetChatEventPayloadAsync(string chatId, string eventId, CancellationToken cancellationToken)
         {
             LastChatId = chatId;
@@ -522,7 +527,7 @@ namespace RNAssistant.Office
             return Task.FromResult(ChatState(pendingId, chatId));
         }
         public ChatStateResponse CancelAgentTool(string pendingId, string chatId = null) { return ChatState(pendingId, chatId); }
-        public PromptContextInspectorResponse InspectPromptContext(string chatId, string text, IReadOnlyList<string> resourceDraftIds, bool includeRaw)
+        public PromptContextInspectorResponse InspectPromptContext(string chatId, string text, IReadOnlyList<string> resourceDraftIds, bool includeRaw, bool fullRaw = false)
         {
             return new PromptContextInspectorResponse
             {
