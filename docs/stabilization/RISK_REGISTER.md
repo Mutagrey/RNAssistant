@@ -85,6 +85,12 @@ publication and never reuses that snapshot as read/mutation/GC authority. Slow
 navigation now reaches the runtime log as `kind=chatNavigation`; recovery has its
 own timing. No event/CAS data or request limits were removed or relaxed.
 
+The October 2 log also shows `EnsureHostSwitchReady` rejecting every Office panel
+chat selection while a run is active. The coordinator now permits selection and
+creation within the currently bound document while preserving the run's original
+chat; it still requires the run to finish before rebinding to another document.
+This host path needs an exact Windows/Office check.
+
 Focused Node checks cover switching/creation/init races, failed-next-switch recovery,
 focus polling, history paging and run revision ordering. Host-neutral harness checks
 cover caller-context isolation, coordinator rebinding, cancellation responsiveness,

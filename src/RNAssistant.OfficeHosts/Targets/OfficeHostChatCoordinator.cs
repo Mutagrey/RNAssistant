@@ -45,7 +45,6 @@ namespace RNAssistant.OfficeHosts
         {
             if (runtime == null) throw new ArgumentNullException("runtime");
             if (string.IsNullOrWhiteSpace(chatId)) throw new ArgumentException("A chat id is required.", "chatId");
-            runtime.Controller.EnsureHostSwitchReady();
             var currentState = await Task.Run(() => runtime.Controller.TrySelectCurrentDocumentChat(chatId))
                 .ConfigureAwait(false);
             if (currentState != null)
@@ -71,6 +70,7 @@ namespace RNAssistant.OfficeHosts
                 };
             }
 
+            runtime.Controller.EnsureHostSwitchReady();
             using (var opened = await OpenExistingAsync(chat.Host, chat.DocumentKey, chatId).ConfigureAwait(false))
             {
                 var init = await runtime.SwitchToAdapterAsync(
@@ -132,7 +132,6 @@ namespace RNAssistant.OfficeHosts
             AssistantRuntime runtime, string host)
         {
             if (runtime == null) throw new ArgumentNullException("runtime");
-            runtime.Controller.EnsureHostSwitchReady();
             if (string.Equals(runtime.Controller.HostName, host, StringComparison.Ordinal))
             {
                 if (host == "Outlook" && runtime.Controller.DocumentKey.StartsWith(
@@ -149,6 +148,7 @@ namespace RNAssistant.OfficeHosts
                 };
             }
 
+            runtime.Controller.EnsureHostSwitchReady();
             using (var created = await CreateAsync(host, host != "Outlook").ConfigureAwait(false))
             {
                 InitResponse init;
