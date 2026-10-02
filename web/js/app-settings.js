@@ -190,6 +190,7 @@ function renderSettings() {
   var s = state.settings || {};
   applyUiFontScale(s);
   var uiTheme = applyUiTheme(s);
+  if ($("runningMessageDelivery")) $("runningMessageDelivery").value = String(s.RunningMessageDelivery || "Steer").toLowerCase() === "queue" ? "Queue" : "Steer";
   var appVersion = $("appVersion");
   if (appVersion) {
     var appVersionText = String(state.appVersion || "").trim();
@@ -290,6 +291,7 @@ function readSettings() {
     TopP: Number($("topPInput").value || modelSettingsDefaults.topP),
     UiFontScale: clampUiFontScale(Number($("uiFontScaleInput").value || 100) / 100),
     DesktopWindowWidth: Number($("desktopWindowWidthInput").value || 1600),
+    RunningMessageDelivery: $("runningMessageDelivery") ? $("runningMessageDelivery").value : "Steer",
     UiTheme: normalizeUiTheme((document.querySelector('input[name="uiTheme"]:checked') || {}).value),
     ContextWindowOverrideTokens: Number($("contextLimitInput").value || 0),
     AttachmentHelperMaxTokens: Math.max(0, Math.floor(Number($("attachmentHelperMaxTokensInput").value || 0))),

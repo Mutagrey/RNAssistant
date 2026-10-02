@@ -120,7 +120,7 @@ function ingestChatResourceFiles(files) {
   files = Array.prototype.slice.call(files || []);
   if (!files.length) return Promise.resolve(true);
   var targetChatId = state.activeChatId;
-  if (!targetChatId || currentActiveSend() || state.bridgeUnavailable || isPendingChatSubmit(targetChatId)) {
+  if (!targetChatId || state.bridgeUnavailable || isPendingChatSubmit(targetChatId)) {
     return Promise.resolve(false);
   }
 
@@ -147,7 +147,7 @@ function ingestChatResourceFiles(files) {
 
 async function removeDraftAttachment(item) {
   var targetChatId = state.activeChatId;
-  if (!targetChatId || currentActiveSend() || isPendingChatSubmit(targetChatId)) return;
+  if (!targetChatId || isPendingChatSubmit(targetChatId)) return;
   try {
     await send("discardChatResourceDraft", { chatId: targetChatId, id: attachmentId(item) });
   } catch (error) {

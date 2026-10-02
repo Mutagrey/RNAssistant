@@ -37,6 +37,16 @@ pass is reusable only when its relevant sources/tests, dependencies, build setti
 and environment are unchanged. Explicit phase/release gates and the pre-commit
 version check still apply.
 
+## Incoming messages / steer
+
+Run the focused `inbox:` filter for cancellation isolation, stale responses, batch
+closure, final/approval races, durable FIFO editing, recovery and Stop behavior.
+`dotnet run --project demo/RNAssistant.MockDemo/RNAssistant.MockDemo.csproj -- --inbox-test`
+checks first-chat intake, actual controller execution and materialized model context
+without Office. Run `node tests/web/chat-inbox.test.js` for UI acknowledgement,
+idempotent retry, chat isolation and queue controls. Manual browser layout checks
+are distinct from Windows/Office/WebView2 qualification.
+
 ## Test map
 
 `agent continuity:` checks retained read counts above the 8192/32768-character UI

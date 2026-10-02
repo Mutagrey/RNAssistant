@@ -141,7 +141,7 @@ namespace RNAssistant.MockDemo
         {
             var indexPath = Path.Combine(_webRoot, "index.html");
             var html = File.ReadAllText(indexPath);
-            html = html.Replace("connect-src 'none';", "connect-src 'self';");
+            html = html.Replace("connect-src https://rnassistant.local-resource/v1/;", "connect-src 'self' https://rnassistant.local-resource/v1/;");
             html = html.Replace(
                 "<script src=\"js/app-core.js",
                 "<script src=\"/mock-bridge.js\"></script>\n  <script src=\"js/app-core.js");

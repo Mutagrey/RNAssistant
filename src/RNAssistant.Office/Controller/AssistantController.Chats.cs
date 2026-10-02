@@ -596,7 +596,7 @@ namespace RNAssistant.Office
 
         private void EnsureNoActiveRuns()
         {
-            if (_chatRuns.HasRuns() || _chatRuns.HasExternalRuns())
+            if (HasInboxWorkers || _chatRuns.HasRuns() || _chatRuns.HasExternalRuns())
             {
                 throw new InvalidOperationException("Сначала остановите выполняющиеся запросы во всех окнах RNAssistant.");
             }
@@ -604,7 +604,7 @@ namespace RNAssistant.Office
 
         public void EnsureHostSwitchReady()
         {
-            if (_chatRuns.HasRuns())
+            if (HasInboxWorkers || _chatRuns.HasRuns())
                 throw new InvalidOperationException("Сначала остановите выполняющийся запрос в этой панели RN Assistant.");
         }
 
@@ -625,6 +625,7 @@ namespace RNAssistant.Office
             var bridgeMessages = ChatCloneService.CloneRecentMessagesForBridge(session.Messages, out messageStartIndex);
             return new ChatStateResponse
             {
+                Inbox = _inbox.Snapshot(session),
                 MessageStartIndex = messageStartIndex,
                 MessageTotalCount = session.Messages.Count,
                 SessionRevision = session == null ? 0 : session.Revision,

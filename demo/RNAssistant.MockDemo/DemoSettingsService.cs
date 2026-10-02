@@ -146,6 +146,7 @@ namespace RNAssistant.Core.Storage
             settings.ReasoningRequestMode = ReasoningRequestModes.Normalize(settings.ReasoningRequestMode);
             settings.ReasoningCustomJson = DefaultIfBlank(settings.ReasoningCustomJson, defaults.ReasoningCustomJson).Trim();
             settings.UiTheme = UiThemes.Normalize(settings.UiTheme);
+            if (!Enum.IsDefined(typeof(InputDelivery), settings.RunningMessageDelivery)) settings.RunningMessageDelivery = InputDelivery.Steer;
             settings.HistoryIntegrityMode = HistoryIntegrityModes.Normalize(settings.HistoryIntegrityMode);
             settings.HistoryEncryptionMode = HistoryEncryptionModes.Normalize(settings.HistoryEncryptionMode);
             settings.HistoryKeySource = HistoryKeySources.Normalize(settings.HistoryKeySource);

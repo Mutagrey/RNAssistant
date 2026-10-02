@@ -38,6 +38,7 @@ namespace RNAssistant.Office.Contracts
         public bool ScreenCaptureProtectionEnabled { get; set; }
         public double UiFontScale { get; set; }
         public string UiTheme { get; set; }
+        public InputDelivery RunningMessageDelivery { get; set; }
         public int DesktopWindowWidth { get; set; }
         public Dictionary<string, string> CustomHeaders { get; set; }
         public Dictionary<string, bool?> ModelImageSupportOverrides { get; set; }
@@ -85,6 +86,7 @@ namespace RNAssistant.Office.Contracts
                 ScreenCaptureProtectionEnabled = settings.ScreenCaptureProtectionEnabled,
                 UiFontScale = settings.UiFontScale,
                 UiTheme = settings.UiTheme,
+                RunningMessageDelivery = settings.RunningMessageDelivery,
                 DesktopWindowWidth = settings.DesktopWindowWidth,
                 CustomHeaders = settings.CustomHeaders,
                 ModelImageSupportOverrides = settings.ModelImageSupportOverrides,
@@ -133,6 +135,7 @@ namespace RNAssistant.Office.Contracts
             result.ScreenCaptureProtectionEnabled = ScreenCaptureProtectionEnabled;
             result.UiFontScale = UiFontScale;
             result.UiTheme = UiTheme;
+            result.RunningMessageDelivery = RunningMessageDelivery;
             result.DesktopWindowWidth = DesktopWindowWidth;
             result.CustomHeaders = CustomHeaders;
             result.ModelImageSupportOverrides = ModelImageSupportOverrides;

@@ -107,6 +107,14 @@ namespace RNAssistant.Office.Services
             return request;
         }
 
+        internal void ApplyUserInput(ChatMessage message, IReadOnlyList<ChatAttachment> attachments)
+        {
+            _userText = message.Content ?? string.Empty;
+            _currentUserId = message.Id;
+            _currentAttachments = attachments ?? message.Attachments;
+            _lastSnapshot = null;
+        }
+
         internal async Task<ModelProtocolRequest> PrepareRequestAsync(
             string stepId, ModelProtocolCallContext callContext, CancellationToken cancellationToken)
         {
@@ -132,6 +140,7 @@ namespace RNAssistant.Office.Services
                 .GroupBy(item => item.EvidenceId, StringComparer.Ordinal).Select(group => group.First()).ToList();
             var options = BuildRequestOptions(_mode, _settings.AgentResponseMode, activeTools, _session, _runCache);
             options.TraceStepId = stepId;
+            options.TraceContextReceipt = snapshot.Receipt;
             return new ModelProtocolRequest
             {
                 Settings = _settings,

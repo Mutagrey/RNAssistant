@@ -82,6 +82,7 @@
     <Reference Include="System.Xml.Linq" />
   </ItemGroup>
   <ItemGroup>
+    <Compile Include="Models\ConversationInput.cs" />
     <Compile Include="Models\AppSettings.cs" />
     <Compile Include="Models\ArtifactModels.cs" />
     <Compile Include="Models\ResourceModels.cs" />

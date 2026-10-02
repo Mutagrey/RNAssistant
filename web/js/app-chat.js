@@ -168,7 +168,7 @@ function bindChatActions() {
       cancelMessageEdit();
       return;
     }
-    if (event.key === "Enter" && !event.shiftKey && !event.ctrlKey && !event.altKey && !event.metaKey) {
+    if (event.key === "Enter" && !event.isComposing && !event.shiftKey && !event.ctrlKey && !event.altKey && !event.metaKey) {
       event.preventDefault();
       submitChatInput();
     }
@@ -177,5 +177,6 @@ function bindChatActions() {
     event.preventDefault();
     submitChatInput();
   });
+  if (typeof initChatInbox === "function") initChatInbox();
   updateComposerInputState();
 }

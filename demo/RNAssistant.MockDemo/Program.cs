@@ -14,7 +14,7 @@ using RNAssistant.Office.Contracts;
 
 namespace RNAssistant.MockDemo
 {
-    internal static class Program
+    internal static partial class Program
     {
         public static int Main(string[] args)
         {
@@ -25,6 +25,7 @@ namespace RNAssistant.MockDemo
         {
             var options = DemoOptions.Parse(args);
             SettingsService.ConfigureDemoDefaults(options.BaseUrl, "mock-strict");
+            if ((args ?? new string[0]).Contains("--inbox-test")) return await RunInboxTestAsync().ConfigureAwait(false);
             if (options.ArtifactCommitTest)
             {
                 try

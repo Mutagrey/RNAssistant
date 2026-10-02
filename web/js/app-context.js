@@ -227,6 +227,21 @@ async function addSelectionContext(mode) {
       document.activeElement.blur();
     }
     reportFocusState();
+    if (currentActiveSend() || (typeof pendingAgentApprovalActivity === "function" && pendingAgentApprovalActivity())) {
+      var staged = await send("stageSelectionInput", { chatId: targetChatId, mode: mode || "full" });
+      var attachment = staged.resource || staged.Resource;
+      if (state.activeChatId === targetChatId) {
+        state.draftAttachments.push(attachment);
+        renderAttachmentDrafts();
+        updateComposerInputState();
+      } else {
+        var drafts = chatDraftStore();
+        var draft = drafts[targetChatId] || { text: "", attachments: [] };
+        draft.attachments.push(attachment); drafts[targetChatId] = draft;
+      }
+      log("Снимок выделения прикреплён к следующему сообщению.");
+      return;
+    }
     applyContextResponse(
       await send("addSelectionContext", { chatId: targetChatId, mode: mode || "full" }),
       targetChatId);

@@ -14,6 +14,18 @@ namespace RNAssistant.Office
     public sealed class AssistantController
     {
         internal event Action<LlmRequestDiagnosticUpdate> ModelRequestDiagnostics;
+        public Task InboxWorkersDrained { get { return Task.CompletedTask; } }
+        public void StopInboxWorkers() { }
+        public ChatResourceDraftResponse StageSelectionInput(string mode, string chatId) { return new ChatResourceDraftResponse(); }
+        public ChatInboxResponse GetChatInbox(string chatId) { return new ChatInboxResponse { ChatId = chatId }; }
+        public ChatInboxResponse StopChatInbox(string chatId) { return GetChatInbox(chatId); }
+        public ChatInboxResponse SubmitChatInput(SubmitChatInputPayload request, Action<string, string, string, ChatActivity> progress,
+            Action<ChatStateResponse> changed) { return GetChatInbox(request.ChatId); }
+        public ChatInboxResponse UpdateChatInput(UpdateChatInputPayload request, string action, Action<string, string, string, ChatActivity> progress,
+            Action<ChatStateResponse> changed) { return GetChatInbox(request.ChatId); }
+        public ChatInboxResponse ResumeChatInbox(string chatId, Action<string, string, string, ChatActivity> progress,
+            Action<ChatStateResponse> changed) { return GetChatInbox(chatId); }
+
         public event EventHandler<ResourceAuthorityChangedEventArgs> ResourceAuthorityChanged;
         internal void RaiseResourceChange(ResourceAuthorityCommit commit)
         { ResourceAuthorityChanged?.Invoke(this, new ResourceAuthorityChangedEventArgs(commit)); }

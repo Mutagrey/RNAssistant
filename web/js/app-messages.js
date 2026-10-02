@@ -622,7 +622,7 @@ function buildLiveMessageUnits() {
       function () { return renderLiveStreamMessage(); });
   }
 
-  return units;
+  return units.concat(typeof buildPendingInputUnits === "function" ? buildPendingInputUnits() : []);
 }
 
 function messageDisclosureSnapshot(node) {
@@ -743,7 +743,7 @@ function renderMessages(options) {
   renderedMessagesChatId = state.activeChatId;
   if (chatChanged || options.fullReset) resetRenderedMessageUnits(box);
   var visibleMessages = (state.messages || []).filter(function (message) { return !messageProtocolMessage(message); });
-  if (!visibleMessages.length && !state.messageStartIndex && !state.liveStreamContent && !state.liveReasoning && !state.liveActivity && !(state.liveAgentRun && state.liveAgentRun.length)) {
+  if (!(typeof pendingSteerInputs === "function" && pendingSteerInputs().length) && !visibleMessages.length && !state.messageStartIndex && !state.liveStreamContent && !state.liveReasoning && !state.liveActivity && !(state.liveAgentRun && state.liveAgentRun.length)) {
     resetRenderedMessageUnits(box);
     box.appendChild(renderChatEmptyState());
     renderAgentPlanDock();

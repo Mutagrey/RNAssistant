@@ -142,7 +142,7 @@ async function refreshChatAfterSendFailure(chatId) {
   }
 }
 
-async function submitChatInput() {
+async function submitChatInput(delivery) {
   if (state.chatNavigationPending || state.initializePromise) return;
   if (hasActiveMessageEdit()) {
     if (!currentActiveSend() && !state.modelSaving && !state.modeSaving && !state.reasoningSaving) {
@@ -153,13 +153,10 @@ async function submitChatInput() {
     }
     return;
   }
-  if (currentActiveSend() || state.modelSaving || state.modeSaving || state.reasoningSaving) {
+  if (state.modelSaving || state.modeSaving || state.reasoningSaving) {
     return;
   }
   if (isPendingChatSubmit(state.activeChatId)) {
-    return;
-  }
-  if (typeof pendingAgentApprovalActivity === "function" && pendingAgentApprovalActivity()) {
     return;
   }
 
@@ -185,9 +182,8 @@ async function submitChatInput() {
       setPendingChatSubmit(targetChatId, false);
       renderSendControls();
     }
-    if (!ingestionSucceeded || state.activeChatId !== targetChatId || currentActiveSend() ||
-        state.modelSaving || state.modeSaving || state.reasoningSaving ||
-        (typeof pendingAgentApprovalActivity === "function" && pendingAgentApprovalActivity())) {
+    if (!ingestionSucceeded || state.activeChatId !== targetChatId ||
+        state.modelSaving || state.modeSaving || state.reasoningSaving) {
       return;
     }
     attachments = (state.draftAttachments || []).slice();
@@ -197,14 +193,7 @@ async function submitChatInput() {
     return;
   }
 
-  setChatInputText("", false);
-  clearSendError();
-  state.messages.push({ Id: "local-" + Date.now(), Role: "user", Content: text, Attachments: attachments, Local: true, Pending: true });
-  clearDraftAttachments();
-  renderMessages({ forceScroll: true });
-  renderChatSessions();
-  renderContextMeter();
-  sendChat(text, attachments, targetChatId);
+  await submitInboxMessage(text, attachments, targetChatId, delivery || (currentActiveSend() || (typeof pendingAgentApprovalActivity === "function" && pendingAgentApprovalActivity()) ? runningMessageDelivery() : "Steer"));
 }
 
 function stopActiveSend() {
@@ -215,6 +204,13 @@ function stopActiveSend() {
 
   activeSend.canceling = true;
   renderSendControls();
+  if (activeSend.inbox) {
+    chatInbox().canceling = true;
+    send("stopChatInbox", { chatId: state.activeChatId }).then(applyChatInbox).catch(function (error) {
+      chatInbox().canceling = false; log(error.message, "error"); renderSendControls();
+    });
+    return;
+  }
   var run = state.chatRuns[state.activeChatId] || {};
   var cancellation = run.runId
     ? cancelChatRun(state.activeChatId, run.runId)
@@ -225,7 +221,10 @@ function stopActiveSend() {
 }
 
 function currentActiveSend() {
-  return state.activeSends[state.activeChatId] || null;
+  var active = state.activeSends[state.activeChatId];
+  if (active) return active;
+  var inbox = typeof chatInbox === "function" ? chatInbox() : null;
+  return inbox && inbox.running ? { inbox: true, canceling: !!inbox.canceling } : null;
 }
 
 function renderChatRunControls() {

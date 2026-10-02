@@ -57,7 +57,8 @@ namespace RNAssistant.Office.Services
                         "ms, session=" + sessionMs + "ms, request=" + requestMs + "ms.");
                 _lastModel = await _protocol.GetResponseAsync(
                     preparedRequest,
-                    ConversationStreamProgressProjector.ForProtocol(_progress), cancellationToken).ConfigureAwait(false);
+                    ConversationStreamProgressProjector.ForProtocol((phase, message, activity) =>
+                    { if (!cancellationToken.IsCancellationRequested && _progress != null) _progress(phase, message, activity); }), cancellationToken).ConfigureAwait(false);
             }
             catch (PromptBudgetExceededException ex)
             {
@@ -101,6 +102,7 @@ namespace RNAssistant.Office.Services
                     ? new ConversationRunInput(_input.Settings, _input.Context, _input.Tools,
                         _input.Skills, _input.Attachments)
                     : await _refresh(cancellationToken).ConfigureAwait(false);
+                if (_steered) fresh = new ConversationRunInput(_input.Settings, fresh.Context, fresh.Tools, fresh.Skills, _input.Attachments);
                 UseInput(fresh);
             }
             _modelSession = await ConversationModelSession.CreateAsync(_adapter, _compaction, _attachments, _eventStore,

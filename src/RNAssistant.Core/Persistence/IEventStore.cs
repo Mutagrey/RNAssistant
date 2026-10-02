@@ -53,7 +53,8 @@ namespace RNAssistant.Core.Persistence
         TurnStarted = 20,
         TurnEnded = 21,
         StepStarted = 22,
-        StepEnded = 23
+        StepEnded = 23,
+        ConversationInputChanged = 24
     }
 
     public sealed class SessionEventDescriptor
@@ -87,6 +88,8 @@ namespace RNAssistant.Core.Persistence
         private static readonly IReadOnlyList<SessionEventDescriptor> Descriptors =
             Array.AsReadOnly(new[]
             {
+                Agent(SessionEventKind.ConversationInputChanged, SessionEventTypes.ConversationInputChanged,
+                    SessionEventAuthority.Authority, SessionEventDurability.Mandatory),
                 Storage(SessionEventKind.SessionCreated, SessionEventTypes.SessionCreated),
                 Storage(SessionEventKind.SessionForked, SessionEventTypes.SessionForked),
                 Storage(SessionEventKind.SessionCommit, SessionEventTypes.SessionCommit),

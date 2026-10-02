@@ -58,6 +58,8 @@ namespace RNAssistant.Office.Services
         private readonly ContextCompactionService _contextCompactionService;
         private readonly AttachmentAnalysisService _attachmentAnalysisService;
         private readonly Action<ChatSession> _saved;
+        private readonly ConversationInboxService _inbox;
+        private readonly ChatResourceIngestionService _ingestion;
 
         public ConversationRunService(IOfficeApplicationAdapter adapter, OfficeToolExecutor toolExecutor,
             IConversationStore conversationStore, IEventStore eventStore, LlmCompletionDelegate completeAsync)
@@ -66,7 +68,8 @@ namespace RNAssistant.Office.Services
         internal ConversationRunService(IOfficeApplicationAdapter adapter, OfficeToolExecutor toolExecutor,
             IConversationStore conversationStore, IEventStore eventStore, LlmCompletionDelegate completeAsync,
             ContextCompactionService contextCompactionService,
-            Func<IMaterializedModelProtocol> modelProtocolFactory = null, Action<ChatSession> saved = null)
+            Func<IMaterializedModelProtocol> modelProtocolFactory = null, Action<ChatSession> saved = null, ConversationInboxService inbox = null,
+            ChatResourceIngestionService ingestion = null)
         {
             _adapter = adapter ?? throw new ArgumentNullException(nameof(adapter));
             _toolExecutor = toolExecutor ?? throw new ArgumentNullException(nameof(toolExecutor));
@@ -76,6 +79,8 @@ namespace RNAssistant.Office.Services
             _contextCompactionService = contextCompactionService;
             _attachmentAnalysisService = new AttachmentAnalysisService(completeAsync);
             _saved = saved;
+            _inbox = inbox;
+            _ingestion = ingestion;
         }
 
         public Task<ChatTurnResult> ExecuteAsync(string mode, string text, ChatSession session,
@@ -114,7 +119,7 @@ namespace RNAssistant.Office.Services
             var input = new ConversationRunInput(settings, documentContext, tools, skills, attachments);
             using (var ports = CreatePorts(mode, text, session, input, progress, pendingToolRegistrar, cancellationToken))
             {
-                var kernel = new AgentKernel(ports, ports, ports);
+                var kernel = new AgentKernel(ports, ports, ports, input: ports);
                 var result = await kernel.RunAsync(new AgentRunRequest(session.LastRun.RunId, session.LastRun.TurnId,
                     text, new AgentRunLimits(Math.Max(1, settings.MaxAgentIterations), Math.Max(1, settings.MaxAgentToolSteps))),
                     cancellationToken).ConfigureAwait(false);
@@ -126,7 +131,7 @@ namespace RNAssistant.Office.Services
             ConversationRunInput input, Action<string, string, ChatActivity> progress,
             PendingToolRegistrar pendingToolRegistrar = null,
             Func<CancellationToken, Task<ConversationRunInput>> refreshModelInput = null,
-            CancellationToken cancellationToken = default(CancellationToken))
+            CancellationToken cancellationToken = default(CancellationToken), bool supersedePending = false)
         {
             if (session == null || ChatModes.Normalize(session.Mode) != ChatModes.Agent)
                 throw new InvalidOperationException("Only Agent mode can continue a confirmed tool call.");
@@ -136,8 +141,8 @@ namespace RNAssistant.Office.Services
             using (var ports = CreatePorts(ChatModes.Agent, LatestUserRequest(session), session, input,
                 progress, pendingToolRegistrar, cancellationToken, command, refreshModelInput, continuation.Revision))
             {
-                var result = await new AgentKernel(ports, ports, ports).ResumeAsync(session.LastRun.RunId,
-                    pendingId, continuation, cancellationToken).ConfigureAwait(false);
+                var result = await new AgentKernel(ports, ports, ports, input: ports).ResumeAsync(session.LastRun.RunId,
+                    pendingId, continuation, cancellationToken, supersedePending).ConfigureAwait(false);
                 return ports.Result(result.Summary);
             }
         }
@@ -149,7 +154,7 @@ namespace RNAssistant.Office.Services
         {
             return new ConversationKernelAdapter(_adapter, _toolExecutor, _conversationStore, _eventStore, _modelProtocolFactory(),
                 _contextCompactionService, _attachmentAnalysisService, _saved, mode, text, session, input,
-                progress, registrar, cancellationToken, confirmedCommand, refresh, revision);
+                progress, registrar, cancellationToken, confirmedCommand, refresh, revision, _inbox, _ingestion);
         }
 
         internal static List<ToolCatalogEntry> PrepareToolsForRun(IEnumerable<ToolCatalogEntry> tools)

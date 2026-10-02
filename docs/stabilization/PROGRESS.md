@@ -50,6 +50,15 @@ records it directly and reviews the signed release payload before finalization.
 
 ## Implementation log — includes current in-flight work and earlier entries
 
+Incoming messages (2026-10-02): runtime-owned durable queue and safe-boundary steer
+are added with typed bridge intake, attachment support, a configurable Enter action,
+queue cards and a separate Stop control. Steer interrupts model transport while
+preserving completed tool evidence and pending-confirmation budgets. Queue recovery
+requires explicit resumption; background work participates in shutdown draining.
+Focused host-neutral and mock-controller evidence is described in the
+[conversation protocol](../conversation-protocol.md#incoming-messages-during-a-run).
+Real Windows/Office/WebView2 delivery qualification remains open.
+
 Library and prompt migration (2026-10-02): Library now shows separate icon-marked
 Prompt, Skill and Tool trees with clearer host nesting. The prompt action menu
 retains only a selected-prompt return to defaults. Prompt schema 35 automatically

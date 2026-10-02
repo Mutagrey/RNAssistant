@@ -191,6 +191,7 @@ namespace RNAssistant.Core.Storage
                 ? defaults.ReasoningCustomJson
                 : settings.ReasoningCustomJson.Trim();
             settings.UiTheme = UiThemes.Normalize(settings.UiTheme);
+            if (!Enum.IsDefined(typeof(InputDelivery), settings.RunningMessageDelivery)) settings.RunningMessageDelivery = InputDelivery.Steer;
             settings.HistoryIntegrityMode = HistoryIntegrityModes.Normalize(settings.HistoryIntegrityMode);
             settings.HistoryEncryptionMode = HistoryEncryptionModes.Normalize(settings.HistoryEncryptionMode);
             settings.HistoryKeySource = HistoryKeySources.Normalize(settings.HistoryKeySource);

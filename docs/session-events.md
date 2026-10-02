@@ -284,3 +284,22 @@ Settings → Diagnostics → Trajectory queries the same stream through disposab
 ## Format policy
 
 `ChatSession.CurrentFormatVersion` is 6 and `SessionEvent.CurrentSchemaVersion` is 3. The active conversation protocol is independently versioned as v5 inside typed message/run operations; R29 adds accepted-call origins without a new event envelope or second durable store, and R72 adds explicit response-final intent. Unversioned/v2/v3/v4 model history is not converted or inferred from prose: full-history preflight requires an explicit new chat/reset before model preparation. A pending confirmation without current-v5 history, complete call origins and `KernelState` cannot continue and must be cancelled or resubmitted in a new chat. Unsupported event schemas and old snapshot files are refused rather than guessed or migrated. Reset is explicit; upgrades and protocol failures never automatically delete user chats, CAS, settings or keys. See [the current conversation contract](protocols/CONVERSATION_RESPONSE_V5.md).
+
+## Conversation input queue
+
+`conversation.input.changed` is a typed, mandatory Agent-authority event written
+through `IEventStore`. Its `ConversationInputEvent` records input identity,
+operation-id correlation, expected-revision transitions, delivery mode, pending /
+delivering / applied / removed status, original runtime document key, attachment CAS
+references and queue pause state. Message text is an immutable CAS event payload;
+attachment references remain in event metadata for reachability scanning.
+
+Replay reconstructs the queue; UI caches and service snapshots are not durable
+stores. Intake and run appends share the live session cursor and ChatStore's existing
+persistence serialization. The inbox never concurrently edits the run's message list.
+Only the run owner projects consumed user messages. A claim precedes delivery;
+`applied` follows durable user-message persistence. After interruption, explicit
+resume reconciles claimed IDs against persisted messages and never reruns an already
+recorded input. Restart pauses retained input independently of the last saved pause
+flag. Missing CAS input bodies fail explicitly. Old event streams need no backfill;
+absence of input events means an empty queue.

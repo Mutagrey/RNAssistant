@@ -26,7 +26,7 @@
   <link rel="stylesheet" href="css/app.css?v=json-surfaces-20260829-1">
   <link rel="stylesheet" href="css/app-chat.css?v=action-severity-20260930-1-chat-paging-1">
   <link rel="stylesheet" href="css/app-markdown.css?v=json-height-20260929-1">
-  <link rel="stylesheet" href="css/app-composer.css?v=composer-polish-20260826-1">
+  <link rel="stylesheet" href="css/app-composer.css?v=composer-polish-20260826-1-inbox-20261002-1">
   <link rel="stylesheet" href="css/app-reasoning.css?v=chat-projection-20260907-1">
   <link rel="stylesheet" href="css/app-context-chips.css?v=sidebar-polish-20260723-1">
   <link rel="stylesheet" href="css/app-models.css?v=model-tables-20260930-1">
@@ -141,6 +141,9 @@
         </div>
         <div class="agent-approval-dock hidden" id="agentApprovalDock" aria-live="polite"></div>
         <form class="composer" id="chatForm">
+          <section id="chatInbox" class="chat-inbox" aria-label="Очередь сообщений" hidden></section>
+          <span id="inboxAnnouncer" class="inbox-sr-only" aria-live="polite"></span>
+          <span id="inboxStatus" class="inbox-status" role="status" aria-live="polite"></span>
           <div class="composer-edit-bar hidden" id="messageEditBar" aria-hidden="true">
             <span>Редактирование сообщения</span>
             <button type="button" class="composer-edit-cancel" id="cancelMessageEditButton" title="Отменить редактирование" aria-label="Отменить редактирование">
@@ -224,6 +227,13 @@
               <button type="button" class="composer-reasoning-button" id="chatReasoningToggle" title="Reasoning выключен" aria-label="Включить reasoning" aria-pressed="false">
                 <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 18h6"/><path d="M10 21h4"/><path d="M8.4 14.7A6 6 0 1 1 15.6 14.7c-.9.7-1.4 1.6-1.6 2.3h-4c-.2-.7-.7-1.6-1.6-2.3Z"/><path d="M12 1V0"/><path d="m4.9 4.9-.8-.8"/><path d="m19.9 4.1-.8.8"/></svg>
               </button>
+              <details class="send-delivery-menu" id="sendDeliveryMenu">
+                <summary title="Способ отправки" aria-label="Выбрать способ отправки">⌄</summary>
+                <div class="send-delivery-options">
+                  <button type="button" id="sendSteerButton" aria-label="Отправить сразу — уточнить текущую задачу"><strong>Отправить сразу</strong><span>Уточнить текущую задачу</span></button>
+                  <button type="button" id="sendQueueButton" aria-label="В очередь — после текущего ответа"><strong>В очередь</strong><span>После текущего ответа</span></button>
+                </div>
+              </details>
               <button type="submit" class="composer-send-button" id="sendButton" title="Отправить" aria-label="Отправить">
                 <svg class="composer-send-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 4.75a1 1 0 0 1 .7.29l5.25 5.25a1 1 0 1 1-1.41 1.42L13 8.16V18a1 1 0 1 1-2 0V8.16l-3.54 3.55a1 1 0 0 1-1.41-1.42l5.25-5.25a1 1 0 0 1 .7-.29Z"/></svg>
                 <svg class="composer-save-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="m6.5 12.5 3.5 3.5 7.5-8"/></svg>
@@ -818,6 +828,12 @@
                 <label class="checkline"><input id="smartChatTitlesInput" type="checkbox"><span>Умные названия чатов</span></label>
               </div>
               <div class="setting-note">Для окон Desktop и Native CLI; встроенные VSTO-панели не меняются. Ширина применяется после сохранения, в развёрнутом окне — после возврата к обычному размеру.</div>
+              <label class="field-label" for="runningMessageDelivery">Сообщения во время работы агента</label>
+              <select id="runningMessageDelivery">
+                <option value="Steer">Отправлять сразу</option>
+                <option value="Queue">Добавлять в очередь</option>
+              </select>
+              <div class="setting-note">Действие Enter. Меню возле отправки позволяет разово выбрать другой способ. Shift+Enter — новая строка.</div>
               <div class="settings-subheading">
                 <h3>Тема</h3>
                 <p>Цветовая схема всего интерфейса и рабочих областей.</p>
@@ -1015,14 +1031,14 @@
   <script src="js/vendor/codemirror/addon/hint/show-hint.min.js"></script>
   <script src="js/vendor/wunderbaum.umd.min.js"></script>
   <script src="js/vendor/viewer.min.js"></script>
-  <script src="js/app-core.js?v=office-chat-20260930-3-chat-paging-1-navigation-20261002-1-panel-model-20261002-1"></script>
+  <script src="js/app-core.js?v=office-chat-20260930-3-chat-paging-1-navigation-20261002-1-panel-model-20261002-1-inbox-20261002-1"></script>
   <script src="js/app-utils.js?v=run-view-state-20260830-1"></script>
   <script src="js/app-run-view-state.js?v=action-severity-20260930-1"></script>
   <script src="js/app-layout.js"></script>
   <script src="js/app-vba-completion.js?v=vba-completion-20260903-1"></script>
   <script src="js/app-editors.js?v=html-memory-20261002-1"></script>
   <script src="js/app-markdown.js?v=chat-message-cleanup-20260908-1"></script>
-  <script src="js/app-settings.js?v=desktop-width-20260930-1-usage-20261002-1-library-20261002-1-panel-model-20261002-1"></script>
+  <script src="js/app-settings.js?v=desktop-width-20260930-1-usage-20261002-1-library-20261002-1-panel-model-20261002-1-inbox-20261002-1"></script>
   <script src="js/app-logs.js?v=diagnostics-clarity-20260930-1"></script>
   <script src="js/app-diagnostics.js?v=diagnostics-clarity-20260930-1"></script>
   <script src="js/app-viewer-registry.js?v=artifact-preview-20260902-2"></script>
@@ -1042,7 +1058,7 @@
   <script src="js/app-model-render.js?v=model-settings-20260930-1-panel-model-20261002-1"></script>
   <script src="js/app-models.js?v=ui-lazy-20260903-1-usage-20261002-1-panel-model-20261002-2"></script>
   <script src="js/app-context-data.js"></script>
-  <script src="js/app-chat-state.js?v=office-chat-20260930-3-chat-paging-1-usage-20261002-1"></script>
+  <script src="js/app-chat-state.js?v=office-chat-20260930-3-chat-paging-1-usage-20261002-1-inbox-20261002-1"></script>
   <script src="js/app-resource-list.js?v=resource-navigation-20260826-1-library-20261002-1"></script>
   <script src="js/app-tools-structured.js?v=library-ux-20260903-1"></script>
   <script src="js/app-tools-actions.js?v=manual-tool-chat-20260908-1"></script>
@@ -1064,7 +1080,7 @@
   <script src="js/app-artifact-viewer-actions.js?v=binary-chunks-20260906-1"></script>
   <script src="js/app-html-workspace-actions.js?v=html-action-guard-20260908-1"></script>
   <script src="js/app-html-workspace.js?v=html-memory-20261002-1"></script>
-  <script src="js/app-context.js?v=ui-lazy-20260903-1-usage-20261002-1"></script>
+  <script src="js/app-context.js?v=ui-lazy-20260903-1-usage-20261002-1-inbox-20261002-1"></script>
   <script src="js/app-context-inspector.js?v=context-download-20260906-1-usage-20261002-1"></script>
   <script src="js/app-tool-result-preview.js?v=typed-step-results-20260908-1"></script>
   <script src="js/app-agent-data.js?v=step-results-20260908-1"></script>
@@ -1076,13 +1092,14 @@
   <script src="js/app-agent-approval.js?v=run-view-state-20260830-1"></script>
   <script src="js/app-run-changes.js?v=typed-step-results-20260908-1"></script>
   <script src="js/app-agent.js?v=action-severity-20260930-1-chat-paging-1"></script>
-  <script src="js/app-messages.js?v=action-severity-20260930-1-chat-paging-1-panel-model-20261002-1"></script>
+  <script src="js/app-messages.js?v=action-severity-20260930-1-chat-paging-1-panel-model-20261002-1-inbox-20261002-1"></script>
   <script src="js/app-reasoning.js?v=chat-projection-20260907-1"></script>
-  <script src="js/app-attachments.js?v=vba-upload-20260906-1"></script>
+  <script src="js/app-attachments.js?v=vba-upload-20260906-1-inbox-20261002-1"></script>
   <script src="js/app-chat-session.js?v=office-chat-20260930-4-chat-paging-1-usage-20261002-1-navigation-20261002-1-panel-model-20261002-1"></script>
-  <script src="js/app-chat-composer.js?v=multi-chat-20260902-1-navigation-20261002-1-panel-model-20261002-1"></script>
-  <script src="js/app-chat-run.js?v=response-render-timing-20260928-1-usage-20261002-1-navigation-20261002-1"></script>
-  <script src="js/app-chat.js?v=office-chat-20260930-3-navigation-20261002-1-panel-model-20261002-1"></script>
+  <script src="js/app-chat-composer.js?v=multi-chat-20260902-1-navigation-20261002-1-panel-model-20261002-1-inbox-20261002-1"></script>
+  <script src="js/app-chat-inbox.js?v=inbox-1"></script>
+  <script src="js/app-chat-run.js?v=response-render-timing-20260928-1-usage-20261002-1-navigation-20261002-1-inbox-20261002-1"></script>
+  <script src="js/app-chat.js?v=office-chat-20260930-3-navigation-20261002-1-panel-model-20261002-1-inbox-20261002-1"></script>
   <script src="js/app-chat-edit.js?v=chat-sync-20260903-1-usage-20261002-1"></script>
   <script src="js/app.js?v=chat-poll-20260928-1-usage-20261002-1-panel-model-20261002-2"></script>
 </body>

@@ -39,7 +39,12 @@ namespace RNAssistant.Office.WebView
             get { lock (_hostSwitchSync) return _hostSwitchPending; }
         }
 
-        public Task RequestsDrained { get { return _requestsDrained.Task; } }
+        public Task RequestsDrained { get { return DrainRequestsAsync(); } }
+        private async Task DrainRequestsAsync()
+        {
+            await _requestsDrained.Task.ConfigureAwait(false);
+            await _controller.InboxWorkersDrained.ConfigureAwait(false);
+        }
 
         public void RebindController(AssistantController controller)
         {
@@ -309,6 +314,33 @@ namespace RNAssistant.Office.WebView
                     case "deleteChat":
                         responsePayload = await RunBridgeWorkAsync(
                             () => _controller.DeleteChat(Payload<ChatPayload>(payload).ChatId), cancellationToken).ConfigureAwait(false);
+                        break;
+                    case "stopChatInbox":
+                        responsePayload = await RunBridgeWorkAsync(() => _controller.StopChatInbox(Payload<ChatPayload>(payload).ChatId), cancellationToken).ConfigureAwait(false);
+                        break;
+                    case "getChatInbox":
+                        responsePayload = await RunBridgeWorkAsync(() => _controller.GetChatInbox(Payload<ChatPayload>(payload).ChatId), cancellationToken).ConfigureAwait(false);
+                        break;
+                    case "submitChatInput":
+                        var inboxInput = Payload<SubmitChatInputPayload>(payload);
+                        responsePayload = await RunBridgeWorkAsync(() => _controller.SubmitChatInput(inboxInput,
+                            (nextRun, phase, message, activity) => ReportProgress("inbox:" + inboxInput.ChatId, inboxInput.ChatId, nextRun, phase, message, activity),
+                            ReportChatState), cancellationToken).ConfigureAwait(false);
+                        break;
+                    case "editChatInput":
+                    case "removeChatInput":
+                    case "steerChatInput":
+                        var inboxUpdate = Payload<UpdateChatInputPayload>(payload);
+                        responsePayload = await RunBridgeWorkAsync(() => _controller.UpdateChatInput(inboxUpdate,
+                            type == "removeChatInput" ? "remove" : type == "steerChatInput" ? "steer" : "edit",
+                            (nextRun, phase, message, activity) => ReportProgress("inbox:" + inboxUpdate.ChatId, inboxUpdate.ChatId, nextRun, phase, message, activity),
+                            ReportChatState), cancellationToken).ConfigureAwait(false);
+                        break;
+                    case "resumeChatInbox":
+                        var inboxChat = Payload<ChatPayload>(payload).ChatId;
+                        responsePayload = await RunBridgeWorkAsync(() => _controller.ResumeChatInbox(inboxChat,
+                            (nextRun, phase, message, activity) => ReportProgress("inbox:" + inboxChat, inboxChat, nextRun, phase, message, activity),
+                            ReportChatState), cancellationToken).ConfigureAwait(false);
                         break;
                     case "sendChat":
                         var sendChat = Payload<SendChatPayload>(payload);
@@ -639,6 +671,10 @@ namespace RNAssistant.Office.WebView
                             inspectContext.ResourceDraftIds,
                             inspectContext.IncludeRaw);
                         break;
+                    case "stageSelectionInput":
+                        var stagedSelection = Payload<SelectionContextPayload>(payload);
+                        responsePayload = _controller.StageSelectionInput(stagedSelection.Mode, stagedSelection.ChatId);
+                        break;
                     case "addSelectionContext":
                         var selectionContext = Payload<SelectionContextPayload>(payload);
                         responsePayload = _controller.AddSelectionContextFromBridge(selectionContext.Mode, selectionContext.ChatId);
@@ -744,6 +780,7 @@ namespace RNAssistant.Office.WebView
                 _disposed = true;
                 if (_requestsInFlight == 0) _requestsDrained.TrySetResult(true);
             }
+            _controller.StopInboxWorkers();
             _controller.ModelRequestDiagnostics -= ReportModelRequestDiagnostics;
             _controller.ResourceAuthorityChanged -= ReportResourceChanged;
             lock (_resourceChangesSync)

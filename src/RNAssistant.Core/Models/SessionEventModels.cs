@@ -7,6 +7,7 @@ namespace RNAssistant.Core.Models
 {
     public static class SessionEventTypes
     {
+        public const string ConversationInputChanged = "conversation.input.changed";
         public const string SessionCreated = "session.created";
         public const string SessionForked = "session.forked";
         public const string SessionCommit = "session.commit";

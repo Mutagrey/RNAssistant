@@ -66,7 +66,12 @@ namespace RNAssistant.Office
 
         public bool CancelChatRun(string chatId, string runId)
         {
-            return _chatRuns.Cancel(chatId, runId);
+            var active = _chatRuns.Get(chatId);
+            if (active == null || !string.Equals(active.RunId, runId, StringComparison.Ordinal)) return false;
+            var cancelled = false;
+            try { _inbox.Pause(LoadAddressedSession(chatId), "Остановлено пользователем"); }
+            finally { cancelled = _chatRuns.Cancel(chatId, runId); }
+            return cancelled;
         }
 
         private static void AnnotateRunMessages(ChatSession session, int firstIndex, string runId)
@@ -244,8 +249,8 @@ namespace RNAssistant.Office
         {
             if (request == null || string.IsNullOrWhiteSpace(request.ChatId))
                 throw new InvalidOperationException("RESOURCE_ACCESS_DENIED: an explicit chat is required.");
-            return WithReservedSession(LoadAddressedSession(request.ChatId), session =>
-                _resourceData.OpenUpload(session, request, cancellationToken));
+            // Staging owns only a bounded upload lease, never the run's mutable history.
+            return _resourceData.OpenUpload(LoadAddressedSession(request.ChatId), request, cancellationToken);
         }
 
         public async Task<ChatResourceDraftResponse> CompleteChatResourceUploadAsync(ResourceUploadLeaseRequest request,
@@ -254,14 +259,9 @@ namespace RNAssistant.Office
             if (request == null || string.IsNullOrWhiteSpace(request.ChatId))
                 throw new InvalidOperationException("RESOURCE_ACCESS_DENIED: an explicit chat is required.");
             var session = LoadAddressedSession(request.ChatId);
-            using (ReserveChatOperation(session))
-            {
-                session = ReloadReservedSession(session);
-                // The WebView body has already been consumed on its STA. Extraction operates
-                // only on bounded managed bytes and keeps this chat reserved until cleanup ends.
-                return await Task.Run(() => _resourceData.CompleteUpload(session, request.LeaseId,
-                    _chatResourceIngestion, cancellationToken), cancellationToken).ConfigureAwait(false);
-            }
+            // Extraction produces a chat-owned draft; publication happens only at a run boundary.
+            return await Task.Run(() => _resourceData.CompleteUpload(session, request.LeaseId,
+                _chatResourceIngestion, cancellationToken), cancellationToken).ConfigureAwait(false);
         }
 
         public ResourceDataCloseResponse CancelChatResourceUpload(ResourceUploadLeaseRequest request)
@@ -400,6 +400,7 @@ namespace RNAssistant.Office
         {
             public string Text { get; set; }
             public IReadOnlyList<ChatAttachment> Attachments { get; set; }
+            public string InputId { get; set; }
             public bool AppendUserMessage { get; set; }
             public bool CommitUserAttachments { get; set; }
             public IReadOnlyList<ChatMessage> MessagesToDeleteAfterSave { get; set; }
@@ -433,6 +434,8 @@ namespace RNAssistant.Office
             try
             {
                 session = ReloadReservedSession(session);
+                _inbox.Bind(session);
+                if (input != null && input.InputId != null) _inbox.EnsureCanDispatch(session, input.InputId);
                 settings = ResolveChatSettings(session, settings);
                 ConversationProtocolContext.EnsureCurrentHistory(session);
                 if (prepareTurn == null && HasPendingAgentConfirmation(session))
@@ -463,6 +466,7 @@ namespace RNAssistant.Office
                 {
                     var userMessage = new ChatMessage
                     {
+                        Id = input.InputId ?? Guid.NewGuid().ToString("N"),
                         Role = "user",
                         Content = text,
                         RunId = runId,
@@ -514,6 +518,7 @@ namespace RNAssistant.Office
                     _conversationStore.Save(session);
                     var initialSaveMs = turnTimer.ElapsedMilliseconds - initialSaveStartMs;
                     preparedTurnPersisted = true;
+                    if (input.InputId != null) _inbox.Applied(session, input.InputId);
                     causalTrace = RunCausalTrace.Begin(_eventStore, session);
                     RunCausalTrace.Record(new CausalTraceRecord(SessionEventKind.RunStartedObservation)
                     {
@@ -705,7 +710,8 @@ namespace RNAssistant.Office
             }
             finally
             {
-                ReleaseControllerRun(runLease, ref causalTrace);
+                EndInboxRun(session, runLease, ref causalTrace);
+                StartInboxWorker(session, (nextRun, phase, message, activity) => { if (progress != null) progress(phase, message, activity); }, chatStateChanged);
             }
             if (shouldGenerateLlmTitle)
                 StartChatTitleGeneration(session, titleUserSeed, assistantTitleSeed,
@@ -731,6 +737,7 @@ namespace RNAssistant.Office
                 session == null ? null : session.Messages, out messageStartIndex);
             var response = new SendChatResponse
             {
+                Inbox = _inbox.Snapshot(session),
                 MessageStartIndex = messageStartIndex,
                 MessageTotalCount = session == null || session.Messages == null ? 0 : session.Messages.Count,
                 SessionRevision = session == null ? 0 : session.Revision,

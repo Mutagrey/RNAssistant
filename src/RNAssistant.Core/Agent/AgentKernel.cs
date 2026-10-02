@@ -16,10 +16,12 @@ namespace RNAssistant.Core.Agent
         private readonly IRunStore _store;
         private readonly Func<DateTime> _utcNow;
         private readonly Func<string> _newCallId;
+        private readonly IRunInputChannel _input;
 
         public AgentKernel(IModelProtocol model, IToolRuntime tools, IRunStore store, Func<DateTime> utcNow = null,
-            Func<string> newCallId = null)
+            Func<string> newCallId = null, IRunInputChannel input = null)
         {
+            _input = input;
             _model = model ?? throw new ArgumentNullException(nameof(model));
             _tools = tools ?? throw new ArgumentNullException(nameof(tools));
             _store = store ?? throw new ArgumentNullException(nameof(store));
@@ -37,7 +39,7 @@ namespace RNAssistant.Core.Agent
         }
 
         public async Task<AgentRunResult> ResumeAsync(string runId, string pendingId,
-            AgentRunContinuation continuation, CancellationToken cancellationToken)
+            AgentRunContinuation continuation, CancellationToken cancellationToken, bool supersedePending = false)
         {
             if (string.IsNullOrWhiteSpace(runId)) throw new ArgumentException("Run id is required.", nameof(runId));
             var pending = continuation == null ? null : continuation.Summary.PendingConfirmation;
@@ -49,6 +51,12 @@ namespace RNAssistant.Core.Agent
             // Claim the continuation cursor before either executing or consuming
             // it. A duplicate resume cannot reach the tool runtime.
             await AppendAsync(state, new AgentRunEvent(AgentRunEventKind.SummaryChanged, state.Summary())).ConfigureAwait(false);
+            if (supersedePending || (_input != null && _input.HasPendingInput))
+            {
+                await RecordNotDispatchedAsync(state, pending.Call, pending.Policy, pending.StepId,
+                    "Pending approval superseded by a new user message.").ConfigureAwait(false);
+                return await LoopAsync(state, cancellationToken).ConfigureAwait(false);
+            }
             var execution = await ExecuteOneAsync(state, pending.Call, pending.Policy, pending.StepId,
                 true, pending.ChargedToolSteps, pending.PreparedStateJson, cancellationToken).ConfigureAwait(false);
             if (execution != null)
@@ -62,6 +70,7 @@ namespace RNAssistant.Core.Agent
             {
                 if (cancellationToken.IsCancellationRequested)
                     return await FinishAsync(state, RunLifecycle.Cancelled, "cancelled", "Run cancelled.").ConfigureAwait(false);
+                await TakeInputAsync(state, cancellationToken).ConfigureAwait(false);
                 state.Iterations++;
                 var stepId = state.RunId + ":" + state.Iterations;
                 await AppendAsync(state, new AgentRunEvent(AgentRunEventKind.ModelStepStarted, state.Summary(), stepId)).ConfigureAwait(false);
@@ -70,11 +79,15 @@ namespace RNAssistant.Core.Agent
                 AgentModelResult model;
                 try
                 {
-                    model = await _model.SendAsync(new AgentModelRequest(state.RunId, state.TurnId, stepId,
-                        state.Messages), cancellationToken).ConfigureAwait(false);
+                    using (var requestCancellation = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken,
+                        _input == null ? CancellationToken.None : _input.InterruptToken))
+                        model = await _model.SendAsync(new AgentModelRequest(state.RunId, state.TurnId, stepId,
+                            state.Messages), requestCancellation.Token).ConfigureAwait(false);
                 }
                 catch (OperationCanceledException)
                 {
+                    if (!cancellationToken.IsCancellationRequested && _input != null && _input.HasPendingInput)
+                        continue;
                     return await FinishAsync(state, RunLifecycle.Cancelled, "cancelled", "Model request cancelled.").ConfigureAwait(false);
                 }
                 catch (Exception ex)
@@ -83,6 +96,7 @@ namespace RNAssistant.Core.Agent
                 }
                 if (cancellationToken.IsCancellationRequested)
                     return await FinishAsync(state, RunLifecycle.Cancelled, "cancelled", "Run cancelled.").ConfigureAwait(false);
+                if (_input != null && _input.HasPendingInput) continue;
                 if (model == null)
                     return await FinishAsync(state, RunLifecycle.Failed, "missing_model_result", "Model returned no result.").ConfigureAwait(false);
                 if (model.FailureKind.HasValue)
@@ -120,10 +134,20 @@ namespace RNAssistant.Core.Agent
                     state.Summary(), stepId, response: response)).ConfigureAwait(false);
                 state.Progress.BeginStep();
                 if (response.ToolCalls.Count == 0 && response.Final)
+                {
+                    if (_input != null && !_input.TryCloseInput()) continue;
                     return await FinishAsync(state, RunLifecycle.Completed, "model_loop_ended", response.Message).ConfigureAwait(false);
+                }
 
                 for (var index = 0; index < response.ToolCalls.Count; index++)
                 {
+                    if (_input != null && _input.HasPendingInput)
+                    {
+                        for (var rest = index; rest < response.ToolCalls.Count; rest++)
+                            await RecordNotDispatchedAsync(state, response.ToolCalls[rest], policies[rest], stepId,
+                                "Superseded by a new user message before dispatch.").ConfigureAwait(false);
+                        break;
+                    }
                     var result = await ExecuteOneAsync(state, response.ToolCalls[index], policies[index], stepId,
                         false, 0, null, cancellationToken).ConfigureAwait(false);
                     if (result != null)
@@ -141,6 +165,13 @@ namespace RNAssistant.Core.Agent
                         "Three consecutive model responses repeated only rejected calls. No repeated operation was dispatched; change the approach or reconcile the earlier result.").ConfigureAwait(false);
             }
             return await FinishAsync(state, RunLifecycle.Failed, "iteration_limit", "Model iteration limit reached.").ConfigureAwait(false);
+        }
+
+        private async Task TakeInputAsync(State state, CancellationToken token)
+        {
+            if (_input == null) return;
+            foreach (var message in await _input.TakeInputAsync(token).ConfigureAwait(false))
+                state.Messages.Add(message);
         }
 
         private AgentResponse AssignCallIds(State state, AgentResponseDraft response)

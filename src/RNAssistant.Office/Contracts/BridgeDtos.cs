@@ -706,6 +706,7 @@ namespace RNAssistant.Office.Contracts
 
     public class ChatStateResponse
     {
+        [JsonProperty("inbox")] public ChatInboxResponse Inbox { get; set; }
         [JsonProperty("messageStartIndex")]
         public int MessageStartIndex { get; set; }
 

@@ -39,7 +39,7 @@ namespace RNAssistant.Office.Services
     // One invocation-scoped adapter for the existing application services. Its
     // partials separate model materialization, executor mapping and event projection.
     // No loop, effect aggregation, accepted-id index or durable side store lives here.
-    internal sealed partial class ConversationKernelAdapter : IModelProtocol, IToolRuntime, IRunStore, IDisposable
+    internal sealed partial class ConversationKernelAdapter : IModelProtocol, IToolRuntime, IRunStore, IRunInputChannel, IDisposable
     {
         private readonly IOfficeApplicationAdapter _adapter;
         private readonly OfficeToolExecutor _executor;
@@ -50,7 +50,10 @@ namespace RNAssistant.Office.Services
         private readonly AttachmentAnalysisService _attachments;
         private readonly Action<ChatSession> _saved;
         private readonly ConversationRunPolicy _policy;
-        private readonly string _text;
+        private string _text;
+        private bool _steered;
+        private readonly ConversationInboxService _inbox;
+        private readonly ChatResourceIngestionService _ingestion;
         private readonly ChatSession _session;
         private readonly Action<string, string, ChatActivity> _progress;
         private readonly ConversationRunService.PendingToolRegistrar _registrar;
@@ -80,7 +83,7 @@ namespace RNAssistant.Office.Services
             AttachmentAnalysisService attachments, Action<ChatSession> saved, string mode, string text,
             ChatSession session, ConversationRunInput input, Action<string, string, ChatActivity> progress,
             ConversationRunService.PendingToolRegistrar registrar, CancellationToken cancellationToken,
-            ToolInvocation confirmedCommand, Func<CancellationToken, Task<ConversationRunInput>> refresh, long revision)
+            ToolInvocation confirmedCommand, Func<CancellationToken, Task<ConversationRunInput>> refresh, long revision, ConversationInboxService inbox = null, ChatResourceIngestionService ingestion = null)
         {
             _adapter = adapter;
             _executor = executor;
@@ -92,6 +95,8 @@ namespace RNAssistant.Office.Services
             _saved = saved;
             _policy = ConversationRunPolicy.For(mode);
             _text = text;
+            _inbox = inbox;
+            _ingestion = ingestion;
             _session = session;
             _progress = progress;
             _registrar = _policy.AllowsConfirmation ? registrar : null;

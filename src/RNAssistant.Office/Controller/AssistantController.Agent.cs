@@ -29,7 +29,7 @@ namespace RNAssistant.Office
             Action<string, string, ChatActivity> progress = null,
             CancellationToken cancellationToken = default(CancellationToken),
             string runId = null,
-            Action<ChatStateResponse> chatStateChanged = null)
+            Action<ChatStateResponse> chatStateChanged = null, bool supersedePending = false)
         {
             PendingAgentTool pending;
             var session = ResolvePendingAgentTool(pendingId, chatId, out pending);
@@ -44,6 +44,7 @@ namespace RNAssistant.Office
             try
             {
                 session = ReloadReservedSession(session);
+                _inbox.Bind(session);
                 pending = FindPendingAgentTool(session, pendingId);
                 if (pending == null)
                 {
@@ -52,7 +53,7 @@ namespace RNAssistant.Office
                 ConversationProtocolContext.EnsureCanContinue(session, pending.Command, _toolExecutor.Payloads);
                 var settings = ResolveChatSettings(session);
                 var documentRuntimeKey = CaptureExpectedRuntimeDocumentKey(session);
-                if (!MarkPendingActivityExecuting(session, pending.PendingId, runId))
+                if (!supersedePending && !MarkPendingActivityExecuting(session, pending.PendingId, runId))
                 {
                     throw new InvalidOperationException("Pending tool was not found or was already resolved.");
                 }
@@ -72,7 +73,7 @@ namespace RNAssistant.Office
                     Status = "running",
                     Phase = "executing",
                     KernelState = previousState,
-                    CurrentAction = "Выполняю подтверждённое действие.",
+                    CurrentAction = supersedePending ? "Учитываю уточнение пользователя." : "Выполняю подтверждённое действие.",
                     DocumentRuntimeKey = documentRuntimeKey,
                     IterationsUsed = pending.IterationsUsed,
                     ToolStepsUsed = pending.ToolStepsUsed,
@@ -98,7 +99,8 @@ namespace RNAssistant.Office
                 var skills = _skillCatalog.GetVisibleSkills().Where(skill => skill.Enabled).ToList();
                 try
                 {
-                    ReportProgress(runProgress, "executing", "Выполняю подтверждённое действие...");
+                    ReportProgress(runProgress, supersedePending ? "thinking" : "executing",
+                        supersedePending ? "Учитываю уточнение пользователя…" : "Выполняю подтверждённое действие...");
                     var confirmedCommand = CloneCommand(pending.Command);
                     var completion = await _conversationRunService.ConfirmAsync(
                         pendingId, confirmedCommand, session,
@@ -130,7 +132,7 @@ namespace RNAssistant.Office
                                 token).ConfigureAwait(false);
                             continuationAttachments = attachmentRouting.PrimaryAttachments ?? new ChatAttachment[0];
                             return new ConversationRunInput(settings, context, tools, skills, continuationAttachments);
-                        }, runCancellation.Token).ConfigureAwait(false);
+                        }, runCancellation.Token, supersedePending).ConfigureAwait(false);
 
                     FinalizeControllerRun(
                         session, firstRunMessageIndex, 0,
@@ -166,7 +168,8 @@ namespace RNAssistant.Office
             }
             finally
             {
-                ReleaseControllerRun(runLease, ref causalTrace);
+                EndInboxRun(session, runLease, ref causalTrace);
+                StartInboxWorker(session, (nextRun, phase, message, activity) => { if (progress != null) progress(phase, message, activity); }, chatStateChanged);
             }
             return response;
         }

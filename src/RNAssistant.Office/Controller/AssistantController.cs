@@ -62,6 +62,7 @@ namespace RNAssistant.Office
         private readonly object _syncRoot;
         private readonly Dictionary<string, PendingAgentTool> _pendingAgentTools;
         private readonly ChatRunRegistry _chatRuns;
+        private readonly ConversationInboxService _inbox;
         private readonly HtmlNetworkService _htmlNetwork;
         private readonly CancellationTokenSource _lifetimeCancellation;
         private int _disposed;
@@ -86,6 +87,7 @@ namespace RNAssistant.Office
             _artifactWorkingSet = new ArtifactWorkingSetService(_chatStore.DocumentArtifacts, new ResourceMutationJournal(_paths));
             _conversationStore = new ChatConversationStoreAdapter(_chatStore);
             _eventStore = new ChatEventStoreAdapter(_chatStore);
+            _inbox = new ConversationInboxService(_eventStore);
             _modelTracePersistence = new ModelTracePersistenceService(_eventStore);
             _attachmentStore = new AttachmentStore(_paths, () => _settingsService.LoadStorageProtector());
             _chatResourceIngestion = new ChatResourceIngestionService(_attachmentStore, _chatStore.DocumentArtifacts);
@@ -214,7 +216,7 @@ namespace RNAssistant.Office
                 _eventStore,
                 completion,
                 _contextCompactionService,
-                saved: _chatSessions.NotifySaved);
+                saved: _chatSessions.NotifySaved, inbox: _inbox, ingestion: _chatResourceIngestion);
             _contextService = new ContextService(_adapter);
             _syncRoot = new object();
             _pendingAgentTools = new Dictionary<string, PendingAgentTool>(StringComparer.OrdinalIgnoreCase);

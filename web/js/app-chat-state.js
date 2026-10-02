@@ -232,6 +232,7 @@ function applyChatState(response) {
     applyRevisionedChatSummaryState(response);
     return false;
   }
+  if (response.inbox && typeof applyChatInbox === "function") applyChatInbox(response.inbox);
   state.chatStateApplyVersion = (state.chatStateApplyVersion || 0) + 1;
   var chatChanged = previousChatId !== nextChatId;
   if (chatChanged) {
@@ -255,6 +256,7 @@ function applyChatState(response) {
     resetMessageEditState();
   }
   state.activeChatId = nextChatId;
+  if (typeof renderChatInbox === "function") renderChatInbox();
   state.activeRunViewState = window.RNAssistantRunViewState.normalize(
     response.runViewState !== undefined ? response.runViewState : response.RunViewState);
   if (response.activeChatModel !== undefined || response.ActiveChatModel !== undefined) {

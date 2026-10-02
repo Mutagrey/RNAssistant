@@ -1295,3 +1295,43 @@ OpenAI описывает agent loop как последовательное п�
 
 Это обоснование принципов; предложенная реализация — вывод из кода RNAssistant,
 а не утверждение, что другой framework автоматически исправит его дефекты.
+
+## Incoming messages during a run
+
+Owner: `ConversationInboxService` accepts input and owns the FIFO queue;
+`ConversationRunService` / `AgentKernel` own application and execution. Typed bridge
+commands are `submitChatInput`, `getChatInbox`, `editChatInput`, `removeChatInput`,
+`steerChatInput`, `resumeChatInbox`, `stopChatInbox`, and `stageSelectionInput`. Intake acknowledges only a
+durable append. Operation IDs deduplicate uncertain retries; runtime allocates input
+and message identities. Queue edits compare the input revision.
+
+`RunningMessageDelivery` selects Steer (default) or Queue for Enter during a run;
+Shift+Enter inserts a newline. A composer menu overrides one submission. Input,
+files and document selection remain available, with a separate Stop button.
+During a run, selection is captured under the document read gate into an immutable
+attachment draft; upload staging does not reserve or mutate the running chat. Idle
+Enter starts an ordinary turn. Queue cards support text editing, removal and sending
+now without replacing the composer draft.
+
+Steer cancels only the current model-request token, never the tool/run token.
+The kernel discards late responses, retains charged iterations and completed tool
+evidence, closes an undispatched accepted batch with NotDispatched results and
+consumes ordered user input before another model request. An executing operation
+finishes through read-back. Terminal admission and intake are synchronized: input
+accepted after the closing boundary becomes the next turn. During approval, steer
+invalidates the pending action and resumes the same kernel continuation and budgets
+without dispatching it. Model context and attachment analysis use the new input.
+
+Queued messages execute separately, in FIFO order, through the same controller and
+kernel path. Explicit steers take priority. The background worker is controller-owned
+and included in bridge shutdown draining. Original document-session keys are rechecked
+before execution; switching windows never retargets work. Failed/cancelled runs,
+non-clean execution health and runtime/document loss pause retained work. Approval
+holds queued work. After restart, all retained input is paused and requires explicit
+resumption; no possible effect is replayed. A new explicit steer can run while older
+queued work remains paused. Removal changes queue state; it does not erase history.
+
+Validation: focused harness `inbox:` and mock demo `--inbox-test` cover kernel,
+replay and actual controller/materialized-request delivery. `tests/web/chat-inbox.test.js`
+covers acknowledgement/retry and UI isolation. These checks do not establish real
+Windows/Office/WebView2 qualification.

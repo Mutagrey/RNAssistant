@@ -5,6 +5,14 @@ using RNAssistant.Core.Tools;
 
 namespace RNAssistant.Core.Agent
 {
+    public interface IRunInputChannel
+    {
+        System.Threading.CancellationToken InterruptToken { get; }
+        bool HasPendingInput { get; }
+        System.Threading.Tasks.Task<IReadOnlyList<AgentMessage>> TakeInputAsync(System.Threading.CancellationToken token);
+        bool TryCloseInput();
+    }
+
     public sealed class AgentRunLimits
     {
         public int MaxIterations { get; private set; }

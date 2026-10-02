@@ -58,11 +58,13 @@ namespace RNAssistant.Office.Services
                 throw new InvalidOperationException("The resource message is not at the expected chat position.");
             }
             if ((message.Attachments ?? new List<ChatAttachment>()).Any(resource =>
-                resource == null || !string.Equals(resource.DraftChatId, chatId, StringComparison.OrdinalIgnoreCase)))
+                resource == null || (string.IsNullOrWhiteSpace(resource.ContentSha256) &&
+                    !string.Equals(resource.DraftChatId, chatId, StringComparison.OrdinalIgnoreCase))))
             {
                 throw new InvalidOperationException("Every staged resource must belong to the target chat.");
             }
-            _attachments.CommitToCas(message);
+            if (message.Attachments.Any(a => string.IsNullOrWhiteSpace(a.ContentSha256)))
+                _attachments.CommitToCas(message);
             ChatResourceReferenceService.LinkMessageResources(session, messageIndex);
             foreach (var original in message.Attachments)
             {
