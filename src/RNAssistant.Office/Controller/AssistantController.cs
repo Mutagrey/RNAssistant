@@ -84,6 +84,7 @@ namespace RNAssistant.Office
             RuntimeLog.Configure(_paths.Root);
             _settingsService = new SettingsService(_paths);
             _chatStore = new ChatStore(_paths, () => _settingsService.LoadStorageProtector());
+            _chatStore.PerformanceLog = RuntimeLog.Info;
             _artifactWorkingSet = new ArtifactWorkingSetService(_chatStore.DocumentArtifacts, new ResourceMutationJournal(_paths));
             _conversationStore = new ChatConversationStoreAdapter(_chatStore);
             _eventStore = new ChatEventStoreAdapter(_chatStore);

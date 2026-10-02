@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.Globalization;
 using System.IO;
 using System.Linq;
@@ -224,6 +225,7 @@ namespace RNAssistant.Core.Storage
 
         private IDisposable AcquirePathLock(string targetPath)
         {
+            var timer = Stopwatch.StartNew();
             var directory = Path.Combine(_paths.Root, "locks");
             Directory.CreateDirectory(directory);
             var normalized = Path.GetFullPath(targetPath ?? _paths.Root);
@@ -233,12 +235,15 @@ namespace RNAssistant.Core.Storage
             {
                 try
                 {
-                    return new FileStream(lockPath, FileMode.OpenOrCreate, FileAccess.ReadWrite, FileShare.None);
+                    var lease = new FileStream(lockPath, FileMode.OpenOrCreate, FileAccess.ReadWrite, FileShare.None);
+                    LogPerformance("documentLockWait", timer.ElapsedMilliseconds);
+                    return lease;
                 }
                 catch (IOException)
                 {
                     if (DateTime.UtcNow >= deadline)
                     {
+                        LogPerformance("documentLockTimeout", timer.ElapsedMilliseconds);
                         throw new ChatConcurrencyException("Timed out waiting for another RNAssistant instance to finish saving this chat.");
                     }
                     Thread.Sleep(25);

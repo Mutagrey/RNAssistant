@@ -732,7 +732,11 @@ namespace RNAssistant.Office.WebView
 
             if (!_webView.IsDisposed && _webView.CoreWebView2 != null)
             {
+                var timer = Stopwatch.StartNew();
                 _webView.CoreWebView2.PostWebMessageAsJson(json);
+                if (timer.ElapsedMilliseconds >= 250)
+                    RuntimeLog.Info("WebView post timing: elapsed=" + timer.ElapsedMilliseconds +
+                        "ms, chars=" + (json == null ? 0 : json.Length) + ".");
             }
         }
 

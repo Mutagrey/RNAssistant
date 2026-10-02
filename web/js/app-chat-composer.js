@@ -17,7 +17,8 @@ function renderChatModePicker() {
   icon.textContent = active.icon;
   icon.dataset.mode = active.value;
   var disabled = !!currentActiveSend() || isPendingChatSubmit(state.activeChatId) ||
-    hasActiveMessageEdit() || state.modeSaving || state.reasoningSaving || state.bridgeUnavailable || !state.activeChatId;
+    hasActiveMessageEdit() || state.modeSaving || state.reasoningSaving || state.bridgeUnavailable ||
+    state.chatDetailPending || state.chatDetailError || !state.activeChatId;
   if (typeof setComposerPickerDisabled === "function") setComposerPickerDisabled(picker, disabled);
 
   menu.replaceChildren();
@@ -63,6 +64,7 @@ function renderChatModePicker() {
 
 function renderSendControls() {
   var navigating = !!(state.chatNavigationPending || state.initializePromise);
+  var detailUnavailable = !!(state.chatDetailPending || state.chatDetailError);
   var activeSend = currentActiveSend();
   var isEditing = hasActiveMessageEdit();
   var isSending = !!activeSend;
@@ -105,9 +107,10 @@ function renderSendControls() {
     stopButton.setAttribute("aria-label", stopButton.title);
   }
   if (input) {
-    input.readOnly = navigating || isPreparingAttachments || state.modeSaving || state.reasoningSaving ||
+    input.readOnly = navigating || detailUnavailable || isPreparingAttachments || state.modeSaving || state.reasoningSaving ||
       state.bridgeUnavailable;
-    input.placeholder = navigating ? "Обновляю чат…" : isEditing
+    input.placeholder = navigating || state.chatDetailPending ? "Обновляю чат…" : state.chatDetailError
+      ? "Повторите загрузку чата…" : isEditing
       ? "Измените сообщение или отправьте его заново..."
       : (state.bridgeUnavailable
         ? "Откройте RNAssistant внутри Office, чтобы начать чат..."
@@ -119,7 +122,7 @@ function renderSendControls() {
     clearButton.disabled = isPreparingAttachments || state.editingBusy;
   }
   if (modeSelect) {
-    modeSelect.disabled = navigating || isSending || isPreparingAttachments || isEditing || state.modeSaving || state.reasoningSaving || state.bridgeUnavailable || !state.activeChatId;
+    modeSelect.disabled = navigating || detailUnavailable || isSending || isPreparingAttachments || isEditing || state.modeSaving || state.reasoningSaving || state.bridgeUnavailable || !state.activeChatId;
   }
   renderChatModePicker();
   if (typeof renderChatModelPicker === "function") {
@@ -128,7 +131,7 @@ function renderSendControls() {
   if (typeof renderReasoningToggle === "function") {
     renderReasoningToggle();
   }
-  if (navigating || isPreparingAttachments) {
+  if (navigating || detailUnavailable || isPreparingAttachments) {
     if (typeof setComposerPickerDisabled === "function") {
       setComposerPickerDisabled($("chatModePicker"), true);
       setComposerPickerDisabled($("chatModelPicker"), true);
@@ -136,7 +139,7 @@ function renderSendControls() {
     if ($("chatReasoningToggle")) $("chatReasoningToggle").disabled = true;
   }
   if ($("addSelectionContextButton")) {
-    $("addSelectionContextButton").disabled = navigating || isPreparingAttachments || isEditing || state.bridgeUnavailable || !currentDocumentAvailable;
+    $("addSelectionContextButton").disabled = navigating || detailUnavailable || isPreparingAttachments || isEditing || state.bridgeUnavailable || !currentDocumentAvailable;
   }
   if ($("attachFileButton")) {
     $("attachFileButton").disabled = navigating || isPreparingAttachments || isEditing || state.bridgeUnavailable || !state.activeChatId;
@@ -181,6 +184,7 @@ function updateSendButtonAvailability(hasContent) {
   var canSaveEdit = !!editingTarget && canSaveMessageEdit(editingTarget.message, editingTarget.index);
   sendButton.disabled =
     !!state.chatNavigationPending || !!state.initializePromise ||
+    !!state.chatDetailPending || !!state.chatDetailError ||
     isPendingChatSubmit(state.activeChatId) ||
     state.modelSaving ||
     state.modeSaving ||

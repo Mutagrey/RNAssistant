@@ -119,6 +119,23 @@ discovers Outlook mailboxes on its minute timer, before its foreground-focus gua
 that COM wait and attach preparation still require a separate Desktop owner change
 and Windows timing evidence.
 
+Large-chat follow-up (2026-10-02): a 30–50 MiB JSONL file does not cross the
+bridge whole; the initial message page is 80 items. Cold integrity validation and
+projection replay remain proportional to stream size, while the former 4-million-
+character cache ceiling caused repeat replays for larger projections. The in-memory
+ceiling is now 16 million characters per entry/32 million total, and document
+writes no longer share an exclusive process-wide lock. Selection sends a bound
+loading shell followed by full detail from the same loaded session; UI detail
+refresh omits a duplicate header catalog. Model/reasoning preference responses
+avoid full chat-state projection. Stage timing is now recorded without content.
+Temporary synthetic 30/50 MiB fixtures show cold load 1.53/1.70 s, warm load
+14/21 ms and title save 428/417 ms on this host, with 6,000 messages and nine HTML
+revisions. This is not a before/after speedup or Windows/WebView2 qualification;
+the real reported chat is unavailable, so its bottleneck remains open evidence.
+Library/usage/HTML stages took at most 7/11/1 ms on these fixtures. A separate
+cross-response cache for those mutable projections was therefore not added without
+evidence of a benefit and an invalidation rule for same-revision live sessions.
+
 ## Agent continuity and deterministic read loops — 2026-10-01
 
 P1 incident evidence remains open; shared host-neutral fixes are implemented.

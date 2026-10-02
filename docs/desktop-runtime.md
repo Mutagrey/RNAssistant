@@ -111,6 +111,13 @@ path/title, folder/mail id и selection reference. Долгоживущие COM-
   сразу при отсутствии навигации, инициализации и активной отправки сообщения;
   DOM-событие focus не считается принудительным обновлением. Обычный фоновый
   опрос идёт раз в минуту.
+- Выбор чата после точной привязки отправляет связанный с request id короткий
+  `selection` state: UI очищает прежний transcript/HTML и показывает загрузку.
+  Полный ответ строится из того же загруженного `ChatSession`; поздний shell после
+  terminal response игнорируется. `getChatState` для UI не повторяет сканирование
+  каталога, уже полученного через `listChats`. Смена модели и reasoning возвращает
+  только revision и настройки чата (для модели также оценку контекста), без
+  повторной сборки transcript, artifact library и HTML metadata.
 - WebView не рендерит скрытые transcript, Artifact Library/HTML workspace и
   Library surfaces при применении состояния. CodeMirror создаётся только при
   первом открытии владеющей вкладки; ECharts загружается только для фактической
@@ -155,10 +162,13 @@ Desktop не требует ClickOnce. `install-desktop-local.cmd` сохран�
 `rnassistant.log` в каталоге данных приложения пишет медленные `WebView startup`,
 `WebView navigation`, `Startup`, `Chat headers`, `Chat model setup`,
 `Model request`, `Chat save`, `Chat turn completion`, `Chat response projection`, `Skill source`,
-`Bridge response timing` и `WebView render timing`. Bridge разделяет выполнение
+`Bridge response timing`, `WebView post timing` и `WebView render timing`. Bridge разделяет выполнение
 запроса и сериализацию ответа; WebView передаёт только медленные замеры запуска,
 навигации (`kind=chatNavigation`, включая ожидание очереди), ответа чата и
 чтения/отрисовки Skill в тот же runtime log.
+`Chat storage timing` разделяет ожидание storage gate, холодный replay, попадание
+в кеш и подготовку/запись save; `Chat state timing` разделяет сообщения, библиотеку,
+каталог, контекст, оценку usage и HTML metadata.
 Записи содержат время и размеры, без текста чата или запроса.
 
 Состояние чата передаёт WebView только последние 80 сообщений; предыдущие

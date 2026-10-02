@@ -175,7 +175,7 @@ namespace RNAssistant.Office.WebView
                     case "getChatState":
                         var getChat = Payload<ChatPayload>(payload);
                         responsePayload = await RunBridgeWorkAsync(
-                            () => _controller.GetChatState(getChat.ChatId),
+                            () => _controller.GetChatDetail(getChat.ChatId),
                             cancellationToken).ConfigureAwait(false);
                         break;
                     case "getPreviousChatMessages":
@@ -216,7 +216,7 @@ namespace RNAssistant.Office.WebView
                         var selectChat = Payload<ChatPayload>(payload);
                         if (OfficeChatSelectionRequested == null)
                             responsePayload = await RunBridgeWorkAsync(
-                                () => _controller.SelectChat(selectChat.ChatId),
+                                () => _controller.SelectChat(selectChat.ChatId, shell => ReportChatSelection(id, shell)),
                                 cancellationToken).ConfigureAwait(false);
                         else
                         {
@@ -745,9 +745,10 @@ namespace RNAssistant.Office.WebView
                 var serializeMs = timer.ElapsedMilliseconds - handleMs;
                 if ((string.Equals(type, "init", StringComparison.OrdinalIgnoreCase) &&
                         handleMs + serializeMs >= 500) ||
-                    (serializeMs >= 250 && (string.Equals(type, "sendChat", StringComparison.OrdinalIgnoreCase) ||
+                    ((handleMs + serializeMs >= 250) && (string.Equals(type, "sendChat", StringComparison.OrdinalIgnoreCase) ||
                         string.Equals(type, "getChatState", StringComparison.OrdinalIgnoreCase) ||
-                        string.Equals(type, "selectChat", StringComparison.OrdinalIgnoreCase))))
+                        string.Equals(type, "selectChat", StringComparison.OrdinalIgnoreCase) ||
+                        string.Equals(type, "listChats", StringComparison.OrdinalIgnoreCase))))
                     RuntimeLog.Info("Bridge response timing: type=" + type + ", handle=" + handleMs +
                         "ms, serialize=" + serializeMs + "ms, chars=" + serialized.Length + ".");
                 return serialized;
@@ -983,6 +984,15 @@ namespace RNAssistant.Office.WebView
                 Type = "chatState",
                 Scope = state != null && state.Messages != null ? "full" : "catalog",
                 Payload = state
+            }));
+        }
+
+        private void ReportChatSelection(string requestId, ChatStateResponse shell)
+        {
+            if (_postMessageJson == null || shell == null) return;
+            _postMessageJson(JsonConvert.SerializeObject(new ChatStateMessage
+            {
+                Type = "chatState", Id = requestId, Scope = "selection", Payload = shell
             }));
         }
 

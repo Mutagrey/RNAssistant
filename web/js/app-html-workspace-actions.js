@@ -42,7 +42,10 @@
     var workspaceWrite = null;
     state.htmlWorkspaceExportPending = false;
 
+    function detailUnavailable() { return !!(state.chatDetailPending || state.chatDetailError); }
+
     function captureWorkspaceAction() {
+      if (detailUnavailable()) throw new Error("Сначала загрузите чат.");
       var chatId = state.activeChatId;
       var revision = (state.chatProjectionRevisions || {})[chatId];
       if (!chatId || !Number.isSafeInteger(revision) || revision < 0 || typeof state.activeHtmlArtifactId !== "string")
@@ -53,7 +56,7 @@
     }
 
     function workspaceActionCurrent(action) {
-      return !state.bridgeUnavailable && state.activeChatId === action.chatId &&
+      return !state.bridgeUnavailable && !detailUnavailable() && state.activeChatId === action.chatId &&
         state.chatNavigationVersion === action.navigationVersion &&
         (state.htmlWorkspaceEditVersion || 0) === action.editVersion &&
         state.activeHtmlArtifactId === action.expectedActiveHtmlArtifactId &&
@@ -100,7 +103,7 @@
     }
 
     async function writeWorkspace(action, controls, content, creating) {
-      if (workspaceWrite || htmlActionPending || !state.activeChatId || state.bridgeUnavailable)
+      if (workspaceWrite || htmlActionPending || !state.activeChatId || state.bridgeUnavailable || detailUnavailable())
         throw new Error("Сохранение уже выполняется или чат недоступен.");
       if (creating && state.htmlWorkspaceDirty) throw new Error("Сначала сохраните изменения текущего артефакта.");
       if (typeof state.activeHtmlArtifactId !== "string") throw new Error("Сначала загрузите HTML workspace.");
@@ -112,7 +115,8 @@
         throw new Error("Некорректный Unicode в исходном тексте.");
       var operation = { chatId: state.activeChatId, revision: state.activeHtmlArtifactId,
         workspace: state.htmlWorkspace, draft: draftState(), abort: new AbortController(), dispatched: false };
-      function current() { return workspaceWrite === operation && !operation.abort.signal.aborted && !state.bridgeUnavailable &&
+      function current() { return workspaceWrite === operation && !operation.abort.signal.aborted &&
+        !state.bridgeUnavailable && !detailUnavailable() &&
         state.activeChatId === operation.chatId && state.activeHtmlArtifactId === operation.revision && state.htmlWorkspace === operation.workspace; }
       function unchanged() {
         var draft = draftState();
@@ -179,7 +183,8 @@
 
     async function saveSelection() {
       var selected = options.getSelection();
-      if (!selected || selected.type === "artifact" || selected.type === "collection" || state.bridgeUnavailable) return;
+      if (!selected || selected.type === "artifact" || selected.type === "collection" ||
+          state.bridgeUnavailable || detailUnavailable()) return;
       var chatId = state.activeChatId;
       options.syncEditor();
       selected = options.getSelection();
@@ -246,7 +251,8 @@
 
     async function deleteSelection(target) {
       var selected = target && typeof target.type === "string" ? target : options.getSelection();
-      if (!selected || selected.type === "artifact" || selected.type === "collection" || state.bridgeUnavailable) return;
+      if (!selected || selected.type === "artifact" || selected.type === "collection" ||
+          state.bridgeUnavailable || detailUnavailable()) return;
       var chatId = state.activeChatId;
 
       try {
@@ -478,7 +484,7 @@
     }
 
     async function createPlan() {
-      if (state.bridgeUnavailable) return;
+      if (state.bridgeUnavailable || detailUnavailable()) return;
       var chatId = state.activeChatId;
       try {
         var result = await options.send("runTool", {
@@ -538,7 +544,7 @@
     }
 
     async function refreshData(name, policy, interactive) {
-      if (state.bridgeUnavailable || refreshPending) return;
+      if (state.bridgeUnavailable || detailUnavailable() || refreshPending) return;
       if (typeof options.hasRefreshableData === "function" && !options.hasRefreshableData(policy)) return;
       if (state.htmlWorkspaceDirty) {
         if (!interactive || !window.confirm("Обновление данных отменит несохранённые изменения. Продолжить?")) return;

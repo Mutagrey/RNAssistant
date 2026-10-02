@@ -105,6 +105,22 @@ function state(runId, lifecycle = "completed", health = "clean", pending = null)
   assert.equal(ui.state.chats[0].Revision, 7, "late catalog cannot regress the visible chat summary");
   assert.equal(ui.state.chats[1].Id, "chat-new", "late catalog cannot remove a chat created after its snapshot");
   assert.equal(ui.state.tools[0].Id, "tool-new", "unversioned global catalogs are not accepted from a stale response");
+  const transcript = ui.state.messages;
+  assert.equal(ui.applyChatPreferenceStateForChat({ chatId: "chat-a", sessionRevision: 8,
+    model: "model-new", mode: "agent", reasoningEnabled: true }, "chat-a"), true);
+  assert.strictEqual(ui.state.messages, transcript, "model preference keeps the transcript projection");
+  assert.equal(ui.state.activeChatModel, "model-new");
+  assert.equal(ui.applyChatPreferenceStateForChat({ chatId: "chat-a", sessionRevision: 7,
+    model: "model-old" }, "chat-a"), false, "stale preference cannot undo a newer revision");
+  assert.equal(ui.applyChatState({ activeChatId: "chat-b", sessionRevision: 2,
+    detailDeferred: true, messageTotalCount: 90 }), true);
+  assert.equal(ui.state.chatDetailPending, true);
+  assert.equal(ui.state.messages.length, 0, "selection shell clears the previous transcript");
+  assert.equal(ui.state.artifacts.length, 0, "selection shell clears the previous resource cards");
+  assert.equal(ui.applyChatState({ activeChatId: "chat-b", sessionRevision: 2,
+    messages: [{ Content: "detail" }] }), true);
+  assert.equal(ui.state.chatDetailPending, false);
+  assert.equal(ui.state.messages[0].Content, "detail");
   console.log("PASS run view state: integrated chat state rejects stale transcript and outcome");
 }
 

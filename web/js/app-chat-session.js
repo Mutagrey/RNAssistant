@@ -44,10 +44,19 @@ function navigateChat(type, payload) {
     var bridgeMs = (window.performance && window.performance.now ? window.performance.now() : Date.now()) - startedAt;
     // Apply each completed switch before dispatching the next. If the next request
     // fails, the visible chat still matches the controller's committed binding.
+    var selectedState = response && (response.state || response.State || response);
+    var appliedNavigation = true;
     if (type === "init" || response.init) applyInitState(response.init || response);
-    else if (response.state || response.State) applyChatNavigationState(response.state || response.State, version);
+    else if (response.state || response.State) appliedNavigation = applyChatNavigationState(selectedState, version);
     else if (response.activeChatId !== undefined || response.ActiveChatId !== undefined)
-      applyChatNavigationState(response, version);
+      appliedNavigation = applyChatNavigationState(selectedState, version);
+    if (type === "selectChat" && !appliedNavigation && state.chatDetailPending &&
+        state.activeChatId === payload.chatId) {
+      state.chatDetailPending = false;
+      state.chatDetailError = "Состояние чата изменилось. Повторите загрузку.";
+      renderChatSessions();
+      renderMessages();
+    }
     var renderMs = (window.performance && window.performance.now ? window.performance.now() : Date.now()) - startedAt - bridgeMs;
     if (bridgeMs + renderMs >= (type === "init" ? 500 : 250)) send("reportClientTiming", {
       kind: type === "init" ? "startup" : "chatNavigation",
@@ -61,7 +70,15 @@ function navigateChat(type, payload) {
     if (state.chatNavigationPromise === navigation) state.chatNavigationPromise = null;
     if (typeof renderSendControls === "function") renderSendControls();
   };
-  navigation.then(finished, finished);
+  navigation.then(finished, function (error) {
+    if (type === "selectChat" && state.chatDetailPending && state.activeChatId === payload.chatId) {
+      state.chatDetailPending = false;
+      state.chatDetailError = error.detail || error.message || "Не удалось загрузить чат";
+      renderChatSessions();
+      renderMessages();
+    }
+    finished();
+  });
   return navigation;
 }
 
@@ -448,6 +465,8 @@ function applyInitState(init) {
   state.htmlWorkspace = init.htmlWorkspace || init.HtmlWorkspace || { activeFileId: "", files: [], dataSources: [], history: [], redoHistory: [], redoBranches: [], recovery: { status: "empty", canMutate: true, candidates: [] } };
   state.htmlWorkspaceDirty = false;
   state.activeChatId = nextChatId;
+  state.chatDetailPending = false;
+  state.chatDetailError = "";
   state.chatProjectionRevisions = {};
   window.RNAssistantRunViewState.accept(
     state.chatProjectionRevisions,
@@ -513,6 +532,8 @@ function applyBridgeUnavailableState(error) {
   state.chats = [];
   state.documents = [];
   state.activeChatId = "";
+  state.chatDetailPending = false;
+  state.chatDetailError = "";
   state.activeRunViewState = null;
   state.chatProjectionRevisions = {};
   state.activeChatReasoning = false;
@@ -608,6 +629,36 @@ async function loadChatState(chatIdValue) {
   var targetChatId = chatIdValue || state.activeChatId || "";
   if (!targetChatId) return initialize();
   return send("getChatState", { chatId: targetChatId });
+}
+
+async function retryChatDetail() {
+  if (!state.chatDetailError || !state.activeChatId || state.chatNavigationPending) return;
+  var targetChatId = state.activeChatId;
+  var version = state.chatNavigationVersion;
+  state.chatDetailPending = true;
+  state.chatDetailError = "";
+  renderChatSessions();
+  renderMessages();
+  if (typeof renderSendControls === "function") renderSendControls();
+  try {
+    var detail = await loadChatState(targetChatId);
+    if (state.activeChatId === targetChatId && state.chatNavigationVersion === version &&
+        !applyChatState(detail)) {
+      state.chatDetailPending = false;
+      state.chatDetailError = "Состояние чата изменилось. Повторите загрузку.";
+      renderChatSessions();
+      renderMessages();
+      if (typeof renderSendControls === "function") renderSendControls();
+    }
+  } catch (error) {
+    if (state.activeChatId === targetChatId && state.chatNavigationVersion === version) {
+      state.chatDetailPending = false;
+      state.chatDetailError = error.detail || error.message || "Не удалось загрузить чат";
+      renderChatSessions();
+      renderMessages();
+      if (typeof renderSendControls === "function") renderSendControls();
+    }
+  }
 }
 
 async function synchronizeChatState(force) {

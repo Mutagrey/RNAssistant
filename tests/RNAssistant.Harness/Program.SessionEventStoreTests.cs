@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.Globalization;
 using System.IO;
 using System.IO.Compression;
@@ -676,6 +677,110 @@ namespace RNAssistant.Harness
                     "metadata rewrite falls back to a complete verified replay");
                 AssertEqual(3L, reader.ProjectionFullReplayCount, "non-append change invalidates the cache");
             });
+        }
+
+        private static void SeparateDocumentsAvoidSharedSaveWait()
+        {
+            WithTempPaths(paths =>
+            {
+                var store = new ChatStore(paths);
+                var first = store.Create("Word", "lock-first", "First.docx", "First");
+                var second = store.Create("Word", "lock-second", "Second.docx", "Second");
+                store.Save(first);
+                store.Save(second);
+                first.Title = "First updated";
+                second.Title = "Second updated";
+
+                var documentLockTarget = SessionDirectory(paths, first) + ".document";
+                var lockDirectory = Path.Combine(paths.Root, "locks");
+                Directory.CreateDirectory(lockDirectory);
+                var lockPath = Path.Combine(lockDirectory,
+                    "chat_" + AppDataPaths.SafeFileName(Path.GetFullPath(documentLockTarget)) + ".lck");
+                var gate = (ReaderWriterLockSlim)typeof(ChatStore)
+                    .GetField("PersistenceSync", BindingFlags.NonPublic | BindingFlags.Static).GetValue(null);
+                Task blocked = null;
+                try
+                {
+                    using (var fileLock = new FileStream(lockPath, FileMode.OpenOrCreate, FileAccess.ReadWrite, FileShare.None))
+                    {
+                        blocked = Task.Run(() => store.Save(first));
+                        var deadline = DateTime.UtcNow.AddSeconds(5);
+                        while (gate.CurrentReadCount == 0 && !blocked.IsCompleted && DateTime.UtcNow < deadline)
+                            Thread.Sleep(10);
+                        AssertTrue(gate.CurrentReadCount > 0 && !blocked.IsCompleted,
+                            "first document waits while holding a shared storage lease");
+                        var unrelated = Task.Run(() => store.Save(second));
+                        AssertTrue(unrelated.Wait(TimeSpan.FromSeconds(2)),
+                            "saving a separate document is not blocked by the first document lock");
+                    }
+                }
+                finally { if (blocked != null) blocked.GetAwaiter().GetResult(); }
+                AssertEqual("First updated", store.Load(first.Id).Title, "first save completes after its lock releases");
+                AssertEqual("Second updated", store.Load(second.Id).Title, "independent save stays durable");
+            });
+        }
+
+        private static void LargeChatPerformanceProfile()
+        {
+            if (Environment.GetEnvironmentVariable("RNA_CHAT_PERF") != "1")
+            {
+                Console.WriteLine("SKIP storage perf: set RNA_CHAT_PERF=1 for temporary 30/50 MiB fixtures");
+                return;
+            }
+            foreach (var targetMiB in new[] { 30, 50 })
+            {
+                WithTempPaths(paths =>
+                {
+                    var writer = new ChatStore(paths);
+                    var chat = writer.Create("Word", "perf-" + targetMiB, "Synthetic.docx", "Synthetic");
+                    var content = new string('m', 768);
+                    for (var index = 0; index < 6000; index++)
+                        chat.Messages.Add(new ChatMessage { Id = Guid.NewGuid().ToString("N"),
+                            Role = "user", Content = content + index.ToString(CultureInfo.InvariantCulture) });
+                    HtmlWorkspaceToolService.UpsertFile(chat, "index.html", "html", "<html><body>0</body></html>", true);
+                    writer.Save(chat);
+                    for (var revision = 1; revision <= 8; revision++)
+                    {
+                        HtmlWorkspaceToolService.UpsertFile(chat, "index.html", "html",
+                            "<html><body>" + revision.ToString(CultureInfo.InvariantCulture) + "</body></html>", true);
+                        writer.Save(chat);
+                    }
+                    var path = SessionEventFile(paths, chat);
+                    var padding = new string('d', 192 * 1024);
+                    while (new FileInfo(path).Length < targetMiB * 1024L * 1024L)
+                        writer.AppendTrace(chat, SessionEventTypes.AssistantChunk,
+                            new { Padding = padding }, null, null, "perf-run", "perf-turn", "perf-step");
+
+                    var reader = new ChatStore(paths);
+                    var timer = Stopwatch.StartNew();
+                    var loaded = reader.Load(chat.Id);
+                    var coldMs = timer.ElapsedMilliseconds;
+                    timer.Restart();
+                    reader.Load(chat.Id);
+                    var warmMs = timer.ElapsedMilliseconds;
+                    AssertEqual(1L, reader.ProjectionFullReplayCount,
+                        "large projected chat uses the bounded warm cache");
+                    int startIndex;
+                    var visible = ChatCloneService.CloneRecentMessagesForBridge(loaded.Messages, out startIndex);
+                    timer.Restart();
+                    ArtifactLibraryProjectionService.ProjectState(loaded, visible);
+                    var libraryMs = timer.ElapsedMilliseconds;
+                    timer.Restart();
+                    ContextUsageEstimator.FromSession(loaded, new AppSettings());
+                    var usageMs = timer.ElapsedMilliseconds;
+                    timer.Restart();
+                    HtmlWorkspaceEditorResourceService.Metadata(loaded);
+                    var htmlMs = timer.ElapsedMilliseconds;
+                    loaded.Title = "Synthetic updated";
+                    timer.Restart();
+                    reader.Save(loaded);
+                    var saveMs = timer.ElapsedMilliseconds;
+                    Console.WriteLine("PROFILE chatMiB=" + (new FileInfo(path).Length / 1048576.0).ToString("F1", CultureInfo.InvariantCulture) +
+                        " coldMs=" + coldMs + " warmMs=" + warmMs + " saveMs=" + saveMs +
+                        " libraryMs=" + libraryMs + " usageMs=" + usageMs + " htmlMs=" + htmlMs +
+                        " messages=" + loaded.Messages.Count + " artifacts=" + loaded.Artifacts.Count);
+                });
+            }
         }
 
         private static void CacheRejectsTamperedPrefixBeforeSuffix()

@@ -742,6 +742,22 @@ function renderMessages(options) {
 
   renderedMessagesChatId = state.activeChatId;
   if (chatChanged || options.fullReset) resetRenderedMessageUnits(box);
+  if (state.chatDetailPending || state.chatDetailError) {
+    resetRenderedMessageUnits(box);
+    var notice = document.createElement("div");
+    notice.className = "chat-history-more";
+    notice.textContent = state.chatDetailPending ? "Загрузка чата…" : state.chatDetailError;
+    box.appendChild(notice);
+    if (state.chatDetailError && typeof retryChatDetail === "function") {
+      var retry = document.createElement("button");
+      retry.type = "button";
+      retry.className = "chat-history-more";
+      retry.textContent = "Повторить загрузку";
+      retry.addEventListener("click", retryChatDetail);
+      box.appendChild(retry);
+    }
+    return;
+  }
   var visibleMessages = (state.messages || []).filter(function (message) { return !messageProtocolMessage(message); });
   if (!(typeof pendingSteerInputs === "function" && pendingSteerInputs().length) && !visibleMessages.length && !state.messageStartIndex && !state.liveStreamContent && !state.liveReasoning && !state.liveActivity && !(state.liveAgentRun && state.liveAgentRun.length)) {
     resetRenderedMessageUnits(box);

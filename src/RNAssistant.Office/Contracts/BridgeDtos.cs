@@ -120,6 +120,9 @@ namespace RNAssistant.Office.Contracts
         [JsonProperty("type")]
         public string Type { get; set; }
 
+        [JsonProperty("id", NullValueHandling = NullValueHandling.Ignore)]
+        public string Id { get; set; }
+
         [JsonProperty("scope")]
         public string Scope { get; set; }
 
@@ -714,8 +717,21 @@ namespace RNAssistant.Office.Contracts
         }
     }
 
+    public sealed class ChatPreferenceResponse
+    {
+        [JsonProperty("chatId")] public string ChatId { get; set; }
+        [JsonProperty("sessionRevision")] public long SessionRevision { get; set; }
+        [JsonProperty("model")] public string Model { get; set; }
+        [JsonProperty("mode")] public string Mode { get; set; }
+        [JsonProperty("reasoningEnabled")] public bool ReasoningEnabled { get; set; }
+        [JsonProperty("contextUsage", NullValueHandling = NullValueHandling.Ignore)] public object ContextUsage { get; set; }
+    }
+
     public class ChatStateResponse
     {
+        [JsonProperty("detailDeferred", DefaultValueHandling = DefaultValueHandling.Ignore)]
+        public bool DetailDeferred { get; set; }
+
         [JsonProperty("inbox")] public ChatInboxResponse Inbox { get; set; }
         [JsonProperty("messageStartIndex")]
         public int MessageStartIndex { get; set; }

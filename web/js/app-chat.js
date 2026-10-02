@@ -35,7 +35,8 @@ async function createOfficeHostChat(host) {
 
 async function saveChatMode(mode) {
   mode = mode || "agent";
-  if (!state.activeChatId || state.bridgeUnavailable || state.modeSaving || state.chatNavigationPending || state.initializePromise || currentActiveSend() || hasActiveMessageEdit()) {
+  if (!state.activeChatId || state.bridgeUnavailable || state.modeSaving || state.chatNavigationPending || state.initializePromise ||
+      state.chatDetailPending || state.chatDetailError || currentActiveSend() || hasActiveMessageEdit()) {
     return false;
   }
   if (mode === state.activeChatMode) {

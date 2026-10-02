@@ -28,6 +28,12 @@ dotnet run --no-build --project tests/RNAssistant.Harness/RNAssistant.Harness.cs
 
 Filtering limits executed tests. The harness source-links Core and Office-neutral production files, so a normal run still compiles that full linked source set. Compilation does not require reading every test file into agent context.
 
+For large-chat storage profiling, run
+`RNA_CHAT_PERF=1 dotnet run --no-build --project tests/RNAssistant.Harness/RNAssistant.Harness.csproj -- "storage perf:"`
+after a successful build. It creates temporary 30/50 MiB JSONL fixtures with 6,000
+messages and HTML revisions, then reports cold/warm load, save, library, context
+usage and HTML metadata times. The normal harness run skips this expensive fixture.
+
 Permanent test policy is defined in
 [development rules §9](../../docs/development-rules.md#9-тестирование-по-риску);
 the active stabilization application remains

@@ -71,7 +71,8 @@ function discardModelCatalogPreview() {
 
 async function saveChatModelSelection(value) {
   value = String(value || "").trim();
-  if (!state.activeChatId || state.modelSaving || state.reasoningSaving || state.chatNavigationPending || state.initializePromise || hasActiveMessageEdit() || !!currentActiveSend()) {
+  if (!state.activeChatId || state.modelSaving || state.reasoningSaving || state.chatNavigationPending || state.initializePromise ||
+      state.chatDetailPending || state.chatDetailError || hasActiveMessageEdit() || !!currentActiveSend()) {
     return false;
   }
   if (value === activeChatModel()) {
@@ -85,7 +86,7 @@ async function saveChatModelSelection(value) {
   var targetChatId = state.activeChatId;
   try {
     var response = await sendChatPreference("setChatModel", { chatId: targetChatId, model: value });
-    if (!applyChatStateForChat(response, targetChatId)) return false;
+    if (!applyChatPreferenceStateForChat(response, targetChatId)) return false;
     renderContextMeter();
     log(value ? ("Chat model selected: " + value) : "Chat model uses default.");
     return activeChatModel() === value;
@@ -103,7 +104,8 @@ async function saveChatModelSelection(value) {
 }
 
 async function saveChatReasoningSelection(enabled) {
-  if (!state.activeChatId || state.modelSaving || state.reasoningSaving || state.chatNavigationPending || state.initializePromise || hasActiveMessageEdit() || !!currentActiveSend()) {
+  if (!state.activeChatId || state.modelSaving || state.reasoningSaving || state.chatNavigationPending || state.initializePromise ||
+      state.chatDetailPending || state.chatDetailError || hasActiveMessageEdit() || !!currentActiveSend()) {
     return false;
   }
   state.reasoningSaving = true;
@@ -112,7 +114,7 @@ async function saveChatReasoningSelection(enabled) {
   var targetChatId = state.activeChatId;
   try {
     var response = await sendChatPreference("setChatReasoning", { chatId: targetChatId, enabled: !!enabled });
-    if (!applyChatStateForChat(response, targetChatId)) return false;
+    if (!applyChatPreferenceStateForChat(response, targetChatId)) return false;
     log(enabled ? "Reasoning enabled." : "Reasoning disabled.");
     return state.activeChatReasoning === !!enabled;
   } catch (error) {

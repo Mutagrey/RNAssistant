@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.IO;
 using System.Linq;
 using System.Security.Cryptography;
@@ -29,12 +30,15 @@ namespace RNAssistant.Core.Storage
     {
         private const string EventFileSuffix = ".events.jsonl";
         private const int MaxProjectionCacheEntries = 16;
-        private const long MaxProjectionCacheCharacters = 4L * 1024 * 1024;
-        private const long MaxProjectionCacheTotalCharacters = 16L * 1024 * 1024;
+        private const long MaxProjectionCacheCharacters = 16L * 1024 * 1024;
+        private const long MaxProjectionCacheTotalCharacters = 32L * 1024 * 1024;
         private const int MaxHeaderCacheEntries = 64;
         private const long MaxHeaderCacheCharacters = 512L * 1024;
         private const long MaxHeaderCacheTotalCharacters = 4L * 1024 * 1024;
-        private static readonly object PersistenceSync = new object();
+        // Document locks serialize writes to the same document. The shared gate only
+        // excludes a reachability scan from writes; unrelated documents can proceed.
+        private static readonly ReaderWriterLockSlim PersistenceSync =
+            new ReaderWriterLockSlim(LockRecursionPolicy.SupportsRecursion);
         private static readonly UTF8Encoding Utf8 = new UTF8Encoding(false);
         private static readonly HashSet<string> SessionEventProperties = new HashSet<string>(
             new[]
@@ -56,6 +60,43 @@ namespace RNAssistant.Core.Storage
         private long _headerFullReplayCount;
         private long _headerIncrementalReplayCount;
         private long _artifactCasExternalizationCount;
+
+        public Action<string> PerformanceLog { get; set; }
+
+        private IDisposable AcquirePersistenceRead()
+        {
+            var timer = Stopwatch.StartNew();
+            PersistenceSync.EnterReadLock();
+            LogPerformance("lockWait", timer.ElapsedMilliseconds);
+            return new PersistenceLease(false);
+        }
+
+        private IDisposable AcquirePersistenceWrite()
+        {
+            var timer = Stopwatch.StartNew();
+            PersistenceSync.EnterWriteLock();
+            LogPerformance("maintenanceLockWait", timer.ElapsedMilliseconds);
+            return new PersistenceLease(true);
+        }
+
+        private void LogPerformance(string stage, long milliseconds, string detail = null)
+        {
+            if (milliseconds < 250 || PerformanceLog == null) return;
+            try { PerformanceLog("Chat storage timing: stage=" + stage + ", elapsed=" + milliseconds +
+                "ms" + (string.IsNullOrEmpty(detail) ? string.Empty : ", " + detail) + "."); }
+            catch { /* Diagnostics must not affect storage authority. */ }
+        }
+
+        private sealed class PersistenceLease : IDisposable
+        {
+            private readonly bool _write;
+            public PersistenceLease(bool write) { _write = write; }
+            public void Dispose()
+            {
+                if (_write) PersistenceSync.ExitWriteLock();
+                else PersistenceSync.ExitReadLock();
+            }
+        }
 
         internal long ProjectionFullReplayCount
         {
@@ -231,6 +272,7 @@ namespace RNAssistant.Core.Storage
         {
             if (session == null) throw new ArgumentNullException("session");
             if (string.IsNullOrWhiteSpace(type)) throw new ArgumentException("Event type is required.", "type");
+            var timer = Stopwatch.StartNew();
 
             var dataToken = data == null ? null : JToken.FromObject(data);
             var correlatedStepId = ResolveStepId(stepId, dataToken);
@@ -239,8 +281,9 @@ namespace RNAssistant.Core.Storage
             {
                 payload = _blobs.StoreBytes(payloadBytes, payloadContentType);
             }
+            var payloadMs = timer.ElapsedMilliseconds;
 
-            lock (PersistenceSync)
+            using (AcquirePersistenceRead())
             {
                 var path = GetSessionPath(session.Host, session.DocumentKey, session.Id);
                 using (AcquireDocumentLock(session.Host, session.DocumentKey))
@@ -288,6 +331,9 @@ namespace RNAssistant.Core.Storage
                     session.StorageHeadHash = tail.Hash;
                     session.StorageTailByteOffset = tail.StorageByteOffset;
                     CaptureStorageState(session, path);
+                    LogPerformance("trace", timer.ElapsedMilliseconds,
+                        "type=" + type + ", payload=" + payloadMs +
+                        "ms, commit=" + (timer.ElapsedMilliseconds - payloadMs) + "ms");
                     return appended.First(item => string.Equals(item.EventId, trace.EventId, StringComparison.Ordinal));
                 }
             }
@@ -296,7 +342,7 @@ namespace RNAssistant.Core.Storage
         internal int CloseOpenSteps(ChatSession session, string runId, string status, string error)
         {
             if (session == null || string.IsNullOrWhiteSpace(runId)) return 0;
-            lock (PersistenceSync)
+            using (AcquirePersistenceRead())
             {
                 var path = GetSessionPath(session.Host, session.DocumentKey, session.Id);
                 using (AcquireDocumentLock(session.Host, session.DocumentKey))
@@ -354,7 +400,7 @@ namespace RNAssistant.Core.Storage
         {
             if (string.IsNullOrWhiteSpace(sessionId)) return new List<SessionEvent>();
             var path = GetSessionPath(host, documentKey, sessionId);
-            lock (PersistenceSync)
+            using (AcquirePersistenceRead())
             {
                 using (AcquireDocumentLock(host, documentKey))
                 {
@@ -368,7 +414,7 @@ namespace RNAssistant.Core.Storage
         {
             if (string.IsNullOrWhiteSpace(sessionId)) return new List<SessionEvent>();
             var path = GetSessionPath(host, documentKey, sessionId);
-            lock (PersistenceSync)
+            using (AcquirePersistenceRead())
             {
                 using (AcquireDocumentLock(host, documentKey))
                 {
@@ -400,7 +446,7 @@ namespace RNAssistant.Core.Storage
                 var sourceId = CasMaintenanceService.RelativePath(_paths.ChatDirectory, path);
                 try
                 {
-                    lock (PersistenceSync)
+                    using (AcquirePersistenceWrite())
                     {
                         using (AcquireDocumentPathLock(path))
                         {
@@ -533,7 +579,7 @@ namespace RNAssistant.Core.Storage
                     return session;
                 }
 
-                lock (PersistenceSync)
+                using (AcquirePersistenceRead())
                 {
                     var newPath = GetSessionPath(host, documentKey, session.Id);
                     using (AcquireTwoDocumentLocks(oldHost, oldDocumentKey, host, documentKey))
@@ -610,7 +656,7 @@ namespace RNAssistant.Core.Storage
             if (string.IsNullOrWhiteSpace(sessionId)) return false;
             var path = GetSessionPath(host, documentKey, sessionId);
             if (!File.Exists(path)) return false;
-            lock (PersistenceSync)
+            using (AcquirePersistenceRead())
             {
                 using (AcquireDocumentLock(host, documentKey))
                 {
@@ -631,7 +677,7 @@ namespace RNAssistant.Core.Storage
         {
             var directory = GetDocumentDirectory(host, documentKey);
             if (!Directory.Exists(directory)) return false;
-            lock (PersistenceSync)
+            using (AcquirePersistenceRead())
             {
                 using (AcquireDocumentLock(host, documentKey))
                 {
@@ -710,7 +756,7 @@ namespace RNAssistant.Core.Storage
             if (!File.Exists(path)) return string.Empty;
             try
             {
-                lock (PersistenceSync)
+                using (AcquirePersistenceRead())
                 {
                     using (AcquireDocumentLock(host, documentKey))
                     {
@@ -728,7 +774,7 @@ namespace RNAssistant.Core.Storage
             var path = GetActivePath(host, documentKey);
             try
             {
-                lock (PersistenceSync)
+                using (AcquirePersistenceRead())
                 {
                     using (AcquireDocumentLock(host, documentKey))
                     {
@@ -744,7 +790,7 @@ namespace RNAssistant.Core.Storage
         private void SaveInternal(ChatSession session, string explicitPath, bool allowRelocatedSession)
         {
             if (session == null) throw new ArgumentNullException("session");
-            lock (PersistenceSync)
+            using (AcquirePersistenceRead())
             {
                 foreach (var message in session.Messages ?? new List<ChatMessage>())
                     RuntimePayloadService.ExternalizeActivity(message.Activity, _blobs);
@@ -759,12 +805,15 @@ namespace RNAssistant.Core.Storage
 
         private void SaveInternalLocked(ChatSession session, string path, bool allowRelocatedSession)
         {
+            var timer = Stopwatch.StartNew();
             EnsureUniqueArtifactIdentities(session);
             EnsureChartArtifacts(session);
             ExternalizeArtifacts(session);
+            var externalizeMs = timer.ElapsedMilliseconds;
             var exists = File.Exists(path);
             EventLogReadResult log = null;
             var stored = exists ? ReadProjectedSession(path, false, false, out log) : null;
+            var readMs = timer.ElapsedMilliseconds - externalizeMs;
             var storedRevision = stored == null ? 0 : stored.Revision;
             if (exists && stored == null)
             {
@@ -788,6 +837,7 @@ namespace RNAssistant.Core.Storage
                 var pending = new List<PendingSessionEvent>();
                 var projectedBefore = exists ? ToProjectionToken(stored) : null;
                 var projectedAfter = ToProjectionToken(session);
+                var projectionMs = timer.ElapsedMilliseconds - externalizeMs - readMs;
                 if (!exists)
                 {
                     var initialType = string.IsNullOrWhiteSpace(session.ParentSessionId)
@@ -805,6 +855,7 @@ namespace RNAssistant.Core.Storage
                         new JObject { ["Operations"] = JArray.FromObject(operations) }, null,
                         correlationRunId, correlationTurnId, null));
                 }
+                var diffMs = timer.ElapsedMilliseconds - externalizeMs - readMs - projectionMs;
                 AddTurnLifecycleEvents(pending, stored == null ? null : stored.LastRun, session.LastRun);
                 var appended = AppendEvents(
                     path,
@@ -816,6 +867,7 @@ namespace RNAssistant.Core.Storage
                     stored == null ? 0 : stored.StorageTailByteOffset,
                     pending,
                     log);
+                var appendMs = timer.ElapsedMilliseconds - externalizeMs - readMs - projectionMs - diffMs;
                 AdvanceHeaderCache(
                     path,
                     session.Id,
@@ -834,6 +886,10 @@ namespace RNAssistant.Core.Storage
                 RebuildHtmlWorkspaceProjection(session);
                 RebuildContextCheckpointProjection(session);
                 RebuildChartActivityProjection(session);
+                LogPerformance("save", timer.ElapsedMilliseconds,
+                    "externalize=" + externalizeMs + "ms, read=" + readMs + "ms, projection=" + projectionMs +
+                    "ms, diff=" + diffMs + "ms, append=" + appendMs +
+                    "ms, messages=" + (session.Messages == null ? 0 : session.Messages.Count));
             }
             catch
             {
@@ -1011,25 +1067,37 @@ namespace RNAssistant.Core.Storage
             bool rebuildDerivedProjections,
             out EventLogReadResult validatedLog)
         {
+            var timer = Stopwatch.StartNew();
             validatedLog = null;
             ProjectionCacheEntry cached;
             if (TryReadProjectionCache(path, out cached))
             {
-                return Project(cached.Root, cached.Sequence, cached.HeadHash, cached.TailByteOffset,
+                var cachedSession = Project(cached.Root, cached.Sequence, cached.HeadHash, cached.TailByteOffset,
                     cached.ByteLength, cached.LastWriteUtcTicks,
                     hydrateActiveArtifacts, rebuildDerivedProjections);
+                LogPerformance("projectionCache", timer.ElapsedMilliseconds,
+                    "bytes=" + cached.ByteLength + ", characters=" + cached.EstimatedCharacters);
+                return cachedSession;
             }
 
             var replay = new ProjectionReplayCursor(null);
             validatedLog = ReadEventLog(path, 0, null, replay.Apply);
             if (validatedLog == null || validatedLog.Events.Count == 0) return null;
+            var replayMs = timer.ElapsedMilliseconds;
             var root = replay.Materialize();
+            var reduceMs = timer.ElapsedMilliseconds - replayMs;
             var tail = LastEvent(validatedLog);
             Interlocked.Increment(ref _projectionFullReplayCount);
             var session = Project(root, tail.Sequence, tail.Hash, tail.StorageByteOffset,
                 validatedLog.ByteLength, validatedLog.LastWriteUtcTicks,
                 hydrateActiveArtifacts, rebuildDerivedProjections);
+            var projectMs = timer.ElapsedMilliseconds - replayMs - reduceMs;
             if (CanCacheProjection(validatedLog)) StoreProjectionCache(path, root, session);
+            LogPerformance("projectionReplay", timer.ElapsedMilliseconds,
+                "replay=" + replayMs + "ms, reduce=" + reduceMs +
+                "ms, project=" + projectMs + "ms, cache=" +
+                (timer.ElapsedMilliseconds - replayMs - reduceMs - projectMs) +
+                "ms, bytes=" + validatedLog.ByteLength);
             return session;
         }
 

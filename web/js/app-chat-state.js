@@ -40,7 +40,7 @@ function renderChatSessions() {
   var subtitle = [];
   if (state.activeChatId) {
     var visibleCount = (state.messages || []).filter(function (message) { return !messageProtocolMessage(message); }).length;
-    subtitle.push(state.messageStartIndex > 0
+    subtitle.push(state.chatDetailPending ? "Загрузка чата…" : state.chatDetailError ? "Ошибка загрузки чата" : state.messageStartIndex > 0
       ? "Показано " + visibleCount + " · история доступна выше"
       : formatChatMessageCount(visibleCount));
   }
@@ -136,11 +136,39 @@ function applyChatStateForChat(response, expectedChatId) {
   return false;
 }
 
+function applyChatPreferenceStateForChat(response, expectedChatId) {
+  response = response || {};
+  var responseChatId = response.chatId || response.ChatId || "";
+  if (!expectedChatId || responseChatId !== expectedChatId || state.activeChatId !== expectedChatId) return false;
+  var revision = window.RNAssistantRunViewState.sessionRevision(response);
+  if (!window.RNAssistantRunViewState.accept(state.chatProjectionRevisions, responseChatId, revision)) return false;
+  state.activeChatModel = response.model || response.Model || "";
+  state.activeChatMode = response.mode || response.Mode || "agent";
+  state.activeChatReasoning = !!(response.reasoningEnabled || response.ReasoningEnabled);
+  if (response.contextUsage || response.ContextUsage) {
+    state.contextUsage = response.contextUsage || response.ContextUsage;
+    syncTokenEstimateCalibrationFromUsage();
+  }
+  renderChatSessions();
+  renderContextMeter();
+  renderModelControls();
+  if (typeof renderSendControls === "function") renderSendControls();
+  return true;
+}
+
 function applyPushedChatState(message) {
   message = message || {};
   var response = message.payload || message.Payload || {};
   var scope = String(message.scope || message.Scope || "catalog").toLowerCase();
   var responseChatId = response.activeChatId || response.ActiveChatId || "";
+  if (scope === "selection") {
+    var requestId = message.id || message.Id || "";
+    var pending = (state.pending || {})[requestId];
+    if (pending && pending.type === "selectChat" && pending.payload &&
+        pending.payload.chatId === responseChatId && (response.detailDeferred || response.DetailDeferred))
+      return applyChatState(response);
+    return false;
+  }
   if (scope === "full" && responseChatId && responseChatId === state.activeChatId) {
     return applyChatState(response);
   }
@@ -222,6 +250,7 @@ function retainHtmlWorkspaceSources(current, incoming) {
 
 function applyChatState(response) {
   response = response || {};
+  var detailDeferred = !!(response.detailDeferred || response.DetailDeferred);
   var previousChatId = state.activeChatId || "";
   var hasResponseChatId = response.activeChatId !== undefined || response.ActiveChatId !== undefined;
   var nextChatId = hasResponseChatId
@@ -256,6 +285,19 @@ function applyChatState(response) {
     resetMessageEditState();
   }
   state.activeChatId = nextChatId;
+  state.chatDetailPending = detailDeferred;
+  state.chatDetailError = "";
+  if (detailDeferred) {
+    state.messages = [];
+    state.messageStartIndex = 0;
+    state.messageTotalCount = response.messageTotalCount || response.MessageTotalCount || 0;
+    state.context = {};
+    state.contextUsage = {};
+    state.artifacts = [];
+    state.artifactLibrary = { sessionRevision: incomingRevision || 0, heads: [] };
+    state.htmlWorkspace = { files: [], dataSources: [], history: [], redoHistory: [], redoBranches: [],
+      recovery: { status: "empty", canMutate: false } };
+  }
   if (typeof renderChatInbox === "function") renderChatInbox();
   state.activeRunViewState = window.RNAssistantRunViewState.normalize(
     response.runViewState !== undefined ? response.runViewState : response.RunViewState);
@@ -327,6 +369,7 @@ function applyChatState(response) {
   renderContext();
   renderContextMeter();
   renderModelControls();
+  if (typeof renderSendControls === "function") renderSendControls();
   if ($("chatModeSelect")) {
     $("chatModeSelect").value = state.activeChatMode || "agent";
   }

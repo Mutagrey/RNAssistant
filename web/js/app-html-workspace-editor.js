@@ -135,15 +135,20 @@
       var status = $("htmlWorkspaceStatus");
       var save = $("saveHtmlWorkspaceButton");
       var selected = selectedItem();
-      var blocked = recoveryBlocked();
+      var detailUnavailable = !!(state.chatDetailPending || state.chatDetailError);
+      var blocked = recoveryBlocked() || detailUnavailable;
       renderHtmlWorkspaceRecovery();
-      if ($("addPlanButton")) $("addPlanButton").disabled = !!state.bridgeUnavailable;
+      if ($("addPlanButton")) $("addPlanButton").disabled = !!state.bridgeUnavailable || detailUnavailable;
       ["addHtmlFileButton", "addCssFileButton", "addJsFileButton", "addHtmlDataButton"].forEach(function (id) {
         if ($(id)) $(id).disabled = !!state.bridgeUnavailable || blocked;
       });
       if (status) {
         if (state.bridgeUnavailable) {
           status.textContent = "Office bridge недоступен.";
+        } else if (state.chatDetailPending) {
+          status.textContent = "Загрузка чата…";
+        } else if (state.chatDetailError) {
+          status.textContent = "Не удалось загрузить чат. Повторите загрузку в истории сообщений.";
         } else if (blocked) {
           status.textContent = "HTML workspace требует восстановления.";
         } else if (!files().length && !dataSources().length && !(state.artifacts || []).length) {
@@ -161,7 +166,8 @@
       }
       if (save) {
         save.disabled = state.bridgeUnavailable || !selected || selected.type === "artifact" ||
-          selected.type === "collection" || !state.htmlWorkspaceDirty || (blocked && selected.type !== "plan") ||
+          selected.type === "collection" || !state.htmlWorkspaceDirty || detailUnavailable ||
+          (blocked && selected.type !== "plan") ||
           selected.type === "file" && (!source.ready(selected.item) || !source.current(workspace()));
         save.title = "Сохранить изменения (Ctrl+S)";
       }
@@ -172,7 +178,7 @@
         $("refreshHtmlDataButton").title = boundCount ? "Перечитать " + boundCount + " привязанных наборов из Office" : "Нет привязанных данных";
       }
       if ($("exportHtmlWorkspaceButton")) {
-        var exportBlocked = !!state.htmlWorkspaceDirty || !!state.htmlWorkspaceExportPending ||
+        var exportBlocked = detailUnavailable || !!state.htmlWorkspaceDirty || !!state.htmlWorkspaceExportPending ||
           !state.activeHtmlArtifactId || !files().some(function (file) { return fileKind(file) === "html"; });
         $("exportHtmlWorkspaceButton").disabled = exportBlocked;
         $("exportHtmlWorkspaceButton").title = state.htmlWorkspaceDirty
@@ -181,7 +187,8 @@
       }
       if ($("deleteHtmlWorkspaceButton")) {
         $("deleteHtmlWorkspaceButton").disabled = state.bridgeUnavailable || !selected ||
-          selected.type === "artifact" || selected.type === "collection" || (blocked && selected.type !== "plan");
+          selected.type === "artifact" || selected.type === "collection" || detailUnavailable ||
+          (blocked && selected.type !== "plan");
         $("deleteHtmlWorkspaceButton").title = selected
           ? (selected.type === "plan" ? "Удалить план" : "Удалить выбранный файл или источник данных")
           : "Выберите артефакт";

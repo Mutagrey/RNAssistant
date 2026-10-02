@@ -218,6 +218,61 @@ function createSyncContext() {
   }
 
   {
+    const { context, calls, fullStates } = createSyncContext();
+    vm.runInContext(fs.readFileSync(path.join(root, "web/js/app-chat-state.js"), "utf8"), context);
+    context.applyChatState = response => {
+      fullStates.push(response);
+      context.state.activeChatId = response.activeChatId;
+    };
+    context.state.pending = { "42": { type: "selectChat", payload: { chatId: "chat-b" } } };
+    assert.equal(context.applyPushedChatState({ id: "42", scope: "selection",
+      payload: { activeChatId: "chat-c", detailDeferred: true } }), false,
+    "a shell cannot switch to another target");
+    assert.equal(context.applyPushedChatState({ id: "42", scope: "selection",
+      payload: { activeChatId: "chat-b", detailDeferred: true } }), undefined);
+    assert.equal(context.state.activeChatId, "chat-b", "confirmed target becomes visible before the full response");
+    assert.equal(fullStates.length, 1);
+    delete context.state.pending["42"];
+    assert.equal(context.applyPushedChatState({ id: "42", scope: "selection",
+      payload: { activeChatId: "chat-b", detailDeferred: true } }), false,
+    "a late shell cannot replace the full response");
+    assert.equal(fullStates.length, 1);
+    console.log("PASS chat navigation: selection shell is exact and cannot arrive late");
+  }
+
+  {
+    const { context, calls } = createSyncContext();
+    let rejectSelection;
+    context.renderChatSessions = () => {};
+    context.renderMessages = () => {};
+    context.renderSendControls = () => {};
+    context.applyChatState = response => {
+      context.state.activeChatId = response.activeChatId;
+      context.state.chatDetailPending = !!response.detailDeferred;
+      context.state.chatDetailError = "";
+      return true;
+    };
+    context.send = (type, payload) => {
+      calls.push({ type, payload });
+      if (type === "selectChat") return new Promise((resolve, reject) => { rejectSelection = reject; });
+      if (type === "getChatState") return Promise.resolve({ activeChatId: "chat-b", messages: [] });
+      throw new Error("unexpected bridge call: " + type);
+    };
+    const selection = context.navigateChat("selectChat", { chatId: "chat-b" });
+    context.applyChatState({ activeChatId: "chat-b", detailDeferred: true });
+    rejectSelection(new Error("detail unavailable"));
+    await assert.rejects(selection, /detail unavailable/);
+    await new Promise(setImmediate);
+    assert.equal(context.state.chatDetailPending, false);
+    assert.equal(context.state.chatDetailError, "detail unavailable");
+    await context.retryChatDetail();
+    assert.equal(context.state.chatDetailPending, false);
+    assert.equal(context.state.chatDetailError, "");
+    assert.deepEqual(calls.map(call => call.type), ["selectChat", "getChatState"]);
+    console.log("PASS chat navigation: failed detail remains visible and retries once");
+  }
+
+  {
     const { context, calls } = createSyncContext();
     let releaseSync;
     context.state.chatSyncPromise = new Promise(resolve => { releaseSync = resolve; });
@@ -299,7 +354,7 @@ function createSyncContext() {
   assert.ok(index.includes("app-chat-session.js?v=office-chat-20260930-4"), "chat session cache key was bumped");
   assert.ok(fs.readFileSync(path.join(root, "web/js/app.js"), "utf8")
     .includes("window.setInterval(synchronizeChatState, 60000)"), "background catalog scan is limited to once per minute");
-  console.log("OK 10/10");
+  console.log("OK 12/12");
 }()).catch(error => {
   console.error(error.stack || error);
   process.exitCode = 1;

@@ -555,6 +555,32 @@ namespace RNAssistant.Harness
             }
         }
 
+        private static async Task BridgeChatSelectionStreamsBoundShell()
+        {
+            var posted = new List<JObject>();
+            using (var bridge = new AssistantWebBridge(new AssistantController(),
+                json => posted.Add(JObject.Parse(json))))
+            {
+                var response = JObject.Parse(await bridge.HandleMessageAsync(JsonConvert.SerializeObject(new
+                {
+                    id = "select-1", type = "selectChat", bridgeToken = BridgeToken(bridge),
+                    payload = new { chatId = "chat-b" }
+                })));
+                AssertTrue(response["ok"].Value<bool>(), "selection returns a terminal response");
+                AssertEqual("chat-b", response["payload"]["activeChatId"].Value<string>(),
+                    "terminal detail belongs to the bound chat");
+                AssertTrue(response["payload"]["messages"] != null,
+                    "terminal response includes chat detail");
+                AssertEqual(1, posted.Count, "selection sends one early state message");
+                AssertEqual("select-1", posted[0]["id"].Value<string>(), "shell binds to the request");
+                AssertEqual("selection", posted[0]["scope"].Value<string>(), "shell has its own scope");
+                AssertEqual("chat-b", posted[0]["payload"]["activeChatId"].Value<string>(),
+                    "shell belongs to the selected chat");
+                AssertTrue(posted[0]["payload"]["detailDeferred"].Value<bool>(),
+                    "shell cannot be mistaken for full detail");
+            }
+        }
+
         private static async Task BridgeAgentRunKeepsControlsResponsive()
         {
             using (var entered = new ManualResetEventSlim())
@@ -1145,7 +1171,9 @@ namespace RNAssistant.Harness
             AssertTrue(response["ok"].Value<bool>(), "reasoning response ok");
             AssertEqual("chat-1", controller.LastChatId, "reasoning chat id");
             AssertTrue(controller.LastChatReasoning, "reasoning payload");
-            AssertTrue(response["payload"]["activeChatReasoning"].Value<bool>(), "reasoning response");
+            AssertTrue(response["payload"]["reasoningEnabled"].Value<bool>(), "reasoning response");
+            AssertTrue(response["payload"]["messages"] == null,
+                "preference response does not project the transcript");
         }
 
         private static void BridgeUsesTypedSettingsPayload()

@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.Linq;
 using System.Reflection;
 using Newtonsoft.Json;
@@ -109,8 +110,10 @@ namespace RNAssistant.Core.Storage
             bool rebuildDerivedProjections)
         {
             if (root == null) return null;
+            var timer = Stopwatch.StartNew();
             var session = RuntimePayloadService.HydrateActiveExecution(root, _blobs).ToObject<ChatSession>();
             ArtifactWorkingSet.Validate(session);
+            var sessionMs = timer.ElapsedMilliseconds;
             session.Revision = sequence;
             session.StorageHeadHash = headHash;
             session.StorageTailByteOffset = tailByteOffset;
@@ -140,11 +143,16 @@ namespace RNAssistant.Core.Storage
                     foreach (var artifact in DocumentArtifacts.SnapshotHistory(session, logicalId))
                         if (!session.Artifacts.Any(item => item.Id == artifact.Id)) session.Artifacts.Add(artifact);
             }
+            var documentMs = timer.ElapsedMilliseconds - sessionMs;
+            long htmlMs = 0, contextMs = 0, chartMs = 0;
             if (rebuildDerivedProjections)
             {
                 RebuildHtmlWorkspaceProjection(session);
+                htmlMs = timer.ElapsedMilliseconds - sessionMs - documentMs;
                 RebuildContextCheckpointProjection(session);
+                contextMs = timer.ElapsedMilliseconds - sessionMs - documentMs - htmlMs;
                 RebuildChartActivityProjection(session);
+                chartMs = timer.ElapsedMilliseconds - sessionMs - documentMs - htmlMs - contextMs;
             }
             if (hydrateActiveArtifacts)
             {
@@ -153,6 +161,11 @@ namespace RNAssistant.Core.Storage
                     HydrateArtifact(artifact);
                 }
             }
+            LogPerformance("sessionMaterialize", timer.ElapsedMilliseconds,
+                "session=" + sessionMs + "ms, document=" + documentMs +
+                "ms, html=" + htmlMs + "ms, context=" + contextMs +
+                "ms, chart=" + chartMs + "ms, activeBodies=" +
+                (timer.ElapsedMilliseconds - sessionMs - documentMs - htmlMs - contextMs - chartMs) + "ms");
             return session;
         }
 

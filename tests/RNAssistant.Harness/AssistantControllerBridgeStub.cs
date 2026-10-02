@@ -98,6 +98,7 @@ namespace RNAssistant.Office
             LastChatId = chatId;
             return ChatState(null, chatId);
         }
+        public ChatStateResponse GetChatDetail(string chatId) { return GetChatState(chatId); }
         public ChatMessagePageDto GetPreviousChatMessages(string chatId, int beforeIndex)
         {
             LastChatId = chatId;
@@ -161,7 +162,12 @@ namespace RNAssistant.Office
             LastDocumentHost = host;
             return ChatState(title, documentKey);
         }
-        public ChatStateResponse SelectChat(string chatId) { NavigationWork?.Invoke(); return ChatState(null, chatId); }
+        public ChatStateResponse SelectChat(string chatId, Action<ChatStateResponse> selected = null)
+        {
+            NavigationWork?.Invoke();
+            selected?.Invoke(new ChatStateResponse { ActiveChatId = chatId, DetailDeferred = true });
+            return ChatState(null, chatId);
+        }
         public OpenDocumentResponse OpenDocument(string chatId) { NavigationWork?.Invoke(); return new OpenDocumentResponse { Path = string.Empty, Launched = false }; }
         public ChatStateResponse ActivateDocument(string documentKey) { NavigationWork?.Invoke(); return ChatState(null, documentKey); }
         public ChatStateResponse DeleteDocument(string host, string documentKey)
@@ -170,7 +176,8 @@ namespace RNAssistant.Office
             return ChatState(host, documentKey);
         }
         public ChatStateResponse RenameChat(string chatId, string title) { return ChatState(title, chatId); }
-        public ChatStateResponse SetChatModel(string chatId, string model) { NavigationWork?.Invoke(); return ChatState(model, chatId); }
+        public ChatPreferenceResponse SetChatModel(string chatId, string model)
+        { NavigationWork?.Invoke(); return new ChatPreferenceResponse { ChatId = chatId, Model = model, Mode = "chat" }; }
         public ChatStateResponse SetChatMode(string chatId, string mode)
         {
             NavigationWork?.Invoke();
@@ -180,14 +187,12 @@ namespace RNAssistant.Office
             state.ActiveChatMode = mode;
             return state;
         }
-        public ChatStateResponse SetChatReasoning(string chatId, bool enabled)
+        public ChatPreferenceResponse SetChatReasoning(string chatId, bool enabled)
         {
             NavigationWork?.Invoke();
             LastChatId = chatId;
             LastChatReasoning = enabled;
-            var state = ChatState(null, chatId);
-            state.ActiveChatReasoning = enabled;
-            return state;
+            return new ChatPreferenceResponse { ChatId = chatId, Mode = "chat", ReasoningEnabled = enabled };
         }
         public ChatStateResponse ClearChat(string chatId) { return ChatState(null, chatId); }
         public Task<ChatStateResponse> CompactChatContextAsync(string chatId = null, Action<string, string, ChatActivity> progress = null, CancellationToken cancellationToken = default(CancellationToken))
