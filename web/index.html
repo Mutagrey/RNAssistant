@@ -124,6 +124,7 @@
                   <input id="chatResourcesSearchInput" type="search" placeholder="Найти ресурс..." autocomplete="off">
                 </label>
                 <div class="chat-resource-list" id="chatResourcesList"></div>
+                <button type="button" class="link-button hidden" id="chatResourcesMoreButton">Следующие 50 ресурсов</button>
                 <details id="documentArtifactsPicker">
                   <summary>Из документа…</summary>
                   <p class="chat-resource-empty">Подключите файл или выберите Plan из другого чата. «Убрать» удаляет только ссылку в этом чате; история и ресурс документа сохраняются.</p>
@@ -608,6 +609,7 @@
               </div>
             </div>
             <div class="tool-list html-workspace-tree" id="htmlWorkspaceTree" role="tree" aria-label="Ресурсы чата"></div>
+            <button type="button" class="link-button hidden" id="artifactLibraryMoreButton">Следующие 50 ресурсов</button>
           </aside>
           <div class="splitter" role="separator" aria-orientation="vertical" aria-label="Изменить ширину списка артефактов"></div>
           <section class="html-workspace-editor surface-panel padded tool-editor" id="htmlWorkspaceEditor">
@@ -1091,7 +1093,7 @@
   <script src="js/app-vba.js?v=run-diff-20260908-1"></script>
   <script src="js/app-html-resource-export.js?v=binary-chunks-20260906-1"></script>
   <script src="js/app-html-workspace-preview.js?v=binary-chunks-20260906-1"></script>
-  <script src="js/app-html-workspace-artifacts.js?v=binary-chunks-20260906-1"></script>
+  <script src="js/app-html-workspace-artifacts.js?v=artifact-library-lazy-20261002-1"></script>
   <script src="js/app-html-workspace-source.js?v=html-memory-20261002-1"></script>
   <script src="js/app-html-workspace-model.js?v=html-read-20260906-1"></script>
   <script src="js/app-html-workspace-editor.js?v=html-memory-20261002-1"></script>
@@ -1107,7 +1109,7 @@
   <script src="js/app-agent-data.js?v=step-results-20260908-1"></script>
   <script src="js/app-agent-model.js?v=catalog-display-chat-20260908-1"></script>
   <script src="js/app-chart-artifacts.js?v=chart-chat-scope-20260908-1"></script>
-  <script src="js/app-artifacts.js?v=shared-markdown-20260908-1"></script>
+  <script src="js/app-artifacts.js?v=artifact-library-lazy-20261002-1"></script>
   <script src="js/app-task-list.js?v=agent-planning-20261002-2"></script>
   <script src="js/app-agent-activity.js?v=agent-continuity-20261002-1"></script>
   <script src="js/app-agent-approval.js?v=run-view-state-20260830-1"></script>
@@ -1116,7 +1118,7 @@
   <script src="js/app-messages.js?v=action-severity-20260930-1-chat-paging-1-panel-model-20261002-1-inbox-20261002-1"></script>
   <script src="js/app-reasoning.js?v=chat-projection-20260907-1"></script>
   <script src="js/app-attachments.js?v=vba-upload-20260906-1-inbox-20261002-1"></script>
-  <script src="js/app-chat-session.js?v=office-chat-20260930-4-chat-paging-1-usage-20261002-1-navigation-20261002-1-panel-model-20261002-1"></script>
+  <script src="js/app-chat-session.js?v=office-chat-20260930-4-chat-paging-1-usage-20261002-1-navigation-20261002-1-panel-model-20261002-1-artifact-library-lazy-1"></script>
   <script src="js/app-chat-composer.js?v=multi-chat-20260902-1-navigation-20261002-1-panel-model-20261002-1-inbox-20261002-1"></script>
   <script src="js/app-chat-inbox.js?v=inbox-1"></script>
   <script src="js/app-chat-run.js?v=response-render-timing-20260928-1-usage-20261002-1-navigation-20261002-1-inbox-20261002-1"></script>

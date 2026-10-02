@@ -542,6 +542,8 @@ namespace RNAssistant.Harness
                 Test("artifact library: immutable classes and labels", ArtifactLibraryProjectsImmutableClasses),
                 Test("artifact library: exact heads and branch history", ArtifactLibraryProjectsExactHeadsAndHistory),
                 Test("artifact library: derived resources stay separate", ArtifactLibraryProjectsDerivedResources),
+                Test("artifact library: synthetic transport", ArtifactLibrarySyntheticTransport),
+                Test("artifact library: history pages reject stale session", ArtifactLibraryHistoryPagesRejectStale),
                 Test("attachments: visual pdf payload", AttachmentBuildsVisualPdfPayload),
                 Test("attachments: rejects unsupported file", AttachmentRejectsUnsupportedFile),
                 Test("attachments: cleans stale drafts", AttachmentCleansStaleDrafts),

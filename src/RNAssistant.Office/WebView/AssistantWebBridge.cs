@@ -587,6 +587,16 @@ namespace RNAssistant.Office.WebView
                     case "cancelHtmlWorkspaceMutationUpload":
                         responsePayload = _controller.CancelHtmlWorkspaceMutationUpload(Payload<ResourceUploadLeaseRequest>(payload));
                         break;
+                    case "getArtifactLibraryPage":
+                        var libraryPage = Payload<ArtifactLibraryPageRequest>(payload);
+                        responsePayload = await RunBridgeWorkAsync(
+                            () => _controller.GetArtifactLibraryPage(libraryPage), cancellationToken).ConfigureAwait(false);
+                        break;
+                    case "getArtifactLibraryHistory":
+                        var libraryHistory = Payload<ArtifactLibraryHistoryRequest>(payload);
+                        responsePayload = await RunBridgeWorkAsync(
+                            () => _controller.GetArtifactLibraryHistory(libraryHistory), cancellationToken).ConfigureAwait(false);
+                        break;
                     case "listDocumentArtifacts":
                         responsePayload = _controller.ListDocumentArtifacts(Payload<DocumentArtifactListRequest>(payload));
                         break;

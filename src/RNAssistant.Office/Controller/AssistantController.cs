@@ -263,6 +263,7 @@ namespace RNAssistant.Office
             var librariesMs = promptsMs + toolsMs + skillsMs;
             int messageStartIndex;
             var bridgeMessages = ChatCloneService.CloneRecentMessagesForBridge(session.Messages, out messageStartIndex);
+            var artifactPresentation = ArtifactLibraryProjectionService.ProjectState(session, bridgeMessages);
             var response = new InitResponse
             {
                 MessageStartIndex = messageStartIndex,
@@ -290,8 +291,8 @@ namespace RNAssistant.Office
                 SkillsPath = _paths.SkillsDirectory,
                 Context = ChatCloneService.CloneContext(context),
                 Messages = bridgeMessages,
-                Artifacts = ChatArtifactDto.From(session),
-                ArtifactLibrary = ArtifactLibraryProjectionService.Project(session),
+                Artifacts = artifactPresentation.Artifacts,
+                ArtifactLibrary = artifactPresentation.Library,
                 ActiveContextCheckpointId = session.ActiveContextCheckpointId,
                 ActiveHtmlArtifactId = session.ActiveHtmlArtifactId,
                 ActiveTaskListArtifactId = session.ActiveTaskListArtifactId,
@@ -352,6 +353,7 @@ namespace RNAssistant.Office
                 : _conversationStore.Load(host, documentKey, activeId);
             var chats = _chatSessions.GetChatSummaries(activeId)
                 .ToList();
+            var artifactPresentation = ArtifactLibraryProjectionService.ProjectState(active, new ChatMessageViewDto[0]);
 
             return new ChatStateResponse
             {
@@ -363,8 +365,8 @@ namespace RNAssistant.Office
                 ActiveChatReasoning = active != null && active.ReasoningEnabled,
                 Chats = chats,
                 Documents = ListOpenDocuments(),
-                Artifacts = ChatArtifactDto.From(active),
-                ArtifactLibrary = ArtifactLibraryProjectionService.Project(active),
+                Artifacts = artifactPresentation.Artifacts,
+                ArtifactLibrary = artifactPresentation.Library,
                 ActiveContextCheckpointId = active == null ? string.Empty : active.ActiveContextCheckpointId,
                 ActiveHtmlArtifactId = active == null ? string.Empty : active.ActiveHtmlArtifactId,
                 ActiveTaskListArtifactId = active == null ? string.Empty : active.ActiveTaskListArtifactId,

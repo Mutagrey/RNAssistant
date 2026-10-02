@@ -1,24 +1,204 @@
 using System;
 using System.Collections.Generic;
+using System.Globalization;
 using System.Linq;
+using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
 using RNAssistant.Core.Models;
 using RNAssistant.Core.Services;
+using RNAssistant.Core.Tools;
 using RNAssistant.Office.Contracts;
 
 namespace RNAssistant.Office.Services
 {
     internal static class ArtifactLibraryProjectionService
     {
+        internal const int PageSize = 50;
+
+        internal sealed class Presentation
+        {
+            public ArtifactLibraryProjectionDto Library { get; set; }
+            public IReadOnlyList<ChatArtifactDto> Artifacts { get; set; }
+        }
+
+        private sealed class BuildResult
+        {
+            public List<ArtifactLibraryHeadDto> Heads { get; set; }
+            public Dictionary<string, ArtifactLibraryHeadDto> HeadByArtifactId { get; set; }
+            public Dictionary<string, List<ChatArtifact>> RevisionsByHeadId { get; set; }
+            public List<string> RemovedResourceUris { get; set; }
+            public Dictionary<string, ChatArtifact> ArtifactsById { get; set; }
+            public string HeadStamp { get; set; }
+        }
+
         public static ArtifactLibraryProjectionDto Project(ChatSession session)
         {
-            var projection = new ArtifactLibraryProjectionDto
+            int startIndex;
+            var messages = ChatCloneService.CloneRecentMessagesForBridge(session == null ? null : session.Messages, out startIndex);
+            return ProjectState(session, messages).Library;
+        }
+
+        public static Presentation ProjectState(ChatSession session, IReadOnlyList<ChatMessageViewDto> visibleMessages)
+        {
+            return ProjectState(session, visibleMessages, true);
+        }
+
+        public static Presentation ProjectMessagePage(ChatSession session, IReadOnlyList<ChatMessageViewDto> messages)
+        {
+            return ProjectState(session, messages, false);
+        }
+
+        private static Presentation ProjectState(ChatSession session, IReadOnlyList<ChatMessageViewDto> visibleMessages, bool includeHeads)
+        {
+            var visibleIds = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            foreach (var message in visibleMessages ?? new ChatMessageViewDto[0])
+            {
+                foreach (var reference in message.ResourceRefs ?? new ResourceRef[0])
+                {
+                    string id;
+                    if (ChatResourceUri.TryGetCurrentArtifactId(session, reference, out id))
+                        visibleIds.Add(id);
+                }
+            }
+            var build = Build(session, visibleIds);
+            var library = includeHeads ? InitialPage(session, build) : new ArtifactLibraryProjectionDto
             {
                 SessionRevision = session == null ? 0 : session.Revision,
-                Heads = new List<ArtifactLibraryHeadDto>(),
-                RemovedResourceUris = new List<string>()
+                Heads = new ArtifactLibraryHeadDto[0], RemovedResourceUris = build.RemovedResourceUris
             };
-            if (session == null || string.IsNullOrWhiteSpace(session.Id)) return projection;
+            if (includeHeads)
+            {
+                foreach (var head in library.Heads) visibleIds.Add(head.ArtifactId);
+                if (session != null)
+                {
+                    visibleIds.Add(session.ActivePlanDocumentArtifactId ?? string.Empty);
+                    visibleIds.Add(session.ActiveHtmlArtifactId ?? string.Empty);
+                    visibleIds.Add(session.ActiveTaskListArtifactId ?? string.Empty);
+                }
+            }
+            var artifacts = ChatArtifactDto.From(session, visibleIds);
+            AttachExactDetails(session, build, artifacts);
+            return new Presentation { Library = library, Artifacts = artifacts };
+        }
+
+        public static ArtifactLibraryPageResponse Page(ChatSession session, ArtifactLibraryPageRequest request)
+        {
+            RequireSession(session, request == null ? null : request.ChatId,
+                request == null ? -1 : request.ExpectedSessionRevision);
+            var build = Build(session, null);
+            var offset = ParseCursor(session, "heads", string.Empty, build.HeadStamp, request.Cursor, build.Heads.Count);
+            if (offset == 0) throw new InvalidOperationException("Для следующей страницы нужен cursor.");
+            var heads = build.Heads.Skip(offset).Take(PageSize).ToArray();
+            var ids = new HashSet<string>(heads.Select(item => item.ArtifactId), StringComparer.OrdinalIgnoreCase);
+            var artifacts = ChatArtifactDto.From(session, ids);
+            AttachExactDetails(session, build, artifacts);
+            return new ArtifactLibraryPageResponse
+            {
+                ChatId = session.Id, SessionRevision = session.Revision, Heads = heads, Artifacts = artifacts,
+                NextCursor = offset + PageSize < build.Heads.Count
+                    ? Cursor(session, "heads", string.Empty, build.HeadStamp, offset + PageSize) : null
+            };
+        }
+
+        private static void AttachExactDetails(ChatSession session, BuildResult build, IReadOnlyList<ChatArtifactDto> artifacts)
+        {
+            var branches = new Dictionary<string, ISet<string>>(StringComparer.OrdinalIgnoreCase);
+            foreach (var card in artifacts)
+            {
+                ArtifactLibraryHeadDto head;
+                ChatArtifact exact;
+                List<ChatArtifact> revisions;
+                if (!build.HeadByArtifactId.TryGetValue(card.Id, out head) ||
+                    !build.ArtifactsById.TryGetValue(card.Id, out exact) ||
+                    !build.RevisionsByHeadId.TryGetValue(head.ArtifactId, out revisions)) continue;
+                card.LibraryHead = head;
+                ISet<string> branch;
+                if (string.Equals(card.Id, head.ArtifactId, StringComparison.OrdinalIgnoreCase))
+                    branch = new HashSet<string>(StringComparer.OrdinalIgnoreCase) { head.ArtifactId };
+                else if (!branches.TryGetValue(head.ArtifactId, out branch))
+                {
+                    branch = ActiveBranch(build.ArtifactsById[head.ArtifactId], revisions, build.ArtifactsById);
+                    branches[head.ArtifactId] = branch;
+                }
+                card.LibraryRevision = CreateRevision(session, exact, build.ArtifactsById[head.ArtifactId], branch, build.ArtifactsById);
+            }
+        }
+
+        public static ArtifactLibraryHistoryResponse History(ChatSession session, ArtifactLibraryHistoryRequest request)
+        {
+            RequireSession(session, request == null ? null : request.ChatId,
+                request == null ? -1 : request.ExpectedSessionRevision);
+            if (string.IsNullOrWhiteSpace(request.HeadArtifactId))
+                throw new InvalidOperationException("Требуется точная голова истории.");
+            var build = Build(session, null);
+            List<ChatArtifact> revisions;
+            ArtifactLibraryHeadDto head;
+            if (!build.RevisionsByHeadId.TryGetValue(request.HeadArtifactId, out revisions) ||
+                !build.HeadByArtifactId.TryGetValue(request.HeadArtifactId, out head) ||
+                !string.Equals(head.ArtifactId, request.HeadArtifactId, StringComparison.OrdinalIgnoreCase))
+                throw new InvalidOperationException("История ресурса недоступна.");
+            if (!string.IsNullOrEmpty(request.TargetArtifactId) && !string.IsNullOrEmpty(request.Cursor))
+                throw new InvalidOperationException("Точный ресурс и cursor несовместимы.");
+            var activeBranch = ActiveBranch(build.ArtifactsById[head.ArtifactId], revisions, build.ArtifactsById);
+            var ordered = revisions.OrderByDescending(item => Math.Max(1, item.Revision))
+                .ThenByDescending(item => item.CreatedUtc)
+                .ThenBy(item => item.Id ?? string.Empty, StringComparer.Ordinal).ToList();
+            var historyStamp = TextPatternEngine.Sha256(JsonConvert.SerializeObject(ordered.Select(item =>
+                new object[] { item.Id, item.Revision, item.ParentArtifactId, item.CreatedUtc,
+                    MetadataText(item, "restoredFromArtifactId", "restoredFromUri", "restoredFrom") })));
+            var offset = string.IsNullOrEmpty(request.TargetArtifactId)
+                ? ParseCursor(session, "history", head.ArtifactId, historyStamp, request.Cursor, ordered.Count) : 0;
+            if (!string.IsNullOrEmpty(request.TargetArtifactId))
+            {
+                var exact = ordered.SingleOrDefault(item =>
+                    string.Equals(item.Id, request.TargetArtifactId, StringComparison.OrdinalIgnoreCase));
+                if (exact == null) throw new InvalidOperationException("Точная ревизия не принадлежит ресурсу.");
+                ordered = new List<ChatArtifact> { exact };
+            }
+            return new ArtifactLibraryHistoryResponse
+            {
+                ChatId = session.Id, SessionRevision = session.Revision, HeadArtifactId = head.ArtifactId,
+                TotalCount = revisions.Count,
+                Items = ordered.Skip(offset).Take(PageSize)
+                    .Select(item => CreateRevision(session, item, build.ArtifactsById[head.ArtifactId], activeBranch, build.ArtifactsById)).ToArray(),
+                NextCursor = string.IsNullOrEmpty(request.TargetArtifactId) && offset + PageSize < ordered.Count
+                    ? Cursor(session, "history", head.ArtifactId, historyStamp, offset + PageSize) : null
+            };
+        }
+
+        private static ArtifactLibraryProjectionDto InitialPage(ChatSession session, BuildResult build)
+        {
+            var first = build.Heads.Take(PageSize).ToList();
+            if (session != null)
+            {
+                foreach (var id in new[] { session.ActivePlanDocumentArtifactId, session.ActiveHtmlArtifactId, session.ActiveTaskListArtifactId })
+                {
+                    ArtifactLibraryHeadDto head;
+                    if (!string.IsNullOrEmpty(id) && build.HeadByArtifactId.TryGetValue(id, out head) &&
+                        !first.Contains(head)) first.Add(head);
+                }
+            }
+            return new ArtifactLibraryProjectionDto
+            {
+                SessionRevision = session == null ? 0 : session.Revision,
+                Heads = first, TotalHeads = build.Heads.Count,
+                NextCursor = build.Heads.Count > PageSize ? Cursor(session, "heads", string.Empty, build.HeadStamp, PageSize) : null,
+                RemovedResourceUris = build.RemovedResourceUris
+            };
+        }
+
+        private static BuildResult Build(ChatSession session, ISet<string> visibleIds)
+        {
+            var empty = new BuildResult
+            {
+                Heads = new List<ArtifactLibraryHeadDto>(),
+                HeadByArtifactId = new Dictionary<string, ArtifactLibraryHeadDto>(StringComparer.OrdinalIgnoreCase),
+                RevisionsByHeadId = new Dictionary<string, List<ChatArtifact>>(StringComparer.OrdinalIgnoreCase),
+                RemovedResourceUris = new List<string>(),
+                ArtifactsById = new Dictionary<string, ChatArtifact>(StringComparer.OrdinalIgnoreCase),
+                HeadStamp = string.Empty
+            };
+            if (session == null || string.IsNullOrWhiteSpace(session.Id)) return empty;
 
             var artifacts = (session.Artifacts ?? new List<ChatArtifact>())
                 .Where(item => item != null && !string.IsNullOrWhiteSpace(item.Id))
@@ -48,8 +228,10 @@ namespace RNAssistant.Office.Services
                 }
                 else
                 {
-                    heads.Add(CreateHead(session, artifact, artifact.Id, resourceClass,
-                        new[] { artifact }, byId));
+                    var head = CreateHead(session, artifact, artifact.Id, resourceClass, 1, byId);
+                    heads.Add(head);
+                    empty.HeadByArtifactId[artifact.Id] = head;
+                    empty.RevisionsByHeadId[artifact.Id] = new List<ChatArtifact> { artifact };
                 }
             }
 
@@ -60,26 +242,32 @@ namespace RNAssistant.Office.Services
                 {
                     foreach (var revision in revisions)
                     {
-                        removedResourceUris.Add(ChatResourceUri.CreateArtifactRevisionUri(session, revision));
+                        if (visibleIds != null && visibleIds.Contains(revision.Id))
+                            removedResourceUris.Add(ChatResourceUri.CreateArtifactRevisionUri(session, revision));
                     }
                     continue;
                 }
                 var head = SelectHead(session, revisions);
                 if (head == null) continue;
-                heads.Add(CreateHead(session, head, LogicalId(head, byId),
-                    ResourceClass(head), revisions, byId));
+                var projected = CreateHead(session, head, LogicalId(head, byId),
+                    ResourceClass(head), revisions.Count, byId);
+                heads.Add(projected);
+                empty.RevisionsByHeadId[head.Id] = revisions;
+                foreach (var revision in revisions) empty.HeadByArtifactId[revision.Id] = projected;
             }
 
-            projection.Heads = heads
+            empty.Heads = heads
                 .OrderBy(item => GroupOrder(item.Group))
                 .ThenByDescending(item => item.CreatedUtc)
                 .ThenBy(item => item.Title ?? string.Empty, StringComparer.OrdinalIgnoreCase)
                 .ThenBy(item => item.ArtifactId ?? string.Empty, StringComparer.Ordinal)
                 .ToList();
-            projection.RemovedResourceUris = removedResourceUris
+            empty.RemovedResourceUris = removedResourceUris
                 .OrderBy(item => item, StringComparer.OrdinalIgnoreCase)
                 .ToList();
-            return projection;
+            empty.ArtifactsById = byId;
+            empty.HeadStamp = TextPatternEngine.Sha256(JsonConvert.SerializeObject(empty.Heads));
+            return empty;
         }
 
         private static ArtifactLibraryHeadDto CreateHead(
@@ -87,17 +275,9 @@ namespace RNAssistant.Office.Services
             ChatArtifact head,
             string logicalId,
             string resourceClass,
-            IEnumerable<ChatArtifact> revisions,
+            int historyCount,
             IReadOnlyDictionary<string, ChatArtifact> byId)
         {
-            var activeBranch = ActiveBranch(head, revisions, byId);
-            var history = (revisions ?? new ChatArtifact[0])
-                .Where(item => item != null)
-                .OrderByDescending(item => Math.Max(1, item.Revision))
-                .ThenByDescending(item => item.CreatedUtc)
-                .ThenBy(item => item.Id ?? string.Empty, StringComparer.Ordinal)
-                .Select(item => CreateRevision(session, item, head, activeBranch, byId))
-                .ToList();
             return new ArtifactLibraryHeadDto
             {
                 CanDetach = RNAssistant.Core.Storage.DocumentArtifactStore.Owns(session, ChatResourceUri.CreateArtifactRevision(session, head)),
@@ -119,8 +299,34 @@ namespace RNAssistant.Office.Services
                 SourceMessageId = head.SourceMessageId,
                 RunId = head.RunId,
                 CreatedUtc = head.CreatedUtc,
-                History = history
+                HistoryCount = historyCount
             };
+        }
+
+        private static void RequireSession(ChatSession session, string chatId, long revision)
+        {
+            if (session == null || string.IsNullOrWhiteSpace(chatId) ||
+                !string.Equals(session.Id, chatId, StringComparison.Ordinal) || session.Revision != revision)
+                throw new InvalidOperationException("Чат изменился. Обновите библиотеку артефактов.");
+        }
+
+        private static string Cursor(ChatSession session, string kind, string id, string collectionStamp, int offset)
+        {
+            var stamp = TextPatternEngine.Sha256(session.Id + "|" + session.Revision.ToString(CultureInfo.InvariantCulture) +
+                "|" + kind + "|" + id + "|" + collectionStamp);
+            return stamp + "." + offset.ToString(CultureInfo.InvariantCulture);
+        }
+
+        private static int ParseCursor(ChatSession session, string kind, string id, string collectionStamp, string cursor, int count)
+        {
+            if (string.IsNullOrEmpty(cursor)) return 0;
+            var parts = cursor.Split('.');
+            int offset;
+            if (parts.Length != 2 || !int.TryParse(parts[1], NumberStyles.None, CultureInfo.InvariantCulture, out offset) ||
+                offset <= 0 || offset >= count || offset % PageSize != 0 ||
+                !string.Equals(cursor, Cursor(session, kind, id, collectionStamp, offset), StringComparison.Ordinal))
+                throw new InvalidOperationException("Страница артефактов устарела. Обновите список.");
+            return offset;
         }
 
         private static ArtifactLibraryRevisionDto CreateRevision(

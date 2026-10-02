@@ -1,7 +1,9 @@
 using System;
 using System.Linq;
+using System.Text;
 using Newtonsoft.Json;
 using RNAssistant.Core.Models;
+using RNAssistant.Core.Services;
 using RNAssistant.Office.Contracts;
 using RNAssistant.Office.Services;
 
@@ -32,7 +34,8 @@ namespace RNAssistant.Harness
             AssertEqual("audio", upload.DisplayKind, "attachment display kind");
             AssertEqual("Original", upload.VersionLabel, "upload label ignores stored revision");
             AssertTrue(upload.ResourceUri.EndsWith("/revision/7", StringComparison.Ordinal), "upload exact URI");
-            AssertEqual(1, upload.History.Count, "original has one exact history entry");
+            AssertEqual(1, upload.HistoryCount, "original has one exact history entry");
+            AssertTrue(upload.History == null, "ordinary projection omits exact history");
 
             var charts = projection.Heads.Where(item => item.Kind == ChatArtifactKinds.Chart).ToList();
             AssertEqual(2, charts.Count, "snapshot parent links do not collapse library rows");
@@ -63,19 +66,31 @@ namespace RNAssistant.Harness
             AssertEqual("plan", plan.DisplayKind, "Plan display kind");
             AssertEqual("v2", plan.VersionLabel, "Plan version label");
             AssertEqual("ready", plan.Status, "Plan status");
-            AssertEqual(2, plan.History.Count, "Plan history count");
-            var planRevision = plan.History.Single(item => item.ArtifactId == plan2.Id);
+            AssertEqual(2, plan.HistoryCount, "Plan history count");
+            var planHistory = ArtifactLibraryProjectionService.History(session, new ArtifactLibraryHistoryRequest
+            { ChatId = session.Id, ExpectedSessionRevision = session.Revision, HeadArtifactId = plan.ArtifactId });
+            var planRevision = planHistory.Items.Single(item => item.ArtifactId == plan2.Id);
             AssertTrue(planRevision.ParentResourceUri.EndsWith("/artifact/plan-r1/revision/1", StringComparison.Ordinal),
                 "Plan exact parent URI");
 
             var html = projection.Heads.Single(item => item.Kind == ChatArtifactKinds.HtmlWorkspace);
             AssertEqual(htmlLeft.Id, html.ArtifactId, "HTML active pointer wins a newer alternative branch revision");
-            AssertEqual(3, html.History.Count, "HTML branch history count");
-            AssertEqual("head", html.History.Single(item => item.ArtifactId == htmlLeft.Id).Relation, "HTML head relation");
-            AssertEqual("ancestor", html.History.Single(item => item.ArtifactId == html1.Id).Relation, "HTML ancestor relation");
-            AssertEqual("branch", html.History.Single(item => item.ArtifactId == htmlRight.Id).Relation, "HTML alternative branch relation");
-            AssertTrue(html.History.All(item => item.ResourceUri.Contains("/artifact/" + item.ArtifactId + "/revision/")),
+            AssertEqual(3, html.HistoryCount, "HTML branch history count");
+            var htmlHistory = ArtifactLibraryProjectionService.History(session, new ArtifactLibraryHistoryRequest
+            { ChatId = session.Id, ExpectedSessionRevision = session.Revision, HeadArtifactId = html.ArtifactId });
+            AssertEqual("head", htmlHistory.Items.Single(item => item.ArtifactId == htmlLeft.Id).Relation, "HTML head relation");
+            AssertEqual("ancestor", htmlHistory.Items.Single(item => item.ArtifactId == html1.Id).Relation, "HTML ancestor relation");
+            AssertEqual("branch", htmlHistory.Items.Single(item => item.ArtifactId == htmlRight.Id).Relation, "HTML alternative branch relation");
+            AssertTrue(htmlHistory.Items.All(item => item.ResourceUri.Contains("/artifact/" + item.ArtifactId + "/revision/")),
                 "history URIs stay exact per artifact");
+            var visible = new ChatMessageViewDto { ResourceRefs = new[] { ChatResourceUri.CreateArtifactRevision(session, htmlRight) } };
+            var state = ArtifactLibraryProjectionService.ProjectState(session, new[] { visible });
+            var pinned = state.Artifacts.Single(item => item.Id == htmlRight.Id);
+            AssertEqual(htmlLeft.Id, pinned.LibraryHead.ArtifactId, "pinned HTML card knows the selected branch head");
+            AssertTrue(pinned.ResourceUri.EndsWith("/artifact/html-right-r3/revision/3", StringComparison.Ordinal),
+                "pinned HTML card keeps its exact branch URI");
+            AssertTrue(pinned.LibraryRevision.ParentResourceUri.EndsWith("/artifact/html-r1/revision/1", StringComparison.Ordinal),
+                "pinned HTML card keeps its exact parent relation");
         }
 
         private static void ArtifactLibraryProjectsDerivedResources()
@@ -94,7 +109,7 @@ namespace RNAssistant.Harness
             AssertEqual(ArtifactLibraryGroups.GeneratedSnapshots, item.Group, "derived group");
             AssertEqual("Derived", item.VersionLabel, "derived label");
             AssertEqual("rna://chat/source/artifact/upload/revision/1", item.DerivedFromResourceUri, "derived source URI");
-            AssertEqual(1, item.History.Count, "derived resource is one immutable exact row");
+            AssertEqual(1, item.HistoryCount, "derived resource is one immutable exact row");
         }
 
         private static ChatArtifact Artifact(string id, string kind, int revision, string parentId, int minute)
@@ -110,6 +125,93 @@ namespace RNAssistant.Harness
                 SourceMessageId = "message-" + id,
                 RunId = "run-" + id
             };
+        }
+
+        private static void ArtifactLibrarySyntheticTransport()
+        {
+            var session = NewSession(FakeOfficeAdapter.ForHost("Excel"));
+            session.Revision = 44;
+            for (var head = 0; head < 1000; head++)
+            {
+                string parent = null;
+                for (var revision = 1; revision <= 6; revision++)
+                {
+                    var id = "plan-" + head + "-r" + revision;
+                    var item = Artifact(id, ChatArtifactKinds.PlanDocument, revision, parent, 1);
+                    item.MetadataJson = JsonConvert.SerializeObject(new { planId = "plan-" + head, status = "ready" });
+                    session.Artifacts.Add(item);
+                    parent = id;
+                }
+            }
+            session.ActivePlanDocumentArtifactId = "plan-999-r6";
+            var presentation = ArtifactLibraryProjectionService.ProjectState(session, new ChatMessageViewDto[0]);
+            var after = new { artifacts = presentation.Artifacts, artifactLibrary = presentation.Library };
+            var bytes = Encoding.UTF8.GetByteCount(JsonConvert.SerializeObject(after));
+            Console.WriteLine("artifact library synthetic current bytes: " + bytes);
+            var chatStateBytes = Encoding.UTF8.GetByteCount(JsonConvert.SerializeObject(new ChatStateResponse
+            { ActiveChatId = session.Id, Messages = new ChatMessageViewDto[0],
+                Artifacts = presentation.Artifacts, ArtifactLibrary = presentation.Library }));
+            Console.WriteLine("artifact library synthetic ChatState bytes: " + chatStateBytes);
+            AssertTrue(bytes < 200000, "ordinary artifact payload stays bounded for 1000 heads and 6000 revisions");
+            AssertTrue(chatStateBytes < 200000, "ordinary ChatState stays bounded for 1000 heads and 6000 revisions");
+            AssertTrue(presentation.Artifacts.Count <= ArtifactLibraryProjectionService.PageSize + 1,
+                "ordinary ChatState omits unloaded revision cards");
+            AssertTrue(presentation.Library.Heads.All(item => item.History == null),
+                "ordinary ChatState omits exact history bodies");
+            AssertTrue(presentation.Library.Heads.Count <= ArtifactLibraryProjectionService.PageSize + 1,
+                "initial heads page includes at most the active Plan outside the page");
+            AssertTrue(presentation.Library.Heads.Any(item => item.ArtifactId == session.ActivePlanDocumentArtifactId),
+                "active Plan remains available");
+            AssertTrue(presentation.Artifacts.Any(item => item.Id == session.ActivePlanDocumentArtifactId),
+                "active Plan card remains available");
+            var headRequest = new ArtifactLibraryPageRequest { ChatId = session.Id,
+                ExpectedSessionRevision = session.Revision, Cursor = presentation.Library.NextCursor };
+            var page = ArtifactLibraryProjectionService.Page(session, headRequest);
+            AssertEqual(50, page.Heads.Count, "head page bound");
+            var old = ArtifactLibraryProjectionService.History(session, new ArtifactLibraryHistoryRequest
+            { ChatId = session.Id, ExpectedSessionRevision = session.Revision,
+                HeadArtifactId = "plan-999-r6", TargetArtifactId = "plan-999-r1" });
+            AssertEqual(1, old.Items.Count, "targeted old revision count");
+            AssertEqual("plan-999-r1", old.Items[0].ArtifactId, "targeted old revision identity");
+            AssertTrue(old.Items[0].ResourceUri.EndsWith("/artifact/plan-999-r1/revision/1", StringComparison.Ordinal),
+                "targeted old revision exact URI");
+            session.Artifacts[5].Title = "changed without session revision";
+            RuntimeThrows<InvalidOperationException>(() => ArtifactLibraryProjectionService.Page(session, headRequest));
+            session.Revision++;
+            RuntimeThrows<InvalidOperationException>(() => ArtifactLibraryProjectionService.Page(session, headRequest));
+        }
+
+        private static void ArtifactLibraryHistoryPagesRejectStale()
+        {
+            var session = NewSession(FakeOfficeAdapter.ForHost("Excel"));
+            session.Revision = 20;
+            string parent = null;
+            for (var number = 1; number <= 121; number++)
+            {
+                var id = "long-plan-r" + number;
+                var item = Artifact(id, ChatArtifactKinds.PlanDocument, number, parent, 1);
+                item.MetadataJson = JsonConvert.SerializeObject(new { planId = "long-plan" });
+                session.Artifacts.Add(item);
+                parent = id;
+            }
+            session.ActivePlanDocumentArtifactId = parent;
+            var request = new ArtifactLibraryHistoryRequest { ChatId = session.Id,
+                ExpectedSessionRevision = session.Revision, HeadArtifactId = parent };
+            var first = ArtifactLibraryProjectionService.History(session, request);
+            AssertEqual(121, first.TotalCount, "history total count");
+            AssertEqual(50, first.Items.Count, "history first page bound");
+            AssertTrue(first.NextCursor != null, "history has continuation");
+            request.Cursor = first.NextCursor;
+            var second = ArtifactLibraryProjectionService.History(session, request);
+            AssertEqual(50, second.Items.Count, "history second page bound");
+            request.Cursor = second.NextCursor;
+            var last = ArtifactLibraryProjectionService.History(session, request);
+            AssertEqual(21, last.Items.Count, "history last page count");
+            AssertEqual("long-plan-r1", last.Items.Last().ArtifactId, "oldest exact revision on last page");
+            session.Artifacts[0].ParentArtifactId = "unexpected-parent";
+            RuntimeThrows<InvalidOperationException>(() => ArtifactLibraryProjectionService.History(session, request));
+            session.Revision++;
+            RuntimeThrows<InvalidOperationException>(() => ArtifactLibraryProjectionService.History(session, request));
         }
     }
 }

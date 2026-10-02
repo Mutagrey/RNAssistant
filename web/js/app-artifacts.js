@@ -28,10 +28,6 @@
     return value(projection, "Heads", "heads", []) || [];
   }
 
-  function libraryHistory(head) {
-    return value(head, "History", "history", []) || [];
-  }
-
   function artifactProjectionKey() {
     var projection = state.artifactLibrary || {};
     var heads = artifactLibraryHeads();
@@ -62,19 +58,10 @@
       if (id) artifactByIdMap[id] = artifact;
     });
     var headByArtifactId = {};
-    var headByHistoryArtifactId = {};
-    var revisionResourceUri = {};
     var headArtifacts = [];
     heads.forEach(function (head) {
       var headId = String(value(head, "ArtifactId", "artifactId", "") || "").toLowerCase();
       if (headId) headByArtifactId[headId] = head;
-      libraryHistory(head).forEach(function (revision) {
-        var id = String(value(revision, "ArtifactId", "artifactId", "") || "").toLowerCase();
-        if (!id) return;
-        if (!headByHistoryArtifactId[id]) headByHistoryArtifactId[id] = head;
-        revisionResourceUri[id + "|" + Number(value(revision, "Revision", "revision", 1) || 1)] =
-          value(revision, "ResourceUri", "resourceUri", "") || "";
-      });
       var artifact = headId ? artifactByIdMap[headId] : null;
       if (artifact) headArtifacts.push(libraryHeadArtifactFromMap(head, artifact));
     });
@@ -90,9 +77,7 @@
       removedRef: removed,
       artifactById: artifactByIdMap,
       headByArtifactId: headByArtifactId,
-      headByHistoryArtifactId: headByHistoryArtifactId,
       headArtifacts: headArtifacts,
-      revisionResourceUri: revisionResourceUri,
       removedResourceUris: removedResourceUris
     };
     return artifactProjectionIndex;
@@ -104,7 +89,7 @@
     var id = String(artifactId(artifact) || "").toLowerCase();
     if (!id) return null;
     var index = artifactProjection();
-    return index.headByArtifactId[id] || index.headByHistoryArtifactId[id] || null;
+    return index.headByArtifactId[id] || null;
   }
 
   function artifactResourceClass(artifact) {
@@ -157,9 +142,7 @@
   function artifactResourceUri(artifact) {
     var direct = value(artifact, "ResourceUri", "resourceUri", "") || "";
     if (direct) return direct;
-    var id = String(artifactId(artifact) || "").toLowerCase();
-    var revision = artifactRevision(artifact);
-    return artifactProjection().revisionResourceUri[id + "|" + revision] || "";
+    return "";
   }
 
   function isImageArtifact(artifact) {
@@ -815,6 +798,10 @@
     var search = $("chatResourcesSearchInput");
     if (!button || !count || !list) return 0;
     var items = chatDockResourceHeads();
+    var hasMoreHeads = !!value(state.artifactLibrary, "NextCursor", "nextCursor", null);
+    [$("chatResourcesMoreButton"), $("artifactLibraryMoreButton")].forEach(function (more) {
+      if (more) more.classList.toggle("hidden", !hasMoreHeads);
+    });
     var hasResources = !!state.activeChatId;
     if (dock) dock.classList.toggle("hidden", !hasResources);
     if (!hasResources) setChatResourcePopoverOpen(false);
@@ -826,9 +813,10 @@
     if (search && items.length <= 6) search.value = "";
     var query = String(search && search.value || "").trim().toLowerCase();
     button.disabled = !state.activeChatId;
-    button.title = items.length ? "Ресурсы чата: " + items.length : "В чате пока нет ресурсов";
+    button.title = hasMoreHeads ? "Ресурсы чата: показаны " + items.length + ", есть ещё" :
+      items.length ? "Ресурсы чата: " + items.length : "В чате пока нет ресурсов";
     button.setAttribute("aria-label", button.title);
-    count.textContent = String(items.length);
+    count.textContent = String(items.length) + (hasMoreHeads ? "+" : "");
     count.classList.toggle("hidden", !items.length);
     if (search) search.parentElement.classList.toggle("hidden", items.length <= 6);
     list.replaceChildren();
@@ -1029,9 +1017,52 @@
     });
   }
 
+  var artifactPagePending = false;
+  async function loadMoreArtifactHeads() {
+    var library = state.artifactLibrary || {};
+    var cursor = value(library, "NextCursor", "nextCursor", null);
+    var revision = value(library, "SessionRevision", "sessionRevision", 0);
+    var chatId = state.activeChatId, navigation = state.chatNavigationVersion;
+    if (!cursor || !chatId || artifactPagePending) return;
+    artifactPagePending = true;
+    try {
+      var response = await send("getArtifactLibraryPage", {
+        chatId: chatId, expectedSessionRevision: revision, cursor: cursor
+      });
+      if (chatId !== state.activeChatId || navigation !== state.chatNavigationVersion ||
+          library !== state.artifactLibrary || cursor !== value(library, "NextCursor", "nextCursor", null)) return;
+      if (response.chatId !== chatId || response.sessionRevision !== revision) throw new Error("Страница ресурсов устарела.");
+      var seen = Object.create(null);
+      artifactLibraryHeads().forEach(function (head) { seen[String(value(head, "ArtifactId", "artifactId", "")).toLowerCase()] = true; });
+      (response.heads || []).forEach(function (head) {
+        var id = String(value(head, "ArtifactId", "artifactId", "")).toLowerCase();
+        if (id && !seen[id]) { library.heads.push(head); seen[id] = true; }
+      });
+      var artifacts = state.artifacts || [];
+      var known = Object.create(null);
+      artifacts.forEach(function (artifact) { known[String(artifactId(artifact)).toLowerCase()] = true; });
+      (response.artifacts || []).forEach(function (artifact) {
+        var id = String(artifactId(artifact)).toLowerCase();
+        if (id && !known[id]) { artifacts.push(artifact); known[id] = true; }
+      });
+      state.artifacts = artifacts;
+      library.nextCursor = response.nextCursor || null;
+      renderChatResourceNavigation();
+      if (typeof renderHtmlWorkspace === "function") renderHtmlWorkspace();
+    } catch (error) {
+      if (chatId === state.activeChatId && navigation === state.chatNavigationVersion) {
+        var more = $("chatResourcesMoreButton") || $("artifactLibraryMoreButton");
+        if (more) more.title = error.detail || error.message || "Не удалось загрузить ресурсы";
+      }
+    } finally { artifactPagePending = false; }
+  }
+
   function bindChatResourceNavigation() {
     var button = $("toggleChatResourcesButton");
     var menu = $("chatResourceMenu");
+    [$("chatResourcesMoreButton"), $("artifactLibraryMoreButton")].forEach(function (more) {
+      if (more) more.addEventListener("click", loadMoreArtifactHeads);
+    });
     var search = $("chatResourcesSearchInput");
     var openAll = $("openArtifactsTabButton");
     if (!button || !menu) return;

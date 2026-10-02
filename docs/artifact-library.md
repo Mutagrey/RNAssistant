@@ -131,8 +131,8 @@ Chat reconstruction loads only the selected aggregate body; restore/redo validat
 and loads its exact source at the existing mutation boundary. Old source bodies
 are not parsed or copied into `HtmlWorkspace.History`. Missing/cyclic metadata
 still degrades navigation; body corruption is reported when that revision is read.
-The full library metadata catalog still scales with revision count; this does not
-claim paginated metadata enumeration or bounded authority-journal startup.
+Library metadata computation and authority-journal startup still scale with revision
+count. The later bounded bridge transport below does not bound those source scans.
 
 `shared HTML:`, HTML runtime/replay and resource chat-lifecycle checks cover this
 host-neutral slice. Windows/Office/WebView2 and Playwright layout qualification
@@ -357,8 +357,8 @@ the last source page as well as between pages, so a write during materialization
 cannot produce an apparently current mixed-generation result.
 
 Uploaded text and HTML members now use the extensions below. Semantic section
-reads are implemented below; picker/history pagination, richer
-compiler decision context and cold allocation/Windows/layout qualification remain
+reads are implemented below; richer compiler decision context and cold
+allocation/Windows/layout qualification remain
 open. No model-generated synopsis or embedding publication is added.
 
 ### Implemented uploaded text discovery views — 2026-09-08
@@ -855,8 +855,9 @@ head, grouped as authored documents, files/media, generated snapshots and system
 evidence. A group title is also a selectable collection: selecting it opens the
 current filtered/sorted resources as a responsive grid, while its expander continues
 to control the tree. Drafts, when shown, are always separated and labelled
-non-durable. The grid is another view over `artifactLibrary.heads[]`; it is not a
-second projection or durable store.
+non-durable. The grid is another view over the loaded `artifactLibrary.heads[]`
+pages; **Следующие 50 ресурсов** loads the next page. It is not a second projection
+or durable store.
 
 Each row exposes title, type, size where meaningful, source turn, created/updated
 time and exact-reference copy. Versioned documents additionally expose current
@@ -875,17 +876,26 @@ the active pointer through an explicit undo/redo branch operation; the next save
 creates a new child and the UI keeps alternative branches visible. No revision is
 silently overwritten or renumbered.
 
-The current bridge projection is
-`artifactLibrary { sessionRevision, heads[], removedResourceUris[] }`.
-`ArtifactLibraryProjectionService` derives it from the replayed `ChatSession`; it is
-never persisted separately. Each head carries the server-owned class, group,
-normalized display kind, exact head URI and history entries with exact parent/
-restore relations. HTML selects `ActiveHtmlArtifactId`, including an older undo or
-branch target, instead of guessing the largest revision. The raw `artifacts[]`
-projection remains available only for exact message cards and existing viewers;
-the client no longer computes library lineage from it. Direct HTML editor responses
-carry the same revisioned library projection so save/undo cannot leave the library
-stale until reload.
+The ordinary ChatState and direct HTML editor response carry a 50-head first page,
+up to three additional active Plan/HTML/Task List heads, `totalHeads`, `nextCursor`,
+and exact `removedResourceUris` only for visible message refs. Each head has
+server-owned class, group, display kind, exact current URI and `historyCount`; its
+exact history is omitted. `artifacts[]` includes loaded heads, active artifacts and
+exact revisions referenced by the visible message page. Older chat-message pages
+carry their own exact artifact cards. Each loaded card carries a small `libraryHead`
+and its own `libraryRevision`, so a pinned older revision retains its logical group,
+exact URI and parent/restore relation without sending its full lineage. HTML selects
+`ActiveHtmlArtifactId`, including an older branch target.
+
+`getArtifactLibraryPage` returns up to 50 more heads and their card metadata.
+Opening **История** calls `getArtifactLibraryHistory` for that head and loads up to
+50 exact revisions at a time; an open historical resource can request its revision
+directly. Parent/restore URIs and branch relations are computed by the same
+`ArtifactLibraryProjectionService` from the replayed session. Both requests require
+an explicit chat and expected session revision; continuation cursors bind the chat,
+revision, collection fingerprint, kind, head and offset. Stale or mismatched pages fail closed. This is a
+disposable transport projection, not another authority or store. Source enumeration
+still scans replayed metadata; no claim of bounded cold replay or journal IO follows.
 
 Message cards resolve their pinned revision even when a newer head exists. If the
 resource was explicitly removed, the message shows a stable `Resource removed`

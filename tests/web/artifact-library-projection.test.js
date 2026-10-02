@@ -53,6 +53,7 @@ context.state = {
   htmlWorkspaceDirty: false,
   htmlWorkspaceSelection: { type: "plan", id: "plan-r1" }
 };
+context.state.artifacts[0].libraryHead = context.state.artifactLibrary.heads[0];
 vm.runInContext(source, context, { filename: "app-artifacts.js" });
 
 {
@@ -103,20 +104,20 @@ vm.runInContext(source, context, { filename: "app-artifacts.js" });
   assert.match(detail, /ParentResourceUri/);
   const htmlController = fs.readFileSync(path.join(root, "src/RNAssistant.Office/Controller/AssistantController.HtmlWorkspace.cs"), "utf8");
   const htmlUi = fs.readFileSync(path.join(root, "web/js/app-html-workspace.js"), "utf8");
-  assert.match(htmlController, /ArtifactLibrary\s*=\s*ArtifactLibraryProjectionService\.Project\(session\)/);
-  assert.match(htmlController, /Artifacts\s*=\s*ChatArtifactDto\.From\(session\)/);
+  assert.match(htmlController, /ArtifactLibrary\s*=\s*artifactPresentation\.Library/);
+  assert.match(htmlController, /Artifacts\s*=\s*artifactPresentation\.Artifacts/);
   assert.match(htmlUi, /response\.artifactLibrary/);
   assert.match(htmlUi, /RNAssistantRunViewState\.accept/);
   const index = fs.readFileSync(path.join(root, "web/index.html"), "utf8");
   assert.ok(index.includes("app-core.js?v=office-chat-20260930-3"), "core has the current cache key");
   assert.ok(index.includes("app-chat-state.js?v=office-chat-20260930-3"), "chat state has the current cache key");
   assert.ok(index.includes("app-chat-session.js?v=office-chat-20260930-4"), "chat session has the current cache key");
-  assert.ok(index.includes("app-artifacts.js?v=shared-markdown-20260908-1"), "artifact cards have the working-set cache key");
+  assert.ok(index.includes("app-artifacts.js?v=artifact-library-lazy-20261002-1"), "artifact cards have the lazy library cache key");
   assert.ok(index.includes("app-html-workspace-model.js?v=html-read-20260906-1"), "artifact selection model has the gallery cache key");
   assert.ok(index.includes("app-html-workspace.js?v=html-memory-20261002-1"), "artifact actions have the current resource cache key");
   assert.ok(index.includes("app-html-workspace-actions.js?v=html-action-guard-20260908-1"), "artifact tool calls have the current resource cache key");
   assert.ok(index.includes("app-artifact-viewer-actions.js?v=binary-chunks-20260906-1"), "artifact paging owner has the current resource cache key");
-  assert.ok(index.includes("app-html-workspace-artifacts.js?v=binary-chunks-20260906-1"), "artifact detail has the current resource cache key");
+  assert.ok(index.includes("app-html-workspace-artifacts.js?v=artifact-library-lazy-20261002-1"), "artifact detail has the lazy history cache key");
   assert.ok(index.includes("app-chart-artifacts.js?v=chart-chat-scope-20260908-1"), "chart artifact renderer has the current UI cache key");
   assert.ok(index.includes("app-html-workspace-editor.js?v=html-memory-20261002-1"), "artifact action bridge has the lazy UI cache key");
   assert.match(source, /function artifactProjection\(\)/, "artifact UI builds a transient projection index");
@@ -159,4 +160,39 @@ vm.runInContext(source, context, { filename: "app-artifacts.js" });
   console.log("PASS artifact library: collection and chat image contexts stay exact and ephemeral");
 }
 
-console.log("OK 5/5");
+async function testLazyHeadPages() {
+  const listeners = {};
+  const more = {
+    classList: { toggle() {} },
+    addEventListener(name, handler) { listeners[name] = handler; }
+  };
+  context.$ = id => id === "chatResourcesMoreButton" ? more : null;
+  context.state.chatNavigationVersion = 1;
+  context.state.artifactLibrary.nextCursor = "page-50";
+  context.bindChatResourceNavigation();
+  let request;
+  context.send = async (command, payload) => {
+    request = { command, payload };
+    return { chatId: "c", sessionRevision: 12, heads: [{ artifactId: "late-chart", displayKind: "chart",
+      resourceClass: "immutable_snapshot", group: "generated_snapshots" }],
+      artifacts: [{ id: "late-chart", kind: "chart", title: "Late chart", revision: 1 }], nextCursor: null };
+  };
+  await listeners.click();
+  assert.equal(request.command, "getArtifactLibraryPage");
+  assert.equal(request.payload.expectedSessionRevision, 12);
+  assert.equal(context.state.artifactLibrary.nextCursor, null);
+  assert.ok(Array.from(context.artifactResourceHeads()).some(item => item.id === "late-chart"));
+
+  context.state.artifactLibrary.nextCursor = "page-100";
+  let resolveLate;
+  context.send = () => new Promise(resolve => { resolveLate = resolve; });
+  const late = listeners.click();
+  context.state.chatNavigationVersion = 2;
+  resolveLate({ chatId: "c", sessionRevision: 12,
+    heads: [{ artifactId: "stale-chart" }], artifacts: [{ id: "stale-chart" }], nextCursor: null });
+  await late;
+  assert.ok(!Array.from(context.artifactResourceHeads()).some(item => item.id === "stale-chart"));
+  console.log("PASS artifact library: head pages append lazily and discard stale navigation");
+}
+
+testLazyHeadPages().then(() => console.log("OK 6/6")).catch(error => { console.error(error); process.exitCode = 1; });

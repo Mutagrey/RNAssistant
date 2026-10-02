@@ -168,6 +168,22 @@ async function loadPreviousChatMessages(event) {
     }
     var box = $("messages");
     var previousScrollHeight = box ? box.scrollHeight : 0;
+    state.artifacts = state.artifacts || [];
+    var knownArtifacts = Object.create(null);
+    (state.artifacts || []).forEach(function (artifact) { knownArtifacts[String(artifact.id || artifact.Id || "").toLowerCase()] = true; });
+    (page.artifacts || []).forEach(function (artifact) {
+      var id = String(artifact.id || artifact.Id || "").toLowerCase();
+      if (id && !knownArtifacts[id]) { state.artifacts.push(artifact); knownArtifacts[id] = true; }
+    });
+    var library = state.artifactLibrary || {};
+    var removed = library.removedResourceUris || library.RemovedResourceUris || [];
+    var knownRemoved = Object.create(null);
+    removed.forEach(function (uri) { knownRemoved[String(uri).toLowerCase()] = true; });
+    (page.removedResourceUris || []).forEach(function (uri) {
+      var key = String(uri).toLowerCase();
+      if (key && !knownRemoved[key]) { removed.push(uri); knownRemoved[key] = true; }
+    });
+    library.removedResourceUris = removed;
     state.messages = older.concat(state.messages || []).slice(0, 240);
     state.messageStartIndex = page.startIndex;
     state.messageTotalCount = page.totalCount;

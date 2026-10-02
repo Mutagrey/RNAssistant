@@ -296,7 +296,7 @@ vm.runInContext(fs.readFileSync(path.join(root, "web/js/app-html-workspace-actio
   assert.ok(index.indexOf("app-html-resource-export.js?v=") < index.indexOf("app-html-workspace-preview.js?v="));
   assert.ok(index.includes("app-html-workspace-editor.js?v=html-memory-20261002-1"));
   assert.ok(index.includes(
-    "app-html-workspace-artifacts.js?v=binary-chunks-20260906-1"));
+    "app-html-workspace-artifacts.js?v=artifact-library-lazy-20261002-1"));
   assert.ok(index.includes("app-html-workspace.css?v=html-memory-20261002-1"));
   console.log("PASS HTML export: changed UI graph uses one cache key");
 

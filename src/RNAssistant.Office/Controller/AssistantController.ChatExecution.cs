@@ -735,6 +735,7 @@ namespace RNAssistant.Office
             int messageStartIndex;
             var bridgeMessages = ChatCloneService.CloneRecentMessagesForBridge(
                 session == null ? null : session.Messages, out messageStartIndex);
+            var artifactPresentation = ArtifactLibraryProjectionService.ProjectState(session, bridgeMessages);
             var response = new SendChatResponse
             {
                 Inbox = _inbox.Snapshot(session),
@@ -757,8 +758,8 @@ namespace RNAssistant.Office
                 Documents = ListOpenDocuments(),
                 Context = session == null ? CreateEmptyContext() : ChatCloneService.CloneContext(LoadContext(session)),
                 Messages = bridgeMessages,
-                Artifacts = ChatArtifactDto.From(session),
-                ArtifactLibrary = ArtifactLibraryProjectionService.Project(session),
+                Artifacts = artifactPresentation.Artifacts,
+                ArtifactLibrary = artifactPresentation.Library,
                 ActiveContextCheckpointId = session == null ? string.Empty : session.ActiveContextCheckpointId,
                 ActiveHtmlArtifactId = session == null ? string.Empty : session.ActiveHtmlArtifactId,
                 ActiveTaskListArtifactId = session == null ? string.Empty : session.ActiveTaskListArtifactId,

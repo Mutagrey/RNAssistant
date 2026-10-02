@@ -9,6 +9,12 @@ namespace RNAssistant.Office
 {
     public sealed partial class AssistantController
     {
+        public ArtifactLibraryPageResponse GetArtifactLibraryPage(ArtifactLibraryPageRequest request)
+        { return ArtifactLibraryProjectionService.Page(LoadArtifactViewerSession(request?.ChatId), request); }
+
+        public ArtifactLibraryHistoryResponse GetArtifactLibraryHistory(ArtifactLibraryHistoryRequest request)
+        { return ArtifactLibraryProjectionService.History(LoadArtifactViewerSession(request?.ChatId), request); }
+
         public DocumentArtifactListDto ListDocumentArtifacts(DocumentArtifactListRequest request)
         {
             return _artifactWorkingSet.List(LoadArtifactViewerSession(request?.ChatId), request);

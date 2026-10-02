@@ -350,8 +350,12 @@ namespace RNAssistant.Office
             if (string.IsNullOrWhiteSpace(chatId))
                 throw new ArgumentException("A chat id is required.", nameof(chatId));
             var session = LoadAddressedSession(chatId);
-            return ChatCloneService.ClonePreviousMessagesForBridge(
+            var page = ChatCloneService.ClonePreviousMessagesForBridge(
                 session.Id, session.Revision, session.Messages, beforeIndex);
+            var artifactPresentation = ArtifactLibraryProjectionService.ProjectMessagePage(session, page.Messages);
+            page.Artifacts = artifactPresentation.Artifacts;
+            page.RemovedResourceUris = artifactPresentation.Library.RemovedResourceUris;
+            return page;
         }
 
         public ChatStateResponse CreateChat(string title)
@@ -623,6 +627,7 @@ namespace RNAssistant.Office
             var activeId = session.Id;
             int messageStartIndex;
             var bridgeMessages = ChatCloneService.CloneRecentMessagesForBridge(session.Messages, out messageStartIndex);
+            var artifactPresentation = ArtifactLibraryProjectionService.ProjectState(session, bridgeMessages);
             return new ChatStateResponse
             {
                 Inbox = _inbox.Snapshot(session),
@@ -638,8 +643,8 @@ namespace RNAssistant.Office
                 Documents = includeCatalog ? ListOpenDocuments() : null,
                 Context = session == null ? CreateEmptyContext() : ChatCloneService.CloneContext(LoadContext(session)),
                 Messages = bridgeMessages,
-                Artifacts = ChatArtifactDto.From(session),
-                ArtifactLibrary = ArtifactLibraryProjectionService.Project(session),
+                Artifacts = artifactPresentation.Artifacts,
+                ArtifactLibrary = artifactPresentation.Library,
                 ActiveContextCheckpointId = session == null ? string.Empty : session.ActiveContextCheckpointId,
                 ActiveHtmlArtifactId = session == null ? string.Empty : session.ActiveHtmlArtifactId,
                 ActiveTaskListArtifactId = session == null ? string.Empty : session.ActiveTaskListArtifactId,

@@ -123,6 +123,7 @@ function ref(id, revision) {
     resourceClass: "versioned_aggregate", history: [
       { artifactId: "html-r1", revision: 1 }, { artifactId: "html-r3", revision: 3 }
     ] }];
+  old.libraryHead = context.state.artifactLibrary.heads[0];
   const parent = new Element("div");
   const messages = [current, old, independent].map(item => ({ message: { resourceRefs: [ref(item.id, item.revision)] } }));
   context.appendAgentRunResourceCards(parent, messages, null);

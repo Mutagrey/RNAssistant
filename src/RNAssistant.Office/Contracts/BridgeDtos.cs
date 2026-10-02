@@ -575,12 +575,22 @@ namespace RNAssistant.Office.Contracts
         [JsonProperty("createdUtc")] public System.DateTime CreatedUtc { get; set; }
         [JsonProperty("resourceUri")] public string ResourceUri { get; set; }
         [JsonProperty("documentScoped")] public bool DocumentScoped { get; set; }
+        [JsonProperty("libraryHead", NullValueHandling = NullValueHandling.Ignore)]
+        public ArtifactLibraryHeadDto LibraryHead { get; set; }
+        [JsonProperty("libraryRevision", NullValueHandling = NullValueHandling.Ignore)]
+        public ArtifactLibraryRevisionDto LibraryRevision { get; set; }
 
         public static IReadOnlyList<ChatArtifactDto> From(ChatSession session)
+        {
+            return From(session, null);
+        }
+
+        public static IReadOnlyList<ChatArtifactDto> From(ChatSession session, ISet<string> selectedIds)
         {
             if (session == null) return From((IEnumerable<ChatArtifact>)null);
             var artifacts = (session.Artifacts ?? new List<ChatArtifact>())
                 .Where(item => item != null && !string.IsNullOrWhiteSpace(item.Id))
+                .Where(item => selectedIds == null || selectedIds.Contains(item.Id))
                 .GroupBy(item => item.Id, StringComparer.OrdinalIgnoreCase)
                 .Where(group => group.Count() == 1)
                 .Select(group => group.Single())
@@ -894,6 +904,12 @@ namespace RNAssistant.Office.Contracts
 
         [JsonProperty("messages")]
         public IReadOnlyList<ChatMessageViewDto> Messages { get; set; }
+
+        [JsonProperty("artifacts", NullValueHandling = NullValueHandling.Ignore)]
+        public IReadOnlyList<ChatArtifactDto> Artifacts { get; set; }
+
+        [JsonProperty("removedResourceUris", NullValueHandling = NullValueHandling.Ignore)]
+        public IReadOnlyList<string> RemovedResourceUris { get; set; }
     }
 
     public sealed class SendChatResponse : ChatStateResponse

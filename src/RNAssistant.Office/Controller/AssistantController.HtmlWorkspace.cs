@@ -306,6 +306,9 @@ namespace RNAssistant.Office
 
         private static HtmlWorkspaceResponse HtmlWorkspaceState(ChatSession session, bool redoChoiceRequired = false)
         {
+            int messageStartIndex;
+            var visibleMessages = ChatCloneService.CloneRecentMessagesForBridge(session.Messages, out messageStartIndex);
+            var artifactPresentation = ArtifactLibraryProjectionService.ProjectState(session, visibleMessages);
             var preflight = HtmlWorkspaceToolService.InspectForPreview(
                 session, CancellationToken.None);
             HtmlWorkspacePreflightDto preflightDto;
@@ -330,8 +333,8 @@ namespace RNAssistant.Office
                 SessionRevision = session == null ? 0 : session.Revision,
                 ActiveChatId = session.Id,
                 ActiveHtmlArtifactId = session == null ? string.Empty : session.ActiveHtmlArtifactId,
-                Artifacts = ChatArtifactDto.From(session),
-                ArtifactLibrary = ArtifactLibraryProjectionService.Project(session),
+                Artifacts = artifactPresentation.Artifacts,
+                ArtifactLibrary = artifactPresentation.Library,
                 Workspace = HtmlWorkspaceEditorResourceService.Metadata(session),
                 StaticPreflight = preflightDto,
                 RedoChoiceRequired = redoChoiceRequired

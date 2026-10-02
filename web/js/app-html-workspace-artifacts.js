@@ -401,6 +401,8 @@
   }
 
   function libraryRevision(artifact) {
+    var embedded = prop(artifact, "LibraryRevision", "libraryRevision", null);
+    if (embedded) return embedded;
     var id = String(artifactId(artifact) || "").toLowerCase();
     var history = prop(libraryHead(artifact), "History", "history", []) || [];
     return history.filter(function (revision) {
@@ -502,17 +504,24 @@
   function appendLibraryHistory(root, artifact, actions) {
     actions = actions || {};
     var head = libraryHead(artifact);
-    var history = prop(head, "History", "history", []) || [];
+    var historyCount = Number(prop(head, "HistoryCount", "historyCount",
+      (prop(head, "History", "history", []) || []).length) || 0);
     var resourceClass = String(prop(head, "ResourceClass", "resourceClass", "") || "").toLowerCase();
-    if ((resourceClass !== "versioned_document" && resourceClass !== "versioned_aggregate") || history.length < 2) return;
+    if ((resourceClass !== "versioned_document" && resourceClass !== "versioned_aggregate") || historyCount < 2) return;
     var isPlan = artifactKind(artifact) === "plan";
     var headArtifactId = prop(head, "ArtifactId", "artifactId", "") || "";
     var details = document.createElement("details");
     details.className = "artifact-history";
     var summary = document.createElement("summary");
-    summary.textContent = "История · " + history.length;
+    summary.textContent = "История · " + historyCount;
     details.appendChild(summary);
-    history.forEach(function (revision) {
+    var rows = document.createElement("div");
+    details.appendChild(rows);
+    var loadedIds = Object.create(null);
+    function appendRevision(revision) {
+      var rowId = String(prop(revision, "ArtifactId", "artifactId", "") || "").toLowerCase();
+      if (!rowId || loadedIds[rowId]) return;
+      loadedIds[rowId] = true;
       var row = document.createElement("div");
       row.className = "artifact-history-row";
       var copy = document.createElement("div");
@@ -585,8 +594,54 @@
       });
       actionBox.appendChild(button);
       row.appendChild(actionBox);
-      details.appendChild(row);
-    });
+      rows.appendChild(row);
+    }
+    var loaded = false, pending = false, nextCursor = null;
+    var chatId = state.activeChatId, navigation = state.chatNavigationVersion;
+    var sessionRevision = Number(prop(state.artifactLibrary, "SessionRevision", "sessionRevision", 0));
+    async function load(cursor, targetArtifactId) {
+      if (pending) return;
+      pending = true;
+      try {
+        var response = await send("getArtifactLibraryHistory", {
+          chatId: chatId, expectedSessionRevision: sessionRevision,
+          headArtifactId: headArtifactId, targetArtifactId: targetArtifactId || null, cursor: cursor || null
+        });
+        if (chatId !== state.activeChatId || navigation !== state.chatNavigationVersion ||
+            sessionRevision !== Number(prop(state.artifactLibrary, "SessionRevision", "sessionRevision", 0)) ||
+            !details.isConnected) return;
+        if (response.chatId !== chatId || response.sessionRevision !== sessionRevision ||
+            response.headArtifactId !== headArtifactId) throw new Error("История ресурса устарела.");
+        if (!cursor && !targetArtifactId) { rows.replaceChildren(); loadedIds = Object.create(null); }
+        (response.items || []).forEach(appendRevision);
+        if (!targetArtifactId) nextCursor = response.nextCursor || null;
+        var more = rows.querySelector(".artifact-history-more");
+        if (more) more.remove();
+        if (nextCursor) {
+          more = document.createElement("button");
+          more.type = "button"; more.className = "secondary compact artifact-history-more";
+          more.textContent = "Следующие 50";
+          more.addEventListener("click", function () { load(nextCursor); });
+          rows.appendChild(more);
+        }
+        loaded = true;
+      } catch (error) {
+        if (chatId === state.activeChatId && navigation === state.chatNavigationVersion && details.isConnected) {
+          var note = document.createElement("p");
+          note.textContent = error.detail || error.message || "История недоступна";
+          rows.appendChild(note);
+        }
+      } finally { pending = false; }
+    }
+    if (String(artifactId(artifact)).toLowerCase() !== String(headArtifactId).toLowerCase()) {
+      var findSelected = document.createElement("button");
+      findSelected.type = "button";
+      findSelected.className = "secondary compact";
+      findSelected.textContent = "Найти открытую ревизию";
+      findSelected.addEventListener("click", function () { load(null, artifactId(artifact)); });
+      details.appendChild(findSelected);
+    }
+    details.addEventListener("toggle", function () { if (details.open && !loaded) load(null); });
     root.appendChild(details);
   }
 

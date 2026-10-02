@@ -31,6 +31,9 @@ namespace RNAssistant.Office.Contracts
 
         [JsonProperty("removedResourceUris")]
         public IReadOnlyList<string> RemovedResourceUris { get; set; }
+
+        [JsonProperty("totalHeads")] public int TotalHeads { get; set; }
+        [JsonProperty("nextCursor")] public string NextCursor { get; set; }
     }
 
     public sealed class ArtifactLibraryHeadDto
@@ -54,7 +57,44 @@ namespace RNAssistant.Office.Contracts
         [JsonProperty("sourceMessageId")] public string SourceMessageId { get; set; }
         [JsonProperty("runId")] public string RunId { get; set; }
         [JsonProperty("createdUtc")] public DateTime CreatedUtc { get; set; }
-        [JsonProperty("history")] public IReadOnlyList<ArtifactLibraryRevisionDto> History { get; set; }
+        [JsonProperty("historyCount")] public int HistoryCount { get; set; }
+        [JsonProperty("history", NullValueHandling = NullValueHandling.Ignore)]
+        public IReadOnlyList<ArtifactLibraryRevisionDto> History { get; set; }
+    }
+
+    public sealed class ArtifactLibraryPageRequest
+    {
+        [JsonProperty("chatId")] public string ChatId { get; set; }
+        [JsonProperty("expectedSessionRevision")] public long ExpectedSessionRevision { get; set; }
+        [JsonProperty("cursor")] public string Cursor { get; set; }
+    }
+
+    public sealed class ArtifactLibraryPageResponse
+    {
+        [JsonProperty("chatId")] public string ChatId { get; set; }
+        [JsonProperty("sessionRevision")] public long SessionRevision { get; set; }
+        [JsonProperty("heads")] public IReadOnlyList<ArtifactLibraryHeadDto> Heads { get; set; }
+        [JsonProperty("artifacts")] public IReadOnlyList<ChatArtifactDto> Artifacts { get; set; }
+        [JsonProperty("nextCursor")] public string NextCursor { get; set; }
+    }
+
+    public sealed class ArtifactLibraryHistoryRequest
+    {
+        [JsonProperty("chatId")] public string ChatId { get; set; }
+        [JsonProperty("expectedSessionRevision")] public long ExpectedSessionRevision { get; set; }
+        [JsonProperty("headArtifactId")] public string HeadArtifactId { get; set; }
+        [JsonProperty("targetArtifactId")] public string TargetArtifactId { get; set; }
+        [JsonProperty("cursor")] public string Cursor { get; set; }
+    }
+
+    public sealed class ArtifactLibraryHistoryResponse
+    {
+        [JsonProperty("chatId")] public string ChatId { get; set; }
+        [JsonProperty("sessionRevision")] public long SessionRevision { get; set; }
+        [JsonProperty("headArtifactId")] public string HeadArtifactId { get; set; }
+        [JsonProperty("totalCount")] public int TotalCount { get; set; }
+        [JsonProperty("items")] public IReadOnlyList<ArtifactLibraryRevisionDto> Items { get; set; }
+        [JsonProperty("nextCursor")] public string NextCursor { get; set; }
     }
 
     public sealed class ArtifactLibraryRevisionDto

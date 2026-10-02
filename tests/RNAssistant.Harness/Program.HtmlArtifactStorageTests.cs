@@ -9,6 +9,7 @@ using RNAssistant.Core.Models;
 using RNAssistant.Core.Storage;
 using RNAssistant.Core.Services;
 using RNAssistant.Core.Tools;
+using RNAssistant.Office.Contracts;
 using RNAssistant.Office.Services;
 using RNAssistant.Office.Tools;
 
@@ -233,10 +234,12 @@ namespace RNAssistant.Harness
             var library = ArtifactLibraryProjectionService.Project(session).Heads
                 .Single(item => item.Kind == ChatArtifactKinds.HtmlWorkspace);
             AssertEqual(branchBChildId, library.ArtifactId, "library uses the explicit active branch head");
-            AssertEqual(5, library.History.Count, "library preserves the complete branch lineage");
-            AssertEqual("branch", library.History.Single(item => item.ArtifactId == branchAId).Relation,
+            AssertEqual(5, library.HistoryCount, "library counts the complete branch lineage");
+            var exactHistory = ArtifactLibraryProjectionService.History(session, new ArtifactLibraryHistoryRequest
+            { ChatId = session.Id, ExpectedSessionRevision = session.Revision, HeadArtifactId = library.ArtifactId });
+            AssertEqual("branch", exactHistory.Items.Single(item => item.ArtifactId == branchAId).Relation,
                 "inactive first branch remains explicit");
-            AssertEqual("branch", library.History.Single(item => item.ArtifactId == branchAChildId).Relation,
+            AssertEqual("branch", exactHistory.Items.Single(item => item.ArtifactId == branchAChildId).Relation,
                 "inactive first branch descendant remains explicit");
 
             var incompatible = new ChatSession();
