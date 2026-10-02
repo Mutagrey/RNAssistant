@@ -2,6 +2,12 @@
 
 NuGet packages are committed in `packages/`:
 
+`NuGet.Config` contains only that local source. Production, harness and demo
+projects reference the checked-in DLLs by relative path. SDK projects may run
+`dotnet restore` to create local build assets, but no NuGet download or network
+feed is needed. The .NET Framework 4.8 Core build uses `System.Data` and the
+`netstandard` facade from the locally installed targeting pack.
+
 - `Microsoft.Web.WebView2 1.0.2903.40`
 - `Newtonsoft.Json 13.0.3`
 - `PdfPig 0.1.15` and its managed dependencies
