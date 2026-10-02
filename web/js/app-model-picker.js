@@ -117,11 +117,10 @@ function createChatModelPickerItem(value, model, isDefault, selected) {
   return button;
 }
 
-function renderChatModelPicker() {
+function renderChatModelPicker(force) {
   var picker = $("chatModelPicker");
   var menu = $("chatModelMenu");
   var label = $("chatModelButtonLabel");
-  var select = $("chatModelSelect");
   if (!picker || !menu || !label) return;
 
   var selected = activeChatModel();
@@ -130,11 +129,27 @@ function renderChatModelPicker() {
   var effectiveModel = findModel(effectiveValue);
   label.textContent = (effectiveModel && effectiveModel.title) || effectiveValue || "Модель";
   picker.title = effectiveValue ? "Модель чата: " + effectiveValue : "Модель чата не выбрана";
-  var disabled = state.modelCatalog.loading || state.modelSaving || state.reasoningSaving ||
+  var disabled = state.modelSaving || state.reasoningSaving || !!state.chatNavigationPending || !!state.initializePromise ||
     !!currentActiveSend() || hasActiveMessageEdit() || state.bridgeUnavailable || !state.activeChatId;
   setComposerPickerDisabled(picker, disabled);
+  if (!picker.open) return;
+
+  var catalog = state.modelCatalog;
+  var previous = menu.modelRenderState;
+  if (!force && previous && previous.catalog === catalog && previous.settings === state.settings &&
+      previous.selected === selected && previous.defaultValue === defaultValue &&
+      previous.loading === catalog.loading && previous.error === catalog.error) return;
+  menu.modelRenderState = { catalog: catalog, settings: state.settings, selected: selected,
+    defaultValue: defaultValue, loading: catalog.loading, error: catalog.error };
 
   menu.replaceChildren();
+  if (catalog.loading || catalog.error) {
+    var status = document.createElement("div");
+    status.className = "composer-model-item-description";
+    status.setAttribute("role", "status");
+    status.textContent = catalog.loading ? "Загрузка моделей…" : "Каталог моделей не загружен: " + catalog.error;
+    menu.appendChild(status);
+  }
   var defaultModel = findModel(defaultValue);
   var defaultItem = createChatModelPickerItem("", defaultModel || (defaultValue ? { value: defaultValue, title: defaultValue } : null), true, !selected);
   menu.appendChild(defaultItem);
@@ -152,32 +167,9 @@ function renderChatModelPicker() {
       if (picker.classList.contains("is-disabled")) return;
       var value = item.dataset.value || "";
       picker.open = false;
-      if (select) select.value = value;
       saveChatModelSelection(value);
     });
   });
-}
-
-function setChatModelSelectWidth(select) {
-  if (!select) {
-    return;
-  }
-
-  var option = select.options[select.selectedIndex];
-  var text = option ? String(option.textContent || "") : "";
-  var width = Math.max(48, Math.min(228, text.length * 8 + 6));
-
-  if (typeof window !== "undefined" && window.document && window.document.createElement) {
-    var canvas = setChatModelSelectWidth.canvas || (setChatModelSelectWidth.canvas = window.document.createElement("canvas"));
-    var context = canvas.getContext && canvas.getContext("2d");
-    if (context && window.getComputedStyle) {
-      var styles = window.getComputedStyle(select);
-      context.font = styles.font || [styles.fontStyle, styles.fontVariant, styles.fontWeight, styles.fontSize, styles.fontFamily].join(" ");
-      width = Math.max(48, Math.min(228, Math.ceil(context.measureText(text).width) + 6));
-    }
-  }
-
-  select.style.setProperty("--chat-model-select-width", width + "px");
 }
 
 function populateModelSelect(select, selectedValue) {
@@ -214,40 +206,3 @@ function populateModelSelect(select, selectedValue) {
   select.value = selected || state.modelCatalog.defaultModel || "";
   select.disabled = state.modelCatalog.loading || state.modelSaving || models.length === 0;
 }
-
-function populateChatModelSelect(select) {
-  if (!select) {
-    return;
-  }
-
-  var models = state.modelCatalog.models || [];
-  var selected = activeChatModel();
-  var defaultModel = settingsModel();
-  select.innerHTML = "";
-
-  var defaultOption = document.createElement("option");
-  defaultOption.value = "";
-  defaultOption.textContent = defaultModel || "Не выбрана";
-  select.appendChild(defaultOption);
-
-  if (selected && !findModel(selected)) {
-    var fallback = document.createElement("option");
-    fallback.value = selected;
-    fallback.textContent = selected + " (чат)";
-    select.appendChild(fallback);
-  }
-
-  models.forEach(function (model) {
-    var option = document.createElement("option");
-    option.value = model.value;
-    option.textContent = modelOptionText(model);
-    option.title = modelOptionTitle(model);
-    select.appendChild(option);
-  });
-
-  select.value = selected;
-  select.title = selected || defaultModel ? ("Модель чата: " + (selected || defaultModel)) : "Модель чата не выбрана";
-  select.disabled = state.modelCatalog.loading || state.modelSaving || !!currentActiveSend() || !state.activeChatId;
-  setChatModelSelectWidth(select);
-}
-

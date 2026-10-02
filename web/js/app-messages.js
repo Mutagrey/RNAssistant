@@ -699,14 +699,18 @@ function reconcileMessageUnits(box, units, liveOnly) {
   renderedMessageUnits = nextCache;
 }
 
-function scheduleLiveStreamRender() {
+function scheduleLiveStreamRender(fullProjection) {
+  if (fullProjection) state.liveFullRenderPending = true;
   if (state.liveStreamRenderPending) {
     return;
   }
   state.liveStreamRenderPending = true;
   var render = function () {
     state.liveStreamRenderPending = false;
-    renderStreamingMessages();
+    var full = state.liveFullRenderPending;
+    state.liveFullRenderPending = false;
+    if (full) renderMessages();
+    else renderStreamingMessages();
   };
   if (window.requestAnimationFrame) {
     window.requestAnimationFrame(render);

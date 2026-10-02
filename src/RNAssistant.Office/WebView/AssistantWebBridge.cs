@@ -276,15 +276,18 @@ namespace RNAssistant.Office.WebView
                         break;
                     case "setChatModel":
                         var setChatModel = Payload<SetChatModelPayload>(payload);
-                        responsePayload = _controller.SetChatModel(setChatModel.ChatId, setChatModel.Model);
+                        responsePayload = await RunBridgeWorkAsync(
+                            () => _controller.SetChatModel(setChatModel.ChatId, setChatModel.Model), cancellationToken).ConfigureAwait(false);
                         break;
                     case "setChatMode":
                         var setChatMode = Payload<SetChatModePayload>(payload);
-                        responsePayload = _controller.SetChatMode(setChatMode.ChatId, setChatMode.Mode);
+                        responsePayload = await RunBridgeWorkAsync(
+                            () => _controller.SetChatMode(setChatMode.ChatId, setChatMode.Mode), cancellationToken).ConfigureAwait(false);
                         break;
                     case "setChatReasoning":
                         var setChatReasoning = Payload<SetChatReasoningPayload>(payload);
-                        responsePayload = _controller.SetChatReasoning(setChatReasoning.ChatId, setChatReasoning.Enabled == true);
+                        responsePayload = await RunBridgeWorkAsync(
+                            () => _controller.SetChatReasoning(setChatReasoning.ChatId, setChatReasoning.Enabled == true), cancellationToken).ConfigureAwait(false);
                         break;
                     case "allowHtmlNetworkOrigin":
                         responsePayload = _controller.AllowHtmlNetworkOrigin(Payload<HtmlOriginPayload>(payload).Origin);
@@ -373,9 +376,8 @@ namespace RNAssistant.Office.WebView
                         break;
                     case "getModelCatalog":
                         var modelCatalog = Payload<ModelCatalogPayload>(payload);
-                        responsePayload = await _controller.GetModelCatalogAsync(
-                            modelCatalog.Settings,
-                            modelCatalog.ApiKey);
+                        responsePayload = await Task.Run(() => _controller.GetModelCatalogAsync(
+                            modelCatalog.Settings, modelCatalog.ApiKey, cancellationToken), cancellationToken).ConfigureAwait(false);
                         break;
                     case "saveSettings":
                         responsePayload = _controller.SaveSettings(payload.ToObject<SaveSettingsPayload>(JsonSerializer.Create(

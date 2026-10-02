@@ -7,6 +7,9 @@ function switchTab(name) {
   var section = name === "instructions" ? "library" : name;
   var active = document.querySelector(".panel.active");
   var changed = !active || active.id !== "tab-" + name;
+  if (changed && active && active.id === "tab-settings" && typeof discardModelCatalogPreview === "function") {
+    discardModelCatalogPreview();
+  }
   Array.prototype.slice.call(document.querySelectorAll(".tab")).forEach(function (tab) {
     tab.classList.toggle("active", tab.dataset.section === section);
   });

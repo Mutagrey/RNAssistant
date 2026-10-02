@@ -25,16 +25,21 @@ namespace RNAssistant.Office
             };
         }
 
-        public async Task<ModelCatalogResponse> GetModelCatalogAsync(AppSettings settings, string apiKey)
+        public async Task<ModelCatalogResponse> GetModelCatalogAsync(AppSettings settings, string apiKey, CancellationToken cancellationToken)
         {
+            cancellationToken.ThrowIfCancellationRequested();
             settings = settings ?? _settingsService.Load();
             var configUrl = LlmClient.BuildModelsConfigUrl(settings);
             var json = await _llmClient.GetModelsConfigJsonAsync(
                 settings,
-                string.IsNullOrWhiteSpace(apiKey) ? null : apiKey).ConfigureAwait(false);
+                string.IsNullOrWhiteSpace(apiKey) ? null : apiKey, cancellationToken).ConfigureAwait(false);
+            cancellationToken.ThrowIfCancellationRequested();
             var catalog = ModelCapabilityService.ParseCatalog(json, configUrl);
             var storedSettings = _settingsService.Load();
-            if (ModelCapabilityService.Merge(storedSettings, catalog))
+            cancellationToken.ThrowIfCancellationRequested();
+            if (string.IsNullOrWhiteSpace(apiKey) &&
+                string.Equals(configUrl, LlmClient.BuildModelsConfigUrl(storedSettings), StringComparison.Ordinal) &&
+                ModelCapabilityService.Merge(storedSettings, catalog))
             {
                 _settingsService.Save(storedSettings);
             }

@@ -73,6 +73,37 @@ marshals callbacks back to its UI thread and `AttachTarget` selects the requeste
 chat synchronously before replacing the pane; a separate Desktop attach slice is
 still needed. No measured Windows speedup or complete freeze resolution is claimed.
 
+Panel/model follow-up: model/mode/reasoning persistence and projection also ran in
+the bridge UI callback; the closed model picker rebuilt every menu item on composer
+updates, and foreground activity events rebuilt the transcript individually.
+These paths now use worker dispatch, lazy/cached picker DOM and one render per
+animation frame. The duplicate hidden model select and its canvas width measurement
+are removed. Hidden settings model tables are not rendered from the chat tab.
+
+Model discovery could hold exclusive host rebinding until its 30-second HTTP timeout,
+close its own picker while loading, and use an unsaved settings-form API key from the
+chat picker. Discovery is now single-flight and cancellable through the HTTP token;
+navigation drains both discovery and its cancellation acknowledgement, plus accepted
+chat preference writes. Late results cannot replace a new binding's catalog; init and
+settings publication invalidate it. Different-URL/explicit-key catalog previews no
+longer persist capabilities to the current server's settings. Leaving settings also
+discards their preview catalog; the chat picker can reload after cancellation without
+reopening. Regression review covers a failed cancellation acknowledgement as well:
+the original request must still drain before navigation. This does not identify
+the user's unspecified model error as a context overflow or justify reducing limits.
+
+Node regression checks cover a 500-model catalog without hidden DOM work, cancellation
+races and stale binding replies, preference/navigation ordering, and 100 foreground
+activities coalesced without lost events. Four targeted host-neutral checks pass:
+catalog cancellation releases binding, navigation/model controls leave the caller
+context, bound session identity, and per-chat model isolation. These were run against
+an isolated HEAD archive plus this slice because unrelated in-flight kernel changes
+prevented the shared harness from compiling. Production controller/HTTP wiring is
+source-reviewed; the harness controller remains a stub. Desktop also synchronously
+discovers Outlook mailboxes on its minute timer, before its foreground-focus guard;
+that COM wait and attach preparation still require a separate Desktop owner change
+and Windows timing evidence.
+
 ## Agent continuity and deterministic read loops — 2026-10-01
 
 P1 incident evidence remains open; shared host-neutral fixes are implemented.

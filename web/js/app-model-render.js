@@ -47,16 +47,20 @@ function renderModelStatus() {
 
 function renderModelControls() {
   if (typeof isPanelActive === "function" && !isPanelActive("chat") && !isPanelActive("settings")) return;
-  populateModelSelect($("modelSelect"), formModel());
-  populateChatModelSelect($("chatModelSelect"));
-  renderModelStatus();
-  renderModelCapabilityList();
-  renderAttachmentModelPriority();
-  renderActiveModelCapability();
-  renderReasoningToggle();
-  renderChatModelPicker();
-  if (typeof renderTokenEstimateCalibrationStatus === "function") {
-    renderTokenEstimateCalibrationStatus(state.settings);
+  if (typeof isPanelActive !== "function" || isPanelActive("settings")) {
+    populateModelSelect($("modelSelect"), formModel());
+    renderModelStatus();
+    renderModelCapabilityList();
+    renderAttachmentModelPriority();
+    renderActiveModelCapability();
+    if ($("loadModelsButton")) $("loadModelsButton").disabled = state.modelCatalog.loading;
+    if (typeof renderTokenEstimateCalibrationStatus === "function") {
+      renderTokenEstimateCalibrationStatus(state.settings);
+    }
+  }
+  if (typeof isPanelActive !== "function" || isPanelActive("chat")) {
+    renderReasoningToggle();
+    renderChatModelPicker(true);
   }
 }
 
@@ -67,6 +71,7 @@ function renderReasoningToggle() {
   var support = effectiveModelSupportsReasoning(model);
   var active = !!state.activeChatReasoning && support !== false;
   var disabled = !!currentActiveSend() || state.modelSaving || state.reasoningSaving ||
+    !!state.chatNavigationPending || !!state.initializePromise ||
     hasActiveMessageEdit() || state.bridgeUnavailable || !state.activeChatId || support === false;
 
   button.classList.toggle("active", active);

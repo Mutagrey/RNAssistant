@@ -73,7 +73,6 @@ function renderSendControls() {
   var stopButton = $("stopButton");
   var input = $("chatInput");
   var clearButton = $("clearInputButton");
-  var modelSelect = $("chatModelSelect");
   var modeSelect = $("chatModeSelect");
   var form = $("chatForm");
   var editBar = $("messageEditBar");
@@ -118,9 +117,6 @@ function renderSendControls() {
   }
   if (clearButton) {
     clearButton.disabled = isSending || isPreparingAttachments || state.editingBusy;
-  }
-  if (modelSelect) {
-    modelSelect.disabled = navigating || isSending || isPreparingAttachments || isEditing || state.modelCatalog.loading || state.modelSaving || state.reasoningSaving || state.bridgeUnavailable || !state.activeChatId;
   }
   if (modeSelect) {
     modeSelect.disabled = navigating || isSending || isPreparingAttachments || isEditing || state.modeSaving || state.reasoningSaving || state.bridgeUnavailable || !state.activeChatId;

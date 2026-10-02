@@ -46,6 +46,7 @@ namespace RNAssistant.Office.WebView
             "editMessage",
             "confirmAgentTool",
             "testModelConnection",
+            "getModelCatalog",
             "testModelCompatibility"
         };
 

@@ -68,6 +68,8 @@ var state = {
   editingDraftSelectionEnd: 0,
   editingDraftScrollTop: 0,
   modelCatalog: { configUrl: "", defaultModel: "", models: [], loaded: false, loading: false, error: "" },
+  modelCatalogRequest: null,
+  chatPreferencePromise: null,
   modelSaving: false,
   modeSaving: false,
   reasoningSaving: false,
@@ -490,7 +492,8 @@ if (window.chrome && window.chrome.webview) {
       }
       if (progressChatId !== state.activeChatId) { scheduleChatProgressRender(); return; }
       if (isChatProgress) {
-        renderMessages();
+        if (typeof scheduleLiveStreamRender === "function") scheduleLiveStreamRender(true);
+        else renderMessages();
       }
       log("[" + (progress.phase || "working") + "] " + (progress.message || "Выполняю..."));
       return;

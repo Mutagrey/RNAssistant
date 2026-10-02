@@ -327,6 +327,15 @@ the harness uses a bridge stub, so controller wiring remains a Windows gate.
 They do not validate real Excel COM identity, production binding or Windows UI
 reentrancy. Those remain Phase 5B2 gates in [ADR-0005](../../docs/decisions/ADR-0005-bound-document-session.md).
 
+Panel/model responsiveness uses `bridge: navigation leaves caller context` and
+`bridge: model catalog cancellation releases binding`, paired with
+`node tests/web/model-navigation.test.js` and `node tests/web/stream-render-cost.test.js`.
+They cover worker dispatch, cancel/drain before exclusive rebinding, stale catalog
+responses, settings-preview cancellation/reload, chat preference ordering, hidden
+model DOM work and activity batching.
+The bridge controller is a stub; real controller/HTTP wiring and Desktop/Office
+UI responsiveness still need Windows evidence.
+
 The former Excel identity probe/helper and Qualification Center tests were removed.
 Real Excel COM identity, production binding and UI reentrancy remain Windows gates
 under [ADR-0005](../../docs/decisions/ADR-0005-bound-document-session.md).

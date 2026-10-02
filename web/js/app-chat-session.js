@@ -8,6 +8,20 @@ function applyChatNavigationState(response, version) {
   return applyChatState(response);
 }
 
+function sendChatPreference(type, payload) {
+  var previous = state.chatPreferencePromise;
+  var request = (async function () {
+    if (previous) await previous.catch(function () {});
+    return send(type, payload);
+  })();
+  state.chatPreferencePromise = request;
+  var finished = function () {
+    if (state.chatPreferencePromise === request) state.chatPreferencePromise = null;
+  };
+  request.then(finished, finished);
+  return request;
+}
+
 function navigateChat(type, payload) {
   var previous = state.chatNavigationPromise;
   var selectionVersion = 0;
@@ -21,6 +35,9 @@ function navigateChat(type, payload) {
   var navigation = (async function () {
     if (previous) await previous.catch(function () {});
     if (state.chatSyncPromise) await state.chatSyncPromise;
+    if (state.chatPreferencePromise) await state.chatPreferencePromise.catch(function () {});
+    if (selectionVersion && selectionVersion !== state.chatSelectionRequestVersion) return null;
+    if (typeof cancelModelCatalogLoad === "function") await cancelModelCatalogLoad();
     if (selectionVersion && selectionVersion !== state.chatSelectionRequestVersion) return null;
     var version = beginChatNavigation();
     var response = await send(type, payload);
@@ -392,6 +409,7 @@ function applyInitState(init) {
   state.officeContext = init.officeContext || null;
   state.bridgeToken = init.bridgeToken || init.BridgeToken || state.bridgeToken || "";
   state.settings = init.settings || {};
+  if (typeof resetModelCatalog === "function") resetModelCatalog();
   state.prompts = init.prompts;
   if (typeof releasePromptEditorContext === "function") releasePromptEditorContext();
   if (typeof window.cancelHtmlWorkspaceWrite === "function") window.cancelHtmlWorkspaceWrite();

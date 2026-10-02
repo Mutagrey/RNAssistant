@@ -35,7 +35,7 @@ async function createOfficeHostChat(host) {
 
 async function saveChatMode(mode) {
   mode = mode || "agent";
-  if (!state.activeChatId || state.bridgeUnavailable || state.modeSaving || currentActiveSend() || hasActiveMessageEdit()) {
+  if (!state.activeChatId || state.bridgeUnavailable || state.modeSaving || state.chatNavigationPending || state.initializePromise || currentActiveSend() || hasActiveMessageEdit()) {
     return false;
   }
   if (mode === state.activeChatMode) {
@@ -47,7 +47,7 @@ async function saveChatMode(mode) {
   state.activeChatMode = mode;
   renderChatSessions();
   try {
-    var applied = applyChatStateForChat(await send("setChatMode", {
+    var applied = applyChatStateForChat(await sendChatPreference("setChatMode", {
       chatId: targetChatId,
       mode: mode
     }), targetChatId);

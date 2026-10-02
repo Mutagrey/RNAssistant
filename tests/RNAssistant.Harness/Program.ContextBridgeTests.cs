@@ -655,6 +655,43 @@ namespace RNAssistant.Harness
             finally { SynchronizationContext.SetSynchronizationContext(previousContext); }
         }
 
+        private static async Task BridgeModelCatalogCancellationReleasesBinding()
+        {
+            using (var entered = new ManualResetEventSlim())
+            using (var bridge = new AssistantWebBridge(new AssistantController
+            {
+                ModelCatalogWork = async token =>
+                {
+                    AssertTrue(token.CanBeCanceled, "catalog receives the bridge cancellation token");
+                    entered.Set();
+                    await Task.Delay(Timeout.Infinite, token).ConfigureAwait(false);
+                    return new ModelCatalogResponse();
+                }
+            }, null))
+            {
+                var token = BridgeToken(bridge);
+                Func<string, string, object, Task<string>> send = (id, type, payload) =>
+                    bridge.HandleMessageAsync(JsonConvert.SerializeObject(new { id, type, bridgeToken = token, payload }));
+                bridge.OfficeChatSelectionRequested = chatId => Task.FromResult(new OfficeHostChatResponse
+                {
+                    Host = "Outlook", ChatId = chatId, State = new ChatStateResponse { ActiveChatId = chatId }
+                });
+                var loading = send("catalog", "getModelCatalog", new { });
+                AssertTrue(entered.Wait(TimeSpan.FromSeconds(5)), "catalog entered cancellable worker");
+                var busy = JObject.Parse(await send("busy", "selectChat", new { chatId = "outlook-chat" }));
+                AssertTrue(!(bool)busy["ok"], "in-flight catalog retains its binding until it drains");
+                var cancelled = JObject.Parse(await send("cancel", "cancelRequest", new { requestId = "catalog" }));
+                AssertTrue((bool)cancelled["payload"]["cancelled"], "catalog cancellation is reachable");
+                AssertTrue(ReferenceEquals(await Task.WhenAny(loading, Task.Delay(TimeSpan.FromSeconds(2))), loading),
+                    "catalog cancellation releases the request without waiting for the HTTP timeout");
+                var terminal = JObject.Parse(await loading);
+                AssertTrue(!(bool)terminal["ok"] && (bool)terminal["cancelled"], "catalog returns typed cancellation");
+                var selected = JObject.Parse(await send("selected", "selectChat", new { chatId = "outlook-chat" }));
+                AssertTrue((bool)selected["ok"], "exclusive Office switch succeeds after catalog drains");
+                AssertEqual("outlook-chat", (string)selected["payload"]["chatId"], "switch keeps the requested chat identity");
+            }
+        }
+
         private static void BridgeInitReturnsToken()
         {
             var controller = new AssistantController();

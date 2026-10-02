@@ -153,9 +153,10 @@ namespace RNAssistant.Office
             return ChatState(host, documentKey);
         }
         public ChatStateResponse RenameChat(string chatId, string title) { return ChatState(title, chatId); }
-        public ChatStateResponse SetChatModel(string chatId, string model) { return ChatState(model, chatId); }
+        public ChatStateResponse SetChatModel(string chatId, string model) { NavigationWork?.Invoke(); return ChatState(model, chatId); }
         public ChatStateResponse SetChatMode(string chatId, string mode)
         {
+            NavigationWork?.Invoke();
             LastChatId = chatId;
             LastChatMode = mode;
             var state = ChatState(null, chatId);
@@ -164,6 +165,7 @@ namespace RNAssistant.Office
         }
         public ChatStateResponse SetChatReasoning(string chatId, bool enabled)
         {
+            NavigationWork?.Invoke();
             LastChatId = chatId;
             LastChatReasoning = enabled;
             var state = ChatState(null, chatId);
@@ -209,7 +211,13 @@ namespace RNAssistant.Office
         public SettingsResponse GetSettings() { return new SettingsResponse { Settings = SettingsControlsDto.From(new AppSettings()), HasApiKey = false, HasHistorySecret = false }; }
         public CasHealthResponse GetCasHealth() { return new CasHealthResponse { Healthy = true, ReachabilityComplete = true, CanGarbageCollect = true }; }
         public CasGarbageCollectionResponse CollectCasGarbage() { return new CasGarbageCollectionResponse { Completed = true, Health = GetCasHealth() }; }
-        public Task<ModelCatalogResponse> GetModelCatalogAsync(AppSettings settings, string apiKey) { return Task.FromResult(new ModelCatalogResponse { Catalog = new JObject() }); }
+        internal Func<CancellationToken, Task<ModelCatalogResponse>> ModelCatalogWork { get; set; }
+        public Task<ModelCatalogResponse> GetModelCatalogAsync(AppSettings settings, string apiKey, CancellationToken token)
+        {
+            NavigationWork?.Invoke();
+            token.ThrowIfCancellationRequested();
+            return ModelCatalogWork != null ? ModelCatalogWork(token) : Task.FromResult(new ModelCatalogResponse { Catalog = new JObject() });
+        }
 
         public SaveSettingsPayload LastSettingsRequest { get; private set; }
 
