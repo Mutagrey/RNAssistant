@@ -42,7 +42,6 @@ namespace RNAssistant.Office.Services
         private IReadOnlyList<ChatAttachment> _currentAttachments;
         private string _currentUserId;
         private ChatMessage _packState;
-        private ChatMessage _runtimeContinuation;
         private List<ResourceEvidence> _responseEvidence = new List<ResourceEvidence>();
         private CallableToolPack _toolPack;
         private LlmRunCache _runCache;
@@ -125,7 +124,6 @@ namespace RNAssistant.Office.Services
         {
             var activeTools = _toolPack.Tools;
             var snapshot = _lastSnapshot;
-            _runtimeContinuation = null;
             _session.LastContextReceipt = snapshot.Receipt;
             _responseEvidence = snapshot.Messages.Where(message =>
                     IsVisibleResourceRead(message) || message.SyntheticResourceObservation)
@@ -184,15 +182,6 @@ namespace RNAssistant.Office.Services
                 AcceptedCallPayloadService.Externalize(accepted, _payloads);
             }
             _session.Messages.Add(accepted);
-            _lastSnapshot = null;
-        }
-
-        internal void AppendDeferredFinal(string message, LlmCompletionResult completion)
-        {
-            var accepted = AgentJsonProtocol.CreateDeferredFinalMessage(message, completion);
-            AttachResponseEvidence(accepted);
-            _session.Messages.Add(accepted);
-            _runtimeContinuation = AgentJsonProtocol.CreateOpenTaskListContinuationMessage();
             _lastSnapshot = null;
         }
 
@@ -449,8 +438,6 @@ namespace RNAssistant.Office.Services
                 current.Attachments = _currentAttachments.ToList();
                 facts[currentIndex] = current;
             }
-            if (_runtimeContinuation != null)
-                facts.Add(_runtimeContinuation);
             var archivedEvidence = ContextCompactionService.ActiveCheckpoint(_session) == null
                 ? Enumerable.Empty<ResourceEvidence>()
                 : (_session.Messages ?? new List<ChatMessage>())

@@ -243,8 +243,31 @@ function activityPrimaryText(activity) {
   return labels[activityKind(activity)] || toolId || title || "Выполняю шаг";
 }
 
+function activityReadSummary(activity) {
+  return activityToolId(activity) === "common.resources_read"
+    ? activityValue(activity, "ReadSummary", "readSummary", null) : null;
+}
+
+function activityReadCaption(summary) {
+  var representation = activityValue(summary, "Representation", "representation", "");
+  var rows = activityValue(summary, "ReturnedRows", "returnedRows", null);
+  var characters = activityValue(summary, "ReturnedCharacters", "returnedCharacters", null);
+  var caption;
+  if (Number.isSafeInteger(rows) && rows >= 0) caption = "Получено строк: " + rows;
+  else if (representation === "media") caption = activityValue(summary, "HydratedForNextModelStep", "hydratedForNextModelStep", false)
+    ? "Медиа подготовлено для следующего запроса модели" : "Получены сведения о медиа";
+  else if (representation === "metadata") caption = "Получены сведения · содержимое не загружено";
+  else {
+    caption = { text: "Получен текст", source: "Получен исходный код", structure: "Получена структура" }[representation] || "Прочитано";
+    if (Number.isSafeInteger(characters) && characters >= 0) caption += " · символов: " + characters;
+  }
+  return caption + (activityValue(summary, "Complete", "complete", true) === false ? " · часть данных" : "");
+}
+
 function activityResultCaption(activity) {
   var toolId = activityToolId(activity);
+  var read = activityReadSummary(activity);
+  if (read) return activityReadCaption(read);
   var source = activityDataJson(activity);
   if (!source || source.length > 32768) return "";
   var cached = activityPresentationCache.get(activity);
@@ -261,17 +284,6 @@ function activityResultCaption(activity) {
       caption = partial ? "Загружена часть описания" : "Загружено";
     } else if (data && typeof data === "object" && (data.truncated || data.externalized)) {
       caption = data.externalized ? "Результат сохранён отдельно" : "В журнале показана часть результата";
-    } else if (toolId === "common.resources_read" && data && data.kind === "resource-read") {
-      if (data.table && Array.isArray(data.table.rows)) caption = "Получено строк: " + data.table.rows.length;
-      else if (data.representation === "media") caption = data.hydratedForNextModelStep === true
-        ? "Медиа подготовлено для следующего запроса модели" : "Получены сведения о медиа";
-      else if (data.representation === "metadata") caption = "Получены сведения · содержимое не загружено";
-      else {
-        caption = { text: "Получен текст", source: "Получен исходный код", structure: "Получена структура" }[data.representation] || "Прочитано";
-        if (Number.isSafeInteger(data.returnedCharacters) && data.returnedCharacters >= 0)
-          caption += " · символов: " + data.returnedCharacters;
-      }
-      if (data.complete === false) { caption += " · часть данных"; partial = true; }
     } else if ((toolId === "common.resources_find" || toolId === "common.capabilities_search") && data && Array.isArray(data.items) && typeof data.complete === "boolean") {
       var count = data.items.length;
       partial = !data.complete || data.partial === true;
@@ -298,6 +310,7 @@ var activityNoEffectWarningCodes = {
   html_source_observation_required: true,
   html_workspace_target_ambiguous: true,
   invalid_task_list: true,
+  task_list_blocker_required: true,
   invalid_plan_document: true,
   resource_not_found: true,
   resource_target_not_found: true,
@@ -333,6 +346,8 @@ function activityPresentationState(activity) {
   if (effect === "Unknown") return "unknown";
   var status = activityStatus(activity);
   if (status === "completed") {
+    var read = activityReadSummary(activity);
+    if (read) return activityValue(read, "Complete", "complete", true) === false ? "partial" : status;
     activityResultCaption(activity);
     var display = activityPresentationCache.get(activity);
     if (display && display.source === activityDataJson(activity) && display.partial) return "partial";

@@ -656,6 +656,20 @@
   line-height: 1.4;
 }
 
+.agent-plan-step-note {
+  grid-column: 2;
+  color: var(--muted);
+  white-space: pre-wrap;
+}
+
+.agent-plan-reason {
+  margin: 0;
+  padding: 2px 11px 9px;
+  color: var(--muted);
+  font-size: 11px;
+  white-space: pre-wrap;
+}
+
 .agent-plan-step-mark {
   display: grid;
   width: 15px;

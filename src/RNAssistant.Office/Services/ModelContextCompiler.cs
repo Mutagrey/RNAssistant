@@ -278,6 +278,7 @@ namespace RNAssistant.Office.Services
                         if (message.ResultPayload.ByteLength > maximumPayloadBytes &&
                             !(IsSharedContextRead(message) && message.ResultPayload.ByteLength <= 4L * 1024 * 1024))
                         {
+                            if (OmitSourceBody(atom)) break;
                             if (message.ToolResultProtocolVersion == ToolResultWire.CurrentVersion &&
                                 !ToolResultResourceService.IsExactReadEvidence(new ToolInvocation { ToolId = message.ToolName }))
                                 throw new PromptBudgetExceededException("Complete tool result exceeds this request budget. Use a larger context or request a narrower scope.", false);
@@ -339,6 +340,9 @@ namespace RNAssistant.Office.Services
             foreach (var atom in atoms.Where(item => item.Kind == "terminal-mutation"))
             {
                 var result = atom.Messages[1];
+                if (enforceBudget && ModelContextBudget.EstimateMessagesTokens(new[] { result }, settings) +
+                    ModelContextBudget.EstimateMessagesTokens(atoms.Where(a => a.Kind == "system-invariant" || a.Kind == "user-instruction")
+                        .SelectMany(a => a.Messages), settings) > budget && OmitSourceBody(atom)) continue;
                 ToolResultWireReadResult wire;
                 string error;
                 if (!ToolResultHistoryReader.TryRead(result, out wire, out error)) continue;
@@ -380,6 +384,14 @@ namespace RNAssistant.Office.Services
                 receipt.Deduplicated++;
             }
             var messages = atoms.SelectMany(item => item.Messages).ToList();
+            if (enforceBudget && ModelContextBudget.EstimateMessagesTokens(messages, settings) > budget)
+            {
+                var invariantCost = ModelContextBudget.EstimateMessagesTokens(atoms.Where(a => a.Kind == "system-invariant" ||
+                    a.Kind == "user-instruction").SelectMany(a => a.Messages), settings);
+                foreach (var atom in atoms.Where(a => ModelContextBudget.EstimateMessagesTokens(a.Messages, settings) + invariantCost > budget))
+                    OmitSourceBody(atom);
+                messages = atoms.SelectMany(item => item.Messages).ToList();
+            }
             receipt.OperationReceipts = messages.Count(message => message.CompletedOperation != null);
             receipt.EstimatedTokens = ModelContextBudget.EstimateMessagesTokens(messages, settings);
             receipt.AtomCounts = atoms.GroupBy(item => item.Kind).ToDictionary(group => group.Key, group => group.Count());
@@ -406,8 +418,10 @@ namespace RNAssistant.Office.Services
                 if (_payloads == null)
                     throw new InvalidOperationException("Verified current source has no payload reader.");
                 if (evidence.Payload.ByteLength > maximumPayloadBytes)
-                    throw new PromptBudgetExceededException(
-                        "Complete current source after mutation exceeds the request budget.", false);
+                {
+                    atoms.Add(Atom("observation-notice", OmittedSourceNotice(CurrentSourceLabel(frame.Result, evidence)), true));
+                    continue;
+                }
                 var body = _payloads.ReadText(evidence.Payload.ToBlobReference());
                 if (body == null)
                     throw new InvalidOperationException("Verified current source payload is unavailable.");
@@ -509,6 +523,46 @@ namespace RNAssistant.Office.Services
                 item != null && item.Complete && item.Coverage.Kind == ResourceCoverageKinds.Whole &&
                 (item.View == ResourceRepresentations.Source || item.View == ResourceRepresentations.Text));
         }
+
+        private static ResourceObservationNotice SourceOmission(string target)
+        { return new ResourceObservationNotice { Target = target, State = EvidenceState.Current, BodyIncluded = false,
+            Reason = "The read/verified source is retained locally, but its body exceeds this request budget and was not included.",
+            NextAction = "For source/text use common.resources_read with this target, representation and startLine/lineCount for a bounded excerpt, or find a narrower snippet. An omitted body cannot authorize a whole-file overwrite. Do not repeat the same whole read or replay a completed mutation." }; }
+
+        private static ChatMessage OmittedSourceNotice(string target)
+        { return new ChatMessage { Role = "user", ProtocolMessage = true,
+            Content = "RESOURCE_OBSERVATION:\n" + JsonConvert.SerializeObject(SourceOmission(target)) }; }
+
+        private static bool OmitSourceBody(ContextAtom atom)
+        {
+            var result = atom.Messages.Last();
+            if (result.SyntheticResourceObservation && HasCompleteSource(result))
+            {
+                // Preserve its semantic label/header, never the large body or read authority.
+                var header = (result.Content ?? string.Empty).Split(new[] { '\n' }, 3);
+                var json = header[0].StartsWith("CURRENT_RESOURCE", StringComparison.Ordinal) && header.Length > 1 ? header[1] : header[0];
+                string target = null;
+                try { target = JsonConvert.DeserializeObject<SourceObservationHeader>(json)?.Target; }
+                catch (JsonException) { }
+                atom.Messages = new List<ChatMessage> { OmittedSourceNotice(target) };
+                atom.Kind = "observation-notice";
+                return true;
+            }
+            ToolResultWireReadResult wire; string error;
+            if (!ToolResultHistoryReader.TryRead(result, out wire, out error) ||
+                wire.Result.Status != RNAssistant.Core.Tools.Contracts.ToolResultStatus.Ok ||
+                result.ToolName != "common.resources_read" && atom.Kind != "terminal-mutation" ||
+                !HasCompleteSource(result)) return false;
+            var projected = ModelToolResultProjection.Project(result);
+            if (!ToolResultHistoryReader.TryRead(projected, out wire, out error)) return false;
+            atom.Messages = new List<ChatMessage> { CompleteOperation(projected, wire,
+                SourceOmission(RootTargetLabel(ToolResultWire.ParseData(wire.Result.DataJson) as JObject))) };
+            atom.Kind = "completed-operation";
+            return true;
+        }
+
+        private sealed class SourceObservationHeader
+        { public string Target { get; set; } }
 
         private static bool ReplaceOversizedExactReadEvidence(ContextAtom atom)
         {

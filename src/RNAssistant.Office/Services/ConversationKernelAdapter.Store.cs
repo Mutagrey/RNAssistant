@@ -34,11 +34,6 @@ namespace RNAssistant.Office.Services
                     _stepMessage = fact.Response.Message;
                     // Persist the entire accepted batch before any dispatch. Callable
                     // pack membership changes only at the next model-step boundary.
-                    if (fact.Response.ToolCalls.Count == 0 && fact.Response.Final &&
-                        _policy.Mode != ChatModes.Chat &&
-                        !string.IsNullOrWhiteSpace(_session.ActiveTaskListArtifactId))
-                        _modelSession.AppendDeferredFinal(fact.Response.Message,
-                            _lastModel == null ? null : _lastModel.Completion);
                     for (var index = 0; index < fact.Response.ToolCalls.Count; index++)
                         _modelSession.AppendToolCall(new AgentToolCall
                             { Id = fact.Response.ToolCalls[index].Id, Name = fact.Response.ToolCalls[index].Name,
@@ -88,35 +83,6 @@ namespace RNAssistant.Office.Services
             RunViewStateProjector.StampCurrentRun(_session);
             _conversations.Save(_session);
             if (_saved != null) _saved(_session);
-        }
-
-        public FinalResponseDecision EvaluateFinalResponse()
-        {
-            if (_policy.Mode == ChatModes.Chat ||
-                string.IsNullOrWhiteSpace(_session.ActiveTaskListArtifactId))
-                return FinalResponseDecision.Complete;
-            return OpenTaskListFinalDecision(_session.Messages, _session.LastRun.RunId);
-        }
-
-        internal static FinalResponseDecision OpenTaskListFinalDecision(
-            System.Collections.Generic.IEnumerable<ChatMessage> messages, string runId)
-        {
-            var recent = (messages ?? Enumerable.Empty<ChatMessage>())
-                .Where(message => message != null && message.RunId == runId &&
-                    message.ProtocolMessage && message.Role == "assistant" &&
-                    message.Activity == null &&
-                    message.ResponseProtocolVersion == AgentResponseProtocol.CurrentVersion &&
-                    message.ResponseStatus == AgentResponseStatuses.InProgress)
-                .Reverse().Take(2)
-                .Select(ConversationResponseHistoryReader.Read).ToArray();
-            if (recent.Length == 0 || !recent[0].Success ||
-                !recent[0].Response.Final || recent[0].Response.ToolCalls.Count != 0 ||
-                recent.Length > 1 && !recent[1].Success)
-                return FinalResponseDecision.Fail;
-            return recent.Length > 1 && recent[1].Response.Final &&
-                recent[1].Response.ToolCalls.Count == 0
-                ? FinalResponseDecision.Fail
-                : FinalResponseDecision.Continue;
         }
 
         private ChatMessage ProjectToolCompletion(AgentRunEvent fact)

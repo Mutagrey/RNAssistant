@@ -202,6 +202,17 @@ namespace RNAssistant.Core.Models
         }
     }
 
+    // Bounded presentation metadata survives result-body externalization. It is
+    // not evidence that a body was included in a later model request.
+    public sealed class ResourceReadSummary
+    {
+        public string Representation { get; set; }
+        public int? ReturnedCharacters { get; set; }
+        public int? ReturnedRows { get; set; }
+        public bool Complete { get; set; }
+        public bool HydratedForNextModelStep { get; set; }
+    }
+
     public sealed class ChatActivity
     {
         public string RunId { get; set; }
@@ -232,6 +243,8 @@ namespace RNAssistant.Core.Models
         public string RuntimeGuardJson { get; set; }
         public string ResultMessage { get; set; }
         public string DataJson { get; set; }
+        [JsonProperty(NullValueHandling = NullValueHandling.Ignore)]
+        public ResourceReadSummary ReadSummary { get; set; }
         public List<ChatActivity> Children { get; set; }
 
         public ChatActivity()

@@ -493,12 +493,12 @@ namespace RNAssistant.Harness
             AssertContains(skillAuthoring, "Do not invent a skill",
                 "skill authoring is not an unsolicited substitute for execution");
             var taskTracking = skills.Single(skill => skill.Id == "common.task_tracking").BodyMarkdown;
-            AssertContains(taskTracking, "when a persistent task list helps track at least three meaningful user-level stages",
-                "task tracking is selected when persistence helps rather than forcing duplicate plans");
-            AssertContains(taskTracking, "After a bounded read-only pass over source structure and key examples",
-                "the execution checklist follows initial discovery and precedes construction");
-            AssertContains(taskTracking, "An open active Task List prevents final completion",
-                "task tracking forbids successful completion with an open checklist");
+            AssertContains(taskTracking, "when it helps retain work across steps",
+                "task tracking preserves multiple requested outcomes without an artificial minimum");
+            AssertContains(taskTracking, "No source read or edit is required to save a plan",
+                "planning is not coupled to source admission");
+            AssertContains(taskTracking, "An open Task List does not prevent a final answer",
+                "task tracking leaves final decisions to the model");
             foreach (var skill in skills)
                 AssertTrue(skill.BodyMarkdown.IndexOf("TOOL_RESULT ok=true", StringComparison.OrdinalIgnoreCase) < 0,
                     skill.Id + " does not teach the removed result success flag");
@@ -522,34 +522,30 @@ namespace RNAssistant.Harness
             }
             AssertContains(defaults.SystemPrompt, "1. **Understand.** Translate the request into explicit deliverables",
                 "Agent begins by establishing deliverables and evidence");
-            AssertContains(defaults.SystemPrompt, "3. **Inspect and plan.** For complex work, inspect the source structure and key examples",
+            AssertContains(defaults.SystemPrompt, "Inspect the source structure and key examples",
                 "Agent inspects requested sources before construction");
             AssertContains(defaults.SystemPrompt, "only after the primary solution is implemented and verified",
                 "Agent follows source, deliverable, verification and reuse dependency order");
-            AssertContains(defaults.SystemPrompt, "latest read-back of the user-visible result",
-                "Agent completion gate requires final read-back before handoff");
-            AssertContains(defaults.SystemPrompt, "obvious bugs, dropped requirements, broken interactions, stale data, layout breakage, or regressions",
-                "Agent completion gate checks likely defects and regressions before final");
-            AssertContains(defaults.SystemPrompt, "fix them and verify again instead of finishing",
-                "Agent completion gate requires repair loops for in-scope defects");
-            AssertContains(defaults.SystemPrompt, "good enough to hand off",
-                "Agent completion gate requires a quality decision before ending");
-            AssertContains(defaults.SystemPrompt, "compare every explicit deliverable and every active task-list step",
-                "Agent verifies requested outcomes before ending the loop");
-            AssertContains(defaults.SystemPrompt, "An active Task List prevents final completion",
-                "Agent completion gate treats open task list as unfinished work");
-            AssertContains(defaults.SystemPrompt, "close it through `common.task_list_set` before final",
-                "Agent final success requires the task-list close tool");
+            AssertContains(defaults.SystemPrompt, "Choose checks proportionate to the changed behavior",
+                "Agent selects useful verification from context");
+            AssertContains(defaults.SystemPrompt, "An open Task List does not prevent a final answer",
+                "saved planning state is advisory");
+            AssertContains(defaults.SystemPrompt, "No task-list call is a prerequisite for final",
+                "Agent does not perform bookkeeping to bypass a gate");
             AssertContains(defaults.SystemPrompt, "cannot become success prose",
                 "tool and protocol errors cannot be reported as completed work");
             AssertContains(defaults.SystemPrompt, "simplified placeholder",
                 "Agent does not degrade an artifact to bypass validation");
-            AssertContains(defaults.AgentToolsPrompt, "For complex work use a Task List when it helps retain remaining stages",
+            AssertContains(defaults.AgentToolsPrompt, "Use a Task List when it helps retain remaining work",
                 "tracking is selected for useful continuity");
-            AssertContains(defaults.AgentToolsPrompt, "Load only the skill bodies and schemas actually needed and absent",
+            AssertContains(defaults.AgentToolsPrompt, "Load only missing skill bodies and schemas actually needed",
                 "planning does not force repeated loading or duplicate artifacts");
-            AssertContains(defaults.AgentToolsPrompt, "Preserve the Task List goal and existing step text/order",
-                "tool policy prevents ending while task list is still active");
+            AssertContains(defaults.AgentToolsPrompt, "add, remove, rewrite or reorder stages",
+                "tool policy permits reasoned replanning");
+            AssertContains(defaults.ContextCompactionPrompt, "compaction does not require another capabilities_read or admission",
+                "compaction guidance agrees with durable tool admission");
+            AssertContains(defaults.SystemPrompt, "Report unfinished work or a concrete blocker honestly",
+                "ending the answer does not imply completed deliverables");
             AssertContains(defaults.AgentToolsPrompt, "never add an inner `arguments`",
                 "tool arguments are supplied at the schema root");
             AssertContains(defaults.AgentToolsPrompt, "Skills define domain workflow and quality criteria",

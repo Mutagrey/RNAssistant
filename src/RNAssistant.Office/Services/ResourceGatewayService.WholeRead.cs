@@ -13,6 +13,41 @@ namespace RNAssistant.Office.Services
         private const int MaximumWholeReadCharacters = ChatArtifactLimits.MaximumTextCharacters;
         private const int MaximumWholeReadPages = 128;
 
+        // A semantic line selection pins the same whole snapshot used by the
+        // gateway. Only its exact excerpt becomes model observation evidence.
+        internal ResourceReadSelection ReadLines(ChatSession session, ResourceRef reference,
+            string representation, int startLine, int lineCount)
+        {
+            if ((representation != "source" && representation != "text") || startLine < 1 || lineCount < 1 || lineCount > 500)
+                throw new ResourceRequestException("Use source/text with 1-based startLine and lineCount between 1 and 500.", "resource_lines_invalid", false);
+            var selection = ReadWhole(session, reference, representation);
+            var result = selection.Result;
+            var text = result.Text;
+            if (text == null) throw new ResourceRequestException("This representation has no line-addressable text.", "resource_lines_unsupported", false);
+            var starts = new List<int> { 0 };
+            for (var i = 0; i < text.Length; i++)
+            {
+                if (text[i] != '\r' && text[i] != '\n') continue;
+                if (text[i] == '\r' && i + 1 < text.Length && text[i + 1] == '\n') i++;
+                starts.Add(i + 1);
+            }
+            if (startLine > starts.Count)
+                throw new ResourceRequestException("startLine is past the end of this text (" + starts.Count + " lines).", "resource_lines_invalid", false);
+            var start = starts[startLine - 1];
+            var next = Math.Min((long)starts.Count, (long)startLine - 1 + lineCount);
+            var end = next < starts.Count ? starts[(int)next] : text.Length;
+            if (end - start > InternalReadCharacters)
+                throw new ResourceRequestException("Selected lines exceed 32000 characters. Reduce lineCount or find a narrower snippet target.", "resource_lines_too_large", false);
+            result.Text = text.Substring(start, end - start);
+            result.Offset = start;
+            result.ReturnedCharacters = end - start;
+            result.Coverage = new ResourceCoverage(ResourceCoverageKinds.CharacterRange, start: start, end: end);
+            result.Complete = false;
+            result.Truncated = true;
+            result.CompleteViewPayload = null;
+            return selection;
+        }
+
         internal ResourceReadSelection ReadWhole(
             ChatSession session, ResourceRef reference,
             string representation)

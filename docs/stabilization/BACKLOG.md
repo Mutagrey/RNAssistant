@@ -63,29 +63,26 @@ mailbox analysis.
 
 ## Resource read prompt wording — 2026-09-28
 
-Owner: Agent/Chat prompt defaults and Resource Fabric. Current Chat instructions
-require `common.resources_find` before every read and forbid `offset`, although a
-semantic target may already be present in `RUNTIME_CONTEXT` and bounded
-`table`/`records` reads accept a row offset. Agent tool instructions say resource
-reads use only scope, target, representation and action, omitting the supported
-`section`, `limit`, `offset`, `fields` and `path` selectors. Correct both defaults
-in one prompt-schema change, then review/reset saved prompts through the existing
-explicit UI flow and run focused prompt/schema tests. Do not silently replace
-saved user instructions while fixing the HTML observation loop.
+Source defaults are corrected in prompt schemas 33–34: reuse known semantic
+targets, allow the documented row/section/line selectors, and keep opaque paging
+state runtime-owned. Focused prompt/schema checks cover the current contract.
+Current settings migration selects the new defaults and preserves a recovery
+copy of prior prompt texts before saving. Owner: Agent/Chat prompt defaults and Resource Fabric.
 
 ## Complex Agent planning and model evaluation — 2026-09-28
 
 Owner: Conversation application / Agent planning / model evaluation. Source changes
 allow Agent to use the existing revisioned document Plan after bounded read-only
 discovery; `startNew=true` creates an independent Plan for another task. Task List
-is the concise execution projection, with preserved prior stages and a runtime
-completion check. No second outcome store was added. Focused harness and live-model
-evaluation are deferred at the user's request.
+is an optional, revisionable projection of agent assessments and remaining work.
+It preserves history and exact current context without source-hash or final gates. No second outcome store was added.
+Host-neutral tracking/context/blocked-final checks are implemented; target-model
+evaluation remains open.
 
 Representative target-model scenarios must cover Excel/VBA source inspection before
 dashboard design, two differing table layouts mapped to one semantic schema,
-source change/refresh, failure without placeholder replacement, Task List step
-preservation/closure, and Skill/Tool authoring only after the primary result works.
+source change/refresh, failure without placeholder replacement, Task List replanning, no-op decisions and
+remaining-work continuity, and Skill/Tool authoring only after the primary result works.
 Score accepted calls and retained evidence, not final prose alone. Harness stubs
 remain contract regressions; they cannot establish model usability or Windows
 Office/WebView2 behavior. Uploaded XLSX ingestion, if required for sources outside
@@ -96,8 +93,9 @@ accept binary spreadsheets.
 
 Owner: context compaction. The default now requests
 `claims[{kind,text,sourceIds}]`, matching the appended instruction, JSON schema
-and parser. Authored custom helper text is preserved. Focused harness verification
-remains deferred at the user's request.
+and parser. Schema 34 also removes the contradictory demand for readmission after
+compaction. Authored custom helper text is preserved; focused prompt/context checks
+cover the defaults, while saved helper text must be reviewed separately.
 
 ## Resource context fixture drift — 2026-09-08
 

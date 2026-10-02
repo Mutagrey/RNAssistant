@@ -28,7 +28,7 @@ severity, not a new phase queue):
 
 | Priority | Next concrete step | Owner / evidence |
 |---|---|---|
-| P1 | Validate the implemented context-continuity invariants on the original Excel/VBA/HTML trajectories: compare terminal events with exact next-request bytes and actual rendered/Office state. Core host-neutral regressions are covered; incident attribution still needs real Windows/model evidence. | Conversation/model context + kernel/Resource owners; [analysis and implementation slices](../conversation-protocol.md#agent-continuity-audit--2026-10-01), [active incident](RISK_REGISTER.md#agent-continuity-and-deterministic-read-loops--2026-10-01) |
+| P1 | Validate agent-owned planning, completion decisions and context continuity on the original Excel/VBA/HTML trajectories: compare terminal events with exact next-request bytes and actual rendered/Office state. Earlier host-neutral fixes do not establish complete task execution; incident attribution still needs real Windows/model evidence. | Conversation/model context + kernel/Resource owners; [implementation slices](../conversation-protocol.md#agent-continuity-audit--2026-10-01), [active incident](RISK_REGISTER.md#agent-continuity-and-deterministic-read-loops--2026-10-01), [completion and read-presentation follow-up](RISK_REGISTER.md#html-read-presentation-and-premature-completion--2026-10-02) |
 | P1 | Verify pane switch/shutdown draining and Outlook Explorer/Inspector activation on Windows; fix a reproduced failure in the bound host path. | Bridge/HostRuntime/Outlook; [current risks](RISK_REGISTER.md), Windows x64 + Office x64 + WebView2 |
 | P1 | Verify navigation/model-catalog cancellation, lazy model UI/activity batching, deferred startup recovery and batched CAS metadata reads on the affected Windows history; isolate remaining Desktop attach/Outlook discovery/lock stalls. | ChatStore / bridge / controller / Desktop; [navigation evidence](RISK_REGISTER.md#chat-navigation-and-startup-freezes--2026-10-02), exact build and same chat |
 | P2 | Reconcile the remaining host-neutral fixture/prompt checks and bounded resource gaps as separately scoped slices. | Owners and triggers in [BACKLOG](BACKLOG.md) |
@@ -57,6 +57,18 @@ selects current built-in texts on load; the next settings save archives the old
 eight texts before persisting the new marker. User skills/tools and other settings
 are unchanged. Focused host-neutral checks cover the editor and settings path;
 Windows/WebView2 qualification remains open.
+
+Read presentation and completion continuity (2026-10-02): read counts now survive
+CAS externalization independently of source bodies; lazy preview reports missing
+payloads explicitly. Exact active task state stays in required runtime context.
+Task planning is now advisory: goals/stages can be revised with rationale, and
+notes retain why a proposed edit was unnecessary. Removed source/hash completion
+checks and the open-list final gate; final leaves unfinished steps intact. Actual
+mutation receipts and unknown-effect guards remain authoritative. Source/text line
+excerpts and explicit body-omission recovery avoid repeating an oversized whole read.
+Prompt schema 36 aligns the model's decision authority with the tool and kernel
+contracts, using the existing schema-35 migration mechanism. Original Windows/model
+incident evidence remains open in the [follow-up](RISK_REGISTER.md#html-read-presentation-and-premature-completion--2026-10-02).
 
 Recovery flexibility and mutation receipts (2026-10-02): a repeated-call rejection
 now returns to the model with its specific reason before any dispatch. It does not

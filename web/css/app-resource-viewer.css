@@ -305,6 +305,12 @@
   color: var(--success);
 }
 
+.rn-task-list-step-note {
+  grid-column: 2;
+  color: var(--muted);
+  white-space: pre-wrap;
+}
+
 .rn-task-list-status.status-blocked,
 .rn-task-list-step.status-blocked .rn-task-list-step-mark {
   color: var(--danger);

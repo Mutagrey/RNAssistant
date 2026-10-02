@@ -712,14 +712,11 @@ namespace RNAssistant.Harness
                 "default resource page leaves conservative room for exact evidence and continuation");
             AssertTrue(!string.IsNullOrWhiteSpace(defaultRead.NextCursor),
                 "conservative default remains lossless through provider-owned paging");
-            AssertTrue(ResourceReadToolHandler.Descriptor.ParametersJson.IndexOf(
-                    "maxChars", StringComparison.OrdinalIgnoreCase) < 0 &&
-                ResourceReadToolHandler.Descriptor.ParametersJson.IndexOf(
-                    "cursor", StringComparison.OrdinalIgnoreCase) < 0 &&
-                ResourceReadToolHandler.Descriptor.ParametersJson.IndexOf(
-                    "uri", StringComparison.OrdinalIgnoreCase) < 0,
-                "public resource schema hides provider paging and identity state");
             var readSchema = JObject.Parse(ResourceReadToolHandler.Descriptor.ParametersJson);
+            var publicPaths = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            CollectPropertyPaths(readSchema, string.Empty, publicPaths);
+            AssertTrue(!new[] { "maxChars", "cursor", "uri", "revision" }.Any(publicPaths.Contains),
+                "public resource schema hides provider paging and identity properties; descriptions may forbid them");
             string pathError;
             AssertTrue(ToolSchemaSupport.ValidateArguments(new JObject {
                 ["target"] = "attachment: records.json", ["representation"] = "records",
@@ -1070,7 +1067,7 @@ namespace RNAssistant.Harness
                 10).Items.Single();
             var dataCandidate = htmlGateway.Find(htmlSession, dataResource.Title, "html").Items
                 .Single(item => item.Type == "HTML data");
-            AssertContains(dataCandidate.Usage, "binding metadata",
+            AssertContains(dataCandidate.Usage, "Existing binding, not data values",
                 "HTML data discovery distinguishes a binding from its source values");
             var binding = JsonConvert.DeserializeObject<HtmlWorkspaceDataBinding>(
                 ReadResource(htmlGateway, htmlSession, dataResource.Reference.Uri, ResourceRepresentations.Text, null, 32000).Result.Text);

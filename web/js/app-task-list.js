@@ -24,6 +24,8 @@
       id: plan.id || plan.Id || "",
       goal: plan.goal || plan.Goal || "Текущая задача",
       status: plan.status || plan.Status || "active",
+      blocker: plan.blocker || plan.Blocker || "",
+      reason: plan.reason || plan.Reason || "",
       steps: plan.steps || plan.Steps || []
     };
   }
@@ -48,6 +50,8 @@
       id: plan.id || plan.Id || "",
       goal: plan.goal || plan.Goal || "Текущая задача",
       status: plan.status || plan.Status || "active",
+      blocker: plan.blocker || plan.Blocker || "",
+      reason: plan.reason || plan.Reason || "",
       steps: plan.steps || plan.Steps || []
     };
   }
@@ -58,7 +62,7 @@
     var status = typeof activityStatus === "function" ? activityStatus(activity) : "";
     if (status === "completed" && toolId === "common.task_list_set") {
       var projected = taskListFromToolActivity(activity);
-      current = projected && String(value(projected, "Status", "status", "active")).toLowerCase() === "active"
+      current = projected && ["active", "blocked"].indexOf(String(value(projected, "Status", "status", "active")).toLowerCase()) >= 0
         ? projected : null;
     }
     var children = typeof activityChildren === "function" ? activityChildren(activity) : [];
@@ -93,7 +97,7 @@
     var current = steps.filter(function (step) { return status(step) === "in_progress"; })[0] ||
       steps.filter(function (step) { return status(step) === "blocked"; })[0] ||
       steps.filter(function (step) { return status(step) === "pending"; })[0] || null;
-    var planStatus = steps.length && completed === steps.length ? "ready_to_close" :
+    var planStatus = plan.status === "blocked" ? "blocked" : steps.length && completed === steps.length ? "ready_to_close" :
       (steps.some(function (step) { return status(step) === "blocked"; }) ? "blocked" :
         (steps.some(function (step) { return status(step) === "in_progress"; }) ? "running" : "planned"));
     return { completed: completed, total: steps.length, current: current, status: planStatus };
@@ -115,6 +119,13 @@
       text.textContent = stepValue(step, "Text", "text", stepValue(step, "Id", "id", "Шаг"));
       row.appendChild(mark);
       row.appendChild(text);
+      var note = stepValue(step, "Note", "note", "");
+      if (note) {
+        var noteText = document.createElement("span");
+        noteText.className = "agent-plan-step-note";
+        noteText.textContent = note;
+        row.appendChild(noteText);
+      }
       list.appendChild(row);
     });
     return list;
@@ -144,7 +155,7 @@
     var summary = document.createElement("summary");
     summary.className = "agent-plan-summary";
     var readyToClose = info.status === "ready_to_close";
-    summary.title = plan.goal + (readyToClose ? " · шаги выполнены, список не закрыт" : "");
+    summary.title = plan.goal + (plan.blocker ? " · " + plan.blocker : readyToClose ? " · шаги выполнены, список не закрыт" : "");
     summary.setAttribute("aria-label", "Задачи: выполнено " + info.completed + " из " + info.total +
       (readyToClose ? "; список не закрыт. " : ". ") + plan.goal);
     var icon = document.createElement("span");
@@ -156,7 +167,7 @@
     label.textContent = "Задачи";
     var count = document.createElement("span");
     count.className = "agent-plan-count";
-    count.textContent = info.completed + "/" + info.total + (readyToClose ? " · не закрыт" : "");
+    count.textContent = info.completed + "/" + info.total + (info.status === "blocked" ? " · заблокирован" : readyToClose ? " · не закрыт" : "");
     var caret = document.createElement("span");
     caret.className = "agent-plan-caret";
     caret.setAttribute("aria-hidden", "true");
@@ -173,11 +184,17 @@
     var goal = document.createElement("strong");
     goal.textContent = plan.goal;
     var current = document.createElement("span");
-    current.textContent = info.current ? stepValue(info.current, "Text", "text", "") :
-      "Шаги выполнены, список не закрыт";
+    current.textContent = plan.blocker || (info.current ? stepValue(info.current, "Text", "text", "") :
+      "Шаги выполнены, список не закрыт");
     head.appendChild(goal);
     head.appendChild(current);
     popover.appendChild(head);
+    if (plan.reason && plan.reason !== plan.blocker) {
+      var reason = document.createElement("p");
+      reason.className = "agent-plan-reason";
+      reason.textContent = plan.reason;
+      popover.appendChild(reason);
+    }
     popover.appendChild(renderSteps(plan));
     details.appendChild(popover);
     dock.replaceChildren(details);

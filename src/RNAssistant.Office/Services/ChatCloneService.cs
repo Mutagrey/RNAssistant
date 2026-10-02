@@ -505,6 +505,13 @@ namespace RNAssistant.Office.Services
                 RuntimeGuardJson = forBridge ? null : activity.RuntimeGuardJson,
                 ResultMessage = activity.ResultMessage,
                 DataJson = activity.DataJson,
+                ReadSummary = activity.ReadSummary == null ? null : new ResourceReadSummary {
+                    Representation = activity.ReadSummary.Representation,
+                    ReturnedCharacters = activity.ReadSummary.ReturnedCharacters,
+                    ReturnedRows = activity.ReadSummary.ReturnedRows,
+                    Complete = activity.ReadSummary.Complete,
+                    HydratedForNextModelStep = activity.ReadSummary.HydratedForNextModelStep
+                },
                 Children = activity.Children == null ? null : activity.Children.Select(child => CloneActivity(child, forBridge)).ToList()
             };
         }

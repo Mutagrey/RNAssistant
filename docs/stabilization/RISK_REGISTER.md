@@ -137,6 +137,161 @@ calls/next-request bytes and exact Windows/Office/WebView2/model evidence remain
 needed to attribute and close each photographed incident. Host-neutral passes do
 not establish live provider or target-model behavior.
 
+## HTML read presentation and premature completion — 2026-10-02
+
+P1 — task continuity/completion; P2 — read presentation. Owners: Conversation/model
+context, Task List/completion policy, transcript/UI presentation. Ниже сохранён
+исходный аудит до исправления; реализованный follow-up и открытые границы — в конце
+раздела. Исходный Windows-инцидент не закрыт.
+На фото счётчики HTML/CSS показывают **символы**, не строки. В видимой части run
+есть изменение `styles.css`, после которого модель утверждает также исправление
+`app.js` и работу взаимодействий. Exact build, полный event stream и отправленные
+model requests отсутствуют; нельзя доказать причину этого конкретного финала или
+что отсутствующий в показанном участке вызов никогда не выполнялся.
+
+Подтверждённые до исправления механизмы и границы:
+
+1. **Подпись зависит от хранения тела.**
+   [RuntimePayloadService.ExternalizeActivity](../../src/RNAssistant.Core/Storage/RuntimePayloadService.cs)
+   при `DataJson.Length > 8192` сохраняет результат в CAS и обнуляет `DataJson`.
+   Это происходит в `ChatStore.SaveInternal` до отчёта UI.
+   [ChatCloneService](../../src/RNAssistant.Office/Services/ChatCloneService.cs)
+   не передаёт runtime payload reference в bridge; отдельной краткой сводки нет.
+   [activityResultCaption](../../web/js/app-agent-activity.js) читает только
+   `DataJson`, дополнительно отказывается разбирать JSON длиннее 32768 символов.
+   В обоих случаях успешный read получает общую подпись «Прочитано».
+   [ToolResultPresentationService.Read](../../src/RNAssistant.Office/Services/ToolResultPresentationService.cs)
+   также использует только `activity.DataJson`: раскрытие архивированного read
+   не восстанавливает тело. Наличие файла/байтов в CAS не означает наличие preview.
+   Это presentation defect; model result хранится отдельным protocol message,
+   который `ModelContextCompiler` гидратирует независимо. Подпись не доказывает
+   ни потерю, ни доставку тела модели.
+2. **Завершение ответа не проверяет исполнение всей задачи.**
+   [EvaluateFinalResponse](../../src/RNAssistant.Office/Services/ConversationKernelAdapter.Store.cs)
+   возвращает `Complete`, если активного Task List нет. Список необязателен.
+   При его наличии проверяется факт закрытия, а
+   [TaskListService.Close](../../src/RNAssistant.Office/Services/TaskListService.cs)
+   принимает model-authored `status=completed` без связи шага с mutation/read-back
+   evidence. Поэтому один успешный CSS patch и финал с утверждением о двух файлах
+   допустимы для runtime. Это gap семантической проверки, а не ошибка wire parser:
+   `Completed` корректно означает конец run, не доказанную полноту deliverables.
+3. **Точный остаток работы не закреплён после compaction.**
+   `ConversationPromptComposer` включает для Task List только discovery entry
+   через `ChatResourcePromptIndex`, с общим бюджетом индекса 192–600 tokens.
+   Цель/шаги/статусы отдельной обязательной проекцией не передаются.
+   [ContextWorkingSet](../../src/RNAssistant.Office/Services/ContextWorkingSet.cs)
+   восстанавливает source/resource/capability bodies, но не гарантирует восстановление
+   последнего `task_list_set` с полным списком. После ухода результата в compacted
+   prefix остаются summary claims и возможность повторного чтения ресурса.
+   Это риск пропуска этапов, не доказательство потери списка в исходном run.
+4. **Остались противоречия инструкций.** В
+   [AppSettings](../../src/RNAssistant.Core/Models/AppSettings.cs) основной tool
+   prompt сохраняет admission через compaction, а `ContextCompactionPrompt`
+   требует повторный `capabilities_read` и новое admission. Runtime notice самого
+   compactor тоже говорит, что повторное admission не требуется. Основной workflow
+   разрешает при блокере оставить список открытым и сообщить о блокере через final,
+   но completion gate и `RUNTIME_CONTINUE` запрещают любой final с открытым списком;
+   два последовательных final дают `task_list_open`. У Task List есть blocked step,
+   но закрыть его можно только как completed/cancelled/superseded. Дополнительно
+   `RUNTIME_CONTEXT.document.artifacts` советует Plan для complex task, тогда как
+   основной prompt ограничивает отдельный Plan запросом пользователя/нуждой в design
+   artifact. Исправление только одной строки системного промпта эти слои не согласует.
+5. **Большое source read может оборвать продолжение.**
+   `ResourceReadToolHandler` читает source целиком; `offset/limit` допустимы только
+   для table/records, `section` — для Markdown. Gateway whole-read bound —
+   2,000,000 символов, а доставка ограничена меньшим фактическим request budget.
+   `ModelContextCompiler` может выбросить `PromptBudgetExceededException` с
+   `CanCompact=false` для одного большого complete source. Это честный отказ,
+   но модель не получает следующего шага для выбора меньшего фрагмента.
+   Поиск даёт snippet targets, однако штатного запроса диапазона строк HTML/JS нет.
+   Связанный large-resource gap уже есть в [BACKLOG](BACKLOG.md#large-resource-working-set-and-compacted-action-memory--2026-09-29).
+6. **Read-back файла не доказывает исправление взаимодействия.** HTML tools
+   выполняют static preflight (`scope=static_preflight`), не браузерный сценарий.
+   Встроенный HTML skill это правильно оговаривает. «Запись подтверждена»,
+   «статическая проверка прошла» и «Y-zoom/drag проверен» должны оставаться разными
+   claims. Фото не подтверждает последний. Живую проверку нельзя заменить
+   успешным scripted-model harness.
+
+Исходный порядок предложенных изменений:
+
+- **Presentation owner:** перед externalization сохранять typed bounded read summary
+  (representation, returned count/unit, coverage/complete), независимо от тела;
+  ленивый preview читать из CAS через существующего владельца storage с явным
+  unavailable. Удалить зависимость подписи от полного JSON и согласовать producer,
+  clone/bridge и UI. Не увеличивать inline limit ради счётчика.
+- **Prompt/context owners:** согласовать основной/tool/helper/runtime prompts;
+  сохранить authored prompts и существующий explicit review. Исправить устаревшие
+  указания в документации: wire-v5 doc ещё называет prompt schema 32 при текущей 33,
+  а backlog «Resource read prompt wording» описывает уже исправленные defaults.
+- **Task List + Conversation owner:** из существующего состояния включать в каждый
+  запрос компактную точную проекцию цели, оставшихся шагов, blockers и имеющихся
+  receipts с резервом бюджета перед большими телами. Не создавать второй durable
+  task store; для коротких ответов не навязывать отдельный Plan/ритуальные стадии.
+  Task List сейчас требует минимум три шага — пересмотреть это для простых
+  задач с двумя независимыми deliverables.
+- **Completion policy owner:** связать проверяемые deliverables с semantic targets
+  и требуемым видом evidence; runtime связывает их с фактическими terminal events.
+  Финал при незакрытых проверяемых обязательствах возвращает модели конкретный
+  остаток для продолжения. Отдельно разрешить честный blocked/input-needed исход,
+  сохранив незавершённые шаги. Не определять выполнение по словам «исправил» или
+  числу успешных calls. Семантическое качество полностью детерминированным gate
+  не доказывается и требует model evaluation.
+- **Resource/context owners:** добавить ограниченный source excerpt с понятным
+  selector/coverage и восстановимым ответом о недоставленном большом body. Runtime
+  сохраняет revision/cursor authority; excerpt не разрешает whole-file overwrite.
+  Сохранить текущие unknown-effect non-replay и bounded no-progress recovery.
+
+Минимальные проверки реализации: read выше 8192/32768 после save/reload и отсутствующий
+CAS; два обещанных файла с записью только первого; compaction между двумя правками
+с точным остатком/исходником второго; blocked final с открытым списком; oversized
+source с успешным переходом к excerpt. Для целевой модели повторить эти сценарии
+и оценивать фактические mutations/проверки/повторы/пропуски, а не текст финала.
+
+Evidence исходного аудита: вызовы shipped UI functions из Node дали счётчики для
+3563/6965 символов, общую подпись после simulated activity externalization для
+10000 и общую подпись уже inline для 40000; `node tests/web/completion-guard.test.js`
+прошёл 19/19. C# storage/preview/completion/context paths проверены чтением кода,
+новый end-to-end C# repro не запускался. Build, Office/VSTO, WebView2 и live-model
+проверки не выполнялись. Production code этим аудитом не изменён.
+
+Реализованный follow-up (2026-10-02):
+
+- Transcript/UI: typed `ReadSummary` переживает externalization и replay; caption
+  не разбирает большой JSON. Preview читает точный CAS payload и явно показывает
+  отсутствие тела. Прежние activities без summary остаются с общей подписью.
+- Conversation/Task List: точные goal/steps/statuses/notes/reason/blocker закреплены
+  в обязательном `RUNTIME_CONTEXT.active_task_list`. Допустимы 1–32 этапа; список
+  необязателен. Сохраняется история уточнения цели, замены и перестановки шагов.
+- Completion, пересмотр после review: удалены первоначальные `read`/`changed`
+  bindings и проверка изменения baseline hash. Они мешали обоснованному no-op,
+  пересмотру гипотезы и работе без полного source в контексте. Удалён и прежний
+  completion gate с принудительным `RUNTIME_CONTINUE` из-за открытого списка.
+  Статусы плана — `agent_assessment`; агент решает о завершении из контекста и
+  фактов, может пояснить отсутствие необходимой правки. `close` не требует
+  механически завершить все шаги и не меняет неуказанные статусы. `blocked` с reason
+  сохраняет список без привязки к одному run. Final не закрывает список и не теряет
+  незавершённые шаги; следующий запрос снова получает точное состояние.
+  Tool receipts, guards записи и unknown-effect non-replay не заменяются оценкой
+  агента. Снятие gate не доказывает правдивость финала модели: это остаётся предметом
+  target-model evaluation.
+- Resource/compiler: source/text `startLine` + `lineCount` возвращают точный excerpt
+  с частичным покрытием. Не помещающееся полное тело заменяется явным notice и
+  operation receipt с прежним outcome/effect; это не доказательство чтения тела и
+  не разрешение whole-file overwrite. Сохраняются bounds и unknown non-replay.
+- Defaults schema 36 согласует основной/tool/Task Tracking prompts с новым
+  контрактом. Schema-35 migration выбирает текущие defaults и сохраняет прежние
+  тексты перед записью settings. Canonical docs и reviewed inventory обновлены
+  вместе со схемой tool.
+
+Focused evidence после пересмотра: `agent continuity:` 5/5, `task lists:` 4/4;
+пересмотр плана и rationale после save/reload/compaction, open/blocked final в двух
+запусках, CSS-only правка без лишней записи JS, read summary/CAS и excerpts.
+Defaults/guidance, schema migration, R61 inventory и unknown-effect non-replay
+также прошли. UI: task continuity 1/1, completion 20/20, artifact JSON 8/8,
+Plan 8/8, artifact text 10/10, run state 6/6. Это scripted-model и host-neutral
+проверки, не оценка качества решений реальной модели.
+Office/VSTO validation и исходный Windows/WebView2 incident остаются открытыми.
+
 ## Repeated resource reads and HTML binding failures — 2026-10-01
 
 Six Windows photos show repeated capability loads, reads/rewrites, missing HTML or

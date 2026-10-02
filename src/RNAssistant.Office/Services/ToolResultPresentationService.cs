@@ -5,6 +5,7 @@ using System.IO;
 using System.Linq;
 using Newtonsoft.Json;
 using RNAssistant.Core.Models;
+using RNAssistant.Core.Storage;
 using RNAssistant.Core.Tools;
 using RNAssistant.Office.Contracts;
 
@@ -15,7 +16,9 @@ namespace RNAssistant.Office.Services
     {
         private const int MaxSource = 512 * 1024, MaxRows = 200, MaxText = 12000;
         private readonly Func<string, RunChangesDto> _changes;
-        internal ToolResultPresentationService(Func<string, RunChangesDto> changes) { _changes = changes; }
+        private readonly ChatBlobStore _payloads;
+        internal ToolResultPresentationService(Func<string, RunChangesDto> changes, ChatBlobStore payloads = null)
+        { _changes = changes; _payloads = payloads; }
 
         internal ToolResultPresentationDto Read(ChatSession session, string runId, string toolCallId)
         {
@@ -37,9 +40,26 @@ namespace RNAssistant.Office.Services
             else if (activity.ExecutionEvidence?.Effect == ToolEffectEvidence.Unknown ||
                 activity.ExecutionEvidence?.Effect == ToolEffectEvidence.VerifiedChange)
                 result.Blocks.Add(new ToolTextBlockDto { Title = "Сравнение", Text = "Сохранённое сравнение для этого вызова недоступно." });
-            AppendContent(result.Blocks, activity.DataJson);
+            if (activity.ResultPayload == null) AppendContent(result.Blocks, activity.DataJson);
+            else if (activity.ResultPayload.ByteLength > MaxSource * 4L) Notice(result.Blocks);
+            else
+            {
+                try
+                {
+                    var content = _payloads?.ReadText(activity.ResultPayload.ToBlobReference());
+                    if (content == null) Unavailable(result.Blocks);
+                    else AppendContent(result.Blocks, content);
+                }
+                catch (Exception ex) when (ex is IOException || ex is System.Security.Cryptography.CryptographicException ||
+                    ex is UnauthorizedAccessException)
+                { Unavailable(result.Blocks); }
+            }
             return result;
         }
+
+        private static void Unavailable(List<ToolResultBlockDto> blocks)
+        { blocks.Add(new ToolTextBlockDto { Title = "Содержимое", Complete = false,
+            Text = "Сохранённое содержимое результата недоступно. Статус выполненного действия не изменён." }); }
 
         // Recognize existing content shapes through a typed input projection. No before/after heuristic.
         internal static void AppendContent(List<ToolResultBlockDto> blocks, string source)

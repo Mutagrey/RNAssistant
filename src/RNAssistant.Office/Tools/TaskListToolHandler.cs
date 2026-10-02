@@ -72,19 +72,19 @@ namespace RNAssistant.Office.Tools
                 return _service.Set(_session,
                     ToolArgumentReader.String(context.Arguments, "goal", string.Empty),
                     ReadSteps(context.Arguments, "steps"),
-                    context.MarkDispatchPossible);
+                    context.MarkDispatchPossible, ToolArgumentReader.String(context.Arguments, "reason", null));
             }
             if (string.Equals(action, "update_statuses", StringComparison.Ordinal))
             {
                 return _service.UpdateStatuses(_session,
-                    ToolArgumentReader.String(context.Arguments, "goal", string.Empty),
+                    ToolArgumentReader.String(context.Arguments, "goal", null),
                     ReadStatusUpdates(context.Arguments, "updates"),
                     context.MarkDispatchPossible);
             }
             return _service.CloseActive(_session,
                 ToolArgumentReader.String(context.Arguments, "outcome", string.Empty),
                 ReadStatusUpdates(context.Arguments, "updates"),
-                context.MarkDispatchPossible);
+                context.MarkDispatchPossible, ToolArgumentReader.String(context.Arguments, "reason", null));
         }
 
         private ToolHandlerResult Project(
@@ -141,6 +141,7 @@ namespace RNAssistant.Office.Tools
                     ? null : mutation.Artifact.Id,
                 ["revision"] = mutation.Artifact == null
                     ? 0 : mutation.Artifact.Revision,
+                ["statusSource"] = "agent_assessment",
                 ["taskList"] = mutation.TaskList == null
                     ? null : JObject.FromObject(mutation.TaskList)
             };
@@ -178,16 +179,7 @@ namespace RNAssistant.Office.Tools
             var current = mutation.CurrentTaskList;
             if (current != null)
             {
-                data["currentTaskList"] = new JObject
-                {
-                    ["goal"] = current.Goal,
-                    ["steps"] = new JArray((current.Steps ?? new List<ChatTaskStep>())
-                        .Select(step => new JObject
-                        {
-                            ["text"] = step.Text,
-                            ["status"] = step.Status
-                        }))
-                };
+                data["currentTaskList"] = JObject.FromObject(TaskListService.Project(current));
             }
             return data.ToString(Formatting.None);
         }

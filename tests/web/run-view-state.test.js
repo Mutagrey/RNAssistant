@@ -134,7 +134,7 @@ function state(runId, lifecycle = "completed", health = "clean", pending = null)
   assert.ok(index.includes("app-chat-state.js?v=office-chat-20260930-3"), "chat state uses the current cache key");
   assert.ok(index.includes("app-messages.js?v=action-severity-20260930-1"), "messages uses the transcript incremental cache key");
   ["app-chat.css", "app-agent.css"].forEach(asset => {
-    assert.ok(index.includes(asset + "?v=action-severity-20260930-1"), asset + " uses the current layout cache key");
+    assert.ok(index.includes(asset + "?v=" + (asset === "app-agent.css" ? "agent-planning-20261002-2" : "action-severity-20260930-1")), asset + " uses the current layout cache key");
   });
   assert.ok(index.indexOf("app-run-view-state.js") < index.indexOf("app-chat-state.js"));
   assert.ok(index.indexOf("app-run-view-state.js") < index.indexOf("app-agent-model.js"));

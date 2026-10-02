@@ -644,8 +644,8 @@ function settle() { return new Promise(resolve => setImmediate(resolve)); }
   assert.ok(index.includes("app-text-viewer.css?v=artifact-text-20260831-1"));
   assert.ok(index.includes("app-sequence-viewer.js?v=artifact-gallery-20260902-1"));
   assert.ok(index.includes("app-sequence-viewer.css?v=artifact-gallery-20260902-1"));
-  assert.ok(index.includes("app-resource-viewer.js?v=binary-chunks-20260906-1"));
-  assert.ok(index.includes("app-resource-viewer.css?v=artifact-gallery-20260902-1"));
+  assert.ok(index.includes("app-resource-viewer.js?v=agent-planning-20261002-2"));
+  assert.ok(index.includes("app-resource-viewer.css?v=agent-planning-20261002-2"));
   assert.ok(index.includes("js/vendor/viewer.min.js"));
   assert.ok(index.includes("css/vendor/viewer.min.css"));
   assert.ok(index.indexOf("js/vendor/viewer.min.js") < index.indexOf("app-resource-viewer.js"));

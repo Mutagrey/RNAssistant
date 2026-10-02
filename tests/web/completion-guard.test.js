@@ -231,9 +231,12 @@ tests.push(["search and read captions distinguish complete empty and partial dat
   search.DataJson = '{"items":[],"complete":true}';
   assert.equal(context.activityDisplayResult(search), "Получено элементов: 0");
   const read = { Kind: "tool", ToolId: "common.resources_read", Status: "completed",
-    DataJson: '{"kind":"resource-read","table":{"rows":[{},{}]},"complete":false}' };
+    ReadSummary: { ReturnedRows: 2, Complete: false } };
   assert.equal(context.activityDisplayResult(read), "Получено строк: 2 · часть данных");
   read.DataJson = '{"truncated":true,"preview":"not the model result"}';
+  assert.equal(context.activityPresentationState(read), "partial");
+  assert.equal(context.activityDisplayResult(read), "Получено строк: 2 · часть данных", "storage encoding cannot hide read coverage");
+  delete read.ReadSummary;
   assert.equal(context.activityDisplayResult(read), "В журнале показана часть результата");
 }]);
 tests.push(["result representations work for new tools without identity-specific renderers", () => {
@@ -260,6 +263,7 @@ tests.push(["result representations work for new tools without identity-specific
     [{ representation: "media", hydratedForNextModelStep: false }, "Получены сведения о медиа"],
     [{ representation: "metadata" }, "Получены сведения · содержимое не загружено"]
   ]) {
+    activity.ReadSummary = data;
     activity.DataJson = JSON.stringify(Object.assign({ kind: "resource-read" }, data));
     assert.equal(context.activityDisplayResult(activity), expected);
   }
@@ -275,6 +279,18 @@ tests.push(["result representations work for new tools without identity-specific
   assert.match(context.activityDisplayResult(activity), /не подтверждён/);
   activity.ExecutionEvidence.Effect = "VerifiedChange";
   assert.equal(context.activityDisplayResult(activity), "Изменения подтверждены");
+}]);
+tests.push(["read metadata survives absent and large bodies without granting effects", () => {
+  for (const DataJson of [null, JSON.stringify({ text: "x".repeat(40000) })]) {
+    const read = { Kind: "tool", ToolId: "common.resources_read", Status: "completed", DataJson,
+      ReadSummary: { Representation: "source", ReturnedCharacters: 40000, Complete: true } };
+    assert.equal(context.activityDisplayResult(read), "Получен исходный код · символов: 40000");
+    read.ExecutionEvidence = { Effect: "Unknown" };
+    assert.match(context.activityDisplayResult(read), /не подтверждён/);
+    read.ToolId = "custom.read";
+    delete read.ExecutionEvidence;
+    assert.doesNotMatch(context.activityDisplayResult(read), /40000/);
+  }
 }]);
 tests.push(["catalog display works for arbitrary ids while zero-action history stays hidden", () => {
   const item = { Kind: "tool", ToolId: "new.opaque_id", Status: "running", Subtitle: "Отчёт за май",

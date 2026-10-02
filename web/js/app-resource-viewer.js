@@ -333,10 +333,16 @@
       mark.setAttribute("aria-hidden", "true");
       row.appendChild(mark);
       row.appendChild(element("span", "rn-task-list-step-text", value(step, "Text", "text", value(step, "Id", "id", "Шаг"))));
+      var note = value(step, "Note", "note", "");
+      if (note) row.appendChild(element("span", "rn-task-list-step-note", note));
       list.appendChild(row);
     });
     root.appendChild(goal);
     root.appendChild(summary);
+    var blocker = value(taskList, "Blocker", "blocker", "");
+    if (blocker) root.appendChild(element("p", "rn-resource-viewer-status", blocker));
+    var reason = value(taskList, "Reason", "reason", "");
+    if (reason && reason !== blocker) root.appendChild(element("p", "rn-resource-viewer-status", reason));
     root.appendChild(progress);
     root.appendChild(list);
     return { element: root, destroy: function () { root.replaceChildren(); } };

@@ -139,13 +139,15 @@ function render(item, actions) {
   console.log("PASS artifact JSON viewer: metadata fallback uses exact shared viewer");
 
   const taskPayload = JSON.stringify({
-    protocolVersion: 1, goal: "Ship preview", status: "active",
-    steps: [{ id: "one", text: "Render task list", status: "completed" }, { id: "two", text: "Keep JSON in details", status: "in_progress" }]
+    protocolVersion: 1, goal: "Ship preview", status: "active", reason: "Revised after inspection",
+    steps: [{ id: "one", text: "Render task list", status: "completed", note: "Existing script already works" }, { id: "two", text: "Keep JSON in details", status: "in_progress" }]
   });
   const task = render({ Kind: "task_list", MimeType: "application/vnd.rnassistant.task-list+json", InlineText: taskPayload, Revision: 1 });
   assert.ok(task.querySelector(".rn-task-list-viewer"));
   assert.match(task.querySelector(".artifact-detail-pane-preview").textContent, /Ship preview/);
   assert.match(task.querySelector(".artifact-detail-pane-preview").textContent, /1 из 2/);
+  assert.match(task.querySelector(".artifact-detail-pane-preview").textContent, /Existing script already works/);
+  assert.match(task.querySelector(".artifact-detail-pane-preview").textContent, /Revised after inspection/);
   assert.ok(task.querySelector(".artifact-detail-pane-details").classList.contains("hidden"));
   button(task, "Детали").click();
   assert.equal(task.querySelector(".artifact-detail-pane-details").classList.contains("hidden"), false);

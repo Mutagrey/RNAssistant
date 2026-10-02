@@ -1223,7 +1223,7 @@ namespace RNAssistant.Harness
             AssertContains(settings.AgentToolsPrompt, "unclassified calls are singleton", "tool prompt describes conservative batching");
             AssertContains(settings.AgentToolsPrompt, "TOOL_PACK_STATE", "tool prompt requires explicit optional admission");
             AssertContains(settings.AgentToolsPrompt, "without LRU eviction", "tool prompt preserves admitted schemas for the run");
-            AssertContains(settings.AgentToolsPrompt, "exact references, revision guards, continuation cursors",
+            AssertContains(settings.AgentToolsPrompt, "exact references, revision guards and continuation cursors belong to runtime",
                 "tool prompt assigns opaque resource state to runtime");
             AssertTrue(settings.AgentSkillsPrompt.StartsWith("# Agent skill policy", StringComparison.Ordinal), "skill prompt is separate Markdown");
             AssertContains(settings.AgentSkillsPrompt, "metadata only", "skill catalog is explicitly not loaded guidance");

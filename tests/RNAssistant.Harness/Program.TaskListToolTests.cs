@@ -43,15 +43,6 @@ namespace RNAssistant.Harness
                 AssertContains(planningSkill.BodyMarkdown, TaskListToolCatalog.SetToolId, "tracking skill explains semantic set");
                 AssertContains(planningSkill.BodyMarkdown, "action=update_statuses",
                     "tracking skill selects status-only updates");
-                AssertContains(AgentJsonProtocol.CreateOpenTaskListContinuationMessage().Content,
-                    "action=close and outcome=completed",
-                    "premature final continuation names the exact closing action");
-                AssertContains(AgentJsonProtocol.CreateOpenTaskListContinuationMessage().Content,
-                    "task_list_not_terminal",
-                    "premature final continuation explains a rejected close");
-                AssertContains(AgentJsonProtocol.CreateOpenTaskListContinuationMessage().Content,
-                    "every step not yet marked completed",
-                    "premature final continuation requires all evidenced unfinished statuses");
                 string contractError;
                 AssertTrue(!ModelToolResultProjection.ValidateAcceptedCall(
                     new ToolCall("old-task-list", "common.task_list_update", "{}"),
@@ -177,198 +168,66 @@ namespace RNAssistant.Harness
 
         private static void TaskListPreservesProgressAndStages()
         {
-            WithTempExecutor(FakeOfficeAdapter.ForHost("Excel"), delegate(OfficeToolExecutor executor, FakeOfficeAdapter adapter)
-            {
+            WithTempExecutor(FakeOfficeAdapter.ForHost("Excel"), (executor, adapter) => {
                 var session = NewSession(adapter);
                 var tools = OfficeToolCatalog.ForHost(adapter.HostName).Concat(executor.GetControllerTools()).ToList();
                 var created = executor.ExecuteManual(Command(TaskListToolCatalog.SetToolId,
-                    "action", "save", "goal", "Build a reusable dashboard",
+                    "action", "save", "goal", "Repair dashboard",
                     "steps", new JArray(
-                        new JObject { ["text"] = "Inspect sources", ["status"] = "completed" },
-                        new JObject { ["text"] = "Build dashboard", ["status"] = "in_progress" },
+                        new JObject { ["text"] = "Inspect sources", ["status"] = "completed", ["note"] = "JS already handles zoom." },
+                        new JObject { ["text"] = "Fix script", ["status"] = "in_progress" },
                         new JObject { ["text"] = "Verify output" })),
                     tools, new AppSettings(), false, false, session);
-                AssertTrue(created.Success, "initial task list saved");
+                AssertTrue(created.Success, "plan needs no complete-source binding");
                 var firstSteps = JObject.Parse(created.DataJson)["taskList"]["steps"];
-                var artifactCount = session.Artifacts.Count;
-
-                var changedGoal = executor.ExecuteManual(Command(TaskListToolCatalog.SetToolId,
-                    "action", "save", "goal", "Unrelated task",
+                var firstBody = session.Artifacts.Last().InlineText;
+                var revised = executor.ExecuteManual(Command(TaskListToolCatalog.SetToolId,
+                    "action", "save", "goal", "Restore visible slider", "reason", "Source review identifies missing CSS; no JS edit needed.",
                     "steps", new JArray(
-                        new JObject { ["text"] = "Inspect sources" },
-                        new JObject { ["text"] = "Build dashboard" },
-                        new JObject { ["text"] = "Verify output" })),
-                    tools, new AppSettings(), false, false, session);
-                AssertTrue(!changedGoal.Success, "active goal cannot be replaced");
-                var goalError = JObject.Parse(changedGoal.DataJson);
-                AssertEqual("task_list_goal_changed", (string)goalError["code"],
-                    "goal change has a specific recovery code");
-                AssertEqual("Build a reusable dashboard", (string)goalError["currentTaskList"]["goal"],
-                    "goal conflict returns the exact active goal");
-
-                var changedStages = executor.ExecuteManual(Command(TaskListToolCatalog.SetToolId,
-                    "action", "save", "goal", "Build a reusable dashboard",
-                    "steps", new JArray(
-                        new JObject { ["text"] = "Build dashboard" },
-                        new JObject { ["text"] = "Inspect sources" },
-                        new JObject { ["text"] = "Verify output" })),
-                    tools, new AppSettings(), false, false, session);
-                AssertTrue(!changedStages.Success, "existing stages cannot be reordered");
-                var stepsError = JObject.Parse(changedStages.DataJson);
-                AssertEqual("task_list_steps_changed", (string)stepsError["code"],
-                    "stage change has a specific recovery code");
-                var currentSteps = (JArray)stepsError["currentTaskList"]["steps"];
-                AssertTrue(currentSteps.Select(step => (string)step["text"])
-                    .SequenceEqual(new[] { "Inspect sources", "Build dashboard", "Verify output" }),
-                    "stage conflict returns exact current text and order");
-                AssertTrue(currentSteps.Select(step => (string)step["status"])
-                    .SequenceEqual(new[] { "completed", "in_progress", "pending" }),
-                    "stage conflict returns current statuses");
-                AssertTrue(stepsError["currentTaskList"]["id"] == null &&
-                    currentSteps.All(step => step["id"] == null),
-                    "recovery data omits runtime list and step ids");
-                var errorProjectionCall = Command(TaskListToolCatalog.SetToolId);
-                errorProjectionCall.ToolCallId = "task-list-error-projection";
-                var projectedError = ModelToolResultProjection.Project(
-                    AgentJsonProtocol.CreateToolResultMessage(errorProjectionCall,
-                        RNAssistant.Core.Tools.Contracts.ToolResult.Error(
-                            changedStages.Message, changedStages.DataJson)));
-                AssertContains(projectedError.Content, "currentTaskList",
-                    "model sees exact recovery state after a rejected rewrite");
-                AssertTrue(firstSteps.All(step => projectedError.Content.IndexOf(
-                    (string)step["id"], StringComparison.Ordinal) < 0),
-                    "model recovery state omits runtime step ids");
-                AssertEqual(artifactCount, session.Artifacts.Count, "rejected rewrites do not create revisions");
-
-                var expanded = executor.ExecuteManual(Command(TaskListToolCatalog.SetToolId,
-                    "action", "save", "goal", "Build a reusable dashboard",
-                    "steps", new JArray(
-                        new JObject { ["text"] = "Inspect sources" },
-                        new JObject { ["text"] = "Build dashboard" },
                         new JObject { ["text"] = "Verify output" },
-                        new JObject { ["text"] = "Package reusable skill" })),
+                        new JObject { ["text"] = "Fix styles", ["status"] = "in_progress" },
+                        new JObject { ["text"] = "Inspect sources" })),
                     tools, new AppSettings(), false, false, session);
-                AssertTrue(expanded.Success, "new stage can be appended");
-                var expandedSteps = JObject.Parse(expanded.DataJson)["taskList"]["steps"];
-                AssertEqual("completed", (string)expandedSteps[0]["status"], "omitted status preserves completed progress");
-                AssertEqual("in_progress", (string)expandedSteps[1]["status"], "omitted status preserves active progress");
-                AssertEqual("pending", (string)expandedSteps[3]["status"], "new stage defaults to pending");
-                AssertTrue(firstSteps.Select(step => (string)step["id"])
-                    .SequenceEqual(expandedSteps.Take(3).Select(step => (string)step["id"])),
-                    "existing stage ids remain stable");
+                AssertTrue(revised.Success, "goal, order and stages can be revised together");
+                var revisedData = JObject.Parse(revised.DataJson);
+                var steps = revisedData["taskList"]["steps"];
+                AssertEqual("agent_assessment", (string)revisedData["statusSource"], "plan updates are not claims of file effects");
+                AssertEqual((string)firstSteps[2]["id"], (string)steps[0]["id"], "reordered stage retains identity");
+                AssertEqual((string)firstSteps[0]["id"], (string)steps[2]["id"], "completed stage retains identity");
+                AssertEqual("completed", (string)steps[2]["status"], "progress follows stage, not its former index");
+                AssertEqual("JS already handles zoom.", (string)steps[2]["note"], "assessment follows the unchanged stage");
+                AssertTrue((string)steps[1]["id"] != (string)firstSteps[1]["id"], "rewritten stage gets a new identity");
+                AssertEqual(firstBody, session.Artifacts.First().InlineText, "replanning leaves prior revision intact");
 
-                var prematureClose = executor.ExecuteManual(Command(TaskListToolCatalog.SetToolId,
-                    "action", "close", "outcome", "completed"),
-                    tools, new AppSettings(), false, false, session);
-                AssertTrue(!prematureClose.Success, "unfinished stages block completed close");
-                var closeError = JObject.Parse(prematureClose.DataJson);
-                AssertEqual("task_list_not_terminal", (string)closeError["code"],
-                    "completed close reports unfinished stages");
-                AssertEqual("in_progress", (string)closeError["currentTaskList"]["steps"][1]["status"],
-                    "premature close returns the unfinished current state");
-                AssertContains(prematureClose.Message, "2, 3, 4",
-                    "premature close names every index still unfinished in the current revision");
-                AssertEqual(artifactCount + 1, session.Artifacts.Count, "rejected close does not create a revision");
-
-                var partialClose = executor.ExecuteManual(Command(TaskListToolCatalog.SetToolId,
-                    "action", "close", "outcome", "completed",
-                    "updates", new JArray(new JObject { ["index"] = 2, ["status"] = "completed" })),
-                    tools, new AppSettings(), false, false, session);
-                AssertTrue(!partialClose.Success, "partial close remains rejected");
-                AssertContains(partialClose.Message, "2, 3, 4",
-                    "rejected partial updates are not mistaken for committed progress");
-                AssertEqual(artifactCount + 1, session.Artifacts.Count,
-                    "partial close creates no revision");
-
-                var duplicateUpdate = executor.ExecuteManual(Command(TaskListToolCatalog.SetToolId,
-                    "action", "update_statuses", "goal", "Build a reusable dashboard",
-                    "updates", new JArray(
+                var count = session.Artifacts.Count;
+                var invalid = executor.ExecuteManual(Command(TaskListToolCatalog.SetToolId,
+                    "action", "update_statuses", "updates", new JArray(
                         new JObject { ["index"] = 2, ["status"] = "completed" },
                         new JObject { ["index"] = 2, ["status"] = "pending" })),
                     tools, new AppSettings(), false, false, session);
-                AssertEqual("task_list_status_updates_invalid",
-                    (string)JObject.Parse(duplicateUpdate.DataJson)["code"],
-                    "duplicate status indexes are rejected without guessing");
-                AssertEqual(artifactCount + 1, session.Artifacts.Count,
-                    "invalid status update leaves task list unchanged");
+                AssertEqual("task_list_status_updates_invalid", (string)JObject.Parse(invalid.DataJson)["code"],
+                    "ambiguous indexes still reject before mutation");
+                AssertEqual(count, session.Artifacts.Count, "invalid updates are atomic");
+                var current = JObject.Parse(invalid.DataJson)["currentTaskList"];
+                AssertEqual("Restore visible slider", (string)current["goal"], "recovery returns current goal");
+                AssertTrue(current["id"] == null && current["steps"].All(step => step["id"] == null), "recovery omits runtime identities");
 
-                var statusUpdate = executor.ExecuteManual(Command(TaskListToolCatalog.SetToolId,
-                    "action", "update_statuses", "goal", "Build a reusable dashboard",
-                    "updates", new JArray(
-                        new JObject { ["index"] = 2, ["status"] = "completed" },
-                        new JObject { ["index"] = 3, ["status"] = "completed" })),
+                var progress = executor.ExecuteManual(Command(TaskListToolCatalog.SetToolId,
+                    "action", "update_statuses", "updates", new JArray(
+                        new JObject { ["index"] = 1, ["status"] = "in_progress" },
+                        new JObject { ["index"] = 2, ["status"] = "in_progress", ["note"] = "Reviewing styles and output together." })),
                     tools, new AppSettings(), false, false, session);
-                AssertTrue(statusUpdate.Success, "statuses update without resending step text");
-                var statusSteps = JObject.Parse(statusUpdate.DataJson)["taskList"]["steps"];
-                AssertTrue(statusSteps.Select(step => (string)step["text"])
-                    .SequenceEqual(expandedSteps.Select(step => (string)step["text"])) &&
-                    statusSteps.Select(step => (string)step["id"])
-                    .SequenceEqual(expandedSteps.Select(step => (string)step["id"])),
-                    "status-only update preserves every text and stable step id");
-                AssertEqual("pending", (string)statusSteps[3]["status"],
-                    "status-only update leaves the unmentioned final step pending");
-                var invalidTerminalUpdate = executor.ExecuteManual(Command(TaskListToolCatalog.SetToolId,
-                    "action", "close", "outcome", "superseded",
-                    "updates", new JArray(new JObject { ["index"] = 4, ["status"] = "completed" })),
-                    tools, new AppSettings(), false, false, session);
-                AssertEqual("task_list_close_updates_invalid",
-                    (string)JObject.Parse(invalidTerminalUpdate.DataJson)["code"],
-                    "non-completed close cannot silently change statuses");
-                var beforeFinalClose = session.Artifacts.Count;
+                AssertTrue(progress.Success, "agent can track concurrent stages without repeating goal");
                 var finished = executor.ExecuteManual(Command(TaskListToolCatalog.SetToolId,
-                    "action", "close", "outcome", "completed",
-                    "updates", new JArray(new JObject { ["index"] = 4, ["status"] = "completed" })),
+                    "action", "close", "outcome", "completed", "reason", "Outcome is satisfied; no script edit needed.",
+                    "updates", new JArray(new JObject { ["index"] = 2, ["status"] = "completed", ["note"] = "Changed CSS only." })),
                     tools, new AppSettings(), false, false, session);
-                AssertTrue(finished.Success, "last status and terminal close succeed in one call");
-                AssertEqual(beforeFinalClose + 1, session.Artifacts.Count,
-                    "atomic close creates one terminal revision");
+                AssertTrue(finished.Success, "agent assessment can close without mechanically completing every stage");
                 var terminal = JObject.Parse(finished.DataJson)["taskList"];
-                AssertEqual("completed", (string)terminal["status"],
-                    "atomic close records terminal status");
-                AssertTrue(terminal["steps"].All(step => (string)step["status"] == "completed") &&
-                    string.IsNullOrWhiteSpace(session.ActiveTaskListArtifactId),
-                    "atomic close completes the final step and clears the active list");
+                AssertEqual("in_progress", (string)terminal["steps"][0]["status"], "close does not fabricate completion for unmentioned stages");
+                AssertEqual("Changed CSS only.", (string)terminal["steps"][1]["note"], "explicit outcome notes survive close");
+                AssertTrue(string.IsNullOrEmpty(session.ActiveTaskListArtifactId), "explicit close archives the list");
             });
-        }
-
-        private static void TaskListFinalRecoveryAfterCloseAttempt()
-        {
-            const string runId = "task-list-final-recovery";
-            var firstFinal = AgentJsonProtocol.CreateDeferredFinalMessage("Done.", null);
-            firstFinal.RunId = runId;
-            var secondFinal = AgentJsonProtocol.CreateDeferredFinalMessage("Still done.", null);
-            secondFinal.RunId = runId;
-            var messages = new List<ChatMessage> { firstFinal };
-            AssertEqual(FinalResponseDecision.Continue,
-                ConversationKernelAdapter.OpenTaskListFinalDecision(messages, runId),
-                "first premature final receives a correction opportunity");
-            messages.Add(secondFinal);
-            AssertEqual(FinalResponseDecision.Fail,
-                ConversationKernelAdapter.OpenTaskListFinalDecision(messages, runId),
-                "consecutive premature finals still stop the run");
-
-            var closeAttempt = AgentJsonProtocol.CreateToolCallMessage(
-                new AgentToolCall
-                {
-                    Id = "close-attempt",
-                    Name = TaskListToolCatalog.SetToolId,
-                    Arguments = new Dictionary<string, object>
-                    {
-                        { "action", "close" }, { "outcome", "completed" }
-                    }
-                }, "Closing the task list.", null, "tool",
-                new AcceptedToolCallOrigin("step-close", "attempt-close", 0));
-            closeAttempt.RunId = runId;
-            messages.Insert(1, closeAttempt);
-            AssertEqual(FinalResponseDecision.Continue,
-                ConversationKernelAdapter.OpenTaskListFinalDecision(messages, runId),
-                "a close attempt between finals permits correction after a rejected close");
-            var thirdFinal = AgentJsonProtocol.CreateDeferredFinalMessage("Still open.", null);
-            thirdFinal.RunId = runId;
-            messages.Add(thirdFinal);
-            AssertEqual(FinalResponseDecision.Fail,
-                ConversationKernelAdapter.OpenTaskListFinalDecision(messages, runId),
-                "a second consecutive final after a close attempt stops the run");
         }
 
         private static void TaskListUsesVerifiedNativeRuntime()
@@ -410,14 +269,14 @@ namespace RNAssistant.Harness
 
                 var invalidCloseCall = new ToolCall("task-list-native-invalid-close",
                     TaskListToolCatalog.SetToolId,
-                    "{\"action\":\"close\",\"outcome\":\"completed\"}");
+                    "{\"action\":\"close\",\"outcome\":\"completed\",\"updates\":[{\"index\":4,\"status\":\"completed\"}]}");
                 var invalidClose = ExecuteNative(runtime, invalidCloseCall,
                     runtime.Describe(invalidCloseCall));
                 AssertEqual(ToolExecutionOutcome.Error, invalidClose.Outcome,
-                    "non-terminal close stays a known error");
+                    "invalid index stays a known error");
                 AssertEqual(ToolDispatchEvidence.NotDispatched,
                     invalidClose.Evidence.Dispatch,
-                    "terminal-state rejection occurs before the mutation boundary");
+                    "invalid index rejects before the mutation boundary");
                 var invalidCloseRecovery =
                     JObject.Parse(invalidClose.Result.DataJson)["recovery"];
                 AssertEqual("RejectedNoEffect",

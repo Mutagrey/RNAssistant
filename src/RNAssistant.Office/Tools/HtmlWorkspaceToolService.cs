@@ -106,7 +106,7 @@ namespace RNAssistant.Office.Tools
                             ". Current files (" + session.HtmlWorkspace.Files.Count + "): " +
                             string.Join(", ", files) +
                             (session.HtmlWorkspace.Files.Count > files.Length ? ", ..." : ".") +
-                            " Continue from this saved state; read current source before replacing an existing file.",
+                            " Continue from this saved state. Reuse included complete current source; read before replacement only if the needed source is absent or invalidated.",
                             WorkspaceMutationJson(session, "file", file.Path),
                             HtmlWorkspaceEffect.VerifiedChange),
                         cancellationToken);

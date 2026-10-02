@@ -39,7 +39,7 @@ namespace RNAssistant.Office.Services
     // One invocation-scoped adapter for the existing application services. Its
     // partials separate model materialization, executor mapping and event projection.
     // No loop, effect aggregation, accepted-id index or durable side store lives here.
-    internal sealed partial class ConversationKernelAdapter : IModelProtocol, IToolRuntime, IRunStore, IRunCompletionGate, IDisposable
+    internal sealed partial class ConversationKernelAdapter : IModelProtocol, IToolRuntime, IRunStore, IDisposable
     {
         private readonly IOfficeApplicationAdapter _adapter;
         private readonly OfficeToolExecutor _executor;

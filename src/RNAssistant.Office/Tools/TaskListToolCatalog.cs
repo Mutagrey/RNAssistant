@@ -20,7 +20,7 @@ namespace RNAssistant.Office.Tools
         internal static IEnumerable<ToolCatalogEntry> GetTools()
         {
             yield return Projection(SetToolId,
-                "Task list: Use save to create or append stages; update_statuses changes existing statuses by 1-based index; close accepts optional final status updates and closes atomically. Runtime owns list and stable step identity.",
+                "Task list: Save or revise your plan, update progress by current 1-based index, or record an outcome. Statuses express your assessment, not verified tool effects. An open list does not prevent a final answer. Runtime owns list and step identity.",
                 Schema(), "task_list_set");
         }
 
@@ -34,19 +34,25 @@ namespace RNAssistant.Office.Tools
                 name: name, scope: "session", mutatesLocalState: true);
         }
 
+        private static JObject NoteSchema()
+        {
+            return new JObject { ["type"] = "string", ["maxLength"] = TaskListService.MaxStepCharacters,
+                ["description"] = "Optional result, remaining work or reason no change was needed. Omit to preserve an unchanged stage note; empty clears it." };
+        }
+
         internal static string Schema()
         {
             var action = new JObject
             {
                 ["type"] = "string",
-                ["description"] = "Use save to create or append stages, update_statuses to change only existing statuses, or close for a terminal outcome.",
+                ["description"] = "Use save to create or revise goal and stages, update_statuses for progress, or close for an outcome or blocker.",
                 ["enum"] = new JArray("save", "update_statuses", "close")
             };
             var steps = new JObject
             {
                 ["type"] = "array",
-                ["description"] = "Complete ordered meaningful task stages; runtime generates and preserves their stable ids.",
-                ["minItems"] = 3,
+                ["description"] = "Complete revised plan; stages may be added, rewritten, removed or reordered. Runtime preserves identity and omitted progress only for unchanged unambiguous stage text.",
+                ["minItems"] = 1,
                 ["maxItems"] = TaskListService.MaxSteps,
                 ["items"] = new JObject
                 {
@@ -54,7 +60,8 @@ namespace RNAssistant.Office.Tools
                     ["properties"] = new JObject
                     {
                         ["text"] = new JObject { ["type"] = "string", ["description"] = "Concise user-visible step description.", ["minLength"] = 1, ["maxLength"] = TaskListService.MaxStepCharacters },
-                        ["status"] = new JObject { ["type"] = "string", ["description"] = "Omit to preserve an existing stage status; a new stage defaults to pending.", ["enum"] = new JArray("pending", "in_progress", "completed", "blocked", "cancelled") }
+                        ["status"] = new JObject { ["type"] = "string", ["description"] = "Omit to preserve an existing stage status; a new stage defaults to pending.", ["enum"] = new JArray("pending", "in_progress", "completed", "blocked", "cancelled") },
+                        ["note"] = NoteSchema()
                     },
                     ["required"] = new JArray("text"),
                     ["additionalProperties"] = false
@@ -63,7 +70,7 @@ namespace RNAssistant.Office.Tools
             var properties = new JObject
             {
                 ["action"] = action,
-                ["goal"] = new JObject { ["type"] = "string", ["description"] = "Concise user-visible goal for the current task.", ["minLength"] = 1, ["maxLength"] = TaskListService.MaxGoalCharacters },
+                ["goal"] = new JObject { ["type"] = "string", ["description"] = "Concise goal. Required for save; optional on update_statuses as a check that this is still the intended list.", ["minLength"] = 1, ["maxLength"] = TaskListService.MaxGoalCharacters },
                 ["steps"] = steps,
                 ["updates"] = new JObject
                 {
@@ -77,25 +84,29 @@ namespace RNAssistant.Office.Tools
                         ["properties"] = new JObject
                         {
                             ["index"] = new JObject { ["type"] = "integer", ["minimum"] = 1, ["maximum"] = TaskListService.MaxSteps },
-                            ["status"] = new JObject { ["type"] = "string", ["enum"] = new JArray("pending", "in_progress", "completed", "blocked", "cancelled") }
+                            ["status"] = new JObject { ["type"] = "string", ["enum"] = new JArray("pending", "in_progress", "completed", "blocked", "cancelled") },
+                            ["note"] = NoteSchema()
                         },
                         ["required"] = new JArray("index", "status"),
                         ["additionalProperties"] = false
                     }
                 },
-                ["outcome"] = new JObject { ["type"] = "string", ["enum"] = new JArray("completed", "cancelled", "superseded"), ["description"] = "Terminal outcome used only with action=close." }
+                ["outcome"] = new JObject { ["type"] = "string", ["enum"] = new JArray("completed", "cancelled", "superseded", "blocked"), ["description"] = "Your assessment of the task outcome. blocked retains the plan for resumption; other outcomes archive it. Unmentioned step statuses stay unchanged; no source change is required." },
+                ["reason"] = new JObject { ["type"] = "string", ["minLength"] = 1, ["maxLength"] = 500, ["description"] = "Explain a plan revision or outcome; required only for outcome=blocked." }
             };
             var saveProperties = new JObject
             {
                 ["action"] = new JObject { ["type"] = "string", ["const"] = "save", ["description"] = "Save the complete active checklist." },
                 ["goal"] = properties["goal"].DeepClone(),
-                ["steps"] = steps.DeepClone()
+                ["steps"] = steps.DeepClone(),
+                ["reason"] = properties["reason"].DeepClone()
             };
             var closeProperties = new JObject
             {
-                ["action"] = new JObject { ["type"] = "string", ["const"] = "close", ["description"] = "Close the active checklist, optionally completing evidenced steps in the same call." },
+                ["action"] = new JObject { ["type"] = "string", ["const"] = "close", ["description"] = "Record your outcome or retain the plan as blocked, optionally updating steps in the same call." },
                 ["outcome"] = properties["outcome"].DeepClone(),
-                ["updates"] = properties["updates"].DeepClone()
+                ["updates"] = properties["updates"].DeepClone(),
+                ["reason"] = properties["reason"].DeepClone()
             };
             var statusProperties = new JObject
             {
@@ -121,7 +132,7 @@ namespace RNAssistant.Office.Tools
                     {
                         ["type"] = "object",
                         ["properties"] = statusProperties,
-                        ["required"] = new JArray("action", "goal", "updates"),
+                        ["required"] = new JArray("action", "updates"),
                         ["additionalProperties"] = false
                     },
                     new JObject

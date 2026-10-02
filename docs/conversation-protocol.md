@@ -15,13 +15,15 @@ draft, separate provider-native refusal, or typed failure. Model wording and
 
 Prompt schema 30 requires one mutation per model response; only independent local
 reads may share a batch. The next mutation is proposed after the previous result
-reaches the model, with a fresh source read when the edit depends on current state.
+reaches the model. Reuse its included complete current after-state; read again only
+when the required source body is absent or invalidated.
 Unknown mutation effects remain visible in cumulative run health and the terminal
 summary, but do not stop the current run by themselves. Schema 28 made tool-turn `message` a concise operational summary linking
 an observed finding (when present), the purpose of the actual upcoming calls and
 what their result will determine. It does not request private reasoning, introduce
-wire fields, or turn narrative into execution evidence. Saved custom prompts use
-the existing explicit review/reset flow; they are never overwritten silently.
+wire fields, or turn narrative into execution evidence. The current settings
+migration selects built-in defaults for an older schema and archives the prior
+prompt texts on save; see [prompt migration](skills.md#continuity-after-compaction--2026-10-01).
 Resource descriptions/snippets aid discovery but do not prove complete content.
 Compaction guidance preserves findings, decisions, constraints, open questions and
 next actions without upgrading intentions/interpretations to facts. Its local
@@ -30,31 +32,51 @@ the prior checkpoint rather than silently accepting a partial extraction.
 
 Agent readiness precedes mutation. The model first maps explicit deliverables,
 required source/current-artifact inspection, dependency order, applicable catalog skills
-and tool schemas, and completion evidence. Three or more meaningful stages, or a real
-discovery → construction → verification workflow, require a bounded read-only discovery
-of source structure and key examples, then a Task List and Markdown Plan before changing the requested deliverable.
+and tool schemas, and useful completion evidence. A concise Task List is optional
+when it helps retain remaining work; multiple files do not require a checklist.
+A separate Markdown Plan is created only when requested or needed as a design
+artifact, without duplicating execution stages.
 Source inspection precedes the primary deliverable; binding/testing
 precedes any requested reusable Skill/Tool documentation. A terminal response must
 reconcile every deliverable and Task List step with result evidence. Validation/tool
 errors cannot be converted into success prose or justify silently replacing a richer
 artifact with a simplified placeholder.
 
-Task List saves preserve the active goal and every existing step's text and order;
-`update_statuses` changes existing statuses by 1-based step position without
-resending text. `save` may append stages; an omitted status keeps an existing
-stage's status, and a new stage defaults to `pending`. A different task requires
-`close: superseded` before a new list. `close: completed` requires every step to be
-completed; optional indexed `updates` complete evidenced steps in the same
-atomic close revision. A rejected goal/step rewrite or premature completed close returns
-`currentTaskList` with the current goal and ordered step text/status, without
-runtime identities, for a corrected call. A rejected completed close also names
-the unfinished 1-based indexes from the unchanged current revision; partial
-updates in a rejected close are not committed.
-A final response with an active list remains in the kernel loop: the
-first such response is retained and followed by one corrective continuation. A
-tool call between premature finals permits another correction after its result;
-consecutive premature finals fail the run as `task_list_open`. Run iteration and
-tool-step limits still bound correction attempts. Chat mode is unaffected.
+Task List is a revisioned planning aid owned by the agent's judgement. `save` may
+revise the goal and add, remove, rewrite or reorder stages, with an optional
+`reason`. Prior revisions remain intact. Runtime preserves identity and omitted
+status/note for unchanged unambiguous stage text, never by its old position; new
+or rewritten stages default to `pending`. The agent may explicitly carry progress
+when rewording a stage. `update_statuses` uses current 1-based indexes and optional
+notes; the goal is optional as a stale-list check. Multiple stages may be in progress.
+Malformed/ambiguous indexes still reject atomically with identity-free
+`currentTaskList` recovery data. Payload bounds and runtime-owned identities remain.
+
+`close` records the agent's overall assessment and optional indexed step updates
+in one revision. `completed`, `cancelled` and `superseded` archive the list;
+`blocked` with a concrete reason retains it for resumption. Closing does not
+require all steps to be completed, fabricate a source effect, or change unmentioned
+statuses. No whole-source read, hash difference or tool count is a prerequisite
+for a planning status. Notes can explain that an anticipated edit was unnecessary
+or that verification remains unavailable. A blocked plan is not bound to one run;
+a status update or revised save resumes it.
+
+`RUNTIME_CONTEXT.active_task_list` pins the exact current goal, ordered steps,
+statuses, notes, revision reason and blocker independently of history compaction
+and the bounded discovery index. It projects the existing selected revision,
+not another durable store; its budget is reserved before source bodies.
+`statusSource=agent_assessment` distinguishes planning conclusions from actual
+tool effects. Successful task-list writes verify saving the list only.
+
+An open or blocked list never overrides `final=true`. There is no completion gate,
+deferred-final rewrite or corrective continuation based on checklist state.
+Final leaves the plan unchanged; the next run receives its remaining work.
+The model decides whether the goal is met from user intent, context and results,
+continues feasible authorized work and reports gaps honestly. Kernel `Completed`
+means the answer ended, not proven semantic success. Actual tool receipts,
+unknown-effect health/non-replay, source currency and mutation guards remain
+authoritative and cannot be cleared by a task-list update. Target-model evaluation
+is still necessary; the runtime cannot guarantee that a model's conclusion is true.
 
 R29 switched client, prompts, schema, probes and accepted history together from v3
 to v4 and removed the model-ID parser/context path; only the kernel creates
@@ -161,7 +183,7 @@ Format repair explicitly maps `$ contains unsupported property arguments` to a
 removed wrapper, moving declared fields up first only when necessary, and forbids
 repeating the rejected object unchanged.
 
-A descriptor over 24,000 compact JSON characters is omitted from the runnable catalog rather than being partially advertised. Successful resource/capability evidence is never replaced by a successful transport preview: the complete resource representation or capability body/chunk must fit together with request options and both reserves. Otherwise the projection returns explicit `resource_evidence_context_too_large` or `capability_evidence_context_too_large`; a later media/materialization failure likewise changes an otherwise successful read projection to `status:error`. Budget exhaustion is `PromptBudgetExceeded`, not infrastructure failure. Incomplete schema evidence cannot enter an extension. Prompt schema 23 introduced readiness-before-domain-work, dependency-ordered Task List/skill/tool loading, root tool arguments and evidence-reconciled completion. Schema 24 made that contract an explicit Understand → Prepare → Inspect → Execute → Verify → Finish workflow and assigned non-overlapping authority: system prompt owns universal lifecycle, skill bodies own domain workflow/quality, and current tool descriptions/schemas own exact calls, arguments and evidence. Schema 25 strengthens the finish gate and HTML binding guidance. Schema 26 adds the explicit v5 `final` response intent. Schema 27 requires final read-back, regression review and a quality decision. Schema 28 added the operational-summary/discovery guidance. Schema 29 allowed ordered managed-mutation batches. Schema 30 restricts multi-call responses to independent local reads. Schema 31 permits bounded source discovery before Task List/Plan creation and requires durable planning for complex Agent work. Current schema 32 requires `final=true` for an answer without tool calls. Older prompt markers preserve stored text and require explicit review/reset before Agent/Plan execution.
+A descriptor over 24,000 compact JSON characters is omitted from the runnable catalog rather than being partially advertised. Complete resource/capability bodies count as observed evidence only when they fit with request options and both reserves. A successful complete source that cannot fit becomes an operation receipt with a `bodyIncluded=false` notice and bounded-read recovery, preserving outcome/effect without granting source authority. Other oversized exact reads/capabilities return explicit `resource_evidence_context_too_large` or `capability_evidence_context_too_large`; a later media/materialization failure likewise changes an otherwise successful read projection to `status:error`. Budget exhaustion is `PromptBudgetExceeded`, not infrastructure failure. Incomplete schema evidence cannot enter an extension. Prompt schema 23 introduced readiness-before-domain-work, dependency-ordered Task List/skill/tool loading, root tool arguments and evidence-reconciled completion. Schema 24 made that contract an explicit Understand → Prepare → Inspect → Execute → Verify → Finish workflow and assigned non-overlapping authority: system prompt owns universal lifecycle, skill bodies own domain workflow/quality, and current tool descriptions/schemas own exact calls, arguments and evidence. Schema 25 strengthens the finish gate and HTML binding guidance. Schema 26 adds the explicit v5 `final` response intent. Schema 27 requires final read-back, regression review and a quality decision. Schema 28 added the operational-summary/discovery guidance. Schema 29 allowed ordered managed-mutation batches. Schema 30 restricts multi-call responses to independent local reads. Schema 31 permits bounded source discovery before Task List/Plan creation and requires durable planning for complex Agent work. Schema 32 requires `final=true` for an answer without tool calls. Schema 33 reuses current source and durable tool admission. Schema 34 pinned task state and introduced source checks. Schema 35 introduced automatic default migration with a recovery copy of prior texts on settings save. Current schema 36 keeps exact planning context but removes source-hash checks and final gates: the model may revise plans, explain no-ops and decide completion from actual context and outcomes.
 
 Planning and execution tracking are separate. Exact native `common.plan_doc_save` accepts complete title/Markdown/status intent in Plan and Agent. It creates an active plan when absent, updates the guarded selected head, or creates an independent plan with `startNew=true` for a different task while retaining the previous lineage. `common.plan_doc_restore` and `common.plan_doc_delete` remain Plan-only. `RUNTIME_CONTEXT.active_plan` exposes only current readable metadata, while the body is found and read through the semantic resource pair. `common.questions_ask` accepts prompt/options without question or option ids; runtime generates UI-only ids, and submitted answers return question text plus selected labels/free text. `common.task_list_set` has typed `save`, `update_statuses`, and `close` branches; runtime owns active-list and stable step ids while the model supplies complete goal/ordered steps for creation or append, sparse indexed status changes, or a terminal outcome with optional final status changes. Model Tool Results omit all these internal identities and guards. A ready-plan handoff revalidates the exact selected revision internally, switches to Agent, and submits a semantic instruction to find/read the active plan; no URI enters the model request.
 
@@ -206,7 +228,7 @@ triggers automatic replay or establishes a physical mutation outcome.
 
 A confirmed tool result always returns to the Agent loop, including `ok:false`, so the model can explain the failure, correct arguments, or choose another tool. Runtime failures carry a typed class (`RejectedNoEffect`, `ConflictNoEffect`, `BusyNoEffect` or `ToolDefect`) and retry policy (`None`, `Replan`, `RefreshRequired` or `RetryLater`); the model chooses the semantic next action, while runtime never automatically replays a tool. A definite no-effect `error` returns to the model even when the same public call was tried before; the model may inspect current source, change arguments or choose another tool. The kernel imposes no separate count cap on rejected calls. `RefreshRequired` and `Replan` remain recovery guidance; the domain guard still validates current state before any mutation. A call with an `unknown` effect is not automatically repeated because it may already have changed the document. After a side-effecting call ends in `unknown`, the uncertainty is retained in run health and final status; later calls in the same run are still governed by their own policy, confirmation and guard checks. Chat tools never require confirmation. An explicit user cancellation is terminal for that run and does not invoke the model again. Fresh and confirmed controller invocations share one progress/checkpoint callback, success/failure finalizer and run-lease release path; targeted store recovery releases that ownership before canonical reload. The lease remains per chat. Global coordination and document-access gates are not held across model wait, and `ConversationRunService → AgentKernel` remains the single execution loop.
 
-The skill entries in the unified capability catalog are metadata only. When the user names a skill or a summary clearly matches, the model calls `common.capabilities_read` with that exact public id. Its model result contains `kind:"skill"`, id, readable metadata/version, complete `bodyMarkdown`, and explicit loaded/complete flags, but no package revision. Runtime validates the hidden exact revision before every projection and replaces stale evidence with `capability_evidence_stale`. Each tool named by the skill still needs its own schema read unless already callable. Oversized evidence becomes explicit `capability_evidence_context_too_large`; compaction or stale evidence requires another read.
+The skill entries in the unified capability catalog are metadata only. When the user names a skill or a summary clearly matches, the model calls `common.capabilities_read` with that exact public id. Its model result contains `kind:"skill"`, id, readable metadata/version, complete `bodyMarkdown`, and explicit loaded/complete flags, but no package revision. Runtime validates the hidden exact revision before every projection and replaces stale evidence with `capability_evidence_stale`. Each tool named by the skill still needs its own schema read unless already callable. Oversized evidence becomes explicit `capability_evidence_context_too_large`. Compaction alone requires no reread: reuse a current complete body restored in the working set; reload only needed absent or stale bodies.
 
 A custom skill package may contain up to 64 direct UTF-8 `references/*.md` files. The core read lists paths and byte sizes without bodies or model-visible revisions. A needed reference is read with exact public skill id and `referencePath`; fixed runtime chunks continue with `action=next`. Exact offsets and reference/package revisions remain in durable results. A reference chunk never loads the core skill. Core/reference mutations remain separate confirmed calls.
 
@@ -615,8 +637,10 @@ prove that a document changed.
 
 `message` is bounded before it enters model context. Each accepted terminal result is parsed once into a strict detached token; externalization and semantic media selection reuse that raw representation, while sanitization and every request-budget candidate reuse one separate model projection. The immutable durable wire is archived before request compilation; storage externalization is not a per-result model-delivery limit. Eligible oversized generic `data` up to 2,000,000 characters is stored completely as a CAS-backed `tool_result` artifact before the next model dispatch. Durable materialization retains the exact `relation:"result"` reference, but every model projection removes all exact resource references; subsequent resource calls find and read semantic targets rather than accepting a URI. Generic/producing tool results also remove runtime `rna://` values from their model message/data while preserving ordinary business fields and non-runtime URIs. Resource/capability read evidence is provider-bounded and is neither rewrapped as an untrusted artifact nor silently truncated by transport; its model projection has no exact relation. Completed mutation folding consumes this same model projection rather than durable result prose/effect labels. A specialized chart payload is materialized once at the result boundary and follows the same durable-reference/model-projection separation. After the durable tool-result checkpoint, the controller queues that complete revisioned artifact projection before later progress or the next model step, including confirmation continuation; progress itself carries no artifact authority. Before every conversation model request, including initial dispatch, format repair and continuation after confirmation, ModelProtocol verifies the same messages + options + applicable repair + continuation calculation and stops with a visible diagnostic instead of sending an oversized request.
 
-Before request projection, the compiler hydrates every selected `ResultPayload`
+Before request projection, the compiler hydrates selected `ResultPayload` bodies
 from CAS, including generic reads such as `excel.inspect` and terminal mutations.
+A single complete source exceeding request capacity may instead retain only its
+operation/effect receipt and an explicit body-omission recovery notice.
 Completed mutation frames fold only after hydration and sanitization, retaining
 the original status, full semantic `data`, message and effect. Missing mutation
 payloads stop preparation explicitly instead of rewriting a known terminal result.
@@ -638,8 +662,10 @@ The 8192-character archival threshold and 8192-token tool-result artifact thresh
 control storage only: the model receives the complete recorded JSON whenever the
 whole request fits its calibrated budget and response/repair reserves. Complete
 results do not instruct the model to rediscover their already supplied data.
-No separate per-result delivery cap or silent preview is applied. Actual overflow
-uses the existing history compaction or a visible budget failure before dispatch;
+No separate per-result delivery cap or silent preview is applied. A single
+oversized current source is explicitly omitted with bounded-line recovery and no
+whole-source observation authority. Other overflow uses history compaction or a
+visible budget failure before dispatch;
 missing/corrupt payloads remain explicitly unavailable, never content-free `ok`
 observations. Durable bytes, runtime-reference isolation and current-evidence
 filtering remain intact. Domain capture bounds still describe the tool's actual
@@ -850,6 +876,15 @@ charts and other operations. The display classifies icons only, never tool effec
 `AgentTranscript` derives target captions from accepted scalar arguments, including
 Word insertion locations, PowerPoint slide/shape targets and Outlook draft
 subjects/recipients, without resource lookup or new authority.
+
+Read captions use a bounded typed `ChatActivity.ReadSummary`, captured before
+body truncation/externalization and retained through event replay and UI cloning.
+It contains representation, returned characters/rows and completeness, without a
+source body or runtime reference. Large reads therefore retain the same count as
+small reads. Lazy result preview reads the exact `ResultPayload` through
+`ChatBlobStore`; missing/corrupt bodies are shown as unavailable without changing
+the recorded operation outcome. Preview has its own display limits and never
+authorizes a model write. Old activities without a summary retain a generic label.
 
 Short Russian result captions use typed status/error/effect evidence. Unknown effects
 win over success/error wording; failed no-ops remain failures. Bounded, cached reads

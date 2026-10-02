@@ -124,6 +124,18 @@ and their currentness evidence, so a following whole-file replacement can use th
 source the model has just seen. The conversation compiler applies the same source/text
 carry-forward rule to VBA and document-authored text resources; an older revision is
 excluded when the authority head or dependency changes.
+For a single complete source that cannot fit the request budget, the compiler keeps
+the successful operation/effect receipt and a `bodyIncluded=false` observation
+notice with a bounded-read recovery action. Omitted bytes confer no whole-source
+write authority; they remain in local CAS. Other request/invariant budget failures
+remain explicit and do not silently trim user instructions or task state.
+`common.resources_read` accepts `startLine` (1-based) plus `lineCount` (1–500) for
+text/source, with an exact 32,000-character maximum excerpt. This uses the existing
+revision-pinned whole snapshot (still bounded to 2,000,000 characters), preserves
+CR/LF/CRLF bytes, and emits only character-range incomplete evidence. It cannot be
+combined with section or row selectors. Semantic metadata projections such as a
+workspace root/shared-context archive cannot be bypassed with line reads. A single
+oversized line needs a narrower snippet or scope; this is not unbounded streaming.
 An exact domain target query such as `Sheet!A1:B20`, `Excel table: Sales`,
 `Excel name: Sales`, `Word range: 0:100`, or `PowerPoint slide: 2` is a point
 lookup: it resolves that target without scanning unrelated resource catalogs or

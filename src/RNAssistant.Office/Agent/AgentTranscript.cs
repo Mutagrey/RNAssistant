@@ -182,7 +182,9 @@ namespace RNAssistant.Office
                         false),
                 RuntimeGuardJson = command == null ? null : command.RuntimeGuardJson,
                 ResultMessage = message,
-                DataJson = BoundActivityData(result, rawDataJson)
+                DataJson = BoundActivityData(result, rawDataJson),
+                ReadSummary = success && command?.ToolId == "common.resources_read"
+                    ? SummarizeRead(rawDataJson) : null
             };
 
             return activity;
@@ -316,6 +318,34 @@ namespace RNAssistant.Office
                     kind = result.ModelResultResourceKind
                 }
             });
+        }
+
+        private static ResourceReadSummary SummarizeRead(string json)
+        {
+            if (string.IsNullOrWhiteSpace(json)) return null;
+            try
+            {
+                var data = JsonConvert.DeserializeObject<ReadPresentationInput>(json);
+                if (data?.Kind != "resource-read" || !data.Complete.HasValue) return null;
+                return new ResourceReadSummary {
+                    Representation = data.Representation,
+                    ReturnedCharacters = data.ReturnedCharacters,
+                    ReturnedRows = data.Table?.Rows?.Count,
+                    Complete = data.Complete.Value,
+                    HydratedForNextModelStep = data.HydratedForNextModelStep
+                };
+            }
+            catch (JsonException) { return null; }
+        }
+
+        private sealed class ReadPresentationInput
+        {
+            public string Kind { get; set; }
+            public string Representation { get; set; }
+            public int? ReturnedCharacters { get; set; }
+            public ResourceTableBatch Table { get; set; }
+            public bool? Complete { get; set; }
+            public bool HydratedForNextModelStep { get; set; }
         }
 
         private static string BoundJson(

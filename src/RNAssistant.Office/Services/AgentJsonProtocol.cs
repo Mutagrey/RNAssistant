@@ -160,31 +160,6 @@ namespace RNAssistant.Office.Services
             return protocolMessage;
         }
 
-        internal static ChatMessage CreateDeferredFinalMessage(string message, LlmCompletionResult completion)
-        {
-            var accepted = AgentTranscript.CreateAssistantMessage(
-                ModelProtocolWire.Write(message ?? string.Empty, new ConversationToolCall[0], true),
-                completion, null, AgentResponseStatuses.InProgress);
-            accepted.ProtocolMessage = true;
-            return accepted;
-        }
-
-        internal static ChatMessage CreateOpenTaskListContinuationMessage()
-        {
-            return new ChatMessage
-            {
-                Role = "user",
-                ProtocolMessage = true,
-                Content = "RUNTIME_CONTINUE:\nThe preceding final response was accepted, but the Task List is still active. " +
-                    "If every step is complete and evidenced, call common.task_list_set with action=close and outcome=completed as the sole tool call now. " +
-                    "Include every step not yet marked completed as a 1-based index with status=completed in close.updates, but only when its completion is evidenced. " +
-                    "If the previous close returned task_list_not_terminal, it made no change: use currentTaskList and include every still-unfinished evidenced step's 1-based index with status=completed in close.updates. " +
-                    "The close call applies those updates and closure together. " +
-                    "Otherwise continue and verify the unfinished work. Do not return final=true until the close result succeeds. " +
-                    "A repeated final response without an intervening tool call will fail the run."
-            };
-        }
-
         private static JToken BoundData(JToken parsed, int maxDataTokens, AppSettings settings)
         {
             var compact = parsed.ToString(Formatting.None);

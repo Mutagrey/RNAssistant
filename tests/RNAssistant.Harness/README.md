@@ -39,6 +39,16 @@ version check still apply.
 
 ## Test map
 
+`agent continuity:` checks retained read counts above the 8192/32768-character UI
+thresholds after save/reload, exact CAS preview and missing bodies; revised plan
+state and explanations after persistence/compaction; native open/blocked finals
+across two runs; CSS-only repair with a reasoned no-op for JS and no forced extra
+edit; oversized-source recovery through exact mixed-newline excerpts. Use
+`task lists:`, `context continuity:`, `resources:`, current-source carry-forward,
+prompt/schema and R61 inventory checks for the affected contracts. UI checks are
+`completion-guard.test.js`, `task-list-continuity.test.js` and `plan-document.test.js`.
+These scripted runs do not qualify target-model quality or Windows/WebView2.
+
 `agent: keeps tool result within prompt budget` checks complete next-request JSON
 delivery below/above the 8192-character archival and 8192-token artifact thresholds
 (1/16/160 KB, all three result roles). `agent: tool result rejects insufficient

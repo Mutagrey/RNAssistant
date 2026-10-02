@@ -47,6 +47,12 @@ namespace RNAssistant.Core.Models
         [Newtonsoft.Json.JsonProperty("steps")]
         public List<ChatTaskStep> Steps { get; set; }
 
+        [Newtonsoft.Json.JsonProperty("blocker", NullValueHandling = Newtonsoft.Json.NullValueHandling.Ignore)]
+        public string Blocker { get; set; }
+
+        [Newtonsoft.Json.JsonProperty("reason", NullValueHandling = Newtonsoft.Json.NullValueHandling.Ignore)]
+        public string Reason { get; set; }
+
         public ChatTaskList()
         {
             ProtocolVersion = CurrentProtocolVersion;
@@ -65,6 +71,9 @@ namespace RNAssistant.Core.Models
 
         [Newtonsoft.Json.JsonProperty("status")]
         public string Status { get; set; }
+
+        [Newtonsoft.Json.JsonProperty("note", NullValueHandling = Newtonsoft.Json.NullValueHandling.Ignore)]
+        public string Note { get; set; }
     }
 
     public sealed class ChatArtifact

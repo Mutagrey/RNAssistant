@@ -12,17 +12,20 @@ namespace RNAssistant.Office.Services
         internal const int MaxGoalCharacters = 500;
         internal const int MaxStepCharacters = 500;
 
+        private static bool IsOpen(ChatTaskList task)
+        { return task != null && (task.Status == "active" || task.Status == "blocked"); }
+
         internal TaskListMutation Set(ChatSession session, string goal,
-            List<ChatTaskStep> steps, Action beforeMutation)
+            List<ChatTaskStep> steps, Action beforeMutation, string reason = null)
         {
             RequireSession(session);
             if (string.IsNullOrWhiteSpace(session.ActiveTaskListArtifactId))
-                return Create(session, goal, BindStepIds(steps, null), beforeMutation);
+                return Create(session, goal, BindStepIds(steps, null), beforeMutation, reason);
 
             ChatTaskList current;
             var currentArtifact = FindRevision(session, null, out current);
             if (currentArtifact == null || current == null ||
-                !string.Equals(current.Status, "active", StringComparison.OrdinalIgnoreCase))
+                !IsOpen(current))
             {
                 return TaskListMutation.Fail(
                     "The active task list is unavailable or ambiguous; reset the chat before saving.",
@@ -32,20 +35,8 @@ namespace RNAssistant.Office.Services
                 return TaskListMutation.Fail(
                     "The active task-list steps are unavailable; reset the chat before saving.",
                     "task_list_active_revision_invalid", false);
-            if (!string.Equals((goal ?? string.Empty).Trim(), current.Goal,
-                    StringComparison.Ordinal))
-                return TaskListMutation.Fail(
-                    "The active task-list goal cannot change. Close it as superseded before starting a different task.",
-                    "task_list_goal_changed", false, current);
-            if (steps == null || steps.Count < current.Steps.Count ||
-                current.Steps.Where((step, index) =>
-                    !string.Equals(step.Text, steps[index] == null ? null : (steps[index].Text ?? string.Empty).Trim(),
-                        StringComparison.Ordinal)).Any())
-                return TaskListMutation.Fail(
-                    "Existing task-list steps must keep their text and order. Use action=update_statuses to change statuses, or currentTaskList to append steps; supersede the list for a different task.",
-                    "task_list_steps_changed", false, current);
             return Update(session, currentArtifact.Id,
-                BindStepIds(steps, current), beforeMutation);
+                BindStepIds(steps, current), beforeMutation, goal, reason);
         }
 
         internal TaskListMutation UpdateStatuses(ChatSession session, string goal,
@@ -55,28 +46,31 @@ namespace RNAssistant.Office.Services
             ChatTaskList current;
             var currentArtifact = FindRevision(session, null, out current);
             if (currentArtifact == null || current == null ||
-                !string.Equals(current.Status, "active", StringComparison.OrdinalIgnoreCase) ||
+                !IsOpen(current) ||
                 current.Steps == null || current.Steps.Any(step => step == null))
                 return TaskListMutation.Fail(
                     "This chat has no unambiguous active task list to update.",
                     "task_list_active_revision_invalid", false);
-            if (!string.Equals((goal ?? string.Empty).Trim(), current.Goal,
+            if (goal != null && !string.Equals(goal.Trim(), current.Goal,
                     StringComparison.Ordinal))
                 return TaskListMutation.Fail(
-                    "The active task-list goal cannot change. Use currentTaskList or close it as superseded.",
+                    "The supplied goal does not match the active task list. Use currentTaskList, or save to revise the plan.",
                     "task_list_goal_changed", false, current);
             var invalidUpdates = ValidateStatusUpdates(current, updates, true);
             if (invalidUpdates != null) return invalidUpdates;
 
             var steps = Clone(current).Steps;
             foreach (var update in updates)
+            {
                 steps[update.Index - 1].Status = NormalizeStatus(update.Status);
+                if (update.Note != null) steps[update.Index - 1].Note = update.Note;
+            }
             return Update(session, currentArtifact.Id, steps, beforeMutation);
         }
 
         internal TaskListMutation CloseActive(ChatSession session,
             string outcome, List<TaskListStatusUpdate> updates,
-            Action beforeMutation)
+            Action beforeMutation, string reason = null)
         {
             RequireSession(session);
             ChatTaskList current;
@@ -88,11 +82,11 @@ namespace RNAssistant.Office.Services
                     "task_list_not_found", false);
             }
             return Close(session, currentArtifact.Id, outcome, updates,
-                beforeMutation);
+                beforeMutation, reason);
         }
 
         private TaskListMutation Create(ChatSession session, string goal,
-            List<ChatTaskStep> steps, Action beforeMutation)
+            List<ChatTaskStep> steps, Action beforeMutation, string reason)
         {
             RequireSession(session);
             if (!string.IsNullOrWhiteSpace(session.ActiveTaskListArtifactId))
@@ -105,6 +99,7 @@ namespace RNAssistant.Office.Services
             {
                 Id = "tasks_" + Guid.NewGuid().ToString("N"),
                 Goal = goal,
+                Reason = reason,
                 Steps = steps ?? new List<ChatTaskStep>()
             };
             Validate(taskList);
@@ -115,7 +110,7 @@ namespace RNAssistant.Office.Services
         }
 
         private TaskListMutation Update(ChatSession session, string id,
-            List<ChatTaskStep> steps, Action beforeMutation)
+            List<ChatTaskStep> steps, Action beforeMutation, string goal = null, string reason = null)
         {
             RequireSession(session);
             ChatTaskList current;
@@ -127,13 +122,16 @@ namespace RNAssistant.Office.Services
             }
             if (!string.Equals(session.ActiveTaskListArtifactId, previous.Id,
                     StringComparison.OrdinalIgnoreCase) ||
-                !string.Equals(current.Status, "active",
-                    StringComparison.OrdinalIgnoreCase))
+                !IsOpen(current))
             {
                 return TaskListMutation.Fail("Task list is not active: " + id,
                     "task_list_not_active", false);
             }
             var updated = Clone(current);
+            updated.Status = "active";
+            updated.Blocker = null;
+            if (goal != null) updated.Goal = goal;
+            if (reason != null) updated.Reason = reason;
             updated.Steps = steps ?? new List<ChatTaskStep>();
             Validate(updated);
             var artifact = CreateArtifact(updated, previous,
@@ -145,7 +143,7 @@ namespace RNAssistant.Office.Services
 
         private TaskListMutation Close(ChatSession session, string id,
             string outcome, List<TaskListStatusUpdate> updates,
-            Action beforeMutation)
+            Action beforeMutation, string reason)
         {
             RequireSession(session);
             ChatTaskList selected;
@@ -165,37 +163,31 @@ namespace RNAssistant.Office.Services
             }
 
             var terminalStatus = NormalizeOutcome(outcome);
-            if (updates != null && updates.Count > 0 &&
-                terminalStatus != "completed")
-                return TaskListMutation.Fail(
-                    "Step status updates are supported only when closing as completed.",
-                    "task_list_close_updates_invalid", false, selected);
             var invalidUpdates = ValidateStatusUpdates(selected, updates, false);
             if (invalidUpdates != null) return invalidUpdates;
             var closed = Clone(selected);
             closed.Status = terminalStatus;
             foreach (var update in updates ?? new List<TaskListStatusUpdate>())
-                closed.Steps[update.Index - 1].Status = NormalizeStatus(update.Status);
-            Validate(closed);
-            if (closed.Status == "completed" && closed.Steps.Any(step =>
-                step.Status != "completed"))
             {
-                var unfinished = selected.Steps
-                    .Select((step, index) => new { step, index })
-                    .Where(item => item.step.Status != "completed")
-                    .Select(item => (item.index + 1).ToString())
-                    .ToArray();
-                return TaskListMutation.Fail(
-                    "Task list was not closed. Current unfinished 1-based step indexes: " +
-                    string.Join(", ", unfinished) +
-                    ". If each step is evidenced, include an update with status=completed for every listed index in a corrected action=close call. Otherwise finish or verify the remaining work.",
-                    "task_list_not_terminal", false, selected);
+                closed.Steps[update.Index - 1].Status = NormalizeStatus(update.Status);
+                if (update.Note != null) closed.Steps[update.Index - 1].Note = update.Note;
             }
+            closed.Blocker = null;
+            closed.Reason = terminalStatus == "blocked" ? selected.Reason : reason;
+            if (terminalStatus == "blocked")
+            {
+                if (string.IsNullOrWhiteSpace(reason))
+                    return TaskListMutation.Fail("A blocked task needs a concrete reason.",
+                        "task_list_blocker_required", false, selected);
+                closed.Blocker = reason.Trim();
+            }
+            Validate(closed);
             var artifact = CreateArtifact(closed, selectedArtifact,
                 Math.Max(1, selectedArtifact.Revision) + 1);
-            Commit(session, artifact, true, beforeMutation);
+            Commit(session, artifact, terminalStatus != "blocked", beforeMutation);
             return TaskListMutation.Ok(
-                "Task list closed: " + selected.Goal, closed, artifact, true);
+                (terminalStatus == "blocked" ? "Task blocked; unfinished steps retained: " : "Task list closed: ") + selected.Goal,
+                closed, artifact, terminalStatus != "blocked");
         }
 
         private static TaskListMutation ValidateStatusUpdates(
@@ -240,10 +232,8 @@ namespace RNAssistant.Office.Services
                 Revision = revision,
                 ParentArtifactId = parent == null ? null : parent.Id,
                 InlineText = JsonConvert.SerializeObject(taskList),
-                MetadataJson = JsonConvert.SerializeObject(new
-                {
-                    taskListId = taskList.Id,
-                    status = taskList.Status
+                MetadataJson = JsonConvert.SerializeObject(new TaskListRevisionMetadata {
+                    TaskListId = taskList.Id, Status = taskList.Status
                 })
             };
         }
@@ -323,11 +313,12 @@ namespace RNAssistant.Office.Services
                     "Task-list goal must contain 1-" + MaxGoalCharacters +
                     " characters.");
             taskList.Steps = taskList.Steps ?? new List<ChatTaskStep>();
-            if (taskList.Steps.Count < 3 || taskList.Steps.Count > MaxSteps)
+            if (taskList.Steps.Count < 1 || taskList.Steps.Count > MaxSteps)
                 throw new InvalidOperationException(
-                    "Task list must contain 3-" + MaxSteps + " steps.");
+                    "Task list must contain 1-" + MaxSteps + " steps.");
             var ids = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-            var inProgress = 0;
+            if (taskList.Reason?.Length > MaxGoalCharacters || taskList.Blocker?.Length > MaxGoalCharacters)
+                throw new InvalidOperationException("Task-list reason is too long.");
             foreach (var step in taskList.Steps)
             {
                 if (step == null)
@@ -336,7 +327,8 @@ namespace RNAssistant.Office.Services
                 step.Id = (step.Id ?? string.Empty).Trim();
                 step.Text = (step.Text ?? string.Empty).Trim();
                 step.Status = NormalizeStatus(step.Status);
-                if (step.Status == "in_progress") inProgress++;
+                if (step.Note?.Length > MaxStepCharacters)
+                    throw new InvalidOperationException("Task-list step note is too long.");
                 if (step.Id.Length == 0 || step.Id.Length > 80 ||
                     step.Id.Any(char.IsWhiteSpace))
                     throw new InvalidOperationException(
@@ -350,9 +342,6 @@ namespace RNAssistant.Office.Services
                         "Each plan step text must contain 1-" +
                         MaxStepCharacters + " characters.");
             }
-            if (inProgress > 1)
-                throw new InvalidOperationException(
-                    "A task list can have at most one in_progress step.");
         }
 
         private static string NormalizeStatus(string value)
@@ -377,32 +366,32 @@ namespace RNAssistant.Office.Services
         {
             value = (value ?? string.Empty).Trim().ToLowerInvariant();
             if (value == "completed" || value == "cancelled" ||
-                value == "superseded") return value;
+                value == "superseded" || value == "blocked") return value;
             throw new InvalidOperationException(
                 "Unknown task-list outcome: " + value);
         }
 
-        private static List<ChatTaskStep> BindStepIds(
-            IEnumerable<ChatTaskStep> requested,
+        private static List<ChatTaskStep> BindStepIds(IEnumerable<ChatTaskStep> requested,
             ChatTaskList current)
         {
             var prior = (current == null ? null : current.Steps) ??
                 new List<ChatTaskStep>();
             var result = new List<ChatTaskStep>();
-            var index = 0;
+            var unused = new List<ChatTaskStep>(prior);
             foreach (var step in requested ?? new ChatTaskStep[0])
             {
                 var text = step == null ? string.Empty : (step.Text ?? string.Empty).Trim();
-                var id = index >= prior.Count
-                    ? "step_" + Guid.NewGuid().ToString("N")
-                    : prior[index].Id;
+                // Carry progress only for the same stage, never by its old position.
+                var matches = unused.Where(item => item.Text == text).ToList();
+                var previous = matches.Count == 1 ? matches[0] : null;
+                if (previous != null) unused.Remove(previous);
                 result.Add(new ChatTaskStep
                 {
-                    Id = id,
+                    Id = previous?.Id ?? "step_" + Guid.NewGuid().ToString("N"),
                     Text = text,
-                    Status = step?.Status ?? (index < prior.Count ? prior[index].Status : null)
+                    Status = step?.Status ?? previous?.Status,
+                    Note = step?.Note ?? previous?.Note
                 });
-                index++;
             }
             return result;
         }
@@ -415,12 +404,15 @@ namespace RNAssistant.Office.Services
                 Id = value.Id,
                 Goal = value.Goal,
                 Status = value.Status,
+                Blocker = value.Blocker,
+                Reason = value.Reason,
                 Steps = (value.Steps ?? new List<ChatTaskStep>())
                     .Select(step => step == null ? null : new ChatTaskStep
                     {
                         Id = step.Id,
                         Text = step.Text,
-                        Status = step.Status
+                        Status = step.Status,
+                        Note = step.Note
                     }).ToList()
             };
         }
@@ -432,11 +424,58 @@ namespace RNAssistant.Office.Services
                     "Task-list tools require an active chat session.");
         }
 
+        internal static ChatTaskList Active(ChatSession session)
+        { ChatTaskList task; return session == null || string.IsNullOrEmpty(session.ActiveTaskListArtifactId) ||
+            FindRevision(session, null, out task) == null ? null : task; }
+
+        internal static TaskListStateProjection ProjectCurrent(ChatSession session)
+        {
+            if (string.IsNullOrEmpty(session?.ActiveTaskListArtifactId)) return null;
+            var task = Active(session);
+            return Project(task);
+        }
+
+        internal static TaskListStateProjection Project(ChatTaskList task)
+        {
+            return new TaskListStateProjection
+            {
+                Available = task != null, Goal = task?.Goal, Status = task?.Status,
+                Blocker = task?.Blocker, Reason = task?.Reason,
+                Steps = task?.Steps?.Select((step, index) => new TaskStepProjection
+                {
+                    Index = index + 1, Text = step.Text, Status = step.Status, Note = step.Note
+                }).ToList()
+            };
+        }
+
         private sealed class TaskListRevision
         {
             internal ChatArtifact Artifact { get; set; }
             internal ChatTaskList TaskList { get; set; }
         }
+    }
+
+    internal sealed class TaskListStateProjection
+    {
+        [JsonProperty("available")] public bool Available { get; set; }
+        [JsonProperty("goal")] public string Goal { get; set; }
+        [JsonProperty("status")] public string Status { get; set; }
+        [JsonProperty("blocker")] public string Blocker { get; set; }
+        [JsonProperty("statusSource")] public string StatusSource { get { return "agent_assessment"; } }
+        [JsonProperty("reason")] public string Reason { get; set; }
+        [JsonProperty("steps")] public List<TaskStepProjection> Steps { get; set; }
+    }
+    internal sealed class TaskStepProjection
+    {
+        [JsonProperty("index")] public int Index { get; set; }
+        [JsonProperty("text")] public string Text { get; set; }
+        [JsonProperty("status")] public string Status { get; set; }
+        [JsonProperty("note", NullValueHandling = NullValueHandling.Ignore)] public string Note { get; set; }
+    }
+    internal sealed class TaskListRevisionMetadata
+    {
+        [JsonProperty("taskListId")] public string TaskListId { get; set; }
+        [JsonProperty("status")] public string Status { get; set; }
     }
 
     internal sealed class TaskListStatusUpdate
@@ -446,6 +485,9 @@ namespace RNAssistant.Office.Services
 
         [JsonProperty("status")]
         public string Status { get; set; }
+
+        [JsonProperty("note", NullValueHandling = NullValueHandling.Ignore)]
+        public string Note { get; set; }
     }
 
     internal sealed class TaskListMutation

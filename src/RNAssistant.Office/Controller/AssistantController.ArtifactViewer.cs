@@ -49,7 +49,7 @@ namespace RNAssistant.Office
                 artifact => RunChangesService.ReadRetainedSource(session, artifact, _chatStore.LoadArtifactBody, _toolExecutor.ResourceGateway),
                 query => _vbaJournalStore.QueryMutations(session.Host, session.DocumentKey, query),
                 id => _vbaJournalStore.GetMutationDetail(session.Host, session.DocumentKey, id, RunChangesService.MaximumSourceCharacters));
-            return new ToolResultPresentationService(call => changes.Read(session, request.RunId, call))
+            return new ToolResultPresentationService(call => changes.Read(session, request.RunId, call), _toolExecutor.Payloads)
                 .Read(session, request.RunId, request.ToolCallId);
         }
 
