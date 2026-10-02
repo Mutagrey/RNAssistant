@@ -578,6 +578,13 @@ HTML vendor globals исполняются только в sandbox HTML workspac
 экспериментальный `executor=js` Jint worker. Пользовательский JS tool остаётся
 отдельным подтверждённым Tool Library package с собственным read-only contract.
 
+Переиспользуемые JS/CSS/HTML файлы находятся в локальном каталоге HTML assets
+([контракт](artifact-library.md#reusable-local-html-assets--2026-10-02)):
+`common.html_assets_list` читает компактные метаданные по запросу, import копирует
+выбранный пакет в workspace, publish сохраняет новую версию. Это исходники
+страницы, не новые исполняемые инструменты агента; список пакетов не добавляется
+в обычный контекст модели.
+
 Повторные операции контролируются typed `ToolExecutionProgress`/recovery в kernel,
 исторический результат — `CompletedToolOperation`, отсутствие/устаревание тела —
 `ResourceObservationNotice`. Внешний Tool Result v1 не меняется. Complete core skill

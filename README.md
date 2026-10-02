@@ -311,7 +311,7 @@ rules are documented in the
 
 ## HTML Workspace
 
-The HTML tab is tied to the active chat session. Agent-created HTML pages are stored with the chat, not inside the Office document.
+The HTML tab shows the selected chat's workspace; its authored revisions belong to the bound document.
 There is no separate HTML mode: Agent chooses the workspace from the request and available tools when a visual artifact materially improves the result.
 Agent mode and document-independent local tools remain usable when that chat's Office document is closed. Office reads, writes, VBA actions, and Office-backed HTML bindings become available again only after the bound document is opened.
 
@@ -322,6 +322,7 @@ Agent mode and document-independent local tools remain usable when that chat's O
 - Use `common.html_data_bind` with a semantic target returned by resource discovery. The runtime owns the canonical resource reference, view, and exact/head binding policy.
 - Use `common.html_data_refresh` to resolve current head-bound sources and `common.html_data_freeze` to pin one binding to an exact revision.
 - Use `common.html_workspace_delete` with the exact file path or data-source name. Deletions remain recoverable through workspace history.
+- Reuse local JS/CSS/HTML from `%AppData%\RNAssistant\assets\<id>\<version>\manifest.json`: `common.html_assets_list` discovers packages on demand, `common.html_assets_import` copies a listed package into the current workspace, and `common.html_assets_publish` saves selected workspace files as a new package version. See the [asset contract and manifest example](docs/artifact-library.md#reusable-local-html-assets--2026-10-02).
 - The runtime selects the displayed HTML entry when files are written or restored; there is no model-facing set-active or inspect tool.
 - Every workspace mutation also records an immutable chat artifact revision. Full revision bodies are addressed by SHA-256 in the shared CAS; editing or forking from an older message activates the exact existing revision instead of duplicating it.
 - Undo/redo history is bounded by item count and stored content size. UI responses carry only snapshot ids/labels/timestamps; Agent reads return a manifest or one targeted current item, never history bodies.

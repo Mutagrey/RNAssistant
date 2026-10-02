@@ -21,6 +21,7 @@ namespace RNAssistant.Office.Services
     {
         private static readonly IResourceMutationDomain[] Domains = {
             new VbaResourceMutationDomain(), new CatalogResourceMutationDomain(),
+            new LocalHtmlAssetMutationDomain(),
             new ResourceDefinitionMutationDomain(),
             new ConversationResourceMutationDomain(), new OfficeResourceMutationDomain() };
 
@@ -30,6 +31,8 @@ namespace RNAssistant.Office.Services
         internal static ResourceAuthorityScopeId Scope(ResourceAuthorityService authority, ChatSession session, string operation)
         {
             if (IsDocumentArtifactOperation(operation)) return authority.Scope(session, true);
+            if (LocalHtmlAssetMutationDomain.OwnsOperation(operation))
+                return new ResourceAuthorityScopeId("catalog", "local");
             if (new CatalogResourceMutationDomain().Owns(operation)) return new ResourceAuthorityScopeId("catalog", "local");
             return authority.Scope(session, !new ConversationResourceMutationDomain().Owns(operation) && !ResourceDefinitionToolHandler.Owns(operation));
         }
@@ -51,6 +54,27 @@ namespace RNAssistant.Office.Services
         {
             ResourceAddress address;
             return ResourceUri.TryParse(identity.Uri, out address) ? address.Provider : string.Empty;
+        }
+    }
+
+    internal sealed class LocalHtmlAssetMutationDomain : IResourceMutationDomain
+    {
+        internal static bool OwnsOperation(string operation)
+        { return operation == HtmlWorkspaceToolCatalog.PublishAssetToolId; }
+
+        public bool Owns(string operation) { return OwnsOperation(operation); }
+
+        public IEnumerable<ResourceImpact> Impacts(ResourceAuthorityScopeId scope,
+            string operation, IDictionary<string, object> arguments,
+            ResourceAuthoritySnapshot snapshot)
+        {
+            var id = ResourceMutationDomains.Argument(arguments, "id");
+            var version = ResourceMutationDomains.Argument(arguments, "version");
+            if (string.IsNullOrWhiteSpace(id) || string.IsNullOrWhiteSpace(version))
+                throw new InvalidOperationException("Asset id and version are required.");
+            yield return new ResourceImpact(new ResourceIdentity(
+                ResourceUri.Create("catalog", "html-assets", id, version)),
+                ResourceImpactRelation.Exact);
         }
     }
 

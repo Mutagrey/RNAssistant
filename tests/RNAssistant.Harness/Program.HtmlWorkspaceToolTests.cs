@@ -26,15 +26,16 @@ namespace RNAssistant.Harness
                     var definitions = executor.GetControllerTools()
                         .Where(tool => HtmlWorkspaceToolCatalog.Owns(tool.Id))
                         .ToList();
-                    AssertEqual(7, definitions.Count,
+                    AssertEqual(10, definitions.Count,
                         "semantic HTML workspace family is registered");
                     foreach (var definition in definitions)
                     {
                         AssertTrue(definition.Policy != null,
                             definition.Id + " owns an exact typed policy");
-                        AssertEqual(ToolEffect.Write, definition.Policy.Effect,
+                        var catalogRead = definition.Id == HtmlWorkspaceToolCatalog.ListAssetsToolId;
+                        AssertEqual(catalogRead ? ToolEffect.Read : ToolEffect.Write, definition.Policy.Effect,
                             definition.Id + " effect policy");
-                        AssertEqual(ToolVerification.Tool,
+                        AssertEqual(catalogRead ? ToolVerification.None : ToolVerification.Tool,
                             definition.Policy.Verification,
                             definition.Id + " verification policy");
                         AssertEqual("agent",

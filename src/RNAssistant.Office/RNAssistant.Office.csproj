@@ -362,9 +362,11 @@
     <Compile Include="Tools\HtmlWorkspaceToolContracts.cs" />
     <Compile Include="Tools\HtmlWorkspaceToolHandler.cs" />
     <Compile Include="Tools\HtmlWorkspaceToolService.cs" />
+    <Compile Include="Tools\HtmlWorkspaceToolService.Assets.cs" />
     <Compile Include="Tools\HtmlWorkspaceToolService.DataBinding.cs" />
     <Compile Include="Tools\HtmlWorkspaceToolService.Diagnostics.cs" />
     <Compile Include="Tools\HtmlWorkspaceToolService.Source.cs" />
+    <Compile Include="Services\LocalHtmlAssetLibraryService.cs" />
     <Compile Include="Tools\TaskListToolCatalog.cs" />
     <Compile Include="Tools\TaskListToolHandler.cs" />
     <Compile Include="Tools\PlanDocumentToolCatalog.cs" />

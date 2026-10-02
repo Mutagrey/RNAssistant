@@ -66,6 +66,10 @@ are distinct from Windows/Office/WebView2 qualification.
 
 ## Test map
 
+`html assets:` covers manual package discovery, private content pinning, atomic
+create-only import, cross-workspace publish/reuse and unsafe manifest rejection.
+`html tools: native ownership` checks exact read/write policies and bindings.
+
 `model context: request schema` measures exact retained request bytes for Excel
 Agent core plus one loaded extension, and checks strict projection, direct
 `json_object` and schema-rejection fallback during repair. The optional-schema

@@ -1,9 +1,11 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Runtime.CompilerServices;
 using System.Threading;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
+using Newtonsoft.Json.Serialization;
 using RNAssistant.Core.Models;
 using RNAssistant.Core.Services;
 using RNAssistant.Core.Tools;
@@ -20,11 +22,16 @@ namespace RNAssistant.Office.Tools
         private const int MaxWorkspaceCharacters = 1500000;
 
         private readonly ResourceGatewayService _resources;
+        private readonly LocalHtmlAssetLibraryService _assets;
+        private readonly ConditionalWeakTable<ChatSession, Dictionary<string, string>>
+            _observedAssets = new ConditionalWeakTable<ChatSession, Dictionary<string, string>>();
 
-        internal HtmlWorkspaceToolService(ResourceGatewayService resources = null)
-        { _resources = resources; }
+        internal HtmlWorkspaceToolService(ResourceGatewayService resources = null,
+            LocalHtmlAssetLibraryService assets = null)
+        { _resources = resources; _assets = assets; }
 
         internal bool HasDataSourceTools { get { return _resources != null; } }
+        internal bool HasAssetLibrary { get { return _assets != null; } }
 
         internal HtmlWorkspaceToolOutcome Execute(
             string toolId,
@@ -52,7 +59,42 @@ namespace RNAssistant.Office.Tools
                             ToolFailureKind.RejectedNoEffect,
                             ToolRetryPolicy.None));
 
+                if (string.Equals(toolId,
+                    HtmlWorkspaceToolCatalog.ListAssetsToolId,
+                    StringComparison.Ordinal))
+                {
+                    if (_assets == null)
+                        throw new InvalidOperationException("Local HTML asset library is unavailable.");
+                    var page = _assets.List(
+                        ToolArgumentReader.String(arguments, "query", string.Empty),
+                        ToolArgumentReader.Int32(arguments, "limit", 10));
+                    var observed = _observedAssets.GetValue(session,
+                        _ => new Dictionary<string, string>(StringComparer.Ordinal));
+                    lock (observed)
+                        foreach (var item in page.Items)
+                            observed[item.Id + "@" + item.Version] = item.Revision;
+                    return HtmlWorkspaceToolOutcome.Ok(
+                        "Local HTML assets listed. Inspect purpose and files; import only a selected package when it helps the task.",
+                        JsonConvert.SerializeObject(page, new JsonSerializerSettings
+                        { ContractResolver = new CamelCasePropertyNamesContractResolver() }),
+                        HtmlWorkspaceEffect.None);
+                }
+
                 HtmlWorkspaceArtifactService.EnsureMutable(session);
+                if (string.Equals(toolId,
+                    HtmlWorkspaceToolCatalog.ImportAssetToolId,
+                    StringComparison.Ordinal))
+                {
+                    return WithAutomaticPreflight(session,
+                        ImportAssetPackage(session, arguments, mark),
+                        cancellationToken);
+                }
+                if (string.Equals(toolId,
+                    HtmlWorkspaceToolCatalog.PublishAssetToolId,
+                    StringComparison.Ordinal))
+                {
+                    return PublishAssetPackage(session, arguments, mark);
+                }
                 if (string.Equals(toolId,
                     HtmlWorkspaceToolCatalog.ApplyPatchToolId,
                     StringComparison.Ordinal))
@@ -177,7 +219,7 @@ namespace RNAssistant.Office.Tools
             catch (JsonException ex)
             {
                 return Failure(dispatched,
-                    "Invalid HTML workspace JSON data source: " + ex.Message,
+                    "Invalid HTML workspace JSON input: " + ex.Message,
                     "invalid_html_workspace_json", true);
             }
             catch (ResourceRequestException ex)
@@ -193,6 +235,26 @@ namespace RNAssistant.Office.Tools
             {
                 return Failure(dispatched, ex.Message,
                     "invalid_html_workspace", true);
+            }
+            catch (System.IO.IOException ex)
+            {
+                return Failure(dispatched, ex.Message,
+                    "html_asset_io_failed", true);
+            }
+            catch (UnauthorizedAccessException ex)
+            {
+                return Failure(dispatched, ex.Message,
+                    "html_asset_access_denied", false);
+            }
+            catch (System.Text.DecoderFallbackException ex)
+            {
+                return Failure(dispatched, ex.Message,
+                    "html_asset_encoding_invalid", false);
+            }
+            catch (System.Text.EncoderFallbackException ex)
+            {
+                return Failure(dispatched, ex.Message,
+                    "html_asset_encoding_invalid", false);
             }
 
             return HtmlWorkspaceToolOutcome.Error(

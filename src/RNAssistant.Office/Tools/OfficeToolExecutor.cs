@@ -146,7 +146,7 @@ namespace RNAssistant.Office.Tools
                 ? null : new OutlookToolAdapter(outlookBackend.OutlookBackend,
                     new OutlookArchiveIndexService(paths, Payloads));
             _htmlWorkspaceService = new HtmlWorkspaceToolService(
-                _resourceGateway);
+                _resourceGateway, new LocalHtmlAssetLibraryService(paths, Payloads));
             var controllerTools = new List<ToolCatalogEntry>();
             if (_vbaExecutor.HostSupportsVba())
                 RegisterControllerTools(controllerTools,

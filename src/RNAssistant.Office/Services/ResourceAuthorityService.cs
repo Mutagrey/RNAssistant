@@ -560,7 +560,9 @@ namespace RNAssistant.Office.Services
                     if (record.Evidence?.Effect == ToolEffectEvidence.VerifiedChange) _persistResources?.Invoke(_session);
                     return publication;
                 }
-                if (attempt.ScopeId.Kind == "catalog" && record.Evidence?.Effect == ToolEffectEvidence.VerifiedChange)
+                if (attempt.ScopeId.Kind == "catalog" &&
+                    attempt.Operation != RNAssistant.Office.Tools.HtmlWorkspaceToolCatalog.PublishAssetToolId &&
+                    record.Evidence?.Effect == ToolEffectEvidence.VerifiedChange)
                 {
                     if (_captureCatalog == null) throw new InvalidOperationException("Catalog publication requires its typed read-back owner.");
                     readBack.AddRange(attempt.IntendedImpacts.Select(impact => _captureCatalog(impact.Identity)));

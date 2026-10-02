@@ -451,6 +451,10 @@ namespace RNAssistant.Harness
                 "HTML authoring exposes runtime-owned dependencies");
             AssertContains(htmlAuthoring, "`XLSX` (SheetJS CE 0.20.3 full browser build)",
                 "HTML authoring advertises the offline spreadsheet reader");
+            AssertContains(htmlAuthoring, "`common.html_assets_list` only when",
+                "HTML authoring discovers reusable packages on demand");
+            AssertContains(htmlAuthoring, "`common.html_assets_publish`",
+                "HTML authoring can save explicitly requested reusable source");
             AssertContains(htmlAuthoring, "bind `view=raw`",
                 "HTML authoring connects uploaded spreadsheets to the binary resource plane");
             AssertContains(htmlAuthoring, "ResizeObserver",

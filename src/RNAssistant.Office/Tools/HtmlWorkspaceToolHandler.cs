@@ -14,7 +14,7 @@ using RuntimeResult = RNAssistant.Core.Tools.Contracts.ToolResult;
 
 namespace RNAssistant.Office.Tools
 {
-    internal sealed class HtmlWorkspaceToolHandler : IManagedMutationToolHandler
+    internal sealed class HtmlWorkspaceToolHandler : IReadOnlyToolHandler, IManagedMutationToolHandler
     {
         private readonly string _toolId;
         private readonly ChatSession _session;
@@ -49,6 +49,12 @@ namespace RNAssistant.Office.Tools
             cancellationToken.ThrowIfCancellationRequested();
             try
             {
+                if (_toolId == HtmlWorkspaceToolCatalog.ListAssetsToolId)
+                {
+                    var listed = _service.Execute(_toolId, context.Arguments,
+                        _session, context.MarkDispatchPossible, cancellationToken);
+                    return Task.FromResult(context.Complete(Project(listed)));
+                }
                 using (DocumentAccessGate.BeginOperation())
                 {
                     if (_toolId == HtmlWorkspaceToolCatalog.WriteFileToolId)
@@ -169,6 +175,7 @@ namespace RNAssistant.Office.Tools
             else result = RuntimeResult.Error(
                 outcome.Message, data, resources);
             return new ToolHandlerResult(result, Effect(outcome.Effect),
+                resourceReadBack: outcome.ReadBack,
                 recovery: outcome.Recovery);
         }
 

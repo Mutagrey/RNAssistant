@@ -1077,13 +1077,69 @@ are preview frames, never child artifacts or independently durable revisions.
   remains open. Editable project ZIP v1 still rejects binary `raw` bindings; a
   standalone HTML export includes their exact bounded byte snapshots.
 
-The shipped `web/vendor` manifest is a reviewed application dependency inventory,
-not a writable plugin directory or a filesystem scan at startup. User-authored
-HTML/CSS/JS already belongs to an HTML workspace; custom `executor=js` tools belong
-to Tool Library and its read-only worker. Neither receives execution authority
-from a file merely existing under `vendor`. A shared user asset library, if needed
-across workspaces, requires explicit import/selection and immutable exact versions;
-the bounded design decision is tracked in the stabilization backlog.
+The shipped `web/vendor-manifest.json` is a reviewed application dependency inventory,
+not a writable plugin directory or a filesystem scan at startup. Custom
+`executor=js` tools belong to Tool Library and its read-only worker; HTML assets
+do not become agent tools.
+
+### Reusable local HTML assets — 2026-10-02
+
+Owner: Artifact Library for reusable package sources; HTML workspace for imported
+copies. `%AppData%/RNAssistant/assets/<id>/<version>/manifest.json` is a user
+maintained source folder, separate from shipped `web/vendor`. The application
+creates `assets/` on first use and scans packages only when
+`common.html_assets_list` is called. No source is loaded into ordinary model
+context or executed by discovery. Broad catalog results return compact purpose,
+usage, version, file count and at most eight file names; filter by id to see all
+files. Bad packages are skipped with bounded errors. This folder is not another
+HTML workspace store or a live dependency: import copies exact text into the
+existing document-owned workspace revision/CAS; export captures those copies.
+
+Manual package example (place the listed files beside `manifest.json`):
+
+```json
+{
+  "schemaVersion": 1,
+  "id": "local-helper",
+  "version": "1.0.0",
+  "kind": "html-workspace",
+  "title": "Local helper",
+  "description": "Reusable local table interaction",
+  "usage": "After the page exists, call window.LocalHelper.attach(node, rows).",
+  "offline": true,
+  "license": "MIT",
+  "provenance": "local author",
+  "files": ["helper.js", "helper.css"]
+}
+```
+
+Current package kind admits UTF-8 classic `.js`, `.css`, `.html` and `.htm`
+files only. Paths are workspace-relative and cannot traverse, link outside the
+package or collide case-insensitively. Limits: 300 packages, 20 files per package,
+1,000,000 bytes/300,000 characters per file, 3,000,000 bytes per package,
+16,384 bytes per manifest.
+Descriptions and usage are bounded metadata, not trusted instructions or an
+offline proof. `offline: true` declares the author's intent; normal sandbox/CSP
+and static preflight still govern the page, while user-authored code must be
+reviewed before trusting its behavior. Packages must carry their own licensing
+and provenance as needed; no runtime URL download or auto-update occurs.
+
+`common.html_assets_import` accepts a package id/version already listed in the
+same chat. Runtime privately pins the observed content digest, rereads and
+validates all bytes before mutation, refuses drift and any existing destination
+path, then records one workspace revision. Neither model nor UI supplies a
+revision/guard. A fresh list is needed after restart or drift. Imported CSS and
+classic JS follow the normal all-entry injection rules; an imported HTML file
+becomes the entry only if no active HTML entry exists. File presence in the
+app-data folder alone never activates a package. `common.html_assets_publish` explicitly copies selected
+current workspace files into a new app-data package version through a staging
+directory and verifies it after publication. Existing versions are never
+overwritten. Global package publication has a separate catalog authority
+read-back; workspace import remains under the document mutation authority.
+Current scope has no package editor or UI picker; manual folder editing and the
+three Agent tools are the authoring/discovery routes. Harness `html assets:` and
+`html tools: native ownership` cover host-neutral catalog/import/publication
+contracts. Windows/WebView2 delivery qualification remains open.
 
 ViewerRegistry remains UI-only dispatch. Fetching bounded text/media and checking
 the exact revision belong to the Artifact Library owner and the shared resource

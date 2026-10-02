@@ -1,5 +1,7 @@
 using System;
 using RNAssistant.Core.Tools;
+using RNAssistant.Core.Models;
+using System.Collections.Generic;
 
 namespace RNAssistant.Office.Tools
 {
@@ -27,16 +29,19 @@ namespace RNAssistant.Office.Tools
         internal string ErrorCode { get; private set; }
         internal bool Retryable { get; private set; }
         internal ToolRecoveryContract Recovery { get; private set; }
+        internal IReadOnlyList<ResourceMutationReadBack> ReadBack { get; private set; }
 
         internal static HtmlWorkspaceToolOutcome Ok(
-            string message, string dataJson, HtmlWorkspaceEffect effect)
+            string message, string dataJson, HtmlWorkspaceEffect effect,
+            IReadOnlyList<ResourceMutationReadBack> readBack = null)
         {
             return new HtmlWorkspaceToolOutcome
             {
                 Status = HtmlWorkspaceOutcomeStatus.Ok,
                 Effect = effect,
                 Message = message ?? string.Empty,
-                DataJson = dataJson
+                DataJson = dataJson,
+                ReadBack = readBack
             };
         }
 

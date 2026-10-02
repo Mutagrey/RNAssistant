@@ -15,7 +15,9 @@ namespace RNAssistant.Office.Services
     // attempt, effect and atomic authority publication for UI and native tools.
     internal static class HtmlWorkspacePublication
     {
-        internal static bool Owns(string operation) { return operation.StartsWith("common.html_", StringComparison.Ordinal); }
+        internal static bool Owns(string operation)
+        { return operation.StartsWith("common.html_", StringComparison.Ordinal) &&
+            operation != RNAssistant.Office.Tools.HtmlWorkspaceToolCatalog.PublishAssetToolId; }
         internal static string OperationKey(ChatSession session, ToolExecutionContext context)
         {
             using (var hash = System.Security.Cryptography.SHA256.Create())

@@ -5,15 +5,19 @@
 # 2026-09-08: document Markdown save/restore added; existing property/mode reviews retained, delivered descriptor/binding identities refreshed.
 # 2026-09-29: inventory reflects the default-off Agent JavaScript setting; enabled JS contracts are covered by focused JS tests.
 # 2026-09-30: reviewed Plan startNew/Agent admission, resource-find guidance, VBA patch and Excel search descriptions, and default-off tool authoring fields.
+# 2026-10-02: reviewed on-demand local HTML asset catalog/import/publish; package id is a user-chosen semantic name, while the content revision remains runtime-only.
 common.capabilities_read	Excel,Outlook,PowerPoint,Word	agent,plan	capabilities.read.intent.v1	83a5377df41216258264626ccd93d35427348bde31354a064bb27ff1355be73f	action,id,referencePath	id=semantic-capability-identity
 common.capabilities_search	Excel,Outlook,PowerPoint,Word	agent,plan	capabilities.search.intent.v1	7e647d1a4ae13887d52348b154210db01e9dd818346404a316105e88d68b5e48	kind,query	-
-common.html_data_bind	Excel,Outlook,PowerPoint,Word	agent	html.data.bind.v2	6858152cb3512b4d036896cf0f0df01760ad4ebe48ca67bf162872121bf04364	name,pageIndex,path,policy,target,view	-
+common.html_assets_import	Excel,Outlook,PowerPoint,Word	agent	html.assets.import.v2	2ce47af84f2c7bb2a919bfdbbcbb88e5df88707726d898dd616b2679a19289e2	id,version	id=semantic-user-package-name
+common.html_assets_list	Excel,Outlook,PowerPoint,Word	agent	html.assets.list.v2	111262a74ed01ea92653c2904399ee8d20c5a42489be0c58dc9cfd0e9f24f200	limit,query	-
+common.html_assets_publish	Excel,Outlook,PowerPoint,Word	agent	html.assets.publish.v2	3cc79da54635a071ed66a39e1cf7f71be9e9c1201798acc45356ad4b5d07bf61	description,files,id,license,provenance,title,usage,version	id=semantic-user-package-name
+common.html_data_bind	Excel,Outlook,PowerPoint,Word	agent	html.data.bind.v2	4aa48726c29fb4283ba97a2d27cb69458919e9a99d509f6c97be75a2b06bf8ac	name,pageIndex,path,policy,target,view	-
 common.html_data_freeze	Excel,Outlook,PowerPoint,Word	agent	html.data.freeze.v2	d8a3c55874fef73de5fa0e724c2f468c01b792a3d02c4b17655f8421eb902133	name	-
 common.html_data_refresh	Excel,Outlook,PowerPoint,Word	agent	html.data.refresh.v2	8de83e7cb3b8a37b32fb7e48fa978b26f3c249b5d155c10796013f2aa8e9a4a2	name	-
 common.html_data_write	Excel,Outlook,PowerPoint,Word	agent	html.data.write.v2	9988fb78351c113b34423f65adcb6a7310979200a9ea558f5fd9ef4b3058abfc	json,name	-
 common.html_workspace_apply_patch	Excel,Outlook,PowerPoint,Word	agent	html.workspace.apply.patch.v2	61fbb8be7006efd11728272be60d0c70a43f6cc030ed1d960c31d577a6c82320	patch,patch[].find,patch[].op,patch[].text,path	-
 common.html_workspace_delete	Excel,Outlook,PowerPoint,Word	agent	html.workspace.delete.v2	940955ecdfe292487031f5d8dcf248567399df6855aee77d3b794ed90d154235	target	-
-common.html_workspace_write_file	Excel,Outlook,PowerPoint,Word	agent	html.workspace.write.file.v2	4a13058a0534f48448b6323dabd6bbcb1d802041635c35f57117307d0f838ada	content,path	-
+common.html_workspace_write_file	Excel,Outlook,PowerPoint,Word	agent	html.workspace.write.file.v2	1a0a24bd13a3bf800004e0210f72563680860508e60a43c3b2fe2c61bc55a83a	content,path	-
 common.markdown_restore	Excel,Outlook,PowerPoint,Word	agent	common.markdown_restore.intent.v1	cea756e327c6fd2ec3673e6325095556e69d82f748916208337d48e34a6746ef	target,version	-
 common.markdown_save	Excel,Outlook,PowerPoint,Word	agent	common.markdown_save.intent.v1	3ce198ddecf14b47c81eb0243880d0d693c1c8098ce0fded102cc92092602324	description,markdown,target,title	-
 common.office_run_macro	Excel,PowerPoint,Word	agent	vba.public.office.run.macro.intent.v2	785bb35acd18fb394c35ffed344318d4eafe0745595175d8313b8551c0b7dee4	arguments,macroName	-
