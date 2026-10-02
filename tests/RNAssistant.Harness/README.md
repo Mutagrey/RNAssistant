@@ -60,6 +60,11 @@ are distinct from Windows/Office/WebView2 qualification.
 
 ## Test map
 
+`model context: request schema` measures exact retained request bytes for Excel
+Agent core plus one loaded extension, and checks strict projection, direct
+`json_object` and schema-rejection fallback during repair. The optional-schema
+admission test checks the production model-loop projection.
+
 `agent continuity:` checks retained read counts above the 8192/32768-character UI
 thresholds after save/reload, exact CAS preview and missing bodies; revised plan
 state and explanations after persistence/compaction; native open/blocked finals

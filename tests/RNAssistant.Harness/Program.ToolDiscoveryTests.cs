@@ -580,6 +580,9 @@ namespace RNAssistant.Harness
                     .ToList();
                 AssertTrue(loadedCallableNames.Contains(optionalId, StringComparer.OrdinalIgnoreCase),
                     "strict response schema includes exact loaded tool as a callable name");
+                AssertTrue(requests[2][0].Content.IndexOf("\"parameters\"", StringComparison.Ordinal) < 0 &&
+                    requests[2][0].Content.Contains("\"safety\""),
+                    "strict wire prompt keeps callable metadata while response schema carries arguments");
                 AssertContains(FlattenSimple(requests[1]), "Tool schema is not loaded: " + optionalId,
                     "local parser distinguishes an unloaded known tool during repair");
                 AssertContains(FlattenSimple(requests[1]), "common.capabilities_read",

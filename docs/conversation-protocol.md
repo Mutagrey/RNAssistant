@@ -323,6 +323,33 @@ Strict response schemas require every object property to appear. Properties that
 
 When `FallbackToJsonObject` is enabled and the endpoint explicitly rejects `json_schema`, ModelProtocol retries once with `json_object`, including during format repair, and keeps that choice for the rest of the run. The exact current prompt is reused and the saved selection is unchanged. This compatibility fallback has its own limit and is not model routing.
 
+For `json_schema`, the wire-only projection of the generated `RUNTIME_CONTEXT.tools`
+omits `function.parameters` after checking that every callable name and its exact
+structured argument contract matches `response_format.json_schema`. Descriptions,
+safety metadata, capability membership, document policy and the v5 envelope stay
+in the request. The accepted prompt retains full parameters: a schema-rejection
+retry and direct `json_object` mode send those same contracts without recompiling
+or changing the accepted messages. If the generated context or schema cannot be
+matched, projection is skipped. Admission still budgets the full prompt plus the
+strict schema, so this reduction does not claim extra callable capacity.
+
+Host-neutral fixture measured from the retained exact `llm.request` UTF-8 bytes:
+Excel Agent core (20 callable schemas) plus one admitted
+`common.html_workspace_write_file` extension, one short user request, no media.
+Estimated tokens use the repository's UTF-8 bytes ÷ 4 approximation, not provider
+usage. The earlier prompt preview is an estimate; these are materialized HTTP bytes.
+
+| Request part | `json_schema` before | `json_schema` after | `json_object` before/after |
+|---|---:|---:|---:|
+| `RUNTIME_CONTEXT.tools` contribution | 41,891 B / ≈10,473 tokens | 11,715 B / ≈2,929 | 41,891 B / ≈10,473 |
+| `response_format.json_schema` | 18,572 B / ≈4,643 | 18,572 B / ≈4,643 | 0 |
+| Other messages | 26,827 B / ≈6,707 | 26,827 B / ≈6,707 | 26,827 B / ≈6,707 |
+| Other request fields/wrappers | 163 B / ≈41 | 163 B / ≈41 | 148 B / ≈37 |
+| **Full request** | **87,453 B / ≈21,864** | **57,277 B / ≈14,320** | **68,866 B / ≈17,217** |
+
+The strict request saves 30,176 B (≈7,544 estimated tokens) on this fixture.
+Live target-model and Windows/Office delivery checks remain open.
+
 Tool call (target copied from current runtime context or resource discovery):
 
 ```json

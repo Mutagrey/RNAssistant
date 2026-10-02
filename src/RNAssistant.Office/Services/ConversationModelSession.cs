@@ -147,6 +147,8 @@ namespace RNAssistant.Office.Services
                 AcceptedMessages = _lastSnapshot.Messages,
                 ContextSnapshot = snapshot,
                 CompileRepair = notice => _compiler.CompileRepair(snapshot, notice),
+                ProjectJsonSchemaMessages = messages => ConversationPromptComposer.ProjectJsonSchemaMessages(
+                    messages, activeTools, options.ResponseSchemaJson),
                 CallableTools = activeTools,
                 RunnableCatalog = _runnableCatalog,
                 CallContext = callContext,

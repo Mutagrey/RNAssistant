@@ -50,6 +50,16 @@ records it directly and reviews the signed release payload before finalization.
 
 ## Implementation log — includes current in-flight work and earlier entries
 
+Model request schema duplication (2026-10-02): the exact model-context inspector
+confirmed material repetition on a 20-schema Excel Agent core plus one loaded
+extension. A wire-only strict-mode projection removes repeated parameter schemas
+from `RUNTIME_CONTEXT.tools` while the accepted prompt retains them for identical
+`json_object` fallback; the strict response schema and local argument validation
+remain exact. Full fixture request fell from 87,453 to 57,277 UTF-8 bytes (about
+7,544 estimated tokens). Focused host-neutral mode, repair/fallback, admission and
+inspector checks pass. Live target-model and Windows/Office evidence remains open;
+see [model response contract](../conversation-protocol.md#model-response).
+
 Artifact catalog and transfer (2026-10-02): the Artifacts tab exposes chat/document/
 all-local-document scopes with full-pane discovery and isolated preview. Explicit
 HTML project packages and original/Markdown/JSON import/export support independent

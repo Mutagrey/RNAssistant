@@ -59,9 +59,14 @@ namespace RNAssistant.Core.ModelProtocol
                         attemptMessages = request.CompileRepair(CreateFormatRepairMessage(lastError, attempt, budget.ProtocolAttemptLimit));
                     }
                     LlmCompletionResult completion;
+                    IReadOnlyList<ChatMessage> wireMessages;
                     while (true)
                     {
                         cancellationToken.ThrowIfCancellationRequested();
+                        wireMessages = string.Equals(options.ResponseFormat, LlmResponseFormats.JsonSchema,
+                            StringComparison.Ordinal) && request.ProjectJsonSchemaMessages != null
+                            ? request.ProjectJsonSchemaMessages(attemptMessages)
+                            : attemptMessages;
                         string budgetError;
                         var repairReserve = lastError == null
                             ? EstimateFormatRepairOverheadTokens(settings)
@@ -76,7 +81,7 @@ namespace RNAssistant.Core.ModelProtocol
                             return BudgetFailure(budgetError, contextUsage);
                         try
                         {
-                            completion = await CompleteAsync(settings, attemptMessages, options, progress, cancellationToken).ConfigureAwait(false);
+                            completion = await CompleteAsync(settings, wireMessages, options, progress, cancellationToken).ConfigureAwait(false);
                             break;
                         }
                         catch (LlmRequestException ex) when (
@@ -102,7 +107,7 @@ namespace RNAssistant.Core.ModelProtocol
                     }
 
                     var sourceModelAttemptId = options.TraceModelAttemptId;
-                    contextUsage = ContextUsageEstimator.FromPrompt(attemptMessages, settings, completion.PromptTokens,
+                    contextUsage = ContextUsageEstimator.FromPrompt(wireMessages, settings, completion.PromptTokens,
                         options, completion.CompletionTokens, completion.TotalTokens);
                     if (!string.IsNullOrWhiteSpace(completion.RefusalContent))
                     {

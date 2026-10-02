@@ -25,6 +25,8 @@ namespace RNAssistant.Core.ModelProtocol
         public IReadOnlyList<ChatMessage> AcceptedMessages { get; set; }
         public ModelContextSnapshot ContextSnapshot { get; set; }
         public Func<ChatMessage, IReadOnlyList<ChatMessage>> CompileRepair { get; set; }
+        // Optional wire-only projection. AcceptedMessages remain the full prompt for json_object fallback.
+        public Func<IReadOnlyList<ChatMessage>, IReadOnlyList<ChatMessage>> ProjectJsonSchemaMessages { get; set; }
         public IReadOnlyList<ToolCatalogEntry> CallableTools { get; set; }
         public IReadOnlyList<ToolCatalogEntry> RunnableCatalog { get; set; }
         // Required before raw dispatch, supplied by local execution authority.

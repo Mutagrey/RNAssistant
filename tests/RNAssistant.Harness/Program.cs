@@ -359,6 +359,8 @@ namespace RNAssistant.Harness
                 Test("model context: exact exchange and full payload", ModelContextExactExchange),
                 Test("model context: bound original source and pagination", ModelContextSourceAndPagination),
                 Test("model context: full preview", ModelContextFullPreview),
+                Test("model context: request schema duplication size", ModelRequestSchemaDuplicationSize),
+                Test("model context: request schema modes and fallback", ModelRequestSchemaDuplicationModesAndFallback),
                 Test("model context: compiler presentation", ModelContextCompilerPresentation),
                 Test("trajectory payload: exact bounded preview and ownership", TrajectoryPayloadExactPreview),
                 Test("trajectory payload: reservation and source failures", TrajectoryPayloadSourceFailures),

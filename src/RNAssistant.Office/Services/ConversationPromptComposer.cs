@@ -252,6 +252,63 @@ namespace RNAssistant.Office.Services
             return result;
         }
 
+        // Strict transport already carries each exact argument contract. Keep the
+        // accepted prompt intact so schema-rejection fallback can reuse it verbatim.
+        internal static IReadOnlyList<ChatMessage> ProjectJsonSchemaMessages(
+            IReadOnlyList<ChatMessage> messages, IEnumerable<ToolCatalogEntry> tools, string responseSchemaJson)
+        {
+            if (messages == null || messages.Count == 0 || string.IsNullOrWhiteSpace(responseSchemaJson))
+                return messages;
+            var source = messages[0];
+            if (source == null || source.ProtocolMessage || source.ExcludeFromModelContext ||
+                source.AttachmentAnalysis != null || !string.IsNullOrEmpty(source.ToolCallId) ||
+                (source.ResourceEvidence != null && source.ResourceEvidence.Count > 0) ||
+                (source.ContextClaims != null && source.ContextClaims.Count > 0) ||
+                (source.Attachments != null && source.Attachments.Count > 0) ||
+                (source.ToolCalls != null && source.ToolCalls.Count > 0)) return messages;
+
+            var expected = BuildTools(tools);
+            if (expected.Count == 0) return messages;
+            JObject responseSchema;
+            try { responseSchema = JObject.Parse(responseSchemaJson); }
+            catch (JsonException) { return messages; }
+            var options = responseSchema.SelectToken("properties.tool_calls.items.anyOf") as JArray;
+            if (options == null || options.Count != expected.Count) return messages;
+            for (var index = 0; index < expected.Count; index++)
+            {
+                var parameters = expected[index].SelectToken("function.parameters") as JObject;
+                if (parameters == null ||
+                    !string.Equals((string)expected[index].SelectToken("function.name"),
+                        (string)options[index].SelectToken("properties.name.const"), StringComparison.Ordinal) ||
+                    !JToken.DeepEquals(ToolSchemaSupport.ForStructuredOutput(parameters),
+                        options[index].SelectToken("properties.arguments"))) return messages;
+            }
+
+            const string marker = "\n\nRUNTIME_CONTEXT:\n";
+            var content = source.Content ?? string.Empty;
+            var start = content.LastIndexOf(marker, StringComparison.Ordinal);
+            if (start < 0) return messages;
+            start += marker.Length;
+            var end = content.IndexOf("\n\nUSER_REQUEST:\n", start, StringComparison.Ordinal);
+            if (end < 0) end = content.Length;
+            JObject context;
+            try { context = JObject.Parse(content.Substring(start, end - start)); }
+            catch (JsonException) { return messages; }
+            if (!JToken.DeepEquals(context["tools"], expected)) return messages;
+            foreach (var descriptor in ((JArray)context["tools"]).OfType<JObject>())
+                ((JObject)descriptor["function"]).Remove("parameters");
+            var projected = content.Substring(0, start) + context.ToString(Formatting.None) + content.Substring(end);
+            if (projected.Length >= content.Length) return messages;
+            var copy = new ChatMessage
+            {
+                Id = source.Id, Role = source.Role, Content = projected,
+                CreatedUtc = source.CreatedUtc, RunId = source.RunId, Sequence = source.Sequence
+            };
+            var result = messages.ToArray();
+            result[0] = copy;
+            return result;
+        }
+
         internal static JObject BuildTool(ToolCatalogEntry tool)
         {
             if (tool == null || string.IsNullOrWhiteSpace(tool.Id)) return null;

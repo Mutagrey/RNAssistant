@@ -144,18 +144,6 @@ association into typed artifact/message ids before removing those refs. Check
 the exact artifact cards and compare response size on the affected Windows chat
 before assigning this duplication as a main stall.
 
-## Model request schema duplication — 2026-09-29
-
-Owner: conversation prompt / ModelProtocol. In `json_schema` mode,
-`RUNTIME_CONTEXT.tools` includes full callable parameter schemas while
-`response_format.json_schema` includes the current callable argument contracts
-again. Measure each part of the retained materialized request on the affected
-chat before reducing it. Any prompt reduction must keep `json_object` and the
-one-time schema-rejection fallback usable with the same accepted prompt, retain
-exact callable authority, and pass focused prompt/schema plus target-model checks.
-The v5 response envelope itself is already limited to `message`, `final` and
-`tool_calls`; do not add a second wire format to save bytes.
-
 ## Structural debt
 
 Рефакторинг начинается только вместе с конкретным изменением, которое он упрощает.
