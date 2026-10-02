@@ -104,10 +104,12 @@ results and then checks the complete request budget. The durable event stream ke
 original calls/results; filtering never deletes them. Search results are bounded
 discovery metadata/snippets, not proof that the underlying body was read.
 
-- Optional tool schemas remain callable for the logical user turn, including
-  confirmation and compaction, through durable admission events. A new user turn
-  begins with its finite core and can require fresh optional admission. The current
-  `schemaLoaded` catalog flag and complete callable schemas are authoritative.
+- Optional tool schemas remain callable through durable admission events. A later
+  turn in the same chat reuses unchanged exact schemas when the prior capability
+  read remains in chat history and the complete request fits its budget. Edited or
+  cleared history, changed schemas, host/mode drift, or insufficient budget fall
+  back to the finite core; budget fallback is explicit in the model request. The
+  current `schemaLoaded` flag and complete callable schemas are authoritative.
 - Skill bodies remain ordinary complete capability-read evidence in history/CAS,
   with `loaded`, `complete` and `bodyMarkdown`. There is no separate persistent
   "skill loaded" flag. A still-current complete read remains usable; compaction
@@ -1115,6 +1117,12 @@ Owner: Conversation/model context; совместные границы — Core 
   recency детерминирован; второй durable store не создаётся. Media не переигрывается
   как якобы доставленное изображение. Current Task List/Plan остаются у существующих
   владельцев, не копируются в новый store.
+- Дополнительные схемы инструментов из предыдущего turn того же чата
+  восстанавливаются из сохранённых admission events при точном совпадении
+  descriptor/profile и сохранённом read frame. При нехватке бюджета новый turn
+  явно начинает с core; редактирование/очистка истории не возвращает удалённые
+  admissions. Скиллы и ресурсные тела проходят отдельную проверку актуальности
+  и размера, поэтому сам факт старого чтения не обещает их присутствия.
 - Exact resource dependencies определяют актуальность claims. Добавление unrelated
   callable tool больше не аннулирует все факты. Checkpoint schema `context-claims-v5`
   явно пропускает старые несовместимые checkpoints. Capability notices сохраняются
@@ -1177,7 +1185,7 @@ UI, durable history и отправленный запрос — разные п
 | Что | Где хранится сейчас | Что получает модель / где теряется |
 |---|---|---|
 | Вызовы и результаты | Append-only events; большие тела в CAS | Активное окно и выбранная проекция. Исходный журнал не удаляется при сжатии |
-| Схемы инструментов | Каталог и durable admission events текущего logical turn | Полный callable pack восстанавливается после сжатия/confirmation. Новый пользовательский turn начинает с core; повторное admission тогда допустимо |
+| Схемы инструментов | Каталог и durable admission events текущего logical turn | На момент исходного аудита pack восстанавливался после сжатия/confirmation, а новый turn начинал с core. Исправленный cross-turn контракт описан выше |
 | Скиллы | Версионированный каталог; `capabilities_read` body в истории/CAS | Отдельного активного working set скиллов нет. Полное тело может уйти при сжатии; schema admission его не возвращает. В каталоге есть `schemaLoaded` для tools, но нет факта включения skill body в этот запрос |
 | Прочитанные данные | Evidence с revision/coverage и payload; результаты поиска отдельно | Архивный перенос удерживает complete whole `text/source` из resource reads и подтверждённых мутаций. Skill capability reads, табличные фрагменты, structure и search не получают такого же переноса |
 | Выполненная операция | Runtime call/effect IDs, terminal result и журнал мутаций | `tool_call_id` есть в Tool Result и теперь в folded frame, но folding теряет typed action metadata перед compaction |

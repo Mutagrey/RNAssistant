@@ -57,7 +57,7 @@ namespace RNAssistant.Office
                 skills = publishedSkills.Skills;
             }
 
-            Func<PromptContextInspectorResponse> capture = () => new PromptContextInspectorService(_adapter, _paths, _toolExecutor.ResourceAuthority, _toolExecutor.Payloads).Inspect(
+            Func<PromptContextInspectorResponse> capture = () => new PromptContextInspectorService(_adapter, _paths, _toolExecutor.ResourceAuthority, _toolExecutor.Payloads, _eventStore).Inspect(
                 session,
                 LoadContext(session),
                 settings,

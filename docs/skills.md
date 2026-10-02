@@ -160,8 +160,8 @@ empty built-ins and prevents retired `TOOL_RESULT ok=true` guidance from returni
 - A core read returns complete revision-matched Markdown and reference metadata. A
   needed reference is read separately in bounded chunks through the same tool.
 - Reading a skill does not activate a router, load tool schemas, add callable tools
-  or weaken confirmation/safety policy. Compaction, lost complete evidence or a
-  catalog revision mismatch requires another exact read.
+  or weaken confirmation/safety policy. Lost complete evidence or a catalog
+  revision mismatch requires another exact read; compaction alone does not.
 - Complete skill results are retained in the normal history/CAS path, not a second
   loaded-skill store. Re-reading the same publication must not mark the earlier
   successful read stale. See [context retention](conversation-protocol.md#conversation-context).
@@ -260,7 +260,10 @@ dialog behavior remains a Windows WebView2 qualification gate.
 Core bodies use Gateway whole-read assembly, including bodies larger than one
 provider page. The bounded context working set restores complete current skill
 results and needed reference coverage from saved events/CAS. Compaction alone is
-not a reason to load a skill or admit an already callable schema again. Body
+not a reason to load a skill or admit an already callable schema again. A new user
+turn reuses a complete current skill body when it is included in that request;
+unchanged optional tool schemas can carry across turns of the same chat when their
+exact admission remains valid and fits the request budget. Body
 omission/staleness is distinct from the historical successful load. Prompt schema
 33 originally required manual review; schema 35 replaces that flow with automatic
 default migration and a recovery copy before the next settings save.

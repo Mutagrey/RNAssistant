@@ -9,6 +9,7 @@ using Newtonsoft.Json.Linq;
 using RNAssistant.Core.Llm;
 using RNAssistant.Core.ModelProtocol;
 using RNAssistant.Core.Models;
+using RNAssistant.Core.Persistence;
 using RNAssistant.Core.Services;
 using RNAssistant.Core.Storage;
 using RNAssistant.Office.Contracts;
@@ -28,24 +29,27 @@ namespace RNAssistant.Office.Services
         private readonly AppSettings _estimationSettings;
         private readonly ResourceAuthorityService _authority;
         private readonly ChatBlobStore _payloads;
+        private readonly IEventStore _eventStore;
         private ModelAuthoritySnapshot _frozen;
         private ContextReceipt _receipt;
 
         public PromptContextInspectorService(IOfficeApplicationAdapter adapter, AppDataPaths paths,
-            ResourceAuthorityService authority = null, ChatBlobStore payloads = null)
-            : this(adapter, paths, null, authority, payloads)
+            ResourceAuthorityService authority = null, ChatBlobStore payloads = null, IEventStore eventStore = null)
+            : this(adapter, paths, null, authority, payloads, eventStore)
         {
         }
 
         private PromptContextInspectorService(
             IOfficeApplicationAdapter adapter,
             AppDataPaths paths,
-            AppSettings estimationSettings, ResourceAuthorityService authority, ChatBlobStore payloads)
+            AppSettings estimationSettings, ResourceAuthorityService authority, ChatBlobStore payloads,
+            IEventStore eventStore)
         {
             _adapter = adapter;
             _paths = paths;
             _estimationSettings = estimationSettings;
             _payloads = payloads ?? new ChatBlobStore(paths);
+            _eventStore = eventStore;
             var store = authority == null ? new ResourceAuthorityStore(paths) : null;
             _authority = authority ?? new ResourceAuthorityService(store, store, new ResourceMutationJournal(paths), _payloads);
         }
@@ -62,7 +66,8 @@ namespace RNAssistant.Office.Services
             SkillCatalogSnapshot publishedSkills = null, bool fullRaw = false)
         {
             settings = settings ?? new AppSettings();
-            var inspection = new PromptContextInspectorService(_adapter, _paths, settings, _authority, _payloads);
+            var inspection = new PromptContextInspectorService(_adapter, _paths, settings, _authority, _payloads,
+                _eventStore);
             return inspection.InspectCore(
                 session,
                 context,
@@ -109,7 +114,8 @@ namespace RNAssistant.Office.Services
                 mode,
                 _adapter == null ? string.Empty : _adapter.HostName,
                 null,
-                runnableCatalog);
+                runnableCatalog,
+                _eventStore == null ? null : new ToolPackAdmissionJournal(_eventStore, session).ReadAccepted());
             var runnableTools = toolPack.Tools;
             var evidence = previewSession.Messages.SelectMany(message => message.ResourceEvidence ?? new List<ResourceEvidence>())
                 .Concat(previewSession.Messages.SelectMany(message => message.ContextClaims ?? new List<StructuredContextClaim>()).SelectMany(claim => claim.Evidence))

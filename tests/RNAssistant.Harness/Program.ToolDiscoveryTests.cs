@@ -1301,7 +1301,7 @@ namespace RNAssistant.Harness
             });
         }
 
-        private static void ToolPackAdmissionReplaysByLogicalTurn()
+        private static void ToolPackAdmissionReplaysAcrossChatTurns()
         {
             WithTempExecutor(FakeOfficeAdapter.ForHost("Excel"), delegate(OfficeToolExecutor executor, FakeOfficeAdapter adapter)
             {
@@ -1412,9 +1412,32 @@ namespace RNAssistant.Harness
                     NewContext(adapter), settings, catalog, null, null, false, null,
                     CancellationToken.None).GetAwaiter().GetResult())
                 {
-                    AssertTrue(!nextTurn.CreateRequest("next-step", new ModelProtocolCallContext(new string[0]))
+                    var request = nextTurn.CreateRequest("next-step", new ModelProtocolCallContext(new string[0]));
+                    AssertEqual(2, request.CallableTools.Count(tool => tool.Id == optional.Id || tool.Id == secondOptional.Id),
+                        "unchanged exact admissions remain callable in the next chat turn");
+                    AssertContains(FlattenSimple(request.AcceptedMessages), "\"schemaLoaded\":true",
+                        "current capability metadata reflects carried callable schemas");
+                }
+                var inspected = new PromptContextInspectorService(adapter, FixturePaths.Value,
+                    executor.ResourceAuthority, executor.Payloads, EventStore(store)).Inspect(reloaded,
+                    NewContext(adapter), settings, catalog, new SkillDefinition[0], new ChatAttachment[0],
+                    "Start another turn.", false);
+                AssertEqual(2, inspected.Sections.Single(section => section.Id == "tools").Items
+                    .Count(item => item.Id == optional.Id || item.Id == secondOptional.Id),
+                    "context inspector shows the same carried callable schemas");
+
+                var edited = new ChatStore(FixturePaths.Value).Load(session.Host, session.DocumentKey, session.Id);
+                edited.Messages.Clear();
+                edited.LastRun = new ChatRunRecord { RunId = "edited-run", TurnId = "edited-turn" };
+                using (var afterEdit = ConversationModelSession.CreateAsync(adapter, null,
+                    new AttachmentAnalysisService((s, m, o, u, c) => Task.FromResult(new LlmCompletionResult())),
+                    EventStore(new ChatStore(FixturePaths.Value)), ChatModes.Agent, "Rewritten history.", edited,
+                    NewContext(adapter), settings, catalog, null, null, false, null,
+                    CancellationToken.None).GetAwaiter().GetResult())
+                {
+                    AssertTrue(!afterEdit.CreateRequest("edited-step", new ModelProtocolCallContext(new string[0]))
                             .CallableTools.Any(tool => tool.Id == optional.Id || tool.Id == secondOptional.Id),
-                        "raw schema history cannot cross a turn without a matching admission event");
+                        "removed capability reads do not resurrect admissions after history edit");
                 }
 
                 reloaded.LastRun.RunId = "changed-run";
@@ -1463,6 +1486,66 @@ namespace RNAssistant.Harness
             });
         }
 
+        private static void ToolPackCarryoverFallsBackWithinBudget()
+        {
+            WithTempExecutor(FakeOfficeAdapter.ForHost("Excel"), delegate(OfficeToolExecutor executor, FakeOfficeAdapter adapter)
+            {
+                var values = new JArray(Enumerable.Range(0, 350)
+                    .Select(value => "value_" + value + "_" + new string('x', 12)));
+                var optional = new ToolCatalogEntry {
+                    Id = "fixture.carried_large", Host = "Excel", Name = "Large carried schema",
+                    Description = "Budget fallback fixture.", BuiltIn = true, Enabled = true, AgentCanRun = true,
+                    ArgumentSchemaJson = new JObject {
+                        ["type"] = "object",
+                        ["properties"] = new JObject { ["value"] = new JObject {
+                            ["type"] = "string", ["description"] = "Bounded value.",
+                            ["enum"] = values.DeepClone() } },
+                        ["required"] = new JArray(), ["additionalProperties"] = false
+                    }.ToString(Newtonsoft.Json.Formatting.None),
+                    Policy = OptionalFixturePolicy(), Binding = OptionalFixtureBinding()
+                };
+                var catalog = ConversationRunService.PrepareToolsForRun(
+                    executor.GetControllerTools().Where(tool => tool.Id == CapabilityToolCatalog.ReadToolId)
+                        .Concat(new[] { optional }));
+                AssertTrue(catalog.Any(tool => tool.Id == optional.Id), "large optional descriptor remains runnable");
+                CapabilityCatalogService.BindReadSchema(catalog, null);
+                var session = NewSession(adapter);
+                session.LastRun = new ChatRunRecord { RunId = "large-run", TurnId = "large-turn" };
+                var read = ReadSchemaEvidence(executor, catalog, optional.Id, "large-read");
+                read.RunId = session.LastRun.RunId;
+                read.ExcludeFromModelContext = true;
+                session.Messages.Add(read);
+                var store = new ChatStore(FixturePaths.Value);
+                store.Save(session);
+                var pack = CallableToolPack.Create(ChatModes.Agent, adapter.HostName, session.LastRun.RunId, catalog);
+                AssertTrue(pack.StageReadResult(read), "exact descriptor stages before carryover");
+                var admission = pack.PreparePending((tools, state) => true);
+                new ToolPackAdmissionJournal(EventStore(store), session).Append(admission, "large-admission");
+                pack.Publish(admission);
+
+                session.LastRun = new ChatRunRecord { RunId = "small-run", TurnId = "small-turn" };
+                var settings = new AppSettings { AgentResponseMode = AgentResponseModes.JsonSchema,
+                    ContextWindowOverrideTokens = 12000, MaxTokens = 512, AutoCompressContext = false };
+                using (var next = ConversationModelSession.CreateAsync(adapter, null,
+                    new AttachmentAnalysisService((s, m, o, u, c) => Task.FromResult(new LlmCompletionResult())),
+                    EventStore(store), ChatModes.Agent, "Use the small context.", session,
+                    NewContext(adapter), settings, catalog, null, null, false, null,
+                    CancellationToken.None).GetAwaiter().GetResult())
+                {
+                    var request = next.PrepareRequestAsync("small-step",
+                        new ModelProtocolCallContext(new string[0]), CancellationToken.None).GetAwaiter().GetResult();
+                    AssertTrue(!request.CallableTools.Any(tool => tool.Id == optional.Id),
+                        "oversized prior optional schema yields to the current request budget");
+                    AssertContains(FlattenSimple(request.AcceptedMessages), "tool_pack_carryover_budget",
+                        "budget fallback is explicit in the model request");
+                    next.RebindAuthority(catalog, new SkillCatalogSnapshot(null), settings, NewContext(adapter), 0);
+                    AssertTrue(!next.CreateRequest("small-step-2", new ModelProtocolCallContext(new string[0]))
+                            .CallableTools.Any(tool => tool.Id == optional.Id),
+                        "catalog rebind does not silently restore a dropped prior schema");
+                }
+            });
+        }
+
         private static ToolPolicy OptionalFixturePolicy()
         {
             return new ToolPolicy(
@@ -1487,7 +1570,7 @@ namespace RNAssistant.Harness
             var command = Command(CapabilityToolCatalog.ReadToolId, "id", toolId);
             command.ToolCallId = callId;
             var result = executor.ExecuteManual(command, catalog, new AppSettings(), false, false);
-            AssertTrue(result.Success, "schema read succeeds for " + toolId);
+            AssertTrue(result.Success, "schema read succeeds for " + toolId + ": " + result.Message);
             return AgentJsonProtocol.CreateToolResultMessage(command,
                 new ToolResultMaterialization(TerminalToolResult.Ok(
                     result.Message, result.DataJson,

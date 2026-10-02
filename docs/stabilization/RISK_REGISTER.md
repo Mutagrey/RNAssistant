@@ -127,6 +127,15 @@ target when dropping data. Targets now survive separately from historical source
 bodies, with unchanged success/no-op/error/unknown effect distinctions. These
 paths are covered host-neutral; they do not close the original live incident.
 
+Cross-turn follow-up (2026-10-02): a new user message previously reset optional
+callable schemas to core even when the same chat retained exact accepted admissions.
+The next turn now reuses unchanged, retained admissions within its request budget;
+edited/cleared history, descriptor drift and budget overflow return to core.
+Complete current skill/resource bodies already follow history/CAS and working-set
+selection, so their actual inclusion still needs the exact next-request trace.
+Focused host-neutral tool-pack checks cover carryover, drift, history edit and
+budget fallback. Live Windows/model evidence remains open.
+
 The [canonical analysis and ordered implementation plan](../conversation-protocol.md#agent-continuity-audit--2026-10-01)
 separates operation facts from observation freshness, keeps typed provenance through
 compaction and uses existing typed recovery for bounded progress. The

@@ -50,6 +50,13 @@ records it directly and reviews the signed release payload before finalization.
 
 ## Implementation log — includes current in-flight work and earlier entries
 
+Cross-turn capability reuse (2026-10-02): unchanged optional tool schemas now carry
+to later turns of the same chat from exact durable admissions and retained read
+frames. Edited history, schema drift and budget overflow fall back to core; the
+model request reports budget fallback. Skill/resource bodies still require current
+evidence and available context space. Focused host-neutral checks pass; live
+Windows/model evidence for the reported repeat-loading trajectory remains open.
+
 Model request schema duplication (2026-10-02): the exact model-context inspector
 confirmed material repetition on a 20-schema Excel Agent core plus one loaded
 extension. A wire-only strict-mode projection removes repeated parameter schemas

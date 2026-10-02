@@ -3,7 +3,9 @@ using System.Collections.Generic;
 using System.Linq;
 using Newtonsoft.Json;
 using RNAssistant.Core.Models;
+using RNAssistant.Core.ModelProtocol;
 using RNAssistant.Core.Persistence;
+using RNAssistant.Office.Tools;
 
 namespace RNAssistant.Office.Services
 {
@@ -22,15 +24,35 @@ namespace RNAssistant.Office.Services
 
         public IReadOnlyList<ToolPackExtensionEventData> ReadAccepted()
         {
+            bool currentTurnAdmission;
+            return ReadAccepted(out currentTurnAdmission);
+        }
+
+        public IReadOnlyList<ToolPackExtensionEventData> ReadAccepted(out bool currentTurnAdmission)
+        {
+            currentTurnAdmission = false;
             var turnId = CurrentTurnId();
             if (string.IsNullOrWhiteSpace(turnId) || _session.Revision <= 0)
                 return new ToolPackExtensionEventData[0];
+            // Editing or clearing chat history removes the earlier read frames but
+            // leaves append-only trace events. Such events must not restore tools.
+            var retainedReadRuns = new HashSet<string>((_session.Messages ?? new List<ChatMessage>())
+                .Where(message => message != null && message.ToolName == CapabilityToolCatalog.ReadToolId &&
+                    message.ToolResultProtocolVersion == ToolResultWire.CurrentVersion &&
+                    !string.IsNullOrWhiteSpace(message.RunId))
+                .Select(message => message.RunId), StringComparer.OrdinalIgnoreCase);
             var accepted = SessionEventDescriptors.For(SessionEventKind.ToolPackExtensionAccepted);
-            var events = _events.Read(_session, SessionEventReadMode.Validated)
+            var acceptedEvents = _events.Read(_session, SessionEventReadMode.Validated)
                 .Where(item => item != null &&
-                    string.Equals(item.Type, accepted.Type, StringComparison.Ordinal) &&
-                    string.Equals(item.TurnId, turnId, StringComparison.OrdinalIgnoreCase))
+                    string.Equals(item.Type, accepted.Type, StringComparison.Ordinal))
                 .OrderBy(item => item.Sequence)
+                .ToList();
+            currentTurnAdmission = acceptedEvents.Any(item =>
+                string.Equals(item.TurnId, turnId, StringComparison.OrdinalIgnoreCase));
+            var events = acceptedEvents
+                .Where(item =>
+                    (string.Equals(item.TurnId, turnId, StringComparison.OrdinalIgnoreCase) ||
+                     retainedReadRuns.Contains(item.RunId ?? string.Empty)))
                 .ToList();
             var result = new List<ToolPackExtensionEventData>(events.Count);
             foreach (var item in events)

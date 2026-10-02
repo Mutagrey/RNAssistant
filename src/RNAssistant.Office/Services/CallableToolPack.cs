@@ -9,7 +9,7 @@ using RNAssistant.Office.Tools;
 
 namespace RNAssistant.Office.Services
 {
-    // Model-visible callable membership for one run. Execution authority remains
+    // Model-visible callable membership for a request. Execution authority remains
     // the immutable ToolPackSnapshot captured by ConversationKernelAdapter.
     internal sealed class CallableToolPack
     {
@@ -351,7 +351,7 @@ namespace RNAssistant.Office.Services
                         ? (JToken)SchemaRefs(optionalIds)
                         : JValue.CreateNull(),
                     ["instruction"] = admitted
-                        ? "The requested exact schemas are callable from this model step and remain callable for this logical turn. No schema was evicted. Confirmation, compaction, and restart reconstruct this exact admitted snapshot from the durable runtime event."
+                        ? "The requested exact schemas are callable from this model step. Unchanged schemas can be reused in later turns of this chat after exact validation and budget admission; no schema was evicted in this turn."
                         : "The requested schemas were not added because the complete next request would exceed its input budget. Existing schemas remain callable and no schema was evicted. Do not call a rejected tool unless a later exact read is admitted."
                 }.ToString(Formatting.None)
             };
