@@ -1641,8 +1641,8 @@ namespace RNAssistant.Harness
             AssertEqual("chat-view", controller.LastChatId, "link action preserves exact addressed chat");
             AssertEqual(uri, controller.LastArtifactViewerResourceUri, "link action preserves the displayed exact snapshot");
             response = bridge.HandleMessageAsync(JsonConvert.SerializeObject(new {
-                id = "document-list", type = "listDocumentArtifacts", bridgeToken = token,
-                payload = new DocumentArtifactListRequest { ChatId = "chat-view", Query = "Plan" }
+                id = "document-list", type = "listArtifactCatalog", bridgeToken = token,
+                payload = new ArtifactCatalogRequest { Scope = "document", ChatId = "chat-view", Query = "Plan" }
             })).GetAwaiter().GetResult();
             AssertEqual("chat-view", (string)JObject.Parse(response)["payload"]["chatId"], "typed document picker carries its source chat");
 

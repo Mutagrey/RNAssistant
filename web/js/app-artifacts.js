@@ -288,6 +288,7 @@
     state.htmlWorkspaceSelection = { type: "artifact", id: artifactId(artifact) };
     setChatResourcePopoverOpen(false);
     switchTab("artifacts");
+    if (window.RNAssistantArtifactCatalog) window.RNAssistantArtifactCatalog.editor();
     if (typeof renderHtmlWorkspace === "function") renderHtmlWorkspace();
     return true;
   }
@@ -494,6 +495,7 @@
     }
     setChatResourcePopoverOpen(false);
     switchTab("artifacts");
+    if (window.RNAssistantArtifactCatalog) window.RNAssistantArtifactCatalog.editor();
     if (typeof renderHtmlWorkspace === "function") renderHtmlWorkspace();
     return true;
   }
@@ -777,7 +779,6 @@
     var button = $("toggleChatResourcesButton");
     var panel = $("chatResourcesPopover");
     if (!menu || !button || !panel) return;
-    if (!open) resetDocumentArtifactPicker();
     menu.classList.toggle("is-open", !!open);
     panel.classList.toggle("hidden", !open);
     panel.setAttribute("aria-hidden", open ? "false" : "true");
@@ -791,6 +792,7 @@
   }
 
   function renderChatResourceNavigation() {
+    if (window.RNAssistantArtifactCatalog) window.RNAssistantArtifactCatalog.sync();
     var dock = $("chatResourceDock");
     var button = $("toggleChatResourcesButton");
     var count = $("chatResourceCount");
@@ -808,7 +810,6 @@
     if (resourceNavigationChatId !== String(state.activeChatId || "")) {
       resourceNavigationChatId = String(state.activeChatId || "");
       if (search) search.value = "";
-      resetDocumentArtifactPicker();
     }
     if (search && items.length <= 6) search.value = "";
     var query = String(search && search.value || "").trim().toLowerCase();
@@ -898,123 +899,8 @@
     return items.length;
   }
 
-  var documentArtifactRequestVersion = 0;
-  var artifactLinkPending = false;
-
-  function resetDocumentArtifactPicker() {
-    documentArtifactRequestVersion++;
-    var picker = $("documentArtifactsPicker");
-    if (picker) picker.open = false;
-    var popover = $("chatResourcesPopover");
-    if (popover) popover.classList.toggle("has-document-picker", false);
-    var list = $("documentArtifactsList");
-    if (list) list.replaceChildren();
-  }
-
-  async function loadDocumentArtifacts(cursor) {
-    var chatId = state.activeChatId;
-    var navigation = state.chatNavigationVersion;
-    var picker = $("documentArtifactsPicker");
-    var list = $("documentArtifactsList");
-    if (!chatId || !picker || !picker.open || !list) return;
-    var version = ++documentArtifactRequestVersion;
-    list.textContent = "Загрузка…";
-    try {
-      var response = await send("listDocumentArtifacts", { chatId: chatId, query: $("documentArtifactsQuery").value, cursor: typeof cursor === "string" ? cursor : null });
-      if (version !== documentArtifactRequestVersion || chatId !== state.activeChatId ||
-          navigation !== state.chatNavigationVersion || !picker.open) return;
-      if (response.chatId !== chatId) throw new Error("Получен список другого чата.");
-      list.replaceChildren();
-      (response.items || []).forEach(function (item) {
-        var row = document.createElement("div");
-        row.className = "artifact-link-entry";
-        var label = document.createElement("span");
-        label.className = "chat-resource-row-copy";
-        label.textContent = item.title + (item.kind === "plan_document" || item.kind === "html_workspace" || item.kind === "markdown" ? " · v" + item.revision : " · ресурс") +
-          (item.selected ? " · выбран" : item.linked ? " · в чате" : "") +
-          (item.availabilityIssue === "metadata_unavailable" ? " · метаданные недоступны" :
-           item.availabilityIssue ? " · текущая версия неизвестна" : "");
-        row.appendChild(label);
-        if (!item.availabilityIssue && (!item.linked || (item.kind === "plan_document" || item.kind === "html_workspace" || item.kind === "markdown") && !item.selected)) {
-          var attach = document.createElement("button");
-          attach.type = "button";
-          attach.className = "link-button";
-          attach.textContent = item.kind === "plan_document" ? "Выбрать Plan" : item.kind === "html_workspace" ? "Выбрать HTML" : item.kind === "markdown" ? "Подключить MD" : "В чат";
-          attach.addEventListener("click", function () {
-            changeDocumentArtifactLink(chatId, response.sessionRevision, item.resourceUri, false, attach);
-          });
-          row.appendChild(attach);
-        }
-        if (item.linked) {
-          var detach = document.createElement("button");
-          detach.type = "button";
-          detach.className = "link-button";
-          detach.textContent = "Убрать";
-          detach.addEventListener("click", function () {
-            changeDocumentArtifactLink(chatId, response.sessionRevision, item.resourceUri, true, detach);
-          });
-          row.appendChild(detach);
-        }
-        list.appendChild(row);
-      });
-      if (!(response.items || []).length || response.hasMore) {
-        var note = document.createElement("p");
-        note.className = "chat-resource-empty";
-        note.textContent = response.hasMore ? "Есть ещё ресурсы документа." : "Ресурсы не найдены.";
-        list.appendChild(note);
-        if (response.nextCursor) {
-          var more = document.createElement("button");
-          more.type = "button";
-          more.className = "link-button";
-          more.textContent = "Следующие 50";
-          more.addEventListener("click", function () { loadDocumentArtifacts(response.nextCursor); });
-          list.appendChild(more);
-        }
-      }
-    } catch (error) {
-      if (version === documentArtifactRequestVersion && chatId === state.activeChatId && navigation === state.chatNavigationVersion)
-        list.textContent = error.detail || error.message;
-    }
-  }
-
   async function changeDocumentArtifactLink(chatId, revision, resourceUri, detached, button) {
-    if (artifactLinkPending || chatId !== state.activeChatId) return;
-    var navigation = state.chatNavigationVersion;
-    var editVersion = state.htmlWorkspaceEditVersion || 0;
-    if (state.htmlWorkspaceDirty && !window.confirm("Переключение ресурса отменит несохранённые правки. Продолжить?")) return;
-    if (chatId !== state.activeChatId || navigation !== state.chatNavigationVersion || editVersion !== (state.htmlWorkspaceEditVersion || 0)) return;
-    artifactLinkPending = true;
-    button.disabled = true;
-    try {
-      var response = await send("changeArtifactLink", {
-        chatId: chatId, expectedSessionRevision: revision, resourceUri: resourceUri, detached: detached
-      });
-      if (chatId !== state.activeChatId || navigation !== state.chatNavigationVersion || editVersion !== (state.htmlWorkspaceEditVersion || 0)) return;
-      applyChatStateForChat(response, chatId);
-      await loadDocumentArtifacts();
-    } catch (error) {
-      if (chatId === state.activeChatId && navigation === state.chatNavigationVersion) {
-        window.alert(error.detail || error.message);
-        await loadDocumentArtifacts();
-      }
-    } finally {
-      artifactLinkPending = false;
-      button.disabled = false;
-    }
-  }
-
-  function bindDocumentArtifactPicker() {
-    var picker = $("documentArtifactsPicker");
-    if (!picker) return;
-    picker.addEventListener("toggle", function () {
-      $("chatResourcesPopover").classList.toggle("has-document-picker", picker.open);
-      if (picker.open) loadDocumentArtifacts();
-      else documentArtifactRequestVersion++;
-    });
-    $("documentArtifactsSearch").addEventListener("click", loadDocumentArtifacts);
-    $("documentArtifactsQuery").addEventListener("keydown", function (event) {
-      if (event.key === "Enter") { event.preventDefault(); loadDocumentArtifacts(); }
-    });
+    if (window.RNAssistantArtifactCatalog) return window.RNAssistantArtifactCatalog.changeLink(chatId, revision, resourceUri, detached, button);
   }
 
   var artifactPagePending = false;
@@ -1095,7 +981,12 @@
         button.focus();
       }
     });
-    bindDocumentArtifactPicker();
+    var fromDocument = $("openDocumentArtifactCatalog");
+    if (fromDocument) fromDocument.addEventListener("click", function () {
+      setChatResourcePopoverOpen(false);
+      switchTab("artifacts");
+      window.RNAssistantArtifactCatalog.show("document");
+    });
     renderChatResourceNavigation();
   }
 

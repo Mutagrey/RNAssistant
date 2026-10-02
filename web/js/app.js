@@ -35,6 +35,7 @@ function switchTab(name) {
     renderSettings();
   } else if (name === "artifacts" && typeof renderHtmlWorkspace === "function") {
     renderHtmlWorkspace();
+    if (window.RNAssistantArtifactCatalog) window.RNAssistantArtifactCatalog.show();
   } else if (name === "vba" && typeof renderVbaProject === "function") {
     renderVbaProject();
     if (typeof updateVbaMacroRunState === "function") updateVbaMacroRunState();

@@ -175,7 +175,7 @@ namespace RNAssistant.Harness
                 a.Messages.Add(new ChatMessage { Role = "assistant", Content = "HTML", ResourceRefs = new List<ResourceRef> { firstRef }, HtmlWorkspaceCheckpoint = firstRef });
                 chats.Save(a);
                 var b = NewSession(adapter); b.DocumentAuthorityId = a.DocumentAuthorityId;
-                var picker = links.List(b, new DocumentArtifactListRequest { ChatId = b.Id });
+                var picker = WorkingSetCatalog(links).List(b, new ArtifactCatalogRequest { Scope = "document", ChatId = b.Id });
                 AssertEqual(1, picker.Items.Count(item => item.Kind == ChatArtifactKinds.HtmlWorkspace), "picker exposes one current revision per workspace");
                 links.Change(b, LinkRequest(b, selectedRef.Uri, false), chats.Save);
                 b = new ChatStore(paths).Load(b.Id);
@@ -249,7 +249,7 @@ namespace RNAssistant.Harness
                 ChatCloneService.PrepareForkResources(b, detachedFork, chats.LoadArtifactBody, new ResourceForkService(executor.ResourceAuthority, executor.Payloads));
                 AssertTrue(string.IsNullOrEmpty(detachedFork.ActiveHtmlArtifactId), "fork cannot resurrect detached shared HTML from an old checkpoint");
                 AssertTrue(write(b, "<main>independent</main>").Success, "an unselected chat can create another workspace");
-                AssertEqual(2, links.List(b, new DocumentArtifactListRequest { ChatId = b.Id }).Items.Count(item => item.Kind == ChatArtifactKinds.HtmlWorkspace),
+                AssertEqual(2, WorkingSetCatalog(links).List(b, new ArtifactCatalogRequest { Scope = "document", ChatId = b.Id }).Items.Count(item => item.Kind == ChatArtifactKinds.HtmlWorkspace),
                     "independent workspaces coexist in the document");
                 var c = NewSession(adapter); c.DocumentAuthorityId = b.DocumentAuthorityId;
                 links.Change(c, LinkRequest(c, ChatResourceUri.ResolveArtifactRevision(b, b.ActiveHtmlArtifactId).Uri, false), chats.Save);

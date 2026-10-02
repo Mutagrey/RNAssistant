@@ -3,118 +3,57 @@ const assert = require("node:assert/strict");
 const fs = require("node:fs");
 const vm = require("node:vm");
 const path = require("node:path");
-
+const { webcrypto } = require("node:crypto");
 class Element {
-  constructor() {
-    this.children = []; this.handlers = {}; this.className = ""; this.value = "";
-    this.open = false; this.disabled = false; this.parentElement = this;
-    this.classList = { toggle() {}, contains() { return false; } };
-  }
+  constructor(tag = "div") { this.tag = tag; this.children = []; this.handlers = {}; this.value = ""; this.hidden = false;
+    this.classList = { add() {}, remove() {} }; this.attributes = {}; }
   appendChild(node) { this.children.push(node); return node; }
-  replaceChildren() { this.children = []; this._text = ""; }
-  setAttribute() {}
-  addEventListener(event, handler) { this.handlers[event] = handler; }
-  set textContent(text) { this.replaceChildren(); this._text = String(text); }
-  get textContent() { return (this._text || "") + this.children.map(node => node.textContent).join(""); }
-  focus() {}
+  replaceChildren(...nodes) { this.children = nodes; this._text = ""; }
+  addEventListener(name, handler) { this.handlers[name] = handler; }
+  setAttribute(name, value) { this.attributes[name] = value; }
+  set textContent(value) { this.replaceChildren(); this._text = String(value); }
+  get textContent() { return (this._text || "") + this.children.map(c => c.textContent).join(""); }
+  click() { return this.handlers.click && this.handlers.click(); }
 }
-const ids = ["toggleChatResourcesButton", "chatResourceMenu", "chatResourceDock", "chatResourceCount", "chatResourcesList",
-  "chatResourcesSearchInput", "chatResourcesPopover", "documentArtifactsPicker", "documentArtifactsQuery", "documentArtifactsSearch", "documentArtifactsList"];
-const elements = Object.fromEntries(ids.map(id => [id, new Element()]));
-const requests = [];
-const applied = [];
-const context = vm.createContext({
-  state: { activeChatId: "a", chatNavigationVersion: 1, artifacts: [], artifactLibrary: { sessionRevision: 5, heads: [] } },
-  document: { createElement: () => new Element(), addEventListener() {} },
-  $: id => elements[id] || null,
+const ids = ["", "Scope", "Show", "Editor", "Import", "File", "Query", "Kind", "Document", "Refresh", "Status", "List", "More", "Preview", "Back", "PreviewTitle", "PreviewBody"];
+const elements = Object.fromEntries(ids.map(id => ["artifactCatalog" + id, new Element()]));
+elements.htmlWorkspaceLayout = new Element(); elements.artifactCatalogScope.value = "chat";
+const requests = [], applied = [], previews = [];
+const context = vm.createContext({ console, TextDecoder, TextEncoder, Blob, crypto: webcrypto, URL, setTimeout,
+  Option: function (text, value) { const e = new Element("option"); e.textContent = text; e.value = value; return e; },
+  document: { getElementById: id => elements[id], createElement: tag => new Element(tag) },
+  $: id => elements[id], state: { activeChatId: "a", chatNavigationVersion: 1, htmlWorkspaceEditVersion: 0 },
   send: (type, payload) => new Promise((resolve, reject) => requests.push({ type, payload, resolve, reject })),
-  applyChatStateForChat: (response, chatId) => applied.push({ response, chatId })
+  applyChatStateForChat: (data, id) => applied.push({ data, id }), fetch() {},
+  RNAssistantResourceDownload: { read: async () => new TextEncoder().encode(JSON.stringify({ Project: { Files: [{ Path: "index.html", Kind: "html", Content: "<h1>Saved</h1>" }], EntryPath: "index.html", Data: [], ExternalDependencies: [] }, Views: [] })) },
+  RNAssistantHtmlWorkspacePreview: { ensureECharts: async () => {}, build: options => { previews.push(options); return "<h1>Saved</h1>"; } }
 });
 context.window = context;
-context.alert = () => {};
-vm.runInContext(fs.readFileSync(path.join(__dirname, "../../web/js/app-artifacts.js"), "utf8"), context);
-context.bindChatResourceNavigation();
+vm.runInContext(fs.readFileSync(path.join(__dirname, "../../web/js/app-artifact-catalog.js"), "utf8"), context);
 const flush = () => new Promise(resolve => setImmediate(resolve));
-const rowButton = title => elements.documentArtifactsList.children.flatMap(row => row.children).find(node => node.textContent === title);
-const answer = (chatId, revision, title = "Shared Plan") => ({ chatId, sessionRevision: revision,
-  items: [{ resourceUri: "rna://chat/doc/artifact/plan_doc_p_r1/revision/1", title, kind: "plan_document", revision: 1, linked: false, selected: false }] });
+const answer = (id = "a", revision = 5) => ({ chatId: id, documentId: "doc", sessionRevision: revision, documents: [{ id: "doc", title: "Book" }], items: [{ documentId: "doc", documentTitle: "Book", resourceUri: "rna://chat/doc/artifact/html_ws_a_r1/revision/1", title: "Dashboard", kind: "html_workspace", updatedUtc: "2026-10-02T12:00:00Z", canTransfer: true, linked: false }] });
+const button = label => elements.artifactCatalogList.children.flatMap(r => r.children).flatMap(r => r.children).find(n => n.tag === "button" && n.textContent === label);
 (async () => {
-  assert.equal(elements.toggleChatResourcesButton.disabled, false, "empty chat can open document resource picker");
-  elements.documentArtifactsPicker.open = true;
-  elements.documentArtifactsPicker.handlers.toggle();
-  const old = requests.shift();
-  elements.documentArtifactsQuery.value = "Plan";
-  elements.documentArtifactsSearch.handlers.click();
-  const latest = requests.shift();
-  latest.resolve(answer("a", 5)); await flush();
-  old.resolve(answer("a", 3, "Stale")); await flush();
-  assert.ok(!elements.documentArtifactsList.textContent.includes("Stale"), "late search cannot replace a newer catalog");
-  const select = rowButton("Выбрать Plan");
-  select.handlers.click(); select.handlers.click();
-  assert.equal(requests.length, 1, "duplicate clicks do not dispatch another change");
-  const change = requests.shift();
-  assert.equal(change.type, "changeArtifactLink");
-  assert.equal(change.payload.chatId, "a");
-  assert.equal(change.payload.expectedSessionRevision, 5);
-  assert.equal(change.payload.detached, false);
-  context.state.activeChatId = "b";
-  context.state.chatNavigationVersion++;
-  context.renderChatResourceNavigation();
-  change.resolve({ activeChatId: "a", sessionRevision: 6 }); await flush();
-  assert.equal(applied.length, 0, "late mutation cannot apply state or navigate another chat");
-  assert.equal(elements.documentArtifactsPicker.open, false, "chat switch closes and clears picker");
-
-  elements.documentArtifactsPicker.open = true;
-  elements.documentArtifactsPicker.handlers.toggle();
-  const second = requests.shift();
-  const data = answer("b", 8); data.items[0].linked = true; data.items[0].selected = true;
-  data.items[0].availabilityIssue = "metadata_unavailable";
-  second.resolve(data); await flush();
-  assert.ok(elements.documentArtifactsList.textContent.includes("метаданные недоступны"));
-  assert.equal(rowButton("Выбрать Plan"), undefined, "unavailable resource exposes unlink but no selection action");
-  rowButton("Убрать").handlers.click();
-  const detach = requests.shift();
-  assert.equal(detach.payload.chatId, "b");
-  assert.equal(detach.payload.expectedSessionRevision, 8);
-  assert.equal(detach.payload.detached, true);
-  // Switching away and back still invalidates a response from the earlier visit.
-  context.state.chatNavigationVersion += 2;
-  detach.resolve({ activeChatId: "b", sessionRevision: 9 }); await flush();
-  assert.equal(applied.length, 0);
-  elements.documentArtifactsPicker.open = true;
-  elements.documentArtifactsPicker.handlers.toggle();
-  const htmlList = requests.shift();
-  const htmlAnswer = answer("b", 10, "Shared HTML");
-  htmlAnswer.items[0].kind = "html_workspace";
-  htmlList.resolve(htmlAnswer); await flush();
-  assert.ok(elements.documentArtifactsList.textContent.includes("Shared HTML · v"));
-  context.state.htmlWorkspaceDirty = true;
-  context.confirm = () => false;
-  rowButton("Выбрать HTML").handlers.click(); await flush();
-  assert.equal(requests.length, 0, "dirty editor selection can be cancelled before dispatch");
-  context.confirm = () => true;
-  rowButton("Выбрать HTML").handlers.click();
-  const htmlSelect = requests.shift();
-  assert.equal(htmlSelect.payload.expectedSessionRevision, 10);
-  context.state.htmlWorkspaceEditVersion = 1;
-  htmlSelect.resolve({ activeChatId: "b", sessionRevision: 11 }); await flush();
-  assert.equal(applied.length, 0, "late HTML selection never overwrites new local edits");
-  assert.equal(context.state.htmlWorkspaceDirty, true);
-  context.state.htmlWorkspaceDirty = false;
-  elements.documentArtifactsPicker.handlers.toggle();
-  const markdownList = requests.shift();
-  const mdAnswer = answer("b", 12, "Architecture.md");
-  mdAnswer.items[0].kind = "markdown"; mdAnswer.items[0].linked = true; mdAnswer.items[0].selected = false;
-  markdownList.resolve(mdAnswer); await flush();
-  assert.ok(elements.documentArtifactsList.textContent.includes("Architecture.md · v"));
-  rowButton("Подключить MD").handlers.click();
-  const mdAttach = requests.shift();
-  assert.equal(mdAttach.payload.expectedSessionRevision, 12);
-  assert.equal(mdAttach.payload.detached, false);
-  context.state.chatNavigationVersion++;
-  mdAttach.resolve({ activeChatId: "b", sessionRevision: 13 }); await flush();
-  assert.equal(applied.length, 0, "late Markdown attachment cannot overwrite a newer navigation");
-  console.log("PASS artifact working set: Markdown refresh reuses exact link and navigation guards");
-  console.log("PASS artifact working set: shared HTML selector preserves new edits and requires explicit dirty discard");
-  console.log("PASS artifact working set: empty chat, query ordering, exact mutation, double click and navigation races");
+  context.RNAssistantArtifactCatalog.show("all");
+  assert.equal(requests[0].payload.scope, "all"); requests.shift().resolve(answer()); await flush();
+  assert.ok(elements.artifactCatalogList.textContent.includes("Book"));
+  button("Подключить к чату").click(); button("Подключить к чату").click();
+  assert.equal(requests.length, 1, "duplicate click submits only once");
+  const mutation = requests.shift(); assert.equal(mutation.type, "changeArtifactLink"); assert.equal(mutation.payload.expectedSessionRevision, 5);
+  context.state.activeChatId = "b"; context.state.chatNavigationVersion++;
+  mutation.resolve({ activeChatId: "a" }); await flush(); assert.equal(applied.length, 0, "late mutation cannot apply another chat");
+  context.RNAssistantArtifactCatalog.show("document"); const staleList = requests.shift();
+  context.RNAssistantArtifactCatalog.show("chat"); const latestList = requests.shift();
+  latestList.resolve(answer("b", 8)); await flush(); staleList.resolve({ ...answer("b"), items: [] }); await flush();
+  assert.ok(button("Независимая копия"), "late query cannot replace current catalog");
+  context.state.htmlWorkspaceDirty = true; button("Независимая копия").click();
+  assert.equal(requests.length, 0, "dirty editor blocks replacement"); context.state.htmlWorkspaceDirty = false;
+  button("Просмотр").click(); const read = requests.shift(); assert.equal(read.type, "exportArtifact"); assert.equal(read.payload.preview, true);
+  read.resolve({ kind: "html_workspace", contentType: "application/json", data: { leaseId: "lease" } }); await flush();
+  assert.equal(requests[0].type, "closeArtifactTransfer"); requests.shift().resolve({ closed: true }); await flush();
+  const frame = elements.artifactCatalogPreviewBody.children.find(n => n.tag === "iframe");
+  assert.equal(frame.attributes.sandbox, "allow-scripts", "preview has no same-origin permission");
+  assert.equal(previews[0].hostBridge, false); assert.equal(applied.length, 0, "preview never attaches or selects the workspace");
+  elements.artifactCatalogBack.click(); assert.equal(elements.artifactCatalogPreview.hidden, true);
+  console.log("PASS artifact catalog: scope, duplicate clicks, dirty state, late responses and isolated preview");
 })().catch(error => { console.error(error); process.exitCode = 1; });

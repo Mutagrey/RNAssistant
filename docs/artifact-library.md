@@ -18,6 +18,65 @@ The existing Resource Fabric ingestion, CAS,
 document defines the user-visible lifecycle, viewers and mutation rules; it does not
 introduce another artifact transport or store.
 
+## Local catalog and artifact transfer — 2026-10-02
+
+Owner: Artifact Library. `ArtifactCatalogService` coordinates read-only discovery and
+explicit transfers; Core owns `ArtifactTransferPackage` and document publication.
+The **Артефакты** tab has **В чате / В документе / Все документы**, title search,
+type/document filters and 50-item pages. The catalog reads registered local document
+authorities, including closed documents; it is not another durable inventory. Bodies
+are loaded on demand. Enumeration still scans retained metadata; response pagination
+does not imply bounded source enumeration. Run/system/context resources are excluded.
+
+**Ресурсы → Из документа…** opens this catalog. The old nested picker and
+`listDocumentArtifacts` bridge are removed. `listArtifactCatalog` supplies typed,
+revision-bound metadata and rejects changed continuation cursors. `changeArtifactLink`
+retains existing same-document identity and membership behavior. **Убрать из чата**
+only detaches; **Независимая копия** creates a new document-owned identity and attaches
+it to the addressed chat. Copies across documents grant no live Office authority.
+Catalog preview does not attach or change the selected workspace. HTML preview uses
+the existing sandboxed standalone renderer with captured data. Source inspection,
+text/image preview and downloads remain available; other binary kinds show metadata
+and a download action. The editor remains available separately. Dirty editor content
+blocks selection-changing operations until explicitly saved or discarded.
+
+**Экспорт проекта** writes `*.rna-html.zip` contract v1: `manifest.json`, HTML/CSS/JS
+files under `files/`, the entry file, JSON data snapshots under `data/`, and optional
+schema/mapping JSON dependencies. Origin metadata is descriptive provenance, never
+an authority grant. Only the selected revision is transferred; chat/history, live
+Office bindings and runtime credentials are not serialized. Imported bindings refer to new
+exact local resources. Cached Office data requires a complete retained text view;
+missing data fails explicitly without live recapture or an incomplete success.
+Supported data views are `text`, `table` and `records`; binary resource bindings are
+not supported by this package version. External HTTP(S) dependencies remain external
+and are listed in the package/preview. The existing **Скачать HTML** action still
+produces a standalone page, separately from an editable project package.
+
+`exportArtifact`, `beginArtifactImport`, `importArtifact`, `copyArtifact` and
+`closeArtifactTransfer` use typed control DTOs and the existing chunked resource
+upload/download plane. Transfers are bounded to 20 MiB, including expanded archive
+content; native workspace limits also apply (100 files/data items, 300,000 characters
+per source file, 1,500,000 aggregate source/binding characters). A package needs an
+HTML entry; duplicate/unsafe paths, unsupported versions and missing dependencies
+are rejected before publication. The document authority publishes the entire authored
+aggregate in one commit. New immutable bodies alone are not visible catalog entries.
+A transfer operation id prevents repeated publication; mutations are never retried
+automatically. Publication and chat-link persistence are separate existing boundaries:
+if attaching fails after publication, the complete copy remains in the document catalog.
+
+Markdown/JSON export preserves the authored text; originals preserve their bytes.
+Importing `.md`/`.markdown` creates an authored Markdown document, `.json` an authored
+JSON resource, `.html`/`.htm` a new HTML workspace; other files become immutable
+originals. Only `*.rna-html.zip` is interpreted as a project package. No rename,
+original deletion, bulk operation, automatic source refresh or new model tool is added.
+
+Evidence: Harness `artifact transfer:` and `artifact working set:`, browser-script
+`artifact-working-set.test.js` / `artifact-library-projection.test.js`, and MockDemo
+`--artifact-transfer-test` exercise independent identities, restart, continuation,
+archive refusal, exact bytes, upload/download and late UI responses. MockDemo browser
+layout was inspected at 420 px without horizontal overflow. Windows/Office/WebView2
+qualification remains open; these checks are host-neutral.
+
 ## Authorized document ownership cutover — 2026-09-07
 
 Status: slice **1a, sent originals, implemented host-neutral**. Newly sent files
@@ -113,7 +172,7 @@ source reloads obtain fresh source.
 Uploaded HTML remains an immutable original; authored JSON is an ordinary file
 artifact. Export requires a saved document snapshot and does not create a revision.
 
-**«Ресурсы» → «Из документа…» → «Выбрать HTML»** loads the displayed current snapshot
+**«Артефакты» → «В документе» → «Подключить к чату»** loads the displayed current snapshot
 in another chat. Selection validates the complete body before changing membership.
 A stale writer is rejected before dispatch and must explicitly select the new head.
 The picker and response guards preserve newer drafts/navigation. Unlink clears
@@ -195,23 +254,18 @@ historical messages/checkpoints, exact resource reads, other chats and document
 CAS. It is neither a document tombstone nor an access revocation. History rewrite
 and fork preserve explicit decisions; clearing the entire chat clears membership.
 
-The **«Ресурсы» → «Из документа…»** picker remains available in an empty chat. It
-lists metadata for current Plans/HTML/Markdown and ordinary document files, supports title search and returns
-50 items per page with a cursor bound to the chat revision, document, query and
-ordered collection. Duplicate names remain separate exact resources; continuation
-cannot silently skip a changed catalog. A click attaches an original or selects the
-exact displayed Plan/HTML or refreshes a Markdown link. Detach is also available
-beside eligible working-set rows. Run/system resources are outside this slice.
+The full **Артефакты → В документе** catalog replaces the nested picker and remains
+available in an empty chat. It lists current Plans/HTML/Markdown and ordinary document
+files, with search and guarded pagination. Duplicate names remain separate resources.
+A click attaches an original or selects the exact displayed Plan/HTML snapshot.
 
-`ArtifactWorkingSetService` owns validation and document-lease coordination; the
-typed `listDocumentArtifacts`/`changeArtifactLink` bridge carries an explicit chat,
-exact snapshot URI and expected chat revision for writes. The controller reserves
-and reloads that addressed chat, verifies the bound document, then saves membership
-(including an initially empty chat). A short document mutation lease spans Plan
-currentness validation through chat persistence. Stale chat saves fail optimistic
-concurrency; stale Plan selections fail without choosing latest. No resource head
-is published by link changes. UI requests capture chat/navigation, suppress double
-clicks, ignore late responses and never retry mutations automatically.
+`ArtifactWorkingSetService` owns link validation and document-lease coordination;
+`ArtifactCatalogService` owns listing. The typed `listArtifactCatalog` /
+`changeArtifactLink` bridge carries an explicit chat and exact runtime resource
+reference. Writes require the expected chat revision. The controller reserves and
+reloads the addressed chat; link changes retain the original short document lease,
+optimistic persistence, stale-selection refusal and no automatic retry. No resource
+head is published by link changes. Late responses never replace another chat or draft.
 
 Chat reconstruction reads Plan metadata before optional active-body hydration.
 A missing body therefore does not block unlink; an explicit body read still fails.

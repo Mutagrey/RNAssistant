@@ -627,12 +627,23 @@ namespace RNAssistant.Office
         public ResourceDataCloseResponse CancelHtmlWorkspaceMutationUpload(ResourceUploadLeaseRequest request) { LastChatId = request.ChatId; return new ResourceDataCloseResponse { Closed = true }; }
         public HtmlWorkspaceResponse SaveHtmlWorkspaceFile(HtmlWorkspaceFilePayload request, CancellationToken token) { token.ThrowIfCancellationRequested(); LastChatId = request.ChatId; return new HtmlWorkspaceResponse { ActiveChatId = request.ChatId, Workspace = HtmlWorkspaceDto.From(new HtmlWorkspace { ActiveFileId = request.Path ?? string.Empty }) }; }
         public HtmlWorkspaceResponse SaveHtmlWorkspaceData(HtmlWorkspaceDataPayload request, CancellationToken token) { token.ThrowIfCancellationRequested(); LastChatId = request.ChatId; return new HtmlWorkspaceResponse { ActiveChatId = request.ChatId, Workspace = HtmlWorkspaceDto.From(null) }; }
+        public ArtifactCatalogResponse ListArtifactCatalog(ArtifactCatalogRequest request)
+        { LastChatId = request.ChatId; return new ArtifactCatalogResponse { ChatId = request.ChatId }; }
         public ArtifactLibraryPageResponse GetArtifactLibraryPage(ArtifactLibraryPageRequest request)
         { LastChatId = request.ChatId; return new ArtifactLibraryPageResponse { ChatId = request.ChatId }; }
         public ArtifactLibraryHistoryResponse GetArtifactLibraryHistory(ArtifactLibraryHistoryRequest request)
         { LastChatId = request.ChatId; return new ArtifactLibraryHistoryResponse { ChatId = request.ChatId }; }
-        public DocumentArtifactListDto ListDocumentArtifacts(DocumentArtifactListRequest request)
-        { LastChatId = request.ChatId; return new DocumentArtifactListDto { ChatId = request.ChatId }; }
+        public ArtifactTransferDownload ExportArtifact(ArtifactTransferRequest request, System.Threading.CancellationToken token)
+        { LastChatId = request.ChatId; return new ArtifactTransferDownload(); }
+        public ChatStateResponse CopyArtifact(ArtifactTransferRequest request, System.Threading.CancellationToken token)
+        { LastChatId = request.ChatId; return new ChatStateResponse { ActiveChatId = request.ChatId }; }
+        public ChatStateResponse ImportArtifact(ArtifactTransferRequest request, System.Threading.CancellationToken token)
+        { LastChatId = request.ChatId; return new ChatStateResponse { ActiveChatId = request.ChatId }; }
+        public ResourceUploadOpenResponse BeginArtifactImport(ResourceUploadOpenRequest request, System.Threading.CancellationToken token)
+        { LastChatId = request.ChatId; return new ResourceUploadOpenResponse(); }
+        public ResourceDataCloseResponse CloseArtifactTransfer(ResourceUploadLeaseRequest request)
+        { LastChatId = request.ChatId; return new ResourceDataCloseResponse { Closed = true }; }
+
         public ChatStateResponse ChangeArtifactLink(ArtifactLinkChangeRequest request)
         { LastChatId = request.ChatId; LastArtifactViewerResourceUri = request.ResourceUri; return new ChatStateResponse { ActiveChatId = request.ChatId }; }
         public ArtifactViewerPageDto ReadArtifactViewerPage(string chatId, string resourceUri, string cursor,

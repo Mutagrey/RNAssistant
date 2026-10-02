@@ -1,4 +1,5 @@
 using System;
+using RNAssistant.Core.Storage;
 using RNAssistant.Core.Models;
 using RNAssistant.Office.Contracts;
 using RNAssistant.Core.Services;
@@ -15,9 +16,78 @@ namespace RNAssistant.Office
         public ArtifactLibraryHistoryResponse GetArtifactLibraryHistory(ArtifactLibraryHistoryRequest request)
         { return ArtifactLibraryProjectionService.History(LoadArtifactViewerSession(request?.ChatId), request); }
 
-        public DocumentArtifactListDto ListDocumentArtifacts(DocumentArtifactListRequest request)
+        private ArtifactCatalogService ArtifactCatalog()
         {
-            return _artifactWorkingSet.List(LoadArtifactViewerSession(request?.ChatId), request);
+            return new ArtifactCatalogService(_documentAuthorityRegistry, _chatStore.DocumentArtifacts,
+                _artifactWorkingSet, _resourceAuthorityStore, _toolExecutor.Payloads);
+        }
+
+        public ArtifactCatalogResponse ListArtifactCatalog(ArtifactCatalogRequest request)
+        { return ArtifactCatalog().List(LoadArtifactViewerSession(request?.ChatId), request); }
+
+        public ArtifactTransferDownload ExportArtifact(ArtifactTransferRequest request, CancellationToken token)
+        {
+            var session = LoadArtifactViewerSession(request?.ChatId);
+            ArtifactTransferContent content = null;
+            var data = _resourceData.OpenDownload(session, ArtifactCatalogService.Owner, ArtifactTransferPackage.MaximumBytes,
+                cancellation => {
+                    cancellation.ThrowIfCancellationRequested();
+                    content = ArtifactCatalog().Export(session, request);
+                    return new ResourceDownloadContent { Bytes = content.Bytes, ContentType = content.ContentType };
+                }, token);
+            return new ArtifactTransferDownload { FileName = content.FileName, ContentType = content.ContentType, Kind = content.Kind, Data = data };
+        }
+
+        public ResourceUploadOpenResponse BeginArtifactImport(ResourceUploadOpenRequest request, CancellationToken token)
+        { return _resourceData.OpenUpload(LoadArtifactViewerSession(request?.ChatId), request, token,
+            ArtifactCatalogService.Owner, ArtifactTransferPackage.MaximumBytes, allowEmpty: true); }
+
+        public ResourceDataCloseResponse CloseArtifactTransfer(ResourceUploadLeaseRequest request)
+        {
+            _resourceData.CloseUpload(request.ChatId, request.LeaseId, ArtifactCatalogService.Owner);
+            _resourceData.Close(request.ChatId, ArtifactCatalogService.Owner, request.LeaseId);
+            return new ResourceDataCloseResponse { Closed = true };
+        }
+
+        public ChatStateResponse ImportArtifact(ArtifactTransferRequest request, CancellationToken token)
+        {
+            return WithReservedChatState(LoadArtifactViewerSession(request?.ChatId), session => {
+                RequireArtifactTransferRevision(session, request);
+                var artifact = _resourceData.ConsumeUpload(session, request.UploadLeaseId, ArtifactCatalogService.Owner,
+                    (bytes, name, type) => {
+                        token.ThrowIfCancellationRequested();
+                        using (new ResourceMutationJournal(_paths).AcquireScope(ResourceAuthorityScopeId.Document(new DocumentAuthorityId(session.DocumentAuthorityId))))
+                            return ArtifactCatalog().Import(session, bytes, name, type, request.OperationId);
+                    }, token);
+                AttachTransferredArtifact(session, artifact);
+            });
+        }
+
+        public ChatStateResponse CopyArtifact(ArtifactTransferRequest request, CancellationToken token)
+        {
+            return WithReservedChatState(LoadArtifactViewerSession(request?.ChatId), session => {
+                RequireArtifactTransferRevision(session, request);
+                request.Preview = false;
+                var source = ArtifactCatalog().Export(session, request);
+                token.ThrowIfCancellationRequested();
+                ChatArtifact artifact;
+                using (new ResourceMutationJournal(_paths).AcquireScope(ResourceAuthorityScopeId.Document(new DocumentAuthorityId(session.DocumentAuthorityId))))
+                    artifact = ArtifactCatalog().Import(session, source.Bytes, source.FileName, source.ContentType, request.OperationId, source.Origin);
+                AttachTransferredArtifact(session, artifact);
+            });
+        }
+
+        private static void RequireArtifactTransferRevision(ChatSession session, ArtifactTransferRequest request)
+        {
+            if (request.ExpectedSessionRevision != session.Revision)
+                throw new InvalidOperationException("Чат изменился. Обновите каталог перед переносом.");
+        }
+
+        private void AttachTransferredArtifact(ChatSession session, ChatArtifact artifact)
+        {
+            _artifactWorkingSet.Change(session, new ArtifactLinkChangeRequest { ChatId = session.Id,
+                ExpectedSessionRevision = session.Revision, ResourceUri = ChatResourceUri.CreateArtifactRevisionUri(session, artifact), Detached = false },
+                current => { _conversationStore.Save(current); _chatSessions.NotifySaved(current); });
         }
 
         public ChatStateResponse ChangeArtifactLink(ArtifactLinkChangeRequest request)

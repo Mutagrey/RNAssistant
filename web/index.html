@@ -43,7 +43,7 @@
   <link rel="stylesheet" href="css/app-model-context.css?v=model-context-20261002-1">
   <link rel="stylesheet" href="css/app-context-inspector.css?v=json-height-20260929-1-usage-20261002-1">
   <link rel="stylesheet" href="css/app-chart-artifacts.css?v=chatui-20260622-3">
-  <link rel="stylesheet" href="css/app-artifacts.css?v=artifact-links-20260908-1">
+  <link rel="stylesheet" href="css/app-artifacts.css?v=artifact-catalog-20261002-1">
   <link rel="stylesheet" href="css/app-tree-adapter.css?v=tree-adapter-20260829-1">
   <link rel="stylesheet" href="css/app-html-workspace.css?v=html-memory-20261002-1">
   <link rel="stylesheet" href="css/app-responsive.css?v=library-layout-20260907-1">
@@ -125,15 +125,7 @@
                 </label>
                 <div class="chat-resource-list" id="chatResourcesList"></div>
                 <button type="button" class="link-button hidden" id="chatResourcesMoreButton">Следующие 50 ресурсов</button>
-                <details id="documentArtifactsPicker">
-                  <summary>Из документа…</summary>
-                  <p class="chat-resource-empty">Подключите файл или выберите Plan из другого чата. «Убрать» удаляет только ссылку в этом чате; история и ресурс документа сохраняются.</p>
-                  <label class="chat-resource-search-wrap">
-                    <input id="documentArtifactsQuery" type="search" placeholder="Название ресурса" aria-label="Найти ресурс документа" maxlength="200">
-                    <button type="button" class="link-button" id="documentArtifactsSearch">Найти</button>
-                  </label>
-                  <div id="documentArtifactsList" class="chat-resource-list" aria-live="polite"></div>
-                </details>
+                <button type="button" class="link-button" id="openDocumentArtifactCatalog">Из документа…</button>
                 <div class="chat-resource-popover-foot">
                   <button type="button" class="link-button" id="openArtifactsTabButton">Открыть все артефакты</button>
                 </div>
@@ -585,6 +577,29 @@
       </section>
 
       <section class="panel" id="tab-artifacts">
+        <div class="artifact-catalog-toolbar">
+          <label>Артефакты <select id="artifactCatalogScope"><option value="chat">В чате</option><option value="document">В документе</option><option value="all">Все документы</option></select></label>
+          <button type="button" id="artifactCatalogShow">Каталог</button>
+          <button type="button" id="artifactCatalogEditor">Редактор</button>
+          <button type="button" id="artifactCatalogImport">Импортировать…</button>
+          <input type="file" id="artifactCatalogFile" hidden>
+        </div>
+        <section id="artifactCatalog" class="artifact-catalog" aria-label="Каталог артефактов">
+          <div class="artifact-catalog-filters">
+            <input type="search" id="artifactCatalogQuery" placeholder="Поиск по названию" aria-label="Название артефакта" maxlength="200">
+            <select id="artifactCatalogKind" aria-label="Тип артефакта"><option value="">Все типы</option><option value="html_workspace">HTML-проекты</option><option value="markdown">Markdown</option><option value="file">Файлы и JSON</option><option value="image">Изображения</option><option value="plan_document">Планы</option></select>
+            <select id="artifactCatalogDocument" aria-label="Документ"><option value="">Все документы</option></select>
+            <button type="button" id="artifactCatalogRefresh">Обновить</button>
+          </div>
+          <p id="artifactCatalogStatus" role="status" aria-live="polite"></p>
+          <div id="artifactCatalogList" class="artifact-catalog-list"></div>
+          <button type="button" id="artifactCatalogMore" hidden>Следующие 50</button>
+          <section id="artifactCatalogPreview" hidden aria-label="Предпросмотр артефакта">
+            <button type="button" id="artifactCatalogBack">← К списку</button>
+            <h3 id="artifactCatalogPreviewTitle"></h3>
+            <div id="artifactCatalogPreviewBody"></div>
+          </section>
+        </section>
         <div class="tool-layout html-workspace-layout split-layout" id="htmlWorkspaceLayout" data-split-key="html-workspace" data-default-ratio="0.3" data-min-left="180" data-min-ratio="0.18" data-max-ratio="0.5">
           <aside class="tool-list-panel html-workspace-sidebar" id="htmlWorkspaceSidebar">
             <div class="tool-list-status" id="htmlWorkspaceStatus">Ресурсов пока нет.</div>
@@ -1110,6 +1125,7 @@
   <script src="js/app-agent-model.js?v=catalog-display-chat-20260908-1"></script>
   <script src="js/app-chart-artifacts.js?v=chart-chat-scope-20260908-1"></script>
   <script src="js/app-artifacts.js?v=artifact-library-lazy-20261002-1"></script>
+  <script src="js/app-artifact-catalog.js?v=artifact-catalog-20261002-1"></script>
   <script src="js/app-task-list.js?v=agent-planning-20261002-2"></script>
   <script src="js/app-agent-activity.js?v=agent-continuity-20261002-1"></script>
   <script src="js/app-agent-approval.js?v=run-view-state-20260830-1"></script>
@@ -1124,6 +1140,6 @@
   <script src="js/app-chat-run.js?v=response-render-timing-20260928-1-usage-20261002-1-navigation-20261002-1-inbox-20261002-1"></script>
   <script src="js/app-chat.js?v=office-chat-20260930-3-navigation-20261002-1-panel-model-20261002-1-context-20261002-1-inbox-20261002-1"></script>
   <script src="js/app-chat-edit.js?v=chat-sync-20260903-1-usage-20261002-1"></script>
-  <script src="js/app.js?v=chat-poll-20260928-1-usage-20261002-1-panel-model-20261002-2"></script>
+  <script src="js/app.js?v=artifact-catalog-20261002-1"></script>
 </body>
 </html>

@@ -1,10 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
-using System.Globalization;
 using System.IO;
-using Newtonsoft.Json;
-using RNAssistant.Core.Tools;
 using RNAssistant.Core.Models;
 using RNAssistant.Core.Services;
 using RNAssistant.Core.Storage;
@@ -14,7 +11,6 @@ namespace RNAssistant.Office.Services
 {
     internal sealed class ArtifactWorkingSetService
     {
-        private const int MaximumItems = 50;
         private readonly DocumentArtifactStore _artifacts;
         private readonly ResourceMutationJournal _mutations;
 
@@ -24,49 +20,7 @@ namespace RNAssistant.Office.Services
             _mutations = mutations ?? throw new ArgumentNullException(nameof(mutations));
         }
 
-        public DocumentArtifactListDto List(ChatSession session, DocumentArtifactListRequest request)
-        {
-            RequireChat(session, request?.ChatId);
-            var query = (request.Query ?? string.Empty).Trim();
-            if (query.Length > 200) throw new InvalidOperationException("Сократите поисковый запрос до 200 символов.");
-            // A short document lease keeps catalog heads coherent with mutations.
-            // No body read, model wait or user wait takes place under this lease.
-            using (_mutations.AcquireScope(Scope(session)))
-            {
-                var items = CurrentItems(session)
-                    .Where(item => string.IsNullOrEmpty(query) ||
-                        (item.Title ?? string.Empty).IndexOf(query, StringComparison.OrdinalIgnoreCase) >= 0)
-                    .OrderByDescending(item => item.CreatedUtc).ThenBy(item => item.Id, StringComparer.Ordinal)
-                    .ToList();
-                var stamp = TextPatternEngine.Sha256(JsonConvert.SerializeObject(new object[]
-                    { session.Id, session.DocumentAuthorityId, session.Revision, query, items.Select(item => item.Id + ":" + item.AvailabilityIssue).ToArray() }));
-                var offset = 0;
-                if (!string.IsNullOrEmpty(request.Cursor))
-                {
-                    var parts = request.Cursor.Split('.');
-                    if (parts.Length != 2 || parts[0] != stamp ||
-                        !int.TryParse(parts[1], NumberStyles.None, CultureInfo.InvariantCulture, out offset) ||
-                        offset <= 0 || offset >= items.Count || offset % MaximumItems != 0)
-                        throw new InvalidOperationException("Список ресурсов изменился. Начните поиск заново.");
-                }
-                return new DocumentArtifactListDto
-                {
-                    ChatId = session.Id, SessionRevision = session.Revision, HasMore = items.Count > offset + MaximumItems,
-                    NextCursor = items.Count > offset + MaximumItems ? stamp + "." + (offset + MaximumItems).ToString(CultureInfo.InvariantCulture) : null,
-                    Items = items.Skip(offset).Take(MaximumItems).Select(item => new DocumentArtifactLinkDto
-                    {
-                        ResourceUri = ChatResourceUri.CreateArtifactRevisionUri(session, item),
-                        Title = string.IsNullOrEmpty(item.AvailabilityIssue) ? item.Title : item.Title ?? "Недоступный ресурс",
-                        AvailabilityIssue = item.AvailabilityIssue, Kind = item.Kind, Revision = item.Revision,
-                        Linked = ArtifactWorkingSet.IsLinked(session, item),
-                        Selected = item.Id == session.ActivePlanDocumentArtifactId || item.Id == session.ActiveHtmlArtifactId ||
-                            MarkdownDocumentIdentity.LogicalId(item.Id) != null && session.ArtifactLinks.Any(link => !link.Detached && link.Reference.Uri == ChatResourceUri.CreateArtifactRevisionUri(session, item))
-                    }).ToArray()
-                };
-            }
-        }
-
-        private IEnumerable<ChatArtifact> CurrentItems(ChatSession session)
+        internal IEnumerable<ChatArtifact> CurrentItems(ChatSession session)
         {
             foreach (var group in _artifacts.InspectMetadataList(session)
                 .Concat((session.Artifacts ?? new List<ChatArtifact>()).Where(item => !string.IsNullOrEmpty(item.AvailabilityIssue)))

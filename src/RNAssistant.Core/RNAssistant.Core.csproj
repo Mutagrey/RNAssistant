@@ -167,6 +167,7 @@
     <Compile Include="Services\ChatSessionHeaderFactory.cs" />
     <Compile Include="Services\RunViewStateProjector.cs" />
     <Compile Include="Services\HtmlWorkspaceCopyService.cs" />
+    <Compile Include="Services\ArtifactTransferPackage.cs" />
     <Compile Include="Services\HtmlWorkspaceHistoryPolicy.cs" />
     <Compile Include="Services\HtmlWorkspaceNavigationService.cs" />
     <Compile Include="Services\HtmlWorkspaceIdentity.cs" />
@@ -187,6 +188,7 @@
     <Compile Include="Storage\ChatConversationStoreAdapter.cs" />
     <Compile Include="Storage\ChatStore.Artifacts.cs" />
     <Compile Include="Storage\DocumentArtifactStore.cs" />
+    <Compile Include="Storage\DocumentArtifactStore.Transfer.cs" />
     <Compile Include="Storage\DocumentArtifactStore.Discovery.cs" />
     <Compile Include="Storage\DocumentArtifactStore.Plans.cs" />
     <Compile Include="Storage\DocumentArtifactStore.Records.cs" />

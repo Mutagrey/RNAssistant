@@ -53,7 +53,7 @@ namespace RNAssistant.Office
             {
                 // Lease checks never select a different chat or fall back to the active one.
                 var session = LoadAddressedSession(chatId);
-                return session != null && (workspaceId == "viewer" || workspaceId == ResourceDataPlaneService.UploadOwner ||
+                return session != null && (workspaceId == "viewer" || workspaceId == ArtifactCatalogService.Owner || workspaceId == ResourceDataPlaneService.UploadOwner ||
                     workspaceId == TrajectoryExportDownloadService.Owner ||
                     workspaceId == TrajectoryPayloadService.Owner ||
                     workspaceId == ModelContextInspectorService.Owner ||

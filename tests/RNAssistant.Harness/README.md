@@ -37,6 +37,17 @@ pass is reusable only when its relevant sources/tests, dependencies, build setti
 and environment are unchanged. Explicit phase/release gates and the pre-commit
 version check still apply.
 
+## Artifact catalog and transfer
+
+Use `artifact transfer:` for project/archive roundtrips, saved Office snapshots,
+independent copies, repeated operation refusal and original bytes. Use
+`artifact working set:` for membership, stale selection and paginated discovery.
+`node tests/web/artifact-working-set.test.js` covers the full catalog, dirty editors,
+double clicks, late responses and sandboxed preview. Run
+`dotnet run --project demo/RNAssistant.MockDemo/RNAssistant.MockDemo.csproj -- --artifact-transfer-test`
+for real controller upload/import/download/copy delivery in an initially empty chat.
+This is host-neutral evidence, not Windows/Office qualification.
+
 ## Incoming messages / steer
 
 Run the focused `inbox:` filter for cancellation isolation, stale responses, batch

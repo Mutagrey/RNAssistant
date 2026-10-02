@@ -14,6 +14,13 @@ namespace RNAssistant.Harness
 {
     internal static partial class Program
     {
+        private static ArtifactCatalogService WorkingSetCatalog(ArtifactWorkingSetService links)
+        {
+            var paths = FixturePaths.Value;
+            return new ArtifactCatalogService(new DocumentAuthorityRegistry(paths), new ChatStore(paths).DocumentArtifacts,
+                links, new ResourceAuthorityStore(paths), new ChatBlobStore(paths));
+        }
+
         private static void ArtifactWorkingSetMetadataRecovery()
         {
             WithTempExecutor(FakeOfficeAdapter.ForHost("Excel"), (executor, adapter) =>
@@ -59,7 +66,7 @@ namespace RNAssistant.Harness
                 var prompt = ChatResourcePromptIndex.Build(a, 1000);
                 AssertContains(prompt, "unavailable=1", "model gets an actionable availability summary");
                 AssertTrue(!prompt.Contains("Lost metadata Plan"), "missing metadata cannot become a guessed semantic target");
-                var catalog = links.List(a, new DocumentArtifactListRequest { ChatId = a.Id });
+                var catalog = WorkingSetCatalog(links).List(a, new ArtifactCatalogRequest { Scope = "document", ChatId = a.Id });
                 AssertTrue(catalog.Items.Count == 2 && catalog.Items.Any(item => item.Title == "Healthy original.md" && item.AvailabilityIssue == null),
                     "one unavailable Plan does not block other document picker entries");
                 RuntimeThrows<InvalidDataException>(() => links.Change(b, LinkRequest(b, exact.Uri, false), chats.Save));
@@ -73,7 +80,7 @@ namespace RNAssistant.Harness
                 a = new ChatStore(paths).Load(a.Id);
                 AssertTrue(a.Artifacts.Single(item => item.Id == artifact.Id).AvailabilityIssue == null, "restored exact metadata removes disposable issue on reload");
                 b = new ChatStore(paths).Load(b.Id);
-                AssertTrue(!links.List(b, new DocumentArtifactListRequest { ChatId = b.Id }).Items.Single(item => item.ResourceUri == exact.Uri).Linked,
+                AssertTrue(!WorkingSetCatalog(links).List(b, new ArtifactCatalogRequest { Scope = "document", ChatId = b.Id }).Items.Single(item => item.ResourceUri == exact.Uri).Linked,
                     "metadata recovery does not silently reattach a removed link");
 
                 var identity = DocumentArtifactStore.PlanIdentity(a, DocumentArtifactStore.PlanIdFromSnapshot(exact));
@@ -81,7 +88,7 @@ namespace RNAssistant.Harness
                 authority.Publish(ResourceAuthorityCommit.Create(scope, before.Generation, null,
                     new[] { new ResourceHeadChange(identity, before.GetHead(identity), ResourceHeadState.Unknown(identity, before.Generation + 1, "test-lost-readback")) },
                     AuthorityCommitReason.DerivedPublication));
-                var unknown = links.List(a, new DocumentArtifactListRequest { ChatId = a.Id });
+                var unknown = WorkingSetCatalog(links).List(a, new ArtifactCatalogRequest { Scope = "document", ChatId = a.Id });
                 AssertEqual("head_unavailable", unknown.Items.Single(item => item.ResourceUri == exact.Uri).AvailabilityIssue,
                     "unknown current head is explicit rather than a latest-snapshot substitution");
                 AssertEqual(2, unknown.Items.Count, "unknown head does not prevent listing unrelated originals");
@@ -130,7 +137,7 @@ namespace RNAssistant.Harness
                 var first = a.Artifacts.Single(item => item.Id == a.ActivePlanDocumentArtifactId);
                 var b = NewSession(adapter);
                 b.DocumentAuthorityId = a.DocumentAuthorityId;
-                var listed = links.List(b, new DocumentArtifactListRequest { ChatId = b.Id });
+                var listed = WorkingSetCatalog(links).List(b, new ArtifactCatalogRequest { Scope = "document", ChatId = b.Id });
                 var candidate = listed.Items.Single();
                 AssertTrue(!candidate.Linked && !candidate.Selected && b.Artifacts.Count == 0, "discovery leaves chat membership unchanged");
                 links.Change(b, LinkRequest(b, candidate.ResourceUri, false), chats.Save);
@@ -186,12 +193,12 @@ namespace RNAssistant.Harness
                     tools, new AppSettings(), false, false, a);
                 var b = NewSession(adapter);
                 b.DocumentAuthorityId = a.DocumentAuthorityId;
-                var first = links.List(b, new DocumentArtifactListRequest { ChatId = b.Id }).Items.Single();
+                var first = WorkingSetCatalog(links).List(b, new ArtifactCatalogRequest { Scope = "document", ChatId = b.Id }).Items.Single();
                 executor.ExecuteManual(Command(PlanDocumentToolCatalog.SaveToolId, "title", "Race Plan", "markdown", "# Second", "status", "ready"),
                     tools, new AppSettings(), false, false, a);
                 RuntimeThrows<InvalidOperationException>(() => links.Change(b, LinkRequest(b, first.ResourceUri, false), chats.Save));
                 AssertEqual(0, b.Artifacts.Count, "stale picker cannot silently choose a newer Plan");
-                var next = links.List(b, new DocumentArtifactListRequest { ChatId = b.Id }).Items.Single();
+                var next = WorkingSetCatalog(links).List(b, new ArtifactCatalogRequest { Scope = "document", ChatId = b.Id }).Items.Single();
                 var request = LinkRequest(b, next.ResourceUri, false);
                 chats.Save(b);
                 RuntimeThrows<InvalidOperationException>(() => links.Change(b, request, chats.Save));
@@ -239,7 +246,7 @@ namespace RNAssistant.Harness
                 AssertEqual(0, ArtifactLibraryProjectionService.Project(a).Heads.Count, "unlink hides origin working-set entry");
                 AssertEqual(1, ArtifactLibraryProjectionService.Project(b).Heads.Count, "other chat link remains independent");
                 AssertEqual(exact.Uri, a.Messages.Single().ResourceRefs.Single().Uri, "origin message still has its provenance");
-                AssertTrue(links.List(a, new DocumentArtifactListRequest { ChatId = a.Id }).Items.Single().Linked == false,
+                AssertTrue(WorkingSetCatalog(links).List(a, new ArtifactCatalogRequest { Scope = "document", ChatId = a.Id }).Items.Single().Linked == false,
                     "unlinked document original remains discoverable for reattachment");
                 var clearer = new ChatHistoryEditService(_ => { }, (session, reason) => { });
                 clearer.Clear(b, new DocumentContext());
@@ -254,15 +261,15 @@ namespace RNAssistant.Harness
                     a.Messages.Add(nextMessage);
                     ingestion.CommitAndLink(a, nextMessage, a.Messages.Count - 1);
                 }
-                var page = links.List(b, new DocumentArtifactListRequest { ChatId = b.Id });
+                var page = WorkingSetCatalog(links).List(b, new ArtifactCatalogRequest { Scope = "document", ChatId = b.Id });
                 AssertEqual(50, page.Items.Count, "picker page is bounded even with duplicate titles");
-                var tail = links.List(b, new DocumentArtifactListRequest { ChatId = b.Id, Cursor = page.NextCursor });
+                var tail = WorkingSetCatalog(links).List(b, new ArtifactCatalogRequest { Scope = "document", ChatId = b.Id, Cursor = page.NextCursor });
                 AssertTrue(page.HasMore && !tail.HasMore && tail.Items.Count == 1 &&
                     !page.Items.Any(item => item.ResourceUri == tail.Items[0].ResourceUri), "continuation reaches every duplicate without repetition");
-                RuntimeThrows<InvalidOperationException>(() => links.List(a, new DocumentArtifactListRequest { ChatId = a.Id, Cursor = page.NextCursor }));
-                RuntimeThrows<InvalidOperationException>(() => links.List(b, new DocumentArtifactListRequest { ChatId = b.Id, Query = "Shared", Cursor = page.NextCursor }));
+                RuntimeThrows<InvalidOperationException>(() => WorkingSetCatalog(links).List(a, new ArtifactCatalogRequest { Scope = "document", ChatId = a.Id, Cursor = page.NextCursor }));
+                RuntimeThrows<InvalidOperationException>(() => WorkingSetCatalog(links).List(b, new ArtifactCatalogRequest { Scope = "document", ChatId = b.Id, Query = "Shared", Cursor = page.NextCursor }));
                 links.Change(b, LinkRequest(b, tail.Items[0].ResourceUri, false), chats.Save);
-                RuntimeThrows<InvalidOperationException>(() => links.List(b, new DocumentArtifactListRequest { ChatId = b.Id, Cursor = page.NextCursor }));
+                RuntimeThrows<InvalidOperationException>(() => WorkingSetCatalog(links).List(b, new ArtifactCatalogRequest { Scope = "document", ChatId = b.Id, Cursor = page.NextCursor }));
 
             });
         }

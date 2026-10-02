@@ -587,6 +587,9 @@ namespace RNAssistant.Office.WebView
                     case "cancelHtmlWorkspaceMutationUpload":
                         responsePayload = _controller.CancelHtmlWorkspaceMutationUpload(Payload<ResourceUploadLeaseRequest>(payload));
                         break;
+                    case "listArtifactCatalog":
+                        responsePayload = _controller.ListArtifactCatalog(Payload<ArtifactCatalogRequest>(payload));
+                        break;
                     case "getArtifactLibraryPage":
                         var libraryPage = Payload<ArtifactLibraryPageRequest>(payload);
                         responsePayload = await RunBridgeWorkAsync(
@@ -597,8 +600,20 @@ namespace RNAssistant.Office.WebView
                         responsePayload = await RunBridgeWorkAsync(
                             () => _controller.GetArtifactLibraryHistory(libraryHistory), cancellationToken).ConfigureAwait(false);
                         break;
-                    case "listDocumentArtifacts":
-                        responsePayload = _controller.ListDocumentArtifacts(Payload<DocumentArtifactListRequest>(payload));
+                    case "exportArtifact":
+                        responsePayload = _controller.ExportArtifact(Payload<ArtifactTransferRequest>(payload), cancellationToken);
+                        break;
+                    case "copyArtifact":
+                        responsePayload = _controller.CopyArtifact(Payload<ArtifactTransferRequest>(payload), cancellationToken);
+                        break;
+                    case "beginArtifactImport":
+                        responsePayload = _controller.BeginArtifactImport(Payload<ResourceUploadOpenRequest>(payload), cancellationToken);
+                        break;
+                    case "importArtifact":
+                        responsePayload = _controller.ImportArtifact(Payload<ArtifactTransferRequest>(payload), cancellationToken);
+                        break;
+                    case "closeArtifactTransfer":
+                        responsePayload = _controller.CloseArtifactTransfer(Payload<ResourceUploadLeaseRequest>(payload));
                         break;
                     case "changeArtifactLink":
                         responsePayload = _controller.ChangeArtifactLink(Payload<ArtifactLinkChangeRequest>(payload));

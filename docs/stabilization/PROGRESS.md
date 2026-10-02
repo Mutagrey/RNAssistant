@@ -50,6 +50,14 @@ records it directly and reviews the signed release payload before finalization.
 
 ## Implementation log — includes current in-flight work and earlier entries
 
+Artifact catalog and transfer (2026-10-02): the Artifacts tab exposes chat/document/
+all-local-document scopes with full-pane discovery and isolated preview. Explicit
+HTML project packages and original/Markdown/JSON import/export support independent
+copies; JSON bindings transfer as retained snapshots without live source-document
+access. Typed streaming transport and atomic authored publication retain existing
+authority/CAS ownership. See [contract and evidence](../artifact-library.md#local-catalog-and-artifact-transfer--2026-10-02).
+Windows/Office/WebView2 qualification remains open.
+
 Incoming messages (2026-10-02): runtime-owned durable queue and safe-boundary steer
 are added with typed bridge intake, attachment support, a configurable Enter action,
 queue cards and a separate Stop control. Steer interrupts model transport while

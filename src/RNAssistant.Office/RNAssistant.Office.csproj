@@ -66,6 +66,8 @@
     <Compile Include="Services\ConversationInboxService.cs" />
     <Compile Include="Contracts\ArtifactLibraryDtos.cs" />
     <Compile Include="Contracts\ArtifactWorkingSetDtos.cs" />
+    <Compile Include="Services\ArtifactCatalogService.cs" />
+    <Compile Include="Contracts\ArtifactCatalogDtos.cs" />
     <Compile Include="Services\ArtifactWorkingSetService.cs" />
     <Compile Include="Contracts\BridgeDtos.RunChanges.cs" />
     <Compile Include="Contracts\BridgeDtos.ToolResultPresentation.cs" />

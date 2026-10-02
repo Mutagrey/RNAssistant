@@ -25,6 +25,7 @@ namespace RNAssistant.MockDemo
         {
             var options = DemoOptions.Parse(args);
             SettingsService.ConfigureDemoDefaults(options.BaseUrl, "mock-strict");
+            if ((args ?? new string[0]).Contains("--artifact-transfer-test")) return RunArtifactTransferTest();
             if ((args ?? new string[0]).Contains("--inbox-test")) return await RunInboxTestAsync().ConfigureAwait(false);
             if (options.ArtifactCommitTest)
             {

@@ -7,6 +7,13 @@ using RNAssistant.Core.Models;
 
 namespace RNAssistant.Core.Storage
 {
+    public sealed class DocumentAuthorityEntry
+    {
+        public string AuthorityId { get; set; }
+        public string Host { get; set; }
+        public string Locator { get; set; }
+    }
+
     public sealed class DocumentAuthorityRegistry
     {
         private readonly string _path;
@@ -84,6 +91,13 @@ namespace RNAssistant.Core.Storage
                 if (changed) Save(state);
                 return new DocumentAuthorityId(authorityId);
             }
+        }
+
+        public IReadOnlyList<DocumentAuthorityEntry> List()
+        {
+            lock (Sync)
+                return Load().Documents.Select(item => new DocumentAuthorityEntry {
+                    AuthorityId = item.AuthorityId, Host = item.Host, Locator = item.Locator }).ToArray();
         }
 
         private DocumentAuthorityRegistryState Load()

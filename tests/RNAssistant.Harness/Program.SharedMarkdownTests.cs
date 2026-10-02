@@ -72,7 +72,7 @@ namespace RNAssistant.Harness
                     "# Архитектура", "common Gateway still reads historical Markdown after logical-head drift");
                 var head = store.DocumentArtifacts.CurrentSnapshot(b, logical);
                 AssertTrue(head.Uri != exact.Uri, "edit publishes a new shared head");
-                AssertEqual(1, links.List(b, new DocumentArtifactListRequest { ChatId = b.Id }).Items.Count(item => item.Kind == ChatArtifactKinds.Markdown), "picker lists one current version per MD");
+                AssertEqual(1, WorkingSetCatalog(links).List(b, new ArtifactCatalogRequest { Scope = "document", ChatId = b.Id }).Items.Count(item => item.Kind == ChatArtifactKinds.Markdown), "picker lists one current version per MD");
                 var c = NewSession(adapter); c.DocumentAuthorityId = b.DocumentAuthorityId;
                 var writers = new[] { b, c }.Select((chat, index) => Task.Run(() => save(chat, currentTarget, "# Writer " + index))).ToArray();
                 Task.WaitAll(writers);
@@ -91,7 +91,7 @@ namespace RNAssistant.Harness
                     "restore retains exact source provenance");
                 var independent = save(b, null, "# Independent\nDifferent document with the same title.");
                 AssertTrue(independent.Success, "second MD with the same title coexists");
-                AssertEqual(2, links.List(b, new DocumentArtifactListRequest { ChatId = b.Id }).Items.Count(item => item.Kind == ChatArtifactKinds.Markdown), "independent MD resources remain distinct");
+                AssertEqual(2, WorkingSetCatalog(links).List(b, new ArtifactCatalogRequest { Scope = "document", ChatId = b.Id }).Items.Count(item => item.Kind == ChatArtifactKinds.Markdown), "independent MD resources remain distinct");
                 var ingestion = new ChatResourceIngestionService(new AttachmentStore(paths), store.DocumentArtifacts);
                 var original = ingestion.Stage(b, "uploaded.md", "text/markdown", System.Text.Encoding.UTF8.GetBytes("# Immutable original"));
                 var originalMessage = new ChatMessage { Role = "user", Content = "Original", Attachments = ingestion.LoadDrafts(b, new[] { original.Id }).ToList() };
