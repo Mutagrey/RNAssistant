@@ -132,8 +132,10 @@ namespace RNAssistant.Harness
 
             var result = await f.RunAsync();
 
-            AssertEqual("repeated_tool_failure", result.Summary.Reason, "unchanged invalid request is not redispatched");
+            AssertEqual(RunLifecycle.Completed, result.Summary.Lifecycle, "rejection returns to the model instead of terminating the run");
             AssertEqual(1, f.Tools.Calls.Count, "one original error reaches the model");
+            AssertEqual(ToolExecutionOutcome.NotDispatched, f.Model.Requests[2].AcceptedMessages.Last().Progress.Outcome,
+                "model sees that the repeated call was not executed");
         }
 
         private static async Task KernelContinuesChangedConflicts()
@@ -141,19 +143,24 @@ namespace RNAssistant.Harness
             var f = new KernelFixture(
                 KernelResponse(KernelCall("write", "{\"path\":\"index.html\",\"content\":\"first\"}")),
                 KernelResponse(KernelCall("write", "{\"path\":\"index.html\",\"content\":\"second\"}")),
+                KernelResponse(KernelCall("read")),
                 KernelResponse(KernelCall("write", "{\"path\":\"index.html\",\"content\":\"third\"}")),
                 KernelResponse());
             var recovery = new ToolRecoveryContract(ToolFailureKind.ConflictNoEffect,
                 ToolRetryPolicy.RefreshRequired,
                 new ResourceIdentity("rna://chat/document/artifact/current/member/file/index"),
                 ResourceRepresentations.Source, "HTML file: index.html");
+            var attempts = 0;
             f.Tools.OnExecute = (context, token) => Task.FromResult(KernelRecord(context,
-                ToolExecutionOutcome.Error, recovery: recovery));
+                ++attempts <= 2 ? ToolExecutionOutcome.Error : ToolExecutionOutcome.Ok, recovery: attempts <= 2 ? recovery : null,
+                resourceEvidence: context.Call.Name == "read" ? new[] { new ResourceEvidence(context.Call.Id,
+                    new ResourceAuthorityScopeId("document", "continuity"), new ResourceRef(recovery.ResourceIdentity.Uri, "r1"),
+                    "source", ResourceCoverage.Whole(), true, 1) } : null));
 
             var result = await f.RunAsync();
 
-            AssertEqual("repeated_tool_no_progress", result.Summary.Reason, "changed patch text cannot bypass required refresh");
-            AssertEqual(2, f.Tools.Calls.Count, "second conflict stops the cycle");
+            AssertEqual(RunLifecycle.Completed, result.Summary.Lifecycle, "two conflicts do not prevent the model from refreshing source");
+            AssertEqual(4, f.Tools.Calls.Count, "recovery read and replanned mutation both reach runtime");
         }
 
         private static async Task KernelAllowsFailedCallAfterInterveningSuccess()
@@ -199,7 +206,7 @@ namespace RNAssistant.Harness
 
             var result = await f.RunAsync();
 
-            AssertEqual("repeated_tool_failure", result.Summary.Reason, "alternating invalid calls cannot bypass the guard");
+            AssertEqual(RunLifecycle.Completed, result.Summary.Lifecycle, "model can finish after seeing a repeated-call rejection");
             AssertEqual(2, f.Tools.Calls.Count, "only distinct invalid requests are dispatched");
         }
 
@@ -241,7 +248,7 @@ namespace RNAssistant.Harness
             var f = new KernelFixture(
                 KernelResponse(KernelCall("write", uncertain)),
                 KernelResponse(KernelCall("read", "{\"target\":\"status\"}")),
-                KernelResponse(KernelCall("write", uncertain)));
+                KernelResponse(KernelCall("write", uncertain)), KernelResponse());
             var outcomes = new Queue<ToolExecutionOutcome>(new[]
             {
                 ToolExecutionOutcome.Unknown,
@@ -252,10 +259,12 @@ namespace RNAssistant.Harness
 
             var result = await f.RunAsync();
 
-            AssertEqual(RunLifecycle.Failed, result.Summary.Lifecycle,
-                "the exact same possible effect remains non-repeatable");
-            AssertEqual("repeated_unknown_tool_call", result.Summary.Reason,
-                "unknown write remains non-repeatable because an effect may exist");
+            AssertEqual(RunLifecycle.Completed, result.Summary.Lifecycle,
+                "rejecting an uncertain replay still permits another model decision");
+            AssertEqual(ExecutionHealth.Unknown, result.Summary.ExecutionHealth,
+                "continuing the model does not certify the unknown effect");
+            AssertContains(f.Model.Requests[3].AcceptedMessages.Last().Text, "may have had an effect",
+                "unknown replay rejection reaches the model");
             AssertEqual(2, f.Tools.Calls.Count,
                 "intervening success does not redispatch the unknown write");
         }
@@ -581,7 +590,7 @@ namespace RNAssistant.Harness
             var f = new KernelFixture(
                 KernelResponse(KernelCall()),
                 KernelResponse(KernelCall("confirm")),
-                KernelResponse(KernelCall()));
+                KernelResponse(KernelCall()), KernelResponse());
             var outcomes = new Queue<ToolExecutionOutcome>(new[]
             {
                 ToolExecutionOutcome.Unknown,
@@ -605,8 +614,10 @@ namespace RNAssistant.Harness
                 result.Continuation.Revision, result.AcceptedMessages);
             var resumed = await f.Kernel.ResumeAsync("resumed", result.Summary.PendingConfirmation.PendingId,
                 restored, CancellationToken.None);
-            AssertEqual("repeated_unknown_tool_call", resumed.Summary.Reason,
-                "restored terminal facts block unknown replay even after another confirmed write");
+            AssertEqual(RunLifecycle.Completed, resumed.Summary.Lifecycle,
+                "the model can continue after the restored guard rejects unknown replay");
+            AssertEqual(ExecutionHealth.Unknown, resumed.Summary.ExecutionHealth,
+                "an unrelated confirmed write does not erase unknown effect evidence");
             AssertEqual(3, f.Tools.Calls.Count, "only the unrelated confirmed call is dispatched on resume");
         }
 

@@ -434,13 +434,21 @@ namespace RNAssistant.Office.Services
             // Delivery warnings retain the original semantic result under tool_data.
             data = data?["tool_data"] as JObject ?? data;
             var member = (data?["members"] as JArray ?? new JArray()).OfType<JObject>()
-                .FirstOrDefault(item => string.Equals((string)item["uri"],
+                .FirstOrDefault(item => evidence != null && string.Equals(LabelText(item["uri"]),
                     evidence.Resource.Uri, StringComparison.Ordinal));
-            var label = (string)member?["target"] ?? (string)member?["path"] ?? (string)data?["target"];
-            if (label != null) return label;
-            var module = (string)data?["moduleName"];
-            return module == null ? (string)data?["title"] : "VBA module: " + module;
+            return LabelText(member?["target"]) ?? LabelText(member?["path"]) ?? RootTargetLabel(data);
         }
+
+        private static string RootTargetLabel(JObject data)
+        {
+            var target = LabelText(data?["target"]);
+            if (target != null) return target;
+            var module = LabelText(data?["moduleName"]);
+            return module == null ? LabelText(data?["title"]) : "VBA module: " + module;
+        }
+
+        private static string LabelText(JToken value)
+        { return value?.Type == JTokenType.String ? (string)value : null; }
 
         private static bool IsSharedContextRead(ChatMessage message)
         {
@@ -610,9 +618,18 @@ namespace RNAssistant.Office.Services
             ResourceObservationNotice observation = null)
         {
             var effect = result.ResourceEffect;
+            var data = ToolResultWire.ParseData(wire.Result.DataJson) as JObject;
+            data = data?["tool_data"] as JObject ?? data;
             var fact = new CompletedToolOperation { ToolCallId = wire.ToolCallId, ToolName = wire.Name,
                 Status = wire.Result.Status, Message = wire.Result.Message,
-                DataJson = observation == null ? wire.Result.DataJson : null };
+                DataJson = observation == null ? wire.Result.DataJson : null,
+                // wire is already model-projected: never recover labels from
+                // unsanitized durable data when omitting the original body.
+                Targets = new[] { RootTargetLabel(data) }
+                    .Concat((data?["members"] as JArray ?? new JArray()).OfType<JObject>()
+                        .Select(member => LabelText(member["target"]) ?? LabelText(member["path"])))
+                    .Where(target => !string.IsNullOrWhiteSpace(target))
+                    .Distinct(StringComparer.Ordinal).ToList() };
             return new ChatMessage {
                 Id = result.Id, RunId = result.RunId, CreatedUtc = result.CreatedUtc,
                 Role = "assistant", ProtocolMessage = true, ToolCallId = wire.ToolCallId,
@@ -621,6 +638,7 @@ namespace RNAssistant.Office.Services
                     JsonConvert.SerializeObject(new {
                         tool_call_id = fact.ToolCallId, tool = fact.ToolName,
                         outcome = fact.Status.ToString(), message = fact.Message,
+                        targets = fact.Targets,
                         data = ToolResultWire.ParseData(fact.DataJson), observation,
                         effect = effect == null ? null : new {
                             operation = effect.Operation, outcome = effect.Outcome.ToString(),

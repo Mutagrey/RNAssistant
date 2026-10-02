@@ -86,6 +86,7 @@ namespace RNAssistant.Core.Models
         public RNAssistant.Core.Tools.Contracts.ToolResultStatus Status { get; set; }
         public string Message { get; set; }
         public string DataJson { get; set; }
+        public List<string> Targets { get; set; } = new List<string>();
     }
 
     public sealed class ResourceObservationNotice

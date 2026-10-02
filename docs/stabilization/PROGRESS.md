@@ -50,6 +50,18 @@ records it directly and reviews the signed release payload before finalization.
 
 ## Implementation log — includes current in-flight work and earlier entries
 
+Recovery flexibility and mutation receipts (2026-10-02): a repeated-call rejection
+now returns to the model with its specific reason before any dispatch. It does not
+terminate the run or prevent another tool/corrected request; only three consecutive
+responses containing exclusively rejected calls end the no-progress cycle.
+Read batches count as one response; domain mutation guards and unknown-effect
+non-replay remain in force. Repeated conflicts with different inputs do not stop
+recovery reads. Archived mutation receipts now retain semantic module/file targets
+alongside call ID, outcome and verified effect, even when data bodies are omitted.
+Host-neutral checks cover alternate tools, corrected requests, confirmation,
+unknown replay, all result roles and VBA/HTML target preservation. Exact Windows
+Office/model incident qualification remains open.
+
 Agent continuity implementation (2026-10-01): terminal errors/actions now survive
 context projection and compaction with typed provenance. Existing event messages
 retain typed progress for canonical-call guards and confirmation restoration.

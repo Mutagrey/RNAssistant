@@ -11,6 +11,7 @@ using RNAssistant.Core.ModelProtocol;
 using RNAssistant.Core.Tools;
 using RNAssistant.Core.Tools.Contracts;
 using RNAssistant.Office.Services;
+using RNAssistant.Office.Tools;
 
 namespace RNAssistant.Harness
 {
@@ -84,33 +85,97 @@ namespace RNAssistant.Harness
             return message;
         }
 
+        private static void ContextContinuityKeepsMutationReceipts()
+        {
+            var authority = new ModelAuthoritySnapshot(new ResourceAuthoritySnapshotSet(new ResourceAuthoritySnapshot[0]),
+                "pack", new SkillCatalogSnapshot(null), null, 1);
+            foreach (var resource in new[] {
+                new { Tool = "common.vba_write_module", Data = "{\"moduleName\":\"NormalizeReport\",\"source\":\"HISTORICAL_BODY\"}",
+                    Targets = new[] { "VBA module: NormalizeReport" } },
+                new { Tool = "common.html_workspace_apply_patch", Data = "{\"members\":[{\"target\":\"HTML file: index.html\"},{\"target\":\"HTML file: app.js\"}],\"source\":\"HISTORICAL_BODY\"}",
+                    Targets = new[] { "HTML file: index.html", "HTML file: app.js" } } })
+            foreach (var role in new[] { "user", "developer", "tool" })
+            foreach (var outcome in new[] { ResourceEffectOutcome.VerifiedChanged, ResourceEffectOutcome.VerifiedNoChange,
+                ResourceEffectOutcome.FailedNoEffect, ResourceEffectOutcome.UnknownAfterDispatch })
+            {
+                var status = outcome == ResourceEffectOutcome.FailedNoEffect ? ToolResultStatus.Error :
+                    outcome == ResourceEffectOutcome.UnknownAfterDispatch ? ToolResultStatus.Unknown : ToolResultStatus.Ok;
+                var mutation = ContinuityResult("mutation", resource.Tool, new ToolResult(status,
+                    "Recorded outcome.", resource.Data), role);
+                mutation.ResourceEffect = new ResourceEffect("effect", "write", outcome);
+                var compiler = new ModelContextCompiler();
+                var immediate = compiler.Compile(authority, new ChatMessage[0], new[] { ContinuityCall(mutation), mutation },
+                    null, new ToolCatalogEntry[0], new AppSettings(), 10000);
+                AssertEqual(status, immediate.Messages.Single(m => m.CompletedOperation != null).CompletedOperation.Status,
+                    "next request preserves mutation status for every result role");
+                var checkpoint = new ContextCheckpoint { ThroughMessageId = mutation.Id,
+                    Claims = new List<StructuredContextClaim> { new StructuredContextClaim {
+                        ClaimId = "c", Kind = "interpretation", Text = "Continue.",
+                        SourceRoles = new List<string> { "assistant" }, SourceMessageIds = new List<string> { mutation.Id } } } };
+                var session = new ChatSession { ActiveContextCheckpointId = checkpoint.Id,
+                    ContextCheckpoints = new List<ContextCheckpoint> { checkpoint },
+                    Messages = new List<ChatMessage> { ContinuityCall(mutation), mutation } };
+                var active = ContextCompactionService.BuildActiveWindow(session);
+                AssertTrue(!active.Any(m => m.Id == mutation.Id), "fixture actually compacts the original mutation");
+                var restored = ContextWorkingSet.Restore(session, active, authority, new AppSettings(), 6000);
+                var next = compiler.Compile(authority, new ChatMessage[0], active.Concat(restored.Messages).ToArray(),
+                    null, new ToolCatalogEntry[0], new AppSettings(), 10000);
+                var receipt = next.Messages.Single(m => m.CompletedOperation != null);
+                AssertEqual("mutation", receipt.CompletedOperation.ToolCallId, "operation correlation survives compaction");
+                AssertEqual(status, receipt.CompletedOperation.Status, "compaction cannot upgrade error or unknown to success");
+                AssertEqual(outcome, receipt.ResourceEffect.Outcome, "verified, no-op, rejected and unknown effects remain distinct");
+                AssertEqual(string.Join(",", resource.Targets), string.Join(",", receipt.CompletedOperation.Targets),
+                    "all mutation targets survive even when the original data body is omitted");
+                foreach (var target in resource.Targets)
+                    AssertContains(receipt.Content, target, "target is delivered in the actual model projection");
+                AssertTrue(!receipt.Content.Contains("HISTORICAL_BODY"), "historical receipt does not replay a source body as current");
+            }
+        }
+
         private static async Task ContextContinuityBoundsLoops()
         {
             var repeated = new KernelFixture(KernelResponse(KernelCall("read", "{\"a\":1,\"b\":2}")),
-                KernelResponse(KernelCall("read", "{\"b\":2,\"a\":1}")));
-            repeated.Tools.OnExecute = (context, token) => Task.FromResult(KernelRecord(context, ToolExecutionOutcome.Error));
-            AssertEqual("repeated_tool_failure", (await repeated.RunAsync()).Summary.Reason, "JSON property order cannot bypass repetition detection");
-            AssertEqual(1, repeated.Tools.Calls.Count, "guard acts before redispatch");
+                KernelResponse(KernelCall("read", "{\"b\":2,\"a\":1}")),
+                KernelResponse(KernelCall("alternative_read")), KernelResponse());
+            repeated.Tools.Policies.Add("alternative_read", new ToolPolicySnapshot("alternative_read", "r1",
+                new ToolPolicy(ToolEffect.Read, ToolVerification.None, false, true, new[] { "agent" })));
+            repeated.Tools.OnExecute = (context, token) => Task.FromResult(KernelRecord(context,
+                context.Call.Name == "read" ? ToolExecutionOutcome.Error : ToolExecutionOutcome.Ok));
+            AssertEqual(RunLifecycle.Completed, (await repeated.RunAsync()).Summary.Lifecycle, "model can select another tool after rejection");
+            AssertEqual("read,alternative_read", string.Join(",", repeated.Tools.Calls.Select(c => c.Call.Name)),
+                "JSON property order cannot bypass rejection; alternative tool still dispatches");
+            AssertContains(repeated.Model.Requests[2].AcceptedMessages.Last().Text, "Choose another tool",
+                "rejection reaches the next model request with actionable recovery");
 
-            var busy = new KernelFixture(KernelResponse(KernelCall("read")), KernelResponse(KernelCall("read")),
-                KernelResponse(KernelCall("read")), KernelResponse(KernelCall("read")));
+            var busy = new KernelFixture(Enumerable.Range(0, 6).Select(_ => KernelResponse(KernelCall("read"))).ToArray());
             busy.Tools.OnExecute = (context, token) => Task.FromResult(KernelRecord(context, ToolExecutionOutcome.Error,
                 recovery: new ToolRecoveryContract(ToolFailureKind.BusyNoEffect, ToolRetryPolicy.RetryLater)));
-            AssertEqual("repeated_tool_failure", (await busy.RunAsync()).Summary.Reason, "transient retries are bounded");
+            AssertEqual("repeated_tool_no_progress", (await busy.RunAsync()).Summary.Reason, "only repeated ignored recovery ends the run");
             AssertEqual(3, busy.Tools.Calls.Count, "RetryLater allows three attempts");
 
-            var unchanged = new KernelFixture(KernelResponse(KernelCall("read")), KernelResponse(KernelCall("read")),
-                KernelResponse(KernelCall("read")));
+            var unchanged = new KernelFixture(Enumerable.Range(0, 6).Select(_ => KernelResponse(KernelCall("read"))).ToArray());
             unchanged.Tools.OnExecute = (context, token) => Task.FromResult(new ToolExecutionRecord(context,
                 ToolExecutionOutcome.Ok, context.StartedUtc, result: ToolResult.Ok("loaded", "{\"content\":\"same\"}")));
             AssertEqual("repeated_tool_no_progress", (await unchanged.RunAsync()).Summary.Reason, "successful unchanged reads also stop a loop");
+            AssertEqual(3, unchanged.Tools.Calls.Count, "the repeated success is rejected before a fourth dispatch");
+            AssertEqual(6, unchanged.Model.Requests.Count, "model receives rejection feedback before stopping");
 
-            var noChange = new KernelFixture(KernelResponse(KernelCall()), KernelResponse(KernelCall()), KernelResponse(KernelCall()));
+            var noChange = new KernelFixture(Enumerable.Range(0, 6).Select(_ => KernelResponse(KernelCall())).ToArray());
             noChange.Tools.OnExecute = (context, token) => Task.FromResult(new ToolExecutionRecord(context,
                 ToolExecutionOutcome.Ok, context.StartedUtc, result: ToolResult.Ok("unchanged", "{\"operationId\":\"" + context.Call.Id + "\"}"),
                 resourceEffect: new ResourceEffect("effect_" + context.Call.Id, context.Call.Name, ResourceEffectOutcome.VerifiedNoChange)));
             AssertEqual("repeated_tool_no_progress", (await noChange.RunAsync()).Summary.Reason,
                 "new runtime IDs do not turn repeated verified no-op mutations into progress");
+            AssertEqual(3, noChange.Tools.Calls.Count, "no-op mutation is not dispatched again after its repeated result");
+
+            var batch = new KernelFixture(KernelResponse(KernelCall("read")),
+                KernelResponse(KernelCall("read"), KernelCall("read"), KernelCall("read")),
+                KernelResponse(KernelCall("read", "{\"target\":\"corrected\"}")), KernelResponse());
+            batch.Tools.OnExecute = (context, token) => Task.FromResult(KernelRecord(context,
+                context.Call.ArgumentsJson == "{}" ? ToolExecutionOutcome.Error : ToolExecutionOutcome.Ok));
+            AssertEqual(RunLifecycle.Completed, (await batch.RunAsync()).Summary.Lifecycle,
+                "three rejected calls in one response still permit a corrected next step");
+            AssertEqual(2, batch.Tools.Calls.Count, "only the original and corrected read dispatch");
 
             var call = new ToolCall("known_call", "write", "{}");
             var progress = new ToolExecutionProgress(ToolExecutionOutcome.Unknown);
@@ -123,6 +188,46 @@ namespace RNAssistant.Harness
             AssertTrue(!tracker.CanDispatch(new ToolCall("new_call", "write", "{}"), out reason, out message, out delay),
                 "restored terminal facts prevent replay after confirmation/restart");
             AssertEqual("repeated_unknown_tool_call", reason, "operation identity does not depend on newly allocated call id");
+        }
+
+        private static void ContextContinuityDeliversReplanFeedback()
+        {
+            WithTempExecutor(FakeOfficeAdapter.ForHost("Excel"), (executor, adapter) =>
+            {
+                adapter.VbaModuleCode = "Sub Main()\nDebug.Print \"CURRENT_BODY\"\nEnd Sub";
+                Func<string, JObject, string> response = (tool, arguments) => new JObject {
+                    ["message"] = "Читаю модуль.", ["final"] = false,
+                    ["tool_calls"] = new JArray(new JObject { ["name"] = tool, ["arguments"] = arguments })
+                }.ToString();
+                var invalidRead = response("common.resources_read", new JObject {
+                    ["target"] = "VBA module: Module1", ["representation"] = "table" });
+                var responses = new Queue<string>(new[] { invalidRead, invalidRead,
+                    response("common.resources_find", new JObject { ["scope"] = "vba", ["query"] = "Module1" }),
+                    response("common.resources_read", new JObject { ["target"] = "VBA module: Module1", ["representation"] = "source" }),
+                    "{\"message\":\"Прочитано.\",\"final\":true,\"tool_calls\":[]}" });
+                var requests = new List<IReadOnlyList<ChatMessage>>();
+                var service = CreateConversationRunService(adapter, executor, (settings, messages, options, stream, token) =>
+                {
+                    requests.Add(messages.ToList());
+                    return Task.FromResult(new LlmCompletionResult { Content = responses.Dequeue() });
+                });
+                var session = NewSession(adapter);
+                var completed = service.ExecuteAsync(ChatModes.Agent, "Прочитай Module1.", session,
+                    NewContext(adapter), new AppSettings(), OfficeToolCatalog.ForHost(adapter.HostName)
+                        .Concat(executor.GetControllerTools()).ToList(),
+                    (Action<string, string, ChatActivity>)null, null).GetAwaiter().GetResult();
+                AssertEqual(AgentResponseStatuses.Completed, completed.ResponseStatus,
+                    "production loop permits discovery and corrected read after a duplicate failure");
+                AssertEqual(5, requests.Count, "rejection creates a next model step without protocol repair");
+                AssertContains(FlattenSimple(requests[2]), "repeated_tool_failure",
+                    "specific rejection code survives materialization and context compilation");
+                AssertContains(FlattenSimple(requests[2]), "Choose another tool",
+                    "actionable recovery reaches the actual next request");
+                AssertContains(FlattenSimple(requests.Last()), "CURRENT_BODY",
+                    "the alternative route delivers the source to the model");
+                AssertEqual(1, session.Messages.Count(m => m.ExecutionProgress?.Outcome == ToolExecutionOutcome.NotDispatched),
+                    "only the duplicate is suppressed; corrected reads are executed");
+            });
         }
 
         private static void ContextContinuityRestoresWorkingSet()

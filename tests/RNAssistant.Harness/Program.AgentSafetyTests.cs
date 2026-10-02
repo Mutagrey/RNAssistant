@@ -2033,8 +2033,7 @@ namespace RNAssistant.Harness
                 false);
             var foldedText = string.Join("\n", folded.Messages.Select(
                 item => item.Content));
-            AssertContains(foldedText,
-                "TOOL_INTERACTION (completed causal frame)",
+            AssertTrue(folded.Messages.Any(message => message.CompletedOperation?.ToolCallId == "mutation_projection"),
                 "completed mutation remains represented to the model");
             AssertTrue(foldedText.IndexOf(
                     genericReference.Uri,

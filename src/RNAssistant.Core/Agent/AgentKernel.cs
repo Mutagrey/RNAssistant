@@ -120,6 +120,7 @@ namespace RNAssistant.Core.Agent
                 state.Messages.Add(AgentMessage.Assistant(response));
                 await AppendAsync(state, new AgentRunEvent(AgentRunEventKind.ResponseAccepted,
                     state.Summary(), stepId, response: response)).ConfigureAwait(false);
+                state.Progress.BeginStep();
                 if (response.ToolCalls.Count == 0)
                 {
                     if (response.Final)
@@ -159,6 +160,9 @@ namespace RNAssistant.Core.Agent
                         return await FinishAsync(state, result.Lifecycle, result.Reason, result.AssistantMessage).ConfigureAwait(false);
                     }
                 }
+                if (state.Progress.RecoveryIgnored)
+                    return await FinishAsync(state, RunLifecycle.Failed, "repeated_tool_no_progress",
+                        "Three consecutive model responses repeated only rejected calls. No repeated operation was dispatched; change the approach or reconcile the earlier result.").ConfigureAwait(false);
             }
             return await FinishAsync(state, RunLifecycle.Failed, "iteration_limit", "Model iteration limit reached.").ConfigureAwait(false);
         }
@@ -215,8 +219,9 @@ namespace RNAssistant.Core.Agent
             int retryDelay = 0;
             if (!confirmed && !state.Progress.CanDispatch(call, out progressReason, out progressMessage, out retryDelay))
             {
-                await RecordNotDispatchedAsync(state, call, policy, stepId, progressMessage).ConfigureAwait(false);
-                return state.Summary(RunLifecycle.Failed, progressReason, progressMessage);
+                await RecordNotDispatchedAsync(state, call, policy, stepId, progressMessage,
+                    code: progressReason).ConfigureAwait(false);
+                return null;
             }
             if (retryDelay > 0)
             {
@@ -281,7 +286,7 @@ namespace RNAssistant.Core.Agent
                 state.Messages.Add(AgentMessage.ToolResult(record));
             await AppendAsync(state, new AgentRunEvent(AgentRunEventKind.ToolCompleted, state.Summary(),
                 stepId, execution: record)).ConfigureAwait(false);
-            var stalled = state.Progress.Observe(call, ToolExecutionProgress.Capture(record), record.Message,
+            state.Progress.Observe(call, ToolExecutionProgress.Capture(record), record.Message,
                 record.ResourceEvidence, record.ResourceEffect);
             if (stop.HasValue || cancellationToken.IsCancellationRequested)
             {
@@ -301,19 +306,20 @@ namespace RNAssistant.Core.Agent
             }
             if (record.AwaitingUser)
                 return state.Summary(RunLifecycle.Completed, "awaiting_user", record.Message);
-            if (stalled != null)
-                return state.Summary(RunLifecycle.Failed, "repeated_tool_no_progress", stalled);
             return null;
         }
 
         private async Task RecordNotDispatchedAsync(State state, ToolCall call, ToolPolicySnapshot policy,
-            string stepId, string message, bool confirmed = false)
+            string stepId, string message, bool confirmed = false, string code = null)
         {
             var context = new ToolExecutionContext(call, policy, state.RunId, state.TurnId, stepId, _utcNow(), confirmed, 0);
-            var record = new ToolExecutionRecord(context, ToolExecutionOutcome.NotDispatched, CompletionTime(context), message, mayHaveDispatched: false);
+            var record = new ToolExecutionRecord(context, ToolExecutionOutcome.NotDispatched, CompletionTime(context), message, mayHaveDispatched: false,
+                result: code == null ? null : RNAssistant.Core.Tools.Contracts.ToolResult.Error(message,
+                    Newtonsoft.Json.JsonConvert.SerializeObject(new { code, dispatched = false })));
             state.Messages.Add(AgentMessage.ToolResult(record));
             await AppendAsync(state, new AgentRunEvent(AgentRunEventKind.ToolCompleted, state.Summary(),
                 stepId, execution: record)).ConfigureAwait(false);
+            state.Progress.Observe(call, ToolExecutionProgress.Capture(record), message, null, null);
         }
 
         private async Task<AgentRunResult> FinishAsync(State state, RunLifecycle lifecycle, string reason, string message)

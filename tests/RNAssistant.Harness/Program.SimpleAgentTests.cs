@@ -2006,11 +2006,9 @@ namespace RNAssistant.Harness
                     patched, "next model decision sees the changed VBA source");
                 AssertContains(sourceRequests.Last().Single(message => message.SyntheticResourceObservation).Content,
                     "' Version 2\n" + patched, "final model decision sees the latest whole-module source");
-                var writeFrame = sourceRequests.Last().Where(message =>
-                        (message.Content ?? string.Empty).StartsWith("TOOL_INTERACTION (completed causal frame):\n"))
-                    .Select(message => JObject.Parse(message.Content.Substring(message.Content.IndexOf('\n') + 1)))
-                    .Single(frame => (string)frame["tool"] == "common.vba_write_module");
-                AssertEqual("Ok", (string)writeFrame["outcome"],
+                var writeFrame = sourceRequests.Last().Single(message =>
+                    message.CompletedOperation?.ToolName == "common.vba_write_module").CompletedOperation;
+                AssertEqual(RNAssistant.Core.Tools.Contracts.ToolResultStatus.Ok, writeFrame.Status,
                     "the write's superseded input observation cannot turn its verified result into an error");
                 var writes = result.ToolResults.Select(item => JObject.FromObject(item))
                     .Where(item => (string)item["toolId"] == "common.vba_write_module").ToList();
@@ -2069,8 +2067,7 @@ namespace RNAssistant.Harness
                 AssertContains(FlattenSimple(beforeSecondWrite), "Added sheet: First",
                     "first result reaches the model before the second write is authored");
                 var replay = FlattenSimple(finalRequest);
-                AssertEqual(2, replay.Split(new[] { "TOOL_INTERACTION (completed causal frame):" },
-                    StringSplitOptions.None).Length - 1,
+                AssertEqual(2, finalRequest.Count(message => message.CompletedOperation?.ToolName == "excel.add_sheet"),
                     "both execution results are folded after schema admission");
                 var activities = session.Messages
                     .Where(message => message != null && message.Activity != null && message.Activity.Kind == "tool" &&
@@ -2210,7 +2207,7 @@ namespace RNAssistant.Harness
                     message.ToolResultProtocolVersion == ToolResultWire.CurrentVersion &&
                     !string.Equals(message.Role, "assistant", StringComparison.Ordinal)),
                     "schema evidence remains typed while the completed mutation is folded");
-                AssertContains(replay, "TOOL_INTERACTION (completed causal frame)",
+                AssertTrue(calls[2].Any(message => message.CompletedOperation?.ToolName == "common.skills_upsert"),
                     "confirmed result is retained as a completed causal frame");
                 AssertContains(replay, "common.skills_upsert", "folded confirmation keeps its tool identity");
                 const string runtimeMarker = "RUNTIME_CONTEXT:\n";
@@ -2232,8 +2229,7 @@ namespace RNAssistant.Harness
                 var replayMessages = calls[2].ToList();
                 var userIndex = replayMessages.FindIndex(message => message.Role == "user" && !message.ProtocolMessage &&
                     (message.Content ?? string.Empty).Contains("Create a test skill."));
-                var resultIndex = replayMessages.FindIndex(message => (message.Content ?? string.Empty)
-                    .Contains("TOOL_INTERACTION (completed causal frame)"));
+                var resultIndex = replayMessages.FindIndex(message => message.CompletedOperation?.ToolName == "common.skills_upsert");
                 AssertTrue(userIndex >= 0 && userIndex < resultIndex,
                     "user request precedes the folded completed interaction in replay");
             });
@@ -2349,10 +2345,11 @@ namespace RNAssistant.Harness
                     AssertContains(afterSource.Content, "VBA module: Module1", "archival keeps the source associated with its target");
                     AssertTrue(loaded.Messages.Any(message => message.ToolName == VbaToolCatalog.ApplyPatch &&
                         message.ResultPayload != null), "large patch result exercises CAS archival");
-                    var frame = calls.Last().SingleOrDefault(message => (message.Content ?? string.Empty)
-                        .StartsWith("TOOL_INTERACTION (completed causal frame):\n"));
+                    var frame = calls.Last().SingleOrDefault(message =>
+                        message.CompletedOperation?.ToolCallId == terminal.ToolCallId);
                     AssertTrue(frame != null && frame.Content.Contains("VerifiedChanged"),
                         "the first request after confirmation contains the terminal effect");
+                    AssertContains(frame.Content, "Module1", "terminal effect remains associated with its module");
                     var apiMessages = new LlmMessageBuilder().Build(calls.Last(), settings).Messages
                         .Select(item => JObject.FromObject(item)).ToList();
                     AssertTrue(apiMessages.Any(item => (string)item["content"] == afterSource.Content) &&
@@ -2416,7 +2413,7 @@ namespace RNAssistant.Harness
                     "agent continues after confirmed policy drift");
                 AssertEqual(2, calls.Count, "confirmed policy drift triggers the next model turn");
                 var replay = FlattenSimple(calls[1]);
-                AssertContains(replay, "TOOL_INTERACTION (completed causal frame)",
+                AssertTrue(calls[1].Any(message => message.CompletedOperation?.ToolName == "excel.clear_range"),
                     "confirmed policy drift is retained in model context");
                 AssertContains(replay, "Tool policy changed; request a new call.",
                     "fingerprint failure is replayed without dispatch");

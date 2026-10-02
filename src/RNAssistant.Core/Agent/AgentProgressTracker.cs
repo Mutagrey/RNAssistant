@@ -19,9 +19,21 @@ namespace RNAssistant.Core.Agent
         }
         private readonly HashSet<string> _unknown = new HashSet<string>(StringComparer.Ordinal);
         private readonly Dictionary<string, Failure> _failures = new Dictionary<string, Failure>(StringComparer.Ordinal);
-        private readonly Dictionary<string, int> _refreshFailures = new Dictionary<string, int>(StringComparer.Ordinal);
         private readonly Dictionary<string, string> _seenResults = new Dictionary<string, string>(StringComparer.Ordinal);
         private readonly Dictionary<string, int> _unchanged = new Dictionary<string, int>(StringComparer.Ordinal);
+        private int _rejectedSteps;
+        private bool _stepRejected;
+        private bool _stepDispatched;
+
+        // Count model responses, not calls in a read batch. A rejected call must
+        // reach the model before it can be judged to have ignored that feedback.
+        internal void BeginStep()
+        {
+            _rejectedSteps = _stepRejected && !_stepDispatched ? _rejectedSteps + 1 : 0;
+            _stepRejected = _stepDispatched = false;
+        }
+
+        internal bool RecoveryIgnored => _stepRejected && !_stepDispatched && _rejectedSteps >= 2;
 
         internal bool CanDispatch(ToolCall call, out string reason, out string message, out int delayMilliseconds)
         {
@@ -30,7 +42,14 @@ namespace RNAssistant.Core.Agent
             if (_unknown.Contains(key))
             {
                 reason = "repeated_unknown_tool_call";
-                message = "The previous identical call may have had an effect; reconcile it before repeating the operation.";
+                message = "This call was not dispatched: the previous identical call may have had an effect. Inspect its actual state or choose another operation; do not repeat the uncertain effect.";
+                return false;
+            }
+            int unchanged;
+            if (_unchanged.TryGetValue(key, out unchanged) && unchanged >= 3)
+            {
+                reason = "repeated_tool_no_progress";
+                message = "This call was not dispatched: it already returned the same result three times. Reuse that result, choose another tool or change the input to obtain new information.";
                 return false;
             }
             Failure previous;
@@ -41,30 +60,24 @@ namespace RNAssistant.Core.Agent
                 return true;
             }
             reason = "repeated_tool_failure";
-            message = "The same call already failed without relevant progress. Correct the input or satisfy its recovery before retrying. Previous error: " + previous.Message;
+            message = "This call was not dispatched: the same call already failed without relevant progress. Choose another tool, correct the input or satisfy its recovery before retrying. Previous error: " + previous.Message;
             return false;
         }
 
-        internal string Observe(ToolCall call, ToolExecutionProgress progress, string message,
+        internal void Observe(ToolCall call, ToolExecutionProgress progress, string message,
             IEnumerable<ResourceEvidence> evidence, ResourceEffect effect)
         {
-            if (progress == null || progress.Outcome == ToolExecutionOutcome.AwaitingConfirmation ||
-                progress.Outcome == ToolExecutionOutcome.NotDispatched) return null;
+            if (progress == null || progress.Outcome == ToolExecutionOutcome.AwaitingConfirmation) return;
+            if (progress.Outcome == ToolExecutionOutcome.NotDispatched) { _stepRejected = true; return; }
+            _stepDispatched = true;
             var key = Signature(call);
-            if (progress.Outcome == ToolExecutionOutcome.Unknown) { _unknown.Add(key); return null; }
+            if (progress.Outcome == ToolExecutionOutcome.Unknown) { _unknown.Add(key); return; }
             if (progress.Outcome == ToolExecutionOutcome.Error)
             {
                 Failure previous;
                 if (!_failures.TryGetValue(key, out previous)) _failures.Add(key, previous = new Failure());
                 previous.Attempts++; previous.Recovery = progress.Recovery; previous.Message = message;
-                var refresh = RefreshKey(progress.Recovery);
-                if (refresh != null)
-                {
-                    int count; _refreshFailures.TryGetValue(refresh, out count);
-                    _refreshFailures[refresh] = count + 1;
-                    if (count >= 1) return "Repeated source conflicts require a complete current observation before another mutation.";
-                }
-                return null;
+                return;
             }
             var observations = (evidence ?? new ResourceEvidence[0]).Where(e => e != null).ToArray();
             // A verified state transition can make a previously rejected call valid.
@@ -77,21 +90,19 @@ namespace RNAssistant.Core.Agent
                     if (recovery?.ResourceIdentity != null && !effect.Impacts.Any(impact =>
                         impact.Identity.Equals(recovery.ResourceIdentity))) continue;
                     _failures.Remove(failure.Key);
-                    var refresh = RefreshKey(recovery);
-                    if (refresh != null) _refreshFailures.Remove(refresh);
                 }
                 _unchanged.Clear(); _seenResults.Clear();
-                return null;
+                return;
             }
             foreach (var pair in _failures.ToArray())
             {
                 var recovery = pair.Value.Recovery;
-                if (RefreshKey(recovery) == null || !observations.Any(recovery.IsSatisfiedBy)) continue;
-                _failures.Remove(pair.Key); _refreshFailures.Remove(RefreshKey(recovery));
+                if (recovery?.RetryPolicy != ToolRetryPolicy.RefreshRequired || !observations.Any(recovery.IsSatisfiedBy)) continue;
+                _failures.Remove(pair.Key);
             }
             var resultFingerprint = effect?.Outcome == ResourceEffectOutcome.VerifiedNoChange
                 ? "verified-no-change" : progress.ResultFingerprint;
-            if (string.IsNullOrEmpty(resultFingerprint)) return null;
+            if (string.IsNullOrEmpty(resultFingerprint)) return;
             var observationKey = string.Join("\n", observations.Select(e => e.Resource.Uri + "@" + e.Resource.Revision +
                 ":" + e.View + ":" + JsonConvert.SerializeObject(e.Coverage)).OrderBy(x => x, StringComparer.Ordinal));
             var fingerprint = resultFingerprint + "\n" + observationKey;
@@ -100,12 +111,11 @@ namespace RNAssistant.Core.Agent
             {
                 _seenResults[key] = fingerprint;
                 _unchanged.Clear(); // New information is progress, including read-only work.
-                return null;
+                return;
             }
             int previousCount;
             var repeats = _unchanged.TryGetValue(key, out previousCount) ? previousCount + 1 : 2;
             _unchanged[key] = repeats;
-            return repeats >= 3 ? "The same operation returned the same result three times. Reuse its result or choose a different next step." : null;
         }
 
         internal void Restore(IEnumerable<AgentMessage> messages)
@@ -113,6 +123,7 @@ namespace RNAssistant.Core.Agent
             var calls = new Dictionary<string, ToolCall>(StringComparer.Ordinal);
             foreach (var message in messages)
             {
+                if (message.Kind == AgentMessageKind.Assistant) BeginStep();
                 foreach (var call in message.ToolCalls) calls[call.Id] = call;
                 ToolCall completed;
                 if (message.Kind == AgentMessageKind.ToolResult && calls.TryGetValue(message.ToolCallId, out completed))
@@ -123,10 +134,5 @@ namespace RNAssistant.Core.Agent
         private static string Signature(ToolCall call)
         { return call.Name + "\n" + ToolPackSnapshot.JsonFingerprint(call.ArgumentsJson); }
 
-        private static string RefreshKey(ToolRecoveryContract recovery)
-        {
-            return recovery?.RetryPolicy == ToolRetryPolicy.RefreshRequired && recovery.ResourceIdentity != null
-                ? recovery.ResourceIdentity.Uri + "\n" + recovery.View : null;
-        }
     }
 }

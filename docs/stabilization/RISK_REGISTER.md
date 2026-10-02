@@ -22,6 +22,15 @@ compaction notices disappear; six identical failed calls dispatch until the test
 iteration limit. The shared compiler/progress/working-set corrections now cover
 these mechanisms, with exact terminal facts retained independently of source bodies.
 
+Follow-up (2026-10-02): the first progress guard ended the whole run on a duplicate
+failure or a second source conflict, preventing the model from acting on recovery.
+Rejections now return explicit non-dispatch feedback and allow another tool or
+corrected input; only three consecutive responses consisting entirely of rejected
+calls stop the loop. A compact archived mutation receipt also lost its semantic
+target when dropping data. Targets now survive separately from historical source
+bodies, with unchanged success/no-op/error/unknown effect distinctions. These
+paths are covered host-neutral; they do not close the original live incident.
+
 The [canonical analysis and ordered implementation plan](../conversation-protocol.md#agent-continuity-audit--2026-10-01)
 separates operation facts from observation freshness, keeps typed provenance through
 compaction and uses existing typed recovery for bounded progress. The
@@ -195,8 +204,8 @@ pass for 1/16/160 KB JSON in all three result roles, calibrated capacity and act
 overflow, plus existing result projection/current-source checks. Exact Windows,
 Office and target-model reproduction remain open.
 
-AgentKernel currently blocks identical unknown-effect calls, not successful repeated
-reads; the default 256 model iterations only bound the eventual run length. Any
+At the initial 2026-09-30 probe, AgentKernel blocked identical unknown-effect calls,
+not successful repeated reads; the default 256 model iterations only bounded the eventual run length. Any
 separate no-progress policy must preserve legitimate refresh/recovery. Resource
 search is literal, so `excel.inspect charts` need not match the generic
 `Tool result · excel.inspect` title. Correlate the Windows trajectory before
