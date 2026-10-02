@@ -741,6 +741,9 @@ authority, scoped to document, conversation or catalog. One scoped commit atomic
 publishes all affected heads, one effect and generation. Cross-window catch-up reads
 journal tails; the rebuildable in-memory scope cache is bounded. Known heads require
 durable exact revision metadata before publication.
+An explicit local-data reset invalidates that cache in all controllers of the same
+process and clears transient document authority bindings; an unexpected journal
+truncation still fails closed.
 
 `ResourceMutationJournal` records Prepared and possible dispatch before invocation.
 `ResourceMutationAuthorityObserver` durably captures verified read-back before

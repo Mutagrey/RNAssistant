@@ -37,6 +37,16 @@ namespace RNAssistant.Core.Storage
             }
         }
 
+        public void ResetAfterRuntimeDataClear()
+        {
+            ResourceAuthorityStore[] stores;
+            lock (ObserversSync)
+                stores = Observers.Select(item => { ResourceAuthorityStore target; return item.TryGetTarget(out target) ? target : null; })
+                    .Where(item => item != null && item._directory == _directory).ToArray();
+            foreach (var store in stores)
+                lock (store._sync) store._scopes.Clear();
+        }
+
         public ResourceAuthoritySnapshot Capture(ResourceAuthorityScopeId scope)
         {
             if (scope == null) throw new ArgumentNullException(nameof(scope));

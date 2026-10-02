@@ -27,6 +27,16 @@ namespace RNAssistant.Core.Storage
             _path = Path.Combine(paths.ResourceAuthorityDirectory, "documents.json");
         }
 
+        public void ResetAfterRuntimeDataClear()
+        {
+            lock (Sync)
+            {
+                var prefix = _path + "|";
+                foreach (var key in RuntimeBindings.Keys.Where(item => item.StartsWith(prefix, StringComparison.Ordinal)).ToArray())
+                    RuntimeBindings.Remove(key);
+            }
+        }
+
         public DocumentAuthorityId Resolve(string host, string runtimeId, string locator,
             string existingAuthorityId = null)
         {

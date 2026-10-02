@@ -1566,6 +1566,36 @@ namespace RNAssistant.Harness
             });
         }
 
+        private static void ResourceAuthorityExplicitResetInvalidatesCaches()
+        {
+            WithTempPaths(paths =>
+            {
+                var writer = new ResourceAuthorityStore(paths);
+                var reader = new ResourceAuthorityStore(paths);
+                var documents = new DocumentAuthorityRegistry(paths);
+                var oldAuthorityId = documents.Resolve("Excel", "runtime-reset-test", "C:\\ResetTest.xlsx").Id;
+                var scope = new ResourceAuthorityScopeId("document", "reset-test");
+                var oldRevision = new ResourceRef("rna://document/reset-test/source", "r1");
+                writer.RegisterRevision(scope, new ResourceRevisionMetadata(oldRevision, null));
+                AssertTrue(reader.GetRevision(scope, oldRevision) != null, "reader caches the old journal");
+
+                var webViewCache = System.IO.Path.Combine(paths.WebViewUserDataDirectory, "in-use-cache");
+                System.IO.File.WriteAllText(webViewCache, "in use");
+                paths.ClearRuntimeData();
+                writer.ResetAfterRuntimeDataClear();
+
+                AssertEqual(null, reader.GetRevision(scope, oldRevision), "explicit reset invalidates other in-process readers");
+                documents.ResetAfterRuntimeDataClear();
+                var newAuthorityId = new DocumentAuthorityRegistry(paths)
+                    .Resolve("Excel", "runtime-reset-test", "C:\\ResetTest.xlsx").Id;
+                AssertTrue(oldAuthorityId != newAuthorityId, "reset discards transient document authority identity");
+                AssertTrue(System.IO.File.Exists(webViewCache), "active WebView data is not deleted during reset");
+                var newRevision = new ResourceRef("rna://document/reset-test/source", "r2");
+                writer.RegisterRevision(scope, new ResourceRevisionMetadata(newRevision, null));
+                AssertTrue(reader.GetRevision(scope, newRevision) != null, "authority accepts a fresh journal after reset");
+            });
+        }
+
         private static void ResourceTwoChatMutationsReachCompiler()
         {
             foreach (var scenario in new[] { "changed", "no-op", "unknown" })

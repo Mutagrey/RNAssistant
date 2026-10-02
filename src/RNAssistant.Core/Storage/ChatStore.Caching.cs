@@ -475,6 +475,12 @@ namespace RNAssistant.Core.Storage
             _projectionCache.Clear();
         }
 
+        public void ResetAfterRuntimeDataClear()
+        {
+            ClearProjectionCache();
+            ClearHeaderCache();
+        }
+
         private void MoveProjectionCache(string oldPath, string newPath)
         {
             _projectionCache.Move(ProjectionCacheKey(oldPath), ProjectionCacheKey(newPath));

@@ -8,6 +8,19 @@ retired or deferred is not an active P0/P1 implementation defect merely because
 that original severity remains in the table. Release qualification is a separate
 exact-build gate.
 
+## Local-data reset and active WebView profile — 2026-10-02
+
+Owner: Core storage paths and Office controller lifecycle. The Windows log shows
+`ClearRuntimeData` deleting durable roots before failing to remove the open
+`webview/EXCEL` profile; the surviving controller then reported a truncated
+resource journal from its stale in-memory projection. The reset now validates
+durable roots first, leaves the active WebView profile alone, and invalidates chat,
+document-authority and resource caches after a successful explicit clear. Focused
+host-neutral checks cover a late invalid root and fresh resource reads after reset.
+Exact Windows/WebView2 behavior remains unverified. A filesystem failure during
+deletion of a durable root can still leave a partial reset and must be reported as
+an error; no automatic replay or silent recovery is permitted.
+
 ## HTML patch `replace` mismatch — 2026-10-02
 
 Owner: Core text patch engine and HTML workspace tools. The photo shows a

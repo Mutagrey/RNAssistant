@@ -69,13 +69,19 @@ namespace RNAssistant.Core.Storage
 
         public void ClearRuntimeData()
         {
+            // Validate every durable root before deleting any user data. The live WebView
+            // profile is intentionally excluded: its files are held open by the pane.
+            EnsureManagedDirectory(Root);
+            EnsureManagedDirectory(ChatDirectory);
+            EnsureManagedDirectory(ChatBlobDirectory);
+            EnsureManagedDirectory(VbaJournalDirectory);
+            EnsureManagedDirectory(AttachmentDirectory);
+            EnsureManagedDirectory(ResourceAuthorityDirectory);
             ClearDirectory(ChatDirectory);
             ClearDirectory(ChatBlobDirectory);
             ClearDirectory(VbaJournalDirectory);
             ClearDirectory(AttachmentDirectory);
             ClearDirectory(ResourceAuthorityDirectory);
-            ClearDirectory(WebViewUserDataDirectory);
-            Ensure();
         }
 
         public static string SafeFileName(string value)

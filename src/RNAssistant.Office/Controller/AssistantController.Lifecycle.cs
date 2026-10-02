@@ -14,11 +14,11 @@ namespace RNAssistant.Office
                 EnsureNoActiveRuns();
                 _resourceData.CloseTransfers();
                 _paths.ClearRuntimeData();
+                _resourceAuthorityStore.ResetAfterRuntimeDataClear();
+                _documentAuthorityRegistry.ResetAfterRuntimeDataClear();
+                _chatStore.ResetAfterRuntimeDataClear();
                 _chatSessions.Reset();
-                lock (_syncRoot)
-                {
-                    _pendingAgentTools.Clear();
-                }
+                lock (_syncRoot) _pendingAgentTools.Clear();
             }
             return Initialize();
         }

@@ -195,6 +195,10 @@ An artifact body that was just stored or successfully hydrated keeps a transient
 - exact model request/response payloads use the same CAS;
 - equal bytes across chats or revisions deduplicate automatically.
 
+Explicit local-data clearing validates all durable roots before deleting their
+contents and invalidates the in-process resource journal cache. It leaves the active
+WebView profile untouched because open browser files cannot be reliably removed.
+
 When history encryption is enabled, committed CAS files contain authenticated ciphertext while their references retain the plaintext SHA-256 and byte length for deterministic identity and post-decryption verification.
 
 Authenticated-encryption writes place AES ciphertext directly into the final envelope buffer and compute HMAC incrementally over purpose plus envelope body. Reads authenticate the original stored buffer and decrypt its ciphertext slice without allocating separate full-size body, HMAC-input, or ciphertext copies. The on-disk `RNAENC01` format and key derivation remain unchanged.

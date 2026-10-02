@@ -288,6 +288,8 @@ namespace RNAssistant.Harness
 
                     var externalBlob = Path.Combine(external, new string('b', 64) + ".blob");
                     File.WriteAllText(externalBlob, "outside-managed-root");
+                    var retainedChat = Path.Combine(paths.ChatDirectory, "retain-before-rejected-reset.jsonl");
+                    File.WriteAllText(retainedChat, "chat-history");
                     var service = CasService(paths, new ChatStore(paths), new VbaJournalStore(paths), () => StorageProtector.None);
                     var report = service.Audit();
                     AssertTrue(!report.CanGarbageCollect, "reparse CAS root blocks GC");
@@ -303,6 +305,7 @@ namespace RNAssistant.Harness
                     try { paths.ClearRuntimeData(); }
                     catch (IOException) { resetRejected = true; }
                     AssertTrue(resetRejected, "runtime reset refuses a managed reparse root");
+                    AssertTrue(File.Exists(retainedChat), "a late invalid root cannot partially delete chat history");
                     AssertTrue(File.Exists(externalBlob), "managed operations never traverse the reparse root");
 
                     var deleteRoot = Path.Combine(paths.AttachmentDirectory, "safe-delete");

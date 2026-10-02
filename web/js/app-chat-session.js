@@ -728,7 +728,7 @@ async function initialize() {
 }
 
 async function clearRuntimeData() {
-  if (!window.confirm("Удалить локальные чаты, контекст чатов, резервные копии VBA и кеш WebView RNAssistant? Настройки, API-ключ, пользовательские инструменты и навыки останутся.")) {
+  if (!window.confirm("Удалить локальные чаты, контекст чатов и резервные копии VBA? Настройки, API-ключ, пользовательские инструменты и навыки останутся.")) {
     return;
   }
 
