@@ -17,6 +17,9 @@ assert.equal(typeof context.define, "function", "capture remains installed until
 vm.runInContext(fs.readFileSync(path.join(root, "web/js/vendor/echarts.min.js"), "utf8"), context,
   { filename: "echarts.min.js", timeout: 5000 });
 context.RNAssistantEChartsSandboxRuntime.finish();
+vm.runInContext(fs.readFileSync(path.join(root, "web/js/app-html-vendor-catalog.js"), "utf8"), context);
+vm.runInContext(fs.readFileSync(path.join(root, "web/js/app-html-vendor-runtime.js"), "utf8"), context,
+  { filename: "app-html-vendor-runtime.js" });
 vm.runInContext(fs.readFileSync(path.join(root, "web/js/app-html-resource-export.js"), "utf8"), context);
 vm.runInContext(fs.readFileSync(path.join(root, "web/js/app-html-workspace-preview.js"), "utf8"), context,
   { filename: "app-html-workspace-preview.js" });
@@ -116,6 +119,9 @@ console.log("PASS HTML ECharts: only exact binding names are exposed, without da
 
 const missingRuntime = vm.createContext({});
 missingRuntime.window = missingRuntime;
+vm.runInContext(fs.readFileSync(path.join(root, "web/js/app-html-vendor-catalog.js"), "utf8"), missingRuntime);
+vm.runInContext(fs.readFileSync(path.join(root, "web/js/app-html-vendor-runtime.js"), "utf8"), missingRuntime,
+  { filename: "app-html-vendor-runtime.js" });
 vm.runInContext(fs.readFileSync(path.join(root, "web/js/app-html-workspace-preview.js"), "utf8"), missingRuntime,
   { filename: "app-html-workspace-preview.js" });
 assert.throws(() => missingRuntime.RNAssistantHtmlWorkspacePreview.build({
@@ -125,7 +131,7 @@ assert.throws(() => missingRuntime.RNAssistantHtmlWorkspacePreview.build({
     { id: "app.js", path: "app.js", kind: "script", content: "echarts.init(document.getElementById('chart'));" }
   ],
   hostBridge: false
-}), /requires the loaded bundled ECharts 5\.6\.0 dependency/);
+}), /Bundled echarts 5\.6\.0 is unavailable/);
 console.log("PASS HTML ECharts: standalone export fails closed when the pinned dependency is unavailable");
 
 assert.deepEqual(Array.from(context.RNAssistantHtmlWorkspacePreview.dependencies([

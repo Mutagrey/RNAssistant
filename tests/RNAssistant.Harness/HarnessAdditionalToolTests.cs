@@ -279,11 +279,11 @@ namespace RNAssistant.Harness
                 var target = executor.ResourceGateway.Find(boundSession, "sales.json", "conversation").Items.Single().Target;
                 var definition = executor.GetControllerTools().Single(item => item.Id == HtmlWorkspaceToolCatalog.BindDataToolId);
                 var schema = JObject.Parse(definition.ArgumentSchemaJson);
-                AssertEqual("name,target", string.Join(",", ((JArray)schema["required"]).Values<string>()), "binding takes a semantic target");
+                AssertEqual("name,target,view", string.Join(",", ((JArray)schema["required"]).Values<string>()), "binding takes a semantic target and explicit view");
                 var invalidBind = Command(HtmlWorkspaceToolCatalog.BindDataToolId, "name", "bad", "sourceTool", "excel.read_range");
                 AssertTrue(!executor.ExecuteManual(invalidBind, tools, new AppSettings(), false, false, boundSession).Success,
                     "retired nested source execution arguments are rejected");
-                var bind = Command(HtmlWorkspaceToolCatalog.BindDataToolId, "name", "sales", "target", target, "policy", "head");
+                var bind = Command(HtmlWorkspaceToolCatalog.BindDataToolId, "name", "sales", "target", target, "view", "text", "policy", "head");
                 var bound = executor.ExecuteManual(bind, tools, new AppSettings(), false, false, boundSession);
                 AssertTrue(bound.Success, "resource binding succeeds: " + bound.Message);
                 var binding = boundSession.HtmlWorkspace.DataSources.Single().Binding;
@@ -489,8 +489,8 @@ namespace RNAssistant.Harness
                     "HTML inspection fails loudly when code uses a missing data-source name");
                 AssertTrue(inspection["issues"].Any(item =>
                         (string)item["code"] == "html.script_src_unsupported" &&
-                        ((string)item["message"] ?? string.Empty).IndexOf("bundled ECharts automatically", StringComparison.OrdinalIgnoreCase) >= 0),
-                    "HTML inspection explains the bundled ECharts dependency");
+                        ((string)item["message"] ?? string.Empty).IndexOf("supported bundled vendor globals", StringComparison.OrdinalIgnoreCase) >= 0),
+                    "HTML inspection explains the bundled vendor dependency");
             });
         }
 

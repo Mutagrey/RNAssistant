@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "scope": "RNAssistant main static WebView UI",
+  "scope": "RNAssistant static WebView UI and authored HTML workspace vendor source carriers",
   "sourceUrlsAreProvenanceOnly": true,
   "policy": {
     "runtimeNetwork": "deny",
@@ -168,6 +168,14 @@
       },
       "browserRuntimeDependencies": [],
       "dependencyNotes": "The selected dist bundle embeds tslib/zrender; no separate runtime files are loaded. The same exact bundle is injected into charting HTML workspace sandboxes and standalone exports. Bundled d3-derived code is covered by licenses/echarts-5.6.0/licenses/LICENSE-d3.",
+      "htmlWorkspace": {
+        "global": "echarts",
+        "purpose": "Интерактивные диаграммы",
+        "whenUseful": "Нужен график или визуальное сравнение данных.",
+        "dependencyFile": "echarts.min.js",
+        "sourceCarrier": "echarts-factory",
+        "scriptOnly": false
+      },
       "licenseFiles": [
         {
           "path": "licenses/echarts-5.6.0/LICENSE",
@@ -180,6 +188,114 @@
         {
           "path": "licenses/echarts-5.6.0/licenses/LICENSE-d3",
           "sha256": "e1211892da0b0e0585b7aebe8f98c1274fba15bafe47fa1f4ee8a7a502c06304"
+        }
+      ]
+    },
+    {
+      "id": "fuse",
+      "npmPackage": "fuse.js",
+      "version": "7.1.0",
+      "license": "Apache-2.0",
+      "gitHead": "8119c18862f7df585688b1320ff307eb19f8ff89",
+      "npmTarball": "https://registry.npmjs.org/fuse.js/-/fuse.js-7.1.0.tgz",
+      "npmIntegrity": "sha512-trLf4SzuuUxfusZADLINj+dE8clK1frKdmqiJNb1Es75fmI5oY6X2mxLVUciLLjxqw/xr72Dhy+lER6dGd02FQ==",
+      "packageDependencies": {},
+      "browserRuntimeDependencies": [],
+      "dependencyNotes": "Pinned browser distribution is carried as inert JS/CSS source text in the main WebView; it executes only in an HTML workspace preview or standalone export. No runtime CDN, package loader or transitive asset.",
+      "htmlWorkspace": {
+        "global": "Fuse",
+        "purpose": "Поиск с учётом опечаток по локальным данным",
+        "whenUseful": "В названиях возможны ошибки или разные написания.",
+        "dependencyFile": "fuse.min.js",
+        "sourceCarrier": "js/vendor/fuse.source.js",
+        "scriptOnly": true
+      },
+      "upstreamAssets": [
+        {
+          "role": "js",
+          "path": "dist/fuse.min.js",
+          "sha256": "220934f576134b0466d99f786ce21b13f87d319b1e9ae633c55e68f6f41c3c9d",
+          "embeddedSha256": "220934f576134b0466d99f786ce21b13f87d319b1e9ae633c55e68f6f41c3c9d"
+        }
+      ],
+      "licenseFiles": [
+        {
+          "path": "licenses/fuse.js-7.1.0/LICENSE",
+          "sha256": "cc807e3caa26cdee316bab2ff6fdb508a2f619b74959fe59e513ef6e61635ebe"
+        }
+      ]
+    },
+    {
+      "id": "tabulator",
+      "npmPackage": "tabulator-tables",
+      "version": "6.5.0",
+      "license": "MIT",
+      "gitHead": "c4f7f228e86936b9fa84b415a71d53acd913daf8",
+      "npmTarball": "https://registry.npmjs.org/tabulator-tables/-/tabulator-tables-6.5.0.tgz",
+      "npmIntegrity": "sha512-n0S4rvb2tGJnVBXoiB8ns1liGfSz+sgniG5a92vEY+Wqj3R4L2LB+bF29OeWmEJwo4KAsdhfeknW2S92s/mvMw==",
+      "packageDependencies": {},
+      "browserRuntimeDependencies": [],
+      "dependencyNotes": "Pinned browser distribution is carried as inert JS/CSS source text in the main WebView; it executes only in an HTML workspace preview or standalone export. No runtime CDN, package loader or transitive asset.",
+      "htmlWorkspace": {
+        "global": "Tabulator",
+        "purpose": "Интерактивная таблица локальных данных",
+        "whenUseful": "Нужны сортировка, фильтры или виртуальные строки.",
+        "dependencyFile": "tabulator.min.js",
+        "sourceCarrier": "js/vendor/tabulator.source.js",
+        "scriptOnly": true
+      },
+      "upstreamAssets": [
+        {
+          "role": "js",
+          "path": "dist/js/tabulator.min.js",
+          "sha256": "297f32de082fe4593d385f3a1b16b901f5208b1702ff9f64f454f3460d911170",
+          "embeddedSha256": "2ffd5e83ff622975ba3493c93700625d2710dbf0d416d0ec0e9d5219fabd5002"
+        },
+        {
+          "role": "css",
+          "path": "dist/css/tabulator.min.css",
+          "sha256": "b55e204b2f968cecc4d3663d37858093b31dd22d20f01d76f590726ee18f7e1f",
+          "embeddedSha256": "04db955d165fa3b47f67a9cc45fe1a36e5e30756c6e4d5f9f4b270c32300f15c"
+        }
+      ],
+      "licenseFiles": [
+        {
+          "path": "licenses/tabulator-tables-6.5.0/LICENSE",
+          "sha256": "191a2ee554684e1064c897b432f0e1bc6dfa714ca045d3f6ea2cf692cbd398b7"
+        }
+      ]
+    },
+    {
+      "id": "sheetjs",
+      "npmPackage": "xlsx",
+      "version": "0.20.3",
+      "license": "Apache-2.0",
+      "gitHead": "8a7cfd47bde8258c0d91df6a737bf0136699cdf8",
+      "npmTarball": "https://cdn.sheetjs.com/xlsx-0.20.3/xlsx-0.20.3.tgz",
+      "npmIntegrity": "sha512-oLDq3jw7AcLqKWH2AhCpVTZl8mf6X2YReP+Neh0SJUzV/BdZYjth94tG5toiMB1PPrYtxOCfaoUCkvtuH+3AJA==",
+      "packageDependencies": {},
+      "browserRuntimeDependencies": [],
+      "dependencyNotes": "The official xlsx.full.min.js standalone browser distribution embeds spreadsheet/ZIP/codepage logic and supports XLSX/XLSM/XLSB/XLS/ODS/CSV. It is carried as inert source text and executes only inside an HTML workspace; no runtime package or CDN is loaded.",
+      "htmlWorkspace": {
+        "global": "XLSX",
+        "purpose": "Локальное чтение файлов таблиц",
+        "whenUseful": "Нужно разобрать приложенный XLSX, XLSM, XLSB, XLS, ODS или CSV в HTML workspace.",
+        "dependencyFile": "xlsx.full.min.js",
+        "sourceCarrier": "js/vendor/sheetjs.source.js",
+        "scriptOnly": true
+      },
+      "upstreamAssets": [
+        {
+          "role": "js",
+          "path": "dist/xlsx.full.min.js",
+          "sha256": "cc015130aa8521e7f088f88898eba949ccdcbfb38df0bd129b44b7273c3a6f41",
+          "embeddedSha256": "cc015130aa8521e7f088f88898eba949ccdcbfb38df0bd129b44b7273c3a6f41"
+        }
+      ],
+      "licenseFiles": [
+        {
+          "path": "licenses/sheetjs-0.20.3/LICENSE",
+          "sha256": "4d2a38ac35cda06a555c84074a819d413339cd3691b822cae50f8f322fe01f64"
         }
       ]
     },
@@ -462,6 +578,14 @@
       "provenanceUrl": "https://cdnjs.cloudflare.com/ajax/libs/echarts/5.6.0/echarts.min.js"
     },
     {
+      "path": "js/vendor/fuse.source.js",
+      "package": "fuse",
+      "bytes": 27226,
+      "sha256": "00e9526d22de18199e1e849f2a40f545066e3f2b75f079481612922738441914",
+      "provenanceUrl": "https://registry.npmjs.org/fuse.js/-/fuse.js-7.1.0.tgz",
+      "localTransform": "Wrap exact upstream browser JS bytes as inert source strings for on-demand HTML workspace assembly."
+    },
+    {
       "path": "js/vendor/highlight.min.js",
       "package": "highlight.js",
       "bytes": 121727,
@@ -488,6 +612,22 @@
       "bytes": 29204,
       "sha256": "c2f26ea4fc0d88141c9aa430eb515ac86fce59418ceebd85fa475b87a8d6c3e6",
       "provenanceUrl": "https://cdnjs.cloudflare.com/ajax/libs/dompurify/3.4.14/purify.min.js"
+    },
+    {
+      "path": "js/vendor/sheetjs.source.js",
+      "package": "sheetjs",
+      "bytes": 979423,
+      "sha256": "a0082745be4a6313559248dd2cd0a4489a1200373cdf23c541f838d5e7f4f99c",
+      "provenanceUrl": "https://cdn.sheetjs.com/xlsx-0.20.3/package/dist/xlsx.full.min.js",
+      "localTransform": "Wrap exact official standalone browser JS bytes as inert source text for on-demand HTML workspace assembly."
+    },
+    {
+      "path": "js/vendor/tabulator.source.js",
+      "package": "tabulator",
+      "bytes": 482316,
+      "sha256": "ff7305c48742fd6b5744eb16827c8e8931334a186dd27cdb2ad17f2c1b6a4b89",
+      "provenanceUrl": "https://registry.npmjs.org/tabulator-tables/-/tabulator-tables-6.5.0.tgz",
+      "localTransform": "Wrap pinned browser JS/CSS as inert source strings; strip source map trailer to avoid a runtime map request."
     },
     {
       "path": "js/vendor/wunderbaum.umd.min.js",

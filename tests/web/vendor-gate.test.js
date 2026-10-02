@@ -2,6 +2,7 @@
 
 const assert = require("node:assert/strict");
 const crypto = require("node:crypto");
+const { execFileSync } = require("node:child_process");
 const fs = require("node:fs");
 const path = require("node:path");
 
@@ -73,8 +74,30 @@ assert.deepEqual(packages.get("wunderbaum").packageDependencies, {});
 assert.ok(packages.has("viewerjs"));
 assert.equal(packages.get("viewerjs").version, "1.12.0");
 assert.deepEqual(packages.get("viewerjs").packageDependencies, {});
-assert.equal(entries.size, 42);
-console.log("PASS vendor gate: 42 runtime files have exact size/hash and no unmanifested sibling");
+assert.equal(entries.size, 45);
+console.log("PASS vendor gate: 45 runtime files have exact size/hash and no unmanifested sibling");
+
+for (const id of ["fuse", "tabulator", "sheetjs"]) {
+  const item = packages.get(id);
+  const carrier = fs.readFileSync(path.join(web, "js/vendor", id + ".source.js"), "utf8");
+  const match = carrier.match(/\.register\("([^\"]+)", (\{[\s\S]+\})\);\s*$/);
+  assert.ok(match, "source carrier must only register pinned source text: " + id);
+  assert.equal(match[1], id);
+  const source = JSON.parse(match[2]);
+  for (const asset of item.upstreamAssets) {
+    assert.equal(crypto.createHash("sha256").update(source[asset.role], "utf8").digest("hex"), asset.embeddedSha256,
+      "embedded source hash " + id + "/" + asset.role);
+    assert.match(asset.sha256, /^[a-f0-9]{64}$/, "upstream source hash is recorded");
+  }
+  assert.doesNotMatch(source.js + source.css, /sourceMappingURL=/, "source maps must not trigger extra loads");
+  assert.doesNotMatch(source.css, /url\s*\(/i, "workspace CSS must not request unmanifested assets");
+}
+console.log("PASS vendor gate: HTML source carriers match pinned embedded hashes and have no asset requests");
+
+execFileSync(process.execPath, [path.join(root, "tools/generate-html-vendor-catalog.js"), "--check"]);
+assert.deepEqual(manifest.packages.filter(item => item.htmlWorkspace).map(item => item.id),
+  ["echarts", "fuse", "tabulator", "sheetjs"]);
+console.log("PASS vendor gate: HTML runtime catalog is generated from the pinned manifest");
 
 let cssDependencyCount = 0;
 for (const item of manifest.files.filter(item => item.path.endsWith(".css"))) {
@@ -98,6 +121,8 @@ assert.deepEqual(manifest.policy.workers.allowed, []);
 console.log("PASS vendor gate: CSS resolves only 20 local WOFF2 files; WASM and workers are absent/denied");
 
 const index = fs.readFileSync(path.join(web, "index.html"), "utf8");
+assert.ok(index.indexOf("app-html-vendor-catalog.js?v=") < index.indexOf("app-html-vendor-runtime.js?v="),
+  "the manifest-derived catalog loads before the workspace registry");
 const loadedVendorPaths = Array.from(index.matchAll(/(?:src|href)="((?:js|css)\/vendor\/[^"?#]+)[^"]*"/g), match => match[1]);
 for (const loaded of loadedVendorPaths) assert.ok(entries.has(loaded), "index loads unmanifested vendor file " + loaded);
 assert.equal(/(?:src|href)="(?:https?:)?\/\//i.test(index), false, "main UI contains a remote asset URL");
@@ -120,4 +145,4 @@ assert.equal(manifest.policy.dynamicImport, "deny");
 assert.equal(manifest.policy.workers.mode, "deny-until-manifested-host-factory");
 assert.deepEqual(manifest.policy.workers.requiredLifecycle, ["create-by-manifest-id", "cancel", "terminate"]);
 console.log("PASS vendor gate: new vendor/worker admission is fail-closed and lifecycle-owned");
-console.log("OK 5/5");
+console.log("OK 7/7");

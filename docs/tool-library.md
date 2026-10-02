@@ -571,6 +571,12 @@ HTML bindings и JS inputs; target и record path переиспользуютс
 `columns`, не по переведённому заголовку. `policy=head` — default HTML binding;
 для фиксированного снимка указать `exact`. Source target из JSON write/binding
 metadata проходит round-trip отдельно от workspace и самой binding.
+Текущую книгу Excel связывают по range/table/name с `table|records`; исходный
+загруженный XLSX/XLSB/XLS/ODS файл можно связать как `raw` для локального разбора
+в HTML через SheetJS. Binding указывает на оригинал и не делает его live-книгой.
+HTML vendor globals исполняются только в sandbox HTML workspace; они не входят в
+экспериментальный `executor=js` Jint worker. Пользовательский JS tool остаётся
+отдельным подтверждённым Tool Library package с собственным read-only contract.
 
 Повторные операции контролируются typed `ToolExecutionProgress`/recovery в kernel,
 исторический результат — `CompletedToolOperation`, отсутствие/устаревание тела —

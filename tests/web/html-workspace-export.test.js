@@ -12,6 +12,9 @@ context.window = context;
 context.alert = () => {};
 vm.runInContext(fs.readFileSync(path.join(root, "web/js/app-html-resource-export.js"), "utf8"), context,
   { filename: "app-html-resource-export.js" });
+vm.runInContext(fs.readFileSync(path.join(root, "web/js/app-html-vendor-catalog.js"), "utf8"), context);
+vm.runInContext(fs.readFileSync(path.join(root, "web/js/app-html-vendor-runtime.js"), "utf8"), context,
+  { filename: "app-html-vendor-runtime.js" });
 vm.runInContext(fs.readFileSync(path.join(root, "web/js/app-html-workspace-preview.js"), "utf8"), context,
   { filename: "app-html-workspace-preview.js" });
 vm.runInContext(fs.readFileSync(path.join(root, "web/js/app-artifact-viewer-actions.js"), "utf8"), context,

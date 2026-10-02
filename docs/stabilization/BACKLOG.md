@@ -12,6 +12,23 @@
 новая возможность требует явной задачи, scope и owner; дефекты работающей системы
 приоритетнее расширения без конкретного пользовательского результата.
 
+## Shared local HTML asset library — 2026-10-02
+
+Owner: Artifact Library for reusable HTML/CSS/JS assets; Tool Library for executable
+JS tools. The shipped `web/vendor-manifest.json` is a pinned dependency inventory,
+not a user-writable runtime folder. HTML workspaces already let a user or agent
+author HTML/CSS/JS; custom JS tools have a separate confirmed package and read-only
+worker. If reuse across workspaces becomes a concrete need, add an app-data library
+of versioned local asset packages with a small manifest (`id`, version, kind,
+entry/files, hashes, license/provenance, execution target and offline requirements).
+Import validates bytes and records an immutable version; a workspace explicitly
+selects one and export captures exact assets. CSS and HTML remain inert until used;
+JS never executes from discovery alone. Expose compact names/purposes to the model
+and load full metadata only on selection. Reuse existing CAS/Resource Fabric instead
+of a second durable store; keep Tool Library capabilities and confirmation separate.
+Decide the authoring/import UX and validate sandbox, refresh and export before adding
+a new catalog tool or runtime filesystem scan.
+
 ## Large Excel search without manual range slicing — 2026-09-30
 
 Owner: Excel search / Resource Fabric. Literal queries up to 255 characters without

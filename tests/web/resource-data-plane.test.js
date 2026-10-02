@@ -6,6 +6,8 @@ const vm = require("node:vm");
 const { MessageChannel } = require("node:worker_threads");
 const source = fs.readFileSync(path.join(__dirname, "../../web/js/app-html-workspace-preview.js"), "utf8");
 const build = vm.createContext({}); build.window = build;
+vm.runInContext(fs.readFileSync(path.join(__dirname, "../../web/js/app-html-vendor-catalog.js"), "utf8"), build);
+vm.runInContext(fs.readFileSync(path.join(__dirname, "../../web/js/app-html-vendor-runtime.js"), "utf8"), build);
 vm.runInContext(source, build);
 const html = build.RNAssistantHtmlWorkspacePreview.build({
   files: [{ id: "index", path: "index.html", kind: "html", content: "<main>Bounded</main>" }],

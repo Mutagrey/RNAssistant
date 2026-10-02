@@ -446,6 +446,7 @@ namespace RNAssistant.Harness
                 Test("attachments: audio import and api payload", AttachmentAudioImportAndApiPayload),
                 Test("attachments: extracts pdf text", AttachmentExtractsPdfText),
                 Test("attachments: extracts Office document text", AttachmentExtractsOfficeFormats),
+                Test("attachments: preserves offline spreadsheet originals", AttachmentPreservesSpreadsheetOriginals),
                 Test("attachments: accepts text formats and encodings", AttachmentAcceptsTextFormatsAndEncodings),
                 Test("attachments: stores extracted text sidecar", AttachmentStoresExtractedTextSidecar),
                 Test("tool runtime: native resource tools manual and model paths", NativeResourceToolsUseRuntimeForManualAndModelCalls),

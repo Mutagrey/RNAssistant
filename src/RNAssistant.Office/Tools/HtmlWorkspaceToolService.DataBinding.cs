@@ -18,6 +18,7 @@ namespace RNAssistant.Office.Tools
                 "The workspace stores only a canonical resource reference, view and head/exact policy. " +
                 "HTML workspace and HTML data targets describe the workspace/binding, not its source values; never bind them. html_data_write already creates a text binding. " +
                 "For Excel chart/report data, bind an Excel range, table, or name target with table/records; an Excel search scope is discovery output, not a tabular data source. " +
+                "For an uploaded spreadsheet file, bind its original file target with raw and parse bounded bytes locally with the HTML skill's XLSX vendor; this does not replace live Excel range authority. " +
                 "Page code opens RN.resources.open(name) and consumes bounded read/stream batches. " +
                 "Choose view explicitly. policy=head (default) resolves current state on open; exact retains an immutable revision.";
         }

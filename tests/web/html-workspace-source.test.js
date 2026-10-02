@@ -145,7 +145,8 @@ function fixture(texts = ["\ufeff<main>\r\n" + "я".repeat(140000) + "😀</main
     f.context.document = { querySelector: () => node, querySelectorAll: () => [] };
     f.state.htmlWorkspaceMode = "edit";
     vm.runInContext(read("js/app-html-workspace-editor.js"), f.context);
-    const editor = f.context.RNAssistantHtmlWorkspaceEditor.create({ state: f.state, source: f.source, preview: { build: () => "preview" }, artifacts: {},
+    const editor = f.context.RNAssistantHtmlWorkspaceEditor.create({ state: f.state, source: f.source,
+      preview: { build: () => "preview", missingVendors: () => [] }, artifacts: {},
       model: { selectedItem: () => ({ type: "file", item: f.files[0] }), setFileContent: (_, value) => { writes++; f.files[0].content = value; },
         recoveryBlocked: () => false, workspace: () => f.state.htmlWorkspace, files: () => f.files, dataSources: () => [], filePath: file => file.path,
         fileKind: file => file.kind, fileContent: file => file.content } });

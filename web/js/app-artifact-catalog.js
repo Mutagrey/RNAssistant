@@ -168,7 +168,7 @@
         // Source inspection is always available; use the established sandbox renderer for HTML.
         {
           var snapshot = await previewSnapshot(envelope.Views);
-          await window.RNAssistantHtmlWorkspacePreview.ensureECharts(files);
+          await window.RNAssistantHtmlWorkspacePreview.ensureVendors(files);
           if (!current(id, nav) || version !== generation) return;
           var frame = document.createElement("iframe"); frame.title = item.title; frame.setAttribute("sandbox", "allow-scripts");
           frame.srcdoc = window.RNAssistantHtmlWorkspacePreview.build({ files: files, activeFileId: project.EntryPath.toLowerCase(), dataSources: project.Data.map(function (d) { return { name: d.Name }; }), resourceSnapshot: snapshot, hostBridge: false });

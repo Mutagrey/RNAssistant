@@ -235,9 +235,7 @@ namespace RNAssistant.Office.Tools
                     var src = AttributeValue(HtmlSrcAttributePattern, tagText);
                     if (!string.IsNullOrWhiteSpace(src))
                     {
-                        var message = src.IndexOf("echarts", StringComparison.OrdinalIgnoreCase) >= 0
-                            ? "Remove the ECharts script src. The workspace loads bundled ECharts automatically when source references global echarts; do not copy the vendor bundle."
-                            : "Script src is not assembled by the workspace; keep JavaScript in workspace script files.";
+                        var message = "Script src is not assembled by the workspace. Use supported bundled vendor globals in workspace source or keep JavaScript in workspace script files; do not copy vendor bundles.";
                         collector.Add("error", "html.script_src_unsupported", message, entry.Path, entry.Kind, lineStarts, match.Index);
                     }
                     var type = AttributeValue(HtmlTypeAttributePattern, tagText);

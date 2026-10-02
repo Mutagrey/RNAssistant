@@ -64,6 +64,38 @@ namespace RNAssistant.Harness
             }
         }
 
+        private static void AttachmentPreservesSpreadsheetOriginals()
+        {
+            WithTempPaths(delegate(AppDataPaths paths)
+            {
+                var store = new AttachmentStore(paths);
+                var zip = OfficeZip(new Dictionary<string, string> { { "xl/workbook.bin", "binary workbook fixture" } });
+                var ole = new byte[] { 0xd0, 0xcf, 0x11, 0xe0, 0xa1, 0xb1, 0x1a, 0xe1, 1, 2 };
+                foreach (var format in new[] {
+                    new { Name = "data.xlsm", Bytes = zip, Mime = "application/vnd.ms-excel.sheet.macroEnabled.12" },
+                    new { Name = "data.xlsb", Bytes = zip, Mime = "application/vnd.ms-excel.sheet.binary.macroEnabled.12" },
+                    new { Name = "data.ods", Bytes = zip, Mime = "application/vnd.oasis.opendocument.spreadsheet" },
+                    new { Name = "data.xls", Bytes = ole, Mime = "application/vnd.ms-excel" },
+                    new { Name = "data.xlt", Bytes = ole, Mime = "application/vnd.ms-excel" },
+                    new { Name = "data.xltx", Bytes = zip, Mime = "application/vnd.openxmlformats-officedocument.spreadsheetml.template" },
+                    new { Name = "data.xltm", Bytes = zip, Mime = "application/vnd.ms-excel.template.macroEnabled.12" },
+                    new { Name = "data.xlam", Bytes = zip, Mime = "application/vnd.ms-excel.addin.macroEnabled.12" }
+                })
+                {
+                    var staged = store.Import(format.Name, "application/octet-stream", format.Bytes, "spreadsheet-chat");
+                    AssertEqual("file", staged.Kind, format.Name + " is an exact raw original");
+                    AssertEqual(format.Mime, staged.ContentType, format.Name + " MIME");
+                    AssertTrue(store.ReadBytes(staged).SequenceEqual(format.Bytes), format.Name + " keeps all bytes");
+                    AssertEqual(null, staged.ExtractedTextPath, format.Name + " is not falsely described as extracted text");
+                }
+                RuntimeThrows<InvalidOperationException>(() => store.Import("fake.xlsb", "application/octet-stream",
+                    System.Text.Encoding.UTF8.GetBytes("not a workbook"), "spreadsheet-chat"));
+                AssertEqual("text", store.Import("data.fods", "application/xml",
+                    System.Text.Encoding.UTF8.GetBytes("<office:document/>"), "spreadsheet-chat").Kind,
+                    "flat ODS remains a text original");
+            });
+        }
+
         private static void AttachmentImportCommitDelete()
         {
             WithTempPaths(delegate(AppDataPaths paths)

@@ -797,6 +797,11 @@ four uploads within the shared 50 MiB transfer-buffer and 64-lease budgets.
 The existing 20 MiB/file and 50 MiB/message limits remain. Ten-minute expiry is
 checked on access and swept periodically; close/dispose releases idle buffers.
 A cancelled busy lease retains its reservation until the operation actually exits.
+Chat ingestion accepts XLSM/XLSB/XLS/ODS and common template/add-in variants as
+signature-checked, immutable `file` originals with spreadsheet MIME types. They
+have no host-side extracted text; the HTML workspace can bind their exact `raw`
+bytes for local SheetJS parsing. XLSX keeps its existing bounded text extraction;
+CSV/TSV/FODS remain text originals. A parsed file is not live Excel document authority.
 
 Incomplete, malformed or cancelled uploads cannot create a resource publication.
 Completion consumes the capability and stages managed bytes through the existing

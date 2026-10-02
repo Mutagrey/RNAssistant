@@ -386,18 +386,17 @@
         detail.classList.remove("hidden"); detail.textContent = source.message(); frame.classList.add("hidden");
         return;
       }
-      if (typeof htmlPreview.usesECharts === "function" && htmlPreview.usesECharts(workspaceFiles) &&
-          typeof htmlPreview.echartsReady === "function" && !htmlPreview.echartsReady()) {
+      if (htmlPreview.missingVendors(workspaceFiles).length) {
         invalidatePreview();
         frame.removeAttribute("src");
-        frame.srcdoc = "<!doctype html><html><body style=\"font-family:Segoe UI,Arial,sans-serif;padding:24px;color:#475467\">Загрузка диаграммы...</body></html>";
+        frame.srcdoc = "<!doctype html><html><body style=\"font-family:Segoe UI,Arial,sans-serif;padding:24px;color:#475467\">Загрузка зависимостей...</body></html>";
         previewCleared = false;
-        htmlPreview.ensureECharts().then(function () {
+        htmlPreview.ensureVendors(workspaceFiles).then(function () {
           if (typeof window.renderHtmlWorkspace === "function") window.renderHtmlWorkspace();
           else renderHtmlWorkspacePreview();
         }).catch(function (error) {
           frame.srcdoc = "<!doctype html><html><body style=\"font-family:Segoe UI,Arial,sans-serif;padding:24px;color:#b42318\">" +
-            String(error && error.message || "ECharts не загружен.").replace(/[&<>]/g, function (character) {
+            String(error && error.message || "Зависимость не загружена.").replace(/[&<>]/g, function (character) {
               return { "&": "&amp;", "<": "&lt;", ">": "&gt;" }[character];
             }) + "</body></html>";
         });

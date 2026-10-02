@@ -548,7 +548,7 @@
       return state.activeChatId === exportState.chatId && state.activeHtmlArtifactId === exportState.revisionArtifactId && !state.htmlWorkspaceDirty;
     }
     await workspaceSource.exportSources(exportedWorkspace, isCurrent);
-    if (htmlPreview.usesECharts(exportedFiles)) await htmlPreview.ensureECharts();
+    await htmlPreview.ensureVendors(exportedFiles);
     var snapshot = await window.RNAssistantHtmlResourceExport.capture(exportState.resourceExport, {
       fetch: window.fetch.bind(window), isCurrent: isCurrent
     });

@@ -439,16 +439,20 @@ namespace RNAssistant.Harness
                 "HTML authoring forbids a second source unescape");
             AssertContains(htmlAuthoring, "echarts.getInstanceByDom(node) || echarts.init(node)",
                 "HTML authoring avoids duplicate bundled chart instances");
-            AssertContains(htmlAuthoring, "Do not create `echarts.js`",
-                "HTML authoring rejects remote or duplicate chart runtimes");
+            AssertContains(htmlAuthoring, "Do not invent globals, copy bundles",
+                "HTML authoring rejects unsupported or duplicate vendor runtimes");
             AssertContains(htmlAuthoring, "do not also call `excel.create_chat_chart` for the same data",
                 "HTML authoring keeps ECharts workspace and chat-chart artifacts from duplicating one visual");
             AssertContains(htmlAuthoring, "root `arguments` contains exactly `path` and `content`",
                 "HTML writes put semantic properties directly at the schema root");
             foreach (var file in new[] { "`index.html`", "`styles.css`", "`app.js`" })
                 AssertContains(htmlAuthoring, file, "substantial HTML workspaces split responsibilities");
-            AssertContains(htmlAuthoring, "Dependencies/echarts.min.js",
-                "HTML authoring exposes the runtime-owned chart dependency");
+            AssertContains(htmlAuthoring, "lists it read-only under Dependencies",
+                "HTML authoring exposes runtime-owned dependencies");
+            AssertContains(htmlAuthoring, "`XLSX` (SheetJS CE 0.20.3 full browser build)",
+                "HTML authoring advertises the offline spreadsheet reader");
+            AssertContains(htmlAuthoring, "bind `view=raw`",
+                "HTML authoring connects uploaded spreadsheets to the binary resource plane");
             AssertContains(htmlAuthoring, "ResizeObserver",
                 "HTML authoring resizes charts with their containers");
             AssertContains(htmlAuthoring, "CSS custom properties",

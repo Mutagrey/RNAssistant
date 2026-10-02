@@ -1,9 +1,6 @@
 (function () {
   "use strict";
 
-  var ECHARTS_DEPENDENCY_ID = "runtime/echarts.min.js";
-  var ECHARTS_VERSION = "5.6.0";
-
   function prop(source, pascal, camel, fallback) {
     source = source || {};
     return source[camel] !== undefined ? source[camel] : (source[pascal] !== undefined ? source[pascal] : fallback);
@@ -209,53 +206,20 @@
     }).join("\n");
   }
 
-  function usesECharts(files) {
-    return files.some(function (file) {
-      return (fileKind(file) === "html" || isScriptFile(file)) && /\becharts\b/.test(fileContent(file));
-    });
-  }
-
-  function echartsReady() {
-    return typeof window.RNAssistantEChartsFactory === "function" &&
-      !!window.echarts && window.echarts.version === ECHARTS_VERSION;
-  }
-
-  function ensureECharts() {
-    if (echartsReady()) return Promise.resolve(window.echarts);
-    var runtime = window.RNAssistantEChartsSandboxRuntime;
-    if (!runtime || typeof runtime.load !== "function") {
-      return Promise.reject(new Error("Bundled ECharts " + ECHARTS_VERSION + " loader is unavailable."));
-    }
-    return runtime.load();
-  }
-
   function dependencies(files) {
-    if (!usesECharts(files || [])) return [];
-    var loaded = echartsReady();
-    return [{
-      id: ECHARTS_DEPENDENCY_ID,
-      path: ECHARTS_DEPENDENCY_ID,
-      title: "echarts.min.js",
-      kind: "script",
-      version: ECHARTS_VERSION,
-      loaded: loaded,
-      readOnly: true,
-      description: loaded
-        ? "Встроенная зависимость preview/export; подключается перед скриптами workspace."
-        : "Встроенная зависимость ECharts не загрузилась."
-    }];
+    var runtime = window.RNAssistantHtmlVendorRuntime;
+    return runtime ? runtime.dependencies(files || []) : [];
   }
 
-  function echartsScript(files) {
-    if (!usesECharts(files) || typeof window.RNAssistantEChartsFactory !== "function" ||
-        !window.echarts || window.echarts.version !== ECHARTS_VERSION) {
-      return "";
-    }
-    return "<script data-rn-vendor=\"echarts-" + ECHARTS_VERSION + "\">" +
-      "/* Licensed to the Apache Software Foundation under the Apache License, Version 2.0. " +
-      "https://www.apache.org/licenses/LICENSE-2.0 */\n(" +
-      safeScript(window.RNAssistantEChartsFactory.toString()) +
-      ")(window.echarts={});<\/script>";
+  function vendorHead(files) {
+    var runtime = window.RNAssistantHtmlVendorRuntime;
+    if (!runtime) throw new Error("Bundled HTML vendor registry is unavailable.");
+    return runtime.used(files).map(function (vendor) {
+      var source = runtime.source(vendor);
+      var label = encodeHtml(vendor.id + "-" + vendor.version);
+      return (source.css ? "<style data-rn-vendor=\"" + label + "\">" + safeStyle(source.css) + "</style>\n" : "") +
+        "<script data-rn-vendor=\"" + label + "\">" + safeScript(source.js) + "<\/script>";
+    }).join("\n");
   }
 
   function injectBeforeLastClosingTag(html, tagName, content) {
@@ -296,15 +260,10 @@
       throw new Error("RESOURCE_EXPORT_REQUIRED: capture exact resource bindings before standalone export.");
     var file = activeHtmlFile(files, options.activeFileId || "");
     var html = file ? fileContent(file) : "";
-    if (options.hostBridge === false && usesECharts(files) &&
-        (typeof window.RNAssistantEChartsFactory !== "function" ||
-          !window.echarts || window.echarts.version !== ECHARTS_VERSION)) {
-      throw new Error("Standalone HTML export requires the loaded bundled ECharts " + ECHARTS_VERSION + " dependency.");
-    }
     var hostBridge = options.hostBridge === false ? "" : networkBridgeScript() + "\n";
-    var chartRuntime = echartsScript(files);
+    var vendorRuntime = vendorHead(files);
     var headInject = '<meta charset="utf-8">' + previewContentSecurityPolicy(options.hostBridge === false) + "\n" + previewViewportReset() + "\n" +
-      chartRuntime + (chartRuntime ? "\n" : "") + resourceScript(dataSources, options.resourceSnapshot) + hostBridge + "\n" + cssBlock(files);
+      vendorRuntime + (vendorRuntime ? "\n" : "") + resourceScript(dataSources, options.resourceSnapshot) + hostBridge + "\n" + cssBlock(files);
     var bodyInject = scriptBlock(files);
     if (!html.trim()) {
       html = "<div style=\"font-family:Segoe UI,Arial,sans-serif;padding:24px;color:#475467\">HTML workspace пуст.</div>";
@@ -328,8 +287,7 @@
   window.RNAssistantHtmlWorkspacePreview = {
     build: build,
     dependencies: dependencies,
-    echartsReady: echartsReady,
-    ensureECharts: ensureECharts,
-    usesECharts: usesECharts
+    missingVendors: function (files) { return window.RNAssistantHtmlVendorRuntime.missing(files); },
+    ensureVendors: function (files) { return window.RNAssistantHtmlVendorRuntime.ensure(files); }
   };
 }());

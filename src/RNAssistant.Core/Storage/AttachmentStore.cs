@@ -16,7 +16,7 @@ namespace RNAssistant.Core.Storage
         private const int MaxInlinePreviewChars = 4000;
         private static readonly HashSet<string> TextExtensions = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
         {
-            ".txt", ".md", ".markdown", ".mdx", ".json", ".jsonl", ".ndjson", ".csv", ".tsv",
+            ".txt", ".md", ".markdown", ".mdx", ".json", ".jsonl", ".ndjson", ".csv", ".tsv", ".fods",
             ".xml", ".xaml", ".svg", ".yaml", ".yml", ".toml", ".ini", ".cfg", ".conf", ".config",
             ".env", ".properties", ".log", ".sql", ".html", ".htm", ".css", ".scss", ".sass", ".less",
             ".js", ".jsx", ".mjs", ".cjs", ".ts", ".tsx", ".vue", ".svelte", ".cs", ".vb", ".fs",
@@ -53,10 +53,11 @@ namespace RNAssistant.Core.Storage
             var kind = DetectKind(fileName, contentType, bytes);
             if (kind == null)
             {
-                throw new InvalidOperationException("Unsupported or binary attachment type. Use images, PDF, MP3, WAV or a text-based file.");
+                throw new InvalidOperationException("Unsupported attachment type. Use images, PDF, text, DOCX/XLSX/PPTX or a supported spreadsheet original.");
             }
 
-            contentType = kind == "office" ? OfficeContentType(fileName) : NormalizeContentType(kind, contentType, bytes);
+            contentType = kind == "office" ? OfficeContentType(fileName) :
+                kind == "file" ? SpreadsheetContentType(fileName) : NormalizeContentType(kind, contentType, bytes);
             var attachment = new ChatAttachment
             {
                 DraftChatId = draftChatId,
@@ -495,6 +496,14 @@ namespace RNAssistant.Core.Storage
             if (extension == ".docx" || extension == ".xlsx" || extension == ".pptx")
                 return bytes.Length >= 4 && bytes[0] == 0x50 && bytes[1] == 0x4b &&
                     bytes[2] == 0x03 && bytes[3] == 0x04 ? "office" : null;
+            if (extension == ".xlsm" || extension == ".xlsb" || extension == ".ods" ||
+                extension == ".xltx" || extension == ".xltm" || extension == ".xlam")
+                return bytes.Length >= 4 && bytes[0] == 0x50 && bytes[1] == 0x4b &&
+                    bytes[2] == 0x03 && bytes[3] == 0x04 ? "file" : null;
+            if (extension == ".xls" || extension == ".xlt")
+                return bytes.Length >= 8 && bytes[0] == 0xd0 && bytes[1] == 0xcf &&
+                    bytes[2] == 0x11 && bytes[3] == 0xe0 && bytes[4] == 0xa1 &&
+                    bytes[5] == 0xb1 && bytes[6] == 0x1a && bytes[7] == 0xe1 ? "file" : null;
             if (IsImageSignature(bytes)) return "image";
             if (bytes.Length >= 5 && Encoding.ASCII.GetString(bytes, 0, 5) == "%PDF-") return "pdf";
             if (IsWavSignature(bytes) || IsMp3Signature(bytes)) return "audio";
@@ -685,6 +694,21 @@ namespace RNAssistant.Core.Storage
             if (extension == ".docx") return "application/vnd.openxmlformats-officedocument.wordprocessingml.document";
             if (extension == ".xlsx") return "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet";
             return "application/vnd.openxmlformats-officedocument.presentationml.presentation";
+        }
+
+        private static string SpreadsheetContentType(string fileName)
+        {
+            switch (Path.GetExtension(fileName ?? string.Empty).ToLowerInvariant())
+            {
+                case ".xlsm": return "application/vnd.ms-excel.sheet.macroEnabled.12";
+                case ".xlsb": return "application/vnd.ms-excel.sheet.binary.macroEnabled.12";
+                case ".xls": case ".xlt": return "application/vnd.ms-excel";
+                case ".ods": return "application/vnd.oasis.opendocument.spreadsheet";
+                case ".xltx": return "application/vnd.openxmlformats-officedocument.spreadsheetml.template";
+                case ".xltm": return "application/vnd.ms-excel.template.macroEnabled.12";
+                case ".xlam": return "application/vnd.ms-excel.addin.macroEnabled.12";
+                default: throw new InvalidOperationException("Unsupported spreadsheet original.");
+            }
         }
 
         private static string SafeDisplayName(string value)

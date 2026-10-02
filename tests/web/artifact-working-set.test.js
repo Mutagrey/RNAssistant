@@ -26,7 +26,7 @@ const context = vm.createContext({ console, TextDecoder, TextEncoder, Blob, cryp
   send: (type, payload) => new Promise((resolve, reject) => requests.push({ type, payload, resolve, reject })),
   applyChatStateForChat: (data, id) => applied.push({ data, id }), fetch() {},
   RNAssistantResourceDownload: { read: async () => new TextEncoder().encode(JSON.stringify({ Project: { Files: [{ Path: "index.html", Kind: "html", Content: "<h1>Saved</h1>" }], EntryPath: "index.html", Data: [], ExternalDependencies: [] }, Views: [] })) },
-  RNAssistantHtmlWorkspacePreview: { ensureECharts: async () => {}, build: options => { previews.push(options); return "<h1>Saved</h1>"; } }
+  RNAssistantHtmlWorkspacePreview: { ensureVendors: async () => {}, build: options => { previews.push(options); return "<h1>Saved</h1>"; } }
 });
 context.window = context;
 vm.runInContext(fs.readFileSync(path.join(__dirname, "../../web/js/app-artifact-catalog.js"), "utf8"), context);

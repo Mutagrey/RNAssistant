@@ -1051,21 +1051,39 @@ are preview frames, never child artifacts or independently durable revisions.
   Page code opens explicit names through `RN.resources`, then reads bounded exact
   batches/streams. Refresh reconciles source authority and reopens head bindings;
   it does not manufacture a workspace revision or replace an exact binding. A
-  workspace whose
-  HTML/JavaScript references `echarts` receives the exact local ECharts 5.6.0 bundle
-  as classic JavaScript before workspace scripts in its sandbox and standalone
-  export. The tree projects that runtime as the read-only
-  `Dependencies/echarts.min.js` item; it is not a user-editable workspace member or
-  a second durable artifact. Ordinary workspaces do not carry it, and Chart.js/CDN
-  loading is unsupported. Full-document assembly inserts workspace scripts against
-  the original document's last closing body/html tag before adding the vendor head
-  block, so tag-shaped strings inside the bundled source cannot capture the
-  insertion. Standalone export pulls exact resources through the same data plane
+  workspace whose HTML/JavaScript references a supported vendor global receives
+  only that pinned local dependency: `echarts` 5.6.0 for charts, `Tabulator` 6.5.0
+  with its CSS for local data grids, `Fuse` 7.1.0 for fuzzy search, or `XLSX`
+  (SheetJS CE 0.20.3 full browser build) for offline parsing of raw XLSX/XLSM/XLSB/
+  XLS/ODS/CSV originals. Current live Excel ranges remain Resource Fabric table/
+  records bindings; file parsing does not replace Excel document authority. The on-demand
+  registry embeds selected classic JavaScript and CSS before workspace scripts in
+  sandbox preview and standalone export. The tree projects each as a read-only
+  `Dependencies/*.min.js` item; vendors are neither editable workspace members nor
+  durable artifacts. Ordinary workspaces carry none. The HTML authoring skill gives
+  the model a compact selection guide; manifest, source and licenses remain outside
+  normal model context. `web/vendor-manifest.json` owns the explicit HTML pool;
+  `tools/generate-html-vendor-catalog.js` produces the small catalog loaded before
+  the preview registry. New vendor source is inert in the main UI and must pass
+  the hash/license gate. No separate vendor tool or CDN is involved. Main-UI vendor
+  packages do not thereby become HTML-workspace options. Full-document assembly
+  inserts workspace scripts against the original document's last closing body/html
+  tag before adding vendor head blocks, so tag-shaped strings inside bundled source
+  cannot capture the insertion. Standalone export pulls exact resources through the same data plane
   into bounded inert snapshot parts, served lazily by the same `RN.resources` API.
   It has no live Office/network fallback; incomplete, oversized or mixed-revision
   capture prevents download. Missing/tampered parts and an unavailable pinned
-  ECharts runtime fail explicitly. Actual downloaded-file/WebView2 qualification
-  remains open.
+  selected vendor runtime fail explicitly. Actual downloaded-file/WebView2 qualification
+  remains open. Editable project ZIP v1 still rejects binary `raw` bindings; a
+  standalone HTML export includes their exact bounded byte snapshots.
+
+The shipped `web/vendor` manifest is a reviewed application dependency inventory,
+not a writable plugin directory or a filesystem scan at startup. User-authored
+HTML/CSS/JS already belongs to an HTML workspace; custom `executor=js` tools belong
+to Tool Library and its read-only worker. Neither receives execution authority
+from a file merely existing under `vendor`. A shared user asset library, if needed
+across workspaces, requires explicit import/selection and immutable exact versions;
+the bounded design decision is tracked in the stabilization backlog.
 
 ViewerRegistry remains UI-only dispatch. Fetching bounded text/media and checking
 the exact revision belong to the Artifact Library owner and the shared resource
