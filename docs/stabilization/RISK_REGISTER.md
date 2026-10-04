@@ -31,6 +31,14 @@ the model's `done`. Tasks without those conditions still
 expose unverified `model_done`, and the conditions do not grade file content or
 browser behavior. Autonomous completion reliability remains open.
 
+A fresh local-Qwen run after the persisted contract change failed the complete
+three-file task twice: first by repeatedly reading missing files, then by batching
+mutations despite ten protocol repairs. Narrow single-file turns did create all
+three files, but source inspection found a missing form/list and incorrect JS
+delete/localStorage behavior; attempted agent repair made no write. The shallow
+file/count contract passed those narrow turns but did not certify the app. This
+keeps M5 browser verification and agent repair acceptance open.
+
 ## Offline managed dependency closure — 2026-10-02
 
 Owner: local packages and host delivery targets. The Windows photos show

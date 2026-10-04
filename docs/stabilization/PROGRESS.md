@@ -42,6 +42,20 @@ model still said `done`, but the accepted minimum-change contract returned
 flows, broader approvals, automatic resume and real-model confirmation behavior
 remain open.
 
+Fresh local Qwen regression (2026-10-04, after the acceptance/confirmation
+changes): one new multi-file ToDo task with three expected files and minimums
+of three reads and three writes first attempted reads of three missing files and
+failed with `repeated_tool_no_progress`, zero writes and failed acceptance.
+Explicit feedback in that chat led to ten invalid batched mutation responses and
+`ProtocolExhausted`, still zero writes. In a separate chat on the same empty
+workspace, three narrow single-file turns created and read each named file with
+verified changed effects and passing per-turn contracts. `node --check app.js`
+passed, but external source inspection found no form/list in `index.html`, while
+`app.js` expects them; its click handler also deletes a task on any click and
+localStorage reload mishandles saved objects. A model repair request read HTML
+repeatedly and failed with no write. This run does not satisfy the original
+autonomous multi-file verify/repair acceptance; M5 behavior remains open.
+
 Local Qwen evidence (2026-10-04): Ollama 0.35.0 loaded `rna-qwen35-9b-32k`
 entirely on GPU with context 32768. `/api/show` reports `thinking=false` as
 supported; a direct `/v1/chat/completions` strict-JSON probe with
