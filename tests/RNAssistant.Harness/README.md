@@ -20,6 +20,10 @@ After building the CLI, run `python3 tests/cli/interrupted_run_smoke.py` for a
 process-killed model wait. It checks durable interrupted/unknown acceptance,
 idempotent `resume`, one new model request only after explicit input, and the
 one-iteration CLI limit.
+Run `python3 tests/cli/capability_smoke.py` for E-CAPABILITY: with Chromium
+unavailable, the CLI hides `web.verify`, advertises no Office tools, returns
+`not-run` for explicit verification and rejects required browser acceptance
+before starting a model or session.
 
 Host-neutral tests run on this machine without Office COM. Locate the relevant test first; do not read or execute the full suite by default.
 

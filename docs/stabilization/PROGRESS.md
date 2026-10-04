@@ -119,6 +119,14 @@ evaluation. The browser smoke caught a `setTimeout` exception at 650 ms while a
 valid app still passed. Later timers and interactive behavior remain outside this
 smoke contract and need the independent functional grader.
 
+M5 E-CAPABILITY slice: `tests/cli/capability_smoke.py` opened a disposable
+workspace with Chromium deliberately unavailable. `env` advertised the real
+workspace file tools but no `web.verify` or Office tools; `verify` returned
+`not-run`/exit 4 on a valid HTML entry. `run --require-web-verify` returned
+exit 4 before creating a session or calling a model. Browser absence is therefore
+explicit in the CLI capability and acceptance path; broader provider/mode
+capability changes remain open.
+
 M5 independent CSV dashboard check (2026-10-04):
 `tests/cli/csv_dashboard_task.md` fixes the user-visible controls; the separate
 `csv_dashboard_grader.mjs` captures up to 32 files/four MiB in memory, serves only
