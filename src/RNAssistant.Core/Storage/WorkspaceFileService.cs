@@ -47,6 +47,13 @@ namespace RNAssistant.Core.Storage
         public ResourceAuthorityCommit AuthorityCommit { get; internal set; }
     }
 
+    public sealed class WorkspaceDirectoryPage
+    {
+        public IReadOnlyList<string> Names { get; internal set; }
+        public bool Truncated { get; internal set; }
+        public int ScannedEntries { get; internal set; }
+    }
+
     // One file owner for text reads and writes. The locator catalog is not a head store.
     public sealed class WorkspaceFileService
     {
@@ -84,16 +91,42 @@ namespace RNAssistant.Core.Storage
             _journal = new ResourceMutationJournal(paths);
         }
 
-        public IReadOnlyList<string> List(WorkspaceDescriptor workspace, string relativeDirectory = "", int limit = 200)
+        public WorkspaceDirectoryPage ListPage(WorkspaceDescriptor workspace, string relativeDirectory = "",
+            string query = null, int limit = 200)
         {
             if (limit < 1 || limit > 500) throw new ArgumentOutOfRangeException(nameof(limit));
+            if (query != null && (query.Length > 128 || query.Any(char.IsControl)))
+                throw new WorkspaceFileException("invalid_find_query", "Filename query exceeds the bounded text contract.");
             var directory = ResolvePath(workspace, relativeDirectory, true);
             if (!Directory.Exists(directory)) throw new DirectoryNotFoundException(directory);
-            return Directory.EnumerateFileSystemEntries(directory).OrderBy(value => value, StringComparer.Ordinal)
-                .Where(value => !StorageFileSystem.IsReparsePoint(value))
-                .Select(value => Path.GetFileName(value))
-                .Where(value => value != ".rnassistant")
-                .Take(limit).ToArray();
+            var names = new List<string>();
+            var scanned = 0;
+            var truncated = false;
+            foreach (var path in Directory.EnumerateFileSystemEntries(directory))
+            {
+                scanned++;
+                var name = Path.GetFileName(path);
+                if (!StorageFileSystem.IsReparsePoint(path) && IsVisibleFileName(name) &&
+                    (string.IsNullOrWhiteSpace(query) || name.IndexOf(query, StringComparison.OrdinalIgnoreCase) >= 0))
+                {
+                    if (names.Count == limit) { truncated = true; break; }
+                    names.Add(name);
+                }
+                if (scanned == 5000) { truncated = true; break; }
+            }
+            names.Sort(StringComparer.Ordinal);
+            return new WorkspaceDirectoryPage
+            { Names = names.AsReadOnly(), Truncated = truncated, ScannedEntries = scanned };
+        }
+
+        private static bool IsVisibleFileName(string name)
+        {
+            return !name.Equals(".rnassistant", StringComparison.OrdinalIgnoreCase) &&
+                !name.Equals(".git", StringComparison.OrdinalIgnoreCase) &&
+                !name.Equals(".codex", StringComparison.OrdinalIgnoreCase) &&
+                !name.StartsWith(".env", StringComparison.OrdinalIgnoreCase) &&
+                !name.EndsWith(".pem", StringComparison.OrdinalIgnoreCase) &&
+                !name.EndsWith(".key", StringComparison.OrdinalIgnoreCase);
         }
 
         public WorkspaceFileObservation ReadText(WorkspaceDescriptor workspace, string relativePath)

@@ -36,6 +36,11 @@ separate owners, stores, version rules and model transports:
 
 The independent CLI advertises `common.resources_find/read` and the exact
 `files.create/copy/move/patch/replace/delete/restore` catalog for writable workspaces.
+CLI `common.resources_find` accepts an optional `directory` and filename `query`.
+It returns at most 200 names from a single directory plus `truncated` and
+`scannedEntries`; a truncated result requires a narrower directory or query and
+does not prove a filename is absent. The scan stops after 5000 entries, and there
+is no cursor or recursive search yet.
 `files.move` requires an accepted complete source read and explicit confirmation;
 it preserves identity, verifies the target bytes and source absence, then publishes
 a new revision. The target parent must exist and no existing file or reserved

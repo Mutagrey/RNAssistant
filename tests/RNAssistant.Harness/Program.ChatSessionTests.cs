@@ -155,6 +155,34 @@ namespace RNAssistant.Harness
             });
         }
 
+        private static void WorkspaceFilesListBounded()
+        {
+            WithTempPaths(paths =>
+            {
+                var workspace = new WorkspaceStore(paths).Open(Path.Combine(paths.Root, "project"));
+                var files = new WorkspaceFileService(paths);
+                for (var index = 0; index < 230; index++)
+                    File.WriteAllText(Path.Combine(workspace.RootPath,
+                        "item-" + index.ToString("D3") + ".txt"), "fixture");
+                File.WriteAllText(Path.Combine(workspace.RootPath, ".env-local"), "secret");
+                Directory.CreateDirectory(Path.Combine(workspace.RootPath, ".git"));
+                var page = files.ListPage(workspace, limit: 20);
+                AssertEqual(20, page.Names.Count, "directory listing respects requested bound");
+                AssertTrue(page.Truncated && page.ScannedEntries <= 5000,
+                    "directory listing reports an incomplete scan");
+                AssertTrue(!page.Names.Contains(".rnassistant") && !page.Names.Contains(".git") &&
+                    !page.Names.Contains(".env-local"), "protected entries stay out of discovery");
+                var narrowed = files.ListPage(workspace, query: "ITEM-229", limit: 20);
+                AssertEqual(1, narrowed.Names.Count, "query narrows directory discovery");
+                AssertEqual("item-229.txt", narrowed.Names[0], "case-insensitive filename query");
+                AssertTrue(!narrowed.Truncated, "narrow query scanned the full directory");
+                var rejected = false;
+                try { files.ListPage(workspace, query: "bad\nquery"); }
+                catch (WorkspaceFileException ex) { rejected = ex.Code == "invalid_find_query"; }
+                AssertTrue(rejected, "control characters are rejected in filename query");
+            });
+        }
+
         private static void WorkspaceFilesRejectUnsafePaths()
         {
             WithTempPaths(paths =>
@@ -177,7 +205,7 @@ namespace RNAssistant.Harness
                 catch (WorkspaceFileException ex) { wrongRef = ex.Code == "invalid_resource_ref"; }
                 AssertTrue(wrongRef, "historical reference cannot cross file identity");
                 AssertEqual("safe", files.ReadHistoricalText(workspace, "app.js", other.Reference), "exact read");
-                AssertTrue(files.List(workspace).Contains("index.html"), "bounded real file listing");
+                AssertTrue(files.ListPage(workspace).Names.Contains("index.html"), "bounded real file listing");
                 var badText = Path.Combine(workspace.RootPath, "bad.txt");
                 File.WriteAllBytes(badText, new byte[] { 0xff, 0xfe });
                 var badEncoding = false;

@@ -24,6 +24,12 @@ bytes and fail when unavailable. The
 CLI exposes relative paths through `common.resources_find/read`; its adapter is
 not yet registered in the existing Office `ResourceGatewayService`. Historical text
 restoration is guarded by a current accepted revision and records the exact source.
+CLI `common.resources_find` scans one selected directory, returns at most 200
+accessible entry names, and accepts an optional case-insensitive filename substring.
+It scans at most 5000 entries and returns `truncated` with `scannedEntries` whenever
+it cannot establish a complete result. The returned names are sorted within the
+captured window, not across a truncated directory; there is no pagination or
+recursive search yet. Protected metadata and credential-shaped names stay hidden.
 CLI reads now
 retain exact evidence and the file owner publishes mutation effects; old read bodies
 are projected stale at a new turn. Guarded `files.delete` moves an accepted complete

@@ -353,8 +353,8 @@ namespace RNAssistant.Runtime
                 _protocol = new ModelProtocolClient(client.CompleteAsync);
                 var registry = new ToolHandlerRegistry();
                 var entries = new List<ToolCatalogEntry>();
-                Register(registry, entries, "common.resources_find", "List names in one workspace directory.",
-                    Schema("directory", false), false,
+                Register(registry, entries, "common.resources_find", "List up to 200 accessible names in one workspace directory; narrow directory or query when truncated.",
+                    Schema("directory", false, "query", false), false,
                     new FileHandler(files, workspace, _observed, "find"));
                 Register(registry, entries, "common.resources_read", "Read a complete UTF-8 workspace file by relative path.",
                     Schema("relativePath", true), false,
@@ -609,9 +609,13 @@ namespace RNAssistant.Runtime
                     if (_operation == "find")
                     {
                         var directory = Value(context, "directory");
-                        var names = _files.List(_workspace, directory);
-                        return Return(ToolResult.Ok("Workspace entries listed.",
-                            JsonConvert.SerializeObject(new { directory, names })), ToolEffectEvidence.None);
+                        var query = Value(context, "query");
+                        var page = _files.ListPage(_workspace, directory, query);
+                        return Return(ToolResult.Ok(page.Truncated
+                            ? "Workspace scan was truncated; narrow the directory or filename query."
+                            : "Workspace entries listed.",
+                            JsonConvert.SerializeObject(new { directory, query, names = page.Names,
+                                truncated = page.Truncated, scannedEntries = page.ScannedEntries })), ToolEffectEvidence.None);
                     }
                     var path = Value(context, "relativePath");
                     if (_operation == "read")
