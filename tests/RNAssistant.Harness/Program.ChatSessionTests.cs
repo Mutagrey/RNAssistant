@@ -24,6 +24,228 @@ namespace RNAssistant.Harness
 {
     internal static partial class Program
     {
+        private static void WorkspaceCreatesAndRelocates()
+        {
+            WithTempPaths(paths =>
+            {
+                var root = Path.Combine(paths.Root, "project");
+                var workspaces = new WorkspaceStore(paths);
+                var opened = workspaces.Open(root);
+                AssertTrue(opened.WorkspaceId.StartsWith("ws_", StringComparison.Ordinal), "workspace id");
+                AssertTrue(!opened.ReadOnly, "workspace is writable after manifest creation");
+                AssertTrue(File.Exists(Path.Combine(root, ".rnassistant", "workspace.json")), "portable manifest");
+                var chats = new ChatStore(paths);
+                var session = workspaces.CreateSession(chats, opened, "First workspace chat");
+                AssertEqual(opened.WorkspaceId, session.WorkspaceId, "workspace session association");
+                AssertEqual(null, session.DocumentAuthorityId, "no fake document authority");
+                AssertEqual(session.Id, workspaces.ListSessions(chats, opened).Single().Id, "listed chat");
+                AssertEqual(session.Id, workspaces.LoadSession(chats, opened, session.Id).Id, "replayed chat");
+
+                var fileOwner = new WorkspaceFileService(paths);
+                var fileBeforeMove = fileOwner.CreateText(opened, "index.html", "moved file");
+
+                var moved = Path.Combine(paths.Root, "moved-project");
+                Directory.Move(root, moved);
+                var reopened = workspaces.Open(moved, false);
+                AssertEqual(opened.WorkspaceId, reopened.WorkspaceId, "relocation preserves workspace id");
+                AssertEqual(session.Id, workspaces.LoadSession(chats, reopened, session.Id).Id, "relocated chat");
+                var fileAfterMove = fileOwner.ReadText(reopened, "index.html");
+                AssertEqual(fileBeforeMove.Reference.Uri, fileAfterMove.Reference.Uri, "relocation preserves file identity");
+                AssertEqual(fileBeforeMove.Reference.Revision, fileAfterMove.Reference.Revision, "relocation preserves current revision");
+            });
+        }
+
+        private static void WorkspaceRejectsCopyConflict()
+        {
+            WithTempPaths(paths =>
+            {
+                var workspaces = new WorkspaceStore(paths);
+                var root = Path.Combine(paths.Root, "project");
+                var opened = workspaces.Open(root);
+                var copy = Path.Combine(paths.Root, "copy");
+                Directory.CreateDirectory(Path.Combine(copy, ".rnassistant"));
+                File.Copy(Path.Combine(root, ".rnassistant", "workspace.json"),
+                    Path.Combine(copy, ".rnassistant", "workspace.json"));
+                var rejected = false;
+                try { workspaces.Open(copy, false); }
+                catch (InvalidDataException) { rejected = true; }
+                AssertTrue(rejected, "a copy does not silently reuse a live workspace identity");
+
+                var readOnlyRoot = Path.Combine(paths.Root, "external");
+                Directory.CreateDirectory(readOnlyRoot);
+                var readOnly = workspaces.Open(readOnlyRoot, false, false);
+                AssertTrue(readOnly.ReadOnly, "manifest-free association is read-only");
+                AssertTrue(!Directory.Exists(Path.Combine(readOnlyRoot, ".rnassistant")), "no control write in root");
+                AssertEqual(readOnly.WorkspaceId, workspaces.Open(readOnlyRoot, false, false).WorkspaceId,
+                    "read-only association reopens");
+                AssertTrue(opened.WorkspaceId != readOnly.WorkspaceId, "independent roots");
+            });
+        }
+
+        private static void WorkspaceFilesGuardWrites()
+        {
+            WithTempPaths(paths =>
+            {
+                var workspace = new WorkspaceStore(paths).Open(Path.Combine(paths.Root, "project"));
+                var files = new WorkspaceFileService(paths);
+                var first = files.CreateText(workspace, "dashboard/app.js", "const value = 1;\r\n");
+                AssertEqual("const value = 1;\r\n", File.ReadAllText(Path.Combine(workspace.RootPath, "dashboard", "app.js")),
+                    "created a real file");
+                var exists = false;
+                try { files.CreateText(workspace, "dashboard/app.js", "overwrite"); }
+                catch (WorkspaceFileException ex) { exists = ex.Code == "target_exists"; }
+                AssertTrue(exists, "create never overwrites");
+                var patched = files.PatchExact(workspace, "dashboard/app.js", first.Reference, "value = 1", "value = 2");
+                AssertEqual("const value = 2;\r\n", patched.Text, "exact patch and CRLF");
+                AssertTrue(patched.Reference.Revision != first.Reference.Revision, "content revision is new");
+                AssertEqual("files.patch", patched.AuthorityCommit.Effect.Operation,
+                    "patch publication retains the exact operation id");
+                var unchanged = files.ReplaceText(workspace, "dashboard/app.js", patched.Reference, patched.Text);
+                AssertEqual(patched.Reference.Revision, unchanged.Reference.Revision, "same bytes are a no-op");
+                var readEvidence = files.ReadText(workspace, "dashboard/app.js").Evidence;
+                AssertTrue(readEvidence != null && readEvidence.Complete &&
+                    readEvidence.Resource.Revision == patched.Reference.Revision,
+                    "read retains complete exact resource evidence");
+                AssertEqual("const value = 1;\r\n", files.ReadHistoricalText(workspace, "dashboard/app.js", first.Reference),
+                    "historical view reads retained CAS bytes");
+                var sourceForCopy = files.ReadText(workspace, "dashboard/app.js");
+                var copied = files.CopyText(workspace, "dashboard/app.js", sourceForCopy.Reference,
+                    "dashboard/app-copy.js");
+                AssertEqual(sourceForCopy.Text, copied.Text, "copy writes exact observed source bytes");
+                AssertTrue(copied.Reference.Uri != sourceForCopy.Reference.Uri,
+                    "copy creates a distinct file identity");
+                var copyScope = new ResourceAuthorityScopeId("file",
+                    ResourceUri.Parse(copied.Reference.Uri).Segments.Single());
+                var copyRevision = new ResourceAuthorityStore(paths).GetRevision(copyScope, copied.Reference);
+                AssertEqual(sourceForCopy.Reference.Revision,
+                    copyRevision.Dependencies.Single().Resource.Revision,
+                    "copy retains exact source provenance");
+                var restored = files.RestoreHistoricalText(workspace, "dashboard/app.js",
+                    patched.Reference, first.Reference);
+                AssertEqual("const value = 1;\r\n", restored.Text, "historical version restored to real file");
+                AssertEqual(ResourceEffectOutcome.Restored, restored.AuthorityCommit.Effect.Outcome,
+                    "restore is a published effect with provenance");
+                var staleCopy = false;
+                try { files.CopyText(workspace, "dashboard/app.js", sourceForCopy.Reference,
+                    "dashboard/stale-copy.js"); }
+                catch (WorkspaceFileException ex) { staleCopy = ex.Code == "target_conflict"; }
+                AssertTrue(staleCopy && !File.Exists(Path.Combine(workspace.RootPath, "dashboard", "stale-copy.js")),
+                    "stale source cannot create a copy");
+                File.WriteAllText(Path.Combine(workspace.RootPath, "dashboard", "app.js"), "external edit\n");
+                var conflict = false;
+                try { files.ReplaceText(workspace, "dashboard/app.js", patched.Reference, "agent edit"); }
+                catch (WorkspaceFileException ex) { conflict = ex.Code == "target_conflict"; }
+                AssertTrue(conflict, "external edit blocks stale replace");
+                AssertEqual("external edit\n", File.ReadAllText(Path.Combine(workspace.RootPath, "dashboard", "app.js")),
+                    "external edit survives");
+                var refreshed = files.ReadText(workspace, "dashboard/app.js");
+                AssertTrue(refreshed.Reference.Revision != patched.Reference.Revision, "drift observed as a new revision");
+                var currentAuthority = new ResourceAuthorityStore(paths).CaptureMany(new[] { readEvidence.ScopeId });
+                AssertEqual(EvidenceState.Superseded,
+                    new EvidenceStateReducer().Reduce(readEvidence, currentAuthority).State,
+                    "old read evidence is superseded after external drift");
+
+                var bomPath = Path.Combine(workspace.RootPath, "bom.txt");
+                File.WriteAllBytes(bomPath, new byte[] { 0xef, 0xbb, 0xbf, (byte)'a', (byte)'\r', (byte)'\n' });
+                var bom = files.ReadText(workspace, "bom.txt");
+                files.ReplaceText(workspace, "bom.txt", bom.Reference, "b\n");
+                AssertTrue(File.ReadAllBytes(bomPath).Take(3).SequenceEqual(new byte[] { 0xef, 0xbb, 0xbf }),
+                    "whole replacement preserves UTF-8 BOM");
+                AssertEqual("b\r\n", File.ReadAllText(bomPath), "whole replacement preserves CRLF");
+            });
+        }
+
+        private static void WorkspaceFilesRejectUnsafePaths()
+        {
+            WithTempPaths(paths =>
+            {
+                var workspace = new WorkspaceStore(paths).Open(Path.Combine(paths.Root, "project"));
+                var files = new WorkspaceFileService(paths);
+                foreach (var path in new[] { "../escape.txt", ".rnassistant/workspace.json", ".git/config",
+                    ".env", ".env.production", ".codex/config", "cert.pem", "private.key",
+                    "AGENTS.md", "SKILL.md", "/tmp/absolute.txt", "C:/device.txt" })
+                {
+                    var rejected = false;
+                    try { files.CreateText(workspace, path, "data"); }
+                    catch (WorkspaceFileException ex) { rejected = ex.Code == "path_outside_mount"; }
+                    AssertTrue(rejected, "unsafe path rejected: " + path);
+                }
+                var original = files.CreateText(workspace, "index.html", "<h1>safe</h1>");
+                var other = files.CreateText(workspace, "app.js", "safe");
+                var wrongRef = false;
+                try { files.ReadHistoricalText(workspace, "app.js", original.Reference); }
+                catch (WorkspaceFileException ex) { wrongRef = ex.Code == "invalid_resource_ref"; }
+                AssertTrue(wrongRef, "historical reference cannot cross file identity");
+                AssertEqual("safe", files.ReadHistoricalText(workspace, "app.js", other.Reference), "exact read");
+                AssertTrue(files.List(workspace).Contains("index.html"), "bounded real file listing");
+                var badText = Path.Combine(workspace.RootPath, "bad.txt");
+                File.WriteAllBytes(badText, new byte[] { 0xff, 0xfe });
+                var badEncoding = false;
+                try { files.ReadText(workspace, "bad.txt"); }
+                catch (WorkspaceFileException ex) { badEncoding = ex.Code == "encoding_ambiguous"; }
+                AssertTrue(badEncoding, "invalid UTF-8 is not decoded with replacement characters");
+                files.CreateText(workspace, "ambiguous.txt", "valid text");
+                var oldTextEvidence = files.ReadText(workspace, "ambiguous.txt").Evidence;
+                File.WriteAllBytes(Path.Combine(workspace.RootPath, "ambiguous.txt"), new byte[] { 0xff });
+                var externalBinary = false;
+                try { files.ReadText(workspace, "ambiguous.txt"); }
+                catch (WorkspaceFileException ex) { externalBinary = ex.Code == "encoding_ambiguous"; }
+                AssertTrue(externalBinary, "external binary edit is reported explicitly");
+                var frozen = new ResourceAuthorityStore(paths).CaptureMany(new[] { oldTextEvidence.ScopeId });
+                AssertEqual(EvidenceState.Unknown,
+                    new EvidenceStateReducer().Reduce(oldTextEvidence, frozen).State,
+                    "old text evidence becomes unknown after unrepresentable external edit");
+                var caseCollision = false;
+                try { files.CreateText(workspace, "INDEX.HTML", "collision"); }
+                catch (WorkspaceFileException ex) { caseCollision = ex.Code == "case_collision"; }
+                AssertTrue(caseCollision, "portable case collision is rejected");
+            });
+        }
+
+        private static void WorkspaceFilesDoNotReplayUncertainWrite()
+        {
+            WithTempPaths(paths =>
+            {
+                var workspace = new WorkspaceStore(paths).Open(Path.Combine(paths.Root, "project"));
+                var files = new WorkspaceFileService(paths);
+                files.FaultPoint = stage => { if (stage == "after-dispatch") throw new IOException("injected interruption"); };
+                var unknown = false;
+                try { files.CreateText(workspace, "index.html", "<h1>created</h1>"); }
+                catch (WorkspaceFileException ex) { unknown = ex.Code == "effect_unknown"; }
+                AssertTrue(unknown, "possible effect is unknown after interruption");
+                AssertEqual("<h1>created</h1>", File.ReadAllText(Path.Combine(workspace.RootPath, "index.html")),
+                    "dispatched bytes remain visible");
+                var restarted = new WorkspaceFileService(paths);
+                var readBlocked = false;
+                try { restarted.ReadText(workspace, "index.html"); }
+                catch (WorkspaceFileException ex) { readBlocked = ex.Code == "unresolved_previous_effect"; }
+                AssertTrue(readBlocked, "ordinary read cannot publish an unresolved effect as a known head");
+                var blocked = false;
+                try { restarted.ReplaceText(workspace, "index.html", null, "overwrite"); }
+                catch (WorkspaceFileException ex) { blocked = ex.Code == "unresolved_previous_effect"; }
+                AssertTrue(blocked, "restart does not automatically retry or conceal unresolved effect");
+                AssertEqual("<h1>created</h1>", File.ReadAllText(Path.Combine(workspace.RootPath, "index.html")),
+                    "blocked repeat leaves file intact");
+                var reconciled = restarted.ReconcileUncertain(workspace, "index.html");
+                AssertEqual(WorkspaceRecoveryOutcome.UnknownAfterDispatch, reconciled.Outcome,
+                    "recovery retains unknown causality");
+                AssertEqual("<h1>created</h1>", reconciled.Current.Text, "recovery observes current bytes without replay");
+                AssertEqual(0, new ResourceMutationJournal(paths).Unresolved().Count,
+                    "explicit reconciliation resolves pending attempt");
+                var next = restarted.ReplaceText(workspace, "index.html", reconciled.Current.Reference, "<h1>next</h1>");
+                AssertEqual("<h1>next</h1>", next.Text, "new guarded write allowed after reconciliation");
+                var scope = new ResourceAuthorityScopeId("file",
+                    ResourceUri.Parse(next.Reference.Uri).Segments.Single());
+                new ResourceMutationJournal(paths).Prepare(scope, "files.replace",
+                    next.Reference.Identity, next.Reference.Revision);
+                var preparedOnly = restarted.ReconcileUncertain(workspace, "index.html");
+                AssertEqual(WorkspaceRecoveryOutcome.AbandonedBeforeDispatch, preparedOnly.Outcome,
+                    "prepared-only recovery proves no dispatch");
+                AssertEqual("<h1>next</h1>", File.ReadAllText(Path.Combine(workspace.RootPath, "index.html")),
+                    "prepared-only recovery does not touch the file");
+            });
+        }
+
         private static void JsonFileStoreWritesAtomicUtf8()
         {
             WithTempPaths(delegate(AppDataPaths paths)

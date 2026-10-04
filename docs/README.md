@@ -50,6 +50,11 @@ direct cutover объясняют порядок уже выполненной �
 [ADR-0012](decisions/ADR-0012-chat-sqlite-projection.md); текущий контракт чтения
 и восстановления остаётся в [Session events](session-events.md).
 
+Workspace-first решение и текущий срез CLI зафиксированы в
+[ADR-0013](decisions/ADR-0013-workspace-first-runtime.md); состояние этапов — в
+[PROGRESS](stabilization/PROGRESS.md). Пока file adapter CLI не переключён на
+общий Gateway/compiler, его ограничения указаны в [Resource Fabric](resource-fabric.md).
+
 ## Куда писать
 
 | Информация | Место |

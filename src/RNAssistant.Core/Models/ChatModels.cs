@@ -291,6 +291,8 @@ namespace RNAssistant.Core.Models
         public string ForkedThroughMessageId { get; set; }
         public List<ResourceCopyLink> ResourceCopies { get; set; } = new List<ResourceCopyLink>();
         public string Host { get; set; }
+        // New workspace conversations have no Office document authority.
+        public string WorkspaceId { get; set; }
         public string DocumentKey { get; set; }
         public string DocumentAuthorityId { get; set; }
         public ContextReceipt LastContextReceipt { get; set; }
@@ -385,6 +387,7 @@ namespace RNAssistant.Core.Models
         public string Id { get; set; }
         public long Revision { get; set; }
         public string Host { get; set; }
+        public string WorkspaceId { get; set; }
         public string DocumentKey { get; set; }
         public string DocumentTitle { get; set; }
         public string DocumentPath { get; set; }
@@ -419,6 +422,7 @@ namespace RNAssistant.Core.Models
         public string Id { get; set; }
         public long Revision { get; set; }
         public string Host { get; set; }
+        public string WorkspaceId { get; set; }
         public string DocumentKey { get; set; }
         public string DocumentTitle { get; set; }
         public string DocumentPath { get; set; }

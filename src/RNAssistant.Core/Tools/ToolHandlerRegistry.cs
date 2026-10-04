@@ -4,7 +4,7 @@ using Newtonsoft.Json.Linq;
 using RNAssistant.Core.Models;
 using RNAssistant.Core.Tools;
 
-namespace RNAssistant.Office.Runtime
+namespace RNAssistant.Core.Tools
 {
     public sealed class ToolHandlerRegistry
     {

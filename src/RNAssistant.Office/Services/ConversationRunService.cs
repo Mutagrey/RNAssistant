@@ -119,10 +119,9 @@ namespace RNAssistant.Office.Services
             var input = new ConversationRunInput(settings, documentContext, tools, skills, attachments);
             using (var ports = CreatePorts(mode, text, session, input, progress, pendingToolRegistrar, cancellationToken))
             {
-                var kernel = new AgentKernel(ports, ports, ports, input: ports);
-                var result = await kernel.RunAsync(new AgentRunRequest(session.LastRun.RunId, session.LastRun.TurnId,
+                var result = await ConversationRunCoordinator.RunAsync(new AgentRunRequest(session.LastRun.RunId, session.LastRun.TurnId,
                     text, new AgentRunLimits(Math.Max(1, settings.MaxAgentIterations), Math.Max(1, settings.MaxAgentToolSteps))),
-                    cancellationToken).ConfigureAwait(false);
+                    ports, ports, ports, cancellationToken, ports).ConfigureAwait(false);
                 return ports.Result(result.Summary);
             }
         }
@@ -141,8 +140,8 @@ namespace RNAssistant.Office.Services
             using (var ports = CreatePorts(ChatModes.Agent, LatestUserRequest(session), session, input,
                 progress, pendingToolRegistrar, cancellationToken, command, refreshModelInput, continuation.Revision))
             {
-                var result = await new AgentKernel(ports, ports, ports, input: ports).ResumeAsync(session.LastRun.RunId,
-                    pendingId, continuation, cancellationToken, supersedePending).ConfigureAwait(false);
+                var result = await ConversationRunCoordinator.ResumeAsync(session.LastRun.RunId,
+                    pendingId, continuation, ports, ports, ports, cancellationToken, supersedePending, ports).ConfigureAwait(false);
                 return ports.Result(result.Summary);
             }
         }

@@ -1,0 +1,25 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net8.0</TargetFramework>
+    <AssemblyName>RNAssistant.Core</AssemblyName>
+    <LangVersion>7.3</LangVersion>
+    <ImplicitUsings>disable</ImplicitUsings>
+    <Nullable>disable</Nullable>
+    <GenerateAssemblyInfo>false</GenerateAssemblyInfo>
+  </PropertyGroup>
+  <ItemGroup>
+    <Compile Remove="Storage/ProtectedSecretStore.cs" />
+    <Compile Remove="Storage/SettingsService.cs" />
+    <Reference Include="Newtonsoft.Json" HintPath="../../packages/Newtonsoft.Json.13.0.3/lib/net6.0/Newtonsoft.Json.dll" />
+    <Reference Include="Microsoft.Data.Sqlite" HintPath="../../packages/Microsoft.Data.Sqlite.Core.10.0.10/lib/net8.0/Microsoft.Data.Sqlite.dll" />
+    <Reference Include="SQLitePCLRaw.core" HintPath="../../packages/SQLitePCLRaw.core.2.1.11/lib/netstandard2.0/SQLitePCLRaw.core.dll" />
+    <Reference Include="SQLitePCLRaw.provider.sqlite3" HintPath="../../packages/SQLitePCLRaw.provider.sqlite3.2.1.11/lib/net6.0/SQLitePCLRaw.provider.sqlite3.dll" />
+    <Reference Include="SQLitePCLRaw.provider.winsqlite3" HintPath="../../packages/SQLitePCLRaw.provider.winsqlite3.2.1.11/lib/netstandard2.0/SQLitePCLRaw.provider.winsqlite3.dll" />
+    <Reference Include="UglyToad.PdfPig" HintPath="../../packages/PdfPig.0.1.15/lib/net8.0/UglyToad.PdfPig.dll" />
+    <Reference Include="UglyToad.PdfPig.Core" HintPath="../../packages/PdfPig.0.1.15/lib/net8.0/UglyToad.PdfPig.Core.dll" />
+    <Reference Include="UglyToad.PdfPig.DocumentLayoutAnalysis" HintPath="../../packages/PdfPig.0.1.15/lib/net8.0/UglyToad.PdfPig.DocumentLayoutAnalysis.dll" />
+    <Reference Include="UglyToad.PdfPig.Fonts" HintPath="../../packages/PdfPig.0.1.15/lib/net8.0/UglyToad.PdfPig.Fonts.dll" />
+    <Reference Include="UglyToad.PdfPig.Tokenization" HintPath="../../packages/PdfPig.0.1.15/lib/net8.0/UglyToad.PdfPig.Tokenization.dll" />
+    <Reference Include="UglyToad.PdfPig.Tokens" HintPath="../../packages/PdfPig.0.1.15/lib/net8.0/UglyToad.PdfPig.Tokens.dll" />
+  </ItemGroup>
+</Project>

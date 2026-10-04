@@ -11,7 +11,7 @@ using RNAssistant.Core.Tools;
 using RNAssistant.Core.Tools.Contracts;
 using ToolResult = RNAssistant.Core.Tools.Contracts.ToolResult;
 
-namespace RNAssistant.Office.Runtime
+namespace RNAssistant.Core.Tools
 {
     // One call, one captured registration, one handler invocation. The kernel
     // owns response batching, accounting, pending lifecycle and the run store.
@@ -228,6 +228,9 @@ namespace RNAssistant.Office.Runtime
         private static ToolExecutionRecord FromHandler(ToolExecutionContext context, ToolPolicy policy,
             ToolHandlerContext handlerContext, ToolHandlerResult completed)
         {
+            if (completed.AuthorityCommit != null &&
+                !string.Equals(completed.AuthorityCommit.Effect.Operation, context.Call.Name, StringComparison.Ordinal))
+                throw new InvalidOperationException("Direct authority commit operation differs from the accepted tool call.");
             var result = completed.Result;
             var effect = completed.Effect;
             var dispatched = handlerContext.MayHaveDispatched;
@@ -265,10 +268,11 @@ namespace RNAssistant.Office.Runtime
             }
             var outcome = result.Status == ToolResultStatus.Ok ? ToolExecutionOutcome.Ok
                 : result.Status == ToolResultStatus.Unknown ? ToolExecutionOutcome.Unknown : ToolExecutionOutcome.Error;
-            return Record(context, outcome, result, dispatched, effect,
+            var record = Record(context, outcome, result, dispatched, effect,
                 awaitingUser: completed.AwaitingUser && outcome == ToolExecutionOutcome.Ok,
                 resourceEvidence: completed.ResourceEvidence, resourceReadBack: completed.ResourceReadBack,
                 recovery: completed.Recovery);
+            return completed.AuthorityCommit == null ? record : record.WithAuthorityCommit(completed.AuthorityCommit, false);
         }
 
         private static JObject ParseArguments(string json)

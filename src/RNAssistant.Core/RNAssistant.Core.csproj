@@ -116,6 +116,7 @@
     <Compile Include="Services\ResourceSchemaValidator.cs" />
     <Compile Include="Models\AgentResponseModels.cs" />
     <Compile Include="Models\ChatModels.cs" />
+    <Compile Include="Models\WorkspaceModels.cs" />
     <Compile Include="Models\RunViewState.cs" />
     <Compile Include="Models\CasMaintenanceModels.cs" />
     <Compile Include="Models\SessionEventModels.cs" />
@@ -130,6 +131,7 @@
     <Compile Include="Agent\RunSummary.cs" />
     <Compile Include="Agent\AgentRunContracts.cs" />
     <Compile Include="Agent\AgentKernel.cs" />
+    <Compile Include="Agent\ConversationRunCoordinator.cs" />
     <Compile Include="Agent\AgentProgressTracker.cs" />
     <Compile Include="Tools\ToolExecutionRecord.cs" />
     <Compile Include="Tools\ToolContracts.cs" />
@@ -137,6 +139,8 @@
     <Compile Include="Tools\SkillPackageSource.cs" />
     <Compile Include="Tools\ToolPackSnapshot.cs" />
     <Compile Include="Tools\ToolExecutionEvidence.cs" />
+    <Compile Include="Tools\ToolHandlerRegistry.cs" />
+    <Compile Include="Tools\ToolRuntime.cs" />
     <Compile Include="Tools\ToolHandlerContracts.cs" />
     <Compile Include="Tools\ToolMutationObserver.cs" />
     <Compile Include="Tools\Contracts\ToolResult.cs" />
@@ -198,6 +202,8 @@
     <Compile Include="Services\TrajectoryRunProjection.cs" />
     <Compile Include="Services\TrajectoryExportService.cs" />
     <Compile Include="Storage\AppDataPaths.cs" />
+    <Compile Include="Storage\WorkspaceStore.cs" />
+    <Compile Include="Storage\WorkspaceFileService.cs" />
     <Compile Include="Storage\AttachmentStore.cs" />
     <Compile Include="Storage\OfficeAttachmentTextExtractor.cs" />
     <Compile Include="Storage\BoundedLruCache.cs" />

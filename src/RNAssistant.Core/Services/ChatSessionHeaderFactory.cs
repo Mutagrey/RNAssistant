@@ -35,6 +35,7 @@ namespace RNAssistant.Core.Services
                 Id = session.Id,
                 Revision = session.Revision,
                 Host = session.Host,
+                WorkspaceId = session.WorkspaceId,
                 DocumentKey = session.DocumentKey,
                 DocumentTitle = session.DocumentTitle,
                 DocumentPath = session.DocumentPath,

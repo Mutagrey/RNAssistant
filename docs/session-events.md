@@ -2,6 +2,14 @@
 
 ## Decision
 
+Workspace association slice (2026-10-04): new CLI chats are ordinary `ChatSession`
+event streams with `WorkspaceId` and no `DocumentAuthorityId`. `WorkspaceStore`
+currently routes them through the existing ChatStore partition fields
+`Host="Workspace"` and `DocumentKey=WorkspaceId`; this temporary adapter is
+listed in the [migration map](stabilization/MIGRATION_MAP.md#workspace-first-adapters--2026-10-04).
+The workspace manifest and file locator catalog do not replace this event
+stream or resource authority. Existing document chat streams are not rewritten.
+
 RNAssistant uses one append-only event stream per chat as its durable source of truth. A disposable SQLite projection indexes messages, artifacts, header state and the validated event cursor. It can be deleted and rebuilt from JSONL. There is no writable chat snapshot, separate HTML-body store, or migration from the previous v1-v3 snapshot formats.
 
 ```text

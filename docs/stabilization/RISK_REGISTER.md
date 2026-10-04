@@ -8,6 +8,25 @@ retired or deferred is not an active P0/P1 implementation defect merely because
 that original severity remains in the table. Release qualification is a separate
 exact-build gate.
 
+## Workspace CLI false completion with local Qwen — 2026-10-04
+
+Owner: shared agent completion contract and CLI acceptance evidence (M4–M5).
+A real `rna-qwen35-9b-32k` creation run returned `model_done` and described
+`index.html`, `styles.css` and `app.js`, but had zero tool calls and left the
+workspace empty. In a controlled repair run, the model read the broken files
+then returned `model_done` with zero writes while the defect remained. Its final
+message ended mid-sentence. The kernel's `ToolCounts` and the file authority
+correctly showed no effect; no file artifact was committed from the model's words.
+
+Explicit feedback produced three verified creates and three reads, and a later
+narrow repair produced a verified patch plus read-back. External Chromium checks
+passed on the repaired app. The CLI now offers opt-in `--expect-files`,
+`--min-reads` and `--min-writes` postconditions; live failure and pass cases
+returned the matching acceptance result and exit code. Tasks without those
+conditions still expose unverified `model_done`, and the conditions do not grade
+file content or browser behavior. The tool path is demonstrated, but autonomous
+completion reliability remains open. Prompt feedback alone does not close it.
+
 ## Offline managed dependency closure — 2026-10-02
 
 Owner: local packages and host delivery targets. The Windows photos show

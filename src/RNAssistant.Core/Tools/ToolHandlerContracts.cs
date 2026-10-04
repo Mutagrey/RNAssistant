@@ -200,11 +200,12 @@ namespace RNAssistant.Core.Tools
         public IReadOnlyList<ResourceEvidence> ResourceEvidence { get; private set; }
         public IReadOnlyList<ResourceMutationReadBack> ResourceReadBack { get; private set; }
         public ToolRecoveryContract Recovery { get; private set; }
+        public ResourceAuthorityCommit AuthorityCommit { get; private set; }
 
         public ToolHandlerResult(ToolResult result, ToolEffectEvidence effect = ToolEffectEvidence.Unreported,
             bool awaitingUser = false, IEnumerable<ResourceEvidence> resourceEvidence = null,
             IEnumerable<ResourceMutationReadBack> resourceReadBack = null,
-            ToolRecoveryContract recovery = null)
+            ToolRecoveryContract recovery = null, ResourceAuthorityCommit authorityCommit = null)
         {
             Result = result ?? throw new ArgumentNullException(nameof(result));
             if (!Enum.IsDefined(typeof(ToolEffectEvidence), effect)) throw new ArgumentOutOfRangeException(nameof(effect));
@@ -217,6 +218,12 @@ namespace RNAssistant.Core.Tools
             ResourceEvidence = Array.AsReadOnly((resourceEvidence ?? new ResourceEvidence[0]).ToArray());
             ResourceReadBack = Array.AsReadOnly((resourceReadBack ?? new ResourceMutationReadBack[0]).ToArray());
             Recovery = recovery;
+            if (authorityCommit != null && (result.Status != ToolResultStatus.Ok ||
+                effect != ToolEffectEvidence.VerifiedChange || authorityCommit.Effect == null ||
+                authorityCommit.Effect.Outcome != ResourceEffectOutcome.VerifiedChanged &&
+                authorityCommit.Effect.Outcome != ResourceEffectOutcome.Restored))
+                throw new ArgumentException("A direct authority commit requires a verified changed result.", nameof(authorityCommit));
+            AuthorityCommit = authorityCommit;
         }
     }
 }

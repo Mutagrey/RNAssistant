@@ -202,14 +202,15 @@ namespace RNAssistant.Core.Tools
             Recovery = recovery;
         }
 
-        public ToolExecutionRecord WithAuthorityCommit(RNAssistant.Core.Models.ResourceAuthorityCommit commit)
+        public ToolExecutionRecord WithAuthorityCommit(RNAssistant.Core.Models.ResourceAuthorityCommit commit,
+            bool appendResultResources = true)
         {
             if (commit == null) return this;
             var committedResult = Result == null ? null : new RNAssistant.Core.Tools.Contracts.ToolResult(
-                Result.Status, Result.Message, Result.DataJson, Result.Resources.Concat(commit.HeadChanges
+                Result.Status, Result.Message, Result.DataJson, appendResultResources ? Result.Resources.Concat(commit.HeadChanges
                     .Where(change => change.After.Knowledge == RNAssistant.Core.Models.HeadKnowledge.Known)
                     .Select(change => change.After.Revision)).GroupBy(reference => reference.Uri + "@" + reference.Revision)
-                    .Select(group => group.First()));
+                    .Select(group => group.First()) : Result.Resources);
             return new ToolExecutionRecord(Context, Outcome, CompletedUtc, Message, ModelResultJson,
                 MayHaveDispatched, PendingId, AwaitingUser, ToolStepsConsumed, DocumentRuntimeId, Evidence,
                 committedResult, PreparedStateJson, ConfirmationDataJson, ResourceEvidence, commit.Effect, commit.CommitId,

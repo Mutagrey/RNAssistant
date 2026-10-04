@@ -25,6 +25,7 @@ namespace RNAssistant.Core.Storage
         private bool _invalid;
         private string _id;
         private string _host;
+        private string _workspaceId;
         private string _documentKey;
         private string _documentTitle;
         private string _documentPath;
@@ -58,7 +59,7 @@ namespace RNAssistant.Core.Storage
         {
             get
             {
-                long total = StringLength(_id) + StringLength(_host) + StringLength(_documentKey) +
+                long total = StringLength(_id) + StringLength(_host) + StringLength(_workspaceId) + StringLength(_documentKey) +
                     StringLength(_documentTitle) + StringLength(_documentPath) + StringLength(_title) +
                     StringLength(_model) + StringLength(_mode) + StringLength(_activeHtmlArtifactId) + 256;
                 total += _messages.Items.Sum(item => StringLength(item.Id) + 16L);
@@ -121,6 +122,7 @@ namespace RNAssistant.Core.Storage
                 _invalid = _invalid,
                 _id = _id,
                 _host = _host,
+                _workspaceId = _workspaceId,
                 _documentKey = _documentKey,
                 _documentTitle = _documentTitle,
                 _documentPath = _documentPath,
@@ -150,6 +152,7 @@ namespace RNAssistant.Core.Storage
                 ["Invalid"] = _invalid,
                 ["Id"] = _id,
                 ["Host"] = _host,
+                ["WorkspaceId"] = _workspaceId,
                 ["DocumentKey"] = _documentKey,
                 ["DocumentTitle"] = _documentTitle,
                 ["DocumentPath"] = _documentPath,
@@ -185,6 +188,7 @@ namespace RNAssistant.Core.Storage
                 _invalid = (bool?)checkpoint["Invalid"] == true,
                 _id = (string)checkpoint["Id"],
                 _host = (string)checkpoint["Host"],
+                _workspaceId = (string)checkpoint["WorkspaceId"],
                 _documentKey = (string)checkpoint["DocumentKey"],
                 _documentTitle = (string)checkpoint["DocumentTitle"],
                 _documentPath = (string)checkpoint["DocumentPath"],
@@ -248,6 +252,7 @@ namespace RNAssistant.Core.Storage
                 Id = string.IsNullOrWhiteSpace(_id) ? Guid.NewGuid().ToString("N") : _id,
                 Revision = revision,
                 Host = host,
+                WorkspaceId = _workspaceId,
                 DocumentKey = documentKey,
                 DocumentTitle = documentTitle,
                 DocumentPath = _documentPath,
@@ -397,6 +402,7 @@ namespace RNAssistant.Core.Storage
             _id = StringValue(root["Id"]);
             _host = StringValue(root["Host"]);
             _documentKey = StringValue(root["DocumentKey"]);
+            _workspaceId = StringValue(root["WorkspaceId"]);
             _documentTitle = StringValue(root["DocumentTitle"]);
             _documentPath = StringValue(root["DocumentPath"]);
             _title = StringValue(root["Title"]);
@@ -483,6 +489,7 @@ namespace RNAssistant.Core.Storage
                     case "Id": _id = StringValue(property.Value); break;
                     case "Host": _host = StringValue(property.Value); break;
                     case "DocumentKey": _documentKey = StringValue(property.Value); break;
+                    case "WorkspaceId": _workspaceId = StringValue(property.Value); break;
                     case "DocumentTitle": _documentTitle = StringValue(property.Value); break;
                     case "DocumentPath": _documentPath = StringValue(property.Value); break;
                     case "Title": _title = StringValue(property.Value); break;

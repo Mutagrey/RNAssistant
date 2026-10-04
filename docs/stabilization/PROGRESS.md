@@ -1,5 +1,48 @@
 # Stabilization progress
 
+## Workspace-first implementation — 2026-10-04 (in progress)
+
+Baseline `ae05b205519365c9a2b02bce8a218afa84302158` matched the supplied
+implementation plan; the starting tree was clean. [ADR-0013](../decisions/ADR-0013-workspace-first-runtime.md)
+records the intended boundary and [migration map](MIGRATION_MAP.md#workspace-first-adapters--2026-10-04)
+records temporary adapters. This work does not qualify Windows/Office/WebView2.
+
+| Stage | Current result | Evidence / open work |
+|---|---|---|
+| M0 | Baseline, SDK and target contracts checked; one ADR and migration map added. | .NET SDK 8/10 available. Installed Mono `msbuild` cannot run on this arm64 Mac (`Bad CPU type`); old-style Windows build remains open. |
+| M1 | `ToolRuntime` and exact handler registry moved to Core; `ConversationRunCoordinator` is called by Office and CLI. Net8 Core and Runtime assemblies build with project references and no Office/WebView2/WinForms/fake dependency in CLI. | Focused `tool runtime:` 15/15; CLI dependency search/build. Office project compilation and platform delivery remain open. |
+| M2 | Portable workspace manifest, user-state association, read-only opening, existing ChatStore workspace sessions without document authority, root relocation and copy-ID conflict. File locators retain identity across a known root move. | Focused `workspace:` 2/2. External moves not associated with an opened workspace and mount/Office identity resolution remain open. |
+| M3 | Real UTF-8 files: bounded list/read, create, exact patch/replace, copy from an accepted complete source to a new identity with immutable source provenance, guarded restoration of a published historical text revision, CAS views, authority heads, mutation journal, read-back, external-edit conflict and non-replay after an interrupted dispatch. Explicit `recover` distinguishes prepared-only abandonment, an already-published effect and unknown causality after dispatch; it never replays the command. Ordinary reads are blocked while an effect is unresolved. External invalid UTF-8 or oversized text marks the old known head unknown; BOM, CRLF and verified no-change are preserved. | Focused `workspace files:` 3/3. Move/recoverable delete and restore after delete, binary/large streaming, full cross-platform path races and Gateway provider integration remain open. |
+| M4 | Net8 CLI calls one application service for workspace/session open and listing, exact capability catalog, new/continued runs, inspect and explicit file recovery; it supports JSONL output. It uses production `LlmClient` and v6 `ModelProtocolClient`. A live `gemma4:31b:cloud` run through the local Ollama API created `index.html`, `app.js`, `styles.css` as externally visible files, with 3 verified writes and `model_done`. File tools now include copy from an accepted source. Exact read evidence and direct file authority commits enter durable tool records. Prior-turn read results are projected as stale; current-turn reads are refreshed before a model request. A cross-process session lease serializes accepted input and the run; continuation reloads the chat under that lease. The CLI development profile now requests 4096 output tokens and propagates the session's reasoning-off setting as `reasoning_effort=none`. | CLI build, environment/session listing, scripted HTTP protocol smoke and one real-model task passed. External inspection confirmed three files, HTML references/DOM targets and `node --check` of JS. A scripted read/copy turn produced a byte-identical real `index-copy.html`. An earlier `glm-5.3-flash:cloud` attempt returned HTTP 402 and wrote nothing. Focused transport test verifies explicit reasoning-off serialization. The scripted smoke verified stale read projection after external edit without a model-facing `rna://` reference; historical create-call text still appears as past action. The local `qwen3.5:9b` profile and live CLI task were exercised; detailed result and false-completion risk are below. Interactive approvals, automatic safe resume, frozen `ModelContextCompiler` path and full M4 acceptance remain open. Browser behavior is M5 evidence, not yet tested. |
+
+Local Qwen evidence (2026-10-04): Ollama 0.35.0 loaded `rna-qwen35-9b-32k`
+entirely on GPU with context 32768. `/api/show` reports `thinking=false` as
+supported; a direct `/v1/chat/completions` strict-JSON probe with
+`reasoning_effort=none` returned valid v6-shaped JSON and no reasoning field.
+The first CLI file task returned `model_done` with zero tool calls and an empty
+workspace. After explicit feedback, the same session made three verified creates
+and three successful resource reads; a duplicate create was rejected without an
+overwrite. A controlled external ID mismatch was then read but falsely reported
+done without a write. A narrower follow-up produced one verified `files.patch`
+and read-back. `node --check` passed; external headless Chromium passed add,
+empty-input, filter, toggle, delete, reload-persistence, checkbox accessible-name
+and narrow-viewport overflow checks with no JS
+exceptions. This is live tool-path evidence, not autonomous verify/repair
+acceptance. Opt-in CLI postconditions now check expected current files and minimum
+verified read/write counts. A live `model_done` with zero writes and a missing
+expected file returned exit 5 and `acceptance=failed`; a live read/patch case
+returned exit 0 and `acceptance=passed`. A stricter read-back requirement
+correctly rejected a model `done` after only one read. These conditions do not
+grade file semantics;
+see [risk register](RISK_REGISTER.md#workspace-cli-false-completion-with-local-qwen--2026-10-04).
+
+Next concrete slice: make task postconditions part of the accepted work contract
+where required, then connect `WorkspaceFileService` as a filesystem provider to the
+existing ResourceGateway, switch CLI model context to the shared frozen compiler,
+then complete M3 operations and M4 input/resume handling. M5–M11 have not started. Existing
+document-owned HTML writer is still active only for its old Office flow; no CLI
+file is dual-written.
+
 ## Current operating status — 2026-09-30
 
 The maintainer accepts the completed host-neutral architecture migration as a

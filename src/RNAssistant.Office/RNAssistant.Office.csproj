@@ -103,8 +103,6 @@
     <Compile Include="Diagnostics\RuntimeLog.cs" />
     <Compile Include="AssistantRuntime.cs" />
     <Compile Include="Runtime\NativeToolRuntimeAdapter.cs" />
-    <Compile Include="Runtime\ToolHandlerRegistry.cs" />
-    <Compile Include="Runtime\ToolRuntime.cs" />
     <Compile Include="Runtime\HostRuntime.cs" />
     <Compile Include="Runtime\DocumentAccessGate.cs" />
     <Compile Include="Tools\ResourceToolHandlerBase.cs" />

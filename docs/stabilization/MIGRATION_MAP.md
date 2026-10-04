@@ -6,7 +6,7 @@
 и краткий [PROGRESS](PROGRESS.md); новые временные adapters добавляются сюда только
 с owner, consumers и условием удаления.
 
-ModelProtocol работает на v5; старые streams требуют explicit new/reset, pipelines отключены. Phase 3B2 подключает
+ModelProtocol работает на v6; старые streams требуют explicit new/reset, pipelines отключены. Phase 3B2 подключает
 `AgentKernel` к production start/confirmation через Office model/tool/store ports.
 Новый summary replay проверен на существующих events; старый loop, builder,
 mutable ID bookkeeping и Failure.Cause удалены без fallback. Phases 4/8/9 и
@@ -17,6 +17,15 @@ gates; active tool compatibility adapter отсутствует. Windows/Office 
 не закрыта. Resource direct cutover завершён host-neutral вместе с отдельной
 проверкой resource-consumer cleanup (2026-09-07). Порядок задаёт
 [Resource MASTER](resource-cutover/MASTER.md), владельцев — [Resource Fabric](../resource-fabric.md).
+
+## Workspace-first adapters — 2026-10-04
+
+| Temporary seam | Owner / current consumers | Removal gate |
+|---|---|---|
+| `Host="Workspace"`, `DocumentKey=WorkspaceId` as ChatStore path partition | `WorkspaceStore` creates workspace chats in the canonical event store; CLI loads them through the same association. `DocumentAuthorityId` is null. These fields are internal routing, not a fake Office document. | M7: native workspace partition in session/catalog paths, then remove the routing adapter without rewriting historical events. |
+| Net8 Core project over the same production source tree | `RNAssistant.Core.Net8.csproj` builds Core for CLI; .NET Framework project remains for Office. DPAPI `SettingsService` is excluded from the net8 text path; CLI reads key from process environment. | M11: settle the cross-target secret/storage ports and packaging; no copied source files or fake Office dependency. |
+| CLI file resource adapter and prompt assembly | `WorkspaceConversationService` in Runtime calls the same kernel/protocol/tool runtime, but its `common.resources_*` handlers directly use `WorkspaceFileService` and its prompt is assembled outside `ModelContextCompiler`. | M5–M7: register the filesystem provider in the existing Gateway, use frozen authority/evidence in the shared compiler, switch CLI and UI consumers, then remove this adapter. |
+| Existing document-owned HTML authoring | `HtmlWorkspacePublication` and Office UI still own old document results; CLI files have no dual writer. | M6: explicit materialization/linkage and guarded old-writer removal for cut-over authored types. |
 
 ## Document artifact ownership — active slices
 

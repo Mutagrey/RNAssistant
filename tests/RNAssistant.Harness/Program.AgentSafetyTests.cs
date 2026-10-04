@@ -1356,6 +1356,15 @@ namespace RNAssistant.Harness
             AssertEqual(ConversationResponseSchemaBuilder.SchemaName,
                 (string)schemaBody.SelectToken("response_format.json_schema.name"), "schema name");
             AssertTrue(schemaBody.SelectToken("response_format.json_schema.strict").Value<bool>(), "strict response schema");
+
+            settings.ReasoningRequestMode = ReasoningRequestModes.ReasoningEffort;
+            var noThinkingBody = LlmClient.BuildRequestBody(settings, messages, 10, new LlmRequestOptions
+            {
+                ResponseFormat = LlmResponseFormats.JsonObject,
+                ReasoningEnabled = false
+            });
+            AssertEqual("none", (string)noThinkingBody["reasoning_effort"],
+                "explicit reasoning_effort mode disables thinking without model metadata");
         }
 
         private static void AgentJsonSchemaMirrorsToolContracts()

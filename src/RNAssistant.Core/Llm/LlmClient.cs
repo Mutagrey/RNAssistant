@@ -713,7 +713,8 @@ namespace RNAssistant.Core.Llm
                 return;
             }
 
-            if (enabled || reasoningSupport == true)
+            if (enabled || reasoningSupport == true ||
+                string.Equals(mode, ReasoningRequestModes.ReasoningEffort, StringComparison.Ordinal))
             {
                 body["reasoning_effort"] = enabled ? "medium" : "none";
             }

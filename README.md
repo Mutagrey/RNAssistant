@@ -14,6 +14,8 @@ Local AI assistant for Excel, Word, PowerPoint and Outlook.
 ## Structure
 
 - `src/RNAssistant.Core` - settings, DPAPI secret storage, chat/context stores, OpenAI-compatible chat client, skill parser.
+- `src/RNAssistant.Runtime` - development workspace conversation composition over the shared kernel and stores.
+- `src/RNAssistant.Cli` - Office-independent .NET 8 development client.
 - `src/RNAssistant.Office` - shared WebView2 task pane, JS bridge, ribbon XML and assistant controller.
 - `src/RNAssistant.OfficeHosts` - shared Excel/Word/PowerPoint/Outlook COM adapters.
 - `src/RNAssistant.NativeHostCli` - C++/CLI in-process DLL host for VBA.
@@ -32,6 +34,58 @@ ownership are in [`docs/architecture.md`](docs/architecture.md).
 `AGENTS.md` adds the current development and environment-specific instructions;
 working status and open qualification evidence are tracked in
 [`docs/stabilization/PROGRESS.md`](docs/stabilization/PROGRESS.md).
+
+## Workspace CLI (development)
+
+The workspace CLI writes ordinary UTF-8 files in a chosen folder. It does not
+require Office, WebView2 or the mock demo:
+
+```sh
+dotnet run --project src/RNAssistant.Cli/RNAssistant.Cli.csproj -- workspace open ./project
+RNA_BASE_URL=https://example.invalid RNA_MODEL=model-name RNA_API_KEY=... \
+  dotnet run --project src/RNAssistant.Cli/RNAssistant.Cli.csproj -- \
+  run --workspace ./project --task-file ./task.md --profile development
+```
+
+Use an actual approved OpenAI-compatible endpoint and model; the URL above is
+only a placeholder. Keys are read from `RNA_API_KEY` or `OPENAI_API_KEY`, never
+from CLI arguments or the workspace manifest. `run --session <id> --message ...`
+continues a saved chat as a new turn. `inspect --workspace <path> --session <id>`
+shows its saved state; `sessions --workspace <path>` lists workspace chats.
+
+For a local Ollama smoke test, run `ollama pull qwen3.5:9b` and create a separate
+32K profile with this `Modelfile`:
+
+```text
+FROM qwen3.5:9b
+PARAMETER num_ctx 32768
+```
+
+Run `ollama create rna-qwen35-9b-32k -f Modelfile`, then set
+`RNA_BASE_URL=http://127.0.0.1:11434`, `RNA_MODEL=rna-qwen35-9b-32k` and
+`RNA_API_KEY=ollama` for the CLI command above. Do not append `/v1` to this CLI
+base URL; `LlmClient` addresses `/v1/chat/completions` itself. The CLI development
+profile requests 4096 output tokens and disables model reasoning through the
+OpenAI-compatible `reasoning_effort` field. The model profile sets Ollama's actual
+context window; RNAssistant uses the same 32K planning budget for an unknown model.
+The local Ollama server ignores the placeholder API key; the CLI accepts an empty
+key for a loopback endpoint. Ollama defaults to one parallel request per model;
+if this server was configured differently, set `OLLAMA_NUM_PARALLEL=1` in its
+environment and restart it before a memory-constrained test.
+
+For a three-file creation test, add
+`--expect-files index.html,styles.css,app.js --min-reads 3 --min-writes 3` to
+`run`. The CLI reads those current files through the workspace service and exits
+with code 5 and `acceptance=failed` when the model's `done` lacks the required
+effects or files. `model_done` by itself is the model's claim. Use `node --check`
+for generated JavaScript and a browser run for behavior.
+
+After an interrupted file mutation, `recover --workspace
+<path> --path <relative-path>` reports the exact recovery outcome without replaying
+the write. `--jsonl` emits one event per line. See `--help` for the
+current command and exit-code surface. Broader real-model quality, browser verification,
+full file operations and Windows delivery remain open in
+[progress](docs/stabilization/PROGRESS.md#workspace-first-implementation--2026-10-04-in-progress).
 
 ## In-process VBA Quick Start
 

@@ -25,6 +25,13 @@ Canonical domain documents:
 
 RNAssistant is a local Office assistant for Word, Excel, PowerPoint, and Outlook. It stores per-document chats and context, talks to an OpenAI-compatible endpoint, executes Office tools locally, and requires no backend.
 
+Workspace-first migration is active under [ADR-0013](decisions/ADR-0013-workspace-first-runtime.md).
+The development CLI opens ordinary folders and workspace chats without a document
+authority. It references Net8 Core and Runtime projects and uses the existing
+kernel, model protocol, tool runtime and canonical stores. The Office UI still
+uses its document-owned composition until the M6–M9 cutovers; this is an in-flight
+architecture, not a claim that the UI and CLI have identical context preparation.
+
 ## Dependency direction
 
 ```text

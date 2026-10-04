@@ -12,6 +12,25 @@ Earlier R61 whole-read/accepted-tool-result binding explanations are superseded.
 
 ## Goals
 
+Workspace file slice (2026-10-04): `WorkspaceFileService` is the current file
+owner for the development CLI. It assigns stable logical file IDs through the
+user-state locator catalog, observes exact UTF-8 bytes into the existing CAS and
+`ResourceAuthorityStore`, and journals create/patch/replace before dispatch.
+An unresolved possible effect blocks ordinary reads and later writes to that file;
+explicit recovery inspects the current bytes and records unknown causality without
+replaying the command. External edits advance observation rather than silently
+accepting a stale replace. Exact historical text reads use published retained CAS
+bytes and fail when unavailable. The
+CLI exposes relative paths through `common.resources_find/read`; its adapter is
+not yet registered in the existing Office `ResourceGatewayService`. Historical text
+restoration is guarded by a current accepted revision and records the exact source.
+CLI reads now
+retain exact evidence and the file owner publishes mutation effects; old read bodies
+are projected stale at a new turn. Large/binary
+files, move/delete and restore after delete, full symlink/hardlink race guarantees and frozen
+`ModelContextCompiler` admission remain open M3–M5 work. See
+[progress](stabilization/PROGRESS.md#workspace-first-implementation--2026-10-04-in-progress).
+
 One resource identity, shared current-state authority, immutable historical evidence
 and one model-context compiler serve model reads, HTML and viewers. Reading content
 never admits a tool schema, activates a stored package or authorizes a mutation.
