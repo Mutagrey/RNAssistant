@@ -216,6 +216,12 @@ namespace RNAssistant.Runtime
                     Register(registry, entries, "files.replace", "Replace a previously read whole UTF-8 file.",
                         Schema("relativePath", true, "text", true), true,
                         new FileHandler(files, workspace, _observed, "replace"));
+                    Register(registry, entries, "files.delete", "Move a previously read UTF-8 file into managed workspace trash.",
+                        Schema("relativePath", true), true,
+                        new FileHandler(files, workspace, _observed, "delete"));
+                    Register(registry, entries, "files.restore", "Restore the latest managed deletion to its original path without overwriting.",
+                        Schema("relativePath", true), true,
+                        new FileHandler(files, workspace, _observed, "restore"));
                 }
                 _catalog = entries;
                 Tools = new ToolRuntime(registry, "agent", false, false);
@@ -414,6 +420,14 @@ namespace RNAssistant.Runtime
                     }
                     WorkspaceFileObservation changed;
                     ResourceRef expected = null;
+                    if (_operation == "restore")
+                    {
+                        changed = _files.RestoreDeletedText(_workspace, path, context.MarkDispatchPossible);
+                        _observed[path] = changed.Reference;
+                        return Return(ToolResult.Ok("Deleted file restored and verified by exact read-back.",
+                            JsonConvert.SerializeObject(new { path, restored = true })),
+                            ToolEffectEvidence.VerifiedChange, authorityCommit: changed.AuthorityCommit);
+                    }
                     if (_operation == "create")
                         changed = _files.CreateText(_workspace, path, Value(context, "text"), context.MarkDispatchPossible);
                     else if (_operation == "copy")
@@ -431,6 +445,14 @@ namespace RNAssistant.Runtime
                         if (!_observed.TryGetValue(path, out expected))
                             return Return(ToolResult.Error("Read the complete current file before editing it.",
                                 "{\"code\":\"source_observation_required\"}"), ToolEffectEvidence.None);
+                        if (_operation == "delete")
+                        {
+                            var deleted = _files.DeleteText(_workspace, path, expected, context.MarkDispatchPossible);
+                            _observed.Remove(path);
+                            return Return(ToolResult.Ok("File moved to managed workspace trash and verified.",
+                                JsonConvert.SerializeObject(new { path, deleted = true })),
+                                ToolEffectEvidence.VerifiedChange, authorityCommit: deleted.AuthorityCommit);
+                        }
                         changed = _operation == "patch"
                             ? _files.PatchExact(_workspace, path, expected, Value(context, "oldText"),
                                 Value(context, "newText"), context.MarkDispatchPossible)

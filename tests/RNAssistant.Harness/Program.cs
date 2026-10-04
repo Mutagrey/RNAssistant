@@ -91,6 +91,7 @@ namespace RNAssistant.Harness
                 Test("workspace files: guarded create patch and external conflict", WorkspaceFilesGuardWrites),
                 Test("workspace files: paths and historical view", WorkspaceFilesRejectUnsafePaths),
                 Test("workspace files: uncertain dispatch blocks repeat", WorkspaceFilesDoNotReplayUncertainWrite),
+                Test("workspace files: recoverable delete and explicit restore", WorkspaceFilesRecoverableDelete),
                 Test("inbox: steer cancels only model", InboxSteerCancelsOnlyModel),
                 Test("inbox: stale model response cannot dispatch", InboxSteerDiscardsLateModelResponse),
                 Test("inbox: steer closes accepted batch", InboxSteerClosesAcceptedBatch),

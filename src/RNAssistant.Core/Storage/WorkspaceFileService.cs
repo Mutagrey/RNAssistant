@@ -40,6 +40,13 @@ namespace RNAssistant.Core.Storage
         public bool Exists { get; internal set; }
     }
 
+    public sealed class WorkspaceFileDeletion
+    {
+        public string RelativePath { get; internal set; }
+        public ResourceRef DeletedReference { get; internal set; }
+        public ResourceAuthorityCommit AuthorityCommit { get; internal set; }
+    }
+
     // One file owner for text reads and writes. The locator catalog is not a head store.
     public sealed class WorkspaceFileService
     {
@@ -197,6 +204,128 @@ namespace RNAssistant.Core.Storage
                 historical, "files.restore", onDispatch);
         }
 
+        // Move the accepted whole text to workspace-local managed trash. No unlink
+        // fallback is allowed if the move or read-back cannot be verified.
+        public WorkspaceFileDeletion DeleteText(WorkspaceDescriptor workspace, string relativePath,
+            ResourceRef expected, Action onDispatch = null)
+        {
+            RequireWritable(workspace);
+            var path = ResolvePath(workspace, relativePath, false, true);
+            var id = FileIdentity(path);
+            var scope = Scope(id);
+            using (_journal.AcquireScope(scope, true))
+            {
+                EnsureNoUnresolved(scope);
+                if (expected == null || !expected.IsExact || expected.Uri != Identity(id).Uri)
+                    throw new WorkspaceFileException("target_conflict", "An exact accepted file read is required.");
+                if (!File.Exists(path))
+                {
+                    ObserveMissing(scope, id);
+                    throw new WorkspaceFileException("target_conflict", "Observed file is missing.");
+                }
+                byte[] bytes;
+                try { bytes = ReadBounded(path); Decode(bytes); }
+                catch (WorkspaceFileException ex) when (ex.Code == "encoding_ambiguous" || ex.Code == "file_too_large")
+                {
+                    ObserveUnknown(scope, id, ex.Code);
+                    throw;
+                }
+                var snapshot = _authority.Capture(scope);
+                var head = snapshot.GetHead(Identity(id));
+                if (head?.Knowledge != HeadKnowledge.Known || head.Revision.Revision != expected.Revision)
+                    throw new WorkspaceFileException("target_conflict", "File authority changed since the accepted read.");
+                var revision = _authority.GetRevision(scope, expected);
+                if (revision?.ContentSha256 != Hash(bytes))
+                {
+                    Observe(scope, id, bytes);
+                    throw new WorkspaceFileException("target_conflict", "File changed outside RNAssistant since the accepted read.");
+                }
+                if (revision.Payload == null || !_blobs.HasStoredReference(revision.Payload.ToBlobReference()))
+                    throw new WorkspaceFileException("snapshot_unavailable", "The retained delete preimage is unavailable.");
+                var trashDirectory = TrashDirectory(workspace, id);
+                var attempt = _journal.Prepare(scope, "files.delete", Identity(id), expected.Revision, revision.Payload);
+                var trashPath = Path.Combine(trashDirectory, attempt.AttemptId + ".utf8");
+                var dispatched = false;
+                try
+                {
+                    onDispatch?.Invoke();
+                    _journal.MarkDispatchMayHaveOccurred(attempt.AttemptId);
+                    dispatched = true;
+                    ResolvePath(workspace, relativePath, false, true);
+                    if (File.Exists(trashPath)) throw new IOException("Managed trash target already exists.");
+                    File.Move(path, trashPath);
+                    FaultPoint?.Invoke("after-dispatch");
+                    if (File.Exists(path) || Hash(ReadBounded(trashPath)) != revision.ContentSha256)
+                        throw new WorkspaceFileException("read_back_mismatch", "Delete read-back did not match its retained preimage.");
+                    var current = _authority.Capture(scope);
+                    var currentHead = current.GetHead(Identity(id));
+                    if (!currentHead.SameAuthority(head))
+                        throw new WorkspaceFileException("authority_conflict", "File authority changed before deletion publication.");
+                    var effect = new ResourceEffect("fx_" + Guid.NewGuid().ToString("N"), "files.delete",
+                        ResourceEffectOutcome.VerifiedChanged,
+                        new[] { new ResourceImpact(Identity(id), ResourceImpactRelation.Exact,
+                            before: expected, changeKind: "text-delete-to-managed-trash") }, "source absent; managed trash preimage verified");
+                    var commit = ResourceAuthorityCommit.Create(scope, current.Generation, effect,
+                        new[] { new ResourceHeadChange(Identity(id), currentHead,
+                            ResourceHeadState.Unavailable(Identity(id), current.Generation + 1, "files.delete")) },
+                        AuthorityCommitReason.MutationEffect, attempt.AttemptId);
+                    _authority.Publish(commit);
+                    _journal.Resolve(attempt.AttemptId, commit.CommitId);
+                    return new WorkspaceFileDeletion
+                    { RelativePath = relativePath, DeletedReference = expected.Copy(), AuthorityCommit = commit };
+                }
+                catch (Exception ex)
+                {
+                    if (!dispatched) { _journal.AbandonBeforeDispatch(attempt.AttemptId); throw; }
+                    throw new WorkspaceFileException("effect_unknown",
+                        "Delete dispatch or publication is uncertain; reconcile before retry. " + ex.Message);
+                }
+            }
+        }
+
+        // Restores only the latest verified (or explicitly reconciled) managed
+        // deletion. The new head gets a fresh revision with exact provenance.
+        public WorkspaceFileObservation RestoreDeletedText(WorkspaceDescriptor workspace,
+            string relativePath, Action onDispatch = null)
+        {
+            RequireWritable(workspace);
+            var path = ResolvePath(workspace, relativePath, false, true);
+            var id = FileIdentity(path);
+            var scope = Scope(id);
+            using (_journal.AcquireScope(scope, true))
+            {
+                EnsureNoUnresolved(scope);
+                if (File.Exists(path) || Directory.Exists(path))
+                    throw new WorkspaceFileException("target_conflict", "Restore never overwrites an existing path.");
+                var snapshot = _authority.Capture(scope);
+                var head = snapshot.GetHead(Identity(id));
+                var deletion = snapshot.Commits.LastOrDefault(commit => commit.NewGeneration == snapshot.Generation &&
+                    commit.Effect?.Operation == "files.delete" && commit.MutationAttemptId != null);
+                var change = deletion?.HeadChanges.SingleOrDefault();
+                if (head?.Knowledge != HeadKnowledge.Unavailable || change?.Before?.Knowledge != HeadKnowledge.Known ||
+                    !change.After.SameAuthority(head))
+                    throw new WorkspaceFileException("target_conflict", "The current head is not a recoverable managed deletion.");
+                var previous = change.Before.Revision;
+                var retained = _authority.GetRevision(scope, previous);
+                if (retained?.Payload == null || !_blobs.HasStoredReference(retained.Payload.ToBlobReference()))
+                    throw new WorkspaceFileException("snapshot_unavailable", "The retained deleted text is unavailable.");
+                var trashPath = Path.Combine(TrashDirectory(workspace, id, false), deletion.MutationAttemptId + ".utf8");
+                if (!File.Exists(trashPath) || StorageFileSystem.IsReparsePoint(trashPath))
+                    throw new WorkspaceFileException("snapshot_unavailable", "The managed trash preimage is unavailable.");
+                var bytes = ReadBounded(trashPath);
+                Decode(bytes);
+                if (Hash(bytes) != retained.ContentSha256)
+                    throw new WorkspaceFileException("snapshot_unavailable", "The managed trash preimage changed.");
+                return Mutate(scope, id, relativePath, bytes, null, previous, "files.restore", onDispatch, () =>
+                {
+                    ResolvePath(workspace, relativePath, false, true);
+                    if (File.Exists(path) || Directory.Exists(path))
+                        throw new WorkspaceFileException("target_conflict", "Restore target appeared before dispatch.");
+                    File.Move(trashPath, path);
+                }, path, expectedHead: head);
+            }
+        }
+
         private WorkspaceFileObservation ReplaceTextCore(WorkspaceDescriptor workspace, string relativePath,
             ResourceRef expected, string text, ResourceRef restoredFrom, string operation, Action onDispatch)
         {
@@ -351,7 +480,8 @@ namespace RNAssistant.Core.Storage
 
         private WorkspaceFileObservation Mutate(ResourceAuthorityScopeId scope, string id, string relativePath,
             byte[] bytes, ResourceRef before, ResourceRef restoredFrom, string operation,
-            Action onDispatch, Action dispatch, string path, ResourceRef copySource = null)
+            Action onDispatch, Action dispatch, string path, ResourceRef copySource = null,
+            ResourceHeadState expectedHead = null)
         {
             var payload = PayloadRef.FromBlob(_blobs.StoreBytes(bytes, "text/plain; charset=utf-8"));
             var attempt = _journal.Prepare(scope, operation, Identity(id), before?.Revision, payload);
@@ -368,14 +498,15 @@ namespace RNAssistant.Core.Storage
                     throw new WorkspaceFileException("read_back_mismatch", "Written file did not match the intended bytes.");
                 var exact = NewRevision(id);
                 _authority.RegisterRevision(scope, new ResourceRevisionMetadata(exact, payload.Sha256,
-                    payload, before, restoredFrom,
+                    payload, before ?? (expectedHead?.Knowledge == HeadKnowledge.Unavailable ? restoredFrom : null), restoredFrom,
                     dependencies: copySource == null ? null : new[] {
                         new ResourceDependency(copySource, "text", ResourceCoverage.Whole(), "immutable-snapshot") }));
                 _authority.RegisterView(scope, new ResourceRevisionView(exact, "text", payload.Sha256,
                     payload, ResourceCoverage.Whole()));
                 var snapshot = _authority.Capture(scope);
                 var head = snapshot.GetHead(Identity(id));
-                if (head?.Revision?.Revision != before?.Revision)
+                if (expectedHead != null ? head == null || !head.SameAuthority(expectedHead) :
+                    head?.Revision?.Revision != before?.Revision)
                     throw new WorkspaceFileException("authority_conflict", "File authority changed before publication.");
                 var effect = new ResourceEffect("fx_" + Guid.NewGuid().ToString("N"), operation,
                     restoredFrom == null ? ResourceEffectOutcome.VerifiedChanged : ResourceEffectOutcome.Restored,
@@ -482,6 +613,24 @@ namespace RNAssistant.Core.Storage
                     writer.Write(JsonConvert.SerializeObject(new FileLocator { FileId = id, AbsolutePath = absolutePath }));
                 return id;
             }
+        }
+
+        private static string TrashDirectory(WorkspaceDescriptor workspace, string id, bool create = true)
+        {
+            var control = Path.Combine(workspace.RootPath, ".rnassistant");
+            if (!StorageFileSystem.IsRegularDirectory(control))
+                throw new WorkspaceFileException("workspace_unavailable", "Workspace control directory is unavailable or linked.");
+            var root = Path.Combine(control, "trash");
+            var directory = Path.Combine(root, id);
+            if (create)
+            {
+                StorageFileSystem.EnsureRegularDirectory(root);
+                StorageFileSystem.EnsureRegularDirectory(directory);
+            }
+            else if (!StorageFileSystem.IsRegularDirectory(root) ||
+                !StorageFileSystem.IsRegularDirectory(directory))
+                throw new WorkspaceFileException("snapshot_unavailable", "Managed trash directory is unavailable or linked.");
+            return directory;
         }
 
         internal static void RelocateLocators(AppDataPaths paths, string oldRoot, string newRoot)

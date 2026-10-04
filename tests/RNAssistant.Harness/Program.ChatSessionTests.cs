@@ -246,6 +246,72 @@ namespace RNAssistant.Harness
             });
         }
 
+        private static void WorkspaceFilesRecoverableDelete()
+        {
+            WithTempPaths(paths =>
+            {
+                var workspace = new WorkspaceStore(paths).Open(Path.Combine(paths.Root, "project"));
+                var files = new WorkspaceFileService(paths);
+                var source = files.CreateText(workspace, "src/app.js", "const ready = true;\n");
+                var accepted = files.ReadText(workspace, "src/app.js");
+                var deleted = files.DeleteText(workspace, "src/app.js", accepted.Reference);
+                var sourcePath = Path.Combine(workspace.RootPath, "src", "app.js");
+                AssertTrue(!File.Exists(sourcePath), "delete removes only the workspace source path");
+                AssertEqual("files.delete", deleted.AuthorityCommit.Effect.Operation, "delete publishes verified effect");
+                AssertEqual("const ready = true;\n", files.ReadHistoricalText(workspace, "src/app.js", source.Reference),
+                    "deleted bytes remain available as an exact historical view");
+                var oldState = new ResourceAuthorityStore(paths).CaptureMany(new[] { accepted.Evidence.ScopeId });
+                AssertEqual(EvidenceState.Unavailable,
+                    new EvidenceStateReducer().Reduce(accepted.Evidence, oldState).State,
+                    "delete invalidates the former current read");
+                var restored = files.RestoreDeletedText(workspace, "src/app.js");
+                AssertEqual("const ready = true;\n", File.ReadAllText(sourcePath), "restore recreates the original file");
+                AssertTrue(restored.Reference.Revision != source.Reference.Revision,
+                    "restore publishes a new logical revision");
+                AssertEqual(source.Reference.Revision,
+                    new ResourceAuthorityStore(paths).GetRevision(accepted.Evidence.ScopeId, restored.Reference)
+                        .RestoredFrom.Revision, "restored revision retains exact provenance");
+                var repeated = false;
+                try { files.RestoreDeletedText(workspace, "src/app.js"); }
+                catch (WorkspaceFileException ex) { repeated = ex.Code == "target_conflict"; }
+                AssertTrue(repeated, "restore never overwrites a present target");
+
+                var current = files.ReadText(workspace, "src/app.js");
+                File.WriteAllText(sourcePath, "external edit\n");
+                var staleDelete = false;
+                try { files.DeleteText(workspace, "src/app.js", current.Reference); }
+                catch (WorkspaceFileException ex) { staleDelete = ex.Code == "target_conflict"; }
+                AssertTrue(staleDelete && File.ReadAllText(sourcePath) == "external edit\n",
+                    "stale delete leaves an external edit intact");
+                current = files.ReadText(workspace, "src/app.js");
+                files.DeleteText(workspace, "src/app.js", current.Reference);
+                File.WriteAllText(sourcePath, "external");
+                var conflict = false;
+                try { files.RestoreDeletedText(workspace, "src/app.js"); }
+                catch (WorkspaceFileException ex) { conflict = ex.Code == "target_conflict"; }
+                AssertTrue(conflict && File.ReadAllText(sourcePath) == "external",
+                    "external file survives a conflicting restore");
+
+                var uncertain = files.CreateText(workspace, "pending.js", "pending\n");
+                files.FaultPoint = stage => { if (stage == "after-dispatch") throw new IOException("injected interruption"); };
+                var unknown = false;
+                try { files.DeleteText(workspace, "pending.js", uncertain.Reference); }
+                catch (WorkspaceFileException ex) { unknown = ex.Code == "effect_unknown"; }
+                AssertTrue(unknown && !File.Exists(Path.Combine(workspace.RootPath, "pending.js")),
+                    "interrupted delete has possible effect and does not replay");
+                var restarted = new WorkspaceFileService(paths);
+                var blocked = false;
+                try { restarted.RestoreDeletedText(workspace, "pending.js"); }
+                catch (WorkspaceFileException ex) { blocked = ex.Code == "unresolved_previous_effect"; }
+                AssertTrue(blocked, "unresolved delete blocks restoration before reconciliation");
+                var recovery = restarted.ReconcileUncertain(workspace, "pending.js");
+                AssertEqual(WorkspaceRecoveryOutcome.UnknownAfterDispatch, recovery.Outcome,
+                    "recovery records unknown delete causality");
+                var explicitRestore = restarted.RestoreDeletedText(workspace, "pending.js");
+                AssertEqual("pending\n", explicitRestore.Text, "explicit restore after reconciliation recovers managed trash");
+            });
+        }
+
         private static void JsonFileStoreWritesAtomicUtf8()
         {
             WithTempPaths(delegate(AppDataPaths paths)

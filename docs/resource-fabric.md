@@ -26,8 +26,14 @@ not yet registered in the existing Office `ResourceGatewayService`. Historical t
 restoration is guarded by a current accepted revision and records the exact source.
 CLI reads now
 retain exact evidence and the file owner publishes mutation effects; old read bodies
-are projected stale at a new turn. Large/binary
-files, move/delete and restore after delete, full symlink/hardlink race guarantees and frozen
+are projected stale at a new turn. Guarded `files.delete` moves an accepted complete
+UTF-8 file into `.rnassistant/trash`, verifies its retained preimage and publishes an
+unavailable head. Explicit `files.restore` moves that managed preimage back only
+when the original path is absent and the latest head is the matching deletion; it
+publishes a new revision with `RestoredFrom` provenance. An interrupted delete
+requires explicit reconciliation before restore. This is workspace-local managed
+trash, not the OS recycle bin or permanent deletion. Large/binary
+files, move, trash retention policy, full symlink/hardlink race guarantees and frozen
 `ModelContextCompiler` admission remain open M3–M5 work. See
 [progress](stabilization/PROGRESS.md#workspace-first-implementation--2026-10-04-in-progress).
 
