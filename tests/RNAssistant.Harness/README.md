@@ -5,6 +5,17 @@ The independent CLI's optional real-browser check is
 a temporary workspace and fresh Chromium profile; it is not an Office/WebView2
 qualification or an agent functional grader.
 
+The independent M5 CSV dashboard task is `tests/cli/csv_dashboard_task.md`.
+Run `node tests/cli/csv_dashboard_grader.mjs <workspace>` on the resulting files,
+then send `tests/cli/csv_dashboard_followup.md` in the same session and use
+`--require-threshold` after that feature turn. The grader uses
+only Node built-ins and a fresh local Chromium profile. It uploads private CSV
+fixtures, checks actual table/filter/sort/total/chart/export/error behavior and
+external requests against a bounded read-only snapshot. Its JSON result is
+independent acceptance evidence; `web.verify` only checks page load and errors.
+Run `python3 tests/cli/csv_dashboard_grader_smoke.py` to confirm a working fixture
+passes and broken JavaScript, missing browser and blocked outbound requests do not.
+
 Host-neutral tests run on this machine without Office COM. Locate the relevant test first; do not read or execute the full suite by default.
 
 ## Find a test

@@ -54,6 +54,14 @@ verification or a patch without accepted source evidence; the no-progress guard
 stopped both without writes. The hint improves diagnosis for a human or another
 model, but it is not evidence that this local model repairs autonomously.
 
+The independent CSV dashboard grader now checks functional browser behavior
+outside the writable workspace. A fresh local-Qwen task again returned `done`
+without tool calls; CLI acceptance rejected it. One feedback turn produced three
+files and a passing browser smoke, but the grader found broken export and invalid/
+empty CSV handling (8/11 assertions passed). A second feedback turn made no
+change and falsely claimed all three issues fixed. This reproduces the risk with
+an independent functional oracle; model completion still cannot certify the app.
+
 ## Offline managed dependency closure — 2026-10-02
 
 Owner: local packages and host delivery targets. The Windows photos show
