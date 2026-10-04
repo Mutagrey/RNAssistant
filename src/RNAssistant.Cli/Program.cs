@@ -81,7 +81,7 @@ namespace RNAssistant.Cli
                 Output(jsonl, "verification.completed", new { entryPath = result.EntryPath,
                     status = WorkspaceWebVerifier.StatusCode(result.Status),
                     checkedFiles = result.CheckedFiles, snapshotSha256 = result.SnapshotSha256,
-                    browser = result.Browser, errors = result.Errors });
+                    browser = result.Browser, errors = result.Errors, hints = result.Hints });
                 return result.Status == WebVerificationStatus.Passed ? 0 :
                     result.Status == WebVerificationStatus.NotRun ? 4 : 5;
             }

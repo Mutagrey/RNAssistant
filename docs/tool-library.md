@@ -47,6 +47,10 @@ snapshot assembled through `WorkspaceFileService`, reports dependency/load/conso
 runtime errors and attaches exact file evidence to its durable tool result. It
 never writes the source. Without a browser the tool is absent from the catalog;
 the explicit CLI `verify` command returns `not-run`.
+When a JavaScript exception occurs, the result may include an advisory hint for
+literal `getElementById` calls whose IDs are absent from captured HTML. Dynamic
+DOM construction can make such a hint inapplicable; the browser error remains the
+verification fact.
 `files.delete` requires a complete accepted read of the current UTF-8 file and
 moves it to workspace-local managed trash after explicit confirmation and journal preparation. It publishes
 success only after the original path is absent and trash bytes match the retained

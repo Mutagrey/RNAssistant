@@ -27,6 +27,7 @@ namespace RNAssistant.Runtime
         public string EntryPath { get; internal set; }
         public IReadOnlyList<string> CheckedFiles { get; internal set; }
         public IReadOnlyList<string> Errors { get; internal set; }
+        public IReadOnlyList<string> Hints { get; internal set; }
         public string SnapshotSha256 { get; internal set; }
         public string Browser { get; internal set; }
         public IReadOnlyList<ResourceEvidence> Evidence { get; internal set; }
@@ -48,6 +49,10 @@ namespace RNAssistant.Runtime
         private static readonly Regex CssReference = new Regex("(?:url\\(\\s*|@import\\s+)(?<quote>[\"']?)(?<value>[^)\"'\\s]+)\\k<quote>\\s*\\)?",
             RegexOptions.IgnoreCase | RegexOptions.Compiled, TimeSpan.FromMilliseconds(100));
         private static readonly Regex JsImport = new Regex("\\bimport\\s+(?:[^\"']*?\\s+from\\s+)?[\"'](?<value>[^\"']+)[\"']",
+            RegexOptions.Compiled, TimeSpan.FromMilliseconds(100));
+        private static readonly Regex HtmlId = new Regex("\\bid\\s*=\\s*(?<quote>[\"'])(?<value>[^\"']+)\\k<quote>",
+            RegexOptions.IgnoreCase | RegexOptions.Compiled, TimeSpan.FromMilliseconds(100));
+        private static readonly Regex JsElementId = new Regex("\\bgetElementById\\s*\\(\\s*(?<quote>[\"'])(?<value>[^\"']+)\\k<quote>\\s*\\)",
             RegexOptions.Compiled, TimeSpan.FromMilliseconds(100));
         private readonly WorkspaceFileService _files;
 
@@ -90,20 +95,21 @@ namespace RNAssistant.Runtime
             {
                 return new WebVerificationResult { Status = WebVerificationStatus.Failed,
                     EntryPath = entryPath, CheckedFiles = new string[0], Errors = new[] { ex.Message },
-                    SnapshotSha256 = null, Evidence = new ResourceEvidence[0] };
+                    Hints = new string[0], SnapshotSha256 = null, Evidence = new ResourceEvidence[0] };
             }
             if (!entryPath.EndsWith(".html", StringComparison.OrdinalIgnoreCase) &&
                 !entryPath.EndsWith(".htm", StringComparison.OrdinalIgnoreCase))
                 return new WebVerificationResult { Status = WebVerificationStatus.Failed,
                     EntryPath = entryPath, CheckedFiles = new string[0],
                     Errors = new[] { "Static web entry must be an HTML file." },
-                    SnapshotSha256 = null, Evidence = new ResourceEvidence[0] };
+                    Hints = new string[0], SnapshotSha256 = null, Evidence = new ResourceEvidence[0] };
             var errors = new List<string>();
             var snapshot = CaptureSnapshot(workspace, entryPath, errors, cancellationToken);
             var result = new WebVerificationResult { EntryPath = entryPath,
                 CheckedFiles = snapshot.Keys.OrderBy(path => path, StringComparer.Ordinal).ToArray(),
                 Errors = errors, SnapshotSha256 = SnapshotHash(snapshot), Browser = null,
-                Evidence = snapshot.Values.Select(file => file.Evidence).ToArray() };
+                Evidence = snapshot.Values.Select(file => file.Evidence).ToArray(),
+                Hints = new string[0] };
             if (errors.Count != 0)
             { result.Status = WebVerificationStatus.Failed; result.Errors = BoundedErrors(errors); return result; }
             var browser = FindBrowserExecutable();
@@ -123,6 +129,8 @@ namespace RNAssistant.Runtime
                         new Uri(server.BaseUrl, EscapePath(entryPath)), server.BaseUrl,
                         cancellationToken).ConfigureAwait(false);
                     errors.AddRange(browserErrors);
+                    if (browserErrors.Any(error => error.StartsWith("JavaScript exception:", StringComparison.Ordinal)))
+                        result.Hints = DomIdHints(snapshot);
                 }
                 result.Status = errors.Count == 0 ? WebVerificationStatus.Passed : WebVerificationStatus.Failed;
             }
@@ -146,6 +154,31 @@ namespace RNAssistant.Runtime
         {
             return errors.Take(16).Select(error => error.Length > 700
                 ? error.Substring(0, 700) + "…" : error).ToArray();
+        }
+
+        private static IReadOnlyList<string> DomIdHints(Dictionary<string, SnapshotFile> snapshot)
+        {
+            try
+            {
+                var htmlIds = new HashSet<string>(StringComparer.Ordinal);
+                foreach (var file in snapshot.Values.Where(item => item.Path.EndsWith(".html", StringComparison.OrdinalIgnoreCase) ||
+                    item.Path.EndsWith(".htm", StringComparison.OrdinalIgnoreCase)))
+                    foreach (Match match in HtmlId.Matches(StrictUtf8.GetString(file.Bytes)))
+                        htmlIds.Add(match.Groups["value"].Value);
+                var hints = new List<string>();
+                foreach (var file in snapshot.Values.Where(item => item.Path.EndsWith(".js", StringComparison.OrdinalIgnoreCase) ||
+                    item.Path.EndsWith(".mjs", StringComparison.OrdinalIgnoreCase)))
+                    foreach (Match match in JsElementId.Matches(StrictUtf8.GetString(file.Bytes)))
+                    {
+                        var id = match.Groups["value"].Value;
+                        if (!htmlIds.Contains(id) && !hints.Any(hint => hint.Contains("#" + id + " ")))
+                            hints.Add(file.Path + " requests #" + id +
+                                " but no captured HTML declares that ID; check whether it is created dynamically.");
+                        if (hints.Count == 4) return hints;
+                    }
+                return hints;
+            }
+            catch (RegexMatchTimeoutException) { return new string[0]; }
         }
 
         private Dictionary<string, SnapshotFile> CaptureSnapshot(WorkspaceDescriptor workspace,

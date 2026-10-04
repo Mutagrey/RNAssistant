@@ -48,6 +48,11 @@ user supplied the precise DOM-ID diagnosis. The initial Qwen request still asked
 for input despite accessible files, and its next turn stalled after reads and
 failed verification. This does not close autonomous diagnosis, functional browser
 assertions or the original multi-file task risk.
+An advisory DOM-ID hint was added to a failed browser result and exposed in the
+top-level tool message. Two fresh Qwen attempts still repeated either the failed
+verification or a patch without accepted source evidence; the no-progress guard
+stopped both without writes. The hint improves diagnosis for a human or another
+model, but it is not evidence that this local model repairs autonomously.
 
 ## Offline managed dependency closure — 2026-10-02
 

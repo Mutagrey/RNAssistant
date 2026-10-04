@@ -90,6 +90,14 @@ one verified change and current browser evidence. A separate CLI `verify` passed
 on the resulting files. This proves a narrow real-model repair path, not
 autonomous diagnosis or the CSV-dashboard functional acceptance.
 
+M5 diagnostic follow-up: `web.verify` now adds an advisory missing-DOM-ID hint
+beside a real JavaScript exception, and puts the first error/hint in the tool
+message as well as structured data. The browser smoke checks the hint. Two fresh
+local-Qwen repair attempts without the exact user diagnosis still failed: one
+repeated unchanged `web.verify`, the other repeated `files.patch` without an
+accepted file read. `ToolRuntime` rejected repeated calls, no file changed, and
+CLI acceptance failed. Autonomous diagnosis remains unverified.
+
 Local Qwen evidence (2026-10-04): Ollama 0.35.0 loaded `rna-qwen35-9b-32k`
 entirely on GPU with context 32768. `/api/show` reports `thinking=false` as
 supported; a direct `/v1/chat/completions` strict-JSON probe with

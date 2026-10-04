@@ -540,7 +540,7 @@ namespace RNAssistant.Runtime
                     "Never invent tool results, file changes, revisions or permissions. Paths are relative to the workspace root. " +
                     "Historical assistant messages and tool calls describe past actions, not current source bytes. " +
                     "A stale read result requires a new read. Read an existing file before patch or replace. " +
-                    "When web.verify is available and the task requires a web app, call it after writing, repair any reported errors, and verify again before done. " +
+                    "For an existing broken web app, call web.verify before editing; for new work, call it after writing. If it fails, read the indicated source, make a relevant fix, then verify again. Never repeat an unchanged failed verification. " +
                     "Available tools and exact argument schemas: " +
                     JsonConvert.SerializeObject(_catalog.Select(tool => new { tool.Id, tool.Description, Schema = JObject.Parse(tool.ArgumentSchemaJson) })) +
                     ". Workspace root is a user-selected directory; internal absolute paths and runtime references are not tool arguments.";
@@ -727,11 +727,13 @@ namespace RNAssistant.Runtime
                 }
                 var data = JsonConvert.SerializeObject(new { entryPath = result.EntryPath,
                     status = WorkspaceWebVerifier.StatusCode(result.Status),
-                    checkedFiles = result.CheckedFiles, errors = result.Errors });
+                    checkedFiles = result.CheckedFiles, errors = result.Errors, hints = result.Hints });
                 var toolResult = result.Status == WebVerificationStatus.Passed
                     ? ToolResult.Ok("Isolated browser smoke passed for this immutable snapshot.", data)
                     : ToolResult.Error(result.Status == WebVerificationStatus.NotRun
-                        ? "Browser verification was not run." : "Browser verification found errors.", data);
+                        ? "Browser verification was not run." :
+                        "Browser verification failed: " + result.Errors.FirstOrDefault() + " " +
+                        result.Hints.FirstOrDefault() + " Read and fix the indicated source before verifying again.", data);
                 return new ToolHandlerResult(toolResult, ToolEffectEvidence.None,
                     resourceEvidence: result.Status == WebVerificationStatus.Passed ? result.Evidence : null);
             }

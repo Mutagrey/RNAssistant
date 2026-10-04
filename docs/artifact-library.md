@@ -30,6 +30,8 @@ a CLI snapshot fingerprint. The browser has no Office bridge or user profile.
 evidence remains current. This creates no Library artifact or editable HTML
 aggregate; the document-owned HTML path below is unchanged. Functional assertions,
 images/binary assets, durable preview manifests and a UI preview remain M5/M7 work.
+Literal DOM-ID mismatch hints accompany actual JavaScript exceptions; they are
+advice for repair, not independent proof of a runtime defect.
 
 ## Local catalog and artifact transfer — 2026-10-02
 
