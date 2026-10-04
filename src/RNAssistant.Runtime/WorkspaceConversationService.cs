@@ -322,6 +322,9 @@ namespace RNAssistant.Runtime
                     Register(registry, entries, "files.copy", "Copy a previously read complete UTF-8 file to a new path; never overwrite.",
                         Schema("relativePath", true, "targetPath", true), true,
                         new FileHandler(files, workspace, _observed, "copy"));
+                    Register(registry, entries, "files.move", "Move a previously read complete UTF-8 file to a new path; preserve file identity and never overwrite.",
+                        Schema("relativePath", true, "targetPath", true), true,
+                        new FileHandler(files, workspace, _observed, "move"), true);
                     Register(registry, entries, "files.patch", "Replace one exact unique text anchor in a previously read file.",
                         Schema("relativePath", true, "oldText", true, "newText", true), true,
                         new FileHandler(files, workspace, _observed, "patch"));
@@ -339,11 +342,11 @@ namespace RNAssistant.Runtime
                 Tools = new ToolRuntime(registry, "agent", false, true,
                     (context, preparation) =>
                     {
-                        if (context.Call.Name == "files.delete")
+                        if (context.Call.Name == "files.delete" || context.Call.Name == "files.move")
                         {
                             var path = (string)JObject.Parse(context.Call.ArgumentsJson)["relativePath"];
                             if (string.IsNullOrWhiteSpace(path) || !_observed.ContainsKey(path))
-                                throw new InvalidOperationException("Read the complete current file before requesting deletion confirmation.");
+                                throw new InvalidOperationException("Read the complete current file before requesting move or deletion confirmation.");
                         }
                         return "pending_" + Guid.NewGuid().ToString("N");
                     });
@@ -353,10 +356,10 @@ namespace RNAssistant.Runtime
             private void RestorePendingObservation()
             {
                 var pending = _session?.LastRun?.KernelState?.Summary?.PendingConfirmation;
-                if (pending?.Call.Name != "files.delete") return;
+                if (pending?.Call.Name != "files.delete" && pending?.Call.Name != "files.move") return;
                 var path = (string)JObject.Parse(pending.Call.ArgumentsJson)["relativePath"];
                 if (string.IsNullOrWhiteSpace(path))
-                    throw new InvalidOperationException("Pending file deletion has no semantic path.");
+                    throw new InvalidOperationException("Pending file mutation has no semantic path.");
                 foreach (var fact in _session.Messages.AsEnumerable().Reverse())
                 {
                     if (fact.RunId != _session.LastRun.RunId || fact.ToolName != "common.resources_read") continue;
@@ -368,7 +371,7 @@ namespace RNAssistant.Runtime
                     _observed[path] = evidence.Resource.Copy();
                     return;
                 }
-                throw new InvalidOperationException("Pending file deletion has no accepted complete read evidence.");
+                throw new InvalidOperationException("Pending file mutation has no accepted complete read evidence.");
             }
 
             private static void Register(ToolHandlerRegistry registry, List<ToolCatalogEntry> entries,
@@ -591,6 +594,19 @@ namespace RNAssistant.Runtime
                         changed = _files.CopyText(_workspace, path, expected, target, context.MarkDispatchPossible);
                         path = target;
                         expected = null; // A copy always creates a distinct target.
+                    }
+                    else if (_operation == "move")
+                    {
+                        if (!_observed.TryGetValue(path, out expected))
+                            return Return(ToolResult.Error("Read the complete current source before moving it.",
+                                "{\"code\":\"source_observation_required\"}"), ToolEffectEvidence.None);
+                        var target = Value(context, "targetPath");
+                        changed = _files.MoveText(_workspace, path, expected, target, context.MarkDispatchPossible);
+                        _observed.Remove(path);
+                        _observed[target] = changed.Reference;
+                        return Return(ToolResult.Ok("File moved and verified at the new path.",
+                            JsonConvert.SerializeObject(new { path, targetPath = target, moved = true })),
+                            ToolEffectEvidence.VerifiedChange, authorityCommit: changed.AuthorityCommit);
                     }
                     else
                     {

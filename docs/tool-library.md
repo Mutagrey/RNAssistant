@@ -35,7 +35,12 @@ separate owners, stores, version rules and model transports:
 ### Workspace CLI file tools (development)
 
 The independent CLI advertises `common.resources_find/read` and the exact
-`files.create/copy/patch/replace/delete/restore` catalog for writable workspaces.
+`files.create/copy/move/patch/replace/delete/restore` catalog for writable workspaces.
+`files.move` requires an accepted complete source read and explicit confirmation;
+it preserves identity, verifies the target bytes and source absence, then publishes
+a new revision. The target parent must exist and no existing file or reserved
+identity may be overwritten. An interrupted move uses its durable two-path intent
+for explicit reconciliation; no move is automatically replayed.
 `files.delete` requires a complete accepted read of the current UTF-8 file and
 moves it to workspace-local managed trash after explicit confirmation and journal preparation. It publishes
 success only after the original path is absent and trash bytes match the retained

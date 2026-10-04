@@ -91,9 +91,11 @@ namespace RNAssistant.Cli
                 var pending = session.LastRun?.KernelState?.Summary?.PendingConfirmation;
                 if (pending != null)
                 {
+                    var pendingTarget = PendingTarget(pending.Call.Name, pending.Call.ArgumentsJson);
                     Output(jsonl, "run.awaiting_confirmation", new { session.Id,
                         pendingId = pending.PendingId, toolId = pending.Call.Name,
                         path = PendingPath(pending.Call.Name, pending.Call.ArgumentsJson),
+                        targetPath = pendingTarget,
                         command = "rna approve|deny --workspace <path> --session <id> --pending <id>" });
                     return 3;
                 }
@@ -212,6 +214,7 @@ namespace RNAssistant.Cli
                     health = summary.ExecutionHealth.ToString(), summary.AssistantMessage, summary.ToolCounts,
                     pendingId = pending?.PendingId, pendingTool = pending?.Call.Name,
                     pendingPath = pending == null ? null : PendingPath(pending.Call.Name, pending.Call.ArgumentsJson),
+                    pendingTargetPath = pending == null ? null : PendingTarget(pending.Call.Name, pending.Call.ArgumentsJson),
                     acceptance = checkedAcceptance.State.ToString().ToLowerInvariant(),
                     expectedFiles = checkedAcceptance.ExpectedFiles,
                     missingFiles = checkedAcceptance.MissingFiles,
@@ -228,8 +231,15 @@ namespace RNAssistant.Cli
 
         private static string PendingPath(string toolId, string argumentsJson)
         {
-            if (toolId != "files.delete") return null;
+            if (toolId != "files.delete" && toolId != "files.move") return null;
             try { return (string)JObject.Parse(argumentsJson)["relativePath"]; }
+            catch (JsonException) { return null; }
+        }
+
+        private static string PendingTarget(string toolId, string argumentsJson)
+        {
+            if (toolId != "files.move") return null;
+            try { return (string)JObject.Parse(argumentsJson)["targetPath"]; }
             catch (JsonException) { return null; }
         }
 

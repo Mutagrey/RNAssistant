@@ -64,6 +64,18 @@ namespace RNAssistant.Core.Storage
             public string AbsolutePath { get; set; }
         }
 
+        private sealed class FileMoveIntent
+        {
+            public string AttemptId { get; set; }
+            public string FileId { get; set; }
+            public string WorkspaceId { get; set; }
+            public string SourceRelativePath { get; set; }
+            public string TargetRelativePath { get; set; }
+            public string SourceAbsolutePath { get; set; }
+            public string TargetAbsolutePath { get; set; }
+            public string ExpectedSha256 { get; set; }
+        }
+
         public WorkspaceFileService(AppDataPaths paths)
         {
             _paths = paths ?? throw new ArgumentNullException(nameof(paths));
@@ -161,6 +173,115 @@ namespace RNAssistant.Core.Storage
                 throw new WorkspaceFileException("target_conflict", "Source changed since the accepted complete read.");
             return CreateTextCore(workspace, targetRelativePath, source.Text,
                 source.Reference, "files.copy", onDispatch);
+        }
+
+        // An in-workspace move keeps the logical file id but advances its revision:
+        // old path observations must be refreshed after the locator changes.
+        public WorkspaceFileObservation MoveText(WorkspaceDescriptor workspace, string sourceRelativePath,
+            ResourceRef expectedSource, string targetRelativePath, Action onDispatch = null)
+        {
+            RequireWritable(workspace);
+            var source = ResolvePath(workspace, sourceRelativePath, false, true);
+            var target = ResolvePath(workspace, targetRelativePath, false, true);
+            if (source == target)
+                throw new WorkspaceFileException("target_conflict", "Move source and target must differ.");
+            var id = FileIdentity(source);
+            var scope = Scope(id);
+            using (_journal.AcquireScope(scope, true))
+            {
+                EnsureNoUnresolved(scope);
+                if (expectedSource == null || !expectedSource.IsExact || expectedSource.Uri != Identity(id).Uri)
+                    throw new WorkspaceFileException("target_conflict", "An exact accepted source read is required.");
+                if (!File.Exists(source))
+                {
+                    ObserveMissing(scope, id);
+                    throw new WorkspaceFileException("target_conflict", "Move source is missing.");
+                }
+                byte[] bytes;
+                try { bytes = ReadBounded(source); Decode(bytes); }
+                catch (WorkspaceFileException ex) when (ex.Code == "encoding_ambiguous" || ex.Code == "file_too_large")
+                {
+                    ObserveUnknown(scope, id, ex.Code);
+                    throw;
+                }
+                var snapshot = _authority.Capture(scope);
+                var head = snapshot.GetHead(Identity(id));
+                if (head?.Knowledge != HeadKnowledge.Known || head.Revision.Revision != expectedSource.Revision)
+                    throw new WorkspaceFileException("target_conflict", "Source authority changed since the accepted read.");
+                var revision = _authority.GetRevision(scope, expectedSource);
+                var hash = Hash(bytes);
+                if (revision?.ContentSha256 != hash)
+                {
+                    Observe(scope, id, bytes);
+                    throw new WorkspaceFileException("target_conflict", "Source changed outside RNAssistant since the accepted read.");
+                }
+                if (revision.Payload == null || !_blobs.HasStoredReference(revision.Payload.ToBlobReference()))
+                    throw new WorkspaceFileException("snapshot_unavailable", "The retained move preimage is unavailable.");
+                if (!Directory.Exists(Path.GetDirectoryName(target)))
+                    throw new WorkspaceFileException("target_parent_missing", "Move target parent must already exist.");
+                if (File.Exists(target) || Directory.Exists(target) || ExistingLocatorId(target) != null ||
+                    PendingMoveFileId(target) != null)
+                    throw new WorkspaceFileException("target_exists", "Move never overwrites a target or its prior identity.");
+                var attempt = _journal.Prepare(scope, "files.move", Identity(id), expectedSource.Revision, revision.Payload);
+                var intent = new FileMoveIntent { AttemptId = attempt.AttemptId, FileId = id,
+                    WorkspaceId = workspace.WorkspaceId, SourceRelativePath = sourceRelativePath,
+                    TargetRelativePath = targetRelativePath, SourceAbsolutePath = source,
+                    TargetAbsolutePath = target, ExpectedSha256 = hash };
+                var dispatched = false;
+                try
+                {
+                    SaveMoveIntent(intent);
+                    onDispatch?.Invoke();
+                    _journal.MarkDispatchMayHaveOccurred(attempt.AttemptId);
+                    dispatched = true;
+                    ResolvePath(workspace, sourceRelativePath, false, true);
+                    ResolvePath(workspace, targetRelativePath, false, true);
+                    if (Hash(ReadBounded(source)) != hash || File.Exists(target) || Directory.Exists(target) ||
+                        ExistingLocatorId(target) != null || PendingMoveFileId(target) != id)
+                        throw new WorkspaceFileException("target_conflict", "Move paths changed just before dispatch.");
+                    File.Move(source, target);
+                    FaultPoint?.Invoke("after-dispatch");
+                    ResolvePath(workspace, targetRelativePath, false, true);
+                    if (File.Exists(source) || Hash(ReadBounded(target)) != hash)
+                        throw new WorkspaceFileException("read_back_mismatch", "Move read-back did not match its retained preimage.");
+                    RelocateLocator(source, target, id);
+                    FaultPoint?.Invoke("after-locator");
+                    var exact = NewRevision(id);
+                    _authority.RegisterRevision(scope, new ResourceRevisionMetadata(exact, hash,
+                        revision.Payload, expectedSource));
+                    _authority.RegisterView(scope, new ResourceRevisionView(exact, "text", hash,
+                        revision.Payload, ResourceCoverage.Whole()));
+                    var current = _authority.Capture(scope);
+                    var currentHead = current.GetHead(Identity(id));
+                    if (currentHead == null || !currentHead.SameAuthority(head))
+                        throw new WorkspaceFileException("authority_conflict", "File authority changed before move publication.");
+                    var effect = new ResourceEffect("fx_" + Guid.NewGuid().ToString("N"), "files.move",
+                        ResourceEffectOutcome.VerifiedChanged,
+                        new[] { new ResourceImpact(Identity(id), ResourceImpactRelation.Exact,
+                            before: expectedSource, after: exact, changeKind: "text-move") },
+                        "source absent; target bytes and locator verified");
+                    var commit = ResourceAuthorityCommit.Create(scope, current.Generation, effect,
+                        new[] { new ResourceHeadChange(Identity(id), currentHead,
+                            ResourceHeadState.Known(exact, current.Generation + 1, "files.move")) },
+                        AuthorityCommitReason.MutationEffect, attempt.AttemptId);
+                    _authority.Publish(commit);
+                    _journal.Resolve(attempt.AttemptId, commit.CommitId);
+                    RemoveMoveIntent(attempt.AttemptId);
+                    return new WorkspaceFileObservation { RelativePath = targetRelativePath,
+                        Text = Decode(bytes), Reference = exact, ContentSha256 = hash, AuthorityCommit = commit };
+                }
+                catch (Exception ex)
+                {
+                    if (!dispatched)
+                    {
+                        _journal.AbandonBeforeDispatch(attempt.AttemptId);
+                        RemoveMoveIntent(attempt.AttemptId);
+                        throw;
+                    }
+                    throw new WorkspaceFileException("effect_unknown",
+                        "Move dispatch or publication is uncertain; reconcile before retry. " + ex.Message);
+                }
+            }
         }
 
         private WorkspaceFileObservation CreateTextCore(WorkspaceDescriptor workspace, string relativePath,
@@ -411,7 +532,10 @@ namespace RNAssistant.Core.Storage
                 if (attempts.Length == 0)
                     throw new WorkspaceFileException("no_pending_effect", "This file has no unresolved mutation attempt.");
                 foreach (var prepared in attempts.Where(item => item.State == MutationAttemptState.Prepared))
+                {
                     _journal.AbandonBeforeDispatch(prepared.AttemptId);
+                    if (prepared.Operation == "files.move") RemoveMoveIntent(prepared.AttemptId);
+                }
                 var dispatched = attempts.Where(item => item.State == MutationAttemptState.DispatchMayHaveOccurred).ToArray();
                 if (dispatched.Length == 0)
                     return new WorkspaceFileRecoveryResult
@@ -421,6 +545,8 @@ namespace RNAssistant.Core.Storage
                 var attempt = dispatched[0];
                 var snapshot = _authority.Capture(scope);
                 var published = snapshot.Commits.LastOrDefault(item => item.MutationAttemptId == attempt.AttemptId);
+                if (attempt.Operation == "files.move")
+                    return ReconcileMove(workspace, scope, id, attempt, snapshot, published);
                 if (published != null)
                 {
                     _journal.Resolve(attempt.AttemptId, published.CommitId);
@@ -467,6 +593,92 @@ namespace RNAssistant.Core.Storage
                 { Outcome = WorkspaceRecoveryOutcome.UnknownAfterDispatch, Exists = observed != null,
                     Current = observed };
             }
+        }
+
+        private WorkspaceFileRecoveryResult ReconcileMove(WorkspaceDescriptor workspace,
+            ResourceAuthorityScopeId scope, string id, MutationAttempt attempt,
+            ResourceAuthoritySnapshot snapshot, ResourceAuthorityCommit published)
+        {
+            var intent = ReadMoveIntent(attempt.AttemptId);
+            if (intent == null || intent.FileId != id || intent.WorkspaceId != workspace.WorkspaceId ||
+                intent.AttemptId != attempt.AttemptId || intent.ExpectedSha256 != attempt.Payload?.Sha256)
+                throw new WorkspaceFileException("recovery_ambiguous", "The durable move intent is missing or inconsistent.");
+            var source = ResolvePath(workspace, intent.SourceRelativePath, false);
+            var target = ResolvePath(workspace, intent.TargetRelativePath, false);
+            if (Directory.Exists(source) || Directory.Exists(target))
+                throw new WorkspaceFileException("recovery_ambiguous", "A move path became a directory.");
+            var sourceExists = File.Exists(source);
+            var targetExists = File.Exists(target);
+            if (published != null)
+            {
+                RelocateLocator(source, target, id);
+                _journal.Resolve(attempt.AttemptId, published.CommitId);
+                RemoveMoveIntent(attempt.AttemptId);
+                return new WorkspaceFileRecoveryResult
+                { Outcome = WorkspaceRecoveryOutcome.AlreadyPublished, Exists = targetExists };
+            }
+            if (sourceExists && targetExists)
+                throw new WorkspaceFileException("recovery_ambiguous", "Both move paths now contain files; inspect them manually.");
+            var previous = snapshot.GetHead(Identity(id));
+            if (previous?.Knowledge != HeadKnowledge.Known ||
+                previous.Revision.Revision != attempt.ExpectedRevision)
+                throw new WorkspaceFileException("recovery_ambiguous", "Move source authority changed before reconciliation.");
+            WorkspaceFileObservation observed = null;
+            ResourceHeadState after;
+            if (targetExists)
+            {
+                var bytes = ReadBounded(target);
+                Decode(bytes);
+                if (Hash(bytes) != intent.ExpectedSha256)
+                    throw new WorkspaceFileException("recovery_ambiguous", "Moved target no longer matches the prepared preimage.");
+                RelocateLocator(source, target, id);
+                var exact = NewRevision(id);
+                _authority.RegisterRevision(scope, new ResourceRevisionMetadata(exact, intent.ExpectedSha256,
+                    attempt.Payload, previous.Revision));
+                _authority.RegisterView(scope, new ResourceRevisionView(exact, "text", intent.ExpectedSha256,
+                    attempt.Payload, ResourceCoverage.Whole()));
+                after = ResourceHeadState.Known(exact, snapshot.Generation + 1, "reconciled-unknown-move");
+                observed = new WorkspaceFileObservation { RelativePath = intent.TargetRelativePath,
+                    Text = Decode(bytes), Reference = exact, ContentSha256 = intent.ExpectedSha256 };
+            }
+            else if (sourceExists)
+            {
+                var bytes = ReadBounded(source);
+                var text = Decode(bytes);
+                RelocateLocator(target, source, id);
+                var hash = Hash(bytes);
+                var exact = hash == intent.ExpectedSha256 ? previous.Revision.Copy() : NewRevision(id);
+                if (exact.Revision != previous.Revision.Revision)
+                {
+                    var payload = PayloadRef.FromBlob(_blobs.StoreBytes(bytes, "text/plain; charset=utf-8"));
+                    _authority.RegisterRevision(scope, new ResourceRevisionMetadata(exact, hash, payload, previous.Revision));
+                    _authority.RegisterView(scope, new ResourceRevisionView(exact, "text", hash,
+                        payload, ResourceCoverage.Whole()));
+                }
+                after = ResourceHeadState.Known(exact, snapshot.Generation + 1, "reconciled-unknown-move");
+                observed = new WorkspaceFileObservation { RelativePath = intent.SourceRelativePath,
+                    Text = text, Reference = exact, ContentSha256 = hash };
+            }
+            else
+            {
+                RelocateLocator(target, source, id);
+                after = ResourceHeadState.Unavailable(Identity(id), snapshot.Generation + 1,
+                    "reconciled-missing-file-after-unknown-move");
+            }
+            var effect = new ResourceEffect("fx_" + Guid.NewGuid().ToString("N"), "files.move",
+                ResourceEffectOutcome.UnknownAfterDispatch,
+                new[] { new ResourceImpact(Identity(id), ResourceImpactRelation.Exact,
+                    before: previous.Revision, after: observed?.Reference,
+                    changeKind: "reconciled-current-location") },
+                "Current paths inspected; causality of interrupted move is not proven.");
+            var commit = ResourceAuthorityCommit.Create(scope, snapshot.Generation, effect,
+                new[] { new ResourceHeadChange(Identity(id), previous, after) },
+                AuthorityCommitReason.Reconciliation, attempt.AttemptId);
+            _authority.Publish(commit);
+            _journal.Resolve(attempt.AttemptId, commit.CommitId);
+            RemoveMoveIntent(attempt.AttemptId);
+            return new WorkspaceFileRecoveryResult
+            { Outcome = WorkspaceRecoveryOutcome.UnknownAfterDispatch, Exists = observed != null, Current = observed };
         }
 
         private WorkspaceFileObservation ReadCurrentUnderLease(ResourceAuthorityScopeId scope, string id,
@@ -596,23 +808,134 @@ namespace RNAssistant.Core.Storage
         {
             var directory = Path.Combine(_paths.WorkspaceDirectory, "file-locators");
             StorageFileSystem.EnsureRegularDirectory(directory);
-            var locatorPath = Path.Combine(directory, RNAssistant.Core.Tools.TextPatternEngine.Sha256(absolutePath) + ".json");
+            var locatorPath = LocatorPath(directory, absolutePath);
             using (StorageFileSystem.AcquireWriteLock(Path.Combine(directory, "locators.lck")))
             {
-                if (File.Exists(locatorPath))
-                {
-                    if (StorageFileSystem.IsReparsePoint(locatorPath)) throw new IOException("File locator cannot be a link.");
-                    var saved = JsonConvert.DeserializeObject<FileLocator>(File.ReadAllText(locatorPath, StrictUtf8));
-                    if (saved == null || saved.AbsolutePath != absolutePath || string.IsNullOrWhiteSpace(saved.FileId))
-                        throw new InvalidDataException("File locator is invalid.");
-                    return saved.FileId;
-                }
+                var saved = ReadLocator(locatorPath, absolutePath);
+                if (saved != null) return saved.FileId;
+                var pendingId = PendingMoveFileId(absolutePath);
+                if (pendingId != null) return pendingId;
                 var id = "file_" + Guid.NewGuid().ToString("N");
                 using (var stream = new FileStream(locatorPath, FileMode.CreateNew, FileAccess.Write, FileShare.None))
                 using (var writer = new StreamWriter(stream, StrictUtf8))
                     writer.Write(JsonConvert.SerializeObject(new FileLocator { FileId = id, AbsolutePath = absolutePath }));
                 return id;
             }
+        }
+
+        private string ExistingLocatorId(string absolutePath)
+        {
+            var directory = Path.Combine(_paths.WorkspaceDirectory, "file-locators");
+            StorageFileSystem.EnsureRegularDirectory(directory);
+            using (StorageFileSystem.AcquireWriteLock(Path.Combine(directory, "locators.lck")))
+                return ReadLocator(LocatorPath(directory, absolutePath), absolutePath)?.FileId;
+        }
+
+        private static string LocatorPath(string directory, string absolutePath)
+        { return Path.Combine(directory, RNAssistant.Core.Tools.TextPatternEngine.Sha256(absolutePath) + ".json"); }
+
+        private static FileLocator ReadLocator(string locatorPath, string absolutePath)
+        {
+            if (!File.Exists(locatorPath)) return null;
+            if (StorageFileSystem.IsReparsePoint(locatorPath)) throw new IOException("File locator cannot be a link.");
+            var saved = JsonConvert.DeserializeObject<FileLocator>(File.ReadAllText(locatorPath, StrictUtf8));
+            if (saved == null || saved.AbsolutePath != absolutePath || string.IsNullOrWhiteSpace(saved.FileId))
+                throw new InvalidDataException("File locator is invalid.");
+            return saved;
+        }
+
+        private void RelocateLocator(string source, string target, string id)
+        {
+            var directory = Path.Combine(_paths.WorkspaceDirectory, "file-locators");
+            StorageFileSystem.EnsureRegularDirectory(directory);
+            using (StorageFileSystem.AcquireWriteLock(Path.Combine(directory, "locators.lck")))
+            {
+                var sourcePath = LocatorPath(directory, source);
+                var targetPath = LocatorPath(directory, target);
+                var oldLocator = ReadLocator(sourcePath, source);
+                var newLocator = ReadLocator(targetPath, target);
+                if (oldLocator?.FileId != id && newLocator?.FileId != id)
+                    throw new WorkspaceFileException("recovery_ambiguous", "The move's file locator is missing.");
+                if (oldLocator != null && oldLocator.FileId != id ||
+                    newLocator != null && newLocator.FileId != id)
+                    throw new WorkspaceFileException("target_conflict", "A move path has another file identity.");
+                if (newLocator == null)
+                    StorageFileSystem.WriteAllTextAtomic(targetPath,
+                        JsonConvert.SerializeObject(new FileLocator { FileId = id, AbsolutePath = target }), StrictUtf8);
+                if (oldLocator != null) File.Delete(sourcePath);
+            }
+        }
+
+        private string MoveIntentDirectory()
+        { return Path.Combine(_paths.WorkspaceDirectory, "file-moves"); }
+
+        private void SaveMoveIntent(FileMoveIntent intent)
+        {
+            var directory = MoveIntentDirectory();
+            StorageFileSystem.EnsureRegularDirectory(directory);
+            var path = Path.Combine(directory, intent.AttemptId + ".json");
+            var locatorDirectory = Path.Combine(_paths.WorkspaceDirectory, "file-locators");
+            StorageFileSystem.EnsureRegularDirectory(locatorDirectory);
+            using (StorageFileSystem.AcquireWriteLock(Path.Combine(locatorDirectory, "locators.lck")))
+            {
+                if (File.Exists(path)) throw new IOException("Move intent already exists.");
+                StorageFileSystem.WriteAllTextAtomic(path, JsonConvert.SerializeObject(intent), StrictUtf8);
+            }
+        }
+
+        private FileMoveIntent ReadMoveIntent(string attemptId)
+        {
+            var path = Path.Combine(MoveIntentDirectory(), attemptId + ".json");
+            if (!File.Exists(path)) return null;
+            if (StorageFileSystem.IsReparsePoint(path)) throw new IOException("Move intent cannot be a link.");
+            var intent = JsonConvert.DeserializeObject<FileMoveIntent>(File.ReadAllText(path, StrictUtf8));
+            if (intent == null || intent.AttemptId != attemptId || string.IsNullOrWhiteSpace(intent.FileId) ||
+                string.IsNullOrWhiteSpace(intent.WorkspaceId) || string.IsNullOrWhiteSpace(intent.SourceRelativePath) ||
+                string.IsNullOrWhiteSpace(intent.TargetRelativePath) || string.IsNullOrWhiteSpace(intent.ExpectedSha256))
+                throw new InvalidDataException("Move intent is invalid.");
+            return intent;
+        }
+
+        private void RemoveMoveIntent(string attemptId)
+        {
+            try
+            {
+                var directory = Path.Combine(_paths.WorkspaceDirectory, "file-locators");
+                StorageFileSystem.EnsureRegularDirectory(directory);
+                using (StorageFileSystem.AcquireWriteLock(Path.Combine(directory, "locators.lck")))
+                    File.Delete(Path.Combine(MoveIntentDirectory(), attemptId + ".json"));
+            }
+            catch (IOException) { /* A resolved journal attempt remains authoritative. */ }
+            catch (UnauthorizedAccessException) { /* Stale intent is ignored after resolution. */ }
+        }
+
+        private string PendingMoveFileId(string absolutePath)
+        {
+            var directory = MoveIntentDirectory();
+            if (!Directory.Exists(directory)) return null;
+            StorageFileSystem.EnsureRegularDirectory(directory);
+            var unresolved = _journal.Unresolved().Where(item => item.Operation == "files.move")
+                .ToDictionary(item => item.AttemptId, StringComparer.Ordinal);
+            if (unresolved.Count == 0) return null;
+            string id = null;
+            foreach (var path in Directory.EnumerateFiles(directory, "*.json"))
+            {
+                if (StorageFileSystem.IsReparsePoint(path)) throw new IOException("Move intent cannot be a link.");
+                var intent = JsonConvert.DeserializeObject<FileMoveIntent>(File.ReadAllText(path, StrictUtf8));
+                if (intent == null || string.IsNullOrWhiteSpace(intent.AttemptId) ||
+                    Path.GetFileNameWithoutExtension(path) != intent.AttemptId ||
+                    string.IsNullOrWhiteSpace(intent.FileId))
+                    throw new InvalidDataException("Move intent is invalid.");
+                MutationAttempt attempt;
+                if (!unresolved.TryGetValue(intent.AttemptId, out attempt) ||
+                    intent.SourceAbsolutePath != absolutePath && intent.TargetAbsolutePath != absolutePath) continue;
+                if (!attempt.ScopeId.Equals(Scope(intent.FileId)) || !attempt.Target.Equals(Identity(intent.FileId)))
+                    throw new InvalidDataException("Move intent does not match its mutation attempt.");
+                if (id != null && id != intent.FileId)
+                    throw new WorkspaceFileException("recovery_ambiguous", "More than one unresolved move names this path.");
+                id = intent.FileId;
+            }
+            return id;
         }
 
         private static string TrashDirectory(WorkspaceDescriptor workspace, string id, bool create = true)
@@ -643,6 +966,25 @@ namespace RNAssistant.Core.Storage
             var comparison = Path.DirectorySeparatorChar == '\\' ? StringComparison.OrdinalIgnoreCase : StringComparison.Ordinal;
             using (StorageFileSystem.AcquireWriteLock(Path.Combine(directory, "locators.lck")))
             {
+                var intentDirectory = Path.Combine(paths.WorkspaceDirectory, "file-moves");
+                if (Directory.Exists(intentDirectory))
+                {
+                    StorageFileSystem.EnsureRegularDirectory(intentDirectory);
+                    foreach (var path in Directory.EnumerateFiles(intentDirectory, "*.json"))
+                    {
+                        if (StorageFileSystem.IsReparsePoint(path)) throw new IOException("Move intent cannot be a link.");
+                        var intent = JsonConvert.DeserializeObject<FileMoveIntent>(File.ReadAllText(path, StrictUtf8));
+                        if (intent == null || string.IsNullOrWhiteSpace(intent.SourceAbsolutePath) ||
+                            string.IsNullOrWhiteSpace(intent.TargetAbsolutePath))
+                            throw new InvalidDataException("Move intent is invalid.");
+                        var changed = false;
+                        if (intent.SourceAbsolutePath.StartsWith(oldPrefix, comparison))
+                        { intent.SourceAbsolutePath = newPrefix + intent.SourceAbsolutePath.Substring(oldPrefix.Length); changed = true; }
+                        if (intent.TargetAbsolutePath.StartsWith(oldPrefix, comparison))
+                        { intent.TargetAbsolutePath = newPrefix + intent.TargetAbsolutePath.Substring(oldPrefix.Length); changed = true; }
+                        if (changed) StorageFileSystem.WriteAllTextAtomic(path, JsonConvert.SerializeObject(intent), StrictUtf8);
+                    }
+                }
                 var moves = new List<Tuple<string, string, FileLocator>>();
                 foreach (var source in Directory.EnumerateFiles(directory, "*.json"))
                 {

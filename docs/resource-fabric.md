@@ -32,8 +32,14 @@ unavailable head. Explicit `files.restore` moves that managed preimage back only
 when the original path is absent and the latest head is the matching deletion; it
 publishes a new revision with `RestoredFrom` provenance. An interrupted delete
 requires explicit reconciliation before restore. This is workspace-local managed
-trash, not the OS recycle bin or permanent deletion. Large/binary
-files, move, trash retention policy, full symlink/hardlink race guarantees and frozen
+trash, not the OS recycle bin or permanent deletion. Guarded `files.move` preserves
+the logical file ID, advances its revision, and changes its locator only after an
+accepted complete source read. It requires an existing target parent and never
+overwrites a target or prior target identity. A durable two-path move intent lets
+`recover` inspect either path after an interrupted dispatch; both paths are blocked
+from ordinary reads until reconciliation. An uncertain move is never replayed.
+Cross-volume move semantics, large/binary files, trash retention policy, full
+symlink/hardlink race guarantees and frozen
 `ModelContextCompiler` admission remain open M3–M5 work. See
 [progress](stabilization/PROGRESS.md#workspace-first-implementation--2026-10-04-in-progress).
 

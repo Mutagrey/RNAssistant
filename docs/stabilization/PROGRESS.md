@@ -12,7 +12,7 @@ records temporary adapters. This work does not qualify Windows/Office/WebView2.
 | M0 | Baseline, SDK and target contracts checked; one ADR and migration map added. | .NET SDK 8/10 available. Installed Mono `msbuild` cannot run on this arm64 Mac (`Bad CPU type`); old-style Windows build remains open. |
 | M1 | `ToolRuntime` and exact handler registry moved to Core; `ConversationRunCoordinator` is called by Office and CLI. Net8 Core and Runtime assemblies build with project references and no Office/WebView2/WinForms/fake dependency in CLI. | Focused `tool runtime:` 15/15; CLI dependency search/build. Office project compilation and platform delivery remain open. |
 | M2 | Portable workspace manifest, user-state association, read-only opening, existing ChatStore workspace sessions without document authority, root relocation and copy-ID conflict. File locators retain identity across a known root move. | Focused `workspace:` 2/2. External moves not associated with an opened workspace and mount/Office identity resolution remain open. |
-| M3 | Real UTF-8 files: bounded list/read, create, exact patch/replace, copy from an accepted complete source to a new identity with immutable source provenance, guarded historical restore, recoverable delete to managed workspace trash and explicit restore after deletion. CAS views, authority heads, mutation journal, read-back, external-edit conflict and non-replay after an interrupted dispatch remain one file-owner path. `recover` distinguishes prepared-only abandonment, an already-published effect and unknown causality after dispatch; it never replays the command. Ordinary reads and writes are blocked while an effect is unresolved. External invalid UTF-8 or oversized text marks the old known head unknown; BOM, CRLF and verified no-change are preserved. | Focused `workspace files:` 4/4. A delete verifies absent source plus exact trash preimage before publishing an unavailable head; restore requires that deletion head and creates a new revision. Interrupted delete requires explicit reconciliation before restore. Move, trash retention policy, binary/large streaming, full cross-platform path races and Gateway provider integration remain open. |
+| M3 | Real UTF-8 files: bounded list/read, create, exact patch/replace, copy from an accepted complete source to a new identity with immutable source provenance, guarded historical restore, recoverable delete to managed workspace trash and explicit restore after deletion. Confirmed `files.move` keeps logical identity, advances revision and relocates the file locator. CAS views, authority heads, mutation journal, read-back, external-edit conflict and non-replay after an interrupted dispatch remain one file-owner path. `recover` distinguishes prepared-only abandonment, an already-published effect and unknown causality after dispatch; it never replays the command. Ordinary reads and writes are blocked while an effect is unresolved. External invalid UTF-8 or oversized text marks the old known head unknown; BOM, CRLF and verified no-change are preserved. | Focused `workspace files:` 5/5. Move retains a durable two-path intent; reads of both paths block until an interrupted move is reconciled. A delete verifies absent source plus exact trash preimage before publishing an unavailable head; restore requires that deletion head and creates a new revision. Cross-volume move semantics, trash retention policy, binary/large streaming, full cross-platform path races and Gateway provider integration remain open. |
 | M4 | Net8 CLI calls one application service for workspace/session open and listing, exact capability catalog, new/continued runs, inspect and explicit file recovery; it supports JSONL output. It uses production `LlmClient` and v6 `ModelProtocolClient`. A live `gemma4:31b:cloud` run through the local Ollama API created `index.html`, `app.js`, `styles.css` as externally visible files, with 3 verified writes and `model_done`. File tools now include copy from an accepted source. Exact read evidence and direct file authority commits enter durable tool records. Prior-turn read results are projected as stale; current-turn reads are refreshed before a model request. A cross-process session lease serializes accepted input and the run; continuation reloads the chat under that lease. The CLI development profile now requests 4096 output tokens and propagates the session's reasoning-off setting as `reasoning_effort=none`. | CLI build, environment/session listing, scripted HTTP protocol smoke and one real-model task passed. External inspection confirmed three files, HTML references/DOM targets and `node --check` of JS. A scripted read/copy turn produced a byte-identical real `index-copy.html`. An earlier `glm-5.3-flash:cloud` attempt returned HTTP 402 and wrote nothing. Focused transport test verifies explicit reasoning-off serialization. The scripted smoke verified stale read projection after external edit without a model-facing `rna://` reference; historical create-call text still appears as past action. The local `qwen3.5:9b` profile and live CLI task were exercised; detailed result and false-completion risk are below. Other interactive questions/approvals, automatic safe resume, frozen `ModelContextCompiler` path and full M4 acceptance remain open. Browser behavior is M5 evidence, not yet tested. |
 
 M4 acceptance slice (2026-10-04): the CLI accepts expected files and minimum read/
@@ -41,6 +41,19 @@ model still said `done`, but the accepted minimum-change contract returned
 `acceptance=failed`, exit 5. This is CLI/tool-path evidence; other question
 flows, broader approvals, automatic resume and real-model confirmation behavior
 remain open.
+
+M3 move slice (2026-10-04): `files.move` now requires an accepted whole-file read
+and the same kernel confirmation/resume path as delete. It saves source and target
+in a durable move intent before dispatch, checks the source preimage, refuses an
+occupied or previously identified target, verifies target bytes/source absence,
+then relocates the file locator and publishes a new revision of the same identity.
+Fault injection after filesystem dispatch and after locator change passed explicit
+reconciliation without replay; ordinary reads of both paths were blocked before
+recovery. Root relocation during an interrupted move also passed. Focused file
+tests passed 5/5. A scripted OpenAI-compatible CLI run paused before move and a
+separate-process approval resumed the same run, moved the real file and passed
+the expected-file/minimum-write contract. Cross-volume behavior and exact
+Windows filesystem races are unverified.
 
 Fresh local Qwen regression (2026-10-04, after the acceptance/confirmation
 changes): one new multi-file ToDo task with three expected files and minimums
@@ -80,7 +93,7 @@ see [risk register](RISK_REGISTER.md#workspace-cli-false-completion-with-local-q
 Next concrete slice: connect `WorkspaceFileService` as a filesystem provider to the
 existing ResourceGateway by moving its generic routing across the current Office
 assembly boundary, switch CLI model context to the shared frozen compiler, then
-complete M3 move and M4 input/resume handling. M5–M11 have not started. Existing
+complete M4 input/resume handling and M5 verification. M5–M11 have not started. Existing
 document-owned HTML writer is still active only for its old Office flow; no CLI
 file is dual-written.
 

@@ -92,6 +92,9 @@ managed deletion if its original path is still absent. `files.delete` stops at a
 durable confirmation. Use `resume` to inspect the pending id, then `approve` or
 `deny` with that exact id. Approval resumes the same kernel run and rechecks the
 accepted file before dispatch; denial closes the call without dispatch.
+`files.move` also requires confirmation after a complete read. It moves a file
+to an unoccupied path with an existing parent while preserving its logical identity;
+an interrupted move requires explicit `recover` from its source or target path.
 `--jsonl` emits one event per line. See `--help` for the
 current command and exit-code surface. Broader real-model quality, browser verification,
 full file operations and Windows delivery remain open in

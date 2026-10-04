@@ -312,6 +312,101 @@ namespace RNAssistant.Harness
             });
         }
 
+        private static void WorkspaceFilesMoveAndRecover()
+        {
+            WithTempPaths(paths =>
+            {
+                var workspace = new WorkspaceStore(paths).Open(Path.Combine(paths.Root, "project"));
+                var files = new WorkspaceFileService(paths);
+                var created = files.CreateText(workspace, "src/app.js", "const app = 1;\n");
+                var accepted = files.ReadText(workspace, "src/app.js");
+                Directory.CreateDirectory(Path.Combine(workspace.RootPath, "dst"));
+                var moved = files.MoveText(workspace, "src/app.js", accepted.Reference, "dst/app.js");
+                AssertTrue(!File.Exists(Path.Combine(workspace.RootPath, "src", "app.js")), "move removes source path");
+                AssertEqual("const app = 1;\n", File.ReadAllText(Path.Combine(workspace.RootPath, "dst", "app.js")),
+                    "move writes real target bytes");
+                AssertEqual(created.Reference.Uri, moved.Reference.Uri, "move preserves logical file identity");
+                AssertTrue(created.Reference.Revision != moved.Reference.Revision, "move advances revision");
+                AssertEqual(ResourceEffectOutcome.VerifiedChanged, moved.AuthorityCommit.Effect.Outcome,
+                    "move publishes verified effect");
+                AssertEqual(created.Reference.Revision,
+                    new ResourceAuthorityStore(paths).GetRevision(accepted.Evidence.ScopeId, moved.Reference).Parent.Revision,
+                    "moved revision retains parent");
+                AssertEqual("const app = 1;\n", files.ReadHistoricalText(workspace, "dst/app.js", created.Reference),
+                    "historical view follows moved identity");
+                AssertEqual(moved.Reference.Revision, files.ReadText(workspace, "dst/app.js").Reference.Revision,
+                    "target read resolves published head");
+                var currentAuthority = new ResourceAuthorityStore(paths).CaptureMany(new[] { accepted.Evidence.ScopeId });
+                AssertEqual(EvidenceState.Superseded,
+                    new EvidenceStateReducer().Reduce(accepted.Evidence, currentAuthority).State,
+                    "old path observation is superseded by move");
+                var sourceMissing = false;
+                try { files.ReadText(workspace, "src/app.js"); }
+                catch (FileNotFoundException) { sourceMissing = true; }
+                AssertTrue(sourceMissing, "old path no longer resolves moved identity");
+
+                files.CreateText(workspace, "dst/occupied.js", "other\n");
+                var collision = false;
+                try { files.MoveText(workspace, "dst/app.js", moved.Reference, "dst/occupied.js"); }
+                catch (WorkspaceFileException ex) { collision = ex.Code == "target_exists"; }
+                AssertTrue(collision && File.Exists(Path.Combine(workspace.RootPath, "dst", "app.js")),
+                    "move does not overwrite occupied target");
+                File.WriteAllText(Path.Combine(workspace.RootPath, "dst", "app.js"), "external\n");
+                var external = false;
+                try { files.MoveText(workspace, "dst/app.js", moved.Reference, "dst/stale.js"); }
+                catch (WorkspaceFileException ex) { external = ex.Code == "target_conflict"; }
+                AssertTrue(external && !File.Exists(Path.Combine(workspace.RootPath, "dst", "stale.js")),
+                    "external edit blocks stale move");
+
+                var aborted = files.CreateText(workspace, "abort.js", "abort\n");
+                var refusedBeforeDispatch = false;
+                try { files.MoveText(workspace, "abort.js", aborted.Reference, "not-moved.js",
+                    () => throw new IOException("dispatch withheld")); }
+                catch (IOException) { refusedBeforeDispatch = true; }
+                AssertTrue(refusedBeforeDispatch && File.Exists(Path.Combine(workspace.RootPath, "abort.js")) &&
+                    !File.Exists(Path.Combine(workspace.RootPath, "not-moved.js")),
+                    "pre-dispatch refusal does not move or leave an unresolved effect");
+                AssertEqual(aborted.Reference.Revision, files.ReadText(workspace, "abort.js").Reference.Revision,
+                    "source remains readable after pre-dispatch refusal");
+
+                var pending = files.CreateText(workspace, "pending.js", "pending\n");
+                files.FaultPoint = point => { if (point == "after-dispatch") throw new IOException("simulated crash"); };
+                var unknown = false;
+                try { files.MoveText(workspace, "pending.js", pending.Reference, "moved.js"); }
+                catch (WorkspaceFileException ex) { unknown = ex.Code == "effect_unknown"; }
+                AssertTrue(unknown, "interrupted move has unknown effect");
+                var restarted = new WorkspaceFileService(paths);
+                var sourceBlocked = false;
+                var targetBlocked = false;
+                try { restarted.ReadText(workspace, "pending.js"); }
+                catch (WorkspaceFileException ex) { sourceBlocked = ex.Code == "unresolved_previous_effect"; }
+                try { restarted.ReadText(workspace, "moved.js"); }
+                catch (WorkspaceFileException ex) { targetBlocked = ex.Code == "unresolved_previous_effect"; }
+                AssertTrue(sourceBlocked && targetBlocked, "both paths block while move effect is unresolved");
+                var recovery = restarted.ReconcileUncertain(workspace, "pending.js");
+                AssertEqual(WorkspaceRecoveryOutcome.UnknownAfterDispatch, recovery.Outcome,
+                    "move reconciliation records unknown causality");
+                AssertEqual(pending.Reference.Uri, restarted.ReadText(workspace, "moved.js").Reference.Uri,
+                    "recovered move keeps logical identity without replay");
+
+                var another = restarted.CreateText(workspace, "second.js", "second\n");
+                restarted.FaultPoint = point => { if (point == "after-locator") throw new IOException("simulated crash"); };
+                unknown = false;
+                try { restarted.MoveText(workspace, "second.js", another.Reference, "relocated.js"); }
+                catch (WorkspaceFileException ex) { unknown = ex.Code == "effect_unknown"; }
+                AssertTrue(unknown, "interrupted locator publication has unknown effect");
+                var relocatedRoot = Path.Combine(paths.Root, "relocated-project");
+                Directory.Move(workspace.RootPath, relocatedRoot);
+                workspace = new WorkspaceStore(paths).Open(relocatedRoot, false);
+                var finalOwner = new WorkspaceFileService(paths);
+                var afterLocator = finalOwner.ReconcileUncertain(workspace, "second.js");
+                AssertEqual(WorkspaceRecoveryOutcome.UnknownAfterDispatch, afterLocator.Outcome,
+                    "source path resolves pending move after locator and workspace root switched");
+                AssertEqual(another.Reference.Uri, finalOwner.ReadText(workspace, "relocated.js").Reference.Uri,
+                    "target retains identity after locator recovery");
+            });
+        }
+
         private static void JsonFileStoreWritesAtomicUtf8()
         {
             WithTempPaths(delegate(AppDataPaths paths)
