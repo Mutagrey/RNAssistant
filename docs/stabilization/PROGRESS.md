@@ -15,6 +15,18 @@ records temporary adapters. This work does not qualify Windows/Office/WebView2.
 | M3 | Real UTF-8 files: bounded list/read, create, exact patch/replace, copy from an accepted complete source to a new identity with immutable source provenance, guarded historical restore, recoverable delete to managed workspace trash and explicit restore after deletion. CAS views, authority heads, mutation journal, read-back, external-edit conflict and non-replay after an interrupted dispatch remain one file-owner path. `recover` distinguishes prepared-only abandonment, an already-published effect and unknown causality after dispatch; it never replays the command. Ordinary reads and writes are blocked while an effect is unresolved. External invalid UTF-8 or oversized text marks the old known head unknown; BOM, CRLF and verified no-change are preserved. | Focused `workspace files:` 4/4. A delete verifies absent source plus exact trash preimage before publishing an unavailable head; restore requires that deletion head and creates a new revision. Interrupted delete requires explicit reconciliation before restore. Move, trash retention policy, binary/large streaming, full cross-platform path races and Gateway provider integration remain open. |
 | M4 | Net8 CLI calls one application service for workspace/session open and listing, exact capability catalog, new/continued runs, inspect and explicit file recovery; it supports JSONL output. It uses production `LlmClient` and v6 `ModelProtocolClient`. A live `gemma4:31b:cloud` run through the local Ollama API created `index.html`, `app.js`, `styles.css` as externally visible files, with 3 verified writes and `model_done`. File tools now include copy from an accepted source. Exact read evidence and direct file authority commits enter durable tool records. Prior-turn read results are projected as stale; current-turn reads are refreshed before a model request. A cross-process session lease serializes accepted input and the run; continuation reloads the chat under that lease. The CLI development profile now requests 4096 output tokens and propagates the session's reasoning-off setting as `reasoning_effort=none`. | CLI build, environment/session listing, scripted HTTP protocol smoke and one real-model task passed. External inspection confirmed three files, HTML references/DOM targets and `node --check` of JS. A scripted read/copy turn produced a byte-identical real `index-copy.html`. An earlier `glm-5.3-flash:cloud` attempt returned HTTP 402 and wrote nothing. Focused transport test verifies explicit reasoning-off serialization. The scripted smoke verified stale read projection after external edit without a model-facing `rna://` reference; historical create-call text still appears as past action. The local `qwen3.5:9b` profile and live CLI task were exercised; detailed result and false-completion risk are below. Interactive approvals, automatic safe resume, frozen `ModelContextCompiler` path and full M4 acceptance remain open. Browser behavior is M5 evidence, not yet tested. |
 
+M4 acceptance slice (2026-10-04): the CLI accepts expected files and minimum read/
+write evidence as a typed run contract, saves it in the canonical chat stream before
+model dispatch, includes it in the request, and saves the separate assessment at
+termination. `inspect` reloads that result. The read minimum counts distinct
+complete file observations still current after expected-file refresh; the write
+minimum counts verified changed file effects, not no-op or failed calls. A scripted
+OpenAI-compatible response that claimed `done` with no file returned
+`acceptance=failed`, exit 5 and a persisted missing-file result. Another scripted
+run created and read `index.html`, returned `acceptance=passed`, exit 0 and a
+persisted 1/1 evidence count. These scripted checks verify contract wiring, not
+Qwen's autonomous repair or semantic/browser quality.
+
 Local Qwen evidence (2026-10-04): Ollama 0.35.0 loaded `rna-qwen35-9b-32k`
 entirely on GPU with context 32768. `/api/show` reports `thinking=false` as
 supported; a direct `/v1/chat/completions` strict-JSON probe with
@@ -36,8 +48,7 @@ correctly rejected a model `done` after only one read. These conditions do not
 grade file semantics;
 see [risk register](RISK_REGISTER.md#workspace-cli-false-completion-with-local-qwen--2026-10-04).
 
-Next concrete slice: make task postconditions part of the accepted work contract
-where required, then connect `WorkspaceFileService` as a filesystem provider to the
+Next concrete slice: connect `WorkspaceFileService` as a filesystem provider to the
 existing ResourceGateway by moving its generic routing across the current Office
 assembly boundary, switch CLI model context to the shared frozen compiler, then
 complete M3 move and M4 input/resume handling. M5–M11 have not started. Existing

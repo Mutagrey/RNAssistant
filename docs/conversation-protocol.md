@@ -86,6 +86,15 @@ unknown-effect health/non-replay, source currency and mutation guards remain
 authoritative and cannot be cleared by a task-list update. Target-model evaluation
 is still necessary; the runtime cannot guarantee that a model's conclusion is true.
 
+The development workspace CLI can accept explicit file/count postconditions with
+the user task. It saves that contract in the run record before model dispatch and
+assesses it after the kernel terminates. Current expected files are read through
+the file owner; read minimums count distinct complete file observations with
+current authority evidence, and write minimums count verified changed file
+effects. The assessment is a separate durable fact and exit condition. It does
+not rewrite the model's `done` action, the kernel lifecycle, or semantic/browser
+quality evidence.
+
 R29 switched client, prompts, schema, probes and accepted history together from v3
 to v4 and removed the model-ID parser/context path; only the kernel creates
 accepted IDs. R72 switches the active response intent contract from v4 to v5 by

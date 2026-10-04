@@ -77,7 +77,11 @@ For a three-file creation test, add
 `--expect-files index.html,styles.css,app.js --min-reads 3 --min-writes 3` to
 `run`. The CLI reads those current files through the workspace service and exits
 with code 5 and `acceptance=failed` when the model's `done` lacks the required
-effects or files. `model_done` by itself is the model's claim. Use `node --check`
+effects or files. The accepted criteria are saved before model dispatch and remain
+visible through `inspect`. `--min-reads` counts distinct complete file reads whose
+evidence is still current at completion; `--min-writes` counts verified changed
+file effects, excluding no-op tool calls. `model_done` by itself is the model's
+claim. Use `node --check`
 for generated JavaScript and a browser run for behavior.
 
 After an interrupted file mutation, `recover --workspace

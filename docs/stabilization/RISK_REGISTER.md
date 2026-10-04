@@ -21,11 +21,13 @@ correctly showed no effect; no file artifact was committed from the model's word
 Explicit feedback produced three verified creates and three reads, and a later
 narrow repair produced a verified patch plus read-back. External Chromium checks
 passed on the repaired app. The CLI now offers opt-in `--expect-files`,
-`--min-reads` and `--min-writes` postconditions; live failure and pass cases
-returned the matching acceptance result and exit code. Tasks without those
-conditions still expose unverified `model_done`, and the conditions do not grade
-file content or browser behavior. The tool path is demonstrated, but autonomous
-completion reliability remains open. Prompt feedback alone does not close it.
+`--min-reads` and `--min-writes` postconditions. The contract is persisted before
+dispatch; assessment counts current complete file-read evidence and verified
+changed file effects, not generic tool success. Scripted CLI failure and pass
+runs confirmed the exit code and persisted inspection state; earlier live Qwen
+runs exercised the shallower postcheck. Tasks without those conditions still
+expose unverified `model_done`, and the conditions do not grade file content or
+browser behavior. Autonomous completion reliability remains open.
 
 ## Offline managed dependency closure — 2026-10-02
 

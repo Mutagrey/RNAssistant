@@ -82,12 +82,14 @@ namespace RNAssistant.Runtime
 
         public async Task<WorkspaceRunResult> RunAsync(WorkspaceDescriptor workspace, string sessionId,
             string message, AppSettings settings, Func<string> apiKeyProvider,
-            Action<WorkspaceRunEvent> progress = null, CancellationToken cancellationToken = default(CancellationToken))
+            Action<WorkspaceRunEvent> progress = null, CancellationToken cancellationToken = default(CancellationToken),
+            WorkspaceRunAcceptance acceptance = null)
         {
             if (workspace == null) throw new ArgumentNullException(nameof(workspace));
             if (string.IsNullOrWhiteSpace(message)) throw new ArgumentException("A task message is required.", nameof(message));
             if (settings == null || string.IsNullOrWhiteSpace(settings.BaseUrl) || string.IsNullOrWhiteSpace(settings.Model))
                 throw new ArgumentException("An LLM endpoint and model are required.", nameof(settings));
+            var acceptedContract = PrepareAcceptance(acceptance);
             var session = string.IsNullOrWhiteSpace(sessionId)
                 ? _workspaces.CreateSession(_chats, workspace, "Workspace chat")
                 : _workspaces.LoadSession(_chats, workspace, sessionId);
@@ -102,10 +104,13 @@ namespace RNAssistant.Runtime
                     throw new InvalidOperationException("The pending approval must be resolved before another turn.");
 
                 var previous = RestoreAcceptedHistory(session);
-                var ports = new WorkspacePorts(_chats, _files, workspace, session, settings, apiKeyProvider, progress);
+                var ports = new WorkspacePorts(_chats, _files, workspace, session, settings, apiKeyProvider,
+                    progress, acceptedContract);
                 var runId = Guid.NewGuid().ToString("N");
                 session.LastRun = new ChatRunRecord
-                { RunId = runId, TurnId = runId, StartedUtc = DateTime.UtcNow, ResponseProtocolVersion = ConversationResponse.ProtocolVersion };
+                { RunId = runId, TurnId = runId, StartedUtc = DateTime.UtcNow,
+                    ResponseProtocolVersion = ConversationResponse.ProtocolVersion,
+                    WorkspaceAcceptance = acceptedContract };
                 session.Model = settings.Model;
                 session.Mode = "agent";
                 session.Messages.Add(new ChatMessage { Role = "user", Content = message, RunId = runId });
@@ -115,7 +120,69 @@ namespace RNAssistant.Runtime
                     new AgentRunRequest(runId, runId, message,
                         new AgentRunLimits(Math.Max(1, settings.MaxAgentIterations), Math.Max(1, settings.MaxAgentToolSteps)), previous),
                     ports, ports.Tools, ports, cancellationToken).ConfigureAwait(false);
-                return new WorkspaceRunResult(session.Id, result.Summary);
+                if (acceptedContract.Requested)
+                {
+                    AssessAcceptance(workspace, session, result.Summary, acceptedContract);
+                    session.LastRun.WorkspaceAcceptance = acceptedContract;
+                    _chats.Save(session);
+                }
+                return new WorkspaceRunResult(session.Id, result.Summary, acceptedContract);
+            }
+        }
+
+        private static WorkspaceRunAcceptance PrepareAcceptance(WorkspaceRunAcceptance requested)
+        {
+            var files = requested?.ExpectedFiles?.ToArray() ?? new string[0];
+            if (files.Length > 32 || files.Any(string.IsNullOrWhiteSpace) ||
+                files.Distinct(StringComparer.Ordinal).Count() != files.Length ||
+                requested != null && (requested.MinimumVerifiedReads < 0 || requested.MinimumVerifiedWrites < 0))
+                throw new ArgumentException("Invalid workspace run acceptance criteria.", nameof(requested));
+            var result = new WorkspaceRunAcceptance
+            {
+                ExpectedFiles = files.ToList(),
+                MinimumVerifiedReads = requested?.MinimumVerifiedReads ?? 0,
+                MinimumVerifiedWrites = requested?.MinimumVerifiedWrites ?? 0
+            };
+            result.State = result.Requested ? WorkspaceAcceptanceState.Pending : WorkspaceAcceptanceState.NotRequested;
+            return result;
+        }
+
+        private void AssessAcceptance(WorkspaceDescriptor workspace, ChatSession session, RunSummary summary,
+            WorkspaceRunAcceptance acceptance)
+        {
+            var completeReads = new List<ResourceEvidence>();
+            var changed = 0;
+            foreach (var fact in session.Messages.Where(item => item.RunId == summary.RunId &&
+                item.ProtocolMessage && !string.IsNullOrWhiteSpace(item.ToolCallId)))
+            {
+                var wire = ToolResultWire.Read(fact.Content);
+                if (!wire.Success || wire.Result.Status != ToolResultStatus.Ok) continue;
+                if (fact.ToolName == "common.resources_read")
+                    foreach (var evidence in fact.ResourceEvidence ?? new List<ResourceEvidence>())
+                        if (evidence.Complete && evidence.View == "text") completeReads.Add(evidence);
+                if (fact.ToolName != null && fact.ToolName.StartsWith("files.", StringComparison.Ordinal) &&
+                    (fact.ResourceEffect?.Outcome == ResourceEffectOutcome.VerifiedChanged ||
+                        fact.ResourceEffect?.Outcome == ResourceEffectOutcome.Restored))
+                    changed++;
+            }
+            acceptance.VerifiedFileChanges = changed;
+            try
+            {
+                acceptance.MissingFiles = MissingExpectedFiles(workspace, acceptance.ExpectedFiles).ToList();
+                var frozen = _files.CaptureAuthority(completeReads);
+                var reducer = new EvidenceStateReducer();
+                acceptance.AcceptedCompleteFileReads = completeReads.Where(evidence =>
+                    reducer.Reduce(evidence, frozen).State == EvidenceState.Current)
+                    .Select(evidence => evidence.Resource.Uri).Distinct(StringComparer.Ordinal).Count();
+                acceptance.State = summary.Reason == "model_done" && acceptance.MissingFiles.Count == 0 &&
+                    acceptance.AcceptedCompleteFileReads >= acceptance.MinimumVerifiedReads &&
+                    acceptance.VerifiedFileChanges >= acceptance.MinimumVerifiedWrites
+                    ? WorkspaceAcceptanceState.Passed : WorkspaceAcceptanceState.Failed;
+            }
+            catch (Exception ex) when (ex is WorkspaceFileException || ex is IOException || ex is UnauthorizedAccessException)
+            {
+                acceptance.State = WorkspaceAcceptanceState.Unknown;
+                acceptance.Error = ex.Message;
             }
         }
 
@@ -180,6 +247,7 @@ namespace RNAssistant.Runtime
             private readonly AppSettings _settings;
             private readonly IMaterializedModelProtocol _protocol;
             private readonly Action<WorkspaceRunEvent> _progress;
+            private readonly WorkspaceRunAcceptance _acceptance;
             private readonly IReadOnlyList<ToolCatalogEntry> _catalog;
             private readonly Dictionary<string, ResourceRef> _observed = new Dictionary<string, ResourceRef>(StringComparer.Ordinal);
             private long _cursor;
@@ -188,10 +256,10 @@ namespace RNAssistant.Runtime
 
             public WorkspacePorts(ChatStore chats, WorkspaceFileService files, WorkspaceDescriptor workspace,
                 ChatSession session, AppSettings settings, Func<string> apiKeyProvider,
-                Action<WorkspaceRunEvent> progress)
+                Action<WorkspaceRunEvent> progress, WorkspaceRunAcceptance acceptance = null)
             {
                 _chats = chats; _files = files; _workspace = workspace; _session = session;
-                _settings = settings.Clone(); _progress = progress;
+                _settings = settings.Clone(); _progress = progress; _acceptance = acceptance;
                 var client = new LlmClient(apiKeyProvider);
                 _protocol = new ModelProtocolClient(client.CompleteAsync);
                 var registry = new ToolHandlerRegistry();
@@ -332,6 +400,10 @@ namespace RNAssistant.Runtime
             private string Prompt()
             {
                 return "You are the RNAssistant workspace agent. Follow the user's task using real files in the selected workspace. " +
+                    (_acceptance?.Requested == true ? "The accepted task contract requires current files and verified tool results before done: " +
+                        JsonConvert.SerializeObject(new { expectedFiles = _acceptance.ExpectedFiles,
+                            minimumVerifiedReads = _acceptance.MinimumVerifiedReads,
+                            minimumVerifiedWrites = _acceptance.MinimumVerifiedWrites }) + ". " : string.Empty) +
                     "Respond with exactly one conversation-response v6 JSON object: message, action, tool_calls. " +
                     "Use action=tool for calls, continue for a short checkpoint, done only when the requested work is complete, " +
                     "blocked or needs_input when it cannot continue. One mutation per response. " +
@@ -499,7 +571,8 @@ namespace RNAssistant.Runtime
     {
         public string SessionId { get; private set; }
         public RunSummary Summary { get; private set; }
-        public WorkspaceRunResult(string sessionId, RunSummary summary)
-        { SessionId = sessionId; Summary = summary; }
+        public WorkspaceRunAcceptance Acceptance { get; private set; }
+        public WorkspaceRunResult(string sessionId, RunSummary summary, WorkspaceRunAcceptance acceptance)
+        { SessionId = sessionId; Summary = summary; Acceptance = acceptance; }
     }
 }

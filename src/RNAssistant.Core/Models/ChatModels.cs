@@ -380,6 +380,8 @@ namespace RNAssistant.Core.Models
         public int IterationsUsed { get; set; }
         public int ToolStepsUsed { get; set; }
         public DateTime StartedUtc { get; set; }
+        [JsonProperty(NullValueHandling = NullValueHandling.Ignore)]
+        public WorkspaceRunAcceptance WorkspaceAcceptance { get; set; }
     }
 
     public sealed class ChatSessionHeader

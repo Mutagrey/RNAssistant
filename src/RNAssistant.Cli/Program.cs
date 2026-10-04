@@ -79,6 +79,7 @@ namespace RNAssistant.Cli
                 if (session == null) throw new ArgumentException("Session not found.");
                 Output(jsonl, "session", new { session.Id, session.WorkspaceId, session.Title,
                     session.Model, session.Mode, session.Revision, session.LastRun?.Status,
+                    acceptance = session.LastRun?.WorkspaceAcceptance,
                     messageCount = session.Messages?.Count ?? 0 });
                 return 0;
             }
@@ -109,7 +110,8 @@ namespace RNAssistant.Cli
                 throw new ArgumentException("--expect-files requires 1–32 distinct relative paths.");
             var minReads = NonnegativeOption(options, "min-reads");
             var minWrites = NonnegativeOption(options, "min-writes");
-            var acceptanceRequested = expectedFiles.Length > 0 || minReads > 0 || minWrites > 0;
+            var acceptance = new WorkspaceRunAcceptance
+            { ExpectedFiles = expectedFiles.ToList(), MinimumVerifiedReads = minReads, MinimumVerifiedWrites = minWrites };
             var settings = new AppSettings
             {
                 BaseUrl = Value(options, "base-url", Environment.GetEnvironmentVariable("RNA_BASE_URL")),
@@ -147,20 +149,10 @@ namespace RNAssistant.Cli
                                 Output(jsonl, update.Kind == "ToolStarted" ? "tool.started" : "tool.completed",
                                     new { update.Summary.RunId, update.ToolId, lifecycle = update.Summary.Lifecycle.ToString(),
                                         health = update.Summary.ExecutionHealth.ToString() });
-                        }, cancellation.Token).GetAwaiter().GetResult();
-                    IReadOnlyList<string> missingFiles = new string[0];
-                    string acceptanceError = null;
-                    if (expectedFiles.Length > 0)
-                    {
-                        try { missingFiles = service.MissingExpectedFiles(workspace, expectedFiles); }
-                        catch (WorkspaceFileException ex) { acceptanceError = ex.Code + ": " + ex.Message; }
-                        catch (IOException ex) { acceptanceError = ex.Message; }
-                        catch (UnauthorizedAccessException ex) { acceptanceError = ex.Message; }
-                    }
-                    var acceptancePassed = !acceptanceRequested ||
-                        result.Summary.Reason == "model_done" && acceptanceError == null &&
-                        missingFiles.Count == 0 && result.Summary.ToolCounts.ReadOk >= minReads &&
-                        result.Summary.ToolCounts.WriteOk >= minWrites;
+                        }, cancellation.Token, acceptance).GetAwaiter().GetResult();
+                    var checkedAcceptance = result.Acceptance;
+                    var acceptancePassed = checkedAcceptance.State == WorkspaceAcceptanceState.NotRequested ||
+                        checkedAcceptance.State == WorkspaceAcceptanceState.Passed;
                     Output(jsonl, "run.completed", new { result.SessionId, result.Summary.RunId,
                         lifecycle = result.Summary.Lifecycle.ToString(), reason = result.Summary.Reason,
                         action = result.Summary.Reason == "model_done" ? "done" :
@@ -168,9 +160,14 @@ namespace RNAssistant.Cli
                             result.Summary.Reason == "model_needs_input" ? "needs_input" : "other",
                         health = result.Summary.ExecutionHealth.ToString(),
                         result.Summary.AssistantMessage, result.Summary.ToolCounts,
-                        acceptance = !acceptanceRequested ? "not_requested" :
-                            acceptanceError == null ? (acceptancePassed ? "passed" : "failed") : "unknown",
-                        expectedFiles, missingFiles, minReads, minWrites, acceptanceError });
+                        acceptance = checkedAcceptance.State.ToString().ToLowerInvariant(),
+                        expectedFiles = checkedAcceptance.ExpectedFiles,
+                        missingFiles = checkedAcceptance.MissingFiles,
+                        minReads = checkedAcceptance.MinimumVerifiedReads,
+                        minWrites = checkedAcceptance.MinimumVerifiedWrites,
+                        completeFileReads = checkedAcceptance.AcceptedCompleteFileReads,
+                        verifiedFileChanges = checkedAcceptance.VerifiedFileChanges,
+                        acceptanceError = checkedAcceptance.Error });
                     if (!acceptancePassed) return 5;
                     return result.Summary.Lifecycle == RNAssistant.Core.Agent.RunLifecycle.Failed ? 5 :
                         result.Summary.Reason == "model_needs_input" ? 3 : 0;
