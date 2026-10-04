@@ -25,7 +25,9 @@ passed on the repaired app. The CLI now offers opt-in `--expect-files`,
 dispatch; assessment counts current complete file-read evidence and verified
 changed file effects, not generic tool success. Scripted CLI failure and pass
 runs confirmed the exit code and persisted inspection state; earlier live Qwen
-runs exercised the shallower postcheck. Tasks without those conditions still
+runs exercised the shallower postcheck. A scripted confirmed delete after an
+external edit preserved the file and failed the minimum-change contract despite
+the model's `done`. Tasks without those conditions still
 expose unverified `model_done`, and the conditions do not grade file content or
 browser behavior. Autonomous completion reliability remains open.
 

@@ -37,7 +37,7 @@ separate owners, stores, version rules and model transports:
 The independent CLI advertises `common.resources_find/read` and the exact
 `files.create/copy/patch/replace/delete/restore` catalog for writable workspaces.
 `files.delete` requires a complete accepted read of the current UTF-8 file and
-moves it to workspace-local managed trash after journal preparation. It publishes
+moves it to workspace-local managed trash after explicit confirmation and journal preparation. It publishes
 success only after the original path is absent and trash bytes match the retained
 preimage. `files.restore` explicitly restores the latest managed deletion to an
 absent original path and publishes a new revision. A possible effect after dispatch

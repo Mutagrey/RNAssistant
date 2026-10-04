@@ -146,6 +146,7 @@ namespace RNAssistant.Harness
                 Test("kernel: runtime id collision after confirmation", KernelRejectsAllocationCollisionAfterConfirmation),
                 Test("kernel: stale confirmation cannot dispatch twice", KernelRejectsStaleConfirmation),
                 Test("kernel: cancelled confirmation closes pending call", KernelCancelsPendingWithoutDanglingCall),
+                Test("kernel: denied confirmation never dispatches", KernelDeniesPendingWithoutDispatch),
                 Test("kernel: policy change stops accepted call", () => KernelPolicyChangeStopsDispatch(false)),
                 Test("kernel: policy change stops confirmation", () => KernelPolicyChangeStopsDispatch(true)),
                 Test("kernel: store failure stops before dispatch", KernelStoreFailureStopsBeforeDispatch),

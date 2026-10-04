@@ -88,7 +88,11 @@ After an interrupted file mutation, `recover --workspace
 <path> --path <relative-path>` reports the exact recovery outcome without replaying
 the write. Agent `files.delete` moves a previously read UTF-8 file into
 workspace-local `.rnassistant/trash`; `files.restore` explicitly restores the latest
-managed deletion if its original path is still absent. `--jsonl` emits one event per line. See `--help` for the
+managed deletion if its original path is still absent. `files.delete` stops at a
+durable confirmation. Use `resume` to inspect the pending id, then `approve` or
+`deny` with that exact id. Approval resumes the same kernel run and rechecks the
+accepted file before dispatch; denial closes the call without dispatch.
+`--jsonl` emits one event per line. See `--help` for the
 current command and exit-code surface. Broader real-model quality, browser verification,
 full file operations and Windows delivery remain open in
 [progress](docs/stabilization/PROGRESS.md#workspace-first-implementation--2026-10-04-in-progress).

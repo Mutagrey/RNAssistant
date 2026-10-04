@@ -4,6 +4,7 @@ using System.IO;
 using System.Linq;
 using System.Threading;
 using Newtonsoft.Json;
+using Newtonsoft.Json.Linq;
 using RNAssistant.Core.Models;
 using RNAssistant.Core.Services;
 using RNAssistant.Core.Storage;
@@ -87,10 +88,37 @@ namespace RNAssistant.Cli
             {
                 var session = service.GetSession(workspace, Required(options, "session"));
                 if (session == null) throw new ArgumentException("Session not found.");
+                var pending = session.LastRun?.KernelState?.Summary?.PendingConfirmation;
+                if (pending != null)
+                {
+                    Output(jsonl, "run.awaiting_confirmation", new { session.Id,
+                        pendingId = pending.PendingId, toolId = pending.Call.Name,
+                        path = PendingPath(pending.Call.Name, pending.Call.ArgumentsJson),
+                        command = "rna approve|deny --workspace <path> --session <id> --pending <id>" });
+                    return 3;
+                }
                 Output(jsonl, "run.needs_input", new { session.Id,
                     reason = "Explicit new input is required; possible file effects are never replayed automatically.",
                     command = "rna run --workspace <path> --session <id> --message <task>" });
                 return 3;
+            }
+            if (args[0] == "approve" || args[0] == "deny")
+            {
+                var sessionId = Required(options, "session");
+                var pendingId = Required(options, "pending");
+                var session = service.GetSession(workspace, sessionId);
+                if (session == null) throw new ArgumentException("Session not found.");
+                var approve = args[0] == "approve";
+                AppSettings continuationSettings = null;
+                string continuationKey = null;
+                if (approve)
+                {
+                    continuationSettings = Settings(options, session.Model);
+                    if (!EndpointReady(continuationSettings, out continuationKey)) return 4;
+                }
+                var result = service.ResolvePendingAsync(workspace, sessionId, pendingId, approve,
+                    continuationSettings, () => continuationKey).GetAwaiter().GetResult();
+                return ReportRun(jsonl, result);
             }
             if (args[0] != "run") throw new ArgumentException("Unknown command. Use --help.");
             if (options.ContainsKey("profile") && options["profile"] != "development")
@@ -112,29 +140,9 @@ namespace RNAssistant.Cli
             var minWrites = NonnegativeOption(options, "min-writes");
             var acceptance = new WorkspaceRunAcceptance
             { ExpectedFiles = expectedFiles.ToList(), MinimumVerifiedReads = minReads, MinimumVerifiedWrites = minWrites };
-            var settings = new AppSettings
-            {
-                BaseUrl = Value(options, "base-url", Environment.GetEnvironmentVariable("RNA_BASE_URL")),
-                Model = Value(options, "model", Environment.GetEnvironmentVariable("RNA_MODEL")),
-                AgentResponseMode = AgentResponseModes.JsonSchema,
-                ReasoningRequestMode = ReasoningRequestModes.ReasoningEffort,
-                MaxTokens = 4096
-            };
-            if (string.IsNullOrWhiteSpace(settings.BaseUrl) || string.IsNullOrWhiteSpace(settings.Model))
-            {
-                Console.Error.WriteLine("Set RNA_BASE_URL and RNA_MODEL, or pass --base-url and --model.");
-                return 4;
-            }
-            Uri endpoint;
-            if (!Uri.TryCreate(settings.BaseUrl, UriKind.Absolute, out endpoint) ||
-                endpoint.Scheme != Uri.UriSchemeHttps && !(endpoint.Scheme == Uri.UriSchemeHttp && endpoint.IsLoopback))
-                throw new ArgumentException("The LLM endpoint must use HTTPS or loopback HTTP.");
-            var key = Environment.GetEnvironmentVariable("RNA_API_KEY") ?? Environment.GetEnvironmentVariable("OPENAI_API_KEY");
-            if (!endpoint.IsLoopback && string.IsNullOrWhiteSpace(key))
-            {
-                Console.Error.WriteLine("Set RNA_API_KEY or OPENAI_API_KEY for the remote LLM endpoint.");
-                return 4;
-            }
+            var settings = Settings(options, Environment.GetEnvironmentVariable("RNA_MODEL"));
+            string key;
+            if (!EndpointReady(settings, out key)) return 4;
             using (var cancellation = new CancellationTokenSource())
             {
                 ConsoleCancelEventHandler interrupt = (sender, eventArgs) =>
@@ -150,30 +158,79 @@ namespace RNAssistant.Cli
                                     new { update.Summary.RunId, update.ToolId, lifecycle = update.Summary.Lifecycle.ToString(),
                                         health = update.Summary.ExecutionHealth.ToString() });
                         }, cancellation.Token, acceptance).GetAwaiter().GetResult();
-                    var checkedAcceptance = result.Acceptance;
-                    var acceptancePassed = checkedAcceptance.State == WorkspaceAcceptanceState.NotRequested ||
-                        checkedAcceptance.State == WorkspaceAcceptanceState.Passed;
-                    Output(jsonl, "run.completed", new { result.SessionId, result.Summary.RunId,
-                        lifecycle = result.Summary.Lifecycle.ToString(), reason = result.Summary.Reason,
-                        action = result.Summary.Reason == "model_done" ? "done" :
-                            result.Summary.Reason == "model_blocked" ? "blocked" :
-                            result.Summary.Reason == "model_needs_input" ? "needs_input" : "other",
-                        health = result.Summary.ExecutionHealth.ToString(),
-                        result.Summary.AssistantMessage, result.Summary.ToolCounts,
-                        acceptance = checkedAcceptance.State.ToString().ToLowerInvariant(),
-                        expectedFiles = checkedAcceptance.ExpectedFiles,
-                        missingFiles = checkedAcceptance.MissingFiles,
-                        minReads = checkedAcceptance.MinimumVerifiedReads,
-                        minWrites = checkedAcceptance.MinimumVerifiedWrites,
-                        completeFileReads = checkedAcceptance.AcceptedCompleteFileReads,
-                        verifiedFileChanges = checkedAcceptance.VerifiedFileChanges,
-                        acceptanceError = checkedAcceptance.Error });
-                    if (!acceptancePassed) return 5;
-                    return result.Summary.Lifecycle == RNAssistant.Core.Agent.RunLifecycle.Failed ? 5 :
-                        result.Summary.Reason == "model_needs_input" ? 3 : 0;
+                    return ReportRun(jsonl, result);
                 }
                 finally { Console.CancelKeyPress -= interrupt; }
             }
+        }
+
+        private static AppSettings Settings(Dictionary<string, string> options, string defaultModel)
+        {
+            return new AppSettings
+            {
+                BaseUrl = Value(options, "base-url", Environment.GetEnvironmentVariable("RNA_BASE_URL")),
+                Model = Value(options, "model", defaultModel),
+                AgentResponseMode = AgentResponseModes.JsonSchema,
+                ReasoningRequestMode = ReasoningRequestModes.ReasoningEffort,
+                MaxTokens = 4096
+            };
+        }
+
+        private static bool EndpointReady(AppSettings settings, out string key)
+        {
+            key = Environment.GetEnvironmentVariable("RNA_API_KEY") ?? Environment.GetEnvironmentVariable("OPENAI_API_KEY");
+            if (string.IsNullOrWhiteSpace(settings.BaseUrl) || string.IsNullOrWhiteSpace(settings.Model))
+            {
+                Console.Error.WriteLine("Set RNA_BASE_URL and RNA_MODEL, or pass --base-url and --model.");
+                return false;
+            }
+            Uri endpoint;
+            if (!Uri.TryCreate(settings.BaseUrl, UriKind.Absolute, out endpoint) ||
+                endpoint.Scheme != Uri.UriSchemeHttps && !(endpoint.Scheme == Uri.UriSchemeHttp && endpoint.IsLoopback))
+                throw new ArgumentException("The LLM endpoint must use HTTPS or loopback HTTP.");
+            if (!endpoint.IsLoopback && string.IsNullOrWhiteSpace(key))
+            {
+                Console.Error.WriteLine("Set RNA_API_KEY or OPENAI_API_KEY for the remote LLM endpoint.");
+                return false;
+            }
+            return true;
+        }
+
+        private static int ReportRun(bool jsonl, WorkspaceRunResult result)
+        {
+            var checkedAcceptance = result.Acceptance;
+            var summary = result.Summary;
+            var pending = summary.PendingConfirmation;
+            var acceptancePassed = checkedAcceptance.State == WorkspaceAcceptanceState.NotRequested ||
+                checkedAcceptance.State == WorkspaceAcceptanceState.Passed;
+            Output(jsonl, pending == null ? "run.completed" : "run.awaiting_confirmation",
+                new { result.SessionId, summary.RunId,
+                    lifecycle = summary.Lifecycle.ToString(), reason = summary.Reason,
+                    action = summary.Reason == "model_done" ? "done" :
+                        summary.Reason == "model_blocked" ? "blocked" :
+                        summary.Reason == "model_needs_input" ? "needs_input" : "other",
+                    health = summary.ExecutionHealth.ToString(), summary.AssistantMessage, summary.ToolCounts,
+                    pendingId = pending?.PendingId, pendingTool = pending?.Call.Name,
+                    pendingPath = pending == null ? null : PendingPath(pending.Call.Name, pending.Call.ArgumentsJson),
+                    acceptance = checkedAcceptance.State.ToString().ToLowerInvariant(),
+                    expectedFiles = checkedAcceptance.ExpectedFiles,
+                    missingFiles = checkedAcceptance.MissingFiles,
+                    minReads = checkedAcceptance.MinimumVerifiedReads,
+                    minWrites = checkedAcceptance.MinimumVerifiedWrites,
+                    completeFileReads = checkedAcceptance.AcceptedCompleteFileReads,
+                    verifiedFileChanges = checkedAcceptance.VerifiedFileChanges,
+                    acceptanceError = checkedAcceptance.Error });
+            if (pending != null) return 3;
+            if (!acceptancePassed) return 5;
+            return summary.Lifecycle == RNAssistant.Core.Agent.RunLifecycle.Failed ? 5 :
+                summary.Reason == "model_needs_input" ? 3 : 0;
+        }
+
+        private static string PendingPath(string toolId, string argumentsJson)
+        {
+            if (toolId != "files.delete") return null;
+            try { return (string)JObject.Parse(argumentsJson)["relativePath"]; }
+            catch (JsonException) { return null; }
         }
 
         private static Dictionary<string, string> Parse(string[] args)
@@ -225,7 +282,9 @@ namespace RNAssistant.Cli
             Console.WriteLine("rna run --workspace <path> (--message <text> | --task-file <file>) [--session <id>] [--profile development] [--model <name>] [--base-url <url>] [--expect-files <comma-separated paths>] [--min-reads <n>] [--min-writes <n>] [--jsonl]");
             Console.WriteLine("rna inspect --workspace <path> --session <id> [--jsonl]");
             Console.WriteLine("rna recover --workspace <path> --path <relative-path> [--jsonl]  (inspect an uncertain file effect)");
-            Console.WriteLine("rna resume --workspace <path> --session <id> [--jsonl]  (reports explicit input required)");
+            Console.WriteLine("rna resume --workspace <path> --session <id> [--jsonl]  (show pending action or request new input)");
+            Console.WriteLine("rna approve --workspace <path> --session <id> --pending <id> [--base-url <url>] [--model <name>] [--jsonl]");
+            Console.WriteLine("rna deny --workspace <path> --session <id> --pending <id> [--jsonl]");
             Console.WriteLine("LLM settings: RNA_BASE_URL, RNA_MODEL, RNA_API_KEY or OPENAI_API_KEY. Keys are never command arguments.");
             Console.WriteLine("Optional state root: RNA_STATE_ROOT (default: user application data).");
             Console.WriteLine("Exit: 0 command completed, 2 arguments, 3 input needed, 4 dependency, 5 failure, 130 cancelled.");

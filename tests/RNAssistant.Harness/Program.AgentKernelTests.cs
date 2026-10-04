@@ -706,6 +706,22 @@ namespace RNAssistant.Harness
             }
         }
 
+        private static async Task KernelDeniesPendingWithoutDispatch()
+        {
+            var f = new KernelFixture(KernelResponse(KernelCall("confirm")));
+            f.Tools.OnExecute = (context, token) => Task.FromResult(
+                KernelRecord(context, ToolExecutionOutcome.AwaitingConfirmation));
+            var paused = await f.RunAsync();
+            var denied = await f.Kernel.ResumeAsync("resume", paused.Summary.PendingConfirmation.PendingId,
+                paused.Continuation, CancellationToken.None, rejectPending: true);
+            AssertEqual(RunLifecycle.Cancelled, denied.Summary.Lifecycle, "denial terminates the run");
+            AssertEqual("confirmation_denied", denied.Summary.Reason, "denial has a distinct runtime reason");
+            AssertEqual(1, f.Tools.Calls.Count, "denial never reaches confirmed dispatch");
+            AssertEqual(ToolExecutionOutcome.NotDispatched,
+                denied.AcceptedMessages.Single(message => message.Kind == AgentMessageKind.ToolResult).Progress.Outcome,
+                "accepted call is closed without an effect");
+        }
+
         private static async Task KernelPolicyChangeStopsDispatch(bool confirmation)
         {
             var f = new KernelFixture(KernelResponse(KernelCall(confirmation ? "confirm" : "write")), KernelResponse());

@@ -95,6 +95,12 @@ effects. The assessment is a separate durable fact and exit condition. It does
 not rewrite the model's `done` action, the kernel lifecycle, or semantic/browser
 quality evidence.
 
+The CLI's `files.delete` uses the kernel's durable `AwaitingConfirmation` state.
+`approve` reconstructs the accepted call and complete file read from the chat
+stream; the file owner rechecks current bytes before dispatch. `deny` records a
+not-dispatched result and ends the run as `confirmation_denied`. Neither path
+replays an uncertain effect. Other CLI question/approval flows remain open.
+
 R29 switched client, prompts, schema, probes and accepted history together from v3
 to v4 and removed the model-ID parser/context path; only the kernel creates
 accepted IDs. R72 switches the active response intent contract from v4 to v5 by

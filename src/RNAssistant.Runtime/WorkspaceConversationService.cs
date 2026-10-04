@@ -130,6 +130,43 @@ namespace RNAssistant.Runtime
             }
         }
 
+        public async Task<WorkspaceRunResult> ResolvePendingAsync(WorkspaceDescriptor workspace,
+            string sessionId, string pendingId, bool approve, AppSettings settings,
+            Func<string> apiKeyProvider, Action<WorkspaceRunEvent> progress = null,
+            CancellationToken cancellationToken = default(CancellationToken))
+        {
+            if (workspace == null || string.IsNullOrWhiteSpace(sessionId) || string.IsNullOrWhiteSpace(pendingId))
+                throw new ArgumentException("Workspace, session and pending confirmation are required.");
+            if (approve && (settings == null || string.IsNullOrWhiteSpace(settings.BaseUrl) ||
+                string.IsNullOrWhiteSpace(settings.Model)))
+                throw new ArgumentException("The LLM endpoint and model are required after approval.", nameof(settings));
+            using (AcquireSessionLease(sessionId))
+            {
+                var session = _workspaces.LoadSession(_chats, workspace, sessionId);
+                var run = session?.LastRun?.KernelState;
+                if (run?.Summary.Lifecycle != RunLifecycle.AwaitingConfirmation ||
+                    run.Summary.PendingConfirmation?.PendingId != pendingId)
+                    throw new InvalidOperationException("Pending confirmation was not found or was already resolved.");
+                if (approve && !string.Equals(settings.Model, session.Model, StringComparison.Ordinal))
+                    throw new InvalidOperationException("Approval must continue with the accepted run's model.");
+                var history = RestoreAcceptedHistory(session);
+                var continuation = AgentRunContinuation.Restore(run.Summary, run.Limits, 0, history);
+                var acceptance = session.LastRun.WorkspaceAcceptance ?? new WorkspaceRunAcceptance();
+                var ports = new WorkspacePorts(_chats, _files, workspace, session,
+                    settings ?? new AppSettings(), apiKeyProvider, progress, acceptance, approve);
+                var result = await ConversationRunCoordinator.ResumeAsync(session.LastRun.RunId,
+                    pendingId, continuation, ports, ports.Tools, ports, cancellationToken,
+                    rejectPending: !approve).ConfigureAwait(false);
+                if (acceptance.Requested)
+                {
+                    AssessAcceptance(workspace, session, result.Summary, acceptance);
+                    session.LastRun.WorkspaceAcceptance = acceptance;
+                    _chats.Save(session);
+                }
+                return new WorkspaceRunResult(session.Id, result.Summary, acceptance);
+            }
+        }
+
         private static WorkspaceRunAcceptance PrepareAcceptance(WorkspaceRunAcceptance requested)
         {
             var files = requested?.ExpectedFiles?.ToArray() ?? new string[0];
@@ -168,12 +205,18 @@ namespace RNAssistant.Runtime
             acceptance.VerifiedFileChanges = changed;
             try
             {
-                acceptance.MissingFiles = MissingExpectedFiles(workspace, acceptance.ExpectedFiles).ToList();
+                if (summary.Lifecycle != RunLifecycle.AwaitingConfirmation)
+                    acceptance.MissingFiles = MissingExpectedFiles(workspace, acceptance.ExpectedFiles).ToList();
                 var frozen = _files.CaptureAuthority(completeReads);
                 var reducer = new EvidenceStateReducer();
                 acceptance.AcceptedCompleteFileReads = completeReads.Where(evidence =>
                     reducer.Reduce(evidence, frozen).State == EvidenceState.Current)
                     .Select(evidence => evidence.Resource.Uri).Distinct(StringComparer.Ordinal).Count();
+                if (summary.Lifecycle == RunLifecycle.AwaitingConfirmation)
+                {
+                    acceptance.State = WorkspaceAcceptanceState.Pending;
+                    return;
+                }
                 acceptance.State = summary.Reason == "model_done" && acceptance.MissingFiles.Count == 0 &&
                     acceptance.AcceptedCompleteFileReads >= acceptance.MinimumVerifiedReads &&
                     acceptance.VerifiedFileChanges >= acceptance.MinimumVerifiedWrites
@@ -256,7 +299,8 @@ namespace RNAssistant.Runtime
 
             public WorkspacePorts(ChatStore chats, WorkspaceFileService files, WorkspaceDescriptor workspace,
                 ChatSession session, AppSettings settings, Func<string> apiKeyProvider,
-                Action<WorkspaceRunEvent> progress, WorkspaceRunAcceptance acceptance = null)
+                Action<WorkspaceRunEvent> progress, WorkspaceRunAcceptance acceptance = null,
+                bool restorePendingObservation = true)
             {
                 _chats = chats; _files = files; _workspace = workspace; _session = session;
                 _settings = settings.Clone(); _progress = progress; _acceptance = acceptance;
@@ -286,21 +330,54 @@ namespace RNAssistant.Runtime
                         new FileHandler(files, workspace, _observed, "replace"));
                     Register(registry, entries, "files.delete", "Move a previously read UTF-8 file into managed workspace trash.",
                         Schema("relativePath", true), true,
-                        new FileHandler(files, workspace, _observed, "delete"));
+                        new FileHandler(files, workspace, _observed, "delete"), true);
                     Register(registry, entries, "files.restore", "Restore the latest managed deletion to its original path without overwriting.",
                         Schema("relativePath", true), true,
                         new FileHandler(files, workspace, _observed, "restore"));
                 }
                 _catalog = entries;
-                Tools = new ToolRuntime(registry, "agent", false, false);
+                Tools = new ToolRuntime(registry, "agent", false, true,
+                    (context, preparation) =>
+                    {
+                        if (context.Call.Name == "files.delete")
+                        {
+                            var path = (string)JObject.Parse(context.Call.ArgumentsJson)["relativePath"];
+                            if (string.IsNullOrWhiteSpace(path) || !_observed.ContainsKey(path))
+                                throw new InvalidOperationException("Read the complete current file before requesting deletion confirmation.");
+                        }
+                        return "pending_" + Guid.NewGuid().ToString("N");
+                    });
+                if (restorePendingObservation) RestorePendingObservation();
+            }
+
+            private void RestorePendingObservation()
+            {
+                var pending = _session?.LastRun?.KernelState?.Summary?.PendingConfirmation;
+                if (pending?.Call.Name != "files.delete") return;
+                var path = (string)JObject.Parse(pending.Call.ArgumentsJson)["relativePath"];
+                if (string.IsNullOrWhiteSpace(path))
+                    throw new InvalidOperationException("Pending file deletion has no semantic path.");
+                foreach (var fact in _session.Messages.AsEnumerable().Reverse())
+                {
+                    if (fact.RunId != _session.LastRun.RunId || fact.ToolName != "common.resources_read") continue;
+                    var wire = ToolResultWire.Read(fact.Content);
+                    if (!wire.Success || wire.Result.Status != ToolResultStatus.Ok) continue;
+                    if ((string)JObject.Parse(wire.Result.DataJson)["path"] != path) continue;
+                    var evidence = fact.ResourceEvidence?.SingleOrDefault(item => item.Complete && item.View == "text");
+                    if (evidence == null) continue;
+                    _observed[path] = evidence.Resource.Copy();
+                    return;
+                }
+                throw new InvalidOperationException("Pending file deletion has no accepted complete read evidence.");
             }
 
             private static void Register(ToolHandlerRegistry registry, List<ToolCatalogEntry> entries,
-                string id, string description, string schema, bool mutation, IToolHandler handler)
+                string id, string description, string schema, bool mutation, IToolHandler handler,
+                bool requiresConfirmation = false)
             {
                 var policy = new ToolPolicy(mutation ? ToolEffect.Write : ToolEffect.Read,
                     mutation ? ToolVerification.Tool : ToolVerification.None,
-                    false, !mutation, new[] { "agent" }, mutation ? 1 : 0);
+                    requiresConfirmation, !mutation, new[] { "agent" }, mutation ? 1 : 0);
                 var binding = new ToolBinding(id, scope: "workspace", host: "Common");
                 registry.Register(new ToolRegistration(new ToolDescriptor(id, description, schema),
                     policy, binding, "workspace-v1"), handler);
@@ -435,14 +512,17 @@ namespace RNAssistant.Runtime
                         RunId = fact.Summary.RunId
                     });
                 }
-                if (fact.Kind == AgentRunEventKind.ToolCompleted && fact.Execution.Result != null)
+                if (fact.Kind == AgentRunEventKind.ToolCompleted &&
+                    (fact.Execution.Result != null || fact.Execution.Outcome == ToolExecutionOutcome.NotDispatched))
                 {
                     var record = fact.Execution;
+                    var toolResult = record.Result ?? ToolResult.Error(record.Message,
+                        "{\"code\":\"not_dispatched\",\"dispatched\":false}");
                     _session.Messages.Add(new ChatMessage
                     {
                         Role = "user", ProtocolMessage = true, ToolCallId = record.Context.Call.Id,
                         ToolName = record.Context.Call.Name, ToolResultProtocolVersion = ToolResultWire.CurrentVersion,
-                        Content = ToolResultWire.Write(record.Context.Call.Id, record.Context.Call.Name, record.Result),
+                        Content = ToolResultWire.Write(record.Context.Call.Id, record.Context.Call.Name, toolResult),
                         ExecutionProgress = ToolExecutionProgress.Capture(record),
                         ResourceEvidence = record.ResourceEvidence.ToList(), ResourceEffect = record.ResourceEffect,
                         RunId = fact.Summary.RunId

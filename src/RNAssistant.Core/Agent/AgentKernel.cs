@@ -39,7 +39,8 @@ namespace RNAssistant.Core.Agent
         }
 
         public async Task<AgentRunResult> ResumeAsync(string runId, string pendingId,
-            AgentRunContinuation continuation, CancellationToken cancellationToken, bool supersedePending = false)
+            AgentRunContinuation continuation, CancellationToken cancellationToken, bool supersedePending = false,
+            bool rejectPending = false)
         {
             if (string.IsNullOrWhiteSpace(runId)) throw new ArgumentException("Run id is required.", nameof(runId));
             var pending = continuation == null ? null : continuation.Summary.PendingConfirmation;
@@ -51,6 +52,13 @@ namespace RNAssistant.Core.Agent
             // Claim the continuation cursor before either executing or consuming
             // it. A duplicate resume cannot reach the tool runtime.
             await AppendAsync(state, new AgentRunEvent(AgentRunEventKind.SummaryChanged, state.Summary())).ConfigureAwait(false);
+            if (rejectPending)
+            {
+                await RecordNotDispatchedAsync(state, pending.Call, pending.Policy, pending.StepId,
+                    "User rejected the pending confirmation.").ConfigureAwait(false);
+                return await FinishAsync(state, RunLifecycle.Cancelled, "confirmation_denied",
+                    "Pending tool call was rejected without dispatch.").ConfigureAwait(false);
+            }
             if (supersedePending || (_input != null && _input.HasPendingInput))
             {
                 await RecordNotDispatchedAsync(state, pending.Call, pending.Policy, pending.StepId,

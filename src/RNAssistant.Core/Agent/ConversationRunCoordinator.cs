@@ -19,10 +19,10 @@ namespace RNAssistant.Core.Agent
         public static Task<AgentRunResult> ResumeAsync(string runId, string pendingId,
             AgentRunContinuation continuation, IModelProtocol model, IToolRuntime tools,
             IRunStore store, CancellationToken cancellationToken,
-            bool supersedePending = false, IRunInputChannel input = null)
+            bool supersedePending = false, IRunInputChannel input = null, bool rejectPending = false)
         {
             return new AgentKernel(model, tools, store, input: input).ResumeAsync(
-                runId, pendingId, continuation, cancellationToken, supersedePending);
+                runId, pendingId, continuation, cancellationToken, supersedePending, rejectPending);
         }
     }
 }
