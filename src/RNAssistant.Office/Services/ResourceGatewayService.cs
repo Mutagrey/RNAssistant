@@ -9,7 +9,7 @@ namespace RNAssistant.Office.Services
 {
     internal sealed partial class ResourceGatewayService
     {
-        private readonly ResourceGateway<IResourceProvider> _registry;
+        private readonly ResourceProviderRouter<IResourceProvider> _registry;
         private readonly Func<ChatSession, IDisposable> _beginLiveOfficeRead;
         private readonly ResourceAuthorityService _authority;
         private readonly ArtifactViewerService _mediaViews;
@@ -84,7 +84,7 @@ namespace RNAssistant.Office.Services
                     providers.Add(new VbaResourceProvider(adapter, vbaSource, vbaJournalStore, authority?.Payloads));
                 }
             }
-            _registry = new ResourceGateway<IResourceProvider>(providers);
+            _registry = new ResourceProviderRouter<IResourceProvider>(providers);
             _beginLiveOfficeRead = beginLiveOfficeRead;
             _authority = authority;
             if (readAttachmentBytes != null) _mediaViews = new ArtifactViewerService(this, readAttachmentBytes);
@@ -105,7 +105,7 @@ namespace RNAssistant.Office.Services
         internal ResourceGatewayService(IEnumerable<IResourceProvider> providers,
             ResourceAuthorityService authority)
         {
-            _registry = new ResourceGateway<IResourceProvider>(providers);
+            _registry = new ResourceProviderRouter<IResourceProvider>(providers);
             _authority = authority;
         }
 

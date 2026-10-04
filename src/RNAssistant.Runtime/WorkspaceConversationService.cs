@@ -434,7 +434,7 @@ namespace RNAssistant.Runtime
             private readonly Action<WorkspaceRunEvent> _progress;
             private readonly WorkspaceRunAcceptance _acceptance;
             private readonly IReadOnlyList<ToolCatalogEntry> _catalog;
-            private readonly ResourceGateway<WorkspaceFileResourceProvider> _resources;
+            private readonly ResourceProviderRouter<WorkspaceFileResourceProvider> _resources;
             private readonly Dictionary<string, ResourceRef> _observed = new Dictionary<string, ResourceRef>(StringComparer.Ordinal);
             private long _cursor;
             public ToolRuntime Tools { get; private set; }
@@ -447,7 +447,7 @@ namespace RNAssistant.Runtime
             {
                 _chats = chats; _files = files; _workspace = workspace; _session = session;
                 _settings = settings.Clone(); _progress = progress; _acceptance = acceptance;
-                _resources = new ResourceGateway<WorkspaceFileResourceProvider>(new[]
+                _resources = new ResourceProviderRouter<WorkspaceFileResourceProvider>(new[]
                     { new WorkspaceFileResourceProvider(files, workspace) });
                 var client = new LlmClient(apiKeyProvider);
                 _protocol = new ModelProtocolClient(client.CompleteAsync);
@@ -714,11 +714,11 @@ namespace RNAssistant.Runtime
         {
             private readonly WorkspaceFileService _files;
             private readonly WorkspaceDescriptor _workspace;
-            private readonly ResourceGateway<WorkspaceFileResourceProvider> _resources;
+            private readonly ResourceProviderRouter<WorkspaceFileResourceProvider> _resources;
             private readonly Dictionary<string, ResourceRef> _observed;
             private readonly string _operation;
             public FileHandler(WorkspaceFileService files, WorkspaceDescriptor workspace,
-                ResourceGateway<WorkspaceFileResourceProvider> resources,
+                ResourceProviderRouter<WorkspaceFileResourceProvider> resources,
                 Dictionary<string, ResourceRef> observed, string operation)
             { _files = files; _workspace = workspace; _resources = resources;
                 _observed = observed; _operation = operation; }

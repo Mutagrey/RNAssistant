@@ -10,11 +10,11 @@ namespace RNAssistant.Core.Services
     }
 
     // Shared provider routing. A host gateway retains its own authority and read guards.
-    public sealed class ResourceGateway<TProvider> where TProvider : IResourceProviderIdentity
+    public sealed class ResourceProviderRouter<TProvider> where TProvider : IResourceProviderIdentity
     {
         private readonly IDictionary<string, TProvider> _providers;
 
-        public ResourceGateway(IEnumerable<TProvider> providers)
+        public ResourceProviderRouter(IEnumerable<TProvider> providers)
         {
             _providers = new Dictionary<string, TProvider>(StringComparer.Ordinal);
             foreach (var provider in providers ?? Enumerable.Empty<TProvider>())

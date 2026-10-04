@@ -161,7 +161,7 @@ namespace RNAssistant.Harness
             {
                 var workspace = new WorkspaceStore(paths).Open(Path.Combine(paths.Root, "project"));
                 var files = new WorkspaceFileService(paths);
-                var gateway = new ResourceGateway<WorkspaceFileResourceProvider>(new[]
+                var gateway = new ResourceProviderRouter<WorkspaceFileResourceProvider>(new[]
                     { new WorkspaceFileResourceProvider(files, workspace) });
                 for (var index = 0; index < 230; index++)
                     File.WriteAllText(Path.Combine(workspace.RootPath,

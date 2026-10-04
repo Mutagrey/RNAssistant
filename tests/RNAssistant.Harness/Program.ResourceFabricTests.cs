@@ -50,7 +50,7 @@ namespace RNAssistant.Harness
             var rejected = false;
             try
             {
-                new ResourceGateway<IResourceProvider>(new IResourceProvider[]
+                new ResourceProviderRouter<IResourceProvider>(new IResourceProvider[]
                 {
                     new ChatArtifactResourceProvider(),
                     new ChatArtifactResourceProvider()

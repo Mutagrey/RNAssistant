@@ -22,7 +22,7 @@ replaying the command. External edits advance observation rather than silently
 accepting a stale replace. Exact historical text reads use published retained CAS
 bytes and fail when unavailable. The
 CLI exposes relative paths through `common.resources_find/read`; a workspace-bound
-filesystem provider now uses the shared Core `ResourceGateway<TProvider>` router.
+filesystem provider now uses the shared Core `ResourceProviderRouter<TProvider>`.
 The Office `ResourceGatewayService` also uses this router and retains its authority,
 publication and host guards. The CLI's source-specific result projection and model
 prompt still live outside the Office gateway/compiler. Historical text
@@ -109,8 +109,9 @@ batch is not a complete source. Core contracts live in `Resource*Models.cs` and
 
 ## Providers
 
-Core `ResourceGateway<TProvider>` owns canonical provider registration, selection
-and URI routing for Office and CLI. `ResourceGatewayService` owns Office-specific
+Core `ResourceProviderRouter<TProvider>` owns canonical provider registration, selection
+and URI routing for Office and CLI. It is a router, not the common find/read contract.
+`ResourceGatewayService` owns Office-specific
 authority, publication, guarded reads and bounded projections; the workspace file
 provider delegates discovery/read/frozen authority to `WorkspaceFileService`.
 Registered Office owners are chat artifacts/attachments, bound Office

@@ -18,13 +18,16 @@ records temporary adapters. This work does not qualify Windows/Office/WebView2.
 
 M3/M4 resource routing slice (2026-10-04): canonical provider registration and
 URI selection moved from the Office-only registry into Core
-`ResourceGateway<TProvider>`. Office `ResourceGatewayService` uses it; CLI
+`ResourceProviderRouter<TProvider>`. Office `ResourceGatewayService` uses it; CLI
 `common.resources_find/read` now select a workspace-bound filesystem provider,
 which delegates to the existing file owner and preserves exact read evidence.
 The replaced Office registry file was removed. Focused workspace file tests 6/6,
 Gateway routing tests 3/3, and scripted CLI find → read → failed browser
-verification projection passed. The filesystem provider's CLI-specific result
-shape and prompt assembly have not moved to the shared compiler; this does not
+verification projection passed. This is provider routing, not a common typed
+find/read contract: CLI still returns file names, while Office returns semantic
+candidates, and they shape read results separately. Descriptors, stat, raw view,
+coverage and exact retained-view read remain open for the filesystem provider.
+The CLI prompt assembly has not moved to the shared compiler; this does not
 qualify Windows/Office behavior.
 
 Latest local-model result: on the same clean CSV task and current CLI source,
@@ -245,8 +248,10 @@ boundary, not a functional CSV score. Scripted HTTP tests confirmed both CLI
 transport modes and saved metadata. The existing v6 parser correctly rejected
 these outputs; no permissive JSON repair or separate agent loop was added.
 
-Next concrete slice: switch CLI model context to the shared frozen compiler,
-then complete M4 input/resume handling and M5 functional verification. M6–M11
+Next concrete slice: implement one typed find/read provider contract with bounded
+descriptors and exact evidence, switch CLI and Office read/find consumers to it,
+then move CLI context to the shared frozen compiler. Complete M4 input/resume and
+M5 functional verification after that. M6–M11
 have not started. Existing
 document-owned HTML writer is still active only for its old Office flow; no CLI
 file is dual-written.

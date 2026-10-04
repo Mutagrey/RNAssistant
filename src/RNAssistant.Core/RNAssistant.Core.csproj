@@ -183,7 +183,7 @@
     <Compile Include="Tools\ConversationMessageStreamExtractor.cs" />
     <Compile Include="Services\ContextNormalizer.cs" />
     <Compile Include="Services\ResourceUri.cs" />
-    <Compile Include="Services\ResourceGateway.cs" />
+    <Compile Include="Services\ResourceProviderRouter.cs" />
     <Compile Include="Services\WorkspaceFileResourceProvider.cs" />
     <Compile Include="Services\ChartArtifactBuilder.cs" />
     <Compile Include="Services\ChartArtifactPayload.cs" />
