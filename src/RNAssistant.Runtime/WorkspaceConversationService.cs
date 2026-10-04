@@ -602,9 +602,14 @@ namespace RNAssistant.Runtime
 
             private string ProjectResult(AgentMessage item, ResourceAuthoritySnapshotSet frozen)
             {
-                var wire = ToolResultWire.Read(item.ResultJson);
+                var resultJson = item.ResultJson;
+                if (string.IsNullOrWhiteSpace(resultJson) && item.Execution != null)
+                    resultJson = WireResult(item.Execution);
+                if (string.IsNullOrWhiteSpace(resultJson))
+                    throw new InvalidOperationException("Accepted tool result has no model-facing body.");
+                var wire = ToolResultWire.Read(resultJson);
                 if (!wire.Success || wire.Name != "common.resources_read" ||
-                    wire.Result.Status != ToolResultStatus.Ok) return item.ResultJson;
+                    wire.Result.Status != ToolResultStatus.Ok) return resultJson;
                 string path = null;
                 try { path = (string)JObject.Parse(wire.Result.DataJson)["path"]; }
                 catch (JsonException) { }
@@ -613,10 +618,26 @@ namespace RNAssistant.Runtime
                     item.ResourceEvidence != null && item.ResourceEvidence.Any(evidence =>
                         evidence.Resource.Uri == accepted.Uri && evidence.Resource.Revision == accepted.Revision &&
                         new EvidenceStateReducer().Reduce(evidence, frozen).State == EvidenceState.Current);
-                if (current) return item.ResultJson;
+                if (current) return resultJson;
                 return ToolResultWire.Write(item.ToolCallId, wire.Name,
                     ToolResult.Error("The prior file observation is stale or unavailable. Read this path again before editing.",
                         JsonConvert.SerializeObject(new { path, code = "resource_evidence_stale" })));
+            }
+
+            private static string WireResult(ToolExecutionRecord record)
+            {
+                var result = record.Result;
+                if (result == null)
+                {
+                    if (record.Outcome == ToolExecutionOutcome.Ok)
+                        throw new InvalidOperationException("Successful tool execution has no terminal result.");
+                    result = record.Outcome == ToolExecutionOutcome.Unknown
+                        ? ToolResult.Unknown(record.Message)
+                        : ToolResult.Error(record.Message, record.Outcome == ToolExecutionOutcome.NotDispatched
+                            ? "{\"code\":\"not_dispatched\",\"dispatched\":false}"
+                            : "{\"code\":\"execution_error\"}");
+                }
+                return ToolResultWire.Write(record.Context.Call.Id, record.Context.Call.Name, result);
             }
 
             private string Prompt()
@@ -661,16 +682,14 @@ namespace RNAssistant.Runtime
                     });
                 }
                 if (fact.Kind == AgentRunEventKind.ToolCompleted &&
-                    (fact.Execution.Result != null || fact.Execution.Outcome == ToolExecutionOutcome.NotDispatched))
+                    fact.Execution.Outcome != ToolExecutionOutcome.AwaitingConfirmation)
                 {
                     var record = fact.Execution;
-                    var toolResult = record.Result ?? ToolResult.Error(record.Message,
-                        "{\"code\":\"not_dispatched\",\"dispatched\":false}");
                     _session.Messages.Add(new ChatMessage
                     {
                         Role = "user", ProtocolMessage = true, ToolCallId = record.Context.Call.Id,
                         ToolName = record.Context.Call.Name, ToolResultProtocolVersion = ToolResultWire.CurrentVersion,
-                        Content = ToolResultWire.Write(record.Context.Call.Id, record.Context.Call.Name, toolResult),
+                        Content = WireResult(record),
                         ExecutionProgress = ToolExecutionProgress.Capture(record),
                         ResourceEvidence = record.ResourceEvidence.ToList(), ResourceEffect = record.ResourceEffect,
                         RunId = fact.Summary.RunId

@@ -16,6 +16,13 @@ records temporary adapters. This work does not qualify Windows/Office/WebView2.
 | M4 | Net8 CLI calls one application service for workspace/session open and listing, exact capability catalog, new/continued runs, inspect and explicit file recovery; it supports JSONL output. It uses production `LlmClient` and v6 `ModelProtocolClient`. A live `gemma4:31b:cloud` run through the local Ollama API created `index.html`, `app.js`, `styles.css` as externally visible files, with 3 verified writes and `model_done`. File tools now include copy from an accepted source. Exact read evidence and direct file authority commits enter durable tool records. Prior-turn read results are projected as stale; current-turn reads are refreshed before a model request. A cross-process session lease serializes accepted input and the run; continuation reloads the chat under that lease. The CLI development profile now requests 4096 output tokens and propagates the session's reasoning-off setting as `reasoning_effort=none`. | CLI build, environment/session listing, scripted HTTP protocol smoke and one real-model task passed. External inspection confirmed three files, HTML references/DOM targets and `node --check` of JS. A scripted read/copy turn produced a byte-identical real `index-copy.html`. An earlier `glm-5.3-flash:cloud` attempt returned HTTP 402 and wrote nothing. Focused transport test verifies explicit reasoning-off serialization. The scripted smoke verified stale read projection after external edit without a model-facing `rna://` reference; historical create-call text still appears as past action. The local `qwen3.5:9b` profile and live CLI task were exercised; detailed result and false-completion risk are below. Other interactive questions/approvals, automatic safe resume, frozen `ModelContextCompiler` path and full M4 acceptance remain open. |
 | M5 | Development `rna verify` and optional `web.verify` capture a bounded exact UTF-8 snapshot, validate discovered static dependencies, serve only captured bytes over loopback to a fresh headless Chromium profile, and report missing assets, console/page exceptions or `not-run`. `--require-web-verify` is a persisted CLI acceptance condition; a passing tool result carries exact file evidence, refreshed and checked against current authority at `done`. A separate read-only CSV-dashboard grader checks actual UI behavior against private fixtures. | Real Chrome passed a valid 3-file app and a 5-file HTML/CSS/JS import graph; immediate and 650 ms delayed JS errors and missing CSS failed; missing browser removed the model tool and returned `not-run`/exit 4. Scripted agent verify/read/patch/read/verify/done passed; verification before a later patch failed acceptance. The CSV grader passed a known-good fixture on 13 checks and rejected a JS-throwing fixture, missing browser and blocked outbound attempt. A fresh Qwen CSV task falsely returned `done` with no tools; after explicit feedback it wrote three files and passed smoke, but independent functional acceptance failed 3 of 11 assertions. Repair feedback led to no changed file and another false `done`. Autonomous CSV task, behavior after the 1.5-second observation window, binary assets, durable manifest/trace, autonomous diagnosis and other M5 acceptance remain open. |
 
+Latest local-model result: on the same clean CSV task and current CLI source,
+Gemma 4 12B wrote three real files and passed 10/11 independent browser checks;
+Qwen 3.5 9B returned `done` with no calls or files. Neither passed the CLI's
+read-back/verification contract. A discovered current-turn tool-result projection
+gap is fixed and covered by a scripted read/browser-error test; autonomous M5
+completion and the two-phase extension remain open. Details follow below.
+
 M4 acceptance slice (2026-10-04): the CLI accepts expected files and minimum read/
 write evidence as a typed run contract, saves it in the canonical chat stream before
 model dispatch, includes it in the request, and saves the separate assessment at
@@ -170,6 +177,40 @@ returned exit 0 and `acceptance=passed`. A stricter read-back requirement
 correctly rejected a model `done` after only one read. These conditions do not
 grade file semantics;
 see [risk register](RISK_REGISTER.md#workspace-cli-false-completion-with-local-qwen--2026-10-04).
+
+Local Gemma/Qwen comparison (2026-10-04): Ollama 0.35.0, fresh empty workspaces
+and separate state roots, `tests/cli/csv_dashboard_task.md`, the same CLI source,
+tool catalog, 24-iteration/80-tool-step caps, expected three files, three current
+complete reads, three verified writes and required `web.verify`. Both local profiles
+used 32K context, `reasoning_effort=none`, 4096 output tokens and one CLI run at a
+time. Gemma profile `rna-gemma4-12b-32k` had digest `cf94f3793da5`; Qwen profile
+`rna-qwen35-9b-32k` had digest `2db395653ce7`. Gemma's direct `json_object` probe
+returned an invalid v6 action `none`; a strict `json_schema` probe returned valid
+`done`. In the controlled post-fix run, Gemma made five model requests, three
+verified creates, zero current complete reads and one passing `web.verify` in
+122 seconds; CLI exit 5 rejected its `done`. The read-only grader found 10/11
+behaviors working, with nonnumeric CSV amount accepted incorrectly. Qwen made
+one model request, zero tool calls/files and returned a false `done` after 79
+seconds; CLI exit 5 rejected it. These single trials support Gemma as the more
+productive local development profile for this task, not a general quality claim.
+
+Earlier Gemma diagnostic runs exposed a runtime defect: after a current-turn
+`web.verify` returned `status:error` with a JavaScript `SyntaxError`, the next
+model-request snapshot contained a null body for that tool result. The model
+claimed browser verification succeeded; CLI acceptance and independent Chrome
+both failed. `WorkspaceConversationService` now materializes a missing current-turn
+result from the exact execution record, preserves unknown/error status, and uses
+the same wire body for durable history. A scripted HTTP/Chrome regression confirms
+that complete file content and failed browser results reach the next model request.
+Before this fix, one Gemma repair turn with explicit defect feedback produced a
+verified JS change and 11/11 independent base checks but only two current complete
+reads, so CLI acceptance still failed. Its subsequent threshold-feature turn made
+two patches that duplicated `let rawData`; `node --check`, `web.verify` and the
+independent grader failed, while the model falsely claimed success. After the
+projection fix, the fresh base task still failed on missing read-back and invalid
+amount. No run qualified the two-phase M5 acceptance; Windows/Office/WebView2
+qualification is unchanged. The trace reported no `llm.failure` events in these
+runs; provider-internal retries were not separately measured.
 
 Next concrete slice: connect `WorkspaceFileService` as a filesystem provider to the
 existing ResourceGateway by moving its generic routing across the current Office

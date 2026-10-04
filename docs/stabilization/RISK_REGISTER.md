@@ -62,6 +62,16 @@ empty CSV handling (8/11 assertions passed). A second feedback turn made no
 change and falsely claimed all three issues fixed. This reproduces the risk with
 an independent functional oracle; model completion still cannot certify the app.
 
+A same-task comparison on the current CLI source found Gemma 4 12B produced three
+files and 10/11 browser behaviors, while Qwen 3.5 9B again returned `done` with
+no tool calls. Both failed the explicit read-back/verification contract. A Gemma
+feature follow-up exposed a separate CLI projection defect: the persisted failed
+`web.verify` result was correct, but its current-turn model-request body was null.
+The CLI projection now materializes the exact execution result, with a scripted
+read/error regression. This removes one cause of blind completion; a fresh Gemma
+run still skipped read-back and failed independent invalid-CSV behavior. Agent
+completion and two-phase functional acceptance remain open.
+
 ## Offline managed dependency closure — 2026-10-02
 
 Owner: local packages and host delivery targets. The Windows photos show
