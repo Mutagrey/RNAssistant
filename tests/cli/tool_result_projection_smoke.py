@@ -18,6 +18,8 @@ def main():
         raise SystemExit("Build src/RNAssistant.Cli/RNAssistant.Cli.csproj first.")
     requests = []
     responses = [
+        {"message": "Find workspace files.", "action": "tool", "tool_calls": [
+            {"name": "common.resources_find", "arguments": {"directory": "", "query": "app"}}]},
         {"message": "Read the current source.", "action": "tool", "tool_calls": [
             {"name": "common.resources_read", "arguments": {"relativePath": "app.js"}}]},
         {"message": "Check the browser error.", "action": "tool", "tool_calls": [
@@ -58,21 +60,25 @@ def main():
                        RNA_BASE_URL=f"http://127.0.0.1:{server.server_port}",
                        RNA_MODEL="scripted", RNA_API_KEY="ollama")
             run = subprocess.run(["dotnet", str(CLI), "run", "--workspace", str(workspace),
-                "--message", "Read app.js and verify index.html", "--max-iterations", "3",
+                "--message", "Find and read app.js, then verify index.html", "--max-iterations", "4",
                 "--max-tool-steps", "3", "--jsonl"], cwd=REPO, env=env,
                 text=True, capture_output=True, timeout=90, check=False)
             assert run.returncode == 0, (run.stdout, run.stderr)
-            assert len(requests) == 3, len(requests)
-            file_results = [message["content"] for message in requests[1]["messages"]
+            assert len(requests) == 4, len(requests)
+            find_results = [message["content"] for message in requests[1]["messages"]
+                            if message.get("role") == "user" and message.get("content")]
+            assert any("app.js" in value and '"status":"ok"' in value
+                       for value in find_results), find_results
+            file_results = [message["content"] for message in requests[2]["messages"]
                             if message.get("role") == "user" and message.get("content")]
             assert any("TOOL_RESULT_VISIBLE" in value and '"status":"ok"' in value
                        for value in file_results), file_results
-            browser_results = [message["content"] for message in requests[2]["messages"]
+            browser_results = [message["content"] for message in requests[3]["messages"]
                                if message.get("role") == "user" and message.get("content")]
             assert any("TOOL_RESULT_VISIBLE" in value and '"status":"error"' in value
                        for value in browser_results), browser_results
             assert json.loads(run.stdout.splitlines()[-1])["data"]["reason"] == "model_blocked"
-            print("PASS current-turn file body and failed web.verify reach the model")
+            print("PASS gateway file find/read and failed web.verify reach the model")
     finally:
         server.shutdown()
         server.server_close()

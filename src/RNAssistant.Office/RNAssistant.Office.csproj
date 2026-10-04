@@ -264,7 +264,7 @@
     <Compile Include="Services\ExcelSearchResourceService.cs" />
     <Compile Include="Contracts\BridgeDtos.ResourceData.cs" />
     <Compile Include="Services\ResourceGatewayService.Intent.cs" />
-    <Compile Include="Services\ResourceProviderRegistry.cs" />
+    <Compile Include="Services\ResourceProviderContracts.cs" />
     <Compile Include="Services\ResourceReadCursor.cs" />
     <Compile Include="Services\ToolResultResourceService.cs" />
     <Compile Include="Services\ToolResultMaterialization.cs" />

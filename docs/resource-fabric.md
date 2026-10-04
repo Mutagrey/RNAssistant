@@ -21,8 +21,11 @@ explicit recovery inspects the current bytes and records unknown causality witho
 replaying the command. External edits advance observation rather than silently
 accepting a stale replace. Exact historical text reads use published retained CAS
 bytes and fail when unavailable. The
-CLI exposes relative paths through `common.resources_find/read`; its adapter is
-not yet registered in the existing Office `ResourceGatewayService`. Historical text
+CLI exposes relative paths through `common.resources_find/read`; a workspace-bound
+filesystem provider now uses the shared Core `ResourceGateway<TProvider>` router.
+The Office `ResourceGatewayService` also uses this router and retains its authority,
+publication and host guards. The CLI's source-specific result projection and model
+prompt still live outside the Office gateway/compiler. Historical text
 restoration is guarded by a current accepted revision and records the exact source.
 CLI `common.resources_find` scans one selected directory, returns at most 200
 accessible entry names, and accepts an optional case-insensitive filename substring.
@@ -106,8 +109,11 @@ batch is not a complete source. Core contracts live in `Resource*Models.cs` and
 
 ## Providers
 
-`ResourceGatewayService` and `ResourceProviderRegistry` own generic routing and
-bounded reads. Registered owners are chat artifacts/attachments, bound Office
+Core `ResourceGateway<TProvider>` owns canonical provider registration, selection
+and URI routing for Office and CLI. `ResourceGatewayService` owns Office-specific
+authority, publication, guarded reads and bounded projections; the workspace file
+provider delegates discovery/read/frozen authority to `WorkspaceFileService`.
+Registered Office owners are chat artifacts/attachments, bound Office
 document/VBA, Excel ranges/formulas, conversation state/definitions, typed context
 and catalogs. `ContextResourceProvider` discovers attached supplied data in the
 conversation scope and Office observations in the exact bound document scope.

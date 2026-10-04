@@ -16,6 +16,17 @@ records temporary adapters. This work does not qualify Windows/Office/WebView2.
 | M4 | Net8 CLI calls one application service for workspace/session open and listing, exact capability catalog, new/continued runs, inspect and explicit file recovery; it supports JSONL output. It uses production `LlmClient` and v6 `ModelProtocolClient`. A live `gemma4:31b:cloud` run through the local Ollama API created `index.html`, `app.js`, `styles.css` as externally visible files, with 3 verified writes and `model_done`. File tools now include copy from an accepted source. Exact read evidence and direct file authority commits enter durable tool records. Prior-turn read results are projected as stale; current-turn reads are refreshed before a model request. A cross-process session lease serializes accepted input and the run; continuation reloads the chat under that lease. The CLI development profile now requests 4096 output tokens and propagates the session's reasoning-off setting as `reasoning_effort=none`. | CLI build, environment/session listing, scripted HTTP protocol smoke and one real-model task passed. External inspection confirmed three files, HTML references/DOM targets and `node --check` of JS. A scripted read/copy turn produced a byte-identical real `index-copy.html`. An earlier `glm-5.3-flash:cloud` attempt returned HTTP 402 and wrote nothing. Focused transport test verifies explicit reasoning-off serialization. The scripted smoke verified stale read projection after external edit without a model-facing `rna://` reference; historical create-call text still appears as past action. The local `qwen3.5:9b` profile and live CLI task were exercised; detailed result and false-completion risk are below. Other interactive questions/approvals, automatic safe resume, frozen `ModelContextCompiler` path and full M4 acceptance remain open. |
 | M5 | Development `rna verify` and optional `web.verify` capture a bounded exact UTF-8 snapshot, validate discovered static dependencies, serve only captured bytes over loopback to a fresh headless Chromium profile, and report missing assets, console/page exceptions or `not-run`. `--require-web-verify` is a persisted CLI acceptance condition; a passing tool result carries exact file evidence, refreshed and checked against current authority at `done`. A separate read-only CSV-dashboard grader checks actual UI behavior against private fixtures. | Real Chrome passed a valid 3-file app and a 5-file HTML/CSS/JS import graph; immediate and 650 ms delayed JS errors and missing CSS failed; missing browser removed the model tool and returned `not-run`/exit 4. Scripted agent verify/read/patch/read/verify/done passed; verification before a later patch failed acceptance. The CSV grader passed a known-good fixture on 13 checks and rejected a JS-throwing fixture, missing browser and blocked outbound attempt. A fresh Qwen CSV task falsely returned `done` with no tools; after explicit feedback it wrote three files and passed smoke, but independent functional acceptance failed 3 of 11 assertions. Repair feedback led to no changed file and another false `done`. Autonomous CSV task, behavior after the 1.5-second observation window, binary assets, durable manifest/trace, autonomous diagnosis and other M5 acceptance remain open. |
 
+M3/M4 resource routing slice (2026-10-04): canonical provider registration and
+URI selection moved from the Office-only registry into Core
+`ResourceGateway<TProvider>`. Office `ResourceGatewayService` uses it; CLI
+`common.resources_find/read` now select a workspace-bound filesystem provider,
+which delegates to the existing file owner and preserves exact read evidence.
+The replaced Office registry file was removed. Focused workspace file tests 6/6,
+Gateway routing tests 3/3, and scripted CLI find → read → failed browser
+verification projection passed. The filesystem provider's CLI-specific result
+shape and prompt assembly have not moved to the shared compiler; this does not
+qualify Windows/Office behavior.
+
 Latest local-model result: on the same clean CSV task and current CLI source,
 Gemma 4 12B wrote three real files and passed 10/11 independent browser checks;
 Qwen 3.5 9B returned `done` with no calls or files. Neither passed the CLI's
@@ -234,11 +245,9 @@ boundary, not a functional CSV score. Scripted HTTP tests confirmed both CLI
 transport modes and saved metadata. The existing v6 parser correctly rejected
 these outputs; no permissive JSON repair or separate agent loop was added.
 
-Next concrete slice: connect `WorkspaceFileService` as a filesystem provider to the
-existing ResourceGateway by moving its generic routing across the current Office
-assembly boundary, switch CLI model context to the shared frozen compiler, then
-complete M4 input/resume handling and M5 functional verification. M6–M11 have not
-started. Existing
+Next concrete slice: switch CLI model context to the shared frozen compiler,
+then complete M4 input/resume handling and M5 functional verification. M6–M11
+have not started. Existing
 document-owned HTML writer is still active only for its old Office flow; no CLI
 file is dual-written.
 

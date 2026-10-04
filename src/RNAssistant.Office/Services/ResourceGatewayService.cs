@@ -9,7 +9,7 @@ namespace RNAssistant.Office.Services
 {
     internal sealed partial class ResourceGatewayService
     {
-        private readonly ResourceProviderRegistry _registry;
+        private readonly ResourceGateway<IResourceProvider> _registry;
         private readonly Func<ChatSession, IDisposable> _beginLiveOfficeRead;
         private readonly ResourceAuthorityService _authority;
         private readonly ArtifactViewerService _mediaViews;
@@ -84,7 +84,7 @@ namespace RNAssistant.Office.Services
                     providers.Add(new VbaResourceProvider(adapter, vbaSource, vbaJournalStore, authority?.Payloads));
                 }
             }
-            _registry = new ResourceProviderRegistry(providers);
+            _registry = new ResourceGateway<IResourceProvider>(providers);
             _beginLiveOfficeRead = beginLiveOfficeRead;
             _authority = authority;
             if (readAttachmentBytes != null) _mediaViews = new ArtifactViewerService(this, readAttachmentBytes);
@@ -105,7 +105,7 @@ namespace RNAssistant.Office.Services
         internal ResourceGatewayService(IEnumerable<IResourceProvider> providers,
             ResourceAuthorityService authority)
         {
-            _registry = new ResourceProviderRegistry(providers);
+            _registry = new ResourceGateway<IResourceProvider>(providers);
             _authority = authority;
         }
 
@@ -315,30 +315,25 @@ namespace RNAssistant.Office.Services
 
         private IResourceProvider SelectProvider(string providerId)
         {
-            if (!string.IsNullOrWhiteSpace(providerId)) return _registry.Get(providerId);
-            var providers = _registry.All();
-            if (providers.Count == 1) return providers[0];
-            throw new InvalidOperationException("provider is required when more than one resource provider is available.");
+            return _registry.Select(providerId);
         }
 
         private IResourceProvider ProviderFor(string resourceUri)
         {
-            ResourceAddress address;
-            if (!ResourceUri.TryParse(resourceUri, out address))
+            try
+            {
+                return _registry.ForUri(resourceUri);
+            }
+            catch (FormatException)
             {
                 throw new ResourceRequestException(
                     "Runtime preparation requires one canonical resource reference.",
-                    "invalid_resource_uri",
-                    false);
-            }
-            try
-            {
-                return _registry.Get(address.Provider);
+                    "invalid_resource_uri", false);
             }
             catch (KeyNotFoundException)
             {
                 throw new ResourceRequestException(
-                    "Unknown resource provider in the runtime-bound reference: " + address.Provider + ".",
+                    "Unknown resource provider in the runtime-bound reference.",
                     "invalid_resource_uri",
                     false);
             }

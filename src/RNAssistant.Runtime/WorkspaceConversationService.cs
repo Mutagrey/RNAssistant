@@ -434,6 +434,7 @@ namespace RNAssistant.Runtime
             private readonly Action<WorkspaceRunEvent> _progress;
             private readonly WorkspaceRunAcceptance _acceptance;
             private readonly IReadOnlyList<ToolCatalogEntry> _catalog;
+            private readonly ResourceGateway<WorkspaceFileResourceProvider> _resources;
             private readonly Dictionary<string, ResourceRef> _observed = new Dictionary<string, ResourceRef>(StringComparer.Ordinal);
             private long _cursor;
             public ToolRuntime Tools { get; private set; }
@@ -446,16 +447,18 @@ namespace RNAssistant.Runtime
             {
                 _chats = chats; _files = files; _workspace = workspace; _session = session;
                 _settings = settings.Clone(); _progress = progress; _acceptance = acceptance;
+                _resources = new ResourceGateway<WorkspaceFileResourceProvider>(new[]
+                    { new WorkspaceFileResourceProvider(files, workspace) });
                 var client = new LlmClient(apiKeyProvider);
                 _protocol = new ModelProtocolClient(client.CompleteAsync);
                 var registry = new ToolHandlerRegistry();
                 var entries = new List<ToolCatalogEntry>();
                 Register(registry, entries, "common.resources_find", "List up to 200 accessible names in one workspace directory; narrow directory or query when truncated.",
                     Schema("directory", false, "query", false), false,
-                    new FileHandler(files, workspace, _observed, "find"));
+                    new FileHandler(files, workspace, _resources, _observed, "find"));
                 Register(registry, entries, "common.resources_read", "Read a complete UTF-8 workspace file by relative path.",
                     Schema("relativePath", true), false,
-                    new FileHandler(files, workspace, _observed, "read"));
+                    new FileHandler(files, workspace, _resources, _observed, "read"));
                 if (WorkspaceWebVerifier.FindBrowserExecutable() != null)
                     Register(registry, entries, "web.verify", "Load an immutable local HTML/CSS/JS snapshot in an isolated browser and report asset and runtime errors.",
                         Schema("entryPath", true), false,
@@ -464,25 +467,25 @@ namespace RNAssistant.Runtime
                 {
                     Register(registry, entries, "files.create", "Create a new real UTF-8 file; never overwrite.",
                         Schema("relativePath", true, "text", true), true,
-                        new FileHandler(files, workspace, _observed, "create"));
+                        new FileHandler(files, workspace, _resources, _observed, "create"));
                     Register(registry, entries, "files.copy", "Copy a previously read complete UTF-8 file to a new path; never overwrite.",
                         Schema("relativePath", true, "targetPath", true), true,
-                        new FileHandler(files, workspace, _observed, "copy"));
+                        new FileHandler(files, workspace, _resources, _observed, "copy"));
                     Register(registry, entries, "files.move", "Move a previously read complete UTF-8 file to a new path; preserve file identity and never overwrite.",
                         Schema("relativePath", true, "targetPath", true), true,
-                        new FileHandler(files, workspace, _observed, "move"), true);
+                        new FileHandler(files, workspace, _resources, _observed, "move"), true);
                     Register(registry, entries, "files.patch", "Replace one exact unique text anchor in a previously read file.",
                         Schema("relativePath", true, "oldText", true, "newText", true), true,
-                        new FileHandler(files, workspace, _observed, "patch"));
+                        new FileHandler(files, workspace, _resources, _observed, "patch"));
                     Register(registry, entries, "files.replace", "Replace a previously read whole UTF-8 file.",
                         Schema("relativePath", true, "text", true), true,
-                        new FileHandler(files, workspace, _observed, "replace"));
+                        new FileHandler(files, workspace, _resources, _observed, "replace"));
                     Register(registry, entries, "files.delete", "Move a previously read UTF-8 file into managed workspace trash.",
                         Schema("relativePath", true), true,
-                        new FileHandler(files, workspace, _observed, "delete"), true);
+                        new FileHandler(files, workspace, _resources, _observed, "delete"), true);
                     Register(registry, entries, "files.restore", "Restore the latest managed deletion to its original path without overwriting.",
                         Schema("relativePath", true), true,
-                        new FileHandler(files, workspace, _observed, "restore"));
+                        new FileHandler(files, workspace, _resources, _observed, "restore"));
                 }
                 _catalog = entries;
                 Tools = new ToolRuntime(registry, "agent", false, true,
@@ -555,10 +558,10 @@ namespace RNAssistant.Runtime
                 foreach (var path in _observed.Keys.ToArray())
                 {
                     cancellationToken.ThrowIfCancellationRequested();
-                    try { _files.ReadText(_workspace, path); }
+                    try { _resources.Select("file").Read(path); }
                     catch (System.IO.FileNotFoundException) { /* ReadText marked the old head unavailable. */ }
                 }
-                var frozen = _files.CaptureAuthority(request.AcceptedMessages.SelectMany(item =>
+                var frozen = _resources.Select("file").CaptureAuthority(request.AcceptedMessages.SelectMany(item =>
                     item.ResourceEvidence ?? new ResourceEvidence[0]));
                 var messages = new List<ChatMessage>
                 {
@@ -711,11 +714,14 @@ namespace RNAssistant.Runtime
         {
             private readonly WorkspaceFileService _files;
             private readonly WorkspaceDescriptor _workspace;
+            private readonly ResourceGateway<WorkspaceFileResourceProvider> _resources;
             private readonly Dictionary<string, ResourceRef> _observed;
             private readonly string _operation;
             public FileHandler(WorkspaceFileService files, WorkspaceDescriptor workspace,
+                ResourceGateway<WorkspaceFileResourceProvider> resources,
                 Dictionary<string, ResourceRef> observed, string operation)
-            { _files = files; _workspace = workspace; _observed = observed; _operation = operation; }
+            { _files = files; _workspace = workspace; _resources = resources;
+                _observed = observed; _operation = operation; }
 
             public Task<ToolHandlerResult> ExecuteAsync(ToolHandlerContext context, CancellationToken cancellationToken)
             {
@@ -726,7 +732,7 @@ namespace RNAssistant.Runtime
                     {
                         var directory = Value(context, "directory");
                         var query = Value(context, "query");
-                        var page = _files.ListPage(_workspace, directory, query);
+                        var page = _resources.Select("file").Find(directory, query);
                         return Return(ToolResult.Ok(page.Truncated
                             ? "Workspace scan was truncated; narrow the directory or filename query."
                             : "Workspace entries listed.",
@@ -736,7 +742,7 @@ namespace RNAssistant.Runtime
                     var path = Value(context, "relativePath");
                     if (_operation == "read")
                     {
-                        var read = _files.ReadText(_workspace, path);
+                        var read = _resources.Select("file").Read(path);
                         if (read.Text.Length > 16000)
                             return Return(ToolResult.Error("Whole file exceeds the model read bound; no write observation was accepted.",
                                 JsonConvert.SerializeObject(new { path, length = read.Text.Length, code = "read_too_large" })), ToolEffectEvidence.None);

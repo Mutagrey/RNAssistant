@@ -161,21 +161,27 @@ namespace RNAssistant.Harness
             {
                 var workspace = new WorkspaceStore(paths).Open(Path.Combine(paths.Root, "project"));
                 var files = new WorkspaceFileService(paths);
+                var gateway = new ResourceGateway<WorkspaceFileResourceProvider>(new[]
+                    { new WorkspaceFileResourceProvider(files, workspace) });
                 for (var index = 0; index < 230; index++)
                     File.WriteAllText(Path.Combine(workspace.RootPath,
                         "item-" + index.ToString("D3") + ".txt"), "fixture");
                 File.WriteAllText(Path.Combine(workspace.RootPath, ".env-local"), "secret");
                 Directory.CreateDirectory(Path.Combine(workspace.RootPath, ".git"));
-                var page = files.ListPage(workspace, limit: 20);
-                AssertEqual(20, page.Names.Count, "directory listing respects requested bound");
+                var page = gateway.Select("file").Find("", null, 20);
+                AssertEqual(20, page.Names.Count, "gateway file discovery respects requested bound");
                 AssertTrue(page.Truncated && page.ScannedEntries <= 5000,
                     "directory listing reports an incomplete scan");
                 AssertTrue(!page.Names.Contains(".rnassistant") && !page.Names.Contains(".git") &&
                     !page.Names.Contains(".env-local"), "protected entries stay out of discovery");
-                var narrowed = files.ListPage(workspace, query: "ITEM-229", limit: 20);
+                var narrowed = gateway.Select("file").Find("", "ITEM-229");
                 AssertEqual(1, narrowed.Names.Count, "query narrows directory discovery");
                 AssertEqual("item-229.txt", narrowed.Names[0], "case-insensitive filename query");
                 AssertTrue(!narrowed.Truncated, "narrow query scanned the full directory");
+                var observed = gateway.Select("file").Read(narrowed.Names[0]);
+                AssertEqual("fixture", observed.Text, "gateway file read returns real source bytes");
+                AssertTrue(observed.Evidence.Complete && gateway.ForUri(observed.Reference.Uri).Id == "file",
+                    "gateway routes canonical file identity with complete exact evidence");
                 var rejected = false;
                 try { files.ListPage(workspace, query: "bad\nquery"); }
                 catch (WorkspaceFileException ex) { rejected = ex.Code == "invalid_find_query"; }

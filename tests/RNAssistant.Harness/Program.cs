@@ -822,7 +822,7 @@ namespace RNAssistant.Harness
                 Test("resource cutover: binary chunk budget", ResourceBinaryChunkBudget),
                 Test("resources: rejects ambiguous URI", ResourceUriRejectsAmbiguousAddresses),
                 Test("resources: reference pins revision", ResourceReferencePinsRevision),
-                Test("resources: registry rejects duplicate providers", ResourceRegistryRejectsDuplicateProviders),
+                Test("resources: gateway rejects duplicate providers", ResourceGatewayRejectsDuplicateProviders),
                 Test("resources: gateway discovers providers", ResourceGatewayDiscoversProvidersBeforeListing),
                 Test("resources: discovery preserves incomplete source coverage", ResourceIntentDiscoveryPreservesCoverage),
                 Test("resources: document discovery isolates unavailable resources", DocumentDiscoveryPartialResources),

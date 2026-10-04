@@ -53,8 +53,8 @@ direct cutover объясняют порядок уже выполненной �
 
 Workspace-first решение и текущий срез CLI зафиксированы в
 [ADR-0013](decisions/ADR-0013-workspace-first-runtime.md); состояние этапов — в
-[PROGRESS](stabilization/PROGRESS.md). Пока file adapter CLI не переключён на
-общий Gateway/compiler, его ограничения указаны в [Resource Fabric](resource-fabric.md).
+[PROGRESS](stabilization/PROGRESS.md). Граница общего Gateway/compiler для CLI
+описана в [Resource Fabric](resource-fabric.md).
 
 ## Куда писать
 

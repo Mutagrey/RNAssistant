@@ -45,12 +45,12 @@ namespace RNAssistant.Harness
                 out parsedRevision), "semantically non-canonical revision rejected");
         }
 
-        private static void ResourceRegistryRejectsDuplicateProviders()
+        private static void ResourceGatewayRejectsDuplicateProviders()
         {
             var rejected = false;
             try
             {
-                new ResourceProviderRegistry(new IResourceProvider[]
+                new ResourceGateway<IResourceProvider>(new IResourceProvider[]
                 {
                     new ChatArtifactResourceProvider(),
                     new ChatArtifactResourceProvider()
