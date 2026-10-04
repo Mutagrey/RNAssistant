@@ -205,7 +205,11 @@ namespace RNAssistant.Cli
                 Model = Value(options, "model", defaultModel),
                 AgentResponseMode = AgentResponseModes.JsonSchema,
                 ReasoningRequestMode = ReasoningRequestModes.ReasoningEffort,
-                MaxTokens = 4096
+                MaxTokens = 4096,
+                MaxAgentIterations = PositiveBoundedOption(options, "max-iterations",
+                    AppSettings.DefaultMaxAgentIterations),
+                MaxAgentToolSteps = PositiveBoundedOption(options, "max-tool-steps",
+                    AppSettings.DefaultMaxAgentToolSteps)
             };
         }
 
@@ -312,6 +316,15 @@ namespace RNAssistant.Cli
                 throw new ArgumentException("--" + key + " requires a nonnegative integer.");
             return value;
         }
+        private static int PositiveBoundedOption(Dictionary<string, string> options, string key, int maximum)
+        {
+            string raw;
+            if (!options.TryGetValue(key, out raw)) return maximum;
+            int value;
+            if (!int.TryParse(raw, out value) || value < 1 || value > maximum)
+                throw new ArgumentException("--" + key + " requires an integer from 1 to " + maximum + ".");
+            return value;
+        }
         private static void Output(bool jsonl, string type, object payload)
         {
             if (jsonl) Console.WriteLine(JsonConvert.SerializeObject(new { type, data = payload }));
@@ -323,7 +336,7 @@ namespace RNAssistant.Cli
             Console.WriteLine("rna workspace open <path> [--read-only]");
             Console.WriteLine("rna env --workspace <path>");
             Console.WriteLine("rna sessions --workspace <path> [--jsonl]");
-            Console.WriteLine("rna run --workspace <path> (--message <text> | --task-file <file>) [--session <id>] [--profile development] [--model <name>] [--base-url <url>] [--expect-files <comma-separated paths>] [--min-reads <n>] [--min-writes <n>] [--require-web-verify] [--jsonl]");
+            Console.WriteLine("rna run --workspace <path> (--message <text> | --task-file <file>) [--session <id>] [--profile development] [--model <name>] [--base-url <url>] [--max-iterations <1..256>] [--max-tool-steps <1..4096>] [--expect-files <comma-separated paths>] [--min-reads <n>] [--min-writes <n>] [--require-web-verify] [--jsonl]");
             Console.WriteLine("rna inspect --workspace <path> --session <id> [--jsonl]");
             Console.WriteLine("rna recover --workspace <path> --path <relative-path> [--jsonl]  (inspect an uncertain file effect)");
             Console.WriteLine("rna verify --workspace <path> [--entry index.html] [--jsonl]  (isolated static web smoke)");

@@ -28,9 +28,10 @@ def main():
             if len(requests) == 1:
                 entered.set()
                 release.wait(10)
+            action = "continue" if len(requests) == 3 else "needs_input"
             response = json.dumps({"choices": [{"message": {"role": "assistant", "content":
                 json.dumps({"message": "Waiting for an explicit new task.",
-                            "action": "needs_input", "tool_calls": []})}}]}).encode()
+                            "action": action, "tool_calls": []})}}]}).encode()
             try:
                 self.send_response(200)
                 self.send_header("Content-Type", "application/json")
@@ -93,7 +94,17 @@ def main():
             assert result["data"]["reason"] == "model_needs_input", result
             assert len(requests) == 2, "one new model request after explicit input"
             assert not (workspace / "index.html").exists(), "the interrupted tool was replayed"
-            print("PASS interrupted CLI model wait: durable unknown, idempotent resume, explicit new input")
+
+            invalid = cli("run", "--workspace", str(workspace), "--session", session_id,
+                          "--message", "Check budget", "--max-iterations", "0")
+            assert invalid.returncode == 2 and len(requests) == 2, invalid
+            limited = cli("run", "--workspace", str(workspace), "--session", session_id,
+                          "--message", "Check budget", "--max-iterations", "1",
+                          "--max-tool-steps", "1")
+            assert limited.returncode == 5, (limited.stdout, limited.stderr)
+            assert json.loads(limited.stdout.splitlines()[-1])["data"]["reason"] == "iteration_limit"
+            assert len(requests) == 3, "one model request within the explicit iteration limit"
+            print("PASS interrupted CLI model wait: durable unknown, idempotent resume, explicit input and run limit")
     finally:
         release.set()
         server.shutdown()

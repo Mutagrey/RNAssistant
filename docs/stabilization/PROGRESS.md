@@ -52,8 +52,11 @@ and the old CLI acceptance becomes unknown. The user can submit a new turn after
 inspecting the workspace and explicitly reconciling any unresolved file attempt.
 `python3 tests/cli/interrupted_run_smoke.py` killed a process during a model wait,
 then verified repeatable `resume` with no model call and exactly one new request
-after explicit input. A crash during an in-flight file dispatch, same-run budget
-continuation and full E-RESUME acceptance remain unverified.
+after explicit input. The CLI now accepts bounded `--max-iterations` and
+`--max-tool-steps`; the same smoke checks an invalid bound and a one-iteration
+`continue` stopping with `iteration_limit`. A crash during an in-flight file
+dispatch, same-run budget continuation and full E-RESUME acceptance remain
+unverified.
 
 M3 move slice (2026-10-04): `files.move` now requires an accepted whole-file read
 and the same kernel confirmation/resume path as delete. It saves source and target

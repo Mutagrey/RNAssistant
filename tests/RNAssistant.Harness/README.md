@@ -18,7 +18,8 @@ passes and broken JavaScript, missing browser and blocked outbound requests do n
 
 After building the CLI, run `python3 tests/cli/interrupted_run_smoke.py` for a
 process-killed model wait. It checks durable interrupted/unknown acceptance,
-idempotent `resume`, and one new model request only after explicit input.
+idempotent `resume`, one new model request only after explicit input, and the
+one-iteration CLI limit.
 
 Host-neutral tests run on this machine without Office COM. Locate the relevant test first; do not read or execute the full suite by default.
 

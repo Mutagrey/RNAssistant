@@ -81,8 +81,10 @@ effects or files. The accepted criteria are saved before model dispatch and rema
 visible through `inspect`. `--min-reads` counts distinct complete file reads whose
 evidence is still current at completion; `--min-writes` counts verified changed
 file effects, excluding no-op tool calls. `model_done` by itself is the model's
-claim. Use `node --check`
-for generated JavaScript and a browser run for behavior.
+claim. For bounded local experiments, `--max-iterations` (1–256) and
+`--max-tool-steps` (1–4096) override the per-run defaults without changing the
+shared agent loop. An exhausted limit is a failed run with retained history.
+Use `node --check` for generated JavaScript and a browser run for behavior.
 
 `rna verify --workspace ./project --entry index.html` runs a bounded static-web
 smoke in an isolated Chromium profile. It serves only an immutable snapshot of
