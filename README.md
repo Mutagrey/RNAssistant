@@ -61,7 +61,7 @@ Ollama profile from `config/ollama/`:
 | `gemma4:12b` | `rna-gemma4-12b-32k` | 32768 |
 | `gpt-oss:20b` | `rna-gpt-oss-20b-16k` | 16384 |
 | `qwen3.5:9b` | `rna-qwen35-9b-32k` | 32768 |
-| `qwen3.8:27b` | `rna-qwen38-27b-8k` | 8192 |
+| `qwen3.8:27b` | `rna-qwen38-27b-16k` | 16384 |
 | `gemma4:cloud` | `gemma4:cloud` (remote; protocol qualification open) | Set an explicit planning limit |
 
 Pull and create profiles one at a time, without running them during setup:
@@ -74,7 +74,7 @@ ollama create rna-gpt-oss-20b-16k -f config/ollama/Modelfile.gpt-oss-20b-16k
 ollama pull qwen3.5:9b
 ollama create rna-qwen35-9b-32k -f config/ollama/Modelfile.qwen35-9b-32k
 ollama pull qwen3.8:27b
-ollama create rna-qwen38-27b-8k -f config/ollama/Modelfile.qwen38-27b-8k
+ollama create rna-qwen38-27b-16k -f config/ollama/Modelfile.qwen38-27b-16k
 ollama pull gemma4:cloud
 ```
 
@@ -94,6 +94,12 @@ against that provider before using it as comparison evidence.
 For the default local Ollama endpoint, CLI checks the selected tag and `/api/show`
 before starting a run; an unavailable model or RNAssistant context above the
 profile's `num_ctx` fails before model dispatch.
+The separate `rna-qwen38-27b-8k` profile is only for context-limit rejection
+checks: with the CLI's 4096 output-token request and mandatory continuation and
+format-repair reserves, even an empty Agent request cannot pass its 8K budget.
+Use the 16K profile for Agent comparisons only after checking memory pressure
+and the actual prompt composition; 16K is not a blanket guarantee for long
+Office chats or loaded tool/skill bodies.
 The `gemma4:cloud` tag through Ollama 0.35.0 has not passed the CLI v6 probe:
 both response modes failed the full task before any tool call. See
 [current evidence](docs/stabilization/PROGRESS.md#workspace-first-implementation--2026-10-04-in-progress)

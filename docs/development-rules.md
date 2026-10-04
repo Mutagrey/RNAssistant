@@ -262,7 +262,7 @@ Full harness не заменяет Windows/COM проверку. Число фа
 | `gemma4:12b` | Основная локальная development: ежедневные agent loop, tools, workspace, HTML/JS | 32K |
 | `gpt-oss:20b` | Другое семейство: cross-model regression prompts/harness/tools | 16K; 32K только после проверки памяти |
 | `qwen3.5:9b` | Adversarial robustness: JSON, неверные tools, преждевременный `done`, recovery и защита от ошибочных действий | 32K |
-| `qwen3.8:27b` | Milestone и production-parity qualification | Сначала 8K; 16K только после проверки памяти |
+| `qwen3.8:27b` | Milestone и production-parity qualification | 16K после проверки памяти и входного бюджета; 8K только для проверки отказа по контексту |
 | `gemma4:cloud` | Кандидат в reference; через локальный Ollama 0.35.0 пока не прошёл v6 protocol, сначала проверить endpoint | По условиям endpoint; фиксировать фактический лимит |
 
 Обычный цикл: `gemma4:12b` ежедневно → `qwen3.5:9b` после значимого изменения →
@@ -282,6 +282,12 @@ workspace. Не переключать и не обновлять model tag в �
 только одну тяжёлую локальную модель; не увеличивать context до максимума модели
 автоматически. Ollama OpenAI-compatible endpoint получает `num_ctx` из локального
 Modelfile; RNAssistant должен иметь такой же или меньший лимит планирования.
+Для CLI с 4096 output tokens профиль 8K не вмещает даже пустой Agent-запрос:
+после output и safety reserve остаётся 3072 входных токена, из них 3071
+зарезервирован под продолжение, затем нужен ещё format-repair reserve. Поэтому
+8K нельзя использовать для сравнения качества Agent. Для 16K сначала проверить
+состав запроса/резервы и фактическую память на целевой машине; загруженные tools,
+skills и история могут превысить и этот лимит.
 
 Для сравнения зафиксировать RNAssistant commit, task, исходный workspace, tool
 catalog, skills, acceptance tests и по возможности temperature/reasoning policy.

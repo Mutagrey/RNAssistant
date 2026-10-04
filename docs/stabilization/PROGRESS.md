@@ -1,5 +1,11 @@
 # Stabilization progress
 
+Local model context (2026-10-04): the 8K Qwen 27B profile cannot admit a CLI
+Agent request with the current 4096-token output policy and mandatory reserves;
+it is retained only for context rejection checks. A 16K profile is the candidate
+for Agent comparison. The scripted CLI response-mode smoke passed at 16K;
+Qwen 27B memory pressure and real Agent task admission remain unverified.
+
 ## Workspace-first implementation — 2026-10-04 (in progress)
 
 Baseline `ae05b205519365c9a2b02bce8a218afa84302158` matched the supplied
