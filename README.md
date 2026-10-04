@@ -53,25 +53,54 @@ from CLI arguments or the workspace manifest. `run --session <id> --message ...`
 continues a saved chat as a new turn. `inspect --workspace <path> --session <id>`
 shows its saved state; `sessions --workspace <path>` lists workspace chats.
 
-For a local Ollama smoke test, run `ollama pull qwen3.5:9b` and create a separate
-32K profile with this `Modelfile`:
+For local model comparisons, pull only the needed tag and create its bounded
+Ollama profile from `config/ollama/`:
 
-```text
-FROM qwen3.5:9b
-PARAMETER num_ctx 32768
+| Source tag | Profile / `RNA_MODEL` | `RNA_CONTEXT_TOKENS` |
+|---|---|---:|
+| `gemma4:12b` | `rna-gemma4-12b-32k` | 32768 |
+| `gpt-oss:20b` | `rna-gpt-oss-20b-16k` | 16384 |
+| `qwen3.5:9b` | `rna-qwen35-9b-32k` | 32768 |
+| `qwen3.8:27b` | `rna-qwen38-27b-8k` | 8192 |
+| `gemma4:cloud` | `gemma4:cloud` (remote) | Set an explicit planning limit |
+
+Pull and create profiles one at a time, without running them during setup:
+
+```sh
+ollama pull gemma4:12b
+ollama create rna-gemma4-12b-32k -f config/ollama/Modelfile.gemma4-12b-32k
+ollama pull gpt-oss:20b
+ollama create rna-gpt-oss-20b-16k -f config/ollama/Modelfile.gpt-oss-20b-16k
+ollama pull qwen3.5:9b
+ollama create rna-qwen35-9b-32k -f config/ollama/Modelfile.qwen35-9b-32k
+ollama pull qwen3.8:27b
+ollama create rna-qwen38-27b-8k -f config/ollama/Modelfile.qwen38-27b-8k
+ollama pull gemma4:cloud
 ```
 
-Run `ollama create rna-qwen35-9b-32k -f Modelfile`, then set
-`RNA_BASE_URL=http://127.0.0.1:11434`, `RNA_MODEL=rna-qwen35-9b-32k` and
-`RNA_API_KEY=ollama` for the CLI command above. Do not append `/v1` to this CLI
-base URL; `LlmClient` addresses `/v1/chat/completions` itself. The CLI development
-profile requests 4096 output tokens and disables model reasoning through the
-OpenAI-compatible `reasoning_effort` field. The model profile sets Ollama's actual
-context window; RNAssistant uses the same 32K planning budget for an unknown model.
-The local Ollama server ignores the placeholder API key; the CLI accepts an empty
-key for a loopback endpoint. Ollama defaults to one parallel request per model;
-if this server was configured differently, set `OLLAMA_NUM_PARALLEL=1` in its
-environment and restart it before a memory-constrained test.
+Set `RNA_BASE_URL=http://127.0.0.1:11434`, `RNA_MODEL=rna-gemma4-12b-32k`,
+`RNA_CONTEXT_TOKENS=32768`, and `RNA_THINKING=off` for the CLI command above.
+The CLI requests 4096 output tokens; `RNA_REASONING_MODE` defaults to
+`reasoning_effort`. Set `RNA_THINKING=on` only for a deliberate reasoning-mode
+comparison. The run saves model, Ollama digest when available, context and
+reasoning mode; `rna inspect` shows that snapshot. Use a new session for each
+model comparison. Do not append `/v1` to the CLI base URL; `LlmClient` addresses
+`/v1/chat/completions` itself. A loopback Ollama endpoint needs no API key.
+For other endpoints, `RNA_MODEL_DIGEST` is an operator-supplied label; verify it
+against that provider before using it as comparison evidence.
+For the default local Ollama endpoint, CLI checks the selected tag and `/api/show`
+before starting a run; an unavailable model or RNAssistant context above the
+profile's `num_ctx` fails before model dispatch.
+In the Office UI, set the selected model's capability metadata/context limit to
+the same profile values before a separate test session.
+
+Check `ollama ps` before and after switching; unload the previous model with
+`ollama stop <model>` before using another heavy local model. Pulling and creating
+a profile do not load it for inference. On a 24 GB Mac, start the 27B profile at
+8K and keep only one heavy model resident. If Ollama runs parallel requests,
+configure `OLLAMA_NUM_PARALLEL=1` on its server. The comparison workflow, error
+categories and independent acceptance rule are in
+[development rules §9](docs/development-rules.md#сравнение-моделей).
 
 For a three-file creation test, add
 `--expect-files index.html,styles.css,app.js --min-reads 3 --min-writes 3` to

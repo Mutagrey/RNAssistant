@@ -255,7 +255,16 @@ namespace RNAssistant.Office.Services
                 DocumentRuntimeKey = run.DocumentRuntimeKey,
                 IterationsUsed = run.IterationsUsed,
                 ToolStepsUsed = run.ToolStepsUsed,
-                StartedUtc = run.StartedUtc
+                StartedUtc = run.StartedUtc,
+                ModelConfiguration = run.ModelConfiguration == null ? null : new ModelRunMetadata
+                {
+                    Model = run.ModelConfiguration.Model,
+                    Digest = run.ModelConfiguration.Digest,
+                    EndpointSha256 = run.ModelConfiguration.EndpointSha256,
+                    ContextWindowTokens = run.ModelConfiguration.ContextWindowTokens,
+                    ReasoningRequestMode = run.ModelConfiguration.ReasoningRequestMode,
+                    ReasoningEnabled = run.ModelConfiguration.ReasoningEnabled
+                }
             };
         }
 

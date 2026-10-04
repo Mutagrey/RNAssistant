@@ -2,6 +2,8 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
+using System.Security.Cryptography;
+using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
 using Newtonsoft.Json;
@@ -102,7 +104,7 @@ namespace RNAssistant.Runtime
         public async Task<WorkspaceRunResult> RunAsync(WorkspaceDescriptor workspace, string sessionId,
             string message, AppSettings settings, Func<string> apiKeyProvider,
             Action<WorkspaceRunEvent> progress = null, CancellationToken cancellationToken = default(CancellationToken),
-            WorkspaceRunAcceptance acceptance = null)
+            WorkspaceRunAcceptance acceptance = null, bool? reasoningEnabled = null, string modelDigest = null)
         {
             if (workspace == null) throw new ArgumentNullException(nameof(workspace));
             if (string.IsNullOrWhiteSpace(message)) throw new ArgumentException("A task message is required.", nameof(message));
@@ -123,6 +125,8 @@ namespace RNAssistant.Runtime
                     throw new InvalidOperationException("The pending approval must be resolved before another turn.");
                 InterruptAbandonedRun(session);
 
+                if (reasoningEnabled.HasValue) session.ReasoningEnabled = reasoningEnabled.Value;
+
                 var previous = RestoreAcceptedHistory(session);
                 var ports = new WorkspacePorts(_chats, _files, workspace, session, settings, apiKeyProvider,
                     progress, acceptedContract);
@@ -130,6 +134,15 @@ namespace RNAssistant.Runtime
                 session.LastRun = new ChatRunRecord
                 { RunId = runId, TurnId = runId, StartedUtc = DateTime.UtcNow,
                     ResponseProtocolVersion = ConversationResponse.ProtocolVersion,
+                    ModelConfiguration = new ModelRunMetadata
+                    {
+                        Model = settings.Model,
+                        Digest = modelDigest,
+                        EndpointSha256 = EndpointSha256(settings.BaseUrl),
+                        ContextWindowTokens = ModelContextBudget.ContextWindowTokens(settings),
+                        ReasoningRequestMode = settings.ReasoningRequestMode,
+                        ReasoningEnabled = session.ReasoningEnabled
+                    },
                     WorkspaceAcceptance = acceptedContract };
                 session.Model = settings.Model;
                 session.Mode = "agent";
@@ -153,7 +166,7 @@ namespace RNAssistant.Runtime
         public async Task<WorkspaceRunResult> ResolvePendingAsync(WorkspaceDescriptor workspace,
             string sessionId, string pendingId, bool approve, AppSettings settings,
             Func<string> apiKeyProvider, Action<WorkspaceRunEvent> progress = null,
-            CancellationToken cancellationToken = default(CancellationToken))
+            CancellationToken cancellationToken = default(CancellationToken), string modelDigest = null)
         {
             if (workspace == null || string.IsNullOrWhiteSpace(sessionId) || string.IsNullOrWhiteSpace(pendingId))
                 throw new ArgumentException("Workspace, session and pending confirmation are required.");
@@ -169,6 +182,14 @@ namespace RNAssistant.Runtime
                     throw new InvalidOperationException("Pending confirmation was not found or was already resolved.");
                 if (approve && !string.Equals(settings.Model, session.Model, StringComparison.Ordinal))
                     throw new InvalidOperationException("Approval must continue with the accepted run's model.");
+                var modelConfiguration = session.LastRun.ModelConfiguration;
+                if (approve && modelConfiguration != null &&
+                    (ModelContextBudget.ContextWindowTokens(settings) != modelConfiguration.ContextWindowTokens ||
+                     EndpointSha256(settings.BaseUrl) != modelConfiguration.EndpointSha256 ||
+                     !string.Equals(modelDigest, modelConfiguration.Digest, StringComparison.Ordinal) ||
+                     !string.Equals(settings.ReasoningRequestMode, modelConfiguration.ReasoningRequestMode,
+                         StringComparison.Ordinal)))
+                    throw new InvalidOperationException("Approval must continue with the accepted run's endpoint, model digest, context and reasoning mode.");
                 var history = RestoreAcceptedHistory(session);
                 var continuation = AgentRunContinuation.Restore(run.Summary, run.Limits, 0, history);
                 var acceptance = session.LastRun.WorkspaceAcceptance ?? new WorkspaceRunAcceptance();
@@ -387,6 +408,15 @@ namespace RNAssistant.Runtime
                 }
             }
             return history;
+        }
+
+        private static string EndpointSha256(string baseUrl)
+        {
+            using (var sha = SHA256.Create())
+            {
+                var bytes = sha.ComputeHash(Encoding.UTF8.GetBytes((baseUrl ?? string.Empty).TrimEnd('/')));
+                return BitConverter.ToString(bytes).Replace("-", string.Empty).ToLowerInvariant();
+            }
         }
 
         private sealed class WorkspacePorts : IModelProtocol, IRunStore

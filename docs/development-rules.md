@@ -248,6 +248,53 @@ Full harness не заменяет Windows/COM проверку. Число фа
 Команды и filters перечислены в
 [Harness README](../tests/RNAssistant.Harness/README.md).
 
+### Сравнение моделей
+
+Модель — конфигурация environment/profile одного RNAssistant runtime, а не
+вариант реализации агента. При переключении допустимо менять только `BaseUrl`,
+`Model`, лимит контекста, reasoning/thinking и capability metadata. `AgentKernel`,
+`ModelProtocol`, `ToolRuntime`, tool schemas, skills, workspace, правила проверки
+и acceptance tests остаются теми же. System prompts меняются только по отдельной
+причине, не ради адаптации к слабой модели.
+
+| Модель | Назначение | Стартовый контекст (Mac 24 GB) |
+|---|---|---:|
+| `gemma4:12b` | Основная локальная development: ежедневные agent loop, tools, workspace, HTML/JS | 32K |
+| `gpt-oss:20b` | Другое семейство: cross-model regression prompts/harness/tools | 16K; 32K только после проверки памяти |
+| `qwen3.5:9b` | Adversarial robustness: JSON, неверные tools, преждевременный `done`, recovery и защита от ошибочных действий | 32K |
+| `qwen3.8:27b` | Milestone и production-parity qualification | Сначала 8K; 16K только после проверки памяти |
+| `gemma4:cloud` | Сильный reference для сложных задач и разделения дефекта RNAssistant от ограничения локальной модели | По условиям endpoint; фиксировать фактический лимит |
+
+Обычный цикл: `gemma4:12b` ежедневно → `qwen3.5:9b` после значимого изменения →
+`gpt-oss:20b` для cross-model regression → `gemma4:cloud` для сложной/reference
+задачи при необходимости → `qwen3.8:27b` на milestone. Успех сильных моделей
+при провале 9B может быть нормальным пределом модели; не усложнять harness
+эвристиками ради прохождения всех задач 9B.
+
+Перед сравнительным прогоном завершить run и сохранить session/event log. Затем
+выгрузить предыдущую тяжёлую модель (`ollama ps`, при необходимости
+`ollama stop <model>`), выбрать новый профиль, создать новую test session или явно сбросить
+model context, проверить endpoint и точный model tag/digest, записать context и
+reasoning mode в run metadata. Запустить ту же задачу с одинаковым исходным
+workspace. Не переключать и не обновлять model tag в активном run, кроме
+отдельного failover-теста.
+После переключения проверить `ollama ps` повторно. На 24 GB Mac держать в памяти
+только одну тяжёлую локальную модель; не увеличивать context до максимума модели
+автоматически. Ollama OpenAI-compatible endpoint получает `num_ctx` из локального
+Modelfile; RNAssistant должен иметь такой же или меньший лимит планирования.
+
+Для сравнения зафиксировать RNAssistant commit, task, исходный workspace, tool
+catalog, skills, acceptance tests и по возможности temperature/reasoning policy.
+Для каждого run сохранить model/tag и digest, context, thinking/reasoning mode,
+число LLM и tool calls, protocol violations, tool errors, retries, final action,
+результат независимой acceptance-проверки и duration. `action=done` не является
+критерием успеха. Каждый провал пометить хотя бы одной категорией:
+`MODEL_ERROR`, `PROTOCOL_ERROR`, `CONTEXT_ERROR`, `TOOL_ERROR`, `HARNESS_ERROR`,
+`STATE_ERROR`, `VERIFICATION_ERROR`, `ENVIRONMENT_ERROR`. Повторение на нескольких
+сильных моделях — повод исследовать RNAssistant/harness; изолированный провал 9B
+сам по себе не требует новой runtime-эвристики. Проверки host-neutral не
+закрывают Windows/Office/WebView2 qualification.
+
 ## 10. Документация изменения
 
 - Текущее правило живёт в одном canonical document; остальные документы ссылаются

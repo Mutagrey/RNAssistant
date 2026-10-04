@@ -381,6 +381,8 @@ namespace RNAssistant.Core.Models
         public int ToolStepsUsed { get; set; }
         public DateTime StartedUtc { get; set; }
         [JsonProperty(NullValueHandling = NullValueHandling.Ignore)]
+        public ModelRunMetadata ModelConfiguration { get; set; }
+        [JsonProperty(NullValueHandling = NullValueHandling.Ignore)]
         public WorkspaceRunAcceptance WorkspaceAcceptance { get; set; }
         [JsonProperty(NullValueHandling = NullValueHandling.Ignore)]
         public string InterruptedToolId { get; set; }
@@ -390,6 +392,18 @@ namespace RNAssistant.Core.Models
         public string InterruptedTargetPath { get; set; }
         [JsonProperty(DefaultValueHandling = DefaultValueHandling.Ignore)]
         public bool InterruptedEffectPossible { get; set; }
+    }
+
+    // Snapshot of the selected provider profile for a single run. The model's
+    // answer and session-level model selection are not evidence of these values.
+    public sealed class ModelRunMetadata
+    {
+        public string Model { get; set; }
+        public string Digest { get; set; }
+        public string EndpointSha256 { get; set; }
+        public int ContextWindowTokens { get; set; }
+        public string ReasoningRequestMode { get; set; }
+        public bool ReasoningEnabled { get; set; }
     }
 
     public sealed class ChatSessionHeader

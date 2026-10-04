@@ -42,6 +42,7 @@ direct cutover объясняют порядок уже выполненной �
 | Проверка на Windows/Office и evidence | [Проверка](qualification.md), [release](operations/RELEASE_PROCESS.md) |
 | Versioning and release | [Versioning](operations/VERSIONING.md), [release](operations/RELEASE_PROCESS.md), [build evidence](operations/BUILD_EVIDENCE.md) |
 | Targeted checks | [Harness guide](../tests/RNAssistant.Harness/README.md) |
+| Сравнение моделей и безопасное переключение | [Правила разработки §9](development-rules.md#сравнение-моделей) |
 
 `host-fabric.md` и `local-automation-agent.md` описывают отложенные контуры, а не
 действующий stable-core scope.

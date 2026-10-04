@@ -2,9 +2,12 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
+using System.Net.Http;
+using System.Text;
 using System.Threading;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
+using RNAssistant.Core.Llm;
 using RNAssistant.Core.Models;
 using RNAssistant.Core.Services;
 using RNAssistant.Core.Storage;
@@ -91,6 +94,7 @@ namespace RNAssistant.Cli
                 if (session == null) throw new ArgumentException("Session not found.");
                 Output(jsonl, "session", new { session.Id, session.WorkspaceId, session.Title,
                     session.Model, session.Mode, session.Revision, session.LastRun?.Status,
+                    modelConfiguration = session.LastRun?.ModelConfiguration,
                     acceptance = session.LastRun?.WorkspaceAcceptance,
                     interruptedToolId = session.LastRun?.InterruptedToolId,
                     interruptedPath = session.LastRun?.InterruptedFilePath,
@@ -138,13 +142,19 @@ namespace RNAssistant.Cli
                 var approve = args[0] == "approve";
                 AppSettings continuationSettings = null;
                 string continuationKey = null;
+                string continuationDigest = null;
                 if (approve)
                 {
                     continuationSettings = Settings(options, session.Model);
                     if (!EndpointReady(continuationSettings, out continuationKey)) return 4;
+                    if (!ModelReady(continuationSettings, out continuationDigest)) return 4;
+                    var requestedThinking = OptionalThinking(options);
+                    if (requestedThinking.HasValue && session.LastRun.ModelConfiguration != null &&
+                        requestedThinking.Value != session.LastRun.ModelConfiguration.ReasoningEnabled)
+                        throw new ArgumentException("Approval must keep the accepted run's thinking setting.");
                 }
                 var result = service.ResolvePendingAsync(workspace, sessionId, pendingId, approve,
-                    continuationSettings, () => continuationKey).GetAwaiter().GetResult();
+                    continuationSettings, () => continuationKey, modelDigest: continuationDigest).GetAwaiter().GetResult();
                 return ReportRun(jsonl, result);
             }
             if (args[0] != "run") throw new ArgumentException("Unknown command. Use --help.");
@@ -176,6 +186,9 @@ namespace RNAssistant.Cli
             var settings = Settings(options, Environment.GetEnvironmentVariable("RNA_MODEL"));
             string key;
             if (!EndpointReady(settings, out key)) return 4;
+            var thinking = OptionalThinking(options);
+            string modelDigest;
+            if (!ModelReady(settings, out modelDigest)) return 4;
             using (var cancellation = new CancellationTokenSource())
             {
                 ConsoleCancelEventHandler interrupt = (sender, eventArgs) =>
@@ -190,7 +203,7 @@ namespace RNAssistant.Cli
                                 Output(jsonl, update.Kind == "ToolStarted" ? "tool.started" : "tool.completed",
                                     new { update.Summary.RunId, update.ToolId, lifecycle = update.Summary.Lifecycle.ToString(),
                                         health = update.Summary.ExecutionHealth.ToString() });
-                        }, cancellation.Token, acceptance).GetAwaiter().GetResult();
+                        }, cancellation.Token, acceptance, thinking, modelDigest).GetAwaiter().GetResult();
                     return ReportRun(jsonl, result);
                 }
                 finally { Console.CancelKeyPress -= interrupt; }
@@ -199,18 +212,115 @@ namespace RNAssistant.Cli
 
         private static AppSettings Settings(Dictionary<string, string> options, string defaultModel)
         {
+            var reasoningMode = Value(options, "reasoning-mode",
+                Environment.GetEnvironmentVariable("RNA_REASONING_MODE") ?? ReasoningRequestModes.ReasoningEffort);
+            var normalizedMode = ReasoningRequestModes.Normalize(reasoningMode);
+            if (!string.Equals(reasoningMode, normalizedMode, StringComparison.OrdinalIgnoreCase) ||
+                normalizedMode == ReasoningRequestModes.CustomJson)
+                throw new ArgumentException("--reasoning-mode must be auto, reasoning_effort, enable_thinking, chat_template_kwargs or reasoning_enabled.");
             return new AppSettings
             {
                 BaseUrl = Value(options, "base-url", Environment.GetEnvironmentVariable("RNA_BASE_URL")),
                 Model = Value(options, "model", defaultModel),
                 AgentResponseMode = AgentResponseModes.JsonSchema,
-                ReasoningRequestMode = ReasoningRequestModes.ReasoningEffort,
+                ReasoningRequestMode = normalizedMode,
+                ContextWindowOverrideTokens = ContextTokens(options),
                 MaxTokens = 4096,
                 MaxAgentIterations = PositiveBoundedOption(options, "max-iterations",
                     AppSettings.DefaultMaxAgentIterations),
                 MaxAgentToolSteps = PositiveBoundedOption(options, "max-tool-steps",
                     AppSettings.DefaultMaxAgentToolSteps)
             };
+        }
+
+        private static int ContextTokens(Dictionary<string, string> options)
+        {
+            var raw = Value(options, "context-tokens", Environment.GetEnvironmentVariable("RNA_CONTEXT_TOKENS"));
+            if (string.IsNullOrWhiteSpace(raw)) return 0;
+            int value;
+            if (!int.TryParse(raw, out value) || value < 4096 || value > 262144)
+                throw new ArgumentException("--context-tokens/RNA_CONTEXT_TOKENS must be 4096–262144.");
+            return value;
+        }
+
+        private static bool? OptionalThinking(Dictionary<string, string> options)
+        {
+            var raw = Value(options, "thinking", Environment.GetEnvironmentVariable("RNA_THINKING"));
+            if (string.IsNullOrWhiteSpace(raw)) return null;
+            if (raw == "on" || raw == "true") return true;
+            if (raw == "off" || raw == "false") return false;
+            throw new ArgumentException("--thinking/RNA_THINKING must be on or off.");
+        }
+
+        private static bool ModelReady(AppSettings settings, out string digest)
+        {
+            digest = null;
+            Uri endpoint;
+            if (!Uri.TryCreate(settings.BaseUrl, UriKind.Absolute, out endpoint) ||
+                !endpoint.IsLoopback || endpoint.Port != 11434)
+            {
+                digest = Environment.GetEnvironmentVariable("RNA_MODEL_DIGEST")?.Trim();
+                return true;
+            }
+            try
+            {
+                using (var client = new HttpClient { Timeout = TimeSpan.FromSeconds(8) })
+                {
+                    var tags = JObject.Parse(client.GetStringAsync(
+                        new Uri(endpoint.GetLeftPart(UriPartial.Authority) + "/api/tags"))
+                        .GetAwaiter().GetResult());
+                    foreach (var item in tags["models"] as JArray ?? new JArray())
+                    {
+                        var name = (string)item["name"];
+                        if (name == settings.Model || name == settings.Model + ":latest")
+                        {
+                            digest = (string)item["digest"];
+                            break;
+                        }
+                    }
+                    if (!string.IsNullOrWhiteSpace(digest))
+                    {
+                        using (var body = new StringContent(
+                            JsonConvert.SerializeObject(new { model = settings.Model }), Encoding.UTF8, "application/json"))
+                        using (var response = client.PostAsync(
+                            new Uri(endpoint.GetLeftPart(UriPartial.Authority) + "/api/show"), body)
+                            .GetAwaiter().GetResult())
+                        {
+                            response.EnsureSuccessStatusCode();
+                            var show = JObject.Parse(response.Content.ReadAsStringAsync()
+                                .GetAwaiter().GetResult());
+                            var actualContext = OllamaContextTokens((string)show["parameters"]);
+                            if (actualContext > 0 &&
+                                ModelContextBudget.ContextWindowTokens(settings) > actualContext)
+                            {
+                                Console.Error.WriteLine("RNAssistant context exceeds the Ollama profile's num_ctx: " +
+                                    ModelContextBudget.ContextWindowTokens(settings) + " > " + actualContext);
+                                return false;
+                            }
+                            return true;
+                        }
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                Console.Error.WriteLine("Ollama endpoint/model check failed: " + ex.Message);
+                return false;
+            }
+            Console.Error.WriteLine("Ollama model is unavailable or has no digest: " + settings.Model);
+            return false;
+        }
+
+        private static int OllamaContextTokens(string parameters)
+        {
+            foreach (var line in (parameters ?? string.Empty).Split('\n'))
+            {
+                var parts = line.Split((char[])null, StringSplitOptions.RemoveEmptyEntries);
+                int value;
+                if (parts.Length == 2 && parts[0] == "num_ctx" && int.TryParse(parts[1], out value))
+                    return value;
+            }
+            return 0;
         }
 
         private static bool EndpointReady(AppSettings settings, out string key)
@@ -336,14 +446,14 @@ namespace RNAssistant.Cli
             Console.WriteLine("rna workspace open <path> [--read-only]");
             Console.WriteLine("rna env --workspace <path>");
             Console.WriteLine("rna sessions --workspace <path> [--jsonl]");
-            Console.WriteLine("rna run --workspace <path> (--message <text> | --task-file <file>) [--session <id>] [--profile development] [--model <name>] [--base-url <url>] [--max-iterations <1..256>] [--max-tool-steps <1..4096>] [--expect-files <comma-separated paths>] [--min-reads <n>] [--min-writes <n>] [--require-web-verify] [--jsonl]");
+            Console.WriteLine("rna run --workspace <path> (--message <text> | --task-file <file>) [--session <id>] [--profile development] [--model <name>] [--base-url <url>] [--context-tokens <n>] [--reasoning-mode <mode>] [--thinking on|off] [--max-iterations <1..256>] [--max-tool-steps <1..4096>] [--expect-files <comma-separated paths>] [--min-reads <n>] [--min-writes <n>] [--require-web-verify] [--jsonl]");
             Console.WriteLine("rna inspect --workspace <path> --session <id> [--jsonl]");
             Console.WriteLine("rna recover --workspace <path> --path <relative-path> [--jsonl]  (inspect an uncertain file effect)");
             Console.WriteLine("rna verify --workspace <path> [--entry index.html] [--jsonl]  (isolated static web smoke)");
             Console.WriteLine("rna resume --workspace <path> --session <id> [--jsonl]  (close an abandoned run, show pending action or request new input; never replay tools)");
-            Console.WriteLine("rna approve --workspace <path> --session <id> --pending <id> [--base-url <url>] [--model <name>] [--jsonl]");
+            Console.WriteLine("rna approve --workspace <path> --session <id> --pending <id> [--base-url <url>] [--model <name>] [--context-tokens <n>] [--reasoning-mode <mode>] [--jsonl]");
             Console.WriteLine("rna deny --workspace <path> --session <id> --pending <id> [--jsonl]");
-            Console.WriteLine("LLM settings: RNA_BASE_URL, RNA_MODEL, RNA_API_KEY or OPENAI_API_KEY. Keys are never command arguments.");
+            Console.WriteLine("LLM settings: RNA_BASE_URL, RNA_MODEL, RNA_CONTEXT_TOKENS, RNA_REASONING_MODE, RNA_THINKING, RNA_MODEL_DIGEST, RNA_API_KEY or OPENAI_API_KEY. Keys are never command arguments.");
             Console.WriteLine("Optional state root: RNA_STATE_ROOT (default: user application data).");
             Console.WriteLine("Exit: 0 command completed, 2 arguments, 3 input needed, 4 dependency, 5 failure, 130 cancelled.");
         }
