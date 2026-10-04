@@ -161,6 +161,7 @@
     <Compile Include="ModelProtocol\ConversationResponseSchemaBuilder.cs" />
     <Compile Include="ModelProtocol\ConversationResponseHistoryReader.cs" />
     <Compile Include="Models\VbaModels.cs" />
+    <Compile Include="Models\ResourceFindReadModels.cs" />
     <Compile Include="Llm\LlmClient.cs" />
     <Compile Include="Llm\LlmHttpTransport.cs" />
     <Compile Include="Llm\LlmMessageBuilder.cs" />
@@ -184,6 +185,12 @@
     <Compile Include="Services\ContextNormalizer.cs" />
     <Compile Include="Services\ResourceUri.cs" />
     <Compile Include="Services\ResourceProviderRouter.cs" />
+    <Compile Include="Services\ModelContextCompiler.cs" />
+    <Compile Include="Services\ModelResultProjection.cs" />
+    <Compile Include="Services\ToolResultMaterialization.cs" />
+    <Compile Include="Services\ToolResultHistoryReader.cs" />
+    <Compile Include="Services\ContextClaimProjection.cs" />
+    <Compile Include="Llm\PromptBudgetExceededException.cs" />
     <Compile Include="Services\WorkspaceFileResourceProvider.cs" />
     <Compile Include="Services\ChartArtifactBuilder.cs" />
     <Compile Include="Services\ChartArtifactPayload.cs" />

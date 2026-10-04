@@ -6,17 +6,6 @@ using RNAssistant.Core.Models;
 
 namespace RNAssistant.Office.Services
 {
-    internal sealed class PromptBudgetExceededException : InvalidOperationException
-    {
-        public bool CanCompact { get; private set; }
-
-        public PromptBudgetExceededException(string message, bool canCompact)
-            : base(message)
-        {
-            CanCompact = canCompact;
-        }
-    }
-
     internal sealed class PromptBudgetComposer
     {
 

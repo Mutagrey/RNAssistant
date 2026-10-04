@@ -94,7 +94,7 @@ namespace RNAssistant.Office.Services
             owner._catalogGeneration = catalogGeneration;
             owner._payloads = payloads;
             owner._skillSnapshot = captureSkills == null ? new SkillCatalogSnapshot(skills) : captureSkills();
-            owner._compiler = new ModelContextCompiler(payloads);
+            owner._compiler = new ModelContextCompiler(payloads, projection: ModelToolResultProjection.Instance);
             await owner.BuildMessagesAsync(mode, text, session, context, settings, runnableCatalog,
                 skills, attachments, replayCurrentUserInHistory, progress, cancellationToken).ConfigureAwait(false);
             owner._runCache = new LlmRunCache();
@@ -534,7 +534,7 @@ namespace RNAssistant.Office.Services
                 Math.Max(0, Math.Min(budget / 3, budget - ContextWorkingSet.EstimateCost(required.Concat(facts), _settings))));
             facts.AddRange(workingSet.Messages);
             return _compiler.Compile(frozen, required, facts, _context?.Notes, _runnableCatalog,
-                _settings, budget, enforceBudget, workingSet);
+                _settings, budget, enforceBudget, workingSet.IncludedBodies, workingSet.OmittedBodies);
         }
 
         private ChatMessage MaterializeToolResultMessage(

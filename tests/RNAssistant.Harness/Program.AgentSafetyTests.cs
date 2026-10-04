@@ -657,7 +657,7 @@ namespace RNAssistant.Harness
                     TraceStepId = Guid.NewGuid().ToString("N")
                 }
             };
-            request.CompileRepair = notice => new ModelContextCompiler().Compile(
+            request.CompileRepair = notice => new ModelContextCompiler(projection: ModelToolResultProjection.Instance).Compile(
                 new ModelAuthoritySnapshot(new ResourceAuthoritySnapshotSet(new ResourceAuthoritySnapshot[0]),
                     "test-tools", new SkillCatalogSnapshot(new SkillDefinition[0]), null, request.AcceptedMessages.Count),
                 request.AcceptedMessages, new[] { notice }, null, request.CallableTools, request.Settings,
@@ -1560,7 +1560,7 @@ namespace RNAssistant.Harness
                     ModelToolResultProjection.Project(message)).ToList();
                 var authority = new ModelAuthoritySnapshot(new ResourceAuthoritySnapshotSet(new ResourceAuthoritySnapshot[0]),
                     "test-tools", new SkillCatalogSnapshot(new SkillDefinition[0]), null, session.Messages.Count);
-                var prompt = new ModelContextCompiler().Compile(authority, new ChatMessage[0],
+                var prompt = new ModelContextCompiler(projection: ModelToolResultProjection.Instance).Compile(authority, new ChatMessage[0],
                     PromptBudgetComposer.ConversationHistory(session, true, false), null, new ToolCatalogEntry[0],
                     new AppSettings(), 4096, true).Messages.ToList();
                 foreach (var projection in new[] { projected, prompt })
@@ -1829,7 +1829,7 @@ namespace RNAssistant.Harness
             var wordTool = new ToolCatalogEntry { Id = WordToolIds.ReplaceText,
                 Policy = new ToolPolicy(ToolEffect.Write, ToolVerification.Tool, false, false,
                     new[] { ChatModes.Agent }) };
-            var wordContext = new ModelContextCompiler().Compile(
+            var wordContext = new ModelContextCompiler(projection: ModelToolResultProjection.Instance).Compile(
                 new ModelAuthoritySnapshot(new ResourceAuthoritySnapshotSet(new ResourceAuthoritySnapshot[0]),
                     "projection-tools", new SkillCatalogSnapshot(new SkillDefinition[0]), null, 2),
                 new ChatMessage[0], new[] { wordCall, wordResult }, null,
@@ -1902,7 +1902,7 @@ namespace RNAssistant.Harness
             var oldHtmlTool = new ToolCatalogEntry { Id = HtmlWorkspaceToolCatalog.WriteFileToolId,
                 Policy = new ToolPolicy(ToolEffect.Write, ToolVerification.Tool, false, false,
                     new[] { ChatModes.Agent }) };
-            var nextAfterHtml = new ModelContextCompiler().Compile(
+            var nextAfterHtml = new ModelContextCompiler(projection: ModelToolResultProjection.Instance).Compile(
                 new ModelAuthoritySnapshot(new ResourceAuthoritySnapshotSet(new ResourceAuthoritySnapshot[0]),
                     "projection-tools", new SkillCatalogSnapshot(new SkillDefinition[0]), null, 2),
                 new ChatMessage[0], new[] { oldHtmlCall, oldHtmlResult }, null,
@@ -1923,7 +1923,7 @@ namespace RNAssistant.Harness
             var replayResult = AgentJsonProtocol.CreateToolResultMessage(
                 new ToolInvocation { ToolCallId = "replay_find", ToolId = ResourceToolCatalog.FindToolId },
                 TerminalToolResult.Ok("Found.", "{\"items\":[]}"));
-            var replayed = new ModelContextCompiler().Compile(
+            var replayed = new ModelContextCompiler(projection: ModelToolResultProjection.Instance).Compile(
                 new ModelAuthoritySnapshot(new ResourceAuthoritySnapshotSet(new ResourceAuthoritySnapshot[0]),
                     "projection-tools", new SkillCatalogSnapshot(new SkillDefinition[0]), null, 2),
                 new ChatMessage[0], new[] { replayCall, replayResult }, null,
@@ -2002,7 +2002,7 @@ namespace RNAssistant.Harness
                     false,
                     new[] { ChatModes.Agent })
             };
-            var folded = new ModelContextCompiler().Compile(
+            var folded = new ModelContextCompiler(projection: ModelToolResultProjection.Instance).Compile(
                 new ModelAuthoritySnapshot(
                     new ResourceAuthoritySnapshotSet(
                         new ResourceAuthoritySnapshot[0]),
@@ -2043,7 +2043,7 @@ namespace RNAssistant.Harness
                     }
                 }
             };
-            var claimProjection = new ModelContextCompiler().Compile(
+            var claimProjection = new ModelContextCompiler(projection: ModelToolResultProjection.Instance).Compile(
                 new ModelAuthoritySnapshot(
                     new ResourceAuthoritySnapshotSet(
                         new ResourceAuthoritySnapshot[0]),

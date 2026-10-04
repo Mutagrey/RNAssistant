@@ -2,13 +2,13 @@ using System;
 using RNAssistant.Core.ModelProtocol;
 using RNAssistant.Core.Models;
 
-namespace RNAssistant.Office.Services
+namespace RNAssistant.Core.Services
 {
-    internal static class ToolResultHistoryReader
+    public static class ToolResultHistoryReader
     {
         private const string Prefix = "TOOL_RESULT:";
 
-        internal static bool TryRead(ChatMessage message, out ToolResultWireReadResult result, out string error)
+        public static bool TryRead(ChatMessage message, out ToolResultWireReadResult result, out string error)
         {
             result = null;
             error = null;

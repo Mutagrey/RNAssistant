@@ -28,7 +28,7 @@ RNAssistant is a local Office assistant for Word, Excel, PowerPoint, and Outlook
 Workspace-first migration is active under [ADR-0013](decisions/ADR-0013-workspace-first-runtime.md).
 The development CLI opens ordinary folders and workspace chats without a document
 authority. It references Net8 Core and Runtime projects and uses the existing
-kernel, model protocol, tool runtime and canonical stores. The Office UI still
+kernel, model protocol, tool runtime, frozen Core `ModelContextCompiler` and canonical stores. The Office UI still
 uses its document-owned composition until the M6–M9 cutovers; this is an in-flight
 architecture, not a claim that the UI and CLI have identical context preparation.
 
@@ -43,8 +43,8 @@ static WebView UI
                 -> host-specific COM adapters
 ```
 
-- `RNAssistant.Core` cannot reference Office, VSTO, WinForms, or WebView2.
-- `RNAssistant.Office` owns host-neutral orchestration, session services, prompt assembly, transcripts, and tool execution. It cannot contain host-specific COM interop.
+- `RNAssistant.Core` cannot reference Office, VSTO, WinForms, or WebView2. It owns the shared frozen `ModelContextCompiler` and pure model result projection.
+- `RNAssistant.Office` owns host-neutral Office orchestration, session services, prompt preparation, domain result projection, transcripts, and tool execution. It cannot contain host-specific COM interop. Office and workspace Runtime prepare authority before invoking the same Core compiler.
 - `RNAssistant.OfficeHosts` and `RNAssistant.*AddIn` own host adapters and Office wiring only. Host document identity is owned by `RNAssistant.OfficeHosts/Identity/DocumentIdentity.cs`, while the dynamic COM/VBE backend is owned by `RNAssistant.OfficeHosts/Vba/VbaProjectSupport*.cs`; host-neutral Office code cannot consume either helper.
 - `web` is static HTML/CSS/JS with no build pipeline.
 
@@ -164,9 +164,10 @@ current callable tools. `tool` dispatches calls, `continue` advances a bounded
 no-call step, and `done`/`blocked`/`needs_input` end the model turn. Immutable
 `RunViewState` projects lifecycle from `KernelState` and effect health from
 source-owned evidence. `Core.Tools` descriptor/policy/binding and
-`Office.Runtime.ToolRuntime` own exact typed registrations. Native
+`Core.Tools.ToolRuntime` own exact typed registrations. Native
 `common.resources_find/read` handlers use the internal gateway without public
-aliases. `ModelToolResultProjection` keeps exact resource/capability evidence in
+aliases. Core `ModelResultProjection`, with Office's explicit pure
+`ModelToolResultProjection` extension, keeps exact resource/capability evidence in
 durable state while exposing semantic results to the model. Selected non-folded
 archived results hydrate complete CAS payloads when the calibrated request budget
 permits; a success marker cannot replace business data. Core `ToolResultWire`

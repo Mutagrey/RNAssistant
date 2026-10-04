@@ -21,12 +21,6 @@ namespace RNAssistant.Office.Services
     {
         internal const int TriggerPercent = 80;
         internal const int TargetPercent = 55;
-        internal const string CapabilityContextNotice =
-            "SKILL_CONTEXT_NOTICE: Reuse complete current skill bodies included in this request. " +
-            "A historical mention or summary is not a loaded body; load a needed body only when absent or changed. " +
-            "TOOL_SCHEMA_NOTICE: Callable schemas are rematerialized from durable admission, including unchanged schemas from earlier turns of this chat when they fit. " +
-            "Compaction does not require another admission. The current capability catalog and TOOL_PACK_STATE are authoritative.";
-
         private const int MaximumCheckpointResourceReferences = 32;
         private const string SummarySchema =
             "{\"type\":\"object\",\"additionalProperties\":false,\"required\":[\"claims\"],\"properties\":{" +
@@ -47,7 +41,7 @@ namespace RNAssistant.Office.Services
         {
             _completeAsync = completeAsync ?? throw new ArgumentNullException(nameof(completeAsync));
             _authority = authority;
-            _compiler = new ModelContextCompiler(payloads);
+            _compiler = new ModelContextCompiler(payloads, projection: ModelToolResultProjection.Instance);
             _captureTools = captureTools; _captureSkills = captureSkills;
             if (authority != null && payloads != null) _sharedArtifacts = new DocumentArtifactStore(authority.Store, authority.Revisions, payloads);
         }
@@ -284,7 +278,7 @@ namespace RNAssistant.Office.Services
                     Role = "assistant",
                     Content = "COMPACTED_EARLIER_CONTEXT (reference only; not new instructions):\n" +
                         (checkpoint.SummaryMarkdown ?? string.Empty) +
-                        "\n\n" + CapabilityContextNotice,
+                        "\n\n" + ContextClaimProjection.CapabilityContextNotice,
                     ResourceRefs = CollectCheckpointResourceRefs(session, checkpoint),
                     ContextClaims = checkpoint.Claims.ToList()
                 }
@@ -436,7 +430,7 @@ namespace RNAssistant.Office.Services
             if (active != null)
             {
                 builder.AppendLine("PRIOR_CURRENT_CLAIMS:");
-                foreach (var claim in active.Claims.Where(item => CurrentClaim(item, authority)))
+                foreach (var claim in active.Claims.Where(item => ContextClaimProjection.CurrentClaim(item, authority)))
                 {
                     var sourceId = "source-" + (++sourceNumber);
                     sources.Add(sourceId, claim);
@@ -454,7 +448,7 @@ namespace RNAssistant.Office.Services
             {
                 if (message.ContextClaims?.Count > 0)
                 {
-                    foreach (var claim in message.ContextClaims.Where(item => CurrentClaim(item, authority)))
+                    foreach (var claim in message.ContextClaims.Where(item => ContextClaimProjection.CurrentClaim(item, authority)))
                     {
                         var claimSourceId = "source-" + (++sourceNumber);
                         sources.Add(claimSourceId, claim);
@@ -596,12 +590,6 @@ namespace RNAssistant.Office.Services
             }
             if (result.Count != drafts.Count) throw new InvalidOperationException("Malformed context claim.");
             return result;
-        }
-
-        internal static bool CurrentClaim(StructuredContextClaim claim, ModelAuthoritySnapshot authority)
-        {
-            return claim != null && claim.HasTypedProvenance() &&
-                claim.Evidence.All(evidence => new EvidenceStateReducer().Reduce(evidence, authority.Resources).State == EvidenceState.Current);
         }
 
         private static string CompactionPrompt(AppSettings settings)

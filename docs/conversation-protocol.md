@@ -1248,7 +1248,7 @@ ID уже существуют; добавлять ещё один ID в арг�
 | Checkpoint с `SKILL_CONTEXT_NOTICE` и claims → compile | Notice есть до компиляции и отсутствует в отправляемой проекции | Compiler заменяет всё `Content` на `STRUCTURED_CONTEXT_CLAIMS`. Наличие другого общего skill prompt не делает потерю notice корректной |
 | Модель шесть раз возвращает одинаковый детерминированно ошибочный read | Шесть dispatch; остановка только `iteration_limit` | `AgentKernel` блокирует повтор byte-identical unknown-effect call, но не применяет общий no-progress/recovery guard к обычным ошибкам |
 
-Основные исходники: [compiler](../src/RNAssistant.Office/Services/ModelContextCompiler.cs),
+Основные исходники: [compiler](../src/RNAssistant.Core/Services/ModelContextCompiler.cs),
 [compactor](../src/RNAssistant.Office/Services/ContextCompactionService.cs),
 [session](../src/RNAssistant.Office/Services/ConversationModelSession.cs),
 [kernel](../src/RNAssistant.Core/Agent/AgentKernel.cs).

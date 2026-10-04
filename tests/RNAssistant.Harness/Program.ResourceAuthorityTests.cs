@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Linq;
 using Newtonsoft.Json.Linq;
 using RNAssistant.Core.Agent;
+using RNAssistant.Core.Llm;
 using RNAssistant.Core.ModelProtocol;
 using RNAssistant.Core.Models;
 using RNAssistant.Core.Services;
@@ -1102,7 +1103,7 @@ namespace RNAssistant.Harness
                             changeKind: "updated")
                     });
                 var frozen = new ModelAuthoritySnapshot(new ResourceAuthoritySnapshotSet(new ResourceAuthoritySnapshot[0]), "tools", new SkillCatalogSnapshot(null), null, 3);
-                var compiled = new ModelContextCompiler().Compile(frozen, new ChatMessage[0], new[] { call, result }, null, new ToolCatalogEntry[0], new AppSettings(), 1024);
+                var compiled = new ModelContextCompiler(projection: ModelToolResultProjection.Instance).Compile(frozen, new ChatMessage[0], new[] { call, result }, null, new ToolCatalogEntry[0], new AppSettings(), 1024);
                 AssertEqual(0, compiled.Receipt.HydratedPayloads, "terminal frame compiles without even a payload reader");
                 AssertTrue(string.Join("", compiled.Messages.Select(item => item.Content)).Length < 4096, "completed large source is not reserialized into prompt");
                 AssertTrue(string.Join("", compiled.Messages.Select(item => item.Content)).IndexOf(
@@ -1973,7 +1974,7 @@ namespace RNAssistant.Harness
                 AssertEqual(ContextNoteRole.UserInstruction, reloaded[1].Role, "event replay preserves explicit instruction role");
                 AssertEqual(instruction.InstructionPayload.Sha256, reloaded[1].InstructionPayload.Sha256, "event replay retains exact instruction payload");
                 AssertEqual(office.Evidence.Resource.Revision, reloaded[0].Evidence.Resource.Revision, "event replay retains exact observation revision");
-                var compiler = new ModelContextCompiler(payloads);
+                var compiler = new ModelContextCompiler(payloads, projection: ModelToolResultProjection.Instance);
                 Func<ModelAuthoritySnapshot, ContextNote[], ModelContextSnapshot> compile = (snapshot, notes) => compiler.Compile(snapshot,
                     new ChatMessage[0], new ChatMessage[0], notes, new ToolCatalogEntry[0], new AppSettings(), 4096);
                 var current = compile(frozen, reloaded.ToArray());
@@ -2044,7 +2045,7 @@ namespace RNAssistant.Harness
                 var authority = new ModelAuthoritySnapshot(new ResourceAuthoritySnapshotSet(new[] {
                     new ResourceAuthoritySnapshot(scope, 2, null, 0, new[] { ResourceHeadState.Known(after, 2) }) }),
                     "tools", new SkillCatalogSnapshot(null), null, 2);
-                var compiler = new ModelContextCompiler(payloads);
+                var compiler = new ModelContextCompiler(payloads, projection: ModelToolResultProjection.Instance);
                 var compiled = compiler.Compile(authority, new ChatMessage[0], history, null,
                     new ToolCatalogEntry[0], new AppSettings(), 4096);
                 var text = string.Join("\n", compiled.Messages.Select(item => item.Content));
@@ -2194,7 +2195,7 @@ namespace RNAssistant.Harness
                             Type = "function", ArgumentsJson = "{}" } } };
                 var frozen = new ModelAuthoritySnapshot(executor.ResourceAuthority.CaptureMany(new[] { scope }),
                     "tools", new SkillCatalogSnapshot(null), null, 2);
-                var compiled = new ModelContextCompiler(executor.Payloads).Compile(frozen, new ChatMessage[0],
+                var compiled = new ModelContextCompiler(executor.Payloads, projection: ModelToolResultProjection.Instance).Compile(frozen, new ChatMessage[0],
                     new[] { call, result }, null, new ToolCatalogEntry[0], new AppSettings(), 4096);
                 var text = string.Join("\n", compiled.Messages.Select(item => item.Content));
                 AssertContains(text, "CURRENT_HTML", "HTML source reaches the next model request");
@@ -2237,7 +2238,7 @@ namespace RNAssistant.Harness
             var authority = new ModelAuthoritySnapshot(new ResourceAuthoritySnapshotSet(new[] {
                 new ResourceAuthoritySnapshot(scope, 2, null, 0, new[] { ResourceHeadState.Known(r2, 2) }) }),
                 "tools1", new SkillCatalogSnapshot(null), new SchemaRegistrySnapshot(null), 2);
-            var compiled = new ModelContextCompiler().Compile(authority, new ChatMessage[0], new[] { call, result },
+            var compiled = new ModelContextCompiler(projection: ModelToolResultProjection.Instance).Compile(authority, new ChatMessage[0], new[] { call, result },
                 null, new ToolCatalogEntry[0], new AppSettings(), 1024);
             var text = string.Join("\n", compiled.Messages.Select(item => item.Content));
             AssertTrue(!text.Contains("OBSOLETE_BODY"), "stale payload excluded before tight budget");
@@ -2261,7 +2262,7 @@ namespace RNAssistant.Harness
                 new ToolResultMaterialization(RNAssistant.Core.Tools.Contracts.ToolResult.Ok("read",
                     new JObject { ["target"] = "VBA module: Module1", ["text"] = "CURRENT_READ" }.ToString()),
                     resourceEvidence: new[] { currentEvidence }), int.MaxValue, "tool");
-            var fresh = new ModelContextCompiler().Compile(authority, new ChatMessage[0], new[] { call, currentResult },
+            var fresh = new ModelContextCompiler(projection: ModelToolResultProjection.Instance).Compile(authority, new ChatMessage[0], new[] { call, currentResult },
                 null, new ToolCatalogEntry[0], new AppSettings(), 1024);
             AssertEqual(RNAssistant.Core.Tools.Contracts.ToolResultStatus.Ok,
                 ToolResultWire.Read(fresh.Messages.Last().Content).Result.Status,
@@ -2284,7 +2285,7 @@ namespace RNAssistant.Harness
                                 ["target"] = "VBA module: Module1", ["text"] = "RESULT_" + index }.ToString()),
                             resourceEvidence: new[] { currentEvidence }), int.MaxValue, "tool"));
                 }
-                var repeated = new ModelContextCompiler().Compile(authority, new ChatMessage[0],
+                var repeated = new ModelContextCompiler(projection: ModelToolResultProjection.Instance).Compile(authority, new ChatMessage[0],
                     repeatedFacts, null, new ToolCatalogEntry[0], new AppSettings(), 4096);
                 var repeatedText = string.Join("\n", repeated.Messages.Select(item => item.Content));
                 AssertContains(repeatedText, "RESULT_1", "earlier result survives equal evidence for " + toolId);
@@ -2296,7 +2297,7 @@ namespace RNAssistant.Harness
                 if (toolId == "common.resources_read")
                 {
                     repeatedFacts[3].Content = repeatedFacts[3].Content.Replace("RESULT_2", "RESULT_1");
-                    var identical = new ModelContextCompiler().Compile(authority, new ChatMessage[0],
+                    var identical = new ModelContextCompiler(projection: ModelToolResultProjection.Instance).Compile(authority, new ChatMessage[0],
                         repeatedFacts, null, new ToolCatalogEntry[0], new AppSettings(), 4096);
                     AssertEqual(3, identical.Messages.Count, "identical read folds only the earlier call/result pair");
                     var presentation = identical.Receipt.Messages.Single(item => item.MessageIndex == 0);
@@ -2333,7 +2334,7 @@ namespace RNAssistant.Harness
                         new ToolResultMaterialization(RNAssistant.Core.Tools.Contracts.ToolResult.Error("Patch rejected.",
                             "{\"payload_externalized\":true}")), int.MaxValue, role);
                     failure.Content = compact.Content;
-                    var replay = new ModelContextCompiler(payloads).Compile(authority, new ChatMessage[0],
+                    var replay = new ModelContextCompiler(payloads, projection: ModelToolResultProjection.Instance).Compile(authority, new ChatMessage[0],
                         new[] { mutationCall, failure }, null, new[] { mutationTool }, new AppSettings(), 16000);
                     var frame = replay.Messages.Single().Content;
                     var frameData = JObject.Parse(frame.Substring(frame.IndexOf('\n') + 1));
@@ -2347,7 +2348,7 @@ namespace RNAssistant.Harness
                         "semantic patch coordinates survive mutation folding and runtime-evidence sanitization");
                     AssertEqual(diagnostic, (string)frameData["data"]["currentSource"],
                         "archived mutation diagnostics are delivered completely within the request budget");
-                    RuntimeThrows<PromptBudgetExceededException>(() => new ModelContextCompiler(payloads).Compile(
+                    RuntimeThrows<PromptBudgetExceededException>(() => new ModelContextCompiler(payloads, projection: ModelToolResultProjection.Instance).Compile(
                         authority, new ChatMessage[0], new[] { mutationCall, failure }, null,
                         new[] { mutationTool }, new AppSettings(), 1024));
                 }
@@ -2385,9 +2386,16 @@ namespace RNAssistant.Harness
                     }
                 }
             };
-            RuntimeThrows<PromptBudgetExceededException>(() => new ModelContextCompiler().Compile(authority,
+            var omitted = new ModelContextCompiler(projection: ModelToolResultProjection.Instance).Compile(authority,
                 new ChatMessage[0], new[] { oversizedCall, oversizedResult },
-                null, new ToolCatalogEntry[0], new AppSettings(), 1024));
+                null, new ToolCatalogEntry[0], new AppSettings(), 1024);
+            var omission = JObject.Parse(omitted.Messages.Single().Content.Split(new[] { '\n' }, 2)[1]);
+            AssertTrue(!(bool)omission["observation"]["bodyIncluded"],
+                "oversized whole source becomes an explicit omission receipt");
+            AssertEqual("VBA module: Module1", (string)omission["observation"]["target"],
+                "omission retains the semantic target for a narrower read");
+            AssertTrue(!omitted.Messages.Any(message => (message.Content ?? "").Contains("CURRENT_BODY") ||
+                message.ResourceEvidence.Count > 0), "omitted source neither reaches the model nor authorizes a write");
             AssertEqual(RNAssistant.Core.Tools.Contracts.ToolResultStatus.Ok,
                 ToolResultWire.Read(oversizedResult.Content).Result.Status,
                 "budget refusal does not rewrite durable source evidence");

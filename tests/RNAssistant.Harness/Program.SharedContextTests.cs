@@ -106,7 +106,7 @@ namespace RNAssistant.Harness
                 AssertTrue(!direct.Content.Contains("Observed source conclusion") && !direct.Content.Contains(user.Id), "direct projection cannot expose raw archive");
                 Func<ModelAuthoritySnapshot> capture = () => new ModelAuthoritySnapshot(authority.CaptureMany(new[] { scope }),
                     "tools", new SkillCatalogSnapshot(null), new SchemaRegistrySnapshot(null), 0);
-                Func<ChatMessage, ModelContextSnapshot> compile = input => new ModelContextCompiler(executor.Payloads).Compile(capture(),
+                Func<ChatMessage, ModelContextSnapshot> compile = input => new ModelContextCompiler(executor.Payloads, projection: ModelToolResultProjection.Instance).Compile(capture(),
                     new ChatMessage[0], new[] { input }, null, new ToolCatalogEntry[0], new AppSettings(), 3000);
                 var current = compile(message);
                 AssertContains(current.Messages.Single().Content, "Observed source conclusion", "compiler admits current supported claim");

@@ -1,3 +1,4 @@
+using RNAssistant.Core.Services;
 using System;
 using System.Linq;
 using System.Text;
@@ -298,7 +299,7 @@ namespace RNAssistant.Harness
                     Content = "{\"target\":\"Module1\"}", ResultPayload = source,
                     ResourceEvidence = new System.Collections.Generic.List<ResourceEvidence> { new ResourceEvidence("fragment", scope,
                         reference, "source", new ResourceCoverage(ResourceCoverageKinds.LineRange, start: 1, end: 2), true, 1, source) } };
-                var compiler = new ModelContextCompiler(blobs);
+                var compiler = new ModelContextCompiler(blobs, projection: ModelToolResultProjection.Instance);
                 var snapshot = compiler.Compile(authority, new ChatMessage[0], new[] { full, excluded, fragment }, null,
                     new RNAssistant.Core.Tools.ToolCatalogEntry[0], new AppSettings(), 10000);
                 AssertEqual(ContextPresentationKind.Full, snapshot.Receipt.Messages.Single(e => e.SourceMessageId == full.Id).Presentation, "unchanged text is full");

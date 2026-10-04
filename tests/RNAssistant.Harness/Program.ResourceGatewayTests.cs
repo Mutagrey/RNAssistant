@@ -2298,7 +2298,7 @@ namespace RNAssistant.Harness
             historicMessage.ResourceRefs.Add(ArtifactReference(session, session.Artifacts.Last()));
             var historicUri = ArtifactUri(session, session.Artifacts.Last());
 
-            var prompt = new ModelContextCompiler().BuildPreview(
+            var prompt = new ModelContextCompiler(projection: ModelToolResultProjection.Instance).BuildPreview(
                 ChatModes.Agent,
                 "New request", adapter, new ToolCatalogEntry[0], new SkillDefinition[0],
                 new DocumentContext(), new AppSettings(), session, null);

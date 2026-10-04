@@ -95,6 +95,7 @@ namespace RNAssistant.Cli
                 Output(jsonl, "session", new { session.Id, session.WorkspaceId, session.Title,
                     session.Model, session.Mode, session.Revision, session.LastRun?.Status,
                     modelConfiguration = session.LastRun?.ModelConfiguration,
+                    contextReceipt = session.LastContextReceipt,
                     acceptance = session.LastRun?.WorkspaceAcceptance,
                     interruptedToolId = session.LastRun?.InterruptedToolId,
                     interruptedPath = session.LastRun?.InterruptedFilePath,

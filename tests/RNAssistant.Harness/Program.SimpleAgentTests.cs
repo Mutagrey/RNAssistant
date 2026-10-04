@@ -487,7 +487,7 @@ namespace RNAssistant.Harness
                     Enabled = true
                 }
             };
-            var messages = new ModelContextCompiler().BuildPreview(
+            var messages = new ModelContextCompiler(projection: ModelToolResultProjection.Instance).BuildPreview(
                 ChatModes.Agent,
                 "Create a report.", adapter, tools, skills, new DocumentContext(), new AppSettings(),
                 NewSession(adapter), null);
@@ -692,7 +692,7 @@ namespace RNAssistant.Harness
                     ArgumentSchemaJson = "{\"type\":\"object\",\"properties\":{\"value\":{\"type\":\"string\"}},\"required\":[],\"additionalProperties\":false}"
                 }
             };
-            var prompt = FlattenSimple(new ModelContextCompiler().BuildPreview(
+            var prompt = FlattenSimple(new ModelContextCompiler(projection: ModelToolResultProjection.Instance).BuildPreview(
                 ChatModes.Agent,
                 "Test", adapter, tools, null, new DocumentContext(), new AppSettings(), NewSession(adapter), null));
             AssertContains(prompt, "excel.good", "valid tool included");
@@ -1670,7 +1670,7 @@ namespace RNAssistant.Harness
                     currentPack.Tools.Select(tool => tool.Id), StringComparer.Ordinal);
                 legacyCoreIds.UnionWith(legacyVbaIds);
                 var legacyCore = runnable.Where(tool => legacyCoreIds.Contains(tool.Id)).ToArray();
-                var composer = new ModelContextCompiler();
+                var composer = new ModelContextCompiler(projection: ModelToolResultProjection.Instance);
                 var currentMessages = composer.BuildPreview(
                     ChatModes.Agent, userText, adapter, currentPack.Tools, null, context,
                     settings, session, null, false, 60000,
@@ -2850,7 +2850,7 @@ namespace RNAssistant.Harness
             var advanced = new ModelAuthoritySnapshot(new ResourceAuthoritySnapshotSet(new[] {
                 new ResourceAuthoritySnapshot(scope, 2, null, 0, new[] { ResourceHeadState.Known(new ResourceRef(reference.Uri, "r2"), 2) }) }),
                 "tools", new SkillCatalogSnapshot(null), new SchemaRegistrySnapshot(null), 0);
-            var afterChange = new ModelContextCompiler().Compile(advanced, new ChatMessage[0], new[] {
+            var afterChange = new ModelContextCompiler(projection: ModelToolResultProjection.Instance).Compile(advanced, new ChatMessage[0], new[] {
                 new ChatMessage { Role = "assistant", ContextClaims = new List<StructuredContextClaim> { saved.Claims.Single(), observation.Claims.Single() } } },
                 null, new ToolCatalogEntry[0], new AppSettings(), 1024);
             AssertTrue(!afterChange.Messages.Single().Content.Contains("Observed source result."), "source revision advance excludes the observation claim");
@@ -2871,12 +2871,12 @@ namespace RNAssistant.Harness
             var authority = new ModelAuthoritySnapshot(new ResourceAuthoritySnapshotSet(new ResourceAuthoritySnapshot[0]),
                 "tools", new SkillCatalogSnapshot(null), new SchemaRegistrySnapshot(null), 0);
             var message = new ChatMessage { Role = "assistant", ContextClaims = new List<StructuredContextClaim> { typed } };
-            var compiled = new ModelContextCompiler().Compile(authority, new ChatMessage[0], new[] { message }, null,
+            var compiled = new ModelContextCompiler(projection: ModelToolResultProjection.Instance).Compile(authority, new ChatMessage[0], new[] { message }, null,
                 new ToolCatalogEntry[0], new AppSettings(), 1024);
             AssertContains(compiled.Messages.Single().Content, "\"kind\":\"constraint\"", "model projection preserves type after persistence");
             AssertTrue(!compiled.Messages.Single().Content.Contains(typed.SourceMessageIds.Single()), "durable source ids remain runtime-owned");
             typed.Kind = null;
-            var rejected = new ModelContextCompiler().Compile(authority, new ChatMessage[0], new[] { message }, null,
+            var rejected = new ModelContextCompiler(projection: ModelToolResultProjection.Instance).Compile(authority, new ChatMessage[0], new[] { message }, null,
                 new ToolCatalogEntry[0], new AppSettings(), 1024);
             AssertTrue(!rejected.Messages.Single().Content.Contains(typed.Text), "untyped claims cannot replay as current context");
             saved.PromptVersion = "context-claims-v3";

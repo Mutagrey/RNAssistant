@@ -12,6 +12,28 @@
 новая возможность требует явной задачи, scope и owner; дефекты работающей системы
 приоритетнее расширения без конкретного пользовательского результата.
 
+## CLI continuation after completed-operation receipts — 2026-10-05
+
+Owner: model context / CLI evaluation. The fresh Gemma 12B counter task after the
+shared-compiler integration created `index.html` then repeated the same creation;
+runtime stopped it and acceptance failed. Traces retain both the verified change
+and subsequent errors as the compiler's existing completed-operation receipts.
+Isolate continuation behavior using the saved request and a comparable baseline /
+another model before changing projection or blaming model size. Closure needs a
+real multi-step create/read/verify result with the same production compiler and
+preserved mutation guards. Run metadata and local evidence are in [PROGRESS](PROGRESS.md).
+
+## SDK project source-inclusion audit — 2026-10-05
+
+Owner: harness / project structure. `harness: production projects include all
+source files` assumes explicit `Compile Include` for every project and reports
+SDK-default sources as missing in Core.Net8, Runtime and CLI. Teach it to distinguish
+SDK inclusion/exclusion from old-style projects without weakening the latter's
+explicit-source check. Direct XML checks of the changed Core/Office old-style
+projects found all 156/326 sources included and no removed file entries; the CLI
+build and dependency-boundary tests passed. This is a pre-existing test-scope gap,
+not evidence of Windows compilation.
+
 ## Large Excel search without manual range slicing — 2026-09-30
 
 Owner: Excel search / Resource Fabric. Literal queries up to 255 characters without
@@ -115,15 +137,6 @@ search fails the existing
 (`runtime-secret-id` is searchable). Reconcile with the parallel projection fixes
 before declaring this integration gate closed. This failure is not changed by the
 working-set purpose/read-hint implementation. This is not Windows evidence.
-
-Model-context inspection follow-up (2026-10-02):
-`resource cutover: correctness before budget` fails with
-`Expected PromptBudgetExceededException` in the current working tree and with
-`ModelContextCompiler.cs` plus its original fixture from `a6d56268` substituted in
-an isolated harness build. Owner: resource context / harness. Reconcile the old
-oversized-body exception expectation with the current explicit source-omission
-contract; this inspector change does not alter admission/omission policy. The new
-inspector-specific checks pass. Windows qualification remains separate.
 
 ## Plan operation identity edge case — 2026-09-08
 

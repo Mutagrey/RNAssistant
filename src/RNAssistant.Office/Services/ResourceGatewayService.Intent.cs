@@ -14,7 +14,7 @@ namespace RNAssistant.Office.Services
         private const int MaximumIntentResults = 20;
         private const int IntentSnippetCharacters = 600;
 
-        public ResourceIntentFindResult Find(
+        public ResourceFindPage Find(
             ChatSession session,
             string query,
             string scope)
@@ -33,11 +33,11 @@ namespace RNAssistant.Office.Services
                 state.Scope = IntentScope(direct, state.Type);
                 state.Target = IntentTarget(direct);
                 var candidate = ProjectIntentCandidate(state, null);
-                return new ResourceIntentFindResult
+                return new ResourceFindPage
                 {
                     Scope = scope,
                     Query = query,
-                    Items = new List<ResourceIntentCandidate> { candidate },
+                    Items = new List<ResourceFindCandidate> { candidate },
                     Total = 1,
                     Complete = true,
                     Empty = false,
@@ -86,7 +86,7 @@ namespace RNAssistant.Office.Services
                     matches == null ? null : Match(matches, state.Reference.Uri)))
                 .ToList();
             var resultTruncated = sourceTruncated || selected.Count > shown.Count;
-            return new ResourceIntentFindResult
+            return new ResourceFindPage
             {
                 Scope = scope,
                 Query = query.Length == 0 ? null : query,
@@ -646,13 +646,13 @@ namespace RNAssistant.Office.Services
                 state.Target = IntentTarget(state.Descriptor);
         }
 
-        private static ResourceIntentCandidate ProjectIntentCandidate(
+        private static ResourceFindCandidate ProjectIntentCandidate(
             ResourceIntentState state,
             ResourceSearchMatch match)
         {
             string description;
             state.Descriptor.Metadata.TryGetValue("description", out description);
-            return new ResourceIntentCandidate
+            return new ResourceFindCandidate
             {
                 Description = description,
                 Target = state.Target,
@@ -1028,68 +1028,6 @@ namespace RNAssistant.Office.Services
             public string Scope { get; set; }
             public string Target { get; set; }
         }
-    }
-
-    internal sealed class ResourceIntentFindResult
-    {
-        [Newtonsoft.Json.JsonProperty("scope")]
-        public string Scope { get; set; }
-        [Newtonsoft.Json.JsonProperty("query")]
-        public string Query { get; set; }
-        [Newtonsoft.Json.JsonProperty("items")]
-        public List<ResourceIntentCandidate> Items { get; set; }
-        [Newtonsoft.Json.JsonProperty("total")]
-        public int Total { get; set; }
-        [Newtonsoft.Json.JsonProperty("complete")]
-        public bool Complete { get; set; }
-        [Newtonsoft.Json.JsonProperty("empty")]
-        public bool Empty { get; set; }
-        [Newtonsoft.Json.JsonProperty("partial")]
-        public bool Partial { get; set; }
-        [Newtonsoft.Json.JsonProperty("refineQuery")]
-        public bool RefineQuery { get; set; }
-        [Newtonsoft.Json.JsonProperty("availabilityHint", NullValueHandling = Newtonsoft.Json.NullValueHandling.Ignore)]
-        public string AvailabilityHint { get; set; }
-        [Newtonsoft.Json.JsonProperty("unavailableScopes")]
-        public List<string> UnavailableScopes { get; set; }
-        [Newtonsoft.Json.JsonIgnore]
-        public List<ResourceRef> ResourceRefs { get; set; }
-    }
-
-    internal sealed class ResourceIntentCandidate
-    {
-        [Newtonsoft.Json.JsonProperty("sectionTitle", NullValueHandling = Newtonsoft.Json.NullValueHandling.Ignore)]
-        public string SectionTitle { get; set; }
-        [Newtonsoft.Json.JsonProperty("description", NullValueHandling = Newtonsoft.Json.NullValueHandling.Ignore)]
-        public string Description { get; set; }
-        [Newtonsoft.Json.JsonIgnore]
-        public IReadOnlyList<ResourceEvidence> Evidence { get; set; }
-        [Newtonsoft.Json.JsonProperty("target")]
-        public string Target { get; set; }
-        [Newtonsoft.Json.JsonProperty("type")]
-        public string Type { get; set; }
-        [Newtonsoft.Json.JsonProperty("scope")]
-        public string Scope { get; set; }
-        [Newtonsoft.Json.JsonProperty("title")]
-        public string Title { get; set; }
-        [Newtonsoft.Json.JsonProperty("mimeType")]
-        public string MimeType { get; set; }
-        [Newtonsoft.Json.JsonProperty("mutable")]
-        public bool Mutable { get; set; }
-        [Newtonsoft.Json.JsonProperty("byteLength")]
-        public long? ByteLength { get; set; }
-        [Newtonsoft.Json.JsonProperty("createdUtc")]
-        public DateTime? CreatedUtc { get; set; }
-        [Newtonsoft.Json.JsonProperty("representations")]
-        public List<string> Representations { get; set; }
-        [Newtonsoft.Json.JsonProperty("usage", NullValueHandling = Newtonsoft.Json.NullValueHandling.Ignore)]
-        public string Usage { get; set; }
-        [Newtonsoft.Json.JsonProperty("matchRepresentation")]
-        public string MatchRepresentation { get; set; }
-        [Newtonsoft.Json.JsonProperty("snippet")]
-        public string Snippet { get; set; }
-        [Newtonsoft.Json.JsonIgnore]
-        public ResourceRef Reference { get; set; }
     }
 
     internal sealed class ResourceIntentTarget

@@ -6,27 +6,27 @@ using RNAssistant.Core.ModelProtocol;
 using RNAssistant.Core.Models;
 using TerminalResult = RNAssistant.Core.Tools.Contracts.ToolResult;
 
-namespace RNAssistant.Office.Services
+namespace RNAssistant.Core.Services
 {
     // Request-local projection only. Replacing/bounding this payload cannot change
     // the immutable terminal result and execution evidence already recorded by the kernel.
-    internal sealed class ToolResultMaterialization
+    public sealed class ToolResultMaterialization
     {
         private ResourceRef _resultResource;
-        internal TerminalResult Result { get; private set; }
-        internal JToken Data { get; private set; }
-        internal IReadOnlyList<ChatAttachment> ModelAttachments { get; private set; }
-        internal IReadOnlyList<ResourceEvidence> ResourceEvidence { get; private set; }
-        internal ResourceEffect ResourceEffect { get; private set; }
-        internal RNAssistant.Core.Tools.ToolExecutionProgress ExecutionProgress { get; set; }
-        internal string AuthorityCommitId { get; private set; }
-        internal ResourceRef ResultResource
+        public TerminalResult Result { get; private set; }
+        public JToken Data { get; private set; }
+        public IReadOnlyList<ChatAttachment> ModelAttachments { get; private set; }
+        public IReadOnlyList<ResourceEvidence> ResourceEvidence { get; private set; }
+        public ResourceEffect ResourceEffect { get; private set; }
+        public RNAssistant.Core.Tools.ToolExecutionProgress ExecutionProgress { get; set; }
+        public string AuthorityCommitId { get; private set; }
+        public ResourceRef ResultResource
         {
             get { return _resultResource == null ? null : new ResourceRef(_resultResource.Uri, _resultResource.Revision); }
         }
-        internal string ResultResourceKind { get; private set; }
+        public string ResultResourceKind { get; private set; }
 
-        internal ToolResultMaterialization(TerminalResult result,
+        public ToolResultMaterialization(TerminalResult result,
             IEnumerable<ChatAttachment> attachments = null,
             ResourceRef resultResource = null, string resultResourceKind = null,
             JToken data = null, IEnumerable<ResourceEvidence> resourceEvidence = null,
@@ -42,13 +42,13 @@ namespace RNAssistant.Office.Services
             AuthorityCommitId = authorityCommitId;
         }
 
-        internal void ReplaceResult(TerminalResult result, JToken data = null)
+        public void ReplaceResult(TerminalResult result, JToken data = null)
         {
             Result = result ?? throw new ArgumentNullException(nameof(result));
             Data = data ?? ToolResultWire.ParseData(result.DataJson);
         }
 
-        internal void IncludeResultResource(ResourceRef reference, string kind)
+        public void IncludeResultResource(ResourceRef reference, string kind)
         {
             if (reference == null) throw new ArgumentNullException(nameof(reference));
             var resources = Result.Resources.ToList();

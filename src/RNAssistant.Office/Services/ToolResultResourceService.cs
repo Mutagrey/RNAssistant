@@ -150,14 +150,12 @@ namespace RNAssistant.Office.Services
 
         internal static bool IsExactReadEvidence(ToolInvocation command)
         {
-            return IsResourceEvidence(command) || IsCapabilityEvidence(command);
+            return ModelResultProjection.IsExactReadEvidence(command?.ToolId);
         }
 
         internal static bool IsResourceEvidence(ToolInvocation command)
         {
-            var id = command == null ? string.Empty : command.ToolId ?? string.Empty;
-            return string.Equals(id, ResourceToolCatalog.FindToolId, StringComparison.OrdinalIgnoreCase) ||
-                string.Equals(id, ResourceToolCatalog.ReadToolId, StringComparison.OrdinalIgnoreCase);
+            return ModelResultProjection.IsResourceEvidence(command?.ToolId);
         }
 
         internal static ToolResultStatus ProjectionFailureStatus(
@@ -167,12 +165,6 @@ namespace RNAssistant.Office.Services
             return IsExactReadEvidence(command) && sourceStatus == ToolResultStatus.Ok
                 ? ToolResultStatus.Error
                 : sourceStatus;
-        }
-
-        private static bool IsCapabilityEvidence(ToolInvocation command)
-        {
-            var id = command == null ? string.Empty : command.ToolId ?? string.Empty;
-            return CapabilityToolCatalog.Owns(id);
         }
 
     }

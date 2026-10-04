@@ -74,11 +74,10 @@ namespace RNAssistant.Office.Tools
                     ViewPath = viewPath,
                     Fields = Fields(context.Arguments) })
                 : Gateway.ReadWhole(Session, reference, representation);
-            var projection = Project(
-                selection,
-                selected.Target,
-                selected.Type,
-                selected.Scope);
+            var observation = new ResourceReadObservation(selection.Result,
+                Gateway.Evidence(Session, selection.Result));
+            var projection = ResourceReadProjection.From(observation.Result,
+                selected.Target, selected.Type, selected.Scope);
             projection.Section = section;
             if (lines) { projection.StartLine = ToolArgumentReader.Int32(context.Arguments, "startLine", 1);
                 projection.RequestedLines = ToolArgumentReader.Int32(context.Arguments, "lineCount", 100); }
@@ -107,35 +106,7 @@ namespace RNAssistant.Office.Tools
             var attachments = selection.ModelAttachments ?? new ChatAttachment[0];
             if (_captureAttachments != null && attachments.Count > 0)
                 _captureAttachments(context.Execution.Call.Id, attachments);
-            return new ToolHandlerResult(result, ToolEffectEvidence.None, resourceEvidence: Gateway.Evidence(Session, selection.Result));
-        }
-
-        private static ResourceReadProjection Project(
-            ResourceReadSelection selection,
-            string target,
-            string type,
-            string scope)
-        {
-            if (selection == null || selection.Result == null)
-                throw new InvalidOperationException("Resource provider returned no read result.");
-            var result = selection.Result;
-            return new ResourceReadProjection
-            {
-                Kind = "resource-read",
-                Target = target,
-                Type = type,
-                Scope = scope,
-                Representation = result.Representation,
-                Text = result.Text,
-                Table = result.Table,
-                Coverage = result.Coverage,
-                Offset = result.Offset,
-                ReturnedCharacters = result.ReturnedCharacters,
-                TotalCharacters = result.TotalCharacters,
-                Complete = result.Complete,
-                HydratedForNextModelStep = result.HydratedForNextModelStep,
-                RawContentIncluded = result.RawContentIncluded
-            };
+            return new ToolHandlerResult(result, ToolEffectEvidence.None, resourceEvidence: observation.Evidence);
         }
 
         internal static ToolResultSummary Summarize(JObject data)
@@ -188,42 +159,5 @@ namespace RNAssistant.Office.Tools
             return JsonConvert.DeserializeObject<List<string>>(JsonConvert.SerializeObject(value));
         }
 
-        private sealed class ResourceReadProjection
-        {
-            [JsonProperty("startLine", NullValueHandling = NullValueHandling.Ignore)]
-            public int? StartLine { get; set; }
-            [JsonProperty("requestedLines", NullValueHandling = NullValueHandling.Ignore)]
-            public int? RequestedLines { get; set; }
-            [JsonProperty("section", NullValueHandling = NullValueHandling.Ignore)]
-            public string Section { get; set; }
-            [JsonProperty("kind")]
-            public string Kind { get; set; }
-            [JsonProperty("target")]
-            public string Target { get; set; }
-            [JsonProperty("type")]
-            public string Type { get; set; }
-            [JsonProperty("scope")]
-            public string Scope { get; set; }
-            [JsonProperty("representation")]
-            public string Representation { get; set; }
-            [JsonProperty("text")]
-            public string Text { get; set; }
-            [JsonProperty("table", NullValueHandling = NullValueHandling.Ignore)]
-            public ResourceTableBatch Table { get; set; }
-            [JsonProperty("coverage")]
-            public ResourceCoverage Coverage { get; set; }
-            [JsonProperty("offset")]
-            public int Offset { get; set; }
-            [JsonProperty("returnedCharacters")]
-            public int ReturnedCharacters { get; set; }
-            [JsonProperty("totalCharacters")]
-            public int TotalCharacters { get; set; }
-            [JsonProperty("complete")]
-            public bool Complete { get; set; }
-            [JsonProperty("hydratedForNextModelStep")]
-            public bool HydratedForNextModelStep { get; set; }
-            [JsonProperty("rawContentIncluded")]
-            public bool RawContentIncluded { get; set; }
-        }
     }
 }

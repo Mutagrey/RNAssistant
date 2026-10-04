@@ -1,3 +1,4 @@
+using RNAssistant.Core.Llm;
 using System;
 using System.Linq;
 using System.Threading;

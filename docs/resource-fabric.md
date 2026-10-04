@@ -12,7 +12,7 @@ Earlier R61 whole-read/accepted-tool-result binding explanations are superseded.
 
 ## Goals
 
-Workspace file slice (2026-10-04): `WorkspaceFileService` is the current file
+Workspace file slice (2026-10-05): `WorkspaceFileService` is the current file
 owner for the development CLI. It assigns stable logical file IDs through the
 user-state locator catalog, observes exact UTF-8 bytes into the existing CAS and
 `ResourceAuthorityStore`, and journals create/patch/replace before dispatch.
@@ -24,18 +24,30 @@ bytes and fail when unavailable. The
 CLI exposes relative paths through `common.resources_find/read`; a workspace-bound
 filesystem provider now uses the shared Core `ResourceProviderRouter<TProvider>`.
 The Office `ResourceGatewayService` also uses this router and retains its authority,
-publication and host guards. The CLI's source-specific result projection and model
-prompt still live outside the Office gateway/compiler. Historical text
+publication and host guards. Both consumers use Core `ResourceFindPage`, semantic
+candidates and `ResourceReadProjection`; `ResourceReadObservation` binds the read
+to its exact evidence. Provider dispatch remains specific to each host. Historical text
 restoration is guarded by a current accepted revision and records the exact source.
 CLI `common.resources_find` scans one selected directory, returns at most 200
-accessible entry names, and accepts an optional case-insensitive filename substring.
-It scans at most 5000 entries and returns `truncated` with `scannedEntries` whenever
-it cannot establish a complete result. The returned names are sorted within the
+accessible semantic targets, and accepts an optional case-insensitive filename substring.
+It scans at most 5000 entries and reports `complete=false`, `refineQuery` and
+`scannedEntries` when truncated; unavailable entries set `partial` and cannot prove
+an empty result. File descriptors expose metadata/stat without reading content or
+claiming an exact revision. The returned targets are sorted within the
 captured window, not across a truncated directory; there is no pagination or
 recursive search yet. Protected metadata and credential-shaped names stay hidden.
-CLI reads now
-retain exact evidence and the file owner publishes mutation effects; old read bodies
-are projected stale at a new turn. Guarded `files.delete` moves an accepted complete
+CLI `common.resources_read(target)` returns complete whole UTF-8 text with matching
+retained payload, coverage and exact evidence. CLI prepares fresh current-run
+authority through the same file owner, then passes the frozen tuple and accepted
+kernel facts to the existing `ModelContextCompiler`, now in Core. The compiler owns
+projection, freshness filtering, budgeting, receipt and frozen format repair for
+both CLI and Office; it never calls a live provider. Office supplies its pure domain
+projection through an explicit dependency. The separate CLI result projector and
+request assembler are removed. A prior-turn read without freshly admitted authority
+is unavailable. A body omitted by the compiler, or an incomplete/stale read, cannot
+authorize a CLI overwrite. `inspect` exposes the persisted context receipt.
+
+The file owner publishes mutation effects. Guarded `files.delete` moves an accepted complete
 UTF-8 file into `.rnassistant/trash`, verifies its retained preimage and publishes an
 unavailable head. Explicit `files.restore` moves that managed preimage back only
 when the original path is absent and the latest head is the matching deletion; it
@@ -47,9 +59,13 @@ accepted complete source read. It requires an existing target parent and never
 overwrites a target or prior target identity. A durable two-path move intent lets
 `recover` inspect either path after an interrupted dispatch; both paths are blocked
 from ordinary reads until reconciliation. An uncertain move is never replayed.
-Cross-volume move semantics, large/binary files, trash retention policy, full
-symlink/hardlink race guarantees and frozen
-`ModelContextCompiler` admission remain open M3–M5 work. See
+Cross-volume move semantics, large/binary files, trash retention policy and full
+symlink/hardlink race guarantees remain open M3–M5 work. The immediate text-file
+contract and shared compiler do not complete workspace-first plan §8.1:
+raw/binary views, exact retained-view access through the provider, preview/viewer
+consumers and a shared Office/filesystem operation API remain open scope. These
+close when the corresponding consumers use the common contracts with bounded
+coverage, exact evidence and existing host guards; the target architecture is unchanged. See
 [progress](stabilization/PROGRESS.md#workspace-first-implementation--2026-10-04-in-progress).
 
 Development `web.verify` reads bounded UTF-8 source through this same file owner,

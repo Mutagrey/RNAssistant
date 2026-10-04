@@ -28,6 +28,7 @@ namespace RNAssistant.Runtime
         private readonly ChatStore _chats;
         private readonly WorkspaceStore _workspaces;
         private readonly WorkspaceFileService _files;
+        private readonly ChatBlobStore _payloads;
 
         public WorkspaceConversationService(AppDataPaths paths)
         {
@@ -35,6 +36,7 @@ namespace RNAssistant.Runtime
             _chats = new ChatStore(paths);
             _workspaces = new WorkspaceStore(paths);
             _files = new WorkspaceFileService(paths);
+            _payloads = new ChatBlobStore(paths);
         }
 
         public ChatSession GetSession(WorkspaceDescriptor workspace, string sessionId)
@@ -73,7 +75,7 @@ namespace RNAssistant.Runtime
 
         public IReadOnlyList<string> AvailableToolIds(WorkspaceDescriptor workspace)
         {
-            return new WorkspacePorts(_chats, _files, workspace, null, new AppSettings(), null, null)
+            return new WorkspacePorts(_chats, _files, _payloads, workspace, null, new AppSettings(), null, null)
                 .ToolIds;
         }
 
@@ -128,7 +130,7 @@ namespace RNAssistant.Runtime
                 if (reasoningEnabled.HasValue) session.ReasoningEnabled = reasoningEnabled.Value;
 
                 var previous = RestoreAcceptedHistory(session);
-                var ports = new WorkspacePorts(_chats, _files, workspace, session, settings, apiKeyProvider,
+                var ports = new WorkspacePorts(_chats, _files, _payloads, workspace, session, settings, apiKeyProvider,
                     progress, acceptedContract);
                 var runId = Guid.NewGuid().ToString("N");
                 session.LastRun = new ChatRunRecord
@@ -197,7 +199,7 @@ namespace RNAssistant.Runtime
                 var history = RestoreAcceptedHistory(session);
                 var continuation = AgentRunContinuation.Restore(run.Summary, run.Limits, 0, history);
                 var acceptance = session.LastRun.WorkspaceAcceptance ?? new WorkspaceRunAcceptance();
-                var ports = new WorkspacePorts(_chats, _files, workspace, session,
+                var ports = new WorkspacePorts(_chats, _files, _payloads, workspace, session,
                     settings ?? new AppSettings(), apiKeyProvider, progress, acceptance, approve);
                 var result = await ConversationRunCoordinator.ResumeAsync(session.LastRun.RunId,
                     pendingId, continuation, ports, ports.Tools, ports, cancellationToken,
@@ -256,7 +258,7 @@ namespace RNAssistant.Runtime
                 var frozen = _files.CaptureAuthority(completeReads);
                 var reducer = new EvidenceStateReducer();
                 acceptance.AcceptedCompleteFileReads = completeReads.Where(evidence =>
-                    reducer.Reduce(evidence, frozen).State == EvidenceState.Current)
+                    reducer.IsCurrentExactText(evidence, evidence.Resource, frozen))
                     .Select(evidence => evidence.Resource.Uri).Distinct(StringComparer.Ordinal).Count();
                 acceptance.VerifiedWebSnapshot = acceptance.RequireWebVerification &&
                     AssessWebVerification(workspace, session, summary.RunId, acceptance.ExpectedFiles);
@@ -435,29 +437,31 @@ namespace RNAssistant.Runtime
             private readonly WorkspaceRunAcceptance _acceptance;
             private readonly IReadOnlyList<ToolCatalogEntry> _catalog;
             private readonly ResourceProviderRouter<WorkspaceFileResourceProvider> _resources;
+            private readonly ModelContextCompiler _compiler;
             private readonly Dictionary<string, ResourceRef> _observed = new Dictionary<string, ResourceRef>(StringComparer.Ordinal);
             private long _cursor;
             public ToolRuntime Tools { get; private set; }
             public IReadOnlyList<string> ToolIds { get { return _catalog.Select(item => item.Id).ToArray(); } }
 
-            public WorkspacePorts(ChatStore chats, WorkspaceFileService files, WorkspaceDescriptor workspace,
+            public WorkspacePorts(ChatStore chats, WorkspaceFileService files, ChatBlobStore payloads, WorkspaceDescriptor workspace,
                 ChatSession session, AppSettings settings, Func<string> apiKeyProvider,
                 Action<WorkspaceRunEvent> progress, WorkspaceRunAcceptance acceptance = null,
                 bool restorePendingObservation = true)
             {
                 _chats = chats; _files = files; _workspace = workspace; _session = session;
                 _settings = settings.Clone(); _progress = progress; _acceptance = acceptance;
+                _compiler = new ModelContextCompiler(payloads);
                 _resources = new ResourceProviderRouter<WorkspaceFileResourceProvider>(new[]
                     { new WorkspaceFileResourceProvider(files, workspace) });
                 var client = new LlmClient(apiKeyProvider);
                 _protocol = new ModelProtocolClient(client.CompleteAsync);
                 var registry = new ToolHandlerRegistry();
                 var entries = new List<ToolCatalogEntry>();
-                Register(registry, entries, "common.resources_find", "List up to 200 accessible names in one workspace directory; narrow directory or query when truncated.",
+                Register(registry, entries, "common.resources_find", "Find up to 200 workspace resources in one directory; use returned semantic targets for reads. Narrow directory or query when incomplete.",
                     Schema("directory", false, "query", false), false,
                     new FileHandler(files, workspace, _resources, _observed, "find"));
-                Register(registry, entries, "common.resources_read", "Read a complete UTF-8 workspace file by relative path.",
-                    Schema("relativePath", true), false,
+                Register(registry, entries, "common.resources_read", "Read a complete UTF-8 workspace file using a semantic target returned by discovery, or a known relative path.",
+                    Schema("target", true), false,
                     new FileHandler(files, workspace, _resources, _observed, "read"));
                 if (WorkspaceWebVerifier.FindBrowserExecutable() != null)
                     Register(registry, entries, "web.verify", "Load an immutable local HTML/CSS/JS snapshot in an isolated browser and report asset and runtime errors.",
@@ -514,8 +518,10 @@ namespace RNAssistant.Runtime
                     if (fact.RunId != _session.LastRun.RunId || fact.ToolName != "common.resources_read") continue;
                     var wire = ToolResultWire.Read(fact.Content);
                     if (!wire.Success || wire.Result.Status != ToolResultStatus.Ok) continue;
-                    if ((string)JObject.Parse(wire.Result.DataJson)["path"] != path) continue;
-                    var evidence = fact.ResourceEvidence?.SingleOrDefault(item => item.Complete && item.View == "text");
+                    if ((string)JObject.Parse(wire.Result.DataJson)["target"] != path) continue;
+                    var evidence = fact.ResourceEvidence?.SingleOrDefault(item => item.Complete &&
+                        item.View == ResourceRepresentations.Text && item.Coverage?.Kind == ResourceCoverageKinds.Whole &&
+                        item.Payload != null);
                     if (evidence == null) continue;
                     _observed[path] = evidence.Resource.Copy();
                     return;
@@ -553,46 +559,42 @@ namespace RNAssistant.Runtime
 
             public async Task<AgentModelResult> SendAsync(AgentModelRequest request, CancellationToken cancellationToken)
             {
-                // Refresh only files read in this run. Old-turn read bodies are
-                // projected as stale below; they never authorize a new write.
-                foreach (var path in _observed.Keys.ToArray())
-                {
-                    cancellationToken.ThrowIfCancellationRequested();
-                    try { _resources.Select("file").Read(path); }
-                    catch (System.IO.FileNotFoundException) { /* ReadText marked the old head unavailable. */ }
-                }
-                var frozen = _resources.Select("file").CaptureAuthority(request.AcceptedMessages.SelectMany(item =>
-                    item.ResourceEvidence ?? new ResourceEvidence[0]));
-                var messages = new List<ChatMessage>
-                {
-                    new ChatMessage { Role = "developer", Content = Prompt() }
-                };
-                foreach (var item in request.AcceptedMessages)
-                {
-                    if (item.Kind == AgentMessageKind.User)
-                        messages.Add(new ChatMessage { Role = "user", Content = item.Text });
-                    else if (item.Kind == AgentMessageKind.Assistant)
-                    {
-                        var calls = item.ToolCalls.Select(call => new ConversationToolCall
-                        { Name = call.Name, Arguments = JObject.Parse(call.ArgumentsJson) }).ToArray();
-                        messages.Add(new ChatMessage { Role = "assistant",
-                            Content = new ConversationResponse(item.Text, calls, item.Action).ToJson() });
-                    }
-                    else if (item.Kind == AgentMessageKind.ToolResult)
-                        messages.Add(new ChatMessage { Role = "user", Content = ProjectResult(item, frozen) });
-                }
+                var frozen = CaptureContextAuthority(request.RunId, cancellationToken);
                 var options = ModelProtocolWire.CreateRequestOptions(_settings.AgentResponseMode, _catalog);
                 options.ReasoningEnabled = _session.ReasoningEnabled;
                 options.TraceStepId = request.StepId;
                 options.TraceModelAttemptId = "attempt_" + Guid.NewGuid().ToString("N");
+                var authority = new ModelAuthoritySnapshot(frozen,
+                    TextPatternEngine.Sha256(JsonConvert.SerializeObject(_catalog)),
+                    new SkillCatalogSnapshot(null), null, _session.Revision);
+                var fixedTokens = ModelContextBudget.EstimateRequestOptionsTokens(options, _settings) +
+                    ModelProtocolClient.EstimateFormatRepairOverheadTokens(_settings) +
+                    ModelContextBudget.ContinuationReserveTokens(_settings);
+                ModelContextSnapshot snapshot;
+                try
+                {
+                    snapshot = _compiler.Compile(authority,
+                        new[] { new ChatMessage { Role = "developer", Content = Prompt() } },
+                        AcceptedFacts(request.AcceptedMessages), null, _catalog, _settings,
+                        Math.Max(1, ModelContextBudget.InputBudgetTokens(_settings) - fixedTokens));
+                }
+                catch (PromptBudgetExceededException ex)
+                {
+                    return AgentModelResult.Failed(ModelProtocolFailureKind.PromptBudgetExceeded, ex.Message);
+                }
+                RetainDeliveredObservations(snapshot);
+                options.TraceContextReceipt = snapshot.Receipt;
+                _session.LastContextReceipt = snapshot.Receipt;
+                _chats.Save(_session);
                 var callContext = new ModelProtocolCallContext(_catalog.Where(tool => tool.Policy.IndependentLocalRead).Select(tool => tool.Id));
                 _chats.AppendTrace(_session, SessionEventTypes.LlmRequest,
-                    new { request.StepId, Protocol = ConversationResponse.ProtocolVersion, WorkspaceId = _workspace.WorkspaceId },
-                    JsonConvert.SerializeObject(messages), "application/json", request.RunId, request.TurnId, request.StepId);
+                    new { request.StepId, Protocol = ConversationResponse.ProtocolVersion, WorkspaceId = _workspace.WorkspaceId,
+                        ContextSnapshotId = snapshot.Id },
+                    JsonConvert.SerializeObject(snapshot.Messages), "application/json", request.RunId, request.TurnId, request.StepId);
                 var result = await _protocol.GetResponseAsync(new ModelProtocolRequest
                 {
-                    Settings = _settings, AcceptedMessages = messages,
-                    CompileRepair = notice => messages.Concat(new[] { notice }).ToArray(),
+                    Settings = _settings, AcceptedMessages = snapshot.Messages, ContextSnapshot = snapshot,
+                    CompileRepair = notice => _compiler.CompileRepair(snapshot, notice),
                     CallableTools = _catalog, RunnableCatalog = _catalog,
                     CallContext = callContext, Options = options
                 }, null, cancellationToken).ConfigureAwait(false);
@@ -607,28 +609,87 @@ namespace RNAssistant.Runtime
                         call.Arguments.ToString(Formatting.None))), result.Response.Action));
             }
 
-            private string ProjectResult(AgentMessage item, ResourceAuthoritySnapshotSet frozen)
+            private ResourceAuthoritySnapshotSet CaptureContextAuthority(string runId, CancellationToken cancellationToken)
             {
-                var resultJson = item.ResultJson;
-                if (string.IsNullOrWhiteSpace(resultJson) && item.Execution != null)
-                    resultJson = WireResult(item.Execution);
-                if (string.IsNullOrWhiteSpace(resultJson))
-                    throw new InvalidOperationException("Accepted tool result has no model-facing body.");
-                var wire = ToolResultWire.Read(resultJson);
-                if (!wire.Success || wire.Name != "common.resources_read" ||
-                    wire.Result.Status != ToolResultStatus.Ok) return resultJson;
-                string path = null;
-                try { path = (string)JObject.Parse(wire.Result.DataJson)["path"]; }
-                catch (JsonException) { }
-                ResourceRef accepted;
-                var current = !string.IsNullOrWhiteSpace(path) && _observed.TryGetValue(path, out accepted) &&
-                    item.ResourceEvidence != null && item.ResourceEvidence.Any(evidence =>
-                        evidence.Resource.Uri == accepted.Uri && evidence.Resource.Revision == accepted.Revision &&
-                        new EvidenceStateReducer().Reduce(evidence, frozen).State == EvidenceState.Current);
-                if (current) return resultJson;
-                return ToolResultWire.Write(item.ToolCallId, wire.Name,
-                    ToolResult.Error("The prior file observation is stale or unavailable. Read this path again before editing.",
-                        JsonConvert.SerializeObject(new { path, code = "resource_evidence_stale" })));
+                // Prepare live authority before compilation. The compiler receives
+                // only this frozen tuple and never invokes a filesystem provider.
+                // Old turns without a fresh observation have no admitted scope.
+                var active = _session.Messages.Where(item => item.RunId == runId &&
+                    item.ProtocolMessage && !item.ExcludeFromModelContext && !string.IsNullOrWhiteSpace(item.ToolCallId)).ToArray();
+                var paths = new HashSet<string>(_observed.Keys, StringComparer.Ordinal);
+                foreach (var fact in active)
+                {
+                    var wire = ToolResultWire.Read(fact.Content);
+                    if (!wire.Success || wire.Result.Status != ToolResultStatus.Ok) continue;
+                    var data = ToolResultWire.ParseData(wire.Result.DataJson) as JObject;
+                    if (fact.ToolName == "common.resources_read" && data?["target"]?.Type == JTokenType.String)
+                        paths.Add((string)data["target"]);
+                    if (fact.ToolName == "web.verify" && data?["checkedFiles"] is JArray)
+                        foreach (var path in data["checkedFiles"].Values<string>()) paths.Add(path);
+                }
+                foreach (var path in paths)
+                {
+                    cancellationToken.ThrowIfCancellationRequested();
+                    try { _resources.Select("file").Read(path); }
+                    catch (FileNotFoundException) { /* The file owner marked the old head unavailable. */ }
+                    catch (DirectoryNotFoundException) { /* The file owner marked the old head unavailable. */ }
+                    catch (WorkspaceFileException ex) when (ex.Code == "encoding_ambiguous" || ex.Code == "file_too_large")
+                    { /* The file owner marked the old text head unknown. */ }
+                }
+                return _resources.Select("file").CaptureAuthority(active.SelectMany(item =>
+                    item.ResourceEvidence ?? new List<ResourceEvidence>()));
+            }
+
+            private void RetainDeliveredObservations(ModelContextSnapshot snapshot)
+            {
+                var delivered = snapshot.Messages.Where(message => message.ToolName == "common.resources_read" &&
+                    message.Role != "assistant" && message.CompletedOperation == null)
+                    .SelectMany(message => message.ResourceEvidence ?? new List<ResourceEvidence>()).ToArray();
+                var reducer = new EvidenceStateReducer();
+                foreach (var path in _observed.Keys.ToArray())
+                    if (!delivered.Any(evidence => reducer.IsCurrentExactText(evidence, _observed[path], snapshot.Authority.Resources)))
+                        _observed.Remove(path);
+            }
+
+            // Normalize accepted kernel facts into the compiler's existing causal
+            // frame input. No freshness, projection or budgeting decisions live here.
+            private static IReadOnlyList<ChatMessage> AcceptedFacts(IReadOnlyList<AgentMessage> accepted)
+            {
+                var facts = new List<ChatMessage>();
+                foreach (var item in accepted)
+                {
+                    if (item.Kind == AgentMessageKind.User)
+                        facts.Add(new ChatMessage { Role = "user", Content = item.Text });
+                    else if (item.Kind == AgentMessageKind.Assistant)
+                    {
+                        if (item.ToolCalls.Count == 0)
+                            facts.Add(new ChatMessage { Role = "assistant", ProtocolMessage = true,
+                                Content = new ConversationResponse(item.Text, new ConversationToolCall[0], item.Action).ToJson() });
+                        foreach (var call in item.ToolCalls)
+                            facts.Add(new ChatMessage { Id = "call_" + call.Id, Role = "assistant", ProtocolMessage = true,
+                                ResponseProtocolVersion = ConversationResponse.ProtocolVersion,
+                                ToolResultProtocolVersion = ToolResultWire.CurrentVersion, ToolResultRole = ToolResultRoles.User,
+                                ToolCallId = call.Id, ToolName = call.Name,
+                                Content = new ConversationResponse(item.Text, new[] { new ConversationToolCall {
+                                    Name = call.Name, Arguments = JObject.Parse(call.ArgumentsJson) } }, item.Action).ToJson() });
+                    }
+                    else if (item.Kind == AgentMessageKind.ToolResult)
+                    {
+                        var json = !string.IsNullOrWhiteSpace(item.ResultJson) ? item.ResultJson :
+                            item.Execution == null ? null : WireResult(item.Execution);
+                        var wire = ToolResultWire.Read(json);
+                        if (!wire.Success || wire.ToolCallId != item.ToolCallId)
+                            throw new InvalidOperationException("Accepted tool result has no matching terminal body.");
+                        facts.Add(new ChatMessage { Id = "result_" + item.ToolCallId, Role = ToolResultRoles.User,
+                            ProtocolMessage = true, ToolCallId = item.ToolCallId, ToolName = wire.Name,
+                            ToolResultRole = ToolResultRoles.User, ToolResultProtocolVersion = ToolResultWire.CurrentVersion,
+                            Content = "TOOL_RESULT:\n" + json,
+                            ResourceRefs = wire.Result.Resources.ToList(),
+                            ResourceEvidence = (item.ResourceEvidence ?? new ResourceEvidence[0]).ToList(),
+                            ResourceEffect = item.ResourceEffect, ExecutionProgress = item.Progress });
+                    }
+                }
+                return facts;
             }
 
             private static string WireResult(ToolExecutionRecord record)
@@ -733,23 +794,22 @@ namespace RNAssistant.Runtime
                         var directory = Value(context, "directory");
                         var query = Value(context, "query");
                         var page = _resources.Select("file").Find(directory, query);
-                        return Return(ToolResult.Ok(page.Truncated
-                            ? "Workspace scan was truncated; narrow the directory or filename query."
-                            : "Workspace entries listed.",
-                            JsonConvert.SerializeObject(new { directory, query, names = page.Names,
-                                truncated = page.Truncated, scannedEntries = page.ScannedEntries })), ToolEffectEvidence.None);
+                        return Return(ToolResult.Ok(ResourceFindProjection.Message(page),
+                            ResourceFindProjection.Serialize(page), page.ResourceRefs), ToolEffectEvidence.None);
                     }
-                    var path = Value(context, "relativePath");
+                    var path = Value(context, _operation == "read" ? "target" : "relativePath");
                     if (_operation == "read")
                     {
                         var read = _resources.Select("file").Read(path);
-                        if (read.Text.Length > 16000)
+                        if (read.Result.Text.Length > 16000)
                             return Return(ToolResult.Error("Whole file exceeds the model read bound; no write observation was accepted.",
-                                JsonConvert.SerializeObject(new { path, length = read.Text.Length, code = "read_too_large" })), ToolEffectEvidence.None);
-                        _observed[path] = read.Reference;
-                        return Return(ToolResult.Ok("Complete file read.",
-                            JsonConvert.SerializeObject(new { path, text = read.Text, complete = true })),
-                            ToolEffectEvidence.None, read.Evidence);
+                                JsonConvert.SerializeObject(new { target = path, length = read.Result.Text.Length, code = "read_too_large" })), ToolEffectEvidence.None);
+                        read.RequireCompleteExactText();
+                        _observed[path] = read.Result.Resource.Reference;
+                        return Return(ToolResult.Ok("Complete resource representation read.",
+                            JsonConvert.SerializeObject(ResourceReadProjection.From(read.Result,
+                                path, "file", "workspace")), new[] { read.Result.Resource.Reference }),
+                            ToolEffectEvidence.None, read.Evidence.Single());
                     }
                     WorkspaceFileObservation changed;
                     ResourceRef expected = null;

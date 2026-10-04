@@ -1,5 +1,7 @@
 using System;
 using System.Collections.Generic;
+using System.IO;
+using System.Linq;
 using RNAssistant.Core.Models;
 using RNAssistant.Core.Storage;
 
@@ -20,14 +22,62 @@ namespace RNAssistant.Core.Services
             _workspace = workspace ?? throw new ArgumentNullException(nameof(workspace));
         }
 
-        public WorkspaceDirectoryPage Find(string directory, string query, int limit = 200)
+        public ResourceFindPage Find(string directory, string query, int limit = 200)
         {
-            return _files.ListPage(_workspace, directory, query, limit);
+            var listed = _files.ListPage(_workspace, directory, query, limit);
+            var result = new ResourceFindPage { Scope = "workspace", Directory = directory ?? string.Empty,
+                Query = string.IsNullOrWhiteSpace(query) ? null : query,
+                ScannedEntries = listed.ScannedEntries };
+            foreach (var name in listed.Names)
+            {
+                var target = string.IsNullOrEmpty(directory) ? name :
+                    directory.TrimEnd('/', '\\') + "/" + name;
+                try
+                {
+                    var descriptor = _files.Describe(_workspace, target);
+                    result.Items.Add(new ResourceFindCandidate {
+                        Target = target, Title = descriptor.Title, Type = descriptor.Kind,
+                        Scope = "workspace", Mutable = descriptor.Mutable,
+                        ByteLength = descriptor.ByteLength,
+                        Representations = descriptor.Representations.ToList(),
+                        Usage = descriptor.Kind == "directory"
+                            ? "Browse this target as a directory; it has no text body."
+                            : "Read this target for exact content before editing.",
+                        Reference = descriptor.Reference, Descriptor = descriptor });
+                    result.ResourceRefs.Add(descriptor.Reference);
+                }
+                catch (FileNotFoundException) { result.Partial = true; }
+                catch (DirectoryNotFoundException) { result.Partial = true; }
+                catch (WorkspaceFileException) { result.Partial = true; }
+                catch (UnauthorizedAccessException) { result.Partial = true; }
+            }
+            if (result.Partial) result.UnavailableScopes.Add("workspace");
+            result.Total = result.Items.Count;
+            result.Complete = !listed.Truncated && !result.Partial;
+            result.Empty = result.Items.Count == 0 && result.Complete;
+            result.RefineQuery = listed.Truncated;
+            if (listed.Truncated) result.AvailabilityHint = "Directory scan was truncated; narrow directory or filename query.";
+            else if (result.Partial) result.AvailabilityHint = "Some entries changed or were unavailable during discovery; refresh the affected directory.";
+            return result;
         }
 
-        public WorkspaceFileObservation Read(string relativePath)
+        public ResourceReadObservation Read(string relativePath)
         {
-            return _files.ReadText(_workspace, relativePath);
+            var observed = _files.ReadText(_workspace, relativePath);
+            var descriptor = new ResourceDescriptor { Reference = observed.Reference,
+                Provider = Id, Kind = "file", Title = Path.GetFileName(relativePath),
+                Mutable = !_workspace.ReadOnly, Tracking = "current",
+                ContentSha256 = observed.ContentSha256, Coverage = ResourceCoverage.Whole() };
+            descriptor.Representations.Add(ResourceRepresentations.Metadata);
+            descriptor.Representations.Add(ResourceRepresentations.Text);
+            descriptor.Metadata["relativePath"] = relativePath;
+            var result = new ResourceReadResult { Resource = descriptor,
+                Representation = ResourceRepresentations.Text, Text = observed.Text,
+                ContentSha256 = observed.ContentSha256, Coverage = ResourceCoverage.Whole(),
+                Complete = true, ReturnedCharacters = observed.Text.Length,
+                TotalCharacters = observed.Text.Length, RawContentIncluded = true,
+                CompleteViewPayload = observed.Evidence.Payload };
+            return new ResourceReadObservation(result, new[] { observed.Evidence });
         }
 
         public ResourceAuthoritySnapshotSet CaptureAuthority(IEnumerable<ResourceEvidence> evidence)

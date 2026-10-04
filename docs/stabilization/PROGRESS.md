@@ -1,5 +1,11 @@
 # Stabilization progress
 
+Shared compiler status (2026-10-05): CLI and Office now use the same frozen Core
+`ModelContextCompiler`; the separate CLI assembler is removed. Bounded semantic
+file discovery, exact reads, stale-body filtering and omitted-source write guards
+passed focused checks. The fresh Gemma 12B task failed after one file and repeated
+creates; full real-agent acceptance and the remaining §8.1 views/consumers stay open.
+
 Local model context (2026-10-04): the 8K Qwen 27B profile cannot admit a CLI
 Agent request with the current 4096-token output policy and mandatory reserves;
 it is retained only for context rejection checks. A 16K profile is the candidate
@@ -18,11 +24,11 @@ records temporary adapters. This work does not qualify Windows/Office/WebView2.
 | M0 | Baseline, SDK and target contracts checked; one ADR and migration map added. | .NET SDK 8/10 available. Installed Mono `msbuild` cannot run on this arm64 Mac (`Bad CPU type`); old-style Windows build remains open. |
 | M1 | `ToolRuntime` and exact handler registry moved to Core; `ConversationRunCoordinator` is called by Office and CLI. Net8 Core and Runtime assemblies build with project references and no Office/WebView2/WinForms/fake dependency in CLI. | Focused `tool runtime:` 15/15; CLI dependency search/build. Office project compilation and platform delivery remain open. |
 | M2 | Portable workspace manifest, user-state association, read-only opening, existing ChatStore workspace sessions without document authority, root relocation and copy-ID conflict. File locators retain identity across a known root move. | Focused `workspace:` 2/2. External moves not associated with an opened workspace and mount/Office identity resolution remain open. |
-| M3 | Real UTF-8 files: bounded single-directory discovery/read, create, exact patch/replace, copy from an accepted complete source to a new identity with immutable source provenance, guarded historical restore, recoverable delete to managed workspace trash and explicit restore after deletion. Confirmed `files.move` keeps logical identity, advances revision and relocates the file locator. CAS views, authority heads, mutation journal, read-back, external-edit conflict and non-replay after an interrupted dispatch remain one file-owner path. `recover` distinguishes prepared-only abandonment, an already-published effect and unknown causality after dispatch; it never replays the command. Ordinary reads and writes are blocked while an effect is unresolved. External invalid UTF-8 or oversized text marks the old known head unknown; BOM, CRLF and verified no-change are preserved. | Focused `workspace files:` 6/6. Directory discovery scans at most 5000 entries and returns `truncated` rather than implying a complete result; optional filename search is case-insensitive. Move retains a durable two-path intent; reads of both paths block until an interrupted move is reconciled. A delete verifies absent source plus exact trash preimage before publishing an unavailable head; restore requires that deletion head and creates a new revision. Cross-volume move semantics, trash retention policy, binary/large streaming, full cross-platform path races, directory pagination and Gateway provider integration remain open. |
-| M4 | Net8 CLI calls one application service for workspace/session open and listing, exact capability catalog, new/continued runs, inspect and explicit file recovery; it supports JSONL output. It uses production `LlmClient` and v6 `ModelProtocolClient`. A live `gemma4:31b:cloud` run through the local Ollama API created `index.html`, `app.js`, `styles.css` as externally visible files, with 3 verified writes and `model_done`. File tools now include copy from an accepted source. Exact read evidence and direct file authority commits enter durable tool records. Prior-turn read results are projected as stale; current-turn reads are refreshed before a model request. A cross-process session lease serializes accepted input and the run; continuation reloads the chat under that lease. The CLI development profile now requests 4096 output tokens and propagates the session's reasoning-off setting as `reasoning_effort=none`. | CLI build, environment/session listing, scripted HTTP protocol smoke and one real-model task passed. External inspection confirmed three files, HTML references/DOM targets and `node --check` of JS. A scripted read/copy turn produced a byte-identical real `index-copy.html`. An earlier `glm-5.3-flash:cloud` attempt returned HTTP 402 and wrote nothing. Focused transport test verifies explicit reasoning-off serialization. The scripted smoke verified stale read projection after external edit without a model-facing `rna://` reference; historical create-call text still appears as past action. The local `qwen3.5:9b` profile and live CLI task were exercised; detailed result and false-completion risk are below. Other interactive questions/approvals, automatic safe resume, frozen `ModelContextCompiler` path and full M4 acceptance remain open. |
+| M3 | Real UTF-8 files: bounded single-directory discovery/read, create, exact patch/replace, copy from an accepted complete source to a new identity with immutable source provenance, guarded historical restore, recoverable delete to managed workspace trash and explicit restore after deletion. Confirmed `files.move` keeps logical identity, advances revision and relocates the file locator. CAS views, authority heads, mutation journal, read-back, external-edit conflict and non-replay after an interrupted dispatch remain one file-owner path. `recover` distinguishes prepared-only abandonment, an already-published effect and unknown causality after dispatch; it never replays the command. Ordinary reads and writes are blocked while an effect is unresolved. External invalid UTF-8 or oversized text marks the old known head unknown; BOM, CRLF and verified no-change are preserved. | Focused `workspace files:` 6/6. Directory discovery scans at most 5000 entries and returns `truncated` rather than implying a complete result; optional filename search is case-insensitive. Move retains a durable two-path intent; reads of both paths block until an interrupted move is reconciled. A delete verifies absent source plus exact trash preimage before publishing an unavailable head; restore requires that deletion head and creates a new revision. Cross-volume move semantics, trash retention policy, binary/large streaming, full cross-platform path races, directory pagination and the remaining §8.1 provider operations/views remain open. |
+| M4 | Net8 CLI calls one application service for workspace/session open and listing, exact capability catalog, new/continued runs, inspect and explicit file recovery; it supports JSONL output. It uses production `LlmClient` and v6 `ModelProtocolClient`. A live `gemma4:31b:cloud` run through the local Ollama API created `index.html`, `app.js`, `styles.css` as externally visible files, with 3 verified writes and `model_done`. File tools now include copy from an accepted source. Exact read evidence and direct file authority commits enter durable tool records. Prior-turn read results are projected as stale; current-turn reads are refreshed before a model request. A cross-process session lease serializes accepted input and the run; continuation reloads the chat under that lease. The CLI development profile now requests 4096 output tokens and propagates the session's reasoning-off setting as `reasoning_effort=none`. | CLI build, environment/session listing, scripted HTTP protocol smoke and one real-model task passed. External inspection confirmed three files, HTML references/DOM targets and `node --check` of JS. A scripted read/copy turn produced a byte-identical real `index-copy.html`. An earlier `glm-5.3-flash:cloud` attempt returned HTTP 402 and wrote nothing. Focused transport test verifies explicit reasoning-off serialization. The scripted smoke verified stale read projection after external edit without a model-facing `rna://` reference; historical create-call text still appears as past action. The local `qwen3.5:9b` profile and live CLI task were exercised; detailed result and false-completion risk are below. The shared frozen Core `ModelContextCompiler` is connected (2026-10-05; see below). Other interactive questions/approvals, automatic safe resume and full M4 acceptance remain open. |
 | M5 | Development `rna verify` and optional `web.verify` capture a bounded exact UTF-8 snapshot, validate discovered static dependencies, serve only captured bytes over loopback to a fresh headless Chromium profile, and report missing assets, console/page exceptions or `not-run`. `--require-web-verify` is a persisted CLI acceptance condition; a passing tool result carries exact file evidence, refreshed and checked against current authority at `done`. A separate read-only CSV-dashboard grader checks actual UI behavior against private fixtures. | Real Chrome passed a valid 3-file app and a 5-file HTML/CSS/JS import graph; immediate and 650 ms delayed JS errors and missing CSS failed; missing browser removed the model tool and returned `not-run`/exit 4. Scripted agent verify/read/patch/read/verify/done passed; verification before a later patch failed acceptance. The CSV grader passed a known-good fixture on 13 checks and rejected a JS-throwing fixture, missing browser and blocked outbound attempt. A fresh Qwen CSV task falsely returned `done` with no tools; after explicit feedback it wrote three files and passed smoke, but independent functional acceptance failed 3 of 11 assertions. Repair feedback led to no changed file and another false `done`. Autonomous CSV task, behavior after the 1.5-second observation window, binary assets, durable manifest/trace, autonomous diagnosis and other M5 acceptance remain open. |
 
-M3/M4 resource routing slice (2026-10-04): canonical provider registration and
+Historical M3/M4 resource routing slice (2026-10-04, extended below): canonical provider registration and
 URI selection moved from the Office-only registry into Core
 `ResourceProviderRouter<TProvider>`. Office `ResourceGatewayService` uses it; CLI
 `common.resources_find/read` now select a workspace-bound filesystem provider,
@@ -33,10 +39,61 @@ verification projection passed. This is provider routing, not a common typed
 find/read contract: CLI still returns file names, while Office returns semantic
 candidates, and they shape read results separately. Descriptors, stat, raw view,
 coverage and exact retained-view read remain open for the filesystem provider.
-The CLI prompt assembly has not moved to the shared compiler; this does not
-qualify Windows/Office behavior.
+At that commit CLI prompt assembly had not moved to the shared compiler. The
+2026-10-05 slice below replaces that path; Windows/Office behavior remains unqualified.
 
-Latest local-model result: on the same clean CSV task and current CLI source,
+M3/M4 shared compiler slice (2026-10-05): Core now owns the existing
+`ModelContextCompiler`, common result projection and typed bounded find/read
+results. Office injects its pure domain projection; its guarded read dispatch is
+unchanged. CLI prepares authority through `WorkspaceFileService`, normalizes
+accepted kernel facts and passes them to that same frozen compiler. The separate
+CLI result projector/request assembler and old Office compiler file are removed.
+CLI discovery returns semantic targets and metadata-only descriptors with explicit
+incompleteness; exact whole-text reads carry matching retained payload/coverage.
+External edits invalidate prior read bodies. Format repair retains the original
+snapshot; `inspect` exposes the saved receipt. A read excluded by budget cannot
+authorize replacement, even when its durable exact evidence remains current.
+
+Evidence: CLI build; focused `model context:` 6/6, `workspace files:` 6/6,
+`agent: model projection` 2/2, `context continuity:` 5/5, `shared context:` 2/2,
+Gateway 3/3; frozen evidence, current-source carry-forward, correctness-before-budget
+and oversized-source recovery passed individually. Scripted CLI checks passed for
+find/read → external edit → failed browser result → frozen format repair, budget
+omission → rejected replacement with original bytes preserved, and interrupted-run
+reconciliation. The old oversized-read harness assertion was corrected to verify
+the existing omission receipt instead of expecting a hard budget failure; durable
+success is preserved while source evidence is withheld. These scripted checks are
+runtime evidence, not a real-model quality result.
+Dependency-boundary tests passed 2/2. The existing all-project source-inclusion
+test failed because it treats SDK-default includes as missing; this is tracked in
+[BACKLOG](BACKLOG.md#sdk-project-source-inclusion-audit--2026-10-05). Direct checks
+of the changed Core/Office old-style projects found no omitted or removed source
+entries. No old-style Windows build was run.
+
+Scope: this closes the separate CLI compiler path, not all of plan §8.1. Raw/binary
+views, exact retained-view provider access, preview/viewer consumers and common
+Office/filesystem operation dispatch remain open with owners/removal conditions in
+[MIGRATION_MAP](MIGRATION_MAP.md#workspace-first-adapters--2026-10-04). M4–M11
+acceptance and Windows/Office/WebView2 qualification are not declared complete.
+
+Real-model check of this slice (2026-10-05): on `abe17fbd` plus the shared-compiler
+working changes, a fresh three-file counter task used `rna-gemma4-12b-32k:latest`,
+digest `cf94f3793da5f501e0a2948b34825db5baceed926438a78551ffaa83f85a4082`,
+32768 context, 4096 output, `json_schema`, reasoning off, one request at a time.
+In 96.9 seconds it made 8 model requests / 8 accepted calls with no protocol
+violation: 1 verified create, 3 dispatched `target_exists` errors and 4 rejected
+repeat calls. It created only `index.html`, performed no exact reads or browser
+verification and stopped with `repeated_tool_no_progress`, acceptance failed,
+exit 5. Canonical request traces contain the successful path/effect and every
+error receipt; the final context is only 2108 estimated tokens, with no resource
+exclusion. This is a `MODEL_ERROR`/possible `CONTEXT_ERROR` case requiring isolation,
+not proof that Gemma is weak or that shared compilation improved task quality.
+Session `0343a46fdbc847a0a57660cac4539388`; local task/log/state are retained in
+`/var/folders/k9/hr_94nt142x1f43jr6g0wr_00000gp/T/rna-shared-compiler-gemma-6g89vanv`.
+The model was unloaded after the run. A successful autonomous create/read/verify/
+repair scenario remains open; no model-specific prompt workaround was added.
+
+Previous local-model result: on the same clean CSV task and then-current CLI source,
 Gemma 4 12B wrote three real files and passed 10/11 independent browser checks;
 Qwen 3.5 9B returned `done` with no calls or files. Neither passed the CLI's
 read-back/verification contract. A discovered current-turn tool-result projection

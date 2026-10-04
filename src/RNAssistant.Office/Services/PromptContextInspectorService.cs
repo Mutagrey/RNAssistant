@@ -256,7 +256,7 @@ namespace RNAssistant.Office.Services
             int historyBudgetTokens,
             JObject capabilityCatalog)
         {
-            return new ModelContextCompiler(_payloads).BuildPreview(
+            return new ModelContextCompiler(_payloads, projection: ModelToolResultProjection.Instance).BuildPreview(
                 mode,
                 draftText,
                 _adapter,

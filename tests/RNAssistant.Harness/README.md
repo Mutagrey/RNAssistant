@@ -4,8 +4,12 @@ The independent CLI's optional real-browser check is
 `python3 tests/cli/web_verifier_smoke.py` after building `RNAssistant.Cli`. It uses
 a temporary workspace and fresh Chromium profile; it is not an Office/WebView2
 qualification or an agent functional grader.
-`python3 tests/cli/tool_result_projection_smoke.py` checks that a current-turn
-complete file read and a failed `web.verify` result reach the next model request.
+`python3 tests/cli/tool_result_projection_smoke.py` checks bounded semantic find,
+exact read delivery, invalidation after external edit, failed browser-result
+delivery, frozen format repair and the persisted context receipt.
+`python3 tests/cli/omitted_read_guard_smoke.py` verifies that an exact file read
+omitted by the compiler's budget cannot authorize replacement and preserves the
+original bytes. Both use a scripted HTTP model, not real-model quality evidence.
 `python3 tests/cli/response_mode_smoke.py` checks explicit CLI `json_schema` /
 `json_object` selection and persisted model metadata.
 
@@ -134,8 +138,9 @@ source changes, interpretation-promotion refusal, persistence and old-version sk
 `artifacts: prompt preserves decision context` and `resource cutover: correctness
 before budget` cover optional-purpose admission, exact target preservation,
 ownership/read hints and semantic recovery after stale evidence exclusion.
-The latter also checks that stale call input cannot invalidate a fresh result and
-that archived mutation diagnostics survive folding in every result role.
+The latter also checks that stale call input cannot invalidate a fresh result,
+archived mutation diagnostics survive folding in every result role, and oversized
+exact reads become explicit body-omission receipts without usable write evidence.
 `agent: VBA mutation batch rejects before dispatch` checks complete after-source
 and the verified write's unchanged success status in the next model request.
 `agent: confirmed VBA after-state reaches next request` covers a confirmed 100-hunk

@@ -522,7 +522,7 @@ namespace RNAssistant.Harness
             {
                 var tools = new List<ToolCatalogEntry>(OfficeToolCatalog.ForHost(fake.HostName));
                 tools.AddRange(executor.GetControllerTools());
-                var prompt = FlattenMessages(new ModelContextCompiler().BuildPreview(
+                var prompt = FlattenMessages(new ModelContextCompiler(projection: ModelToolResultProjection.Instance).BuildPreview(
                     ChatModes.Agent,
                     "Test request",
                     fake,

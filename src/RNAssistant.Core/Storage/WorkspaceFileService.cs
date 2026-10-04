@@ -119,6 +119,51 @@ namespace RNAssistant.Core.Storage
             { Names = names.AsReadOnly(), Truncated = truncated, ScannedEntries = scanned };
         }
 
+        // Metadata-only discovery. An identity-only reference is never proof that
+        // the current bytes equal a previously observed revision.
+        public ResourceDescriptor Describe(WorkspaceDescriptor workspace, string relativePath)
+        {
+            var path = ResolvePath(workspace, relativePath, false);
+            if (Directory.Exists(path))
+            {
+                var segments = new[] { "directory", workspace.WorkspaceId }
+                    .Concat(relativePath.Replace('\\', '/').Split('/')).ToArray();
+                var directory = new ResourceDescriptor
+                {
+                    Reference = new ResourceRef(ResourceUri.Create("file", segments)),
+                    Provider = "file", Kind = "directory", Title = Path.GetFileName(path),
+                    Mutable = false, Tracking = "metadata-only"
+                };
+                directory.Representations.Add(ResourceRepresentations.Metadata);
+                directory.Metadata["relativePath"] = relativePath;
+                return directory;
+            }
+            var id = FileIdentity(path);
+            var scope = Scope(id);
+            using (_journal.AcquireScope(scope, true))
+            {
+                EnsureNoUnresolved(scope);
+                ResolvePath(workspace, relativePath, false);
+                var file = new FileInfo(path);
+                if (!file.Exists)
+                {
+                    ObserveMissing(scope, id);
+                    throw new FileNotFoundException("Workspace file was not found.", path);
+                }
+                var descriptor = new ResourceDescriptor
+                {
+                    Reference = new ResourceRef(ResourceUri.Create("file", id)),
+                    Provider = "file", Kind = "file", Title = file.Name,
+                    ByteLength = file.Length, Mutable = !workspace.ReadOnly,
+                    Tracking = "metadata-only"
+                };
+                descriptor.Representations.Add(ResourceRepresentations.Metadata);
+                descriptor.Representations.Add(ResourceRepresentations.Text);
+                descriptor.Metadata["relativePath"] = relativePath;
+                return descriptor;
+            }
+        }
+
         private static bool IsVisibleFileName(string name)
         {
             return !name.Equals(".rnassistant", StringComparison.OrdinalIgnoreCase) &&

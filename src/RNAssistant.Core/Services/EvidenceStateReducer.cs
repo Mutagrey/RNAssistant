@@ -81,6 +81,16 @@ namespace RNAssistant.Core.Services
                 new ExcelResourceImpactMatcher(), new OrdinalResourceImpactMatcher() }).ToArray();
         }
 
+        public bool IsCurrentExactText(ResourceEvidence evidence, ResourceRef accepted,
+            ResourceAuthoritySnapshotSet frozen)
+        {
+            return evidence != null && accepted?.IsExact == true &&
+                evidence.Complete && evidence.View == ResourceRepresentations.Text &&
+                evidence.Coverage?.Kind == ResourceCoverageKinds.Whole && evidence.Payload != null &&
+                evidence.Resource.Uri == accepted.Uri && evidence.Resource.Revision == accepted.Revision &&
+                Reduce(evidence, frozen).State == EvidenceState.Current;
+        }
+
         public EvidenceProjection Reduce(ResourceEvidence evidence, ResourceAuthoritySnapshotSet authorities)
         {
             if (evidence == null) throw new ArgumentNullException(nameof(evidence));

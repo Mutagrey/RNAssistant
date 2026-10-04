@@ -1,3 +1,4 @@
+using RNAssistant.Core.Services;
 using System;
 using System.Collections.Generic;
 using System.Linq;
@@ -24,7 +25,7 @@ namespace RNAssistant.Harness
             var resources = new ResourceAuthoritySnapshotSet(new[] {
                 new ResourceAuthoritySnapshot(scope, 1, null, 0, new[] { ResourceHeadState.Known(source, 1) }) });
             var authority = new ModelAuthoritySnapshot(resources, "pack1", new SkillCatalogSnapshot(null), null, 1);
-            var compiler = new ModelContextCompiler();
+            var compiler = new ModelContextCompiler(projection: ModelToolResultProjection.Instance);
             foreach (var role in new[] { "user", "developer", "tool" })
             {
                 var failed = ContinuityResult("failed", "common.resources_read", ToolResult.Error(
@@ -103,7 +104,7 @@ namespace RNAssistant.Harness
                 var mutation = ContinuityResult("mutation", resource.Tool, new ToolResult(status,
                     "Recorded outcome.", resource.Data), role);
                 mutation.ResourceEffect = new ResourceEffect("effect", "write", outcome);
-                var compiler = new ModelContextCompiler();
+                var compiler = new ModelContextCompiler(projection: ModelToolResultProjection.Instance);
                 var immediate = compiler.Compile(authority, new ChatMessage[0], new[] { ContinuityCall(mutation), mutation },
                     null, new ToolCatalogEntry[0], new AppSettings(), 10000);
                 AssertEqual(status, immediate.Messages.Single(m => m.CompletedOperation != null).CompletedOperation.Status,
@@ -259,8 +260,9 @@ namespace RNAssistant.Harness
             AssertTrue(restored.Messages.Any(m => (m.Content ?? "").Contains("KEEP_COMPLETE_BODY")), "complete skill body is reused");
             AssertTrue(restored.Messages.Any(m => m.CompletedOperation?.ToolCallId == "write_done" &&
                 m.CompletedOperation.Status == ToolResultStatus.Ok), "mutation receipt survives independently of LLM summary");
-            var compiled = new ModelContextCompiler().Compile(authority, new ChatMessage[0], active.Concat(restored.Messages).ToList(),
-                null, new ToolCatalogEntry[0], new AppSettings(), 6000, workingSet: restored);
+            var compiled = new ModelContextCompiler(projection: ModelToolResultProjection.Instance).Compile(authority, new ChatMessage[0], active.Concat(restored.Messages).ToList(),
+                null, new ToolCatalogEntry[0], new AppSettings(), 6000,
+                retainedBodies: restored.IncludedBodies, evictedBodies: restored.OmittedBodies);
             AssertEqual(2, compiled.Receipt.RetainedBodies, "receipt exposes real retention");
             AssertContains(string.Join("\n", compiled.Messages.Select(m => m.Content)), "KEEP_COMPLETE_BODY", "model receives the still current complete skill after compaction");
             var retainedRows = compiled.Messages.Single(m => m.ToolCallId == "rows" && m.ToolResultProtocolVersion == ToolResultWire.CurrentVersion);

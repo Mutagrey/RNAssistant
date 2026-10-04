@@ -169,18 +169,33 @@ namespace RNAssistant.Harness
                 File.WriteAllText(Path.Combine(workspace.RootPath, ".env-local"), "secret");
                 Directory.CreateDirectory(Path.Combine(workspace.RootPath, ".git"));
                 var page = gateway.Select("file").Find("", null, 20);
-                AssertEqual(20, page.Names.Count, "gateway file discovery respects requested bound");
-                AssertTrue(page.Truncated && page.ScannedEntries <= 5000,
+                AssertEqual(20, page.Items.Count, "gateway file discovery respects requested bound");
+                AssertTrue(page.RefineQuery && page.ScannedEntries.Value <= 5000,
                     "directory listing reports an incomplete scan");
-                AssertTrue(!page.Names.Contains(".rnassistant") && !page.Names.Contains(".git") &&
-                    !page.Names.Contains(".env-local"), "protected entries stay out of discovery");
+                AssertTrue(!page.Complete && !page.Empty, "bounded listing does not establish absence");
+                AssertTrue(!page.Items.Any(item => item.Target == ".rnassistant" || item.Target == ".git" ||
+                    item.Target == ".env-local"), "protected entries stay out of discovery");
                 var narrowed = gateway.Select("file").Find("", "ITEM-229");
-                AssertEqual(1, narrowed.Names.Count, "query narrows directory discovery");
-                AssertEqual("item-229.txt", narrowed.Names[0], "case-insensitive filename query");
-                AssertTrue(!narrowed.Truncated, "narrow query scanned the full directory");
-                var observed = gateway.Select("file").Read(narrowed.Names[0]);
-                AssertEqual("fixture", observed.Text, "gateway file read returns real source bytes");
-                AssertTrue(observed.Evidence.Complete && gateway.ForUri(observed.Reference.Uri).Id == "file",
+                AssertEqual(1, narrowed.Items.Count, "query narrows directory discovery");
+                AssertEqual("item-229.txt", narrowed.Items[0].Target, "case-insensitive filename query");
+                AssertTrue(narrowed.Complete, "narrow query scanned the full directory");
+                AssertTrue(narrowed.Items[0].Descriptor.Reference.Revision == null,
+                    "metadata-only discovery does not claim current file bytes");
+                var observed = gateway.Select("file").Read(narrowed.Items[0].Target);
+                observed.RequireCompleteExactText();
+                var exactEvidence = observed.Evidence.Single();
+                var frozen = gateway.Select("file").CaptureAuthority(observed.Evidence);
+                var reducer = new EvidenceStateReducer();
+                AssertTrue(reducer.IsCurrentExactText(exactEvidence, observed.Result.Resource.Reference, frozen),
+                    "exact whole-file observation is current in the captured authority");
+                var excerpt = new ResourceEvidence("excerpt", exactEvidence.ScopeId, exactEvidence.Resource,
+                    "text", new ResourceCoverage(ResourceCoverageKinds.CharacterRange, start: 0, end: 2),
+                    true, exactEvidence.AuthorityGeneration, exactEvidence.Payload);
+                AssertTrue(!reducer.IsCurrentExactText(excerpt, exactEvidence.Resource, frozen),
+                    "complete excerpt cannot satisfy whole-file observation");
+                AssertEqual("fixture", observed.Result.Text, "gateway file read returns real source bytes");
+                AssertTrue(observed.Evidence.Single().Complete &&
+                    gateway.ForUri(observed.Result.Resource.Reference.Uri).Id == "file",
                     "gateway routes canonical file identity with complete exact evidence");
                 var rejected = false;
                 try { files.ListPage(workspace, query: "bad\nquery"); }

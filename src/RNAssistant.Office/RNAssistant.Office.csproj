@@ -267,12 +267,11 @@
     <Compile Include="Services\ResourceProviderContracts.cs" />
     <Compile Include="Services\ResourceReadCursor.cs" />
     <Compile Include="Services\ToolResultResourceService.cs" />
-    <Compile Include="Services\ToolResultMaterialization.cs" />
     <Compile Include="Services\ToolRunResultFactory.cs" />
-    <Compile Include="Services\ToolResultHistoryReader.cs" />
     <Compile Include="Services\ToolLibraryDocumentationService.cs" />
     <Compile Include="Services\ToolLibraryTestSessionService.cs" />
     <Compile Include="Services\ModelToolResultProjection.cs" />
+    <Compile Include="Services\ModelContextPreview.cs" />
     <Compile Include="Services\ChatHistoryEditService.cs" />
     <Compile Include="Services\ChatResourceMutationIntent.cs" />
     <Compile Include="Services\ConversationRunService.cs" />
@@ -281,7 +280,6 @@
     <Compile Include="Services\ConversationKernelAdapter.Tools.cs" />
     <Compile Include="Services\ConversationKernelAdapter.Store.cs" />
     <Compile Include="Services\ConversationModelSession.cs" />
-    <Compile Include="Services\ModelContextCompiler.cs" />
     <Compile Include="Services\ContextWorkingSet.cs" />
     <Compile Include="Services\ConversationProtocolContext.cs" />
     <Compile Include="Services\ConversationStreamProgressProjector.cs" />

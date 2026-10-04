@@ -1,3 +1,4 @@
+using RNAssistant.Core.Services;
 using System;
 using System.Collections.Generic;
 using System.Linq;
@@ -292,7 +293,7 @@ namespace RNAssistant.Harness
                 result.ResourceEvidence.Add(evidence);
                 result.ResultPayload = PayloadRef.FromBlob(payloads.StoreText(result.Content, "application/json"));
                 var snapshot = new ModelAuthoritySnapshot(authority.CaptureMany(new[] { scope }), "pack", new SkillCatalogSnapshot(null), null, 0);
-                var compiled = new ModelContextCompiler(payloads).Compile(snapshot, new ChatMessage[0], new[] { ContinuityCall(result), result }, null, new ToolCatalogEntry[0], new AppSettings(), 1000);
+                var compiled = new ModelContextCompiler(payloads, projection: ModelToolResultProjection.Instance).Compile(snapshot, new ChatMessage[0], new[] { ContinuityCall(result), result }, null, new ToolCatalogEntry[0], new AppSettings(), 1000);
                 var receipt = compiled.Messages.Single(m => m.CompletedOperation != null);
                 AssertEqual(ToolResultStatus.Ok, receipt.CompletedOperation.Status, "oversized read keeps its actual outcome");
                 AssertContains(receipt.Content, "startLine/lineCount", "model can recover using bounded lines");

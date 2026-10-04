@@ -36,16 +36,8 @@ namespace RNAssistant.Office.Tools
                 ToolArgumentReader.String(context.Arguments, "query", string.Empty),
                 ToolArgumentReader.String(context.Arguments, "scope", "all"));
             return new ToolHandlerResult(RuntimeResult.Ok(
-                result.Empty
-                    ? "No resources matched the semantic scope."
-                    : result.Partial
-                        ? result.Items.Count > 0
-                            ? "Resource find returned usable targets; some other sources were unavailable. Use a returned target directly and do not repeat the same find."
-                            : "Resource find is incomplete because some sources were unavailable. Refine the scope or query before retrying."
-                        : !result.Complete
-                            ? "Resource find is incomplete; absence is not established."
-                            : "Resource find completed.",
-                Serialize(result),
+                ResourceFindProjection.Message(result),
+                ResourceFindProjection.Serialize(result),
                 ExactReferences(result.ResourceRefs)), ToolEffectEvidence.None, resourceEvidence: result.Items.SelectMany(item => item.Evidence ??
                     new RNAssistant.Core.Models.ResourceEvidence[0]));
         }
