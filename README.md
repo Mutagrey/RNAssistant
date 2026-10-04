@@ -84,6 +84,17 @@ file effects, excluding no-op tool calls. `model_done` by itself is the model's
 claim. Use `node --check`
 for generated JavaScript and a browser run for behavior.
 
+`rna verify --workspace ./project --entry index.html` runs a bounded static-web
+smoke in an isolated Chromium profile. It serves only an immutable snapshot of
+the entry and discovered local HTML/CSS/JS dependencies over loopback, and reports
+missing assets, external references, console errors and uncaught JavaScript errors.
+Set `RNA_BROWSER_EXECUTABLE` to an absolute Chromium path if automatic detection
+does not find one. Missing browser returns `not-run` and exit 4. For agent runs,
+`--require-web-verify` requires a successful `web.verify` tool result whose file
+observations are still current at `done`; pair it with `--expect-files` for the
+required project files. This smoke does not assert application behavior such as
+filtering, persistence or export.
+
 After an interrupted file mutation, `recover --workspace
 <path> --path <relative-path>` reports the exact recovery outcome without replaying
 the write. Agent `files.delete` moves a previously read UTF-8 file into

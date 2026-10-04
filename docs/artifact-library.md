@@ -18,6 +18,19 @@ The existing Resource Fabric ingestion, CAS,
 document defines the user-visible lifecycle, viewers and mutation rules; it does not
 introduce another artifact transport or store.
 
+## Workspace CLI static-web smoke — 2026-10-04
+
+The development CLI has a separate `verify` command and optional `web.verify`
+agent tool for ordinary workspace files. The verifier captures a bounded in-memory
+snapshot through the file owner, rechecks its exact revisions, and serves only that
+snapshot to a fresh headless Chromium profile over loopback. It returns passed,
+failed or not-run with checked paths, missing dependencies, page/console errors and
+a CLI snapshot fingerprint. The browser has no Office bridge or user profile.
+`--require-web-verify` accepts a successful tool check only while all checked file
+evidence remains current. This creates no Library artifact or editable HTML
+aggregate; the document-owned HTML path below is unchanged. Functional assertions,
+images/binary assets, durable preview manifests and a UI preview remain M5/M7 work.
+
 ## Local catalog and artifact transfer — 2026-10-02
 
 Owner: Artifact Library. `ArtifactCatalogService` coordinates read-only discovery and

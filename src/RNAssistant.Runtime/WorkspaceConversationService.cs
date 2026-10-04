@@ -67,6 +67,12 @@ namespace RNAssistant.Runtime
             return _files.ReconcileUncertain(workspace, relativePath);
         }
 
+        public Task<WebVerificationResult> VerifyWebAsync(WorkspaceDescriptor workspace,
+            string entryPath, CancellationToken cancellationToken = default(CancellationToken))
+        {
+            return new WorkspaceWebVerifier(_files).VerifyAsync(workspace, entryPath, cancellationToken);
+        }
+
         public IReadOnlyList<string> MissingExpectedFiles(WorkspaceDescriptor workspace,
             IEnumerable<string> relativePaths)
         {
@@ -178,7 +184,8 @@ namespace RNAssistant.Runtime
             {
                 ExpectedFiles = files.ToList(),
                 MinimumVerifiedReads = requested?.MinimumVerifiedReads ?? 0,
-                MinimumVerifiedWrites = requested?.MinimumVerifiedWrites ?? 0
+                MinimumVerifiedWrites = requested?.MinimumVerifiedWrites ?? 0,
+                RequireWebVerification = requested?.RequireWebVerification ?? false
             };
             result.State = result.Requested ? WorkspaceAcceptanceState.Pending : WorkspaceAcceptanceState.NotRequested;
             return result;
@@ -212,6 +219,8 @@ namespace RNAssistant.Runtime
                 acceptance.AcceptedCompleteFileReads = completeReads.Where(evidence =>
                     reducer.Reduce(evidence, frozen).State == EvidenceState.Current)
                     .Select(evidence => evidence.Resource.Uri).Distinct(StringComparer.Ordinal).Count();
+                acceptance.VerifiedWebSnapshot = acceptance.RequireWebVerification &&
+                    AssessWebVerification(workspace, session, summary.RunId, acceptance.ExpectedFiles);
                 if (summary.Lifecycle == RunLifecycle.AwaitingConfirmation)
                 {
                     acceptance.State = WorkspaceAcceptanceState.Pending;
@@ -219,7 +228,8 @@ namespace RNAssistant.Runtime
                 }
                 acceptance.State = summary.Reason == "model_done" && acceptance.MissingFiles.Count == 0 &&
                     acceptance.AcceptedCompleteFileReads >= acceptance.MinimumVerifiedReads &&
-                    acceptance.VerifiedFileChanges >= acceptance.MinimumVerifiedWrites
+                    acceptance.VerifiedFileChanges >= acceptance.MinimumVerifiedWrites &&
+                    (!acceptance.RequireWebVerification || acceptance.VerifiedWebSnapshot)
                     ? WorkspaceAcceptanceState.Passed : WorkspaceAcceptanceState.Failed;
             }
             catch (Exception ex) when (ex is WorkspaceFileException || ex is IOException || ex is UnauthorizedAccessException)
@@ -227,6 +237,41 @@ namespace RNAssistant.Runtime
                 acceptance.State = WorkspaceAcceptanceState.Unknown;
                 acceptance.Error = ex.Message;
             }
+        }
+
+        private sealed class WebVerificationToolData
+        {
+            [JsonProperty("status")]
+            public string Status { get; set; }
+            [JsonProperty("checkedFiles")]
+            public List<string> CheckedFiles { get; set; }
+        }
+
+        private bool AssessWebVerification(WorkspaceDescriptor workspace, ChatSession session,
+            string runId, IReadOnlyList<string> expectedFiles)
+        {
+            var fact = session.Messages.LastOrDefault(item => item.RunId == runId &&
+                item.ProtocolMessage && item.ToolName == "web.verify" &&
+                !string.IsNullOrWhiteSpace(item.ToolCallId));
+            if (fact == null) return false;
+            var wire = ToolResultWire.Read(fact.Content);
+            if (!wire.Success || wire.Result.Status != ToolResultStatus.Ok) return false;
+            WebVerificationToolData data;
+            try { data = JsonConvert.DeserializeObject<WebVerificationToolData>(wire.Result.DataJson); }
+            catch (JsonException) { return false; }
+            if (data?.Status != "passed" || data.CheckedFiles == null || data.CheckedFiles.Count == 0 ||
+                data.CheckedFiles.Count != (fact.ResourceEvidence?.Count ?? 0) ||
+                expectedFiles.Any(path => !data.CheckedFiles.Contains(path, StringComparer.Ordinal))) return false;
+            foreach (var path in data.CheckedFiles)
+            {
+                try { _files.ReadText(workspace, path); }
+                catch (FileNotFoundException) { return false; }
+                catch (DirectoryNotFoundException) { return false; }
+            }
+            var frozen = _files.CaptureAuthority(fact.ResourceEvidence);
+            var reducer = new EvidenceStateReducer();
+            return fact.ResourceEvidence.All(evidence => evidence != null && evidence.Complete &&
+                reducer.Reduce(evidence, frozen).State == EvidenceState.Current);
         }
 
         private IDisposable AcquireSessionLease(string sessionId)
@@ -314,6 +359,10 @@ namespace RNAssistant.Runtime
                 Register(registry, entries, "common.resources_read", "Read a complete UTF-8 workspace file by relative path.",
                     Schema("relativePath", true), false,
                     new FileHandler(files, workspace, _observed, "read"));
+                if (WorkspaceWebVerifier.FindBrowserExecutable() != null)
+                    Register(registry, entries, "web.verify", "Load an immutable local HTML/CSS/JS snapshot in an isolated browser and report asset and runtime errors.",
+                        Schema("entryPath", true), false,
+                        new WebVerifierHandler(files, workspace), independentRead: false);
                 if (!workspace.ReadOnly)
                 {
                     Register(registry, entries, "files.create", "Create a new real UTF-8 file; never overwrite.",
@@ -376,11 +425,11 @@ namespace RNAssistant.Runtime
 
             private static void Register(ToolHandlerRegistry registry, List<ToolCatalogEntry> entries,
                 string id, string description, string schema, bool mutation, IToolHandler handler,
-                bool requiresConfirmation = false)
+                bool requiresConfirmation = false, bool independentRead = true)
             {
                 var policy = new ToolPolicy(mutation ? ToolEffect.Write : ToolEffect.Read,
                     mutation ? ToolVerification.Tool : ToolVerification.None,
-                    requiresConfirmation, !mutation, new[] { "agent" }, mutation ? 1 : 0);
+                    requiresConfirmation, !mutation && independentRead, new[] { "agent" }, mutation ? 1 : 0);
                 var binding = new ToolBinding(id, scope: "workspace", host: "Common");
                 registry.Register(new ToolRegistration(new ToolDescriptor(id, description, schema),
                     policy, binding, "workspace-v1"), handler);
@@ -483,13 +532,16 @@ namespace RNAssistant.Runtime
                     (_acceptance?.Requested == true ? "The accepted task contract requires current files and verified tool results before done: " +
                         JsonConvert.SerializeObject(new { expectedFiles = _acceptance.ExpectedFiles,
                             minimumVerifiedReads = _acceptance.MinimumVerifiedReads,
-                            minimumVerifiedWrites = _acceptance.MinimumVerifiedWrites }) + ". " : string.Empty) +
+                            minimumVerifiedWrites = _acceptance.MinimumVerifiedWrites,
+                            requireWebVerification = _acceptance.RequireWebVerification }) + ". " : string.Empty) +
                     "Respond with exactly one conversation-response v6 JSON object: message, action, tool_calls. " +
                     "Use action=tool for calls, continue for a short checkpoint, done only when the requested work is complete, " +
                     "blocked or needs_input when it cannot continue. One mutation per response. " +
                     "Never invent tool results, file changes, revisions or permissions. Paths are relative to the workspace root. " +
                     "Historical assistant messages and tool calls describe past actions, not current source bytes. " +
-                    "A stale read result requires a new read. Read an existing file before patch or replace. Available tools and exact argument schemas: " +
+                    "A stale read result requires a new read. Read an existing file before patch or replace. " +
+                    "When web.verify is available and the task requires a web app, call it after writing, repair any reported errors, and verify again before done. " +
+                    "Available tools and exact argument schemas: " +
                     JsonConvert.SerializeObject(_catalog.Select(tool => new { tool.Id, tool.Description, Schema = JObject.Parse(tool.ArgumentSchemaJson) })) +
                     ". Workspace root is a user-selected directory; internal absolute paths and runtime references are not tool arguments.";
             }
@@ -651,6 +703,38 @@ namespace RNAssistant.Runtime
                 ResourceEvidence evidence = null, ResourceAuthorityCommit authorityCommit = null)
             { return Task.FromResult(new ToolHandlerResult(result, effect,
                 resourceEvidence: evidence == null ? null : new[] { evidence }, authorityCommit: authorityCommit)); }
+        }
+
+        private sealed class WebVerifierHandler : IReadOnlyToolHandler
+        {
+            private readonly WorkspaceWebVerifier _verifier;
+            private readonly WorkspaceDescriptor _workspace;
+            public WebVerifierHandler(WorkspaceFileService files, WorkspaceDescriptor workspace)
+            { _verifier = new WorkspaceWebVerifier(files); _workspace = workspace; }
+
+            public async Task<ToolHandlerResult> ExecuteAsync(ToolHandlerContext context,
+                CancellationToken cancellationToken)
+            {
+                object value;
+                var entry = context.Arguments.TryGetValue("entryPath", out value)
+                    ? Convert.ToString(value) : string.Empty;
+                WebVerificationResult result;
+                try { result = await _verifier.VerifyAsync(_workspace, entry, cancellationToken).ConfigureAwait(false); }
+                catch (WorkspaceFileException ex)
+                {
+                    return new ToolHandlerResult(ToolResult.Error(ex.Message,
+                        JsonConvert.SerializeObject(new { code = ex.Code })), ToolEffectEvidence.None);
+                }
+                var data = JsonConvert.SerializeObject(new { entryPath = result.EntryPath,
+                    status = WorkspaceWebVerifier.StatusCode(result.Status),
+                    checkedFiles = result.CheckedFiles, errors = result.Errors });
+                var toolResult = result.Status == WebVerificationStatus.Passed
+                    ? ToolResult.Ok("Isolated browser smoke passed for this immutable snapshot.", data)
+                    : ToolResult.Error(result.Status == WebVerificationStatus.NotRun
+                        ? "Browser verification was not run." : "Browser verification found errors.", data);
+                return new ToolHandlerResult(toolResult, ToolEffectEvidence.None,
+                    resourceEvidence: result.Status == WebVerificationStatus.Passed ? result.Evidence : null);
+            }
         }
     }
 

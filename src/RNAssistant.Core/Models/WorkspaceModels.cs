@@ -52,13 +52,16 @@ namespace RNAssistant.Core.Models
         public List<string> ExpectedFiles { get; set; } = new List<string>();
         public int MinimumVerifiedReads { get; set; }
         public int MinimumVerifiedWrites { get; set; }
+        public bool RequireWebVerification { get; set; }
         public int AcceptedCompleteFileReads { get; set; }
         public int VerifiedFileChanges { get; set; }
+        public bool VerifiedWebSnapshot { get; set; }
         public WorkspaceAcceptanceState State { get; set; }
         public List<string> MissingFiles { get; set; } = new List<string>();
         public string Error { get; set; }
 
         [JsonIgnore]
-        public bool Requested { get { return ExpectedFiles.Count > 0 || MinimumVerifiedReads > 0 || MinimumVerifiedWrites > 0; } }
+        public bool Requested { get { return ExpectedFiles.Count > 0 || MinimumVerifiedReads > 0 ||
+            MinimumVerifiedWrites > 0 || RequireWebVerification; } }
     }
 }

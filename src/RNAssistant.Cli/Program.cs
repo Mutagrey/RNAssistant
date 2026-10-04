@@ -74,6 +74,17 @@ namespace RNAssistant.Cli
                     outcome = recovered.Outcome.ToString(), replayed = false });
                 return 0;
             }
+            if (args[0] == "verify")
+            {
+                var result = service.VerifyWebAsync(workspace, Value(options, "entry", "index.html"))
+                    .GetAwaiter().GetResult();
+                Output(jsonl, "verification.completed", new { entryPath = result.EntryPath,
+                    status = WorkspaceWebVerifier.StatusCode(result.Status),
+                    checkedFiles = result.CheckedFiles, snapshotSha256 = result.SnapshotSha256,
+                    browser = result.Browser, errors = result.Errors });
+                return result.Status == WebVerificationStatus.Passed ? 0 :
+                    result.Status == WebVerificationStatus.NotRun ? 4 : 5;
+            }
             if (args[0] == "inspect")
             {
                 var session = service.GetSession(workspace, Required(options, "session"));
@@ -141,7 +152,13 @@ namespace RNAssistant.Cli
             var minReads = NonnegativeOption(options, "min-reads");
             var minWrites = NonnegativeOption(options, "min-writes");
             var acceptance = new WorkspaceRunAcceptance
-            { ExpectedFiles = expectedFiles.ToList(), MinimumVerifiedReads = minReads, MinimumVerifiedWrites = minWrites };
+            { ExpectedFiles = expectedFiles.ToList(), MinimumVerifiedReads = minReads, MinimumVerifiedWrites = minWrites,
+                RequireWebVerification = options.ContainsKey("require-web-verify") };
+            if (acceptance.RequireWebVerification && WorkspaceWebVerifier.FindBrowserExecutable() == null)
+            {
+                Console.Error.WriteLine("Browser verification requires an available Chromium executable (RNA_BROWSER_EXECUTABLE).");
+                return 4;
+            }
             var settings = Settings(options, Environment.GetEnvironmentVariable("RNA_MODEL"));
             string key;
             if (!EndpointReady(settings, out key)) return 4;
@@ -220,8 +237,10 @@ namespace RNAssistant.Cli
                     missingFiles = checkedAcceptance.MissingFiles,
                     minReads = checkedAcceptance.MinimumVerifiedReads,
                     minWrites = checkedAcceptance.MinimumVerifiedWrites,
+                    requireWebVerification = checkedAcceptance.RequireWebVerification,
                     completeFileReads = checkedAcceptance.AcceptedCompleteFileReads,
                     verifiedFileChanges = checkedAcceptance.VerifiedFileChanges,
+                    webSnapshotVerified = checkedAcceptance.VerifiedWebSnapshot,
                     acceptanceError = checkedAcceptance.Error });
             if (pending != null) return 3;
             if (!acceptancePassed) return 5;
@@ -250,7 +269,8 @@ namespace RNAssistant.Cli
             {
                 if (!args[i].StartsWith("--", StringComparison.Ordinal)) throw new ArgumentException("Unexpected argument: " + args[i]);
                 var key = args[i].Substring(2);
-                if (key == "jsonl" || key == "read-only" || key == "create") result[key] = "true";
+                if (key == "jsonl" || key == "read-only" || key == "create" ||
+                    key == "require-web-verify") result[key] = "true";
                 else
                 {
                     if (i + 1 >= args.Length || args[i + 1].StartsWith("--", StringComparison.Ordinal))
@@ -289,9 +309,10 @@ namespace RNAssistant.Cli
             Console.WriteLine("rna workspace open <path> [--read-only]");
             Console.WriteLine("rna env --workspace <path>");
             Console.WriteLine("rna sessions --workspace <path> [--jsonl]");
-            Console.WriteLine("rna run --workspace <path> (--message <text> | --task-file <file>) [--session <id>] [--profile development] [--model <name>] [--base-url <url>] [--expect-files <comma-separated paths>] [--min-reads <n>] [--min-writes <n>] [--jsonl]");
+            Console.WriteLine("rna run --workspace <path> (--message <text> | --task-file <file>) [--session <id>] [--profile development] [--model <name>] [--base-url <url>] [--expect-files <comma-separated paths>] [--min-reads <n>] [--min-writes <n>] [--require-web-verify] [--jsonl]");
             Console.WriteLine("rna inspect --workspace <path> --session <id> [--jsonl]");
             Console.WriteLine("rna recover --workspace <path> --path <relative-path> [--jsonl]  (inspect an uncertain file effect)");
+            Console.WriteLine("rna verify --workspace <path> [--entry index.html] [--jsonl]  (isolated static web smoke)");
             Console.WriteLine("rna resume --workspace <path> --session <id> [--jsonl]  (show pending action or request new input)");
             Console.WriteLine("rna approve --workspace <path> --session <id> --pending <id> [--base-url <url>] [--model <name>] [--jsonl]");
             Console.WriteLine("rna deny --workspace <path> --session <id> --pending <id> [--jsonl]");

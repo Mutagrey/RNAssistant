@@ -41,6 +41,12 @@ it preserves identity, verifies the target bytes and source absence, then publis
 a new revision. The target parent must exist and no existing file or reserved
 identity may be overwritten. An interrupted move uses its durable two-path intent
 for explicit reconciliation; no move is automatically replayed.
+When an isolated Chromium executable is available, the CLI also advertises
+`web.verify` as a read-only development tool. It loads a bounded immutable
+snapshot assembled through `WorkspaceFileService`, reports dependency/load/console/
+runtime errors and attaches exact file evidence to its durable tool result. It
+never writes the source. Without a browser the tool is absent from the catalog;
+the explicit CLI `verify` command returns `not-run`.
 `files.delete` requires a complete accepted read of the current UTF-8 file and
 moves it to workspace-local managed trash after explicit confirmation and journal preparation. It publishes
 success only after the original path is absent and trash bytes match the retained

@@ -43,6 +43,16 @@ symlink/hardlink race guarantees and frozen
 `ModelContextCompiler` admission remain open M3–M5 work. See
 [progress](stabilization/PROGRESS.md#workspace-first-implementation--2026-10-04-in-progress).
 
+Development `web.verify` reads bounded UTF-8 source through this same file owner,
+rechecks each observed revision, then serves only those captured bytes from an
+in-memory snapshot on loopback to an isolated Chromium profile. The browser cannot
+open the writable workspace through that server. The tool records exact file
+evidence alongside its result; CLI acceptance refreshes those files and requires
+the evidence to remain current at completion. Dependency discovery currently
+covers HTML script/stylesheet references, CSS imports/URLs and static JS imports;
+dynamic asset discovery, binary assets, long-delayed behavior, functional browser
+assertions and Gateway-based preview routing remain open.
+
 One resource identity, shared current-state authority, immutable historical evidence
 and one model-context compiler serve model reads, HTML and viewers. Reading content
 never admits a tool schema, activates a stored package or authorizes a mutation.

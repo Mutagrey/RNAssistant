@@ -39,6 +39,16 @@ delete/localStorage behavior; attempted agent repair made no write. The shallow
 file/count contract passed those narrow turns but did not certify the app. This
 keeps M5 browser verification and agent repair acceptance open.
 
+The development CLI now has isolated `web.verify` and an opt-in
+`--require-web-verify` acceptance condition. A successful browser smoke retains
+exact file evidence; a later file mutation or observed external edit makes that
+verification stale at completion. Scripted verify/repair and stale-check cases
+passed, and local Qwen completed one real read/patch/read/verify repair after the
+user supplied the precise DOM-ID diagnosis. The initial Qwen request still asked
+for input despite accessible files, and its next turn stalled after reads and
+failed verification. This does not close autonomous diagnosis, functional browser
+assertions or the original multi-file task risk.
+
 ## Offline managed dependency closure — 2026-10-02
 
 Owner: local packages and host delivery targets. The Windows photos show

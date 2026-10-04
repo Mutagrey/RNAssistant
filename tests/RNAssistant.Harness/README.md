@@ -1,5 +1,10 @@
 # RNAssistant Harness
 
+The independent CLI's optional real-browser check is
+`python3 tests/cli/web_verifier_smoke.py` after building `RNAssistant.Cli`. It uses
+a temporary workspace and fresh Chromium profile; it is not an Office/WebView2
+qualification or an agent functional grader.
+
 Host-neutral tests run on this machine without Office COM. Locate the relevant test first; do not read or execute the full suite by default.
 
 ## Find a test
