@@ -382,6 +382,14 @@ namespace RNAssistant.Core.Models
         public DateTime StartedUtc { get; set; }
         [JsonProperty(NullValueHandling = NullValueHandling.Ignore)]
         public WorkspaceRunAcceptance WorkspaceAcceptance { get; set; }
+        [JsonProperty(NullValueHandling = NullValueHandling.Ignore)]
+        public string InterruptedToolId { get; set; }
+        [JsonProperty(NullValueHandling = NullValueHandling.Ignore)]
+        public string InterruptedFilePath { get; set; }
+        [JsonProperty(NullValueHandling = NullValueHandling.Ignore)]
+        public string InterruptedTargetPath { get; set; }
+        [JsonProperty(DefaultValueHandling = DefaultValueHandling.Ignore)]
+        public bool InterruptedEffectPossible { get; set; }
     }
 
     public sealed class ChatSessionHeader

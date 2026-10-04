@@ -40,6 +40,19 @@ namespace RNAssistant.Runtime
             return _workspaces.LoadSession(_chats, workspace, sessionId);
         }
 
+        public ChatSession PrepareResume(WorkspaceDescriptor workspace, string sessionId)
+        {
+            if (workspace == null || string.IsNullOrWhiteSpace(sessionId))
+                throw new ArgumentException("Workspace and session are required.");
+            using (AcquireSessionLease(sessionId))
+            {
+                var session = _workspaces.LoadSession(_chats, workspace, sessionId);
+                if (session == null) throw new InvalidOperationException("Workspace session was not found.");
+                InterruptAbandonedRun(session);
+                return session;
+            }
+        }
+
         public WorkspaceDescriptor OpenWorkspace(string rootPath, bool createIfMissing,
             bool permitManifestWrite)
         {
@@ -108,6 +121,7 @@ namespace RNAssistant.Runtime
                 if (session == null) throw new InvalidOperationException("Workspace session was removed.");
                 if (session.LastRun?.KernelState?.Summary?.Lifecycle == RunLifecycle.AwaitingConfirmation)
                     throw new InvalidOperationException("The pending approval must be resolved before another turn.");
+                InterruptAbandonedRun(session);
 
                 var previous = RestoreAcceptedHistory(session);
                 var ports = new WorkspacePorts(_chats, _files, workspace, session, settings, apiKeyProvider,
@@ -285,12 +299,61 @@ namespace RNAssistant.Runtime
             catch (IOException ex) { throw new IOException("Workspace session is already running or its lease is unavailable.", ex); }
         }
 
+        private void InterruptAbandonedRun(ChatSession session)
+        {
+            var run = session.LastRun;
+            if (run == null || string.IsNullOrWhiteSpace(run.RunId)) return;
+            var lifecycle = run.KernelState?.Summary?.Lifecycle;
+            if (lifecycle.HasValue ? lifecycle.Value != RunLifecycle.Running :
+                !string.IsNullOrWhiteSpace(run.Status) && run.Status != "running" &&
+                run.Status != "cancelling") return;
+            var active = run.KernelState?.InFlightTool;
+            var accepted = session.Messages.Where(item => item != null && item.RunId == run.RunId &&
+                item.ProtocolMessage && item.Role == "assistant")
+                .SelectMany(item => item.ToolCalls ?? new List<LlmToolCall>())
+                .Select(call => call.Id).Where(id => !string.IsNullOrWhiteSpace(id)).ToArray();
+            var completed = new HashSet<string>(session.Messages.Where(item => item != null &&
+                item.RunId == run.RunId && item.ProtocolMessage && !string.IsNullOrWhiteSpace(item.ToolCallId))
+                .Select(item => item.ToolCallId), StringComparer.OrdinalIgnoreCase);
+            var incomplete = accepted.Any(id => !completed.Contains(id));
+            if (active != null || incomplete)
+                foreach (var item in session.Messages.Where(item => item != null &&
+                    item.RunId == run.RunId && item.ProtocolMessage))
+                    item.ExcludeFromModelContext = true;
+            run.InterruptedToolId = active?.Call.Name;
+            if (active != null && active.Call.Name.StartsWith("files.", StringComparison.Ordinal))
+            {
+                try
+                {
+                    var args = JObject.Parse(active.Call.ArgumentsJson);
+                    run.InterruptedFilePath = (string)args["relativePath"];
+                    run.InterruptedTargetPath = (string)args["targetPath"];
+                }
+                catch (JsonException) { }
+            }
+            run.InterruptedEffectPossible = active?.Policy.MayHaveSideEffects == true;
+            var message = run.InterruptedEffectPossible
+                ? "Previous CLI process stopped with a possible file effect; inspect current files and reconcile an unresolved attempt before a new edit. No call was replayed."
+                : "Previous CLI process stopped before a terminal run result. No call was replayed; submit explicit new input to continue.";
+            if (run.KernelState != null) run.KernelState = run.KernelState.Interrupt(false, message);
+            run.Status = "interrupted";
+            run.Phase = "interrupted";
+            run.CurrentAction = message;
+            if (run.WorkspaceAcceptance?.Requested == true)
+            {
+                run.WorkspaceAcceptance.State = WorkspaceAcceptanceState.Unknown;
+                run.WorkspaceAcceptance.Error = "Run interrupted before acceptance could be assessed.";
+            }
+            session.Messages.Add(new ChatMessage { Role = "assistant", RunId = run.RunId, Content = message });
+            _chats.Save(session);
+        }
+
         private static IReadOnlyList<AgentMessage> RestoreAcceptedHistory(ChatSession session)
         {
             var history = new List<AgentMessage>();
             foreach (var item in session.Messages ?? new List<ChatMessage>())
             {
-                if (item == null) continue;
+                if (item == null || item.ExcludeFromModelContext) continue;
                 if (item.Role == "user" && !item.ProtocolMessage)
                 {
                     history.Add(AgentMessage.User(item.Content));

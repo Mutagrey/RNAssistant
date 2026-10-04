@@ -92,13 +92,15 @@ namespace RNAssistant.Cli
                 Output(jsonl, "session", new { session.Id, session.WorkspaceId, session.Title,
                     session.Model, session.Mode, session.Revision, session.LastRun?.Status,
                     acceptance = session.LastRun?.WorkspaceAcceptance,
+                    interruptedToolId = session.LastRun?.InterruptedToolId,
+                    interruptedPath = session.LastRun?.InterruptedFilePath,
+                    interruptedEffectPossible = session.LastRun?.InterruptedEffectPossible,
                     messageCount = session.Messages?.Count ?? 0 });
                 return 0;
             }
             if (args[0] == "resume")
             {
-                var session = service.GetSession(workspace, Required(options, "session"));
-                if (session == null) throw new ArgumentException("Session not found.");
+                var session = service.PrepareResume(workspace, Required(options, "session"));
                 var pending = session.LastRun?.KernelState?.Summary?.PendingConfirmation;
                 if (pending != null)
                 {
@@ -108,6 +110,18 @@ namespace RNAssistant.Cli
                         path = PendingPath(pending.Call.Name, pending.Call.ArgumentsJson),
                         targetPath = pendingTarget,
                         command = "rna approve|deny --workspace <path> --session <id> --pending <id>" });
+                    return 3;
+                }
+                if (session.LastRun?.Status == "interrupted")
+                {
+                    var run = session.LastRun;
+                    Output(jsonl, "run.interrupted", new { session.Id, run.RunId,
+                        toolId = run.InterruptedToolId, path = run.InterruptedFilePath,
+                        targetPath = run.InterruptedTargetPath,
+                        possibleEffect = run.InterruptedEffectPossible,
+                        acceptance = run.WorkspaceAcceptance?.State.ToString().ToLowerInvariant(),
+                        reason = run.CurrentAction,
+                        command = "rna run --workspace <path> --session <id> --message <task>" });
                     return 3;
                 }
                 Output(jsonl, "run.needs_input", new { session.Id,
@@ -313,7 +327,7 @@ namespace RNAssistant.Cli
             Console.WriteLine("rna inspect --workspace <path> --session <id> [--jsonl]");
             Console.WriteLine("rna recover --workspace <path> --path <relative-path> [--jsonl]  (inspect an uncertain file effect)");
             Console.WriteLine("rna verify --workspace <path> [--entry index.html] [--jsonl]  (isolated static web smoke)");
-            Console.WriteLine("rna resume --workspace <path> --session <id> [--jsonl]  (show pending action or request new input)");
+            Console.WriteLine("rna resume --workspace <path> --session <id> [--jsonl]  (close an abandoned run, show pending action or request new input; never replay tools)");
             Console.WriteLine("rna approve --workspace <path> --session <id> --pending <id> [--base-url <url>] [--model <name>] [--jsonl]");
             Console.WriteLine("rna deny --workspace <path> --session <id> --pending <id> [--jsonl]");
             Console.WriteLine("LLM settings: RNA_BASE_URL, RNA_MODEL, RNA_API_KEY or OPENAI_API_KEY. Keys are never command arguments.");

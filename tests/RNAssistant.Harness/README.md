@@ -16,6 +16,10 @@ independent acceptance evidence; `web.verify` only checks page load and errors.
 Run `python3 tests/cli/csv_dashboard_grader_smoke.py` to confirm a working fixture
 passes and broken JavaScript, missing browser and blocked outbound requests do not.
 
+After building the CLI, run `python3 tests/cli/interrupted_run_smoke.py` for a
+process-killed model wait. It checks durable interrupted/unknown acceptance,
+idempotent `resume`, and one new model request only after explicit input.
+
 Host-neutral tests run on this machine without Office COM. Locate the relevant test first; do not read or execute the full suite by default.
 
 ## Find a test

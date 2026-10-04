@@ -43,6 +43,18 @@ model still said `done`, but the accepted minimum-change contract returned
 flows, broader approvals, automatic resume and real-model confirmation behavior
 remain open.
 
+M4 interrupted-run safety slice (2026-10-04): an abandoned CLI `running` run
+is now closed only after the per-session cross-process lease is acquired and the
+canonical chat is reloaded. `resume` performs that durable reconciliation without
+calling the model or replaying a tool. An in-flight possible write is marked
+unknown; an incomplete accepted exchange is excluded from future model context,
+and the old CLI acceptance becomes unknown. The user can submit a new turn after
+inspecting the workspace and explicitly reconciling any unresolved file attempt.
+`python3 tests/cli/interrupted_run_smoke.py` killed a process during a model wait,
+then verified repeatable `resume` with no model call and exactly one new request
+after explicit input. A crash during an in-flight file dispatch, same-run budget
+continuation and full E-RESUME acceptance remain unverified.
+
 M3 move slice (2026-10-04): `files.move` now requires an accepted whole-file read
 and the same kernel confirmation/resume path as delete. It saves source and target
 in a durable move intent before dispatch, checks the source preimage, refuses an

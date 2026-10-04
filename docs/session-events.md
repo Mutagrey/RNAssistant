@@ -186,6 +186,16 @@ excluded from replay. These are minimal summary/recovery adaptations; the comple
 persistence/UI matrix remains Phase 9. [Phase 3B2 evidence](stabilization/PHASE_3B2_KERNEL_CUTOVER.md)
 covers actual event replay, pending/cancelled confirmation, stale CAS and faults.
 
+For the independent workspace CLI, `resume` takes the session's cross-process
+lease, reloads the canonical chat, and marks an abandoned `running` run interrupted.
+An in-flight file mutation is recorded as a possible effect; its original call is
+never replayed. Incomplete protocol exchanges are excluded from later model
+context, while user input and completed exchanges remain in history. The old
+CLI acceptance assessment becomes `unknown`. `resume` then reports the stopped
+run and requires explicit new input; it does not continue that run's model budget.
+Any unresolved file journal attempt requires explicit `recover` before editing
+that file. Pending confirmations retain their separate approve/deny route.
+
 The default SHA-256 hash-chain detects accidental edits, truncation in the middle of the log, and reordered records. Optional HMAC-SHA256 prevents recomputing valid edited records without the selected secret. Neither mode prevents deletion of an unanchored final suffix.
 
 ## Blobs and artifacts
