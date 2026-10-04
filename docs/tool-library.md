@@ -52,6 +52,8 @@ snapshot assembled through `WorkspaceFileService`, reports dependency/load/conso
 runtime errors and attaches exact file evidence to its durable tool result. It
 never writes the source. Without a browser the tool is absent from the catalog;
 the explicit CLI `verify` command returns `not-run`.
+After document load it observes browser events for 1.5 seconds; later timers and
+long-running interactions require a separate functional check.
 When a JavaScript exception occurs, the result may include an advisory hint for
 literal `getElementById` calls whose IDs are absent from captured HTML. Dynamic
 DOM construction can make such a hint inapplicable; the browser error remains the

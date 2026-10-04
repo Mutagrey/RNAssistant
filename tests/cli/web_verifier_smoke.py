@@ -57,6 +57,11 @@ def main():
         assert code == 5 and result["status"] == "failed", result
         assert any("BROWSER_SMOKE_FAILURE" in error for error in result["errors"]), result
 
+        script.write_text('setTimeout(() => { throw new Error("DELAYED_BROWSER_FAILURE"); }, 650);', encoding="utf-8")
+        code, result = verify(workspace, state)
+        assert code == 5 and result["status"] == "failed", result
+        assert any("DELAYED_BROWSER_FAILURE" in error for error in result["errors"]), result
+
         script.write_text('document.getElementById("missing").textContent="Ready";', encoding="utf-8")
         code, result = verify(workspace, state)
         assert code == 5 and result["status"] == "failed", result
@@ -70,7 +75,7 @@ def main():
         (workspace / "styles.css").write_text("body {color:black}", encoding="utf-8")
         code, result = verify(workspace, state, "/missing/chromium")
         assert code == 4 and result["status"] == "not-run", result
-        print("PASS workspace CLI web verifier: passed, runtime error, DOM hint, missing asset, not-run")
+        print("PASS workspace CLI web verifier: passed, immediate/delayed error, DOM hint, missing asset, not-run")
 
 
 if __name__ == "__main__":

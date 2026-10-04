@@ -458,6 +458,8 @@ namespace RNAssistant.Runtime
                             cancellationToken).ConfigureAwait(false);
                         if ((string)evaluated["result"]?["result"]?["value"] != "complete")
                             errors.Add("Browser document did not reach readyState=complete.");
+                        await devtools.ObserveForAsync(TimeSpan.FromMilliseconds(1500),
+                            cancellationToken).ConfigureAwait(false);
                         errors.AddRange(devtools.Errors);
                     }
                 }
@@ -521,7 +523,19 @@ namespace RNAssistant.Runtime
                 {
                     deadline.CancelAfter(TimeSpan.FromSeconds(10));
                     while (!_loaded) Observe(await ReadAsync(deadline.Token).ConfigureAwait(false));
-                    await Task.Delay(400, deadline.Token).ConfigureAwait(false);
+                }
+            }
+
+            public async Task ObserveForAsync(TimeSpan duration, CancellationToken token)
+            {
+                using (var deadline = CancellationTokenSource.CreateLinkedTokenSource(token))
+                {
+                    deadline.CancelAfter(duration);
+                    try
+                    {
+                        while (true) Observe(await ReadAsync(deadline.Token).ConfigureAwait(false));
+                    }
+                    catch (OperationCanceledException) when (!token.IsCancellationRequested) { }
                 }
             }
 

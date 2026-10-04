@@ -56,7 +56,8 @@ open the writable workspace through that server. The tool records exact file
 evidence alongside its result; CLI acceptance refreshes those files and requires
 the evidence to remain current at completion. Dependency discovery currently
 covers HTML script/stylesheet references, CSS imports/URLs and static JS imports;
-dynamic asset discovery, binary assets, long-delayed behavior, functional browser
+dynamic asset discovery, binary assets, behavior beyond the 1.5-second post-load
+observation window, functional browser
 assertions and Gateway-based preview routing remain open.
 
 One resource identity, shared current-state authority, immutable historical evidence
