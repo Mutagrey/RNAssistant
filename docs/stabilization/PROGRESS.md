@@ -23,6 +23,12 @@ read-back/verification contract. A discovered current-turn tool-result projectio
 gap is fixed and covered by a scripted read/browser-error test; autonomous M5
 completion and the two-phase extension remain open. Details follow below.
 
+Cloud reference check: `gemma4:cloud` through Ollama 0.35.0 failed v6 parsing
+before any tool in both `json_schema` and explicit `json_object` modes. The
+endpoint returned Markdown-fenced, wrong-shaped tool JSON despite declaring
+OpenAI-compatible response formats. Cloud task quality is therefore unmeasured;
+this tag is not currently a qualified reference for CLI comparisons.
+
 M4 acceptance slice (2026-10-04): the CLI accepts expected files and minimum read/
 write evidence as a typed run contract, saves it in the canonical chat stream before
 model dispatch, includes it in the request, and saves the separate assessment at
@@ -211,6 +217,22 @@ projection fix, the fresh base task still failed on missing read-back and invali
 amount. No run qualified the two-phase M5 acceptance; Windows/Office/WebView2
 qualification is unchanged. The trace reported no `llm.failure` events in these
 runs; provider-internal retries were not separately measured.
+
+Cloud Gemma protocol check (2026-10-04): `gemma4:cloud`, digest `ef09f235533c`,
+reported model context 262144; CLI planning context was explicitly 32768,
+reasoning off and output cap 4096. A fresh three-file CSV task using the default
+`json_schema` exhausted ten format attempts (`ProtocolExhausted`, exit 5), with
+zero calls and files. A direct strict-schema greeting probe returned fenced JSON
+with `action`/`response` instead of the required v6 envelope. A direct simple
+`json_object` greeting probe returned valid v6, so CLI now exposes an explicit
+response-mode setting and records it in run metadata. Repeating the full task in
+`json_object` on another empty workspace again exhausted ten format attempts
+without tool calls or files. A direct call with its saved production prompt
+returned fenced JSON with `Id`/`Schema` tool fields instead of `name`/`arguments`
+and no `message`. This is a reproducible `PROTOCOL_ERROR` at the model/endpoint
+boundary, not a functional CSV score. Scripted HTTP tests confirmed both CLI
+transport modes and saved metadata. The existing v6 parser correctly rejected
+these outputs; no permissive JSON repair or separate agent loop was added.
 
 Next concrete slice: connect `WorkspaceFileService` as a filesystem provider to the
 existing ResourceGateway by moving its generic routing across the current Office

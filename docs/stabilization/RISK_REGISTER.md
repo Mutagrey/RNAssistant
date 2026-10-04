@@ -72,6 +72,18 @@ read/error regression. This removes one cause of blind completion; a fresh Gemma
 run still skipped read-back and failed independent invalid-CSV behavior. Agent
 completion and two-phase functional acceptance remain open.
 
+## Cloud Gemma v6 protocol mismatch — 2026-10-04
+
+Owner: Ollama OpenAI-compatible endpoint/model profile and ModelProtocol
+qualification. `gemma4:cloud` through Ollama 0.35.0 returned Markdown-fenced,
+wrong-shaped JSON to a strict `json_schema` request and to the full CLI task in
+explicit `json_object` mode. Both fresh CLI runs exhausted ten format attempts
+before any tool call or file effect. A simple `json_object` greeting did return
+valid v6, so the failure is prompt/task dependent. CLI response mode is now an
+explicit saved setting for controlled comparison; it does not relax v6 parsing.
+Do not use this tag as a strong reference until the exact full-task protocol
+probe succeeds. The local Gemma 12B evidence remains separate.
+
 ## Offline managed dependency closure — 2026-10-02
 
 Owner: local packages and host delivery targets. The Windows photos show

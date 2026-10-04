@@ -62,7 +62,7 @@ Ollama profile from `config/ollama/`:
 | `gpt-oss:20b` | `rna-gpt-oss-20b-16k` | 16384 |
 | `qwen3.5:9b` | `rna-qwen35-9b-32k` | 32768 |
 | `qwen3.8:27b` | `rna-qwen38-27b-8k` | 8192 |
-| `gemma4:cloud` | `gemma4:cloud` (remote) | Set an explicit planning limit |
+| `gemma4:cloud` | `gemma4:cloud` (remote; protocol qualification open) | Set an explicit planning limit |
 
 Pull and create profiles one at a time, without running them during setup:
 
@@ -82,8 +82,11 @@ Set `RNA_BASE_URL=http://127.0.0.1:11434`, `RNA_MODEL=rna-gemma4-12b-32k`,
 `RNA_CONTEXT_TOKENS=32768`, and `RNA_THINKING=off` for the CLI command above.
 The CLI requests 4096 output tokens; `RNA_REASONING_MODE` defaults to
 `reasoning_effort`. Set `RNA_THINKING=on` only for a deliberate reasoning-mode
-comparison. The run saves model, Ollama digest when available, context and
-reasoning mode; `rna inspect` shows that snapshot. Use a new session for each
+comparison. `--response-mode` / `RNA_RESPONSE_MODE` explicitly selects
+`json_schema` (CLI default) or `json_object` for an endpoint that needs it;
+both use the same v6 parser and agent loop. The run saves model, Ollama digest
+when available, context, response mode and reasoning mode; `rna inspect` shows
+that snapshot. Use a new session for each
 model comparison. Do not append `/v1` to the CLI base URL; `LlmClient` addresses
 `/v1/chat/completions` itself. A loopback Ollama endpoint needs no API key.
 For other endpoints, `RNA_MODEL_DIGEST` is an operator-supplied label; verify it
@@ -91,6 +94,10 @@ against that provider before using it as comparison evidence.
 For the default local Ollama endpoint, CLI checks the selected tag and `/api/show`
 before starting a run; an unavailable model or RNAssistant context above the
 profile's `num_ctx` fails before model dispatch.
+The `gemma4:cloud` tag through Ollama 0.35.0 has not passed the CLI v6 probe:
+both response modes failed the full task before any tool call. See
+[current evidence](docs/stabilization/PROGRESS.md#workspace-first-implementation--2026-10-04-in-progress)
+before using it as a reference model.
 In the Office UI, set the selected model's capability metadata/context limit to
 the same profile values before a separate test session.
 

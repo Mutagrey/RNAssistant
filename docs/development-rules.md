@@ -252,7 +252,7 @@ Full harness не заменяет Windows/COM проверку. Число фа
 
 Модель — конфигурация environment/profile одного RNAssistant runtime, а не
 вариант реализации агента. При переключении допустимо менять только `BaseUrl`,
-`Model`, лимит контекста, reasoning/thinking и capability metadata. `AgentKernel`,
+`Model`, лимит контекста, явный response mode, reasoning/thinking и capability metadata. `AgentKernel`,
 `ModelProtocol`, `ToolRuntime`, tool schemas, skills, workspace, правила проверки
 и acceptance tests остаются теми же. System prompts меняются только по отдельной
 причине, не ради адаптации к слабой модели.
@@ -263,11 +263,11 @@ Full harness не заменяет Windows/COM проверку. Число фа
 | `gpt-oss:20b` | Другое семейство: cross-model regression prompts/harness/tools | 16K; 32K только после проверки памяти |
 | `qwen3.5:9b` | Adversarial robustness: JSON, неверные tools, преждевременный `done`, recovery и защита от ошибочных действий | 32K |
 | `qwen3.8:27b` | Milestone и production-parity qualification | Сначала 8K; 16K только после проверки памяти |
-| `gemma4:cloud` | Сильный reference для сложных задач и разделения дефекта RNAssistant от ограничения локальной модели | По условиям endpoint; фиксировать фактический лимит |
+| `gemma4:cloud` | Кандидат в reference; через локальный Ollama 0.35.0 пока не прошёл v6 protocol, сначала проверить endpoint | По условиям endpoint; фиксировать фактический лимит |
 
 Обычный цикл: `gemma4:12b` ежедневно → `qwen3.5:9b` после значимого изменения →
 `gpt-oss:20b` для cross-model regression → `gemma4:cloud` для сложной/reference
-задачи при необходимости → `qwen3.8:27b` на milestone. Успех сильных моделей
+задачи только после успешного v6 probe → `qwen3.8:27b` на milestone. Успех сильных моделей
 при провале 9B может быть нормальным пределом модели; не усложнять harness
 эвристиками ради прохождения всех задач 9B.
 
@@ -285,7 +285,7 @@ Modelfile; RNAssistant должен иметь такой же или меньш
 
 Для сравнения зафиксировать RNAssistant commit, task, исходный workspace, tool
 catalog, skills, acceptance tests и по возможности temperature/reasoning policy.
-Для каждого run сохранить model/tag и digest, context, thinking/reasoning mode,
+Для каждого run сохранить model/tag и digest, context, response mode, thinking/reasoning mode,
 число LLM и tool calls, protocol violations, tool errors, retries, final action,
 результат независимой acceptance-проверки и duration. `action=done` не является
 критерием успеха. Каждый провал пометить хотя бы одной категорией:

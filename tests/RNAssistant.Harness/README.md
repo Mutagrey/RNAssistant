@@ -6,6 +6,8 @@ a temporary workspace and fresh Chromium profile; it is not an Office/WebView2
 qualification or an agent functional grader.
 `python3 tests/cli/tool_result_projection_smoke.py` checks that a current-turn
 complete file read and a failed `web.verify` result reach the next model request.
+`python3 tests/cli/response_mode_smoke.py` checks explicit CLI `json_schema` /
+`json_object` selection and persisted model metadata.
 
 The independent M5 CSV dashboard task is `tests/cli/csv_dashboard_task.md`.
 Run `node tests/cli/csv_dashboard_grader.mjs <workspace>` on the resulting files,

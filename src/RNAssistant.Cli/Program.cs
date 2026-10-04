@@ -145,7 +145,8 @@ namespace RNAssistant.Cli
                 string continuationDigest = null;
                 if (approve)
                 {
-                    continuationSettings = Settings(options, session.Model);
+                    continuationSettings = Settings(options, session.Model,
+                        session.LastRun?.ModelConfiguration?.AgentResponseMode);
                     if (!EndpointReady(continuationSettings, out continuationKey)) return 4;
                     if (!ModelReady(continuationSettings, out continuationDigest)) return 4;
                     var requestedThinking = OptionalThinking(options);
@@ -210,8 +211,15 @@ namespace RNAssistant.Cli
             }
         }
 
-        private static AppSettings Settings(Dictionary<string, string> options, string defaultModel)
+        private static AppSettings Settings(Dictionary<string, string> options, string defaultModel,
+            string defaultResponseMode = null)
         {
+            var responseMode = Value(options, "response-mode",
+                Environment.GetEnvironmentVariable("RNA_RESPONSE_MODE") ??
+                defaultResponseMode ?? AgentResponseModes.JsonSchema);
+            var normalizedResponseMode = AgentResponseModes.Normalize(responseMode);
+            if (!string.Equals(responseMode, normalizedResponseMode, StringComparison.OrdinalIgnoreCase))
+                throw new ArgumentException("--response-mode/RNA_RESPONSE_MODE must be json_schema or json_object.");
             var reasoningMode = Value(options, "reasoning-mode",
                 Environment.GetEnvironmentVariable("RNA_REASONING_MODE") ?? ReasoningRequestModes.ReasoningEffort);
             var normalizedMode = ReasoningRequestModes.Normalize(reasoningMode);
@@ -222,7 +230,7 @@ namespace RNAssistant.Cli
             {
                 BaseUrl = Value(options, "base-url", Environment.GetEnvironmentVariable("RNA_BASE_URL")),
                 Model = Value(options, "model", defaultModel),
-                AgentResponseMode = AgentResponseModes.JsonSchema,
+                AgentResponseMode = normalizedResponseMode,
                 ReasoningRequestMode = normalizedMode,
                 ContextWindowOverrideTokens = ContextTokens(options),
                 MaxTokens = 4096,
@@ -446,14 +454,14 @@ namespace RNAssistant.Cli
             Console.WriteLine("rna workspace open <path> [--read-only]");
             Console.WriteLine("rna env --workspace <path>");
             Console.WriteLine("rna sessions --workspace <path> [--jsonl]");
-            Console.WriteLine("rna run --workspace <path> (--message <text> | --task-file <file>) [--session <id>] [--profile development] [--model <name>] [--base-url <url>] [--context-tokens <n>] [--reasoning-mode <mode>] [--thinking on|off] [--max-iterations <1..256>] [--max-tool-steps <1..4096>] [--expect-files <comma-separated paths>] [--min-reads <n>] [--min-writes <n>] [--require-web-verify] [--jsonl]");
+            Console.WriteLine("rna run --workspace <path> (--message <text> | --task-file <file>) [--session <id>] [--profile development] [--model <name>] [--base-url <url>] [--context-tokens <n>] [--response-mode json_schema|json_object] [--reasoning-mode <mode>] [--thinking on|off] [--max-iterations <1..256>] [--max-tool-steps <1..4096>] [--expect-files <comma-separated paths>] [--min-reads <n>] [--min-writes <n>] [--require-web-verify] [--jsonl]");
             Console.WriteLine("rna inspect --workspace <path> --session <id> [--jsonl]");
             Console.WriteLine("rna recover --workspace <path> --path <relative-path> [--jsonl]  (inspect an uncertain file effect)");
             Console.WriteLine("rna verify --workspace <path> [--entry index.html] [--jsonl]  (isolated static web smoke)");
             Console.WriteLine("rna resume --workspace <path> --session <id> [--jsonl]  (close an abandoned run, show pending action or request new input; never replay tools)");
-            Console.WriteLine("rna approve --workspace <path> --session <id> --pending <id> [--base-url <url>] [--model <name>] [--context-tokens <n>] [--reasoning-mode <mode>] [--jsonl]");
+            Console.WriteLine("rna approve --workspace <path> --session <id> --pending <id> [--base-url <url>] [--model <name>] [--context-tokens <n>] [--response-mode json_schema|json_object] [--reasoning-mode <mode>] [--jsonl]");
             Console.WriteLine("rna deny --workspace <path> --session <id> --pending <id> [--jsonl]");
-            Console.WriteLine("LLM settings: RNA_BASE_URL, RNA_MODEL, RNA_CONTEXT_TOKENS, RNA_REASONING_MODE, RNA_THINKING, RNA_MODEL_DIGEST, RNA_API_KEY or OPENAI_API_KEY. Keys are never command arguments.");
+            Console.WriteLine("LLM settings: RNA_BASE_URL, RNA_MODEL, RNA_CONTEXT_TOKENS, RNA_RESPONSE_MODE, RNA_REASONING_MODE, RNA_THINKING, RNA_MODEL_DIGEST, RNA_API_KEY or OPENAI_API_KEY. Keys are never command arguments.");
             Console.WriteLine("Optional state root: RNA_STATE_ROOT (default: user application data).");
             Console.WriteLine("Exit: 0 command completed, 2 arguments, 3 input needed, 4 dependency, 5 failure, 130 cancelled.");
         }

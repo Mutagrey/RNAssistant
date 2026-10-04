@@ -262,6 +262,7 @@ namespace RNAssistant.Office.Services
                     Digest = run.ModelConfiguration.Digest,
                     EndpointSha256 = run.ModelConfiguration.EndpointSha256,
                     ContextWindowTokens = run.ModelConfiguration.ContextWindowTokens,
+                    AgentResponseMode = run.ModelConfiguration.AgentResponseMode,
                     ReasoningRequestMode = run.ModelConfiguration.ReasoningRequestMode,
                     ReasoningEnabled = run.ModelConfiguration.ReasoningEnabled
                 }

@@ -140,6 +140,7 @@ namespace RNAssistant.Runtime
                         Digest = modelDigest,
                         EndpointSha256 = EndpointSha256(settings.BaseUrl),
                         ContextWindowTokens = ModelContextBudget.ContextWindowTokens(settings),
+                        AgentResponseMode = settings.AgentResponseMode,
                         ReasoningRequestMode = settings.ReasoningRequestMode,
                         ReasoningEnabled = session.ReasoningEnabled
                     },
@@ -187,6 +188,9 @@ namespace RNAssistant.Runtime
                     (ModelContextBudget.ContextWindowTokens(settings) != modelConfiguration.ContextWindowTokens ||
                      EndpointSha256(settings.BaseUrl) != modelConfiguration.EndpointSha256 ||
                      !string.Equals(modelDigest, modelConfiguration.Digest, StringComparison.Ordinal) ||
+                     !string.Equals(settings.AgentResponseMode,
+                         modelConfiguration.AgentResponseMode ?? AgentResponseModes.JsonSchema,
+                         StringComparison.Ordinal) ||
                      !string.Equals(settings.ReasoningRequestMode, modelConfiguration.ReasoningRequestMode,
                          StringComparison.Ordinal)))
                     throw new InvalidOperationException("Approval must continue with the accepted run's endpoint, model digest, context and reasoning mode.");
