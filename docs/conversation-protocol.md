@@ -1134,9 +1134,17 @@ Owner: Conversation/model context; совместные границы — Core 
 - `CompletedToolOperation` сохраняет terminal outcome, runtime call ID и semantic
   targets изменённых модулей/файлов независимо от свежести тела. Цели остаются в
   кратком receipt после удаления большого/устаревшего data body при compaction.
-  Исходный failed read не превращается в другую ошибку при
-  отсутствии evidence. Устаревший успешный read получает отдельный
-  `ResourceObservationNotice`. Compactor получает `operation_source` с tool provenance;
+  Исходный failed read не превращается в другую ошибку при отсутствии evidence.
+  Failed evaluation с exact evidence (например, `web.verify` на snapshot)
+  проверяется по той же frozen authority: после изменения источника сохраняются
+  прежний `Error`, диагностика и assertions, а `ResourceObservationNotice`
+  отдельно помечает их `Superseded` / `Unknown` / `Unavailable`. Историческая
+  ошибка не означает, что исправленный источник всё ещё содержит дефект, и не
+  разрешает повтор завершённой записи. Свёртка такой диагностики происходит после
+  CAS hydration и model projection; отсутствие exact payload останавливает
+  подготовку, а не заменяет ошибку placeholder-текстом. Ошибки аргументов/dispatch
+  без source evidence остаются обычными actionable results. Устаревший успешный
+  read получает notice с опущенным source body. Compactor получает `operation_source` с tool provenance;
   короткие receipts последних мутаций/ошибок восстанавливаются из terminal events,
   а не из предположений LLM.
 - `ToolExecutionProgress` сохраняется в том же terminal message: outcome, existing

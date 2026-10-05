@@ -298,6 +298,7 @@ namespace RNAssistant.Harness
                 Test("settings: invalid numeric values are normalized", SettingsNormalizeInvalidNumericValues),
                 Test("context: compaction uses structured source claims", CompactionUsesStructuredSourceClaims),
                 Test("context continuity: preserves facts and diagnostics", ContextContinuityPreservesFacts),
+                Test("context continuity: source-bound failure becomes historical", ContextContinuityTracksFailedObservation),
                 Test("context continuity: mutation receipts preserve target and outcome", ContextContinuityKeepsMutationReceipts),
                 Test("context continuity: bounds loops and restores progress", ContextContinuityBoundsLoops),
                 Test("context continuity: delivers recovery and allows another tool", ContextContinuityDeliversReplanFeedback),

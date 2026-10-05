@@ -41,19 +41,17 @@ fix that. Gemma's fresh `system` run still ended after two writes and three empt
 Keep the protocol gate strict; do not raise budgets or rewrite receipts without
 evidence. GPT-OSS continuation quality remains unmeasured.
 
-The M5 functional counter-repair fixture adds a smaller reproducible case. Gemma
-12B passed v6, repaired an `increment` ReferenceError, then repeated reads/replaces
-until the 12-tool bound. An independent exact-snapshot check passed all nine
-steps, while agent acceptance correctly failed without a new `web.verify`.
-The last captured model request contains the original failed verification as a
-plain `TOOL_RESULT`, alongside successful mutation receipts and a correct current
-file read; the model describes it as a possible browser cache mismatch. Investigate
-failed multi-source verification provenance/currentness in the common compiler
-before changing prompts or budgets. This observation does not prove the cause of
-repetition. Closure: preserve the historical failure with explicit source state,
-exercise source changes in a deterministic context test, and obtain a real
-read/repair/reverify result with the unchanged accepted checks. Exact metrics and
-temporary evidence path are in the current [PROGRESS](PROGRESS.md).
+The smaller M5 counter-repair case is now fixed and passed one real Gemma run:
+failed browser results carry exact source evidence, and the common compiler marks
+superseded diagnostics as historical. Deterministic tests cover source changes and
+wire-visible outcomes; the same accepted task then completed with one write and
+9/9 checks. The earlier failed run contained every completed result in its HTTP
+context (73 presence checks, no missing/duplicate results), so this case was not a
+missing-step transport bug. Metrics and evidence are in [PROGRESS](PROGRESS.md).
+Broader creation/continuation failures above remain open: this one successful repair
+does not establish that every historical loop has the same cause or that receipt
+roles must change. A new reproducible case should compare durable outcomes,
+compiled messages and actual wire requests before changing history or prompts.
 
 ## SDK project source-inclusion audit — 2026-10-05
 

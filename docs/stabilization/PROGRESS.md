@@ -1,6 +1,57 @@
 # Stabilization progress
 
-M5 functional-check slice (2026-10-05): CLI `--web-checks` accepts an immutable
+M5 diagnostic freshness / continuation fix (2026-10-05): the failed counter-repair
+run exposed a reproducible context defect. `web.verify` discarded source evidence
+when the browser failed, CLI refreshed only successful verification dependencies,
+and the common compiler exempted every failed result from source-currentness checks.
+Consequently the original `ReferenceError` remained a plain `TOOL_RESULT` even
+after a verified repair and a current read showing correct code. A new deterministic
+regression failed before the change; this was not inferred solely from LLM prose.
+
+Failed evaluations with a published snapshot now retain exact source evidence;
+CLI refreshes all its members before freezing authority. The common Core compiler
+keeps the original outcome/diagnostic/assertions but labels changed-source failures
+as historical, after CAS hydration and sanitization. Missing exact diagnostic
+payloads stop preparation. Argument/dispatch failures without source evidence,
+mutation/recovery guards and frozen format repair retain their existing semantics.
+File path and web entry labels also survive completed-operation folding. No prompt,
+model loop, instruction role, tool-step limit or model profile was changed.
+
+Wire audit of the earlier failed run: 11 HTTP requests, 73 cumulative checks of
+completed-result presence, **zero missing or duplicated results**. Its writes and
+current reads were present; their coexistence with an unqualified old failure was
+the confirmed defect. The new successful run has 23/23 presence checks. This audit
+establishes dispatched content, not what the model attends to. The upstream
+[Ollama 0.35 Gemma renderer](https://github.com/ollama/ollama/blob/v0.35.0/model/renderers/gemma4.go#L65-L139)
+merges adjacent assistant messages, but retains their content; inspection did not
+establish a provider-side message-loss bug or justify changing receipt roles.
+
+Real Gemma 12B rerun, same fixture/checks/model digest/config as the preceding slice:
+the **first production HTTP request was byte-identical** to the failed baseline.
+The agent ran verify (failed) → source reads → one patch → current read → verify
+(9/9 passed) → done. Six model requests, seven tool steps, one verified write,
+no format rejection, 49.94 s, acceptance **passed**, without operator intervention.
+Usage: 14281 cumulative input / 513 output tokens; maxima 3289 input / 128 output.
+Swap-out count remained 900005; swap usage remained 7018.75 MiB. The model was
+unloaded. `ExecutionHealth.Errors` records the initial failed check cumulatively;
+it does not contradict successful current verification and accepted completion.
+This is one real successful repair, not proof that every historical repetition
+has the same cause or that all models/Office tasks are qualified.
+
+Local temporary evidence:
+`/var/folders/k9/hr_94nt142x1f43jr6g0wr_00000gp/T/rna-m5-context-gemma-wa5sfdkx`:
+fixture/checks, exact config/digest and binary hashes, trace/CAS, both verification
+records, context audits, first-request byte comparison, metrics and memory samples.
+Final CLI build passed with zero warnings/errors; focused `context continuity:`
+passed 6/6. Scripted runtime checks inspect actual request messages before/after
+an external dependency edit and verified repair, preserving write targets/effects
+and rejecting stale final acceptance. Existing tool-result/trace smoke passed,
+including frozen repair and exact request-body persistence. Version-format and
+diff checks passed. Windows/Office/WebView2 remain unqualified on this machine.
+Next: M5 CSV dashboard checks on retained snapshots; broader creation/continuation
+cases remain in [BACKLOG](BACKLOG.md#cli-continuation-after-completed-operation-receipts--2026-10-05).
+
+Historical M5 functional-check slice (2026-10-05): CLI `--web-checks` accepts an immutable
 typed contract before the run. The same `web.verify` handler executes bounded
 pointer clicks and exact text checks against the retained manifest; no model
 arguments can replace the checks. Pending/terminal verification records retain
@@ -521,12 +572,12 @@ boundary, not a functional CSV score. Scripted HTTP tests confirmed both CLI
 transport modes and saved metadata. The existing v6 parser correctly rejected
 these outputs; no permissive JSON repair or separate agent loop was added.
 
-Next concrete slice (2026-10-05): isolate freshness/provenance of a failed browser
-verification after source repair in the common model-context path, then repeat
-the fixed counter-repair task without weakening its accepted checks or raising
-budgets to hide repetition. Bounded find/read, one frozen compiler, explicit CLI
-recovery, durable historical snapshot verification and frozen click/text checks
-are implemented. CSV dashboard functional grading on retained snapshots follows.
+Next concrete slice (2026-10-05): M5 CSV dashboard functional grading on retained
+snapshots, then the remaining E-FILE/E-RESUME/E-CONTEXT/E-CAPABILITY evidence for
+that task. The counter verify/repair loop passed one real Gemma run after fixing
+historical diagnostic currency; broader repetition cases still need their own
+wire trace. Bounded find/read, one frozen compiler, explicit CLI recovery, durable
+historical snapshot verification and frozen click/text checks are implemented.
 Raw/binary
 views, general preview UI and common Office/file dispatch remain open §8.1/M5–M7
 scope. Scripted runtime checks do not close real-model acceptance. M6–M11 have not

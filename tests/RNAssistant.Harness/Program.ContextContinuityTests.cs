@@ -86,6 +86,59 @@ namespace RNAssistant.Harness
             return message;
         }
 
+        private static void ContextContinuityTracksFailedObservation()
+        {
+            WithTempPaths(paths =>
+            {
+                var scope = new ResourceAuthorityScopeId("workspace", "failed-observation");
+                var script = new ResourceRef("rna://file/failed-observation/script", "r1");
+                var style = new ResourceRef("rna://file/failed-observation/style", "r1");
+                var failed = ContinuityResult("browser", "web.verify", ToolResult.Error(
+                    "ReferenceError: increment is not defined", "{\"entryPath\":\"index.html\",\"errors\":[\"CLICK_ERROR\"]," +
+                    "\"checks\":[{\"id\":\"after-plus\",\"status\":\"Failed\"}]}"), "user");
+                failed.ResourceEvidence.Add(new ResourceEvidence("script", scope, script, "text", ResourceCoverage.Whole(), true, 1));
+                failed.ResourceEvidence.Add(new ResourceEvidence("style", scope, style, "text", ResourceCoverage.Whole(), true, 1));
+                var blobs = new RNAssistant.Core.Storage.ChatBlobStore(paths);
+                var full = failed.Content;
+                failed.ResultPayload = PayloadRef.FromBlob(blobs.StoreText(full, "application/json"));
+                failed.Content = "TOOL_RESULT:\n" + ToolResultWire.Write("browser", "web.verify", ToolResult.Error("Archived diagnostic."));
+                var compiler = new ModelContextCompiler(blobs);
+                Func<ResourceHeadState, ModelAuthoritySnapshot> authority = head => new ModelAuthoritySnapshot(
+                    new ResourceAuthoritySnapshotSet(new[] { new ResourceAuthoritySnapshot(scope, 2, null, 0,
+                        new[] { ResourceHeadState.Known(script, 1), head }) }),
+                    "pack", new SkillCatalogSnapshot(null), null, 1);
+                var facts = new[] { ContinuityCall(failed), failed };
+                var current = compiler.Compile(authority(ResourceHeadState.Known(style, 2)), new ChatMessage[0],
+                    facts, null, new ToolCatalogEntry[0], new AppSettings(), 10000);
+                ToolResultWireReadResult wire; string error;
+                AssertTrue(ToolResultHistoryReader.TryRead(current.Messages.Last(), out wire, out error),
+                    "current failed observation remains a terminal tool result");
+                AssertContains(wire.Result.Message, "ReferenceError", "CAS diagnostic is hydrated before projection");
+                AssertEqual(0, current.Receipt.ExcludedSuperseded, "unrelated generation change does not stale an observation");
+
+                var changed = compiler.Compile(authority(ResourceHeadState.Known(new ResourceRef(style.Uri, "r2"), 2)),
+                    new ChatMessage[0], facts, null, new ToolCatalogEntry[0], new AppSettings(), 10000);
+                var receipt = changed.Messages.Single(m => m.CompletedOperation != null);
+                AssertEqual(ToolResultStatus.Error, receipt.CompletedOperation.Status, "historical failure is not upgraded or replaced");
+                AssertContains(receipt.CompletedOperation.Message, "ReferenceError", "original diagnostic survives hydration and folding");
+                AssertContains(receipt.CompletedOperation.DataJson, "CLICK_ERROR", "structured error remains available as historical data");
+                AssertContains(receipt.CompletedOperation.DataJson, "after-plus", "failed assertion is retained");
+                AssertTrue(receipt.CompletedOperation.Targets.Contains("index.html"), "historical check keeps its semantic entry");
+                var body = JObject.Parse(receipt.Content.Substring(receipt.Content.IndexOf('\n') + 1));
+                AssertEqual("Superseded", (string)body["observation"]["state"], "change to either source invalidates diagnostic currency");
+                AssertContains((string)body["observation"]["nextAction"], "completed", "historical error cannot instruct mutation replay");
+                AssertTrue(changed.Receipt.ExcludedSuperseded > 0, "receipt records source invalidation");
+                AssertTrue(!receipt.Content.Contains("rna://"), "source identities stay runtime-only");
+                AssertContains(failed.Content, "Archived diagnostic", "compilation does not mutate durable facts");
+                AssertTrue(failed.ResultPayload != null, "historical exact payload remains retained");
+                var rejected = false;
+                try { new ModelContextCompiler().Compile(authority(ResourceHeadState.Known(new ResourceRef(style.Uri, "r2"), 2)),
+                    new ChatMessage[0], facts, null, new ToolCatalogEntry[0], new AppSettings(), 10000); }
+                catch (InvalidOperationException ex) { rejected = ex.Message.Contains("diagnostic result payload"); }
+                AssertTrue(rejected, "missing historical diagnostic reader cannot substitute its placeholder");
+            });
+        }
+
         private static void ContextContinuityKeepsMutationReceipts()
         {
             var authority = new ModelAuthoritySnapshot(new ResourceAuthoritySnapshotSet(new ResourceAuthoritySnapshot[0]),
@@ -93,6 +146,7 @@ namespace RNAssistant.Harness
             foreach (var resource in new[] {
                 new { Tool = "common.vba_write_module", Data = "{\"moduleName\":\"NormalizeReport\",\"source\":\"HISTORICAL_BODY\"}",
                     Targets = new[] { "VBA module: NormalizeReport" } },
+                new { Tool = "files.patch", Data = "{\"path\":\"app.js\",\"changed\":true}", Targets = new[] { "app.js" } },
                 new { Tool = "common.html_workspace_apply_patch", Data = "{\"members\":[{\"target\":\"HTML file: index.html\"},{\"target\":\"HTML file: app.js\"}],\"source\":\"HISTORICAL_BODY\"}",
                     Targets = new[] { "HTML file: index.html", "HTML file: app.js" } } })
             foreach (var role in new[] { "user", "developer", "tool" })

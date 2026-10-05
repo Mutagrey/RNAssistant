@@ -120,6 +120,13 @@ missing/renamed assertions and checks for another entry cannot satisfy that cont
 and next offset; concurrent new publications require refreshing the listing.
 Terminal results cannot be overwritten. Tool results retain the exact verification
 resource reference as runtime metadata; these IDs do not enter model prompts.
+Failed browser evaluations also retain the exact source evidence of their
+published snapshot. CLI refreshes all those dependencies before freezing context,
+including files the model did not explicitly read. The common compiler keeps the
+original diagnostic but marks it historical when its sources change; it cannot
+be presented indefinitely as a failure of the current files. Preparation failures
+without a published snapshot do not claim complete source evidence. Browser error
+evidence does not authorize writes or satisfy run acceptance.
 
 CLI `verify --snapshot <id>` reopens a retained manifest after restart and performs
 a new explicitly historical browser check. Its result does not certify current

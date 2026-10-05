@@ -24,6 +24,7 @@ namespace RNAssistant.Core.Services
         internal string ContextTitle;
         internal List<ChatMessage> Messages = new List<ChatMessage>();
         internal List<ResourceEvidence> Evidence = new List<ResourceEvidence>();
+        internal ResourceObservationNotice HistoricalFailure;
     }
 
     internal sealed class ToolInteractionFrame
@@ -142,9 +143,11 @@ namespace RNAssistant.Core.Services
             // Correctness before collapse, deduplication, relevance, hydration or budget.
             foreach (var atom in atoms)
             {
-                // A failed invocation has no successful observation to invalidate.
-                // Never replace its actionable error/recovery with a freshness error.
-                if (atom.Messages.Last().CompletedOperation != null || IsFailedResult(atom.Messages.Last()))
+                // Argument/dispatch failures have no source observation. A failed
+                // evaluation can carry exact source evidence: preserve its outcome
+                // while tracking the independent currency of that source snapshot.
+                var failed = IsFailedResult(atom.Messages.Last());
+                if (atom.Messages.Last().CompletedOperation != null || failed && atom.Evidence.Count == 0)
                     continue;
                 if (atom.Evidence.Count == 0 && atom.Messages.Any(message =>
                     message.ToolName == "common.resources_read" && message.ToolResultProtocolVersion == ToolResultWire.CurrentVersion))
@@ -164,6 +167,17 @@ namespace RNAssistant.Core.Services
                 var invalid = states.Where(item => item.State != EvidenceState.Current).ToArray();
                 if (invalid.Length > 0)
                 {
+                    if (failed)
+                    {
+                        // Keep the diagnostic payload until after hydration and
+                        // sanitization. Folding it here would lose CAS-backed errors.
+                        atom.HistoricalFailure = new ResourceObservationNotice {
+                            State = invalid.Any(item => item.State == EvidenceState.Unavailable) ? EvidenceState.Unavailable :
+                                invalid.Any(item => item.State == EvidenceState.Unknown) ? EvidenceState.Unknown : EvidenceState.Superseded,
+                            Reason = string.Join("; ", invalid.Select(item => item.State + ": " + item.Reason)),
+                            NextAction = "This diagnostic describes an earlier source snapshot. Re-evaluate its conclusions against current sources; do not reapply completed changes." };
+                        continue;
+                    }
                     if (atom.Kind == "current-source" && atom.Messages.Any(message => message.SyntheticResourceObservation))
                     {
                         // The completed mutation frame already records the action.
@@ -251,6 +265,8 @@ namespace RNAssistant.Core.Services
                         {
                             if (atom.Kind == "terminal-mutation")
                                 throw new InvalidOperationException("Exact mutation result payload reader is unavailable.");
+                            if (atom.HistoricalFailure != null)
+                                throw new InvalidOperationException("Exact diagnostic result payload reader is unavailable.");
                             MarkUnavailable(atom,
                                 "Exact payload reader is unavailable.");
                             receipt.ExcludedUnavailable++;
@@ -289,6 +305,8 @@ namespace RNAssistant.Core.Services
                         {
                             if (atom.Kind == "terminal-mutation")
                                 throw new InvalidOperationException("Exact mutation result payload is unavailable.", ex);
+                            if (atom.HistoricalFailure != null)
+                                throw new InvalidOperationException("Exact diagnostic result payload is unavailable.", ex);
                             MarkUnavailable(atom, "Exact payload is unavailable; no newer revision was substituted.");
                             receipt.ExcludedUnavailable++;
                             break;
@@ -319,6 +337,15 @@ namespace RNAssistant.Core.Services
             // Fold only after complete result hydration and model projection. Data
             // carries target, changed/no-op facts and structured recovery (including
             // patch locations); retaining only a success/error sentence loses them.
+            foreach (var atom in atoms.Where(item => item.HistoricalFailure != null))
+            {
+                var result = atom.Messages.Last();
+                ToolResultWireReadResult wire; string error;
+                if (!ToolResultHistoryReader.TryRead(result, out wire, out error)) continue;
+                atom.HistoricalFailure.Target = RootTargetLabel(ToolResultWire.ParseData(wire.Result.DataJson) as JObject);
+                atom.Kind = "historical-diagnostic";
+                atom.Messages = new List<ChatMessage> { CompleteOperation(result, wire, atom.HistoricalFailure, preserveDiagnostic: true) };
+            }
             foreach (var atom in atoms.Where(item => item.Kind == "terminal-mutation"))
             {
                 var result = atom.Messages[1];
@@ -442,7 +469,8 @@ namespace RNAssistant.Core.Services
             var target = LabelText(data?["target"]);
             if (target != null) return target;
             var module = LabelText(data?["moduleName"]);
-            return module == null ? LabelText(data?["title"]) : "VBA module: " + module;
+            return module == null ? LabelText(data?["title"]) ?? LabelText(data?["path"]) ?? LabelText(data?["entryPath"])
+                : "VBA module: " + module;
         }
 
         private static string LabelText(JToken value)
@@ -701,14 +729,17 @@ namespace RNAssistant.Core.Services
         }
 
         public static ChatMessage CompleteOperation(ChatMessage result, ToolResultWireReadResult wire,
-            ResourceObservationNotice observation = null)
+            ResourceObservationNotice observation = null, bool preserveDiagnostic = false)
         {
             var effect = result.ResourceEffect;
             var data = ToolResultWire.ParseData(wire.Result.DataJson) as JObject;
             data = data?["tool_data"] as JObject ?? data;
             var fact = new CompletedToolOperation { ToolCallId = wire.ToolCallId, ToolName = wire.Name,
                 Status = wire.Result.Status, Message = wire.Result.Message,
-                DataJson = observation == null ? wire.Result.DataJson : null,
+                // A historical failed evaluation keeps its diagnostics/recovery;
+                // source currency must never turn it into a different error.
+                DataJson = observation == null || preserveDiagnostic
+                    ? wire.Result.DataJson : null,
                 // wire is already model-projected: never recover labels from
                 // unsanitized durable data when omitting the original body.
                 Targets = new[] { RootTargetLabel(data) }

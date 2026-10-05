@@ -658,12 +658,17 @@ namespace RNAssistant.Runtime
                 foreach (var fact in active)
                 {
                     var wire = ToolResultWire.Read(fact.Content);
-                    if (!wire.Success || wire.Result.Status != ToolResultStatus.Ok) continue;
+                    if (!wire.Success) continue;
+                    if (fact.ToolName == "web.verify" && fact.ResourceEvidence?.Count > 0)
+                    {
+                        var verification = JsonConvert.DeserializeObject<WebVerificationToolData>(wire.Result.DataJson);
+                        foreach (var path in verification.CheckedFiles) paths.Add(path);
+                        continue;
+                    }
+                    if (wire.Result.Status != ToolResultStatus.Ok) continue;
                     var data = ToolResultWire.ParseData(wire.Result.DataJson) as JObject;
                     if (fact.ToolName == "common.resources_read" && data?["target"]?.Type == JTokenType.String)
                         paths.Add((string)data["target"]);
-                    if (fact.ToolName == "web.verify" && data?["checkedFiles"] is JArray)
-                        foreach (var path in data["checkedFiles"].Values<string>()) paths.Add(path);
                 }
                 foreach (var path in paths)
                 {
@@ -967,7 +972,10 @@ namespace RNAssistant.Runtime
                         result.Hints.FirstOrDefault() + " Read and fix the indicated source before verifying again.", data,
                         new[] { result.VerificationReference });
                 return new ToolHandlerResult(toolResult, ToolEffectEvidence.None,
-                    resourceEvidence: result.Status == WebVerificationStatus.Passed ? result.Evidence : null);
+                    // A browser failure is still an observation of an exact
+                    // captured source snapshot, not a timeless error. Preparation
+                    // failures without a published snapshot assert no such evidence.
+                    resourceEvidence: result.SnapshotId != null ? result.Evidence : null);
             }
         }
     }

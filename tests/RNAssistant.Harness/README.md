@@ -20,6 +20,11 @@ and ambiguous selector. `python3 tests/cli/web_checks_runtime_smoke.py` uses a
 scripted HTTP model through the production runtime for verify/read/patch/read/
 verify/done, frozen admission checks and rejection of a source edit after the last
 passing verification. This is deterministic contract evidence, not LLM quality.
+It also inspects the actual HTTP context after each step: current diagnostic,
+historical failure after an external dependency edit, completed write with its
+target/effect, then current source bytes. `context continuity:` covers source-bound
+failure invalidation after CAS hydration, original argument-error preservation,
+semantic mutation receipts through compaction and existing repeat/recovery guards.
 The `workspace snapshots:` filter also checks that incomplete/substituted
 assertions or mismatched actual text cannot become a durable passing result.
 `python3 tests/cli/tool_result_projection_smoke.py` checks bounded semantic find,

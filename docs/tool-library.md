@@ -61,6 +61,10 @@ checks, select another entry or substitute a smoke result for functional accepta
 Steps require a unique visible HTML target; clicks use browser pointer events and
 reject disabled/obscured targets. The first failure leaves later steps `NotRun`.
 Checks and results are retained with the snapshot in the verification resource.
+Both passed and failed browser evaluations carry their captured source evidence.
+After an edit, the compiler marks the old failure as historical while retaining
+its diagnostic and assertion details; a new verification is needed for the current
+files. This evidence is not a successful file read or write authorization.
 When a JavaScript exception occurs, the result may include an advisory hint for
 literal `getElementById` calls whose IDs are absent from captured HTML. Dynamic
 DOM construction can make such a hint inapplicable; the browser error remains the

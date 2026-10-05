@@ -43,6 +43,10 @@ def run_case(root, change_after_verify):
             assert self.path == "/v1/chat/completions" and index < len(responses)
             if index == 1:
                 checks.write_text("{}")  # The admitted contract must not be reread.
+                # Only app.js is read next. The failed verification must still
+                # refresh its other source dependencies before compiling context.
+                style = workspace / "styles.css"
+                style.write_text(style.read_text() + "\n/* external edit after verification */\n")
             if index == 5 and change_after_verify:
                 script = workspace / "app.js"
                 script.write_text(script.read_text().replace("count += 1", "count += 0"))
@@ -71,6 +75,25 @@ def run_case(root, change_after_verify):
         assert result["webSnapshotVerified"] == (not change_after_verify), result
         assert result["webCheckCount"] == 9 and len(requests) == 6, result
         assert "rna://" not in json.dumps(requests), "Runtime references leaked into the model context"
+        def receipts(request, tool):
+            return [body for message in request["messages"]
+                    if message.get("content", "").startswith("TOOL_INTERACTION")
+                    for body in [json.loads(message["content"].split("\n", 1)[1])]
+                    if body["tool"] == tool]
+
+        original_error = [message["content"] for message in requests[1]["messages"]
+                          if message.get("content", "").startswith("TOOL_RESULT") and '"name":"web.verify"' in message["content"]]
+        assert len(original_error) == 1 and "ReferenceError" in original_error[0], original_error
+        historical = receipts(requests[2], "web.verify")
+        assert len(historical) == 1 and historical[0]["outcome"] == "Error", historical
+        assert historical[0]["observation"]["state"] == "Superseded", historical
+        assert historical[0]["targets"] == ["index.html"] and historical[0]["data"]["checks"], historical
+        writes = receipts(requests[3], "files.patch")
+        assert len(writes) == 1 and writes[0]["targets"] == ["app.js"], writes
+        assert writes[0]["data"]["changed"] and writes[0]["effect"]["outcome"] == "VerifiedChanged", writes
+        current_read = [message["content"] for message in requests[4]["messages"]
+                        if message.get("content", "").startswith("TOOL_RESULT") and '"target":"app.js"' in message["content"]]
+        assert len(current_read) == 1 and "count += 1" in current_read[0] and "count += increment" not in current_read[0], current_read
         saved = record(workspace, state)["Items"]
         assert len(saved) == 2 and {item["State"] for item in saved} == {"Passed", "Failed"}, saved
         assert all(len(item["Checks"]["steps"]) == 9 for item in saved), saved
