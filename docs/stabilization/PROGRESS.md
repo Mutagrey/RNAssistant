@@ -1,5 +1,52 @@
 # Stabilization progress
 
+## Workspace plan reconciliation and event subscription — 2026-10-05
+
+Reviewed HEAD `cd068c86` against the supplied
+`RNAssistant_WORKSPACE_FIRST_UNIFIED_AGENT_IMPLEMENTATION_PLAN.md` (§8.1, §11,
+§21, M0–M11 and A01–A27), production entry points, project references and focused
+checks. This table supersedes the older milestone snapshot below. Owner:
+conversation application services; resource/Office boundaries retain their owners.
+
+| Stage | Current implementation and remaining scope |
+|---|---|
+| M0 | Baseline, ADR-0013, migration map and SDK limits recorded. Done as a planning baseline; Windows builds were not qualified. |
+| M1 | Independent production Core/Runtime/CLI uses ProjectReference, LlmClient/v6, coordinator → AgentKernel, ToolRuntime and the same frozen compiler. No fake Office dependency or second loop. Office/CLI application preparation and handler composition remain separate; full shared application/lifetime cutover is open. |
+| M2 | Workspace/session without document authority, stable identity, known root relocation and read-only association tested. Only the root directory mount is supplied; managed/multiple/external mounts and shared-source identity/heads (A24) remain open. |
+| M3 | Single WorkspaceFileService owns UTF-8 find/read/create/patch/replace/copy/move/delete/restore, exact history, drift and non-replay recovery. Focused tests pass. Remaining §8.1 stat/raw/binary/large views, directory pagination, complete Office/filesystem dispatch and cross-platform path qualification are open. |
+| M4 | First useful real-model multi-file result achieved. Modes, skills, typed questions/answers, approvals, Task Lists/Plans, receipts, cancel/explicit continuation and event following exist. Full §11 remains open: interactive host UX/changed-file presentation, general resource/preview commands and UI use of the shared application contracts. Scripted runs do not close real task quality. |
+| M5 | Retained browser snapshots, dependency checks, structured functional verification, repair and bounded same-run continuation implemented. A real counter repair passed previously; fixed autonomous CSV creation + unchanged feature follow-up still has no passing evidence. General preview, browser screenshots/traces and integrated long-context compaction/resume evidence remain open. |
+| M6 | Authoring cutover not started. Office HTML/MD/JSON and Plan authoring remain on their existing owners; file materialization/linkage/crash guards and old-writer removal are required. CLI files have no dual writer. |
+| M7 | Receipts/cursors/subscription provide shared primitives; Office UI transport/application migration, file tree, preview isolation, bounded body delivery and pane-independent lifetime are not closed. |
+| M8 | External Office provider/mount/target cutover remains open; exact binding/discovery/SaveAs and multiple-instance behavior need Windows evidence. |
+| M9 | Dedicated safe Excel launcher/standalone UI cutover and Windows qualification remain open. |
+| M10 | Explicit VBA source export/compare/apply and workspace file/history transfer remain open. |
+| M11 | Replaced-writer cleanup, final packaging/performance/policy parity and qualification matrix remain open, dependent on the prior cutovers. |
+
+The staged CLI milestone follows §23; it does not shrink §8.1 or replace the
+single-application target in §11. `ResourceProviderRouter` is still a router, while
+typed read contracts and ModelContextCompiler are shared. Corrected the stale ADR
+delivery paragraph that still called CLI context assembly a separate future path.
+No new live-model or Windows/Office/WebView2 qualification is claimed.
+
+New slice: `SubscribeEventsAsync` / CLI `events --follow` reuse the canonical
+IEventStore owner, opaque cursors and bounded metadata pages. Delivery is awaited;
+Ctrl+C/timeout stops the subscriber, and unavailable/changed history stops with
+resync. No lifecycle writes, model calls, mutation replay or new event store.
+The old feed path that materialized the entire event list is removed. Initial or
+changed streams receive full streaming validation; unchanged pages/idle polls
+reuse exact byte boundaries. External append cannot mask a corrupt earlier record.
+Changed-file validation and initial session scope loading remain O(history).
+
+Checks: CLI build clean; harness build with the same two PDF CA1416 warnings.
+`event feed:` 3/3, `kernel:` 55/55, `workspace:` 2/2, `workspace files:` 7/7 and
+JSONL byte offsets 1/1. Diff, touched local document targets and version gate pass.
+CLI event subscription, input receipt/reconnect and run-control process smokes pass
+with controlled HTTP. These cover exact continuity, subscriber/run cancellation
+isolation, bounded pages, backpressure, prefix/tail corruption, no repeated writes
+and preserved continuation budgets. Existing unrelated worktree edits are outside
+this slice.
+
 CLI cancellation and bounded continuation slice (2026-10-05): typed controls bind
 session/run to the exact canonical inspect cursor. `cancel` signals the local
 process holding the run lease through an ephemeral current-user pipe; only that
@@ -790,6 +837,10 @@ Qwen 27B memory pressure and real Agent task admission remain unverified.
 
 ## Workspace-first implementation — 2026-10-04 (in progress)
 
+Historical milestone snapshot; current stage status is in the plan reconciliation
+at the top. In particular, the formerly open CLI Task Lists/Plans and cancellation
+surface have since been implemented; complete M4/M5 acceptance is still open.
+
 Baseline `ae05b205519365c9a2b02bce8a218afa84302158` matched the supplied
 implementation plan; the starting tree was clean. [ADR-0013](../decisions/ADR-0013-workspace-first-runtime.md)
 records the intended boundary and [migration map](MIGRATION_MAP.md#workspace-first-adapters--2026-10-04)
@@ -1199,11 +1250,13 @@ boundary, not a functional CSV score. Scripted HTTP tests confirmed both CLI
 transport modes and saved metadata. The existing v6 parser correctly rejected
 these outputs; no permissive JSON repair or separate agent loop was added.
 
-Next concrete slice (2026-10-05): bounded event subscription for CLI consumers,
-with cancellation, exact cursor continuity and explicit resync. Owner: conversation
-application services / canonical event store. Reuse the existing stream and remove
-full-history scans from repeated event reads through its owner; do not add a second
-event store. Interactive CLI UX and Office UI adoption remain open.
+Next concrete slice (2026-10-05): M5 E-CONTEXT/E-RESUME integration through the
+production CLI: force compaction across a stopped/continued run, retain task and
+acceptance requirements, introduce an external file edit and prove stale evidence
+cannot authorize a write or final success. Reuse the compiler/kernel/file owners;
+fix any reproduced gap before another unchanged real CSV creation/follow-up run.
+Bounded event subscription is implemented above. Interactive CLI UX and Office UI
+adoption remain open; no extra runtime or widened model budget is the next step.
 Modes, typed answer/restart handling, published skills, frozen context, Task Lists
 and workspace-owned Markdown Plans are implemented with the evidence limits above.
 Explicit reconciliation of uncertain planning mutations remains open.

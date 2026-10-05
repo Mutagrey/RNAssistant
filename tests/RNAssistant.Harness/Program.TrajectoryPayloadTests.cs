@@ -155,6 +155,7 @@ namespace RNAssistant.Harness
             internal SessionEventReadMode Mode;
             internal int Reads;
             public IReadOnlyList<SessionEvent> Read(ChatSession session, SessionEventReadMode mode) { Reads++; Mode = mode; return Items; }
+            public ISessionEventReader OpenReader(ChatSession session) { throw new NotSupportedException(); }
             public string ReadPayload(ChatSession session, SessionEvent item) { throw new Exception("Whole payload reads are forbidden in this contour."); }
             public SessionEvent Append(ChatSession session, SessionEventWrite write) { throw new NotSupportedException(); }
         }

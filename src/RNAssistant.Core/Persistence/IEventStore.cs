@@ -284,6 +284,32 @@ namespace RNAssistant.Core.Persistence
     {
         SessionEvent Append(ChatSession session, SessionEventWrite write);
         IReadOnlyList<SessionEvent> Read(ChatSession session, SessionEventReadMode mode);
+        ISessionEventReader OpenReader(ChatSession session);
         string ReadPayload(ChatSession session, SessionEvent sessionEvent);
+    }
+
+    // Transient in-memory bookmarks per consumer over the canonical stream.
+    // No retained event bodies, projection database or independent event log.
+    public interface ISessionEventReader
+    {
+        SessionEventSlice Read(SessionEventPosition after, SessionEventPosition through, int limit,
+            System.Threading.CancellationToken cancellationToken);
+    }
+
+    public sealed class SessionEventPosition
+    {
+        public string SessionId { get; private set; }
+        public long Sequence { get; private set; }
+        public string Hash { get; private set; }
+        public SessionEventPosition(string sessionId, long sequence, string hash)
+        { SessionId = sessionId; Sequence = sequence; Hash = hash; }
+    }
+
+    public sealed class SessionEventSlice
+    {
+        public ConversationResyncReason Reason { get; set; }
+        public SessionEventPosition HighWater { get; set; }
+        public SessionEventPosition Next { get; set; }
+        public IReadOnlyList<SessionEvent> Events { get; set; } = new SessionEvent[0];
     }
 }

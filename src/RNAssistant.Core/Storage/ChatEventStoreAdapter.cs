@@ -54,6 +54,12 @@ namespace RNAssistant.Core.Storage
             return _store.ReadEvents(session.Host, session.DocumentKey, session.Id);
         }
 
+        public ISessionEventReader OpenReader(ChatSession session)
+        {
+            if (session == null) throw new ArgumentNullException(nameof(session));
+            return _store.OpenEventReader(session.Host, session.DocumentKey, session.Id);
+        }
+
         public string ReadPayload(ChatSession session, SessionEvent sessionEvent)
         {
             if (session == null) throw new ArgumentNullException(nameof(session));

@@ -28,10 +28,13 @@ disk bytes. Existing document chats are not rewritten or deleted.
 
 The initial CLI uses the shared `AgentKernel`, `ModelProtocolClient`,
 `ToolRuntime`, `ChatStore`, `ResourceAuthorityStore`, `ResourceMutationJournal`
-and CAS. Its current file adapter and prompt assembly are temporary until the
-filesystem provider enters the existing `ResourceGateway` and frozen
-`ModelContextCompiler` path. The active Office HTML writer remains for old
-document flows until M6; it must not write the CLI's file-backed results.
+and CAS. As of 2026-10-05, filesystem reads use the shared typed resource read
+contracts and the same frozen `ModelContextCompiler`; separate CLI context
+assembly/result projection has been removed. `ResourceProviderRouter` selects
+providers; full Office/filesystem dispatch and raw/binary views remain open.
+Host preparation/application composition is still separate and tracked in the
+migration map. The active Office HTML writer remains for old document flows until
+M6; it must not write the CLI's file-backed results.
 
 See [migration map](../stabilization/MIGRATION_MAP.md) and
 [current progress](../stabilization/PROGRESS.md) for removal gates and evidence.

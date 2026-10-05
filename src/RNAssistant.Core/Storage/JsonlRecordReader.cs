@@ -36,10 +36,14 @@ namespace RNAssistant.Core.Storage
             string path,
             long startOffset,
             Func<string, TRecord> parse,
-            Action<TRecord, JsonlByteLine> accept)
+            Action<TRecord, JsonlByteLine> accept,
+            int? maxRecords = null,
+            System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken))
         {
             if (parse == null) throw new ArgumentNullException("parse");
             if (accept == null) throw new ArgumentNullException("accept");
+            if (maxRecords.HasValue && maxRecords.Value < 1) throw new ArgumentOutOfRangeException("maxRecords");
+            var remaining = maxRecords.GetValueOrDefault();
             var summary = new JsonlReadSummary { TailNextByteOffset = startOffset };
             using (var reader = new JsonlByteReader(path, startOffset))
             {
@@ -47,6 +51,7 @@ namespace RNAssistant.Core.Storage
                 JsonlByteLine line;
                 while ((line = reader.ReadLine()) != null)
                 {
+                    cancellationToken.ThrowIfCancellationRequested();
                     if (string.IsNullOrWhiteSpace(line.Text))
                     {
                         if (!line.Terminated)
@@ -80,6 +85,7 @@ namespace RNAssistant.Core.Storage
                         summary.HasIncompleteTail = true;
                         break;
                     }
+                    if (maxRecords.HasValue && --remaining == 0) break;
                 }
             }
             return summary;

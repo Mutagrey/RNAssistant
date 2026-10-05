@@ -443,7 +443,8 @@ including after deletion of the disposable SQLite projection.
 `ReadState` returns the canonical conversation snapshot's opaque `Cursor`, binding
 session ID, event sequence and hash. Resource availability hints are checked by
 their own authority owners; this is not an atomic snapshot of all workspace files.
-`ConversationEventFeed` reads the same stream through `IEventStore.RequireComplete`.
+`ConversationEventFeed` reads the same stream through `IEventStore.OpenReader`;
+ChatStore retains ownership of hash/sequence validation and byte boundaries.
 `ReadEvents(after, through?, limit)` returns 1–100 event notices per nonempty page,
 with `HighWater`, exclusive `NextCursor` and `HasMore`. Pin subsequent pages to the
 returned `HighWater` using `through`; later appends cannot change that prefix.
@@ -454,6 +455,20 @@ Malformed/cross-session cursors, missing or replaced positions, unavailable stre
 and incomplete tails produce explicit `ResyncRequired` with a typed reason. Obtain
 a fresh snapshot (or resolve unavailable history explicitly); no mutation is
 repeated. Kernel invocation counters remain private and are not transport cursors.
-Output pages are bounded; the current implementation still validates/materializes
-the full event history through the existing port. Indexed incremental reads, push
-subscription and Office UI adoption remain open scope.
+`SubscribeEventsAsync` and CLI `events --follow` deliver those same bounded pages,
+starting strictly after the supplied snapshot cursor. Pages drain to a pinned
+high-water before following later appends. Delivery is awaited (no unbounded queue);
+polling at 250 ms and callbacks hold no persistence/run lease. The first page is
+also delivered when empty; subsequent empty polls are suppressed. Cancellation or
+optional CLI `--timeout-seconds` ends only the subscriber. Resync delivers one final
+notification and stops, without model calls, reconciliation or lifecycle writes.
+
+The reader retains only a few transient boundaries and at most the requested page
+of events. A cold or changed file requires streaming validation of the entire
+canonical prefix, without materializing all events or loading CAS bodies. Repeated
+pages and idle polls over an unchanged file reuse validated offsets and recheck
+their exact boundaries. External growth still triggers full validation: a valid
+new tail cannot establish the integrity of an externally changed prefix. There is
+no persistent event index or second store. Changed-file validation remains O(history);
+the application's initial session scope check also loads its existing projection.
+Office UI subscription adoption and bounded resource body transport remain open.

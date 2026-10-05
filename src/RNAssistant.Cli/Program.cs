@@ -73,6 +73,8 @@ namespace RNAssistant.Cli
             }
             if (args[0] == "events")
             {
+                if (options.ContainsKey("follow")) return FollowEvents(service, workspace, options, jsonl);
+                if (options.ContainsKey("timeout-seconds")) throw new ArgumentException("--timeout-seconds requires --follow.");
                 var page = service.ReadEvents(workspace, Required(options, "session"), Required(options, "after"),
                     Value(options, "through", null), options.ContainsKey("limit") ? PositiveBoundedOption(options, "limit", 100) : 50);
                 Output(jsonl, page.ResyncRequired ? "events.resync_required" : "events", page);
@@ -567,7 +569,7 @@ namespace RNAssistant.Cli
                 if (!args[i].StartsWith("--", StringComparison.Ordinal)) throw new ArgumentException("Unexpected argument: " + args[i]);
                 var key = args[i].Substring(2);
                 if (key == "jsonl" || key == "read-only" || key == "create" ||
-                    key == "require-web-verify" || key == "continue") result[key] = "true";
+                    key == "require-web-verify" || key == "continue" || key == "follow") result[key] = "true";
                 else
                 {
                     if (i + 1 >= args.Length || args[i + 1].StartsWith("--", StringComparison.Ordinal))
@@ -604,6 +606,38 @@ namespace RNAssistant.Cli
                 throw new ArgumentException("--" + key + " requires an integer from 1 to " + maximum + ".");
             return value;
         }
+        private static int FollowEvents(WorkspaceConversationService service, WorkspaceDescriptor workspace,
+            Dictionary<string, string> options, bool jsonl)
+        {
+            if (options.ContainsKey("through")) throw new ArgumentException("--follow cannot pin --through; it follows new high-water positions.");
+            var sessionId = Required(options, "session");
+            var after = Required(options, "after");
+            var limit = options.ContainsKey("limit") ? PositiveBoundedOption(options, "limit", 100) : 50;
+            var seconds = options.ContainsKey("timeout-seconds") ? PositiveBoundedOption(options, "timeout-seconds", 3600) : 0;
+            var resync = false;
+            using (var cancelled = new CancellationTokenSource())
+            using (var deadline = new CancellationTokenSource())
+            using (var linked = CancellationTokenSource.CreateLinkedTokenSource(cancelled.Token, deadline.Token))
+            {
+                if (seconds > 0) deadline.CancelAfter(TimeSpan.FromSeconds(seconds));
+                ConsoleCancelEventHandler handler = (sender, e) => { e.Cancel = true; cancelled.Cancel(); };
+                Console.CancelKeyPress += handler;
+                try
+                {
+                    service.SubscribeEventsAsync(workspace, sessionId, after, page =>
+                    {
+                        resync = page.ResyncRequired;
+                        Output(jsonl, resync ? "events.resync_required" : "events", page);
+                        return System.Threading.Tasks.Task.CompletedTask;
+                    }, limit, linked.Token).GetAwaiter().GetResult();
+                    return resync ? 3 : 0;
+                }
+                catch (OperationCanceledException) when (linked.IsCancellationRequested)
+                { return cancelled.IsCancellationRequested ? 130 : 0; }
+                finally { Console.CancelKeyPress -= handler; }
+            }
+        }
+
         private static void Output(bool jsonl, string type, object payload)
         {
             if (jsonl) Console.WriteLine(JsonConvert.SerializeObject(new { type, data = payload }));
@@ -623,6 +657,7 @@ namespace RNAssistant.Cli
             Console.WriteLine("rna cancel --workspace <path> --session <id> --run <RunId> --cursor <inspect Cursor> [--jsonl]  (signal exact running checkpoint; acknowledgement is not completion)");
             Console.WriteLine("rna resume --workspace <path> --session <id> --continue --run <RunId> --cursor <inspect Cursor> [LLM options] [--jsonl]  (explicit continuation with original budget, no unresolved calls/effects)");
             Console.WriteLine("rna events --workspace <path> --session <id> --after <Cursor> [--through <HighWater>] [--limit <1..100>] [--jsonl]  (read bounded event notices; resync_required never replays work)");
+            Console.WriteLine("rna events --workspace <path> --session <id> --after <Cursor> --follow [--limit <1..100>] [--timeout-seconds <1..3600>] [--jsonl]  (subscribe until Ctrl+C, timeout or resync; never runs the agent)");
             Console.WriteLine("rna recover --workspace <path> --path <relative-path> [--jsonl]  (inspect an uncertain file effect)");
             Console.WriteLine("rna verify --workspace <path> [--entry index.html | --snapshot <id>] [--web-checks <json-file>] [--jsonl]  (historical success does not verify current files)");
             Console.WriteLine("rna verification --workspace <path> --id <id> [--jsonl]  (read a saved result; Pending means no terminal result, never auto-replayed)");

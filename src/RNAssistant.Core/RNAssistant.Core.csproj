@@ -247,6 +247,7 @@
     <Compile Include="Storage\ChatHeaderReducer.cs" />
     <Compile Include="Storage\ChatStore.cs" />
     <Compile Include="Storage\ChatEventStoreAdapter.cs" />
+    <Compile Include="Storage\ChatStore.EventReader.cs" />
     <Compile Include="Storage\ChatConversationStoreAdapter.cs" />
     <Compile Include="Storage\ChatStore.Artifacts.cs" />
     <Compile Include="Storage\DocumentArtifactStore.cs" />

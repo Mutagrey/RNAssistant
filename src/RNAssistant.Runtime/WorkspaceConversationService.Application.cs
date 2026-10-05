@@ -1,6 +1,8 @@
 using System;
 using System.IO;
 using System.Linq;
+using System.Threading;
+using System.Threading.Tasks;
 using Newtonsoft.Json;
 using RNAssistant.Core.Models;
 using RNAssistant.Core.Services;
@@ -45,6 +47,26 @@ namespace RNAssistant.Runtime
             }
             catch (Exception ex) when (ex is IOException || ex is InvalidOperationException || ex is JsonException || ex is UnauthorizedAccessException)
             { return new ConversationEventPage { SessionId = sessionId, After = after, Reason = ConversationResyncReason.HistoryUnavailable }; }
+        }
+
+        public async Task SubscribeEventsAsync(WorkspaceDescriptor workspace, string sessionId, string after,
+            Func<ConversationEventPage, Task> onPage, int limit = 50,
+            CancellationToken cancellationToken = default(CancellationToken))
+        {
+            if (onPage == null) throw new ArgumentNullException(nameof(onPage));
+            if (limit < 1 || limit > 100) throw new ArgumentException("Event page limit must be 1–100.");
+            cancellationToken.ThrowIfCancellationRequested();
+            ChatSession session = null;
+            try { session = GetSession(workspace, sessionId); }
+            catch (Exception ex) when (ex is IOException || ex is InvalidOperationException || ex is JsonException || ex is UnauthorizedAccessException) { }
+            if (session == null)
+            {
+                await onPage(new ConversationEventPage { SessionId = sessionId, After = after,
+                    Reason = ConversationResyncReason.HistoryUnavailable }).ConfigureAwait(false);
+                return;
+            }
+            await new ConversationEventFeed(new ChatEventStoreAdapter(_chats))
+                .SubscribeAsync(session, after, onPage, limit, cancellationToken).ConfigureAwait(false);
         }
 
         public WorkspaceInputReceipt FindAcceptedInput(WorkspaceDescriptor workspace, WorkspaceSubmitInputRequest request)

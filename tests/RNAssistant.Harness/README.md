@@ -1,5 +1,13 @@
 # RNAssistant Harness
 
+After building the CLI, `python3 -B tests/cli/event_subscription_smoke.py` checks
+bounded `events --follow` pages across real processes, snapshot continuity, Ctrl+C
+isolation from an active run, timeout and explicit corruption resync without replay.
+The `event feed:` harness filter checks bounded paging without full history
+materialization, unchanged-file polling without rescans, changed-prefix/torn-tail
+rejection, callback backpressure and storage-lock release before delivery.
+These use controlled HTTP/canonical temporary stores, not a real LLM or Office.
+
 After building the CLI, `python3 -B tests/cli/run_control_smoke.py` checks local
 cross-process cancel and explicit same-run continuation: exact cursors, late model
 response exclusion, unchanged limits/counters/history, retained verified writes,
