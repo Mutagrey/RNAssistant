@@ -141,16 +141,16 @@ function state(runId, lifecycle = "completed", health = "clean", pending = null)
   assert.equal(/agent-run-history-state\.status-(?:blocked|refused|awaiting_user|planned)/.test(agentCss), false);
   assert.equal(/message-outcome\.status-(?:blocked|refused|awaiting_user|planned)/.test(chatCss), false);
   ["app-utils.js", "app-run-view-state.js", "app-agent-model.js", "app-agent-approval.js"].forEach(asset => {
-    assert.ok(index.includes(asset + "?v=" + (["app-utils.js", "app-agent-approval.js"].includes(asset) ? "run-view-state-20260830-1" : asset === "app-agent-model.js" ? "catalog-display-chat-20260908-1" : "action-severity-20260930-1")), asset + " uses the atomic cutover cache key");
+    assert.ok(index.includes(asset + "?v=" + (["app-utils.js", "app-agent-approval.js"].includes(asset) ? "run-view-state-20260830-1" : asset === "app-agent-model.js" ? "catalog-display-chat-20260908-1-run-isolation-1" : "agent-outcome-20261002-1-run-isolation-1")), asset + " uses the current cache key");
   });
-  assert.ok(index.includes("app-agent.js?v=action-severity-20260930-1"),
+  assert.ok(index.includes("app-agent.js?v=agent-outcome-20261002-1-run-isolation-1"),
     "agent outcome uses the current cache key");
   assert.ok(index.includes("app-chat-session.js?v=office-chat-20260930-4"), "chat session uses the current cache key");
   assert.ok(index.includes("app-core.js?v=office-chat-20260930-3"), "core uses the current cache key");
   assert.ok(index.includes("app-chat-state.js?v=office-chat-20260930-3"), "chat state uses the current cache key");
   assert.ok(index.includes("app-messages.js?v=action-severity-20260930-1"), "messages uses the transcript incremental cache key");
   ["app-chat.css", "app-agent.css"].forEach(asset => {
-    assert.ok(index.includes(asset + "?v=" + (asset === "app-agent.css" ? "agent-planning-20261002-2" : "action-severity-20260930-1")), asset + " uses the current layout cache key");
+    assert.ok(index.includes(asset + "?v=" + (asset === "app-agent.css" ? "agent-outcome-20261002-1" : "action-severity-20260930-1")), asset + " uses the current layout cache key");
   });
   assert.ok(index.indexOf("app-run-view-state.js") < index.indexOf("app-chat-state.js"));
   assert.ok(index.indexOf("app-run-view-state.js") < index.indexOf("app-agent-model.js"));

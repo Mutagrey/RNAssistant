@@ -466,6 +466,7 @@ function messageUnitSignature(message) {
     failed: !!message.Failed,
     local: !!message.Local,
     activity: activity || null,
+    runViewState: message.RunViewState || message.runViewState || null,
     attachments: messageAttachments(message),
     artifacts: message.Artifacts || message.artifacts || null,
     reasoning: {

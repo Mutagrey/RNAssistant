@@ -257,6 +257,23 @@ function beginChatRunTracking(chatId) {
   resetLiveReasoning();
 }
 
+function trackChatProgressRun(chatId, runId) {
+  if (!chatId) return null;
+  var tracked = state.chatRuns[chatId];
+  if (runId && tracked && tracked.runId && tracked.runId !== runId) {
+    beginChatRunTracking(chatId);
+    tracked = state.chatRuns[chatId];
+  }
+  if (!tracked) {
+    tracked = state.chatRuns[chatId] = {
+      activities: [], stream: "", streamResetPending: false,
+      reasoning: "", reasoningComplete: false, reasoningResetPending: false
+    };
+  }
+  if (runId) tracked.runId = runId;
+  return tracked;
+}
+
 function endChatRunTracking(chatId) {
   if (!chatId) {
     return;

@@ -400,9 +400,7 @@ if (window.chrome && window.chrome.webview) {
       var progressChatId = progress.chatId || progress.ChatId || (progressPending && progressPending.payload && progressPending.payload.chatId) || "";
       var progressRunId = progress.runId || progress.RunId || "";
       if (progressChatId && isChatProgress) {
-        state.chatRuns[progressChatId] = state.chatRuns[progressChatId] || { activities: [], stream: "", streamResetPending: false, reasoningResetPending: false };
-        state.chatRuns[progressChatId].runId = progressRunId;
-        state.chatRuns[progressChatId].phase = progress.phase || progress.Phase || "working";
+        trackChatProgressRun(progressChatId, progressRunId).phase = progress.phase || progress.Phase || "working";
       }
       var contentReset = !!(progress.contentReset || progress.ContentReset);
       var reasoningReset = !!(progress.reasoningReset || progress.ReasoningReset);

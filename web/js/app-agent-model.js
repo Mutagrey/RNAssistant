@@ -305,7 +305,7 @@ function agentRunStats(items, finished, runViewState) {
 function isAgentRunContinuation(message) {
   var kind = activityKind(messageActivity(message));
   return messageRole(message) === "assistant" &&
-    (kind === "tool" || kind === "control" || kind === "diagnostic" || kind === "reasoning");
+    (kind === "step" || kind === "tool" || kind === "control" || kind === "diagnostic" || kind === "reasoning");
 }
 
 function canCollectAgentRunAt(index) {

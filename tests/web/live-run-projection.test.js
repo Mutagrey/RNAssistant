@@ -15,7 +15,7 @@ class Element {
   removeChild(node) { this.childNodes.splice(this.childNodes.indexOf(node), 1); node.parentNode = null; }
   setAttribute(key, value) { this.attributes[key] = String(value); }
   getAttribute(key) { return this.attributes[key]; }
-  addEventListener() {}
+  addEventListener(type, listener) { (this.listeners || (this.listeners = {}))[type] = listener; }
   querySelectorAll(selector) { return walk(this).slice(1).filter(n => selector === "details" ? n.tagName === "details" : n.classList.contains(selector.slice(1))); }
   querySelector(selector) { return this.querySelectorAll(selector)[0] || null; }
   set textContent(value) { this._text = String(value); this.childNodes.forEach(n => { n.parentNode = null; }); this.childNodes = []; }
@@ -56,6 +56,7 @@ function assertFeed(steps, calls) {
   const nodes = walk(box);
   assert.equal(box.childNodes.length, 1, "one visible run article");
   assert.equal(nodes.filter(n => n.classList.contains("agent-step-message")).length, steps, "each step narration appears once");
+  assert.equal(nodes.filter(n => n.classList.contains("kind-step")).length, 0, "step marker does not repeat the narration");
   assert.equal(nodes.filter(n => n.classList.contains("kind-tool")).length, calls, "each actual call appears once");
 }
 render();
@@ -103,3 +104,53 @@ assert.equal(new Set(segments.map(u => u.key)).size, segments.length, "separated
 render();
 assert.equal(box.childNodes.length, 3);
 console.log("PASS live projection: restoring active chats, final-stream replay and separate transcript segments");
+
+// A failed no-tool run remains one transcript, including every saved progress step.
+const failed = { RunId: "r", TurnId: "r", Lifecycle: "failed", ExecutionHealth: "clean",
+  SuccessfulReads: 0, VerifiedWrites: 0, NoChangeWrites: 0, UnverifiedWrites: 0,
+  FailedCalls: 0, UnknownEffects: 0, Reason: "no_tool_progress" };
+const projected = message(Object.assign(marker("state"), { Status: "completed" }), 10);
+projected.RunViewState = Object.assign({}, failed, { Lifecycle: "running", Reason: "" });
+ctx.state.messages = [projected];
+ctx.resetRenderedMessageUnits(box); render();
+assert.ok(walk(box).some(n => n.classList.contains("status-running")));
+projected.RunViewState = failed;
+render();
+assert.ok(walk(box).some(n => n.classList.contains("agent-run") && n.classList.contains("status-failed")),
+  "a lifecycle change on the same saved message updates the reconciled run");
+
+ctx.state.messages = [{ Id: "user", Role: "user", RunId: "r", Content: "Build an app" },
+  message(Object.assign(marker("s1"), { Status: "completed" }), 1),
+  { Id: "protocol", Role: "assistant", RunId: "r", ProtocolMessage: true, Content: "continue" },
+  message(Object.assign(marker("s2"), { Status: "completed" }), 2),
+  { Id: "terminal", Role: "assistant", RunId: "r", Content: "", RunViewState: failed,
+    Activity: { RunId: "r", Kind: "diagnostic", Status: "failed", ResultMessage: "No tool progress" } }];
+ctx.resetRenderedMessageUnits(box);
+assert.equal(ctx.buildMessageUnits().length, 2, "saved progress and terminal diagnostic belong to one run");
+render();
+assert.equal(walk(box).filter(n => n.classList.contains("agent-run")).length, 1);
+assert.equal(walk(box).filter(n => n.classList.contains("agent-result-card")).length, 1);
+assert.match(box.textContent, /Ошибка выполнения/);
+assert.match(box.textContent, /Модель повторила описание прогресса/);
+assert.equal(walk(box).filter(n => n.classList.contains("status-running")).length, 0,
+  "terminal failure does not leave earlier progress cards running");
+const overview = walk(box).find(n => n.classList.contains("agent-run-overview"));
+assert.ok(overview, "no-tool progress remains inspectable");
+overview.open = true; overview.listeners.toggle();
+assert.equal(walk(overview).filter(n => n.classList.contains("agent-step-message")).length, 2);
+assert.equal(walk(overview).filter(n => n.classList.contains("kind-step")).length, 0,
+  "step text is not repeated inside its own activity row");
+
+// Background inbox work can start another run without an idle state between them.
+ctx.resetLiveReasoning = () => {};
+ctx.state.chatRuns.chat = { runId: "old", activities: [marker("old-step")], stream: "old text", reasoning: "old reasoning" };
+ctx.state.liveAgentRun = ctx.state.chatRuns.chat.activities;
+ctx.state.liveStreamContent = "old text";
+ctx.trackChatProgressRun("chat", "old");
+assert.equal(ctx.state.chatRuns.chat.activities.length, 1, "same-run progress retains its activities");
+ctx.trackChatProgressRun("chat", "next");
+assert.equal(ctx.state.chatRuns.chat.runId, "next");
+assert.equal(ctx.state.chatRuns.chat.activities.length, 0, "new run drops previous live activities");
+assert.equal(ctx.state.liveStreamContent, "", "new run drops previous stream");
+assert.equal(ctx.state.liveReasoning, "", "new run drops previous reasoning");
+console.log("PASS live projection: terminal no-tool run and consecutive inbox runs stay isolated");

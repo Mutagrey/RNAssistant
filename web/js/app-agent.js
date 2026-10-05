@@ -241,7 +241,7 @@ function appendAgentStepMessage(parent, text) {
 function appendLiveAgentStep(parent, step, isLast) {
   var actions = [];
   function append(item, activity, nested) {
-    if (activityKind(activity) !== "notice") {
+    if (activityKind(activity) !== "notice" && activityKind(activity) !== "step") {
       actions.push({ message: item.message, index: item.index, activity: activity,
         reasoningMessage: item.reasoningMessage, includeReasoning: !nested });
     }
@@ -298,7 +298,9 @@ function appendAgentRunSummaryState(summary, status) {
 
 function appendAgentRunOverview(parent, steps, timeline, stats) {
   var actionCount = agentToolCallCount(timeline);
-  if (!actionCount) return null;
+  if (!actionCount && !(timeline || []).some(function (item) {
+    return activityKind(item.activity) === "step";
+  })) return null;
   var details = document.createElement("details");
   details.className = "agent-run-history agent-run-overview status-" + stats.status;
   details.setAttribute("data-disclosure-key", "overview");
@@ -307,7 +309,9 @@ function appendAgentRunOverview(parent, steps, timeline, stats) {
   summary.className = "agent-run-history-summary";
   var title = document.createElement("span");
   title.className = "agent-run-history-title";
-  title.textContent = agentRunSummaryTitle(stats.status, stats.elapsed, stats.runViewState) + " · " + actionCount;
+  title.textContent = actionCount
+    ? agentRunSummaryTitle(stats.status, stats.elapsed, stats.runViewState) + " · " + actionCount
+    : "Ход работы" + (stats.elapsed ? " · " + stats.elapsed : "");
   summary.appendChild(title);
   appendAgentRunSummaryState(summary,
     stats.status === "failed" && stats.runViewState && stats.runViewState.executionHealth === "unknown"
@@ -316,8 +320,8 @@ function appendAgentRunOverview(parent, steps, timeline, stats) {
   caret.className = "agent-run-history-caret";
   caret.setAttribute("aria-hidden", "true");
   summary.appendChild(caret);
-  summary.setAttribute("aria-label", title.textContent + ". " + agentActionCountText(actionCount));
-  summary.title = agentActionCountText(actionCount);
+  summary.setAttribute("aria-label", title.textContent + (actionCount ? ". " + agentActionCountText(actionCount) : ""));
+  summary.title = actionCount ? agentActionCountText(actionCount) : "Показать шаги запуска";
   details.appendChild(summary);
 
   var content = null;
@@ -335,9 +339,12 @@ function appendAgentRunOverview(parent, steps, timeline, stats) {
       var section = document.createElement("section");
       section.className = "agent-model-step agent-model-step-history";
       appendAgentStepMessage(section, step.message);
-      if ((step.items || []).length) {
+      var historyItems = (step.items || []).filter(function (item) {
+        return activityKind(item.activity) !== "step";
+      });
+      if (historyItems.length) {
         section.appendChild(buildAgentRunTranscript(
-          step.items, step.items, agentRunStats(step.items, true, null)));
+          historyItems, historyItems, agentRunStats(historyItems, true, null)));
       }
       content.appendChild(section);
     });
