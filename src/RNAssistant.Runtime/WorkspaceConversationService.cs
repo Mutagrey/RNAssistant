@@ -29,6 +29,7 @@ namespace RNAssistant.Runtime
         private readonly WorkspaceStore _workspaces;
         private readonly WorkspaceFileService _files;
         private readonly ChatBlobStore _payloads;
+        private readonly WorkspaceWebSnapshotStore _webSnapshots;
 
         public WorkspaceConversationService(AppDataPaths paths)
         {
@@ -37,6 +38,7 @@ namespace RNAssistant.Runtime
             _workspaces = new WorkspaceStore(paths);
             _files = new WorkspaceFileService(paths);
             _payloads = new ChatBlobStore(paths);
+            _webSnapshots = new WorkspaceWebSnapshotStore(paths, _files);
         }
 
         public ChatSession GetSession(WorkspaceDescriptor workspace, string sessionId)
@@ -75,7 +77,7 @@ namespace RNAssistant.Runtime
 
         public IReadOnlyList<string> AvailableToolIds(WorkspaceDescriptor workspace)
         {
-            return new WorkspacePorts(_chats, _files, _payloads, workspace, null, new AppSettings(), null, null)
+            return new WorkspacePorts(_chats, _files, _payloads, _webSnapshots, workspace, null, new AppSettings(), null, null)
                 .ToolIds;
         }
 
@@ -85,12 +87,19 @@ namespace RNAssistant.Runtime
         }
 
         public Task<WebVerificationResult> VerifyWebAsync(WorkspaceDescriptor workspace,
-            string entryPath, CancellationToken cancellationToken = default(CancellationToken))
+            string entryPath, CancellationToken cancellationToken = default(CancellationToken), string snapshotId = null)
         {
             var resources = new ResourceProviderRouter<WorkspaceFileResourceProvider>(new[]
                 { new WorkspaceFileResourceProvider(_files, workspace) });
-            return new WorkspaceWebVerifier(resources).VerifyAsync(entryPath, cancellationToken);
+            return new WorkspaceWebVerifier(resources, _webSnapshots, workspace)
+                .VerifyAsync(entryPath, cancellationToken, snapshotId);
         }
+
+        public WebVerificationRecord GetWebVerification(WorkspaceDescriptor workspace, string id)
+        { return _webSnapshots.ReadVerification(workspace, id); }
+
+        public WebVerificationPage ListWebVerifications(WorkspaceDescriptor workspace, int offset = 0)
+        { return _webSnapshots.ListVerifications(workspace, offset); }
 
         public IReadOnlyList<string> MissingExpectedFiles(WorkspaceDescriptor workspace,
             IEnumerable<string> relativePaths)
@@ -139,7 +148,7 @@ namespace RNAssistant.Runtime
                 if (reasoningEnabled.HasValue) session.ReasoningEnabled = reasoningEnabled.Value;
 
                 var previous = RestoreAcceptedHistory(session);
-                var ports = new WorkspacePorts(_chats, _files, _payloads, workspace, session, settings, apiKeyProvider,
+                var ports = new WorkspacePorts(_chats, _files, _payloads, _webSnapshots, workspace, session, settings, apiKeyProvider,
                     progress, acceptedContract);
                 var runId = Guid.NewGuid().ToString("N");
                 session.LastRun = new ChatRunRecord
@@ -214,7 +223,7 @@ namespace RNAssistant.Runtime
                 var history = RestoreAcceptedHistory(session);
                 var continuation = AgentRunContinuation.Restore(run.Summary, run.Limits, 0, history);
                 var acceptance = session.LastRun.WorkspaceAcceptance ?? new WorkspaceRunAcceptance();
-                var ports = new WorkspacePorts(_chats, _files, _payloads, workspace, session,
+                var ports = new WorkspacePorts(_chats, _files, _payloads, _webSnapshots, workspace, session,
                     settings ?? new AppSettings(), apiKeyProvider, progress, acceptance, approve);
                 var result = await ConversationRunCoordinator.ResumeAsync(session.LastRun.RunId,
                     pendingId, continuation, ports, ports.Tools, ports, cancellationToken,
@@ -459,7 +468,8 @@ namespace RNAssistant.Runtime
             public ToolRuntime Tools { get; private set; }
             public IReadOnlyList<string> ToolIds { get { return _catalog.Select(item => item.Id).ToArray(); } }
 
-            public WorkspacePorts(ChatStore chats, WorkspaceFileService files, ChatBlobStore payloads, WorkspaceDescriptor workspace,
+            public WorkspacePorts(ChatStore chats, WorkspaceFileService files, ChatBlobStore payloads,
+                WorkspaceWebSnapshotStore webSnapshots, WorkspaceDescriptor workspace,
                 ChatSession session, AppSettings settings, Func<string> apiKeyProvider,
                 Action<WorkspaceRunEvent> progress, WorkspaceRunAcceptance acceptance = null,
                 bool restorePendingObservation = true)
@@ -483,7 +493,7 @@ namespace RNAssistant.Runtime
                 if (WorkspaceWebVerifier.FindBrowserExecutable() != null)
                     Register(registry, entries, "web.verify", "Load an immutable local HTML/CSS/JS snapshot in an isolated browser and report asset and runtime errors.",
                         Schema("entryPath", true), false,
-                        new WebVerifierHandler(_resources), independentRead: false);
+                        new WebVerifierHandler(_resources, webSnapshots, workspace, session?.Id), independentRead: false);
                 if (!workspace.ReadOnly)
                 {
                     Register(registry, entries, "files.create", "Create a new real UTF-8 file; never overwrite.",
@@ -907,8 +917,10 @@ namespace RNAssistant.Runtime
         private sealed class WebVerifierHandler : IReadOnlyToolHandler
         {
             private readonly WorkspaceWebVerifier _verifier;
-            public WebVerifierHandler(ResourceProviderRouter<WorkspaceFileResourceProvider> resources)
-            { _verifier = new WorkspaceWebVerifier(resources); }
+            private readonly string _sessionId;
+            public WebVerifierHandler(ResourceProviderRouter<WorkspaceFileResourceProvider> resources,
+                WorkspaceWebSnapshotStore snapshots, WorkspaceDescriptor workspace, string sessionId)
+            { _verifier = new WorkspaceWebVerifier(resources, snapshots, workspace); _sessionId = sessionId; }
 
             public async Task<ToolHandlerResult> ExecuteAsync(ToolHandlerContext context,
                 CancellationToken cancellationToken)
@@ -917,7 +929,9 @@ namespace RNAssistant.Runtime
                 var entry = context.Arguments.TryGetValue("entryPath", out value)
                     ? Convert.ToString(value) : string.Empty;
                 WebVerificationResult result;
-                try { result = await _verifier.VerifyAsync(entry, cancellationToken).ConfigureAwait(false); }
+                try { result = await _verifier.VerifyAsync(entry, cancellationToken, origin: new WebVerificationOrigin
+                    { SessionId = _sessionId, RunId = context.Execution.RunId,
+                        ToolCallId = context.Execution.Call.Id }).ConfigureAwait(false); }
                 catch (WorkspaceFileException ex)
                 {
                     return new ToolHandlerResult(ToolResult.Error(ex.Message,
@@ -927,11 +941,13 @@ namespace RNAssistant.Runtime
                     status = WorkspaceWebVerifier.StatusCode(result.Status),
                     checkedFiles = result.CheckedFiles, errors = result.Errors, hints = result.Hints });
                 var toolResult = result.Status == WebVerificationStatus.Passed
-                    ? ToolResult.Ok("Isolated browser smoke passed for this immutable snapshot.", data)
+                    ? ToolResult.Ok("Isolated browser smoke passed for this immutable snapshot.", data,
+                        new[] { result.VerificationReference })
                     : ToolResult.Error(result.Status == WebVerificationStatus.NotRun
                         ? "Browser verification was not run." :
                         "Browser verification failed: " + result.Errors.FirstOrDefault() + " " +
-                        result.Hints.FirstOrDefault() + " Read and fix the indicated source before verifying again.", data);
+                        result.Hints.FirstOrDefault() + " Read and fix the indicated source before verifying again.", data,
+                        new[] { result.VerificationReference });
                 return new ToolHandlerResult(toolResult, ToolEffectEvidence.None,
                     resourceEvidence: result.Status == WebVerificationStatus.Passed ? result.Evidence : null);
             }

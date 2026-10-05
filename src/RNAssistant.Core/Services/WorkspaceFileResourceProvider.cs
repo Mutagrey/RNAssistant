@@ -73,6 +73,11 @@ namespace RNAssistant.Core.Services
             return Project(_files.ReadExactText(_workspace, relativePath, exact), true);
         }
 
+        public ResourceReadObservation ReadSnapshot(RetainedWebSnapshot snapshot, string relativePath)
+        {
+            return Project(_files.ReadSnapshotText(_workspace, snapshot, relativePath), true);
+        }
+
         private ResourceReadObservation Project(WorkspaceFileObservation observed, bool retained)
         {
             var descriptor = new ResourceDescriptor { Reference = observed.Reference,

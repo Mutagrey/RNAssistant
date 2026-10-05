@@ -4,6 +4,7 @@ import gzip
 import hashlib
 import json
 import os
+import re
 import subprocess
 import threading
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
@@ -110,6 +111,18 @@ def main():
             events = [json.loads(line)
                       for path in (root / "state/chats").rglob("*.events.jsonl")
                       for line in path.read_text(encoding="utf-8").splitlines()]
+            verification_ids = set(re.findall(
+                r'rna://workspace-web/[^/"\\]+/verification/([0-9a-f]{32})', json.dumps(events)))
+            assert len(verification_ids) == 1, "Tool result did not retain its exact verification resource"
+            saved_result = subprocess.run([
+                "dotnet", str(CLI), "verification", "--workspace", str(workspace),
+                "--id", verification_ids.pop(), "--jsonl"], cwd=REPO, env=env,
+                text=True, capture_output=True, timeout=15, check=True)
+            verification = json.loads(saved_result.stdout)["data"]
+            assert verification["State"] == "Failed" and verification["SnapshotId"], verification
+            assert verification["Origin"]["SessionId"] == final["SessionId"], verification
+            assert verification["Origin"]["RunId"] and verification["Origin"]["ToolCallId"], verification
+            assert any("CHANGED_AFTER_READ" in error for error in verification["Errors"]), verification
 
             def payload(event):
                 reference = event["Payload"]
@@ -151,7 +164,8 @@ def main():
                 content = json.loads(payload(event))["Content"]
                 assert json.loads(content) == responses[index], "Assembled response content was lost"
             assert env["RNA_API_KEY"] not in json.dumps(events), "API key leaked to trace metadata"
-            print("PASS shared compiler and trace: exact wire bytes, rejected body, correlated repair, stale and saved receipts")
+            print("PASS shared compiler and trace: exact wire bytes, rejected body, correlated repair, "
+                  "stale receipts and durable verification origin")
     finally:
         server.shutdown()
         server.server_close()

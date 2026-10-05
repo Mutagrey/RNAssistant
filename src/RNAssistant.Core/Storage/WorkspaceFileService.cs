@@ -57,7 +57,7 @@ namespace RNAssistant.Core.Storage
     // One file owner for text reads and writes. The locator catalog is not a head store.
     public sealed class WorkspaceFileService
     {
-        private const int MaximumTextBytes = 1024 * 1024;
+        internal const int MaximumTextBytes = 1024 * 1024;
         private static readonly UTF8Encoding StrictUtf8 = new UTF8Encoding(false, true);
         private readonly AppDataPaths _paths;
         private readonly ChatBlobStore _blobs;
@@ -225,6 +225,28 @@ namespace RNAssistant.Core.Storage
             var id = FileIdentity(path);
             if (exact == null || !exact.IsExact || exact.Uri != ResourceUri.Create("file", id))
                 throw new WorkspaceFileException("invalid_resource_ref", "Exact reference does not belong to this file.");
+            return ReadPublishedText(relativePath, exact);
+        }
+
+        internal WorkspaceFileObservation ReadSnapshotText(WorkspaceDescriptor workspace,
+            RetainedWebSnapshot snapshot, string relativePath)
+        {
+            if (snapshot == null || snapshot.WorkspaceId != workspace.WorkspaceId)
+                throw new WorkspaceFileException("invalid_resource_ref", "Snapshot belongs to another workspace.");
+            var file = snapshot.Files.SingleOrDefault(item => item.Path == relativePath);
+            if (file == null) throw new WorkspaceFileException("invalid_resource_ref", "Path is not in this exact snapshot.");
+            var observed = ReadPublishedText(relativePath, file.Reference);
+            if (!file.Matches(observed.Evidence.Payload))
+                throw new WorkspaceFileException("snapshot_unavailable", "Snapshot file payload does not match its exact revision.");
+            return observed;
+        }
+
+        private WorkspaceFileObservation ReadPublishedText(string relativePath, ResourceRef exact)
+        {
+            var address = ResourceUri.Parse(exact.Uri);
+            if (!exact.IsExact || address.Provider != "file" || address.Segments.Count != 1)
+                throw new WorkspaceFileException("invalid_resource_ref", "A published exact file reference is required.");
+            var id = address.Segments[0];
             var scope = Scope(id);
             var snapshot = _authority.Capture(scope);
             if (!snapshot.Commits.Any(commit => commit.HeadChanges.Any(change =>

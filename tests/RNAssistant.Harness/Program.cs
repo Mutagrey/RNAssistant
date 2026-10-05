@@ -96,6 +96,8 @@ namespace RNAssistant.Harness
                 Test("workspace files: recoverable delete and explicit restore", WorkspaceFilesRecoverableDelete),
                 Test("workspace files: identity-preserving move and interrupted recovery", WorkspaceFilesMoveAndRecover),
                 Test("workspace files: bounded directory discovery", WorkspaceFilesListBounded),
+                Test("workspace snapshots: restart moves and CAS retention", WorkspaceWebSnapshotsSurviveRestartAndMoves),
+                Test("workspace snapshots: bounds and publication barrier", WorkspaceWebSnapshotsRequirePublication),
                 Test("inbox: steer cancels only model", InboxSteerCancelsOnlyModel),
                 Test("inbox: stale model response cannot dispatch", InboxSteerDiscardsLateModelResponse),
                 Test("inbox: steer closes accepted batch", InboxSteerClosesAcceptedBatch),

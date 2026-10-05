@@ -147,6 +147,15 @@ observations are still current at `done`; pair it with `--expect-files` for the
 required project files. This smoke does not assert application behavior such as
 filtering, persistence or export.
 
+Each check returns `snapshotId` (when capture succeeded) and `verificationId`.
+`rna verification --workspace ./project --id <verificationId>` reads its saved
+result; `rna verifications --workspace ./project [--offset <n>]` lists up to 20
+records, including `Pending` checks without a terminal result after interruption.
+These commands never rerun a browser. `rna verify --workspace ./project --snapshot
+<snapshotId>` explicitly checks the retained historical bytes after restart, even
+if sources moved or were deleted. It reports `historical=true` and does not restore
+or verify the current workspace. Missing retained data fails without live fallback.
+
 After an interrupted file mutation, `recover --workspace
 <path> --path <relative-path>` reports the exact recovery outcome without replaying
 the write. Agent `files.delete` moves a previously read UTF-8 file into

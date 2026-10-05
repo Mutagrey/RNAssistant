@@ -1,16 +1,21 @@
 # CAS health and garbage collection
 
-`chat-blobs` is one immutable SHA-256 CAS shared by chat model payloads, artifact bodies, committed attachments, extracted attachment text, and VBA before/intended/backup source. CAS files are not a second index: durable ownership exists only in chat `*.events.jsonl` streams and document-scoped VBA `mutations.events.jsonl` journals.
+`chat-blobs` is one immutable SHA-256 CAS shared by chat model payloads, artifact bodies, committed attachments, extracted attachment text, file snapshots, web manifests/verification records and VBA before/intended/backup source. Durable roots include chat `*.events.jsonl`, VBA journals, resource authority revisions/views and resource mutation journals. CAS files are not a second index.
 
 ## Reachability audit
 
 Settings → Diagnostics → CAS storage runs a repository-wide audit under the cross-window maintenance gate. It:
 
-1. Enumerates every canonical chat stream and VBA journal.
-2. Validates schema, sequence, hash/HMAC chain, protection key, decrypted event data, replay projection, and canonical source path.
+1. Enumerates canonical chat streams, VBA/resource mutation journals, resource authority records and managed Outlook archive-cache references.
+2. Validates each source's schema, replay and canonical-path rules; chat/VBA event validation also checks sequence, hash/HMAC chain, protection key and decrypted event data.
 3. Discovers payload references and the typed SHA-256/byte-length pairs used by artifacts and attachments from every retained event, including shadowed historical revisions.
 4. Verifies each referenced blob after decryption by plaintext byte length and SHA-256.
 5. Classifies stored canonical blobs with no retained event/journal reference as orphans.
+
+Web snapshot manifests use authority view `Parts` for each retained file payload;
+verification views retain the manifest payload. Both pending and terminal revisions
+remain roots. No recursive JSON body scan or second snapshot-specific GC index is
+required. Focused workspace snapshot tests verify collection preserves these roots.
 
 The report distinguishes missing referenced blobs, corrupt/unreadable referenced blobs, harmless orphans, malformed CAS paths, reference conflicts, and invalid sources. Protected history is audited with the current DPAPI-backed API-key/custom-secret protector; secrets are never returned through Diagnostics.
 

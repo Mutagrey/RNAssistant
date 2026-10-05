@@ -67,7 +67,7 @@ from ordinary reads until reconciliation. An uncertain move is never replayed.
 Cross-volume move semantics, large/binary files, trash retention policy and full
 symlink/hardlink race guarantees remain open M3–M5 work. The immediate text-file
 contract and shared compiler do not complete workspace-first plan §8.1:
-raw/binary views, durable project snapshot manifests, remaining preview/viewer
+raw/binary views, remaining preview/viewer
 consumers and a shared Office/filesystem operation API remain open scope. These
 close when the corresponding consumers use the common contracts with bounded
 coverage, exact evidence and existing host guards; the target architecture is unchanged. See
@@ -85,9 +85,44 @@ evidence alongside its result; CLI acceptance refreshes those files and requires
 the evidence to remain current at completion. Dependency discovery currently
 covers HTML script/stylesheet references, CSS imports/URLs and static JS imports;
 dynamic asset discovery, binary assets, behavior beyond the 1.5-second post-load
-observation window, functional assertions within `web.verify`, durable exact project
-manifests and the remaining preview/viewer routing remain open. The separate CSV
+observation window, functional assertions within `web.verify` and the remaining
+preview/viewer routing remain open. The separate CSV
 grader provides behavioral checks for its specific task, not generic UI acceptance.
+
+### Retained web project snapshots — 2026-10-05
+
+Core `WorkspaceWebSnapshotStore` owns immutable manifests and verification records
+in the existing `ResourceAuthorityStore` journal and CAS, under the workspace-bound
+`workspace-web` scope. It adds no database or mutable source mirror. A manifest pins
+the entry and at most 32 relative asset routes / four MiB to exact file revisions
+and retained payloads. Metadata is bounded to 128 KiB; source text remains bounded
+to one MiB per file. Revision dependencies record provenance and view `Parts` root
+the source payloads for CAS maintenance. A staged revision/view is unreadable until
+its head publication commits. Missing/corrupt metadata or bodies fail explicitly.
+
+The publication owner checks every member through `WorkspaceFileService` before
+issuing a `RetainedWebSnapshot` handle. Only this workspace-bound runtime handle
+allows the filesystem provider to reopen its exact members after a source move,
+replacement or deletion. The provider delegates byte reads to the same file owner;
+historical routes never resolve to new live files or republish their heads.
+
+`verify` and model `web.verify` publish a pending verification record before capture,
+attach the manifest before browser launch, then append a terminal revision. Records
+include source mode, snapshot, timestamps, bounded errors/hints, browser and optional
+session/run/tool-call origin. A killed process leaves `Pending` (no terminal result);
+cancellation records `NotRun`. Reading/listing records never retries browser work.
+`verifications` returns at most 20 records in resource order with total, generation
+and next offset; concurrent new publications require refreshing the listing.
+Terminal results cannot be overwritten. Tool results retain the exact verification
+resource reference as runtime metadata; these IDs do not enter model prompts.
+
+CLI `verify --snapshot <id>` reopens a retained manifest after restart and performs
+a new explicitly historical browser check. Its result does not certify current
+workspace files; existing agent acceptance still refreshes current file evidence
+at `done`. `verification --id <id>` reads a recorded result without running a browser.
+The saved digest describes captured routes/bytes; the manifest's own CAS payload
+also pins entry and exact revisions. General UI preview routing, binary assets,
+screenshots/browser traces and functional assertions remain open M5–M7 work.
 
 One resource identity, shared current-state authority, immutable historical evidence
 and one model-context compiler serve model reads, HTML and viewers. Reading content

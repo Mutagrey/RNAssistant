@@ -27,8 +27,14 @@ gates; active tool compatibility adapter отсутствует. Windows/Office 
 | CLI accepted-fact and authority preparation | `WorkspaceConversationService` normalizes accepted kernel facts and refreshes current-run file authority through `WorkspaceFileService`. Core `ModelContextCompiler` owns all request assembly, filtering, budgeting and repair; the separate CLI result projector is removed (2026-10-05). Office retains pure domain projection and prompt preparation. | M5–M7: consolidate application preparation when host profiles share the same capability/context inputs; preserve one compiler and one file authority owner. |
 | Filesystem text-only provider surface | Office and CLI use shared `ResourceFindPage`/`ResourceReadProjection` and exact `ResourceReadObservation`; bounded CLI discovery carries metadata descriptors and explicit incompleteness. The filesystem provider now exposes exact retained text to the browser verifier (2026-10-05). `ResourceProviderRouter<TProvider>` still only routes providers. | §8.1 remains open for raw/binary views, remaining preview/viewer consumers and shared Office/filesystem operation dispatch. Close each with a concrete consumer, bounded coverage and exact evidence, preserving Office host guards; the text slice does not replace the target architecture. |
 | CLI abandoned-run reconciliation | `WorkspaceConversationService.PrepareResume` closes a process-abandoned run under the session lease and leaves tool replay disabled; `ChatRunRecord` keeps small interrupted-tool diagnostics. It asks for a new turn rather than resuming the stopped kernel budget. | M5–M7: consolidate startup and CLI recovery in the common application lifecycle and add validated same-run continuation where safe; remove the CLI-only projection path. |
-| Ephemeral development web snapshot | `WorkspaceWebVerifier` in Runtime obtains exact retained text through the same filesystem provider/router as CLI resource reads; the direct file-owner reader is removed (2026-10-05). It checks frozen authority and serves only bounded captured bytes to Chromium. | M5–M7: retain a typed exact project manifest and verification result in the existing event/CAS owners so preview and verification can reopen that snapshot after restart. Replace the in-memory-only manifest; keep file bodies under the existing file owner and CAS. |
 | Existing document-owned HTML authoring | `HtmlWorkspacePublication` and Office UI still own old document results; CLI files have no dual writer. | M6: explicit materialization/linkage and guarded old-writer removal for cut-over authored types. |
+
+The ephemeral-only web manifest seam was removed on 2026-10-05.
+`WorkspaceWebSnapshotStore` now publishes manifests and verification records through
+the existing authority/CAS owners; CLI can reopen exact snapshots and list pending
+records after restart. In-memory bytes are only bounded browser delivery buffers.
+General preview UI, binary assets and functional verification remain open; see
+[Resource Fabric](../resource-fabric.md#retained-web-project-snapshots--2026-10-05).
 
 ## Document artifact ownership — active slices
 

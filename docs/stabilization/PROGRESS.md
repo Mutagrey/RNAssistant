@@ -1,14 +1,38 @@
 # Stabilization progress
 
-M5 retained snapshot slice (2026-10-05): CLI `verify` / agent `web.verify` now
+M5 durable web snapshot slice (2026-10-05): Core `WorkspaceWebSnapshotStore`
+publishes typed exact manifests and pending/terminal verification records through
+the existing resource authority journal and CAS. Source bytes keep their file owner;
+there is no mutable project mirror or new physical store. CLI can rerun a selected
+historical snapshot, read a saved result and list bounded pages of pending/results
+after restart. Model tool results retain an exact verification reference with
+session/run/tool-call origin; the model schema remains semantic and unchanged.
+Historical success does not authorize a current-file mutation or satisfy agent
+acceptance. That still requires refreshed file evidence at completion.
+
+CLI build passed. The workspace harness filter passed 17/17, including the seven
+file tests and two new manifest tests. The final focused `workspace snapshots:`
+run passed 2/2: publication barrier, pending restart/discovery, terminal non-overwrite,
+move/replacement/deletion, cross-workspace rejection, missing/corrupt retained data
+and CAS GC retention. Real Chromium smoke passed for current/historical checks,
+cross-process result inspection/listing and missing payloads. Scripted tool-result
+projection confirmed exact verification-resource persistence with origin, no runtime
+IDs in model messages, stale-source filtering and frozen repair. Version-format
+validation and diff checks passed. No real LLM, Windows/Office/WebView2 or release qualification is
+claimed. Functional assertions, screenshots/browser traces, binary assets and
+general preview UI remain open; the new historical CLI route is a development
+verification consumer of the retained manifest.
+
+Historical M5 retained text slice (2026-10-05): CLI `verify` / agent `web.verify`
 read exact retained UTF-8 through the workspace filesystem provider and shared
 router. The direct verifier-to-file-owner reader is removed. `ReadExactText`
 replaces the string-only historical read, supplies whole-view evidence, enforces
 the text bound and rejects unpublished revisions and missing/corrupt CAS bytes.
 Historical reads do not republish a current head. Before browser launch the
 verifier refreshes sources and checks evidence against frozen authority; acceptance
-still checks freshness at completion. Durable project manifests, binary assets,
-remaining preview/viewer consumers and common Office/file dispatch stay open.
+still checks freshness at completion. Durable project manifests were open at this
+checkpoint and are implemented by the slice above; binary assets, remaining
+preview/viewer consumers and common Office/file dispatch remain open.
 CLI build and focused `workspace files:` 7/7 passed. Real Chromium smoke passed
 with an exact BOM/CRLF snapshot and rejected a missing retained payload before
 launch despite an intact live file; existing error/asset/not-run cases also passed.
@@ -52,7 +76,7 @@ records temporary adapters. This work does not qualify Windows/Office/WebView2.
 | M2 | Portable workspace manifest, user-state association, read-only opening, existing ChatStore workspace sessions without document authority, root relocation and copy-ID conflict. File locators retain identity across a known root move. | Focused `workspace:` 2/2. External moves not associated with an opened workspace and mount/Office identity resolution remain open. |
 | M3 | Real UTF-8 files: bounded single-directory discovery/read, create, exact patch/replace, copy from an accepted complete source to a new identity with immutable source provenance, guarded historical restore, recoverable delete to managed workspace trash and explicit restore after deletion. Confirmed `files.move` keeps logical identity, advances revision and relocates the file locator. CAS views, authority heads, mutation journal, read-back, external-edit conflict and non-replay after an interrupted dispatch remain one file-owner path. `recover` distinguishes prepared-only abandonment, an already-published effect and unknown causality after dispatch; it never replays the command. Ordinary reads and writes are blocked while an effect is unresolved. External invalid UTF-8 or oversized text marks the old known head unknown; BOM, CRLF and verified no-change are preserved. | Focused `workspace files:` 7/7. Directory discovery scans at most 5000 entries and returns `truncated` rather than implying a complete result; optional filename search is case-insensitive. Move retains a durable two-path intent; reads of both paths block until an interrupted move is reconciled. A delete verifies absent source plus exact trash preimage before publishing an unavailable head; restore requires that deletion head and creates a new revision. Cross-volume move semantics, trash retention policy, binary/large streaming, full cross-platform path races, directory pagination and the remaining §8.1 provider operations/views remain open. |
 | M4 | Net8 CLI calls one application service for workspace/session open and listing, exact capability catalog, new/continued runs, inspect and explicit file recovery; it supports JSONL output. It uses production `LlmClient` and v6 `ModelProtocolClient`. A live `gemma4:31b:cloud` run through the local Ollama API created `index.html`, `app.js`, `styles.css` as externally visible files, with 3 verified writes and `model_done`. File tools now include copy from an accepted source. Exact read evidence and direct file authority commits enter durable tool records. Prior-turn read results are projected as stale; current-turn reads are refreshed before a model request. A cross-process session lease serializes accepted input and the run; continuation reloads the chat under that lease. The CLI development profile now requests 4096 output tokens and propagates the session's reasoning-off setting as `reasoning_effort=none`. | CLI build, environment/session listing, scripted HTTP protocol smoke and one real-model task passed. External inspection confirmed three files, HTML references/DOM targets and `node --check` of JS. A scripted read/copy turn produced a byte-identical real `index-copy.html`. An earlier `glm-5.3-flash:cloud` attempt returned HTTP 402 and wrote nothing. Focused transport test verifies explicit reasoning-off serialization. The scripted smoke verified stale read projection after external edit without a model-facing `rna://` reference; historical create-call text still appears as past action. The local `qwen3.5:9b` profile and live CLI task were exercised; detailed result and false-completion risk are below. The shared frozen Core `ModelContextCompiler` is connected (2026-10-05; see below). Other interactive questions/approvals, automatic safe resume and full M4 acceptance remain open. |
-| M5 | Development `rna verify` and optional `web.verify` capture bounded exact retained UTF-8 through the filesystem provider, refresh source authority before browser launch, validate discovered static dependencies, serve only captured bytes over loopback to a fresh headless Chromium profile, and report missing assets, console/page exceptions or `not-run`. `--require-web-verify` is a persisted CLI acceptance condition; a passing tool result carries exact file evidence, refreshed and checked against current authority at `done`. A separate read-only CSV-dashboard grader checks actual UI behavior against private fixtures. | Real Chrome passed a valid 3-file app and a 5-file HTML/CSS/JS import graph; immediate and 650 ms delayed JS errors and missing CSS failed; missing browser removed the model tool and returned `not-run`/exit 4. Scripted agent verify/read/patch/read/verify/done passed; verification before a later patch failed acceptance. The CSV grader passed a known-good fixture on 13 checks and rejected a JS-throwing fixture, missing browser and blocked outbound attempt. A fresh Qwen CSV task falsely returned `done` with no tools; after explicit feedback it wrote three files and passed smoke, but independent functional acceptance failed 3 of 11 assertions. Repair feedback led to no changed file and another false `done`. Autonomous CSV task, behavior after the 1.5-second observation window, binary assets, durable project manifest/verification record, autonomous diagnosis and other M5 acceptance remain open. |
+| M5 | Development `rna verify` and optional `web.verify` capture bounded exact retained UTF-8 through the filesystem provider, refresh source authority before browser launch, validate discovered static dependencies, serve only captured bytes over loopback to a fresh headless Chromium profile, and report missing assets, console/page exceptions or `not-run`. `--require-web-verify` is a persisted CLI acceptance condition; a passing tool result carries exact file evidence, refreshed and checked against current authority at `done`. Manifests and pending/terminal verification records now live in authority/CAS; CLI reopens historical snapshots and lists saved results after restart. A separate read-only CSV-dashboard grader checks actual UI behavior against private fixtures. | Real Chrome passed a valid 3-file app and a 5-file HTML/CSS/JS import graph; immediate and 650 ms delayed JS errors and missing CSS failed; missing browser removed the model tool and returned `not-run`/exit 4. Scripted agent verify/read/patch/read/verify/done passed; verification before a later patch failed acceptance. The CSV grader passed a known-good fixture on 13 checks and rejected a JS-throwing fixture, missing browser and blocked outbound attempt. A fresh Qwen CSV task falsely returned `done` with no tools; after explicit feedback it wrote three files and passed smoke, but independent functional acceptance failed 3 of 11 assertions. Repair feedback led to no changed file and another false `done`. Autonomous CSV task, behavior after the 1.5-second observation window, binary assets, general preview UI, browser traces/screenshots, autonomous diagnosis and other M5 acceptance remain open. |
 
 Historical M3/M4 resource routing slice (2026-10-04, extended below): canonical provider registration and
 URI selection moved from the Office-only registry into Core
@@ -449,15 +473,15 @@ boundary, not a functional CSV score. Scripted HTTP tests confirmed both CLI
 transport modes and saved metadata. The existing v6 parser correctly rejected
 these outputs; no permissive JSON repair or separate agent loop was added.
 
-Next concrete slice (2026-10-05): M5 durable exact project manifest and verification
-record in the existing event/CAS owners, consumed by preview/verification after
-restart. Bounded typed find/read, the shared frozen compiler, explicit CLI recovery
-and provider-based retained text verification are implemented. Raw/binary views
-and common Office/file operation dispatch remain separate open §8.1 scope.
-Continue real-agent protocol/continuation isolation and then autonomous functional
-verify/repair acceptance; scripted runtime checks do not close that gate. M6–M11
-have not started. The document-owned HTML writer remains active only for its old
-Office flow; no CLI file is dual-written.
+Next concrete slice (2026-10-05): M5 functional assertions bound to the exact
+manifest and saved verification result, followed by a real-agent verify/repair
+task. Isolate remaining model protocol/continuation failures before counting
+autonomous acceptance. Bounded find/read, one frozen compiler, explicit CLI
+recovery and durable historical snapshot verification are implemented. Raw/binary
+views, general preview UI and common Office/file dispatch remain open §8.1/M5–M7
+scope. Scripted runtime checks do not close real-model acceptance. M6–M11 have not
+started. The document-owned HTML writer remains active only for its old Office
+flow; no CLI file is dual-written.
 
 ## Current operating status — 2026-09-30
 

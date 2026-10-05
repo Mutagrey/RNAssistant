@@ -8,11 +8,17 @@ with BOM/CRLF and rejects a missing retained CAS payload before browser launch,
 even when the workspace file still exists. Focused `workspace files:` tests cover
 retained provider evidence after edit/deletion, empty text, unpublished revisions,
 corrupt/missing payloads and the existing mutation/recovery guards.
+Focused `workspace snapshots:` tests cover manifest publication barriers, pending
+and terminal records, historical reads after move/replacement/deletion, workspace
+isolation and CAS GC retention. The browser smoke reopens the saved snapshot in a
+new CLI process with current paths changed/deleted and reads saved verification
+records without rerunning the browser.
 `python3 tests/cli/tool_result_projection_smoke.py` checks bounded semantic find,
 exact read delivery, invalidation after external edit, failed browser-result
 delivery, frozen format repair and the persisted context receipt. It also compares
 saved request bytes with actual HTTP bodies and checks rejected-response retention,
-attempt/snapshot correlation and API-key exclusion from trace metadata/payloads.
+attempt/snapshot correlation, exact verification-resource linkage with origin and
+API-key exclusion from trace metadata/payloads.
 `python3 tests/cli/omitted_read_guard_smoke.py` verifies that an exact file read
 omitted by the compiler's budget cannot authorize replacement and preserves the
 original bytes. Both use a scripted HTTP model, not real-model quality evidence.

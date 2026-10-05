@@ -79,14 +79,29 @@ namespace RNAssistant.Cli
             }
             if (args[0] == "verify")
             {
-                var result = service.VerifyWebAsync(workspace, Value(options, "entry", "index.html"))
+                if (options.ContainsKey("entry") && options.ContainsKey("snapshot"))
+                    throw new ArgumentException("Choose --entry for current source or --snapshot for retained source.");
+                var result = service.VerifyWebAsync(workspace, Value(options, "entry", "index.html"),
+                    snapshotId: Value(options, "snapshot", null))
                     .GetAwaiter().GetResult();
                 Output(jsonl, "verification.completed", new { entryPath = result.EntryPath,
                     status = WorkspaceWebVerifier.StatusCode(result.Status),
                     checkedFiles = result.CheckedFiles, snapshotSha256 = result.SnapshotSha256,
+                    snapshotId = result.SnapshotId, verificationId = result.VerificationId,
+                    historical = result.Historical,
                     browser = result.Browser, errors = result.Errors, hints = result.Hints });
                 return result.Status == WebVerificationStatus.Passed ? 0 :
                     result.Status == WebVerificationStatus.NotRun ? 4 : 5;
+            }
+            if (args[0] == "verification")
+            {
+                Output(jsonl, "verification.record", service.GetWebVerification(workspace, Required(options, "id")));
+                return 0;
+            }
+            if (args[0] == "verifications")
+            {
+                Output(jsonl, "verification.list", service.ListWebVerifications(workspace, NonnegativeOption(options, "offset")));
+                return 0;
             }
             if (args[0] == "inspect")
             {
@@ -465,7 +480,9 @@ namespace RNAssistant.Cli
             Console.WriteLine("rna run --workspace <path> (--message <text> | --task-file <file>) [--session <id>] [--profile development] [--model <name>] [--base-url <url>] [--context-tokens <n>] [--response-mode json_schema|json_object] [--instruction-role system|developer] [--reasoning-mode <mode>] [--thinking on|off] [--max-iterations <1..256>] [--max-tool-steps <1..4096>] [--expect-files <comma-separated paths>] [--min-reads <n>] [--min-writes <n>] [--require-web-verify] [--jsonl]");
             Console.WriteLine("rna inspect --workspace <path> --session <id> [--jsonl]");
             Console.WriteLine("rna recover --workspace <path> --path <relative-path> [--jsonl]  (inspect an uncertain file effect)");
-            Console.WriteLine("rna verify --workspace <path> [--entry index.html] [--jsonl]  (isolated static web smoke)");
+            Console.WriteLine("rna verify --workspace <path> [--entry index.html | --snapshot <id>] [--jsonl]  (historical success does not verify current files)");
+            Console.WriteLine("rna verification --workspace <path> --id <id> [--jsonl]  (read a saved result; Pending means no terminal result, never auto-replayed)");
+            Console.WriteLine("rna verifications --workspace <path> [--offset <n>] [--jsonl]  (up to 20 saved/pending results in resource order)");
             Console.WriteLine("rna resume --workspace <path> --session <id> [--jsonl]  (close an abandoned run, show pending action or request new input; never replay tools)");
             Console.WriteLine("rna approve --workspace <path> --session <id> --pending <id> [--base-url <url>] [--model <name>] [--context-tokens <n>] [--response-mode json_schema|json_object] [--instruction-role system|developer] [--reasoning-mode <mode>] [--jsonl]");
             Console.WriteLine("rna deny --workspace <path> --session <id> --pending <id> [--jsonl]");

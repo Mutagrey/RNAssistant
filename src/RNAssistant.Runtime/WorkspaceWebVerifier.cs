@@ -32,14 +32,18 @@ namespace RNAssistant.Runtime
         public string SnapshotSha256 { get; internal set; }
         public string Browser { get; internal set; }
         public IReadOnlyList<ResourceEvidence> Evidence { get; internal set; }
+        public string SnapshotId { get; internal set; }
+        public string VerificationId { get; internal set; }
+        public ResourceRef VerificationReference { get; internal set; }
+        public bool Historical { get; internal set; }
     }
 
     // Development-only browser verifier. The browser receives an immutable,
     // bounded snapshot over loopback, never the writable workspace directory.
     public sealed class WorkspaceWebVerifier
     {
-        private const int MaximumFiles = 32;
-        private const int MaximumSnapshotBytes = 4 * 1024 * 1024;
+        private const int MaximumFiles = WorkspaceWebSnapshotStore.MaximumFiles;
+        private const int MaximumSnapshotBytes = WorkspaceWebSnapshotStore.MaximumSnapshotBytes;
         private static readonly UTF8Encoding StrictUtf8 = new UTF8Encoding(false, true);
         private static readonly Regex ScriptTag = new Regex("<script\\b[^>]*>", RegexOptions.IgnoreCase | RegexOptions.Compiled,
             TimeSpan.FromMilliseconds(100));
@@ -56,6 +60,8 @@ namespace RNAssistant.Runtime
         private static readonly Regex JsElementId = new Regex("\\bgetElementById\\s*\\(\\s*(?<quote>[\"'])(?<value>[^\"']+)\\k<quote>\\s*\\)",
             RegexOptions.Compiled, TimeSpan.FromMilliseconds(100));
         private readonly ResourceProviderRouter<WorkspaceFileResourceProvider> _resources;
+        private readonly WorkspaceWebSnapshotStore _snapshots;
+        private readonly WorkspaceDescriptor _workspace;
 
         private sealed class SnapshotFile
         {
@@ -66,8 +72,13 @@ namespace RNAssistant.Runtime
             public ResourceEvidence Evidence;
         }
 
-        public WorkspaceWebVerifier(ResourceProviderRouter<WorkspaceFileResourceProvider> resources)
-        { _resources = resources ?? throw new ArgumentNullException(nameof(resources)); }
+        public WorkspaceWebVerifier(ResourceProviderRouter<WorkspaceFileResourceProvider> resources,
+            WorkspaceWebSnapshotStore snapshots, WorkspaceDescriptor workspace)
+        {
+            _resources = resources ?? throw new ArgumentNullException(nameof(resources));
+            _snapshots = snapshots ?? throw new ArgumentNullException(nameof(snapshots));
+            _workspace = workspace ?? throw new ArgumentNullException(nameof(workspace));
+        }
 
         public static string StatusCode(WebVerificationStatus status)
         { return status == WebVerificationStatus.NotRun ? "not-run" : status.ToString().ToLowerInvariant(); }
@@ -88,9 +99,41 @@ namespace RNAssistant.Runtime
         }
 
         public async Task<WebVerificationResult> VerifyAsync(string entryPath,
-            CancellationToken cancellationToken = default(CancellationToken))
+            CancellationToken cancellationToken = default(CancellationToken), string snapshotId = null,
+            WebVerificationOrigin origin = null)
         {
-            try { entryPath = NormalizeDependency("", entryPath); }
+            var id = _snapshots.BeginVerification(_workspace, entryPath, snapshotId != null, origin, snapshotId);
+            WebVerificationResult result;
+            try { result = await VerifyCoreAsync(entryPath, snapshotId, id, cancellationToken).ConfigureAwait(false); }
+            catch (OperationCanceledException)
+            {
+                _snapshots.CompleteVerification(_workspace, id, WebVerificationState.NotRun,
+                    null, new[] { "Verification was cancelled." }, new string[0]);
+                throw;
+            }
+            catch (Exception ex) when (ex is WorkspaceFileException || ex is IOException ||
+                ex is UnauthorizedAccessException || ex is ArgumentException)
+            {
+                result = new WebVerificationResult { Status = WebVerificationStatus.Failed, EntryPath = entryPath,
+                    CheckedFiles = new string[0], Evidence = new ResourceEvidence[0],
+                    Errors = BoundedErrors(new[] { ex.Message }), Hints = new string[0] };
+            }
+            result.VerificationId = id;
+            result.Historical = snapshotId != null;
+            _snapshots.CompleteVerification(_workspace, id,
+                result.Status == WebVerificationStatus.Passed ? WebVerificationState.Passed :
+                result.Status == WebVerificationStatus.Failed ? WebVerificationState.Failed : WebVerificationState.NotRun,
+                result.Browser, result.Errors, result.Hints);
+            result.VerificationReference = _snapshots.ReadVerification(_workspace, id).Reference;
+            return result;
+        }
+
+        private async Task<WebVerificationResult> VerifyCoreAsync(string entryPath, string snapshotId,
+            string verificationId, CancellationToken cancellationToken)
+        {
+            var retained = snapshotId == null ? null : _snapshots.ReadSnapshot(_workspace, snapshotId);
+            if (retained != null) entryPath = retained.EntryPath;
+            try { if (retained == null) entryPath = NormalizeDependency("", entryPath); }
             catch (Exception ex) when (ex is WorkspaceFileException || ex is UriFormatException)
             {
                 return new WebVerificationResult { Status = WebVerificationStatus.Failed,
@@ -104,7 +147,8 @@ namespace RNAssistant.Runtime
                     Errors = new[] { "Static web entry must be an HTML file." },
                     Hints = new string[0], SnapshotSha256 = null, Evidence = new ResourceEvidence[0] };
             var errors = new List<string>();
-            var snapshot = CaptureSnapshot(entryPath, errors, cancellationToken);
+            var snapshot = retained == null ? CaptureSnapshot(entryPath, errors, cancellationToken)
+                : OpenSnapshot(retained, cancellationToken);
             var result = new WebVerificationResult { EntryPath = entryPath,
                 CheckedFiles = snapshot.Keys.OrderBy(path => path, StringComparer.Ordinal).ToArray(),
                 Errors = errors, SnapshotSha256 = SnapshotHash(snapshot), Browser = null,
@@ -112,6 +156,10 @@ namespace RNAssistant.Runtime
                 Hints = new string[0] };
             if (errors.Count != 0)
             { result.Status = WebVerificationStatus.Failed; result.Errors = BoundedErrors(errors); return result; }
+            retained = retained ?? _snapshots.PublishSnapshot(_workspace, entryPath,
+                snapshot.Values.Select(file => new WebSnapshotFile(file.Path, file.Reference, file.Evidence.Payload)));
+            _snapshots.AttachSnapshot(_workspace, verificationId, retained);
+            result.SnapshotId = retained.Id;
             var browser = FindBrowserExecutable();
             if (browser == null)
             {
@@ -154,6 +202,23 @@ namespace RNAssistant.Runtime
         {
             return errors.Take(16).Select(error => error.Length > 700
                 ? error.Substring(0, 700) + "…" : error).ToArray();
+        }
+
+        private Dictionary<string, SnapshotFile> OpenSnapshot(RetainedWebSnapshot retained, CancellationToken token)
+        {
+            var result = new Dictionary<string, SnapshotFile>(StringComparer.Ordinal);
+            foreach (var file in retained.Files)
+            {
+                token.ThrowIfCancellationRequested();
+                var read = _resources.ForUri(file.Reference.Uri).ReadSnapshot(retained, file.Path);
+                read.RequireCompleteExactText();
+                var bytes = StrictUtf8.GetBytes(read.Result.Text);
+                if (bytes.LongLength != file.Payload.ByteLength || Hash(bytes) != file.Payload.Sha256)
+                    throw new WorkspaceFileException("snapshot_unavailable", "Retained source bytes do not match the manifest.");
+                result.Add(file.Path, new SnapshotFile { Path = file.Path, Bytes = bytes,
+                    Sha256 = file.Payload.Sha256, Reference = file.Reference, Evidence = read.Evidence.Single() });
+            }
+            return result;
         }
 
         private static IReadOnlyList<string> DomIdHints(Dictionary<string, SnapshotFile> snapshot)
@@ -337,13 +402,8 @@ namespace RNAssistant.Runtime
 
         private static string SnapshotHash(Dictionary<string, SnapshotFile> snapshot)
         {
-            using (var sha = SHA256.Create())
-            {
-                var manifest = string.Join("\n", snapshot.Values.OrderBy(file => file.Path, StringComparer.Ordinal)
-                    .Select(file => file.Path + " " + file.Sha256));
-                return BitConverter.ToString(sha.ComputeHash(StrictUtf8.GetBytes(manifest)))
-                    .Replace("-", "").ToLowerInvariant();
-            }
+            return WorkspaceWebSnapshotStore.Digest(snapshot.Values.Select(file =>
+                new WebSnapshotFile(file.Path, file.Reference, file.Evidence.Payload)));
         }
 
         private static string Hash(byte[] bytes)

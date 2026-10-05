@@ -117,6 +117,7 @@
     <Compile Include="Models\AgentResponseModels.cs" />
     <Compile Include="Models\ChatModels.cs" />
     <Compile Include="Models\WorkspaceModels.cs" />
+    <Compile Include="Models\WebProjectSnapshotModels.cs" />
     <Compile Include="Models\RunViewState.cs" />
     <Compile Include="Models\CasMaintenanceModels.cs" />
     <Compile Include="Models\SessionEventModels.cs" />
@@ -215,6 +216,7 @@
     <Compile Include="Storage\AppDataPaths.cs" />
     <Compile Include="Storage\WorkspaceStore.cs" />
     <Compile Include="Storage\WorkspaceFileService.cs" />
+    <Compile Include="Storage\WorkspaceWebSnapshotStore.cs" />
     <Compile Include="Storage\AttachmentStore.cs" />
     <Compile Include="Storage\OfficeAttachmentTextExtractor.cs" />
     <Compile Include="Storage\BoundedLruCache.cs" />
