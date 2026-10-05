@@ -47,6 +47,11 @@ namespace RNAssistant.Harness
                 var range = executor.ExecuteManual(Command(ResourceToolCatalog.ReadToolId, "target", "Excel range: Data!A1:B2", "representation", "text"),
                     executor.GetControllerTools().ToList(), new AppSettings(), false, false, session);
                 AssertTrue(range.Success, "explicit sheet ranges remain readable independently of catalog size");
+                AssertContains(ResourceReadToolHandler.Descriptor.Description,
+                    "For known Excel cells", "tool guidance names the direct range route");
+                AssertContains((string)JObject.Parse(ResourceReadToolHandler.Descriptor.ParametersJson)
+                        ["properties"]["target"]["description"],
+                    "discovery is optional", "target schema permits a known A1 range");
                 var first = gateway.List(session, "excel", ExcelResourceProvider.NameKind, null, 50);
                 var page = first; var total = page.Items.Count;
                 while (page.NextCursor != null)

@@ -127,6 +127,44 @@ namespace RNAssistant.Harness
             });
         }
 
+        private static void ExcelNarrowRegexSearchHonorsAddress()
+        {
+            WithTempExecutor(FakeOfficeAdapter.ForHost("Excel"), (executor, adapter) =>
+            {
+                adapter.SetExcelCell("Data", "A150000", "distant");
+                for (var row = 115; row <= 137; row++)
+                    adapter.SetExcelCell("Data", "B" + row,
+                        (row == 120 ? "needle" : "") + new string('x', 22000));
+                var runtime = ExcelFindReplaceRuntime(executor, adapter);
+                var conflicting = ExecuteHtmlNative(runtime,
+                    ExcelFindReplaceToolIds.FindCells,
+                    new JObject { ["query"] = "needle", ["mode"] = "regex",
+                        ["scope"] = "sheet", ["sheet"] = "Data",
+                        ["address"] = "B115:B137" });
+                AssertEqual("excel_scope_conflict",
+                    (string)JObject.Parse(conflicting.Result.DataJson)["code"],
+                    "explicit address cannot silently widen to UsedRange");
+                AssertEqual(0, adapter.ExcelSearchCellCaptureCount,
+                    "conflicting scope is rejected before capture");
+                AssertEqual(0, adapter.ExcelBackendCalls.Count(operation =>
+                    operation == FakeOfficeAdapter.ExcelFindScopeReadOperation),
+                    "conflicting scope never reaches the Excel search backend");
+
+                var narrow = ExecuteHtmlNative(runtime,
+                    ExcelFindReplaceToolIds.FindCells,
+                    new JObject { ["query"] = "needle", ["mode"] = "regex",
+                        ["scope"] = "range", ["sheet"] = "Data",
+                        ["address"] = "B115:B137" });
+                AssertEqual(ToolExecutionOutcome.Ok, narrow.Outcome,
+                    "23-cell range succeeds despite a large UsedRange and long cell values");
+                AssertEqual(1,
+                    (int)JObject.Parse(narrow.Result.DataJson)["matchCount"],
+                    "narrow regex search reads the requested data");
+                AssertEqual(23, adapter.ExcelSearchCellCaptureCount,
+                    "range scope captures exactly 23 cells once");
+            });
+        }
+
         private static void ExcelSearchRejectsIncompleteCaptures()
         {
             WithTempExecutor(FakeOfficeAdapter.ForHost("Excel"), (executor, adapter) =>
@@ -143,6 +181,8 @@ namespace RNAssistant.Harness
                 var oversized = ExecuteHtmlNative(runtime, ExcelFindReplaceToolIds.FindCells, new JObject { ["query"] = "x", ["mode"] = "regex", ["sheet"] = "Data", ["address"] = "A1:Z10000" });
                 AssertEqual(ToolExecutionOutcome.Error, oversized.Outcome, "oversized range rejected");
                 AssertContains(oversized.Result.Message, "Do not retry it unchanged", "oversized search returns a bounded recovery route");
+                AssertContains(oversized.Result.Message, "common.resources_read",
+                    "known cells use a direct range read after an oversized search");
                 AssertEqual(0, adapter.ExcelSearchCellCaptureCount, "cell-count bound precedes materialization");
                 var args = new JObject { ["query"] = "x", ["mode"] = "regex", ["sheet"] = "Data", ["address"] = "A1" };
                 adapter.ExcelSearchCellTransform = cell => { cell.Value = null; return cell; };
@@ -283,6 +323,20 @@ namespace RNAssistant.Harness
                     AssertEqual(2,
                         JObject.Parse(replaced.Result.DataJson)["replacements"].Value<int>(),
                         "replacement count remains match-based");
+
+                    var conflictingReplace = new ToolCall(
+                        "replace-conflicting-scope",
+                        ExcelFindReplaceToolIds.ReplaceCells,
+                        "{\"scope\":\"sheet\",\"sheet\":\"Data\",\"address\":\"D1\",\"find\":\"item\",\"replace\":\"wrong\"}");
+                    var rejectedReplace = ExecuteNativeConfirmed(runtime,
+                        conflictingReplace, runtime.Describe(conflictingReplace));
+                    AssertEqual(ToolExecutionOutcome.Error, rejectedReplace.Outcome,
+                        "replacement refuses an address paired with sheet scope");
+                    AssertEqual(ToolDispatchEvidence.NotDispatched,
+                        rejectedReplace.Evidence.Dispatch,
+                        "conflicting replacement scope never writes to Excel");
+                    AssertEqual("item-12 item-345", adapter.CellValue("Data", "D1"),
+                        "conflicting replacement preserves the target cell");
 
                     var formulaReplace = new ToolCall(
                         "replace-formula",

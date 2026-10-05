@@ -12,7 +12,7 @@ namespace RNAssistant.Office.Tools
     {
         internal static JObject Target()
         { return new JObject { ["type"] = "string", ["minLength"] = 1, ["maxLength"] = 1024,
-            ["description"] = "Copy a semantic target verbatim from runtime context, discovery, a workspace member or binding sourceTarget. Never construct it from a title or pass a URI. HTML data names describe bindings; sourceTarget identifies their values." }; }
+            ["description"] = "Copy a semantic target verbatim from runtime context, discovery, a workspace member or binding sourceTarget. For a known Excel sheet and A1 address, use Excel range: Sheet!A1:B10 directly; discovery is optional. Never construct a target from a display title or pass a URI. HTML data names describe bindings; sourceTarget identifies their values." }; }
 
         internal static JObject RecordPath()
         { return new JObject { ["type"] = "string", ["maxLength"] = 256, ["pattern"] = @"^\$(?:\.[A-Za-z_][A-Za-z0-9_]*)*$",

@@ -82,7 +82,7 @@ namespace RNAssistant.Office.Services
             var request = new ExcelCellScopeRequest { Scope = address.Segments[2],
                 Sheet = address.Segments[3].Substring(6, address.Segments[3].Length - 7),
                 Address = address.Segments[4].Substring(8, address.Segments[4].Length - 9) };
-            if (ExcelFindReplaceService.NormalizeScope(request.Scope, null, null, "workbook") != request.Scope ||
+            if (ExcelFindReplaceService.NormalizeScope(request.Scope, request.Sheet, request.Address, "workbook") != request.Scope ||
                 request.Sheet != request.Sheet.ToUpperInvariant() || request.Address != request.Address.ToUpperInvariant() ||
                 request.Sheet.Length > 128 || request.Address.Length > 1024 ||
                 (request.Scope == "range" ? request.Address.Length == 0 : request.Address.Length != 0) ||

@@ -18,7 +18,7 @@ namespace RNAssistant.Office.Domains.Excel
         public const int MaximumSearchCells = 100000;
         public const int MaximumFindResultCharacters = 32000;
         public const string NarrowSearchScopeMessage =
-            "Excel search scope exceeds the exact snapshot limit (100000 cells or 1000000 characters). Do not retry it unchanged. Read excel.inspect with kind=sheets for UsedRange addresses, then search smaller explicit scope=range slices with sheet and address; combine the reported matches without treating an unsearched slice as empty.";
+            "Excel search scope exceeds the exact snapshot limit (100000 cells or 1000000 characters). Do not retry it unchanged. For known cells, read common.resources_read with target=Excel range: Sheet!A1:B10 and representation=text; no search or VBA macro is needed. For text search, inspect sheets for UsedRange addresses, then search smaller explicit scope=range slices with sheet and address; combine matches without treating an unsearched slice as empty.";
 
         private readonly IExcelFindReplaceBackend _backend;
 
@@ -40,11 +40,14 @@ namespace RNAssistant.Office.Domains.Excel
                 if (cell.Value == null || cell.Formula == null || cell.Sheet.Length > 128 || cell.Address.Length > 128 ||
                     !seen.Add(CellKey(cell.Sheet, cell.Address)))
                     throw new ExcelFindReplaceBackendException("Invalid or duplicate search cell.", "excel_scope_snapshot_invalid", false);
-                characters += cell.Sheet.Length + cell.Address.Length + cell.Value.Length + cell.Formula.Length;
+                // Excel returns the cell value from Formula for non-formula cells.
+                // Do not count or retain a duplicate body in the exact search snapshot.
+                var formula = cell.HasFormula ? cell.Formula : string.Empty;
+                characters += cell.Sheet.Length + cell.Address.Length + cell.Value.Length + formula.Length;
                 if (cells.Count >= MaximumSearchCells || characters > MaximumSearchCharacters)
                     throw new ExcelFindReplaceBackendException(NarrowSearchScopeMessage, "RESOURCE_SNAPSHOT_TOO_LARGE", false);
                 cells.Add(new ExcelCellSnapshot { Sheet = cell.Sheet, Address = cell.Address, Value = cell.Value,
-                    Formula = cell.Formula, HasFormula = cell.HasFormula });
+                    Formula = formula, HasFormula = cell.HasFormula });
             });
             cancellationToken.ThrowIfCancellationRequested();
             return new ExcelSearchSnapshot { Scope = request.Scope, Sheet = request.Sheet, Address = request.Address, Cells = cells };
@@ -373,8 +376,13 @@ namespace RNAssistant.Office.Domains.Excel
                     ? "range"
                     : !string.IsNullOrWhiteSpace(sheet) ? "sheet" : defaultScope;
             scope = scope.Trim().ToLowerInvariant();
-            return scope == "workbook" || scope == "sheet" ||
-                scope == "range" || scope == "selection" ? scope : null;
+            if (scope != "workbook" && scope != "sheet" &&
+                scope != "range" && scope != "selection") return null;
+            // An explicit address must never silently expand to UsedRange.
+            var hasAddress = !string.IsNullOrWhiteSpace(address);
+            return scope == "range"
+                ? hasAddress ? scope : null
+                : hasAddress ? null : scope;
         }
 
         internal static string NormalizeMode(string value)

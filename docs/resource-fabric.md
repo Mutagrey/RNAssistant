@@ -454,6 +454,9 @@ or publication authority. Bounds and verified-prefix/draft rules are owned by
 Model/manual callers use `common.resources_read` with an explicit semantic target
 such as `Excel range: Data!A1:B4`: `text` returns values, `formulas` formulas,
 `structure` the existing domain-owned profile, and `table`/`records` bounded rows.
+When sheet and A1 address are known, the caller can form this exact range target
+and read it directly; metadata discovery is not required first. A search tool is
+for locating text, not enumerating values from a known range.
 Discover used ranges through `common.resources_find`; omitted active-sheet/selection
 defaults of the removed tool are not silently translated. `excel.inspect` remains
 the bounded workbook-object metadata action.
@@ -558,12 +561,15 @@ Workbook, selection and named-sheet scopes are body-free discoverable; explicit
 range scopes can also be discovered/resolved. Apostrophes in sheet names are doubled.
 Omitting a sheet retains the existing bound active-sheet behavior; omitted tool
 scope still infers range from address, sheet from sheet name, otherwise workbook.
+An explicit address with any scope other than `range`, or `scope=range` without an
+address, is rejected before Excel access; the address is never silently ignored.
 Named/multi-area range interpretation remains with the bound Excel backend.
 
 Regex and longer literal queries still capture through `ExcelSearchResourceService`
 → the existing Excel provider/Gateway/CAS and run pure matching over the exact cell
 snapshot. Capture admits at most
-100,000 cells and one million aggregate field characters; serialized JSON has its
+100,000 cells and one million aggregate field characters; non-formula cells retain
+only their value, avoiding a duplicate `Formula` body. Serialized JSON has its
 own one-million-character cap. Bound range cell counts are checked before cell
 materialization. Invalid/duplicate cells and oversized sources fail explicitly.
 For these bounded scans, use `excel.inspect` with `kind=sheets` for UsedRange

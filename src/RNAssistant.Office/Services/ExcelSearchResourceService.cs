@@ -35,7 +35,10 @@ namespace RNAssistant.Office.Services
                     MaxResults = ToolArgumentReader.Int32(arguments, "maxResults", 50),
                     ContextChars = ToolArgumentReader.Int32(arguments, "contextChars", 80) };
                 request.Scope = ExcelFindReplaceService.NormalizeScope(request.Scope, request.Sheet, request.Address, "workbook");
-                if (string.IsNullOrWhiteSpace(request.Query) || request.Scope == null || request.Mode == null || request.LookIn == null)
+                if (request.Scope == null)
+                    return Failure("An Excel address requires scope=range, and scope=range requires an address. Correct the scope before searching.",
+                        "excel_scope_conflict");
+                if (string.IsNullOrWhiteSpace(request.Query) || request.Mode == null || request.LookIn == null)
                     return Failure("A valid query, scope, mode and lookIn are required.", "invalid_arguments");
                 TextPatternEngine.Find(string.Empty, request.Query, new TextPatternOptions {
                     Mode = request.Mode, MatchCase = request.MatchCase, WholeWord = request.WholeWord }, 1, 0);
