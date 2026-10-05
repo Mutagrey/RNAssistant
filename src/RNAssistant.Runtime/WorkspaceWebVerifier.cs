@@ -36,6 +36,7 @@ namespace RNAssistant.Runtime
         public string VerificationId { get; internal set; }
         public ResourceRef VerificationReference { get; internal set; }
         public bool Historical { get; internal set; }
+        public IReadOnlyList<WebCheckResult> CheckResults { get; internal set; }
     }
 
     // Development-only browser verifier. The browser receives an immutable,
@@ -100,15 +101,16 @@ namespace RNAssistant.Runtime
 
         public async Task<WebVerificationResult> VerifyAsync(string entryPath,
             CancellationToken cancellationToken = default(CancellationToken), string snapshotId = null,
-            WebVerificationOrigin origin = null)
+            WebVerificationOrigin origin = null, WebFunctionalChecks checks = null)
         {
-            var id = _snapshots.BeginVerification(_workspace, entryPath, snapshotId != null, origin, snapshotId);
+            var checkResults = (checks?.NotRun() ?? new WebCheckResult[0]).ToList();
+            var id = _snapshots.BeginVerification(_workspace, entryPath, snapshotId != null, origin, snapshotId, checks);
             WebVerificationResult result;
-            try { result = await VerifyCoreAsync(entryPath, snapshotId, id, cancellationToken).ConfigureAwait(false); }
+            try { result = await VerifyCoreAsync(entryPath, snapshotId, id, checks, checkResults, cancellationToken).ConfigureAwait(false); }
             catch (OperationCanceledException)
             {
                 _snapshots.CompleteVerification(_workspace, id, WebVerificationState.NotRun,
-                    null, new[] { "Verification was cancelled." }, new string[0]);
+                    null, new[] { "Verification was cancelled." }, new string[0], checkResults);
                 throw;
             }
             catch (Exception ex) when (ex is WorkspaceFileException || ex is IOException ||
@@ -120,16 +122,18 @@ namespace RNAssistant.Runtime
             }
             result.VerificationId = id;
             result.Historical = snapshotId != null;
+            result.CheckResults = checkResults.AsReadOnly();
             _snapshots.CompleteVerification(_workspace, id,
                 result.Status == WebVerificationStatus.Passed ? WebVerificationState.Passed :
                 result.Status == WebVerificationStatus.Failed ? WebVerificationState.Failed : WebVerificationState.NotRun,
-                result.Browser, result.Errors, result.Hints);
+                result.Browser, result.Errors, result.Hints, result.CheckResults);
             result.VerificationReference = _snapshots.ReadVerification(_workspace, id).Reference;
             return result;
         }
 
         private async Task<WebVerificationResult> VerifyCoreAsync(string entryPath, string snapshotId,
-            string verificationId, CancellationToken cancellationToken)
+            string verificationId, WebFunctionalChecks checks, List<WebCheckResult> checkResults,
+            CancellationToken cancellationToken)
         {
             var retained = snapshotId == null ? null : _snapshots.ReadSnapshot(_workspace, snapshotId);
             if (retained != null) entryPath = retained.EntryPath;
@@ -147,6 +151,8 @@ namespace RNAssistant.Runtime
                     Errors = new[] { "Static web entry must be an HTML file." },
                     Hints = new string[0], SnapshotSha256 = null, Evidence = new ResourceEvidence[0] };
             var errors = new List<string>();
+            if (checks != null && checks.EntryPath != entryPath)
+                throw new ArgumentException("Entry must match the accepted functional checks: " + checks.EntryPath);
             var snapshot = retained == null ? CaptureSnapshot(entryPath, errors, cancellationToken)
                 : OpenSnapshot(retained, cancellationToken);
             var result = new WebVerificationResult { EntryPath = entryPath,
@@ -175,7 +181,7 @@ namespace RNAssistant.Runtime
                     await server.StartAsync().ConfigureAwait(false);
                     var browserErrors = await SmokeBrowserAsync(browser,
                         new Uri(server.BaseUrl, EscapePath(entryPath)), server.BaseUrl,
-                        cancellationToken).ConfigureAwait(false);
+                        checks, checkResults, cancellationToken).ConfigureAwait(false);
                     errors.AddRange(browserErrors);
                     if (browserErrors.Any(error => error.StartsWith("JavaScript exception:", StringComparison.Ordinal)))
                         result.Hints = DomIdHints(snapshot);
@@ -487,7 +493,7 @@ namespace RNAssistant.Runtime
         }
 
         private static async Task<IReadOnlyList<string>> SmokeBrowserAsync(string executable, Uri page,
-            Uri origin, CancellationToken cancellationToken)
+            Uri origin, WebFunctionalChecks checks, List<WebCheckResult> checkResults, CancellationToken cancellationToken)
         {
             var errors = new List<string>();
             var profile = Path.Combine(Path.GetTempPath(), "rna-browser-" + Guid.NewGuid().ToString("N"));
@@ -541,9 +547,22 @@ namespace RNAssistant.Runtime
                             cancellationToken).ConfigureAwait(false);
                         if ((string)evaluated["result"]?["result"]?["value"] != "complete")
                             errors.Add("Browser document did not reach readyState=complete.");
+                        if (checks != null && errors.Count == 0 && devtools.Errors.Count == 0)
+                        {
+                            devtools.RejectNavigation = true;
+                            using (var deadline = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken))
+                            {
+                                deadline.CancelAfter(TimeSpan.FromSeconds(30));
+                                await RunChecksAsync(devtools, checks, checkResults, deadline.Token).ConfigureAwait(false);
+                            }
+                        }
                         await devtools.ObserveForAsync(TimeSpan.FromMilliseconds(1500),
                             cancellationToken).ConfigureAwait(false);
                         errors.AddRange(devtools.Errors);
+                        errors.AddRange(checkResults.Where(check => check.Status == WebCheckStatus.Failed)
+                            .Select(check => "Functional check " + check.Id + ": " + check.Error));
+                        if (checks != null && errors.Count == 0 && checkResults.Any(check => check.Status != WebCheckStatus.Passed))
+                            errors.Add("Required functional checks did not complete.");
                     }
                 }
             }
@@ -563,6 +582,68 @@ namespace RNAssistant.Runtime
             return errors.Take(16).ToArray();
         }
 
+        private sealed class BrowserCheckTarget
+        {
+            public string Error { get; set; }
+            public string Text { get; set; }
+            public double X { get; set; }
+            public double Y { get; set; }
+        }
+
+        private static async Task RunChecksAsync(DevToolsClient devtools, WebFunctionalChecks checks,
+            List<WebCheckResult> results, CancellationToken token)
+        {
+            for (var index = 0; index < checks.Steps.Count; index++)
+            {
+                var step = checks.Steps[index];
+                var elapsed = Stopwatch.StartNew();
+                BrowserCheckTarget target;
+                do
+                {
+                    // Only selector data is interpolated, as a JSON string. The caller
+                    // cannot supply executable code. Pointer events come from CDP.
+                    var expression = "(() => { try { const nodes = document.querySelectorAll(" +
+                        JsonConvert.SerializeObject(step.Selector) + "); " +
+                        "if (nodes.length !== 1) return {Error:'Selector must match exactly one element; found ' + nodes.length}; " +
+                        "const el = nodes[0]; if (!(el instanceof HTMLElement)) return {Error:'Target must be an HTML element'}; " +
+                        "el.scrollIntoView({block:'center',inline:'center'}); const r = el.getBoundingClientRect(); " +
+                        "const s = getComputedStyle(el); if (!r.width || !r.height || s.visibility !== 'visible' || Number(s.opacity) === 0) " +
+                        "return {Error:'Target is not visible'}; " +
+                        (step.Operation == WebCheckOperation.Click
+                            ? "if (el.matches(':disabled') || el.getAttribute('aria-disabled') === 'true') return {Error:'Target is disabled'}; " +
+                              "const x=r.x+r.width/2,y=r.y+r.height/2,hit=document.elementFromPoint(x,y); " +
+                              "if (!hit || !(hit===el || el.contains(hit))) return {Error:'Target is obscured'}; return {X:x,Y:y}; "
+                            : "return {Text:(el.textContent || '').trim().slice(0,700)}; ") +
+                        "} catch (e) { return {Error:String(e).slice(0,700)}; } })()";
+                    var evaluated = await devtools.CommandAsync("Runtime.evaluate", new JObject {
+                        ["expression"] = expression, ["returnByValue"] = true, ["timeout"] = 1000 }, token).ConfigureAwait(false);
+                    var evaluation = evaluated["result"];
+                    target = evaluation?["exceptionDetails"] == null
+                        ? evaluation?["result"]?["value"]?.ToObject<BrowserCheckTarget>() : null;
+                    if (target == null) throw new IOException("Browser could not evaluate the functional check target.");
+                    if (devtools.Errors.Count != 0)
+                        target.Error = "Browser reported an error during functional checks.";
+                    if (target.Error != null || step.Operation == WebCheckOperation.Click || target.Text == step.Expected) break;
+                    await Task.Delay(50, token).ConfigureAwait(false);
+                } while (elapsed.Elapsed < TimeSpan.FromSeconds(2));
+
+                var error = target.Error;
+                if (error == null && step.Operation == WebCheckOperation.TextEquals && target.Text != step.Expected)
+                    error = "Text differs from expected: " + step.Expected;
+                if (error != null)
+                {
+                    results[index] = new WebCheckResult(step.Id, WebCheckStatus.Failed, target.Text, error);
+                    return; // Later steps have not run and cannot become successful.
+                }
+                if (step.Operation == WebCheckOperation.Click)
+                    foreach (var type in new[] { "mousePressed", "mouseReleased" })
+                        await devtools.CommandAsync("Input.dispatchMouseEvent", new JObject {
+                            ["type"] = type, ["x"] = target.X, ["y"] = target.Y,
+                            ["button"] = "left", ["clickCount"] = 1 }, token).ConfigureAwait(false);
+                results[index] = new WebCheckResult(step.Id, WebCheckStatus.Passed, target.Text);
+            }
+        }
+
         private sealed class DevToolsClient : IDisposable
         {
             private readonly ClientWebSocket _socket = new ClientWebSocket();
@@ -571,6 +652,7 @@ namespace RNAssistant.Runtime
             private readonly List<string> _errors = new List<string>();
             private int _id;
             private bool _loaded;
+            public bool RejectNavigation { get; set; }
             public IReadOnlyList<string> Errors { get { return _errors.Distinct(StringComparer.Ordinal).Take(16).ToArray(); } }
             public DevToolsClient(string url, Uri origin) { _url = url; _origin = origin; }
             public Task ConnectAsync(CancellationToken token)
@@ -645,6 +727,8 @@ namespace RNAssistant.Runtime
                 var method = (string)message["method"];
                 var args = message["params"];
                 if (method == "Page.loadEventFired") _loaded = true;
+                else if (method == "Page.frameNavigated" && RejectNavigation && args?["frame"]?["parentId"] == null)
+                    _errors.Add("Functional checks navigated away from the captured document.");
                 else if (method == "Runtime.exceptionThrown")
                     _errors.Add("JavaScript exception: " +
                         ((string)args?["exceptionDetails"]?["exception"]?["description"] ??

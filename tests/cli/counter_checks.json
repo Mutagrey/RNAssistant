@@ -1,0 +1,14 @@
+{
+  "entryPath": "index.html",
+  "steps": [
+    {"id": "initial", "operation": "TextEquals", "selector": "#count", "expected": "0"},
+    {"id": "plus", "operation": "Click", "selector": "#plus"},
+    {"id": "after-plus", "operation": "TextEquals", "selector": "#count", "expected": "1"},
+    {"id": "plus-again", "operation": "Click", "selector": "#plus"},
+    {"id": "after-two", "operation": "TextEquals", "selector": "#count", "expected": "2"},
+    {"id": "minus", "operation": "Click", "selector": "#minus"},
+    {"id": "after-minus", "operation": "TextEquals", "selector": "#count", "expected": "1"},
+    {"id": "reset", "operation": "Click", "selector": "#reset"},
+    {"id": "after-reset", "operation": "TextEquals", "selector": "#count", "expected": "0"}
+  ]
+}

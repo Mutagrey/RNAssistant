@@ -82,14 +82,14 @@ namespace RNAssistant.Cli
                 if (options.ContainsKey("entry") && options.ContainsKey("snapshot"))
                     throw new ArgumentException("Choose --entry for current source or --snapshot for retained source.");
                 var result = service.VerifyWebAsync(workspace, Value(options, "entry", "index.html"),
-                    snapshotId: Value(options, "snapshot", null))
+                    snapshotId: Value(options, "snapshot", null), checks: ReadWebChecks(options))
                     .GetAwaiter().GetResult();
                 Output(jsonl, "verification.completed", new { entryPath = result.EntryPath,
                     status = WorkspaceWebVerifier.StatusCode(result.Status),
                     checkedFiles = result.CheckedFiles, snapshotSha256 = result.SnapshotSha256,
                     snapshotId = result.SnapshotId, verificationId = result.VerificationId,
                     historical = result.Historical,
-                    browser = result.Browser, errors = result.Errors, hints = result.Hints });
+                    browser = result.Browser, errors = result.Errors, hints = result.Hints, checks = result.CheckResults });
                 return result.Status == WebVerificationStatus.Passed ? 0 :
                     result.Status == WebVerificationStatus.NotRun ? 4 : 5;
             }
@@ -193,9 +193,10 @@ namespace RNAssistant.Cli
                 throw new ArgumentException("--expect-files requires 1–32 distinct relative paths.");
             var minReads = NonnegativeOption(options, "min-reads");
             var minWrites = NonnegativeOption(options, "min-writes");
+            var webChecks = ReadWebChecks(options);
             var acceptance = new WorkspaceRunAcceptance
             { ExpectedFiles = expectedFiles.ToList(), MinimumVerifiedReads = minReads, MinimumVerifiedWrites = minWrites,
-                RequireWebVerification = options.ContainsKey("require-web-verify") };
+                RequireWebVerification = options.ContainsKey("require-web-verify") || webChecks != null, WebChecks = webChecks };
             if (acceptance.RequireWebVerification && WorkspaceWebVerifier.FindBrowserExecutable() == null)
             {
                 Console.Error.WriteLine("Browser verification requires an available Chromium executable (RNA_BROWSER_EXECUTABLE).");
@@ -397,6 +398,7 @@ namespace RNAssistant.Cli
                     minReads = checkedAcceptance.MinimumVerifiedReads,
                     minWrites = checkedAcceptance.MinimumVerifiedWrites,
                     requireWebVerification = checkedAcceptance.RequireWebVerification,
+                    webCheckCount = checkedAcceptance.WebChecks?.Steps.Count ?? 0,
                     completeFileReads = checkedAcceptance.AcceptedCompleteFileReads,
                     verifiedFileChanges = checkedAcceptance.VerifiedFileChanges,
                     webSnapshotVerified = checkedAcceptance.VerifiedWebSnapshot,
@@ -405,6 +407,30 @@ namespace RNAssistant.Cli
             if (!acceptancePassed) return 5;
             return summary.Lifecycle == RNAssistant.Core.Agent.RunLifecycle.Failed ? 5 :
                 summary.Reason == "model_needs_input" ? 3 : 0;
+        }
+
+        private static WebFunctionalChecks ReadWebChecks(Dictionary<string, string> options)
+        {
+            if (!options.ContainsKey("web-checks")) return null;
+            // Read once at admission. Subsequent tools and continuation use the
+            // frozen typed contract in the run, never this mutable source path.
+            using (var stream = File.OpenRead(Path.GetFullPath(options["web-checks"])))
+            {
+                if (stream.Length > 32768) throw new ArgumentException("Web checks exceed 32 KiB.");
+                using (var reader = new StreamReader(stream, new UTF8Encoding(false, true), true))
+                {
+                    var text = new char[32769];
+                    var count = reader.ReadBlock(text, 0, text.Length);
+                    if (count > 32768) throw new ArgumentException("Web checks exceed their input bound.");
+                    try
+                    {
+                        return JsonConvert.DeserializeObject<WebFunctionalChecks>(new string(text, 0, count),
+                            new JsonSerializerSettings { MissingMemberHandling = MissingMemberHandling.Error, MaxDepth = 8 })
+                            ?? throw new ArgumentException("Web checks must be a JSON object.");
+                    }
+                    catch (JsonException ex) { throw new ArgumentException("Invalid web checks: " + ex.Message); }
+                }
+            }
         }
 
         private static string PendingPath(string toolId, string argumentsJson)
@@ -477,10 +503,10 @@ namespace RNAssistant.Cli
             Console.WriteLine("rna workspace open <path> [--read-only]");
             Console.WriteLine("rna env --workspace <path>");
             Console.WriteLine("rna sessions --workspace <path> [--jsonl]");
-            Console.WriteLine("rna run --workspace <path> (--message <text> | --task-file <file>) [--session <id>] [--profile development] [--model <name>] [--base-url <url>] [--context-tokens <n>] [--response-mode json_schema|json_object] [--instruction-role system|developer] [--reasoning-mode <mode>] [--thinking on|off] [--max-iterations <1..256>] [--max-tool-steps <1..4096>] [--expect-files <comma-separated paths>] [--min-reads <n>] [--min-writes <n>] [--require-web-verify] [--jsonl]");
+            Console.WriteLine("rna run --workspace <path> (--message <text> | --task-file <file>) [--session <id>] [--profile development] [--model <name>] [--base-url <url>] [--context-tokens <n>] [--response-mode json_schema|json_object] [--instruction-role system|developer] [--reasoning-mode <mode>] [--thinking on|off] [--max-iterations <1..256>] [--max-tool-steps <1..4096>] [--expect-files <comma-separated paths>] [--min-reads <n>] [--min-writes <n>] [--require-web-verify] [--web-checks <json-file>] [--jsonl]");
             Console.WriteLine("rna inspect --workspace <path> --session <id> [--jsonl]");
             Console.WriteLine("rna recover --workspace <path> --path <relative-path> [--jsonl]  (inspect an uncertain file effect)");
-            Console.WriteLine("rna verify --workspace <path> [--entry index.html | --snapshot <id>] [--jsonl]  (historical success does not verify current files)");
+            Console.WriteLine("rna verify --workspace <path> [--entry index.html | --snapshot <id>] [--web-checks <json-file>] [--jsonl]  (historical success does not verify current files)");
             Console.WriteLine("rna verification --workspace <path> --id <id> [--jsonl]  (read a saved result; Pending means no terminal result, never auto-replayed)");
             Console.WriteLine("rna verifications --workspace <path> [--offset <n>] [--jsonl]  (up to 20 saved/pending results in resource order)");
             Console.WriteLine("rna resume --workspace <path> --session <id> [--jsonl]  (close an abandoned run, show pending action or request new input; never replay tools)");

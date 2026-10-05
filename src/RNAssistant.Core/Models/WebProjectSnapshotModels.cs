@@ -73,6 +73,8 @@ namespace RNAssistant.Core.Models
         public IReadOnlyList<string> Errors { get; set; } = new string[0];
         public IReadOnlyList<string> Hints { get; set; } = new string[0];
         public WebVerificationOrigin Origin { get; set; }
+        public WebFunctionalChecks Checks { get; set; }
+        public IReadOnlyList<WebCheckResult> CheckResults { get; set; } = new WebCheckResult[0];
     }
 
     public sealed class WebVerificationPage

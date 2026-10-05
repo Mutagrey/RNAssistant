@@ -156,6 +156,22 @@ These commands never rerun a browser. `rna verify --workspace ./project --snapsh
 if sources moved or were deleted. It reports `historical=true` and does not restore
 or verify the current workspace. Missing retained data fails without live fallback.
 
+`verify --web-checks <json-file>` additionally executes a fixed functional contract
+against that exact snapshot. `run --web-checks <json-file>` freezes the same contract
+at admission (also implying `--require-web-verify`); every model `web.verify` uses
+it, and `done` requires its saved passing result plus current source evidence.
+Keep independent checks outside the agent's writable workspace. The tool cannot
+replace them or choose another entry. The saved result retains the complete
+contract and each step's `Passed` / `Failed` / `NotRun` outcome and observed text.
+Current operations are real pointer `Click` and `TextEquals` (trimmed text content,
+exactly one visible HTML element). Bounds: 32 KiB contract, 32 steps including a
+text assertion, two seconds for text to match and 30 seconds for the sequence.
+The first failed step stops the sequence; later steps remain `NotRun`.
+See [counter checks](tests/cli/counter_checks.json) for the JSON format. To exercise
+real verify/repair, copy `tests/cli/fixtures/counter-repair/` into a disposable
+workspace and use `tests/cli/counter_repair_task.md` with these checks. Page-load
+success alone deliberately misses the fixture's click-time exception.
+
 After an interrupted file mutation, `recover --workspace
 <path> --path <relative-path>` reports the exact recovery outcome without replaying
 the write. Agent `files.delete` moves a previously read UTF-8 file into

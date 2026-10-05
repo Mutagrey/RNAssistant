@@ -16,7 +16,7 @@ REPO = Path(__file__).resolve().parents[2]
 CLI = REPO / "src/RNAssistant.Cli/bin/Debug/net8.0/RNAssistant.Cli.dll"
 
 
-def verify(workspace, state, browser=None, snapshot=None, entry=None):
+def verify(workspace, state, browser=None, snapshot=None, entry=None, checks=None):
     env = dict(os.environ, RNA_STATE_ROOT=str(state))
     if browser is not None:
         env["RNA_BROWSER_EXECUTABLE"] = browser
@@ -25,6 +25,8 @@ def verify(workspace, state, browser=None, snapshot=None, entry=None):
         args += ["--snapshot", snapshot]
     if entry:
         args += ["--entry", entry]
+    if checks:
+        args += ["--web-checks", str(checks)]
     completed = subprocess.run(
         args,
         cwd=REPO,

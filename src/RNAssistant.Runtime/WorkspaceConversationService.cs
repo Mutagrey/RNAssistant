@@ -87,12 +87,13 @@ namespace RNAssistant.Runtime
         }
 
         public Task<WebVerificationResult> VerifyWebAsync(WorkspaceDescriptor workspace,
-            string entryPath, CancellationToken cancellationToken = default(CancellationToken), string snapshotId = null)
+            string entryPath, CancellationToken cancellationToken = default(CancellationToken), string snapshotId = null,
+            WebFunctionalChecks checks = null)
         {
             var resources = new ResourceProviderRouter<WorkspaceFileResourceProvider>(new[]
                 { new WorkspaceFileResourceProvider(_files, workspace) });
             return new WorkspaceWebVerifier(resources, _webSnapshots, workspace)
-                .VerifyAsync(entryPath, cancellationToken, snapshotId);
+                .VerifyAsync(entryPath, cancellationToken, snapshotId, checks: checks);
         }
 
         public WebVerificationRecord GetWebVerification(WorkspaceDescriptor workspace, string id)
@@ -250,7 +251,8 @@ namespace RNAssistant.Runtime
                 ExpectedFiles = files.ToList(),
                 MinimumVerifiedReads = requested?.MinimumVerifiedReads ?? 0,
                 MinimumVerifiedWrites = requested?.MinimumVerifiedWrites ?? 0,
-                RequireWebVerification = requested?.RequireWebVerification ?? false
+                RequireWebVerification = requested?.RequireWebVerification == true || requested?.WebChecks != null,
+                WebChecks = requested?.WebChecks
             };
             result.State = result.Requested ? WorkspaceAcceptanceState.Pending : WorkspaceAcceptanceState.NotRequested;
             return result;
@@ -285,7 +287,7 @@ namespace RNAssistant.Runtime
                     reducer.IsCurrentExactText(evidence, evidence.Resource, frozen))
                     .Select(evidence => evidence.Resource.Uri).Distinct(StringComparer.Ordinal).Count();
                 acceptance.VerifiedWebSnapshot = acceptance.RequireWebVerification &&
-                    AssessWebVerification(workspace, session, summary.RunId, acceptance.ExpectedFiles);
+                    AssessWebVerification(workspace, session, summary.RunId, acceptance);
                 if (summary.Lifecycle == RunLifecycle.AwaitingConfirmation)
                 {
                     acceptance.State = WorkspaceAcceptanceState.Pending;
@@ -306,14 +308,22 @@ namespace RNAssistant.Runtime
 
         private sealed class WebVerificationToolData
         {
+            [JsonProperty("entryPath")]
+            public string EntryPath { get; set; }
             [JsonProperty("status")]
             public string Status { get; set; }
             [JsonProperty("checkedFiles")]
-            public List<string> CheckedFiles { get; set; }
+            public IReadOnlyList<string> CheckedFiles { get; set; }
+            [JsonProperty("errors")]
+            public IReadOnlyList<string> Errors { get; set; }
+            [JsonProperty("hints")]
+            public IReadOnlyList<string> Hints { get; set; }
+            [JsonProperty("checks")]
+            public IReadOnlyList<WebCheckResult> Checks { get; set; }
         }
 
         private bool AssessWebVerification(WorkspaceDescriptor workspace, ChatSession session,
-            string runId, IReadOnlyList<string> expectedFiles)
+            string runId, WorkspaceRunAcceptance acceptance)
         {
             var fact = session.Messages.LastOrDefault(item => item.RunId == runId &&
                 item.ProtocolMessage && item.ToolName == "web.verify" &&
@@ -321,13 +331,18 @@ namespace RNAssistant.Runtime
             if (fact == null) return false;
             var wire = ToolResultWire.Read(fact.Content);
             if (!wire.Success || wire.Result.Status != ToolResultStatus.Ok) return false;
-            WebVerificationToolData data;
-            try { data = JsonConvert.DeserializeObject<WebVerificationToolData>(wire.Result.DataJson); }
-            catch (JsonException) { return false; }
-            if (data?.Status != "passed" || data.CheckedFiles == null || data.CheckedFiles.Count == 0 ||
-                data.CheckedFiles.Count != (fact.ResourceEvidence?.Count ?? 0) ||
-                expectedFiles.Any(path => !data.CheckedFiles.Contains(path, StringComparer.Ordinal))) return false;
-            foreach (var path in data.CheckedFiles)
+            if (wire.Result.Resources.Count != 1) return false;
+            var record = _webSnapshots.ReadVerification(workspace, wire.Result.Resources.Single());
+            if (record.State != WebVerificationState.Passed || record.Historical ||
+                record.Origin?.SessionId != session.Id || record.Origin.RunId != runId ||
+                record.Origin.ToolCallId != fact.ToolCallId || record.Checks?.Sha256 != acceptance.WebChecks?.Sha256 ||
+                record.CheckedFiles.Count != (fact.ResourceEvidence?.Count ?? 0) ||
+                acceptance.ExpectedFiles.Any(path => !record.CheckedFiles.Contains(path, StringComparer.Ordinal))) return false;
+            var snapshot = _webSnapshots.ReadSnapshot(workspace, record.SnapshotId);
+            if (snapshot.Files.Any(file => !fact.ResourceEvidence.Any(evidence =>
+                evidence?.Resource?.Uri == file.Reference.Uri && evidence.Resource.Revision == file.Reference.Revision &&
+                evidence.Payload?.Sha256 == file.Payload.Sha256))) return false;
+            foreach (var path in record.CheckedFiles)
             {
                 try { _files.ReadText(workspace, path); }
                 catch (FileNotFoundException) { return false; }
@@ -491,9 +506,9 @@ namespace RNAssistant.Runtime
                     Schema("target", true), false,
                     new FileHandler(files, workspace, _resources, _observed, "read"));
                 if (WorkspaceWebVerifier.FindBrowserExecutable() != null)
-                    Register(registry, entries, "web.verify", "Load an immutable local HTML/CSS/JS snapshot in an isolated browser and report asset and runtime errors.",
+                    Register(registry, entries, "web.verify", "Load an immutable local HTML/CSS/JS snapshot in an isolated browser; check asset/runtime errors and any functional checks fixed by the accepted task contract.",
                         Schema("entryPath", true), false,
-                        new WebVerifierHandler(_resources, webSnapshots, workspace, session?.Id), independentRead: false);
+                        new WebVerifierHandler(_resources, webSnapshots, workspace, session?.Id, acceptance?.WebChecks), independentRead: false);
                 if (!workspace.ReadOnly)
                 {
                     Register(registry, entries, "files.create", "Create a new real UTF-8 file; never overwrite.",
@@ -738,7 +753,8 @@ namespace RNAssistant.Runtime
                         JsonConvert.SerializeObject(new { expectedFiles = _acceptance.ExpectedFiles,
                             minimumVerifiedReads = _acceptance.MinimumVerifiedReads,
                             minimumVerifiedWrites = _acceptance.MinimumVerifiedWrites,
-                            requireWebVerification = _acceptance.RequireWebVerification }) + ". " : string.Empty) +
+                            requireWebVerification = _acceptance.RequireWebVerification,
+                            webChecks = _acceptance.WebChecks }) + ". " : string.Empty) +
                     "Respond with exactly one conversation-response v6 JSON object: message, action, tool_calls. " +
                     "Use action=tool for calls, continue for a short checkpoint, done only when the requested work is complete, " +
                     "blocked or needs_input when it cannot continue. One mutation per response. " +
@@ -918,9 +934,10 @@ namespace RNAssistant.Runtime
         {
             private readonly WorkspaceWebVerifier _verifier;
             private readonly string _sessionId;
+            private readonly WebFunctionalChecks _checks;
             public WebVerifierHandler(ResourceProviderRouter<WorkspaceFileResourceProvider> resources,
-                WorkspaceWebSnapshotStore snapshots, WorkspaceDescriptor workspace, string sessionId)
-            { _verifier = new WorkspaceWebVerifier(resources, snapshots, workspace); _sessionId = sessionId; }
+                WorkspaceWebSnapshotStore snapshots, WorkspaceDescriptor workspace, string sessionId, WebFunctionalChecks checks)
+            { _verifier = new WorkspaceWebVerifier(resources, snapshots, workspace); _sessionId = sessionId; _checks = checks; }
 
             public async Task<ToolHandlerResult> ExecuteAsync(ToolHandlerContext context,
                 CancellationToken cancellationToken)
@@ -931,17 +948,18 @@ namespace RNAssistant.Runtime
                 WebVerificationResult result;
                 try { result = await _verifier.VerifyAsync(entry, cancellationToken, origin: new WebVerificationOrigin
                     { SessionId = _sessionId, RunId = context.Execution.RunId,
-                        ToolCallId = context.Execution.Call.Id }).ConfigureAwait(false); }
+                        ToolCallId = context.Execution.Call.Id }, checks: _checks).ConfigureAwait(false); }
                 catch (WorkspaceFileException ex)
                 {
                     return new ToolHandlerResult(ToolResult.Error(ex.Message,
                         JsonConvert.SerializeObject(new { code = ex.Code })), ToolEffectEvidence.None);
                 }
-                var data = JsonConvert.SerializeObject(new { entryPath = result.EntryPath,
-                    status = WorkspaceWebVerifier.StatusCode(result.Status),
-                    checkedFiles = result.CheckedFiles, errors = result.Errors, hints = result.Hints });
+                var data = JsonConvert.SerializeObject(new WebVerificationToolData { EntryPath = result.EntryPath,
+                    Status = WorkspaceWebVerifier.StatusCode(result.Status), CheckedFiles = result.CheckedFiles,
+                    Errors = result.Errors, Hints = result.Hints, Checks = result.CheckResults });
                 var toolResult = result.Status == WebVerificationStatus.Passed
-                    ? ToolResult.Ok("Isolated browser smoke passed for this immutable snapshot.", data,
+                    ? ToolResult.Ok(_checks == null ? "Isolated browser smoke passed for this immutable snapshot." :
+                        "Isolated browser smoke and accepted functional checks passed for this immutable snapshot.", data,
                         new[] { result.VerificationReference })
                     : ToolResult.Error(result.Status == WebVerificationStatus.NotRun
                         ? "Browser verification was not run." :

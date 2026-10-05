@@ -13,6 +13,15 @@ and terminal records, historical reads after move/replacement/deletion, workspac
 isolation and CAS GC retention. The browser smoke reopens the saved snapshot in a
 new CLI process with current paths changed/deleted and reads saved verification
 records without rerunning the browser.
+`python3 tests/cli/web_functional_checks_smoke.py` exercises real pointer/text
+checks against exact snapshots: a click-time exception missed by page load, repair,
+no-op handler, historical broken bytes after repair, missing browser, wrong entry
+and ambiguous selector. `python3 tests/cli/web_checks_runtime_smoke.py` uses a
+scripted HTTP model through the production runtime for verify/read/patch/read/
+verify/done, frozen admission checks and rejection of a source edit after the last
+passing verification. This is deterministic contract evidence, not LLM quality.
+The `workspace snapshots:` filter also checks that incomplete/substituted
+assertions or mismatched actual text cannot become a durable passing result.
 `python3 tests/cli/tool_result_projection_smoke.py` checks bounded semantic find,
 exact read delivery, invalidation after external edit, failed browser-result
 delivery, frozen format repair and the persisted context receipt. It also compares
@@ -39,8 +48,22 @@ workspace/session and the normal CLI with these arguments:
 Record the exact model
 digest, context, instruction role and `--thinking on|off`; see [model comparison rules](../../docs/development-rules.md#сравнение-моделей).
 This is an opt-in real-model task, not a deterministic harness test. A passing CLI
-contract proves file/read/verification evidence; counter button behavior still
-requires an independent browser check.
+contract proves file/read/verification evidence. For button behavior, use selectors
+from `tests/cli/counter_checks.json` in the task and add `--web-checks` with that file.
+
+For the real M5 repair task, copy `tests/cli/fixtures/counter-repair/` into a new
+disposable workspace. Keep the checks outside it and run the normal CLI with:
+
+```text
+--task-file tests/cli/counter_repair_task.md --web-checks tests/cli/counter_checks.json
+--expect-files index.html,styles.css,app.js --min-reads 1 --min-writes 1
+--max-iterations 12 --max-tool-steps 12
+```
+
+The initial page loads normally; clicking plus raises a reproducible JavaScript
+exception. Success requires fixing it, rereading the current source and passing
+all nine steps against a retained snapshot. Preserve the CLI trace, verification
+records, model config/digest, exact fixture/checks and code/binary revision.
 
 The independent M5 CSV dashboard task is `tests/cli/csv_dashboard_task.md`.
 Run `node tests/cli/csv_dashboard_grader.mjs <workspace>` on the resulting files,
@@ -49,7 +72,8 @@ then send `tests/cli/csv_dashboard_followup.md` in the same session and use
 only Node built-ins and a fresh local Chromium profile. It uploads private CSV
 fixtures, checks actual table/filter/sort/total/chart/export/error behavior and
 external requests against a bounded read-only snapshot. Its JSON result is
-independent acceptance evidence; `web.verify` only checks page load and errors.
+independent acceptance evidence; the current `web.verify` functional contract
+covers clicks/text, not CSV upload, table/export or chart assertions yet.
 Run `python3 tests/cli/csv_dashboard_grader_smoke.py` to confirm a working fixture
 passes and broken JavaScript, missing browser and blocked outbound requests do not.
 

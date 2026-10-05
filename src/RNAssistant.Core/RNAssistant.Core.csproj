@@ -118,6 +118,7 @@
     <Compile Include="Models\ChatModels.cs" />
     <Compile Include="Models\WorkspaceModels.cs" />
     <Compile Include="Models\WebProjectSnapshotModels.cs" />
+    <Compile Include="Models\WebFunctionalChecks.cs" />
     <Compile Include="Models\RunViewState.cs" />
     <Compile Include="Models\CasMaintenanceModels.cs" />
     <Compile Include="Models\SessionEventModels.cs" />

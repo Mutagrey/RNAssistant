@@ -1,6 +1,54 @@
 # Stabilization progress
 
-M5 durable web snapshot slice (2026-10-05): Core `WorkspaceWebSnapshotStore`
+M5 functional-check slice (2026-10-05): CLI `--web-checks` accepts an immutable
+typed contract before the run. The same `web.verify` handler executes bounded
+pointer clicks and exact text checks against the retained manifest; no model
+arguments can replace the checks. Pending/terminal verification records retain
+the contract and every step's outcome/observed value in the existing authority/CAS.
+Acceptance now reads the exact saved result, checks origin/contract/manifest
+membership and refreshes file evidence against frozen authority. Missing checks,
+wrong entry, changed source or a smoke-only result cannot certify the task.
+Owners: Core check contracts/publication, Runtime isolated verifier and acceptance,
+CLI admission. There is no new agent loop, file reader or mutable project store.
+
+CLI build passed with zero warnings/errors. Focused `workspace snapshots:` 2/2
+passed (including incomplete/substituted assertions and mismatched actual values).
+Real Chromium functional smoke passed: click-time exception missed by page load,
+repair, no-op handler, broken historical snapshot after repair, unavailable browser,
+wrong entry and duplicate selector. Scripted production-runtime smoke passed
+verify/read/patch/read/verify/done, frozen checks after the input file changes and
+rejection of a source edit after the last passing snapshot. These scripted checks
+are orchestration evidence only. Version-format and diff checks passed.
+
+Real model: one v6 probe and one fresh counter-repair run with
+`rna-gemma4-12b-32k:latest`, digest
+`cf94f3793da5f501e0a2948b34825db5baceed926438a78551ffaa83f85a4082`,
+Ollama 0.35.0, context 32768, output 4096, `json_schema`, instruction role `system`,
+thinking off, one request at a time. The probe passed. The task made 11 model
+requests with no protocol rejection (30954 cumulative input / 1689 output tokens;
+largest request 3802 input / 295 output), 12 tool steps, four verified changes,
+and stopped after 106.68 s with `tool_step_limit`, acceptance **failed**. Gemma
+fixed the click-time `ReferenceError`, then repeated read/replace instead of
+re-verifying. An explicit independent CLI check of its final files passed all
+nine steps; this does not change the failed agent acceptance or prove autonomous
+verify/repair. No model output reached the token cap. Swap-out count stayed
+900005; existing swap usage decreased from 7146.75 to 7074.75 MiB. The model was
+unloaded after the run. This stop was the tool-step bound, not a context rejection
+or observed out-of-memory error.
+
+Local evidence (temporary, not a durable release artifact):
+`/var/folders/k9/hr_94nt142x1f43jr6g0wr_00000gp/T/rna-m5-functional-gemma-0f2bdqi7`.
+It retains the fixture/checks, probe, source commit plus exact binary hashes, run
+events/CAS, model configuration, metrics, memory samples and independent result.
+The last model request still contains the original failed verification as an
+ordinary `TOOL_RESULT` after verified source changes. Freshness/provenance of that
+diagnostic is the next isolation target; causality of the model's repetition is
+not proven. See [continuation backlog](BACKLOG.md#cli-continuation-after-completed-operation-receipts--2026-10-05).
+M5 remains open for autonomous task acceptance, CSV upload/export grading on the
+retained snapshot, screenshots/traces and broader E-* scenarios. M6–M11 have not
+started. No Windows/Office/WebView2 or release qualification is claimed.
+
+Historical M5 durable web snapshot slice (2026-10-05): Core `WorkspaceWebSnapshotStore`
 publishes typed exact manifests and pending/terminal verification records through
 the existing resource authority journal and CAS. Source bytes keep their file owner;
 there is no mutable project mirror or new physical store. CLI can rerun a selected
@@ -473,11 +521,13 @@ boundary, not a functional CSV score. Scripted HTTP tests confirmed both CLI
 transport modes and saved metadata. The existing v6 parser correctly rejected
 these outputs; no permissive JSON repair or separate agent loop was added.
 
-Next concrete slice (2026-10-05): M5 functional assertions bound to the exact
-manifest and saved verification result, followed by a real-agent verify/repair
-task. Isolate remaining model protocol/continuation failures before counting
-autonomous acceptance. Bounded find/read, one frozen compiler, explicit CLI
-recovery and durable historical snapshot verification are implemented. Raw/binary
+Next concrete slice (2026-10-05): isolate freshness/provenance of a failed browser
+verification after source repair in the common model-context path, then repeat
+the fixed counter-repair task without weakening its accepted checks or raising
+budgets to hide repetition. Bounded find/read, one frozen compiler, explicit CLI
+recovery, durable historical snapshot verification and frozen click/text checks
+are implemented. CSV dashboard functional grading on retained snapshots follows.
+Raw/binary
 views, general preview UI and common Office/file dispatch remain open §8.1/M5–M7
 scope. Scripted runtime checks do not close real-model acceptance. M6–M11 have not
 started. The document-owned HTML writer remains active only for its old Office

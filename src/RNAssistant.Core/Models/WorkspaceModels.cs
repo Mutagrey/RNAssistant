@@ -53,6 +53,7 @@ namespace RNAssistant.Core.Models
         public int MinimumVerifiedReads { get; set; }
         public int MinimumVerifiedWrites { get; set; }
         public bool RequireWebVerification { get; set; }
+        public WebFunctionalChecks WebChecks { get; set; }
         public int AcceptedCompleteFileReads { get; set; }
         public int VerifiedFileChanges { get; set; }
         public bool VerifiedWebSnapshot { get; set; }

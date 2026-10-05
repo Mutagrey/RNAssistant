@@ -53,7 +53,14 @@ runtime errors and attaches exact file evidence to its durable tool result. It
 never writes the source. Without a browser the tool is absent from the catalog;
 the explicit CLI `verify` command returns `not-run`.
 After document load it observes browser events for 1.5 seconds; later timers and
-long-running interactions require a separate functional check.
+long-running interactions require a functional check. CLI `--web-checks` supplies
+a frozen typed contract (up to 32 `Click` / `TextEquals` steps) before the run.
+`web.verify` executes these checks on the exact snapshot and reports each observed
+result; its model arguments remain only `entryPath`. The model cannot change the
+checks, select another entry or substitute a smoke result for functional acceptance.
+Steps require a unique visible HTML target; clicks use browser pointer events and
+reject disabled/obscured targets. The first failure leaves later steps `NotRun`.
+Checks and results are retained with the snapshot in the verification resource.
 When a JavaScript exception occurs, the result may include an advisory hint for
 literal `getElementById` calls whose IDs are absent from captured HTML. Dynamic
 DOM construction can make such a hint inapplicable; the browser error remains the
@@ -65,7 +72,7 @@ preimage. `files.restore` explicitly restores the latest managed deletion to an
 absent original path and publishes a new revision. A possible effect after dispatch
 returns `unknown` and requires `recover` before another mutation; no automatic
 retry or permanent-delete fallback exists. The CLI file read adapter is still
-temporary pending the common Gateway/compiler cutover described in
+temporary pending common Office/file dispatch described in
 [Resource Fabric](resource-fabric.md#goals).
 
 ### Read-only JavaScript tools

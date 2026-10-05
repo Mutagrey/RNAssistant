@@ -151,6 +151,43 @@ namespace RNAssistant.Harness
                 AssertTrue(rejected, "success requires a published snapshot");
                 AssertEqual(WebVerificationState.Pending, store.ReadVerification(workspace, pending).State,
                     "rejected completion preserves pending state");
+
+                var steps = new[] { new WebCheckStep("heading", WebCheckOperation.TextEquals, "h1", "safe") };
+                var checks = new WebFunctionalChecks("index.html", steps);
+                steps[0] = new WebCheckStep("changed", WebCheckOperation.TextEquals, "p", "other");
+                AssertEqual("heading", checks.Steps[0].Id, "checks freeze caller-owned step collection");
+                var functional = store.BeginVerification(workspace, "index.html", false, checks: checks);
+                var snapshot = store.PublishSnapshot(workspace, "index.html", new[] { file });
+                store.AttachSnapshot(workspace, functional, snapshot);
+                rejected = false;
+                try { store.CompleteVerification(workspace, functional, WebVerificationState.Passed,
+                    "test-runner", new string[0], new string[0]); }
+                catch (WorkspaceFileException) { rejected = true; }
+                AssertTrue(rejected, "a successful load cannot replace required functional checks");
+                rejected = false;
+                try { store.CompleteVerification(workspace, functional, WebVerificationState.Passed,
+                    "test-runner", new string[0], new string[0], new[] { new WebCheckResult("changed", WebCheckStatus.Passed) }); }
+                catch (WorkspaceFileException) { rejected = true; }
+                AssertTrue(rejected, "a different assertion cannot replace an accepted check");
+                rejected = false;
+                try { store.CompleteVerification(workspace, functional, WebVerificationState.Passed,
+                    "test-runner", new string[0], new string[0], new[] { new WebCheckResult("heading", WebCheckStatus.Passed, "wrong") }); }
+                catch (WorkspaceFileException) { rejected = true; }
+                AssertTrue(rejected, "passed text assertion requires the expected observed value");
+                store.CompleteVerification(workspace, functional, WebVerificationState.Passed,
+                    "test-runner", new string[0], new string[0], new[] { new WebCheckResult("heading", WebCheckStatus.Passed, "safe") });
+                var saved = store.ReadVerification(workspace, functional);
+                var exact = new WorkspaceWebSnapshotStore(paths, files).ReadVerification(workspace, saved.Reference);
+                AssertEqual(checks.Sha256, exact.Checks.Sha256, "exact result binds the accepted checks after restart");
+                AssertEqual("safe", exact.CheckResults.Single().Actual, "observed assertion value is durable");
+                rejected = false;
+                try { new WebFunctionalChecks("index.html", Enumerable.Repeat(checks.Steps[0], 33)); }
+                catch (ArgumentException) { rejected = true; }
+                AssertTrue(rejected, "functional step input is bounded");
+                rejected = false;
+                try { new WebFunctionalChecks("index.html", new[] { new WebCheckStep("only-click", WebCheckOperation.Click, "button") }); }
+                catch (ArgumentException) { rejected = true; }
+                AssertTrue(rejected, "interaction alone is not an assertion");
             });
         }
     }

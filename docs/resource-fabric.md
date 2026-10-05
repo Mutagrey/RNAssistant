@@ -111,6 +111,11 @@ attach the manifest before browser launch, then append a terminal revision. Reco
 include source mode, snapshot, timestamps, bounded errors/hints, browser and optional
 session/run/tool-call origin. A killed process leaves `Pending` (no terminal result);
 cancellation records `NotRun`. Reading/listing records never retries browser work.
+An optional immutable `WebFunctionalChecks` contract is accepted before the run
+and included in the pending record. Terminal records retain ordered typed step
+results bound to the same snapshot. A passing result requires every requested step
+to pass, with observed text matching each `TextEquals` expectation. Smoke-only,
+missing/renamed assertions and checks for another entry cannot satisfy that contract.
 `verifications` returns at most 20 records in resource order with total, generation
 and next offset; concurrent new publications require refreshing the listing.
 Terminal results cannot be overwritten. Tool results retain the exact verification
@@ -119,10 +124,16 @@ resource reference as runtime metadata; these IDs do not enter model prompts.
 CLI `verify --snapshot <id>` reopens a retained manifest after restart and performs
 a new explicitly historical browser check. Its result does not certify current
 workspace files; existing agent acceptance still refreshes current file evidence
-at `done`. `verification --id <id>` reads a recorded result without running a browser.
+at `done`. Acceptance reads the exact saved result reference, checks its
+session/run/tool-call origin, functional contract and manifest members against the
+tool's evidence, then freezes refreshed authority. Model-facing data contains only
+semantic check results; the contract digest and resource references stay in runtime.
+`verification --id <id>` reads a recorded result without running a browser.
 The saved digest describes captured routes/bytes; the manifest's own CAS payload
 also pins entry and exact revisions. General UI preview routing, binary assets,
-screenshots/browser traces and functional assertions remain open M5–M7 work.
+screenshots/browser traces and CSV upload/export assertions remain open M5–M7 work.
+The current development verifier supports bounded pointer clicks and exact text
+assertions in one captured document, without arbitrary evaluator code or navigation.
 
 One resource identity, shared current-state authority, immutable historical evidence
 and one model-context compiler serve model reads, HTML and viewers. Reading content

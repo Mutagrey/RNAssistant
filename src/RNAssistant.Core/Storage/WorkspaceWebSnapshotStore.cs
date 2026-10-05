@@ -76,13 +76,14 @@ namespace RNAssistant.Core.Storage
         }
 
         public string BeginVerification(WorkspaceDescriptor workspace, string entryPath, bool historical,
-            WebVerificationOrigin origin = null, string requestedSnapshotId = null)
+            WebVerificationOrigin origin = null, string requestedSnapshotId = null, WebFunctionalChecks checks = null)
         {
             var record = new WebVerificationRecord { Id = Guid.NewGuid().ToString("N"),
                 WorkspaceId = workspace.WorkspaceId, EntryPath = entryPath ?? string.Empty,
                 RequestedSnapshotId = requestedSnapshotId,
                 Historical = historical, State = WebVerificationState.Pending,
-                StartedUtc = DateTime.UtcNow, Origin = origin };
+                StartedUtc = DateTime.UtcNow, Origin = origin, Checks = checks,
+                CheckResults = checks?.NotRun() ?? new WebCheckResult[0] };
             SaveVerification(workspace, record, null);
             return record.Id;
         }
@@ -94,6 +95,8 @@ namespace RNAssistant.Core.Storage
             var record = ReadVerification(workspace, verificationId, out previous);
             if (record.State != WebVerificationState.Pending || record.SnapshotId != null)
                 throw Unavailable("Verification already has a snapshot or terminal result.");
+            if (record.Checks != null && record.Checks.EntryPath != snapshot.EntryPath)
+                throw Unavailable("Snapshot entry differs from the accepted functional checks.");
             record.SnapshotId = snapshot.Id;
             record.EntryPath = snapshot.EntryPath;
             record.SnapshotSha256 = snapshot.SnapshotSha256;
@@ -102,22 +105,35 @@ namespace RNAssistant.Core.Storage
         }
 
         public void CompleteVerification(WorkspaceDescriptor workspace, string id, WebVerificationState state,
-            string browser, IReadOnlyList<string> errors, IReadOnlyList<string> hints)
+            string browser, IReadOnlyList<string> errors, IReadOnlyList<string> hints,
+            IReadOnlyList<WebCheckResult> checkResults = null)
         {
             ResourceRef previous;
             var record = ReadVerification(workspace, id, out previous);
+            var results = checkResults ?? record.CheckResults;
             if (record.State != WebVerificationState.Pending || state == WebVerificationState.Pending ||
                 !Enum.IsDefined(typeof(WebVerificationState), state) || errors == null || hints == null ||
+                !ValidChecks(record.Checks, results, state) ||
                 state == WebVerificationState.Passed && (record.SnapshotId == null ||
                     string.IsNullOrWhiteSpace(browser) || errors == null || errors.Count != 0))
                 throw Unavailable("Verification cannot accept this terminal result.");
             record.State = state; record.CompletedUtc = DateTime.UtcNow;
             record.Browser = browser; record.Errors = errors; record.Hints = hints;
+            record.CheckResults = results;
             SaveVerification(workspace, record, previous);
         }
 
         public WebVerificationRecord ReadVerification(WorkspaceDescriptor workspace, string id)
         { ResourceRef reference; return ReadVerification(workspace, id, out reference); }
+
+        public WebVerificationRecord ReadVerification(WorkspaceDescriptor workspace, ResourceRef reference)
+        {
+            var parsed = ResourceUri.Parse(reference.Uri);
+            var id = parsed.Segments.Last();
+            if (Reference(workspace, "verification", id, reference.Revision).Uri != reference.Uri)
+                throw Unavailable("Verification reference belongs to another resource or workspace.");
+            return ReadVerificationRevision(workspace, id, reference);
+        }
 
         public WebVerificationPage ListVerifications(WorkspaceDescriptor workspace, int offset = 0)
         {
@@ -146,11 +162,21 @@ namespace RNAssistant.Core.Storage
                 !Enum.IsDefined(typeof(WebVerificationState), record.State) ||
                 (record.State == WebVerificationState.Pending) == record.CompletedUtc.HasValue ||
                 record.CheckedFiles == null || record.Errors == null || record.Hints == null ||
+                !ValidChecks(record.Checks, record.CheckResults, record.State) ||
+                record.Checks != null && record.SnapshotId != null && record.Checks.EntryPath != record.EntryPath ||
                 record.State == WebVerificationState.Passed && (record.SnapshotId == null ||
                     string.IsNullOrWhiteSpace(record.Browser) || record.Errors.Count != 0 || record.CheckedFiles.Count == 0))
                 throw Unavailable("Verification record is invalid or unsupported.");
             record.Reference = reference;
             return record;
+        }
+
+        private static bool ValidChecks(WebFunctionalChecks checks, IReadOnlyList<WebCheckResult> results,
+            WebVerificationState state)
+        {
+            return checks == null ? results != null && results.Count == 0 : checks.Matches(results) &&
+                (state != WebVerificationState.Pending || results.All(result => result.Status == WebCheckStatus.NotRun)) &&
+                (state != WebVerificationState.Passed || results.All(result => result.Status == WebCheckStatus.Passed));
         }
 
         private void SaveVerification(WorkspaceDescriptor workspace, WebVerificationRecord record, ResourceRef previous)
