@@ -7,20 +7,20 @@ using RNAssistant.Core.Models;
 using RNAssistant.Core.Services;
 using RNAssistant.Core.Tools;
 
-namespace RNAssistant.Office.Services
+namespace RNAssistant.Core.Services
 {
-    internal sealed class PlanDocumentService
+    public sealed class PlanDocumentService
     {
         public const int MaximumMarkdownCharacters = 32000;
 
-        internal static string CreationId(ChatSession session, ToolExecutionContext context)
+        public static string CreationId(ChatSession session, ToolExecutionContext context)
         {
             using (var hash = System.Security.Cryptography.SHA256.Create())
                 return "plan_doc_" + BitConverter.ToString(hash.ComputeHash(System.Text.Encoding.UTF8.GetBytes(
                     session.Id + "\n" + context.RunId + "\n" + context.StepId))).Replace("-", "").ToLowerInvariant();
         }
 
-        internal PlanDocumentMutation Save(
+        public PlanDocumentMutation Save(
             ChatSession session,
             string title,
             string markdown,
@@ -48,7 +48,7 @@ namespace RNAssistant.Office.Services
                 markdown, status, beforeMutation);
         }
 
-        internal PlanDocumentMutation RestoreVersion(
+        public PlanDocumentMutation RestoreVersion(
             ChatSession session,
             int version,
             Action beforeMutation)
@@ -80,7 +80,7 @@ namespace RNAssistant.Office.Services
                 beforeMutation);
         }
 
-        internal PlanDocumentMutation DeleteActive(
+        public PlanDocumentMutation DeleteActive(
             ChatSession session,
             Action beforeMutation)
         {
@@ -344,7 +344,7 @@ namespace RNAssistant.Office.Services
             mutation();
         }
 
-        internal static string PlanId(ChatArtifact artifact)
+        public static string PlanId(ChatArtifact artifact)
         {
             try
             {
@@ -356,12 +356,12 @@ namespace RNAssistant.Office.Services
             }
         }
 
-        internal static string Status(ChatArtifact artifact)
+        public static string Status(ChatArtifact artifact)
         {
             return MetadataString(artifact, "status").ToLowerInvariant();
         }
 
-        internal static bool IsTombstone(ChatArtifact artifact)
+        public static bool IsTombstone(ChatArtifact artifact)
         {
             if (artifact == null || !string.Equals(
                 artifact.Kind,
@@ -378,7 +378,7 @@ namespace RNAssistant.Office.Services
             }
         }
 
-        internal static bool IsRemoved(ChatSession session, ChatArtifact artifact)
+        public static bool IsRemoved(ChatSession session, ChatArtifact artifact)
         {
             if (session == null || artifact == null || !string.Equals(
                 artifact.Kind,
@@ -391,10 +391,11 @@ namespace RNAssistant.Office.Services
                     string.Equals(PlanId(item), planId, StringComparison.OrdinalIgnoreCase));
         }
 
-        internal static bool IsApplicableTombstone(ChatSession session, ChatArtifact artifact)
+        public static bool IsApplicableTombstone(ChatSession session, ChatArtifact artifact)
         {
             if (!IsTombstone(artifact)) return false;
             if (!string.IsNullOrWhiteSpace(artifact.DocumentAuthorityId)) return artifact.DocumentAuthorityId == session?.DocumentAuthorityId;
+            if (!string.IsNullOrWhiteSpace(artifact.WorkspaceId)) return artifact.WorkspaceId == session?.WorkspaceId;
             if (string.IsNullOrWhiteSpace(artifact.SourceMessageId)) return true;
             return (session == null ? new List<ChatMessage>() : session.Messages ?? new List<ChatMessage>()).Any(message =>
                 message != null && string.Equals(
@@ -403,13 +404,13 @@ namespace RNAssistant.Office.Services
                     StringComparison.OrdinalIgnoreCase));
         }
 
-        internal static bool IsRemovedReference(ChatSession session, ResourceRef reference)
+        public static bool IsRemovedReference(ChatSession session, ResourceRef reference)
         {
             string artifactId;
             int revision;
             string owner;
             if (session == null || !ChatResourceUri.TryParseArtifactRevision(reference, out owner, out artifactId, out revision) ||
-                owner != session.Id && owner != session.DocumentAuthorityId) return false;
+                owner != session.Id && owner != session.DocumentAuthorityId && owner != session.WorkspaceId) return false;
             var artifact = UniqueArtifacts(session).FirstOrDefault(item =>
                 string.Equals(item.Id, artifactId, StringComparison.OrdinalIgnoreCase) &&
                 Math.Max(1, item.Revision) == revision);
@@ -551,7 +552,8 @@ namespace RNAssistant.Office.Services
             return (session.Messages ?? new List<ChatMessage>())
                 .Where(message => message != null && (message.ResourceRefs ?? new List<ResourceRef>())
                     .Any(reference => References(reference, ids, session.Id) ||
-                        !string.IsNullOrWhiteSpace(session.DocumentAuthorityId) && References(reference, ids, session.DocumentAuthorityId)))
+                        !string.IsNullOrWhiteSpace(session.DocumentAuthorityId) && References(reference, ids, session.DocumentAuthorityId) ||
+                        !string.IsNullOrWhiteSpace(session.WorkspaceId) && References(reference, ids, session.WorkspaceId)))
                 .Select(message => message.Id)
                 .Where(id => !string.IsNullOrWhiteSpace(id))
                 .Distinct(StringComparer.OrdinalIgnoreCase)
@@ -610,7 +612,7 @@ namespace RNAssistant.Office.Services
         }
     }
 
-    internal sealed class PlanDocumentMutation
+    public sealed class PlanDocumentMutation
     {
         public bool Success { get; private set; }
         public string Message { get; private set; }

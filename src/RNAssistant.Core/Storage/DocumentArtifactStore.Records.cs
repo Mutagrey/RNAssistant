@@ -46,7 +46,7 @@ namespace RNAssistant.Core.Storage
 
         public ResourceRef LogicalRevisionForSnapshot(ChatSession session, ResourceIdentity identity, ResourceRef snapshot)
         {
-            var scope = Scope(session);
+            var scope = IsPlan(session, snapshot) ? PlanScope(session) : Scope(session);
             if (!Owns(session, snapshot)) throw new InvalidDataException("The restore snapshot belongs to another document.");
             var restored = _authority.Capture(scope).Commits.SelectMany(commit => commit.HeadChanges)
                 .Where(change => change.Identity.Equals(identity) && change.After.Knowledge == HeadKnowledge.Known)
@@ -69,14 +69,15 @@ namespace RNAssistant.Core.Storage
         // This code never publishes heads/effects or creates another inventory.
         private ResourceMutationReadBack RetainRecord(ChatSession session, ChatArtifact artifact, string text,
             string recordView, string recordMimeType, string attemptId, string operationKey,
-            ResourceRef restoredFrom = null, IEnumerable<ResourceDependency> dependencies = null)
+            ResourceRef restoredFrom = null, IEnumerable<ResourceDependency> dependencies = null,
+            ResourceAuthorityScopeId ownerScope = null)
         {
-            var scope = Scope(session);
+            var scope = ownerScope ?? Scope(session);
             if (artifact == null || artifact.Revision < 1 || string.IsNullOrEmpty(artifact.Id) || text == null ||
                 string.IsNullOrEmpty(attemptId) || string.IsNullOrEmpty(operationKey))
                 throw new InvalidDataException("An exact artifact and prepared operation are required for retention.");
             var item = Clone(artifact);
-            item.DocumentAuthorityId = scope.Id;
+            AssignOwner(item, scope);
             var body = PayloadRef.FromBlob(_payloads.StoreText(text, item.MimeType));
             item.ContentSha256 = body.Sha256;
             item.ContentByteLength = body.ByteLength;
@@ -92,7 +93,7 @@ namespace RNAssistant.Core.Storage
                 restoredFrom: restoredFrom, dependencies: dependencies));
             _revisions.RegisterView(scope, new ResourceRevisionView(exact, recordView, metadata.Sha256, metadata,
                 ResourceCoverage.Whole(), new[] { body }));
-            artifact.DocumentAuthorityId = scope.Id;
+            AssignOwner(artifact, scope);
             artifact.ContentSha256 = body.Sha256;
             artifact.ContentByteLength = body.ByteLength;
             return new ResourceMutationReadBack(exact.Identity, true, "text", body.Sha256, body,
@@ -100,9 +101,9 @@ namespace RNAssistant.Core.Storage
         }
 
         private ChatArtifact ReadRecordSnapshot(ChatSession session, ResourceRef reference, string recordView,
-            string expectedKind, bool includeBody)
+            string expectedKind, bool includeBody, ResourceAuthorityScopeId ownerScope = null)
         {
-            var scope = Scope(session);
+            var scope = ownerScope ?? Scope(session);
             var head = _authority.GetHead(scope, reference.Identity);
             if (!Owns(session, reference) || head?.Knowledge != HeadKnowledge.Known ||
                 head.Revision.Uri != reference.Uri || head.Revision.Revision != reference.Revision)
@@ -115,7 +116,7 @@ namespace RNAssistant.Core.Storage
             var item = record?.Artifact;
             var body = _revisions.GetRevision(scope, reference)?.Payload;
             if (item == null || string.IsNullOrWhiteSpace(record.SourceChatId) || string.IsNullOrWhiteSpace(record.MutationAttemptId) ||
-                string.IsNullOrWhiteSpace(record.OperationKey) || body == null || item.Revision < 1 || item.DocumentAuthorityId != scope.Id ||
+                string.IsNullOrWhiteSpace(record.OperationKey) || body == null || item.Revision < 1 || !MatchesOwner(item, scope) ||
                 item.Kind != expectedKind || ChatResourceUri.CreateArtifactRevision(session, item).Uri != reference.Uri ||
                 item.ContentSha256 != body.Sha256 || item.ContentByteLength != body.ByteLength)
                 throw new InvalidDataException("The retained artifact does not match its exact snapshot.");
@@ -123,6 +124,19 @@ namespace RNAssistant.Core.Storage
                 item.InlineText = _payloads.ReadText(body.ToBlobReference()) ?? throw new InvalidDataException("The artifact body is unavailable.");
             return item;
         }
+
+        private static void AssignOwner(ChatArtifact artifact, ResourceAuthorityScopeId scope)
+        {
+            if (scope.Kind != "document" && (scope.Kind != "workspace" || artifact.Kind != ChatArtifactKinds.PlanDocument))
+                throw new InvalidDataException("This artifact kind does not support the requested owner.");
+            artifact.DocumentAuthorityId = scope.Kind == "document" ? scope.Id : null;
+            artifact.WorkspaceId = scope.Kind == "workspace" ? scope.Id : null;
+        }
+
+        private static bool MatchesOwner(ChatArtifact artifact, ResourceAuthorityScopeId scope)
+        { return scope.Kind == "workspace" ? artifact.Kind == ChatArtifactKinds.PlanDocument &&
+                artifact.WorkspaceId == scope.Id && string.IsNullOrWhiteSpace(artifact.DocumentAuthorityId)
+            : artifact.DocumentAuthorityId == scope.Id && string.IsNullOrWhiteSpace(artifact.WorkspaceId); }
 
         private sealed class ArtifactRecord
         {

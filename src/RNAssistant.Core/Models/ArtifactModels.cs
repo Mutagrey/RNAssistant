@@ -86,6 +86,10 @@ namespace RNAssistant.Core.Models
         public string MimeType { get; set; }
         public string SourceMessageId { get; set; }
         public string DocumentAuthorityId { get; set; }
+        // Workspace-owned Plan snapshots use their real workspace identity.
+        // This is mutually exclusive with document ownership.
+        [Newtonsoft.Json.JsonProperty(NullValueHandling = Newtonsoft.Json.NullValueHandling.Ignore)]
+        public string WorkspaceId { get; set; }
         // Disposable reference-only recovery state, never durable artifact metadata.
         [Newtonsoft.Json.JsonIgnore]
         public string AvailabilityIssue { get; set; }

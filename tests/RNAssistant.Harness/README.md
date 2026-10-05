@@ -74,6 +74,14 @@ index atomicity, process restart and pinned current context, journal/publication
 read-back, crash before dispatch and after publication, unknown effect denial,
 identity-free model results and no credit toward file-write acceptance. It uses
 scripted HTTP, not real-model qualification.
+`python3 -B tests/cli/plan_document_smoke.py` verifies shared Markdown Plans with
+workspace authority in native-tool and user transport: exact whitespace and
+versions, current/historical evidence, frozen selection in read batches, restart,
+discovery/selection across chats, stale-write rejection, duplicate titles, restore/tombstone, workspace isolation,
+prepared/published/uncertain crash states and no file-write credit. It uses scripted
+HTTP through the production CLI. For shared owner changes also run the focused
+`plan mode:`, `plan document:`, `document Plan:` and `artifact working set:` harness
+filters; these do not qualify real Office delivery or real-model Plan usage.
 `python3 tests/cli/response_mode_smoke.py` checks explicit CLI `json_schema` /
 `json_object` selection, `system` / `developer` instruction roles, all three
 `--tool-result-role` transports through compiler/actual HTTP and persisted metadata.

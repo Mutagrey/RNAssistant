@@ -389,10 +389,7 @@ namespace RNAssistant.Office.Services
             }
             if (PlanDocumentToolCatalog.Owns(name))
             {
-                if (root["revision"] != null && root["version"] == null)
-                    root["version"] = root["revision"].DeepClone();
-                RemoveProperties(root, "planId", "artifactId", "revision",
-                    "restoredFromArtifactId", "referencingMessageIds");
+                ModelResultProjection.RemovePlanRuntimeState(name, token);
                 return;
             }
             ModelResultProjection.RemoveTaskListRuntimeState(name, token);

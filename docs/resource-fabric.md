@@ -214,8 +214,15 @@ The existing mutation observer prepares the selected exact base and publishes
 snapshot/head read-backs together; chat persistence follows publication and keeps
 selection only. Current reads depend on the logical Plan head. Native binding v3
 rejects stale selection before dispatch; chat clear/fork no longer publishes a
-conversation Plan head. Authored workspace/independent Markdown ownership and
-working-set selection remain pending under
+conversation Plan head. The CLI Plan slice (2026-10-05) extends the same owner to workspace
+scope: `ChatArtifact.WorkspaceId`, never a fabricated document identity. Shared
+Core Plan preparation/retention/publication owns both document and workspace
+lineages; the Office wrapper retains its gate. CLI semantic Plan reads use exact
+CAS snapshots and logical-head dependencies through the same frozen compiler.
+Current title reads select their exact version; historical reads do not. Chat
+projections retain links only. This service artifact path does not yet turn Plans
+into mounted `.md` source files. File-backed authored resources, other independent
+Markdown ownership and their workspace UI remain pending under
 [Artifact Library](artifact-library.md#authorized-document-ownership-cutover--2026-09-07).
 
 `ResourceIdentity` is logical identity; `ResourceRef` adds an exact revision.

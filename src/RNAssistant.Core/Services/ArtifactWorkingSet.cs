@@ -21,6 +21,9 @@ namespace RNAssistant.Core.Services
 
         public static ResourceIdentity Identity(ChatSession session, ChatArtifact artifact)
         {
+            if (artifact?.Kind == ChatArtifactKinds.PlanDocument &&
+                DocumentArtifactStore.Owns(session, ChatResourceUri.CreateArtifactRevision(session, artifact)))
+                return DocumentArtifactStore.PlanIdentity(session, DocumentArtifactStore.PlanIdFromArtifact(artifact));
             if (artifact == null || string.IsNullOrWhiteSpace(session?.DocumentAuthorityId) || artifact.DocumentAuthorityId != session.DocumentAuthorityId)
                 throw new InvalidDataException("The artifact is not owned by this document.");
             if (MarkdownDocumentIdentity.LogicalId(artifact.Id) != null)
@@ -29,11 +32,6 @@ namespace RNAssistant.Core.Services
                 return new ResourceIdentity(ResourceUri.Create("state", "document", session.DocumentAuthorityId, DocumentArtifactStore.ContextLogicalId(artifact.Id)));
             if (artifact.Kind == ChatArtifactKinds.HtmlWorkspace)
                 return HtmlWorkspaceIdentity.Identity(session, HtmlWorkspaceIdentity.LogicalId(artifact.Id));
-            if (artifact.Kind == ChatArtifactKinds.PlanDocument)
-            {
-                return DocumentArtifactStore.PlanIdentity(session,
-                    DocumentArtifactStore.PlanIdFromSnapshot(ChatResourceUri.CreateArtifactRevision(session, artifact)));
-            }
             if (!artifact.Id.StartsWith("attachment_", StringComparison.Ordinal) && !artifact.Id.StartsWith("artifact_", StringComparison.Ordinal))
                 throw new InvalidDataException("This artifact has no document working-set owner yet.");
             return ChatResourceUri.CreateArtifactRevision(session, artifact).Identity;
@@ -51,7 +49,7 @@ namespace RNAssistant.Core.Services
                 string owner, id;
                 int revision;
                 if (!link.Detached && ChatResourceUri.TryParseArtifactRevision(link.Reference, out owner, out id, out revision) &&
-                    owner == session.DocumentAuthorityId) yield return id;
+                    DocumentArtifactStore.Owns(session, link.Reference)) yield return id;
             }
         }
 
@@ -61,12 +59,12 @@ namespace RNAssistant.Core.Services
             var decision = (session.ArtifactLinks ?? new List<ChatArtifactLink>()).SingleOrDefault(link => identity.Equals(link.Identity));
             if (decision != null) return !decision.Detached;
             return (session.Artifacts ?? new List<ChatArtifact>()).Any(item =>
-                item.DocumentAuthorityId == session.DocumentAuthorityId && identity.Equals(Identity(session, item)));
+                DocumentArtifactStore.Owns(session, ChatResourceUri.CreateArtifactRevision(session, item)) && identity.Equals(Identity(session, item)));
         }
 
         public static bool IsDetached(ChatSession session, ChatArtifact artifact)
         {
-            if (artifact == null || string.IsNullOrWhiteSpace(artifact.DocumentAuthorityId)) return false;
+            if (artifact == null || string.IsNullOrWhiteSpace(artifact.DocumentAuthorityId) && string.IsNullOrWhiteSpace(artifact.WorkspaceId)) return false;
             var identity = Identity(session, artifact);
             return (session.ArtifactLinks ?? new List<ChatArtifactLink>()).Any(link => link.Detached && identity.Equals(link.Identity));
         }
@@ -75,7 +73,7 @@ namespace RNAssistant.Core.Services
         {
             string owner, id;
             int revision;
-            if (session == null || !ChatResourceUri.TryParseArtifactRevision(reference, out owner, out id, out revision) || owner != session.DocumentAuthorityId) return false;
+            if (session == null || !ChatResourceUri.TryParseArtifactRevision(reference, out owner, out id, out revision) || !DocumentArtifactStore.Owns(session, reference)) return false;
             var artifact = (session.Artifacts ?? new List<ChatArtifact>()).FirstOrDefault(item => item.Id == id && item.Revision == revision);
             return artifact != null && IsDetached(session, artifact);
         }

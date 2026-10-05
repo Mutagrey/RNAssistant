@@ -18,9 +18,13 @@ namespace RNAssistant.Core.Services
                 throw new InvalidOperationException("A persisted chat and artifact are required to create a resource reference.");
             }
             var revision = Math.Max(1, artifact.Revision).ToString(CultureInfo.InvariantCulture);
+            if (!string.IsNullOrWhiteSpace(artifact.WorkspaceId) &&
+                (!string.IsNullOrWhiteSpace(artifact.DocumentAuthorityId) || artifact.Kind != ChatArtifactKinds.PlanDocument))
+                throw new InvalidOperationException("Workspace artifact ownership is supported only for unambiguous Plan snapshots.");
             return new ResourceRef(
                 ResourceUri.Create(ProviderName, string.IsNullOrWhiteSpace(artifact.DocumentAuthorityId)
-                    ? session.Id : artifact.DocumentAuthorityId, "artifact", artifact.Id, "revision", revision),
+                    ? (string.IsNullOrWhiteSpace(artifact.WorkspaceId) ? session.Id : artifact.WorkspaceId)
+                    : artifact.DocumentAuthorityId, "artifact", artifact.Id, "revision", revision),
                 revision);
         }
 

@@ -146,8 +146,8 @@ callable catalog and exact ToolRuntime registrations enforce the selected policy
 | Mode | Available operations |
 | --- | --- |
 | Chat | Bounded file find/read only; skill type/reference arguments are unavailable |
-| Plan | File find/read, enabled skills, `web.verify` when the browser exists, typed questions, durable Task Lists; no file writes or confirmation |
-| Agent | Available file/skill/web operations, guarded writes and confirmations, typed questions and durable Task Lists |
+| Plan | File/Plan find/read, enabled skills, `web.verify` when the browser exists, typed questions, durable Task Lists and Plan save/restore/delete; no file writes or confirmation |
+| Agent | Available file/Plan/skill/web operations, guarded file writes and confirmations, typed questions, Task Lists and Plan save |
 
 CLI uses the shared Core Task List service, catalog, handler and logical authority
 publisher. Task Lists remain conversation-owned revisions in ChatStore events/CAS;
@@ -166,8 +166,38 @@ authority, before optional history/source bodies. Native tool transport retains
 accepted call/result pairing; runtime list/step/artifact IDs stay out of model
 results. Task List statuses express agent assessment and never count toward CLI
 file-write acceptance. A read-only workspace still permits these chat-owned writes
-in Plan/Agent. CLI revisioned Markdown Plan documents remain an explicit host
-capability gap; the full Plan contract above is not yet complete.
+in Plan/Agent.
+
+CLI Plans use the shared Core `PlanDocumentService`, catalog/handler and
+`PlanDocumentPublication`. The existing artifact store retains immutable Markdown
+and metadata in CAS and publishes snapshot, logical head and operation receipt in
+**workspace** authority. `ChatArtifact.WorkspaceId` is distinct from
+`DocumentAuthorityId`; chat events retain only links and exact selection. This is
+service artifact storage, not `.md` authoring in the mounted workspace. Office
+uses the same owners with its existing document scope and gate.
+
+`common.resources_find` with `type="plan"` inspects at most 100 logical heads and
+returns at most 50 title targets with explicit incomplete/unavailable flags.
+`common.resources_read` with `type="plan"` reads the active lineage when `target`
+is omitted/null, or a complete, unambiguous exact title from discovery. A current
+read selects that exact revision for subsequent guarded saves. Implicit selection
+is pinned for the whole model step: one read in an independent batch cannot retarget
+another; selection changes apply to the next step. Optional `version`
+reads an immutable historical version without changing selection. Duplicate titles
+or incomplete discovery cannot resolve a title. Reads retain exact whitespace and
+are whole-body bounded to 32,000 characters; current evidence depends on the logical
+head and is checked by the shared frozen compiler. Historical evidence is marked
+explicitly and cannot authorize a current save.
+
+`inspect.plan` and required `RUNTIME_CONTEXT.active_plan` contain only title, status,
+version and availability. Bodies are delivered through resource reads. Stale
+selection rejects a save before dispatch. Another chat in the same workspace may
+find/read/select the shared Plan; another workspace cannot. Restore appends a new
+version and delete appends a tombstone. Prepared attempts are abandoned, published
+attempts recover their journal link, and uncertain dispatched attempts become
+unknown without replay. Explicit uncertain Plan reconciliation is still open.
+Plan mutations remain allowed with read-only file access and do not count toward
+file-write acceptance. Windows/Office and real-model behavior require separate evidence.
 
 The shared question tool produces 1–3 questions, each with 2–4 choices, a single
 or multiple selection and an optional free-text answer. Runtime IDs are persisted

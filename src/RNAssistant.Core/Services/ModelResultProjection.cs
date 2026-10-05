@@ -116,6 +116,14 @@ namespace RNAssistant.Core.Services
             foreach (var step in (task["steps"] as JArray ?? new JArray()).OfType<JObject>()) step.Remove("id");
         }
 
+        public static void RemovePlanRuntimeState(string name, JToken data)
+        {
+            var root = data as JObject;
+            if (!PlanDocumentToolCatalog.Owns(name) || root == null) return;
+            if (root["revision"] != null && root["version"] == null) root["version"] = root["revision"].DeepClone();
+            foreach (var key in new[] { "planId", "artifactId", "revision", "restoredFromArtifactId", "referencingMessageIds" }) root.Remove(key);
+        }
+
         public static bool IsResourceEvidence(string name)
         {
             return string.Equals(name, "common.resources_find", StringComparison.OrdinalIgnoreCase) ||
@@ -160,6 +168,7 @@ namespace RNAssistant.Core.Services
             var data = source.Data.DeepClone();
             RemoveQuestionRuntimeState(name, data);
             RemoveTaskListRuntimeState(name, data);
+            RemovePlanRuntimeState(name, data);
             RemoveRuntimeResourceValues(data, source.Result.Resources);
             var objectData = data as JObject;
             if (objectData != null && source.ResultResource != null &&

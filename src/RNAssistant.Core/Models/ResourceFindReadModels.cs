@@ -68,6 +68,8 @@ namespace RNAssistant.Core.Models
 
     public sealed class ResourceReadProjection
     {
+        [JsonProperty("version", NullValueHandling = NullValueHandling.Ignore)] public int? Version { get; set; }
+        [JsonProperty("historical", NullValueHandling = NullValueHandling.Ignore)] public bool? Historical { get; set; }
         [JsonProperty("startLine", NullValueHandling = NullValueHandling.Ignore)] public int? StartLine { get; set; }
         [JsonProperty("requestedLines", NullValueHandling = NullValueHandling.Ignore)] public int? RequestedLines { get; set; }
         [JsonProperty("section", NullValueHandling = NullValueHandling.Ignore)] public string Section { get; set; }

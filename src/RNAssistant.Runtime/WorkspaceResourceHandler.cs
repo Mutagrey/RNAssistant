@@ -20,10 +20,11 @@ namespace RNAssistant.Runtime
         private readonly Func<SkillCatalogSnapshot> _skills;
         private readonly Dictionary<string, ResourceRef> _observed;
         private readonly bool _find;
+        private readonly WorkspacePlanService _plans;
 
         internal WorkspaceResourceHandler(WorkspaceFileResourceProvider files, SkillPublicationService publications,
-            Func<SkillCatalogSnapshot> skills, Dictionary<string, ResourceRef> observed, bool find)
-        { _files = files; _publications = publications; _skills = skills; _observed = observed; _find = find; }
+            Func<SkillCatalogSnapshot> skills, Dictionary<string, ResourceRef> observed, bool find, WorkspacePlanService plans)
+        { _files = files; _publications = publications; _skills = skills; _observed = observed; _find = find; _plans = plans; }
 
         public Task<ToolHandlerResult> ExecuteAsync(ToolHandlerContext context, CancellationToken cancellationToken)
         {
@@ -32,13 +33,13 @@ namespace RNAssistant.Runtime
             {
                 var type = Value(context, "type");
                 if (string.IsNullOrEmpty(type)) type = "file";
-                if (type != "file" && type != "skill") throw Error("Unknown resource type.", "RESOURCE_NOT_FOUND");
+                if (type != "file" && type != "skill" && type != "plan") throw Error("Unknown resource type.", "RESOURCE_NOT_FOUND");
                 if (type == "file" && !string.IsNullOrEmpty(Value(context, "referencePath")) ||
                     type == "skill" && !string.IsNullOrEmpty(Value(context, "directory")))
                     throw Error("The selected resource type does not support this selector.", "RESOURCE_REQUEST_INVALID");
                 if (_find)
                 {
-                    var page = type == "file" ? _files.Find(Value(context, "directory"), Value(context, "query")) :
+                    var page = type == "plan" ? _plans.Find(Value(context, "query")) : type == "file" ? _files.Find(Value(context, "directory"), Value(context, "query")) :
                         SkillCatalogService.Find(_skills(), Value(context, "query"));
                     return Return(ToolResult.Ok(ResourceFindProjection.Message(page), ResourceFindProjection.Serialize(page), page.ResourceRefs));
                 }
@@ -47,6 +48,12 @@ namespace RNAssistant.Runtime
                 SkillDefinition skill = null;
                 var referencePath = Value(context, "referencePath");
                 if (type == "file") read = _files.Read(target);
+                else if (type == "plan")
+                {
+                    var versionText = Value(context, "version");
+                    read = _plans.Read(target, string.IsNullOrEmpty(versionText) ? (int?)null : int.Parse(versionText, System.Globalization.CultureInfo.InvariantCulture));
+                    target = read.Result.Resource.Title;
+                }
                 else
                 {
                     skill = _skills().Skills.SingleOrDefault(item => item.Enabled && item.Id == target);
@@ -56,11 +63,16 @@ namespace RNAssistant.Runtime
                     read = _publications.ReadSkill(SkillPublicationService.SkillResource(skill,
                         string.IsNullOrEmpty(referencePath) ? null : referencePath));
                 }
-                if (read.Result.Text.Length > 16000)
+                if (read.Result.Text.Length > (type == "plan" ? PlanDocumentService.MaximumMarkdownCharacters : 16000))
                     throw Error("The complete source exceeds the model read bound; no read evidence was accepted.", "read_too_large");
                 read.RequireCompleteExactText();
                 if (type == "file") _observed[target] = read.Result.Resource.Reference;
-                var projection = ResourceReadProjection.From(read.Result, target, type, type == "file" ? "workspace" : "catalog");
+                var projection = ResourceReadProjection.From(read.Result, target, type, type == "skill" ? "catalog" : "workspace");
+                if (type == "plan")
+                {
+                    projection.Version = int.Parse(read.Result.Resource.Metadata["version"], System.Globalization.CultureInfo.InvariantCulture);
+                    projection.Historical = bool.Parse(read.Result.Resource.Metadata["historical"]);
+                }
                 if (skill != null)
                 {
                     projection.Section = string.IsNullOrEmpty(referencePath) ? null : referencePath;
@@ -72,6 +84,8 @@ namespace RNAssistant.Runtime
             }
             catch (ResourceRequestException error)
             { return Return(ToolResult.Error(error.Message, JsonConvert.SerializeObject(new ResourceFailure { Code = error.ErrorCode, Retryable = error.Retryable }))); }
+            catch (System.IO.InvalidDataException error)
+            { return Return(ToolResult.Error(error.Message, JsonConvert.SerializeObject(new ResourceFailure { Code = "resource_unavailable" }))); }
             catch (RNAssistant.Core.Storage.WorkspaceFileException error)
             {
                 var message = error.Message;

@@ -207,7 +207,7 @@ namespace RNAssistant.Office.Runtime
                 else if (PlanDocumentToolCatalog.Owns(
                     registration.Descriptor.Id))
                 {
-                    handler = new PlanDocumentToolHandler(
+                    handler = new OfficePlanDocumentToolHandler(
                         registration.Descriptor.Id, session);
                 }
                 else if (TaskListToolCatalog.Owns(

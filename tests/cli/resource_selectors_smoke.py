@@ -81,10 +81,11 @@ def run_case(root):
                 ("read", {"type", "target"}, {"type", "target", "referencePath"})):
             name = "common.resources_" + operation
             for schema in (prompt_catalog[name]["Schema"], wire_catalog[name]):
-                assert len(schema["anyOf"]) == 2, schema
+                assert len(schema["anyOf"]) == 3, schema
                 branches = {branch["properties"]["type"]["enum"][0]: branch for branch in schema["anyOf"]}
                 assert set(branches["file"]["properties"]) == file_keys, branches
                 assert set(branches["skill"]["properties"]) == skill_keys, branches
+                assert set(branches["plan"]["properties"]) == ({"type", "query"} if operation == "find" else {"type", "target", "version"}), branches
                 assert all(branch["additionalProperties"] is False for branch in branches.values())
                 assert "type" in branches["skill"]["required"], branches
             for branch in wire_catalog[name]["anyOf"]:
@@ -106,7 +107,7 @@ def run_case(root):
         assert read_progress(requests[-1])["currentCompleteFileReads"] == 2
         assert "rna://" not in json.dumps(requests)
         assert (workspace / "notes.txt").read_text() == "ROOT_FILE_BYTES"
-        print("PASS resource selectors: closed file/skill schemas, rejected cross-selectors, nullable defaults, "
+        print("PASS resource selectors: closed file/skill/plan schemas, rejected cross-selectors, nullable defaults, "
               "unsafe roots rejected, relative discovery, exact file/skill reads and isolated evidence")
     finally:
         server.shutdown()

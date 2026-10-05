@@ -1307,8 +1307,15 @@ Only domain-owned mutable resources expose Save/Delete:
 - Immutable uploads/snapshots have no in-place editor. `Create editable copy` or
   `Import` creates a related resource and leaves the original unchanged.
 
-`Office.Services.PlanDocumentService` owns Plan domain rules; the document
-authority owns durable lineage as specified in the implemented slice above.
+`Core.Services.PlanDocumentService` owns Plan domain rules and shared
+`PlanDocumentPublication` owns preparation, retention and publication. The existing
+artifact store uses document authority for Office and explicit workspace authority
+for CLI Plans. Only Plan records support the new `WorkspaceId` owner; other artifact
+families retain their document guards. Workspace chat events keep links/selection;
+immutable records and bodies stay in the existing authority/CAS. CLI metadata and
+historical/current reads are described in
+[conversation protocol](conversation-protocol.md#workspace-cli-modes-and-questions).
+Mounted `.md` authoring and workspace Library UI remain separate open scope.
 `common.plan_doc_save` is available in Plan and Agent. It validates non-empty title/Markdown/status without normalizing
 the Markdown: leading/trailing whitespace and hard-break spaces are stored exactly.
 The service creates a plan when absent; otherwise it resolves the active exact
@@ -1323,8 +1330,8 @@ and appends it as `vN+1` with `restoredFromArtifactId` provenance. Argument-free
 child revision while clearing the active pointer. Runtime-only ids/guards remain in
 durable evidence and are removed from the model projection. Historical `ResourceRef`
 values are never rewritten. Discovery and the new working set omit the removed
-Plan; document-owned historical exact snapshots remain readable. Its tombstone
-is document-owned, independent of origin-message removal and dialogue forks.
+Plan; historical exact snapshots remain retained in the owning document/workspace
+authority. Its tombstone is independent of origin-message removal and dialogue forks.
 The older chat-local format is not migrated and cannot be mutated by the new
 native Plan binding.
 

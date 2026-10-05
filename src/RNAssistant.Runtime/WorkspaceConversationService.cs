@@ -82,6 +82,9 @@ namespace RNAssistant.Runtime
                 .ToolIds;
         }
 
+        public WorkspacePlanState GetPlan(WorkspaceDescriptor workspace, ChatSession session)
+        { return new WorkspacePlanService(_paths, _chats, _payloads, workspace, session).Inspect(); }
+
         public TaskListStateProjection GetTaskList(ChatSession session)
         { return new WorkspaceTaskListObserver(_paths, _chats, _payloads, session).Inspect(); }
 
@@ -419,6 +422,7 @@ namespace RNAssistant.Runtime
         private sealed class WorkspaceModelContext
         {
             [JsonProperty("readAcceptance", NullValueHandling = NullValueHandling.Ignore)] public WorkspaceReadAcceptance ReadAcceptance { get; set; }
+            [JsonProperty("active_plan", NullValueHandling = NullValueHandling.Ignore)] public WorkspacePlanState ActivePlan { get; set; }
             [JsonProperty("active_task_list", NullValueHandling = NullValueHandling.Ignore)] public TaskListStateProjection ActiveTaskList { get; set; }
         }
 
@@ -603,6 +607,7 @@ namespace RNAssistant.Runtime
             private readonly ResourceProviderRouter<WorkspaceFileResourceProvider> _resources;
             private readonly ModelContextCompiler _compiler;
             private readonly WorkspaceTaskListObserver _taskLists;
+            private readonly WorkspacePlanService _plans;
             private readonly SkillPublicationService _skillPublications;
             private readonly SkillCatalogService _skillCatalog;
             private SkillCatalogSnapshot _skills;
@@ -623,6 +628,7 @@ namespace RNAssistant.Runtime
                 _mode = ConversationRunPolicy.For(ChatModes.Require(mode ?? session?.Mode ?? ChatModes.Agent));
                 _compiler = new ModelContextCompiler(payloads);
                 _taskLists = new WorkspaceTaskListObserver(paths, chats, payloads, session);
+                _plans = new WorkspacePlanService(paths, chats, payloads, workspace, session);
                 _modelTrace = new ModelTracePersistenceService(new ChatEventStoreAdapter(chats));
                 _resources = new ResourceProviderRouter<WorkspaceFileResourceProvider>(new[]
                     { new WorkspaceFileResourceProvider(files, workspace) });
@@ -634,12 +640,12 @@ namespace RNAssistant.Runtime
                 _skillPublications = new SkillPublicationService(authorityStore, authorityStore,
                     new ResourceMutationJournal(paths), payloads, new SkillStore(paths), "Workspace", WorkspaceSkillProvider.GetSkills());
                 _skillCatalog = new SkillCatalogService("Workspace", _skillPublications.Capture);
-                Register(registry, entries, "common.resources_find", _mode.AllowsSkills ? "Find workspace files (default type=file, one directory, up to 200) or enabled skills (type=skill, up to 50). For workspace root omit directory or use null, never / or .; directory applies only to files. Narrow the query when incomplete." : "Find workspace files in one directory, up to 200. For workspace root omit directory or use null, never / or .; narrow the query when incomplete.",
+                Register(registry, entries, "common.resources_find", _mode.AllowsSkills ? "Find workspace files (default type=file, one directory, up to 200) or enabled skills (type=skill, up to 50), or workspace Plans (type=plan, up to 50 from at most 100 heads). For workspace root omit directory or use null, never / or .; directory applies only to files. Narrow the query when incomplete." : "Find workspace files in one directory, up to 200. For workspace root omit directory or use null, never / or .; narrow the query when incomplete.",
                     ResourceSchema(true, _mode.AllowsSkills), false,
-                    new WorkspaceResourceHandler(_resources.Select("file"), _skillPublications, () => _skills, _observed, true));
-                Register(registry, entries, "common.resources_read", _mode.AllowsSkills ? "Read a complete UTF-8 file (default type=file, target is its workspace-relative path) or published skill instructions (type=skill, target is the skill ID). referencePath belongs only to a listed skill reference. Bound: 16000 characters; no partial skill activation." : "Read a complete UTF-8 file using its workspace-relative path as target, up to 16000 characters.",
+                    new WorkspaceResourceHandler(_resources.Select("file"), _skillPublications, () => _skills, _observed, true, _plans));
+                Register(registry, entries, "common.resources_read", _mode.AllowsSkills ? "Read a complete UTF-8 file (default type=file, target is its workspace-relative path) or published skill instructions (type=skill, target is the skill ID). referencePath belongs only to a listed skill reference. For a workspace Plan use type=plan, omit target for the selected plan or supply an exact unique title. Optional version reads history without selecting it; a current read selects its exact revision. Bounds: 16000 characters for files/skills, 32000 for Plans; no partial skill activation." : "Read a complete UTF-8 file using its workspace-relative path as target, up to 16000 characters.",
                     ResourceSchema(false, _mode.AllowsSkills), false,
-                    new WorkspaceResourceHandler(_resources.Select("file"), _skillPublications, () => _skills, _observed, false));
+                    new WorkspaceResourceHandler(_resources.Select("file"), _skillPublications, () => _skills, _observed, false, _plans));
                 if (WorkspaceWebVerifier.FindBrowserExecutable() != null)
                     Register(registry, entries, "web.verify", "Load an immutable local HTML/CSS/JS snapshot in an isolated browser; check asset/runtime errors and any functional checks fixed by the accepted task contract.",
                         Schema("entryPath", true), false,
@@ -670,10 +676,12 @@ namespace RNAssistant.Runtime
                 }
                 Register(registry, entries, UserQuestionToolCatalog.GetTools().Single(), new UserQuestionToolHandler());
                 Register(registry, entries, TaskListToolCatalog.GetTools().Single(), new TaskListToolHandler(TaskListToolCatalog.SetToolId, session));
+                foreach (var entry in PlanDocumentToolCatalog.GetTools())
+                    Register(registry, entries, entry, new PlanDocumentToolHandler(entry.Id, session));
                 _catalog = entries;
                 _skills = VisibleSkills(_skillPublications.Capture());
                 Tools = new ToolRuntime(registry, _mode.Mode, false, _mode.AllowsConfirmation,
-                    (context, preparation) => "pending_" + Guid.NewGuid().ToString("N"), mutationObserver: _taskLists);
+                    (context, preparation) => "pending_" + Guid.NewGuid().ToString("N"), mutationObserver: new WorkspacePlanningObserver(_taskLists, _plans));
                 if (restorePendingObservation) RestorePendingObservation();
             }
 
@@ -745,7 +753,22 @@ namespace RNAssistant.Runtime
                 // must reject selectors belonging to the other resource kind.
                 return new JObject { ["type"] = "object", ["properties"] = new JObject(),
                     ["required"] = new JArray(), ["additionalProperties"] = false,
-                    ["anyOf"] = new JArray(files, ResourceVariant(find, true)) }.ToString(Formatting.None);
+                    ["anyOf"] = new JArray(files, ResourceVariant(find, true), PlanResourceVariant(find)) }.ToString(Formatting.None);
+            }
+
+            private static JObject PlanResourceVariant(bool find)
+            {
+                var schema = JObject.Parse(find ? Schema("query", false) : Schema("target", false));
+                var properties = (JObject)schema["properties"];
+                properties["type"] = new JObject { ["type"] = "string", ["enum"] = new JArray("plan") };
+                ((JArray)schema["required"]).Add("type");
+                if (!find)
+                {
+                    properties["target"]["description"] = "Exact unique Plan title from discovery; omit or null for the selected active plan. A current read selects that exact revision for later guarded saves.";
+                    properties["version"] = new JObject { ["type"] = "integer", ["minimum"] = 1,
+                        ["description"] = "Optional user-visible historical version; a historical read never changes the selected plan." };
+                }
+                return schema;
             }
 
             private static JObject ResourceVariant(bool find, bool skill)
@@ -801,7 +824,7 @@ namespace RNAssistant.Runtime
                 {
                     var required = new List<ChatMessage>
                     { new ChatMessage { Role = _settings.SystemPromptRole, Content = Prompt() } };
-                    var context = new WorkspaceModelContext { ActiveTaskList = _taskLists.Project(frozen) };
+                    var context = new WorkspaceModelContext { ActiveTaskList = _taskLists.Project(frozen), ActivePlan = _plans.Project(frozen) };
                     if (_acceptance?.MinimumVerifiedReads > 0)
                     {
                         var reads = CurrentCompleteFileReads(CompleteFileReads(_session, request.RunId), frozen);
@@ -814,7 +837,7 @@ namespace RNAssistant.Runtime
                                 reads.Select(read => read.Target), StringComparer.Ordinal).ToArray()
                         };
                     }
-                    if (context.ActiveTaskList != null || context.ReadAcceptance != null)
+                    if (context.ActiveTaskList != null || context.ActivePlan != null || context.ReadAcceptance != null)
                         required.Add(new ChatMessage { Role = _settings.SystemPromptRole,
                             Content = "RUNTIME_CONTEXT:\n" + JsonConvert.SerializeObject(context) });
                     snapshot = _compiler.Compile(authority,
@@ -882,9 +905,10 @@ namespace RNAssistant.Runtime
                     { /* The file owner marked the old text head unknown. */ }
                 }
                 _taskLists.ReconcileInterrupted();
+                _plans.ReconcileInterrupted();
                 return _skillPublications.CaptureAuthority(active.SelectMany(item =>
                     item.ResourceEvidence ?? new List<ResourceEvidence>()).Select(item => item.ScopeId)
-                    .Concat(new[] { TaskListPublication.Scope(_session) }));
+                    .Concat(new[] { TaskListPublication.Scope(_session), _plans.Scope }));
             }
 
             private void RetainDeliveredObservations(ModelContextSnapshot snapshot)
@@ -962,7 +986,7 @@ namespace RNAssistant.Runtime
             {
                 return "You are the RNAssistant workspace assistant. Current mode: " + _mode.Mode + ". " +
                     (_mode.Mode == ChatModes.Chat ? "Answer using read-only file discovery; skills and mutations are unavailable. " :
-                     _mode.Mode == ChatModes.Plan ? "Inspect and propose a plan without modifying workspace files. Keep a durable task list when useful. Persistent Markdown plan documents are not available in this host yet. " :
+                     _mode.Mode == ChatModes.Plan ? "Inspect and propose a plan without modifying workspace files. Save a revisioned Markdown plan and keep a durable task list when useful. " :
                      "Follow the user's task using real files in the selected workspace. ") +
                     (_acceptance?.Requested == true ? "The accepted task contract requires current files and verified tool results before done: " +
                         JsonConvert.SerializeObject(new { expectedFiles = _acceptance.ExpectedFiles,
@@ -981,6 +1005,8 @@ namespace RNAssistant.Runtime
                     "Historical assistant messages and tool calls describe past actions, not current source bytes. " +
                     "A stale read result requires a new read. Read an existing file before patch or replace. " +
                     (_mode.AllowsSkills ? "Use common.task_list_set to save or revise steps, retain notes, update statuses by current 1-based index, or close the list. " +
+                    "RUNTIME_CONTEXT.active_plan contains selected Plan metadata only; read its body with common.resources_read type=plan. Save the complete Markdown with common.plan_doc_save; use startNew only for a different task. " +
+                    "Plan writes are service artifacts and do not count as workspace file changes. " +
                     "RUNTIME_CONTEXT.active_task_list is the current durable checklist. Statuses are your assessment, not verified file effects. " +
                     "A task-list write does not satisfy file-write acceptance, and closing a list is not a prerequisite for done. " +
                     "Use common.questions_ask for material decisions that require user input after available discovery. Its typed result stops the run for answers; never choose an answer for the user. " +
@@ -1024,6 +1050,7 @@ namespace RNAssistant.Runtime
                         Content = WireResult(record),
                         ExecutionProgress = ToolExecutionProgress.Capture(record),
                         ResourceEvidence = record.ResourceEvidence.ToList(), ResourceEffect = record.ResourceEffect,
+                        ResourceRefs = record.Result?.Resources.ToList() ?? new List<ResourceRef>(),
                         RunId = fact.Summary.RunId
                     });
                 }

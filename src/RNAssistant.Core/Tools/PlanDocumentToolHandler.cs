@@ -6,19 +6,18 @@ using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
 using RNAssistant.Core.Models;
 using RNAssistant.Core.Tools;
-using RNAssistant.Office.Runtime;
-using RNAssistant.Office.Services;
+using RNAssistant.Core.Services;
 using RuntimeResult = RNAssistant.Core.Tools.Contracts.ToolResult;
 
-namespace RNAssistant.Office.Tools
+namespace RNAssistant.Core.Tools
 {
-    internal sealed class PlanDocumentToolHandler : IManagedMutationToolHandler
+    public sealed class PlanDocumentToolHandler : IManagedMutationToolHandler
     {
         private readonly string _toolId;
         private readonly ChatSession _session;
         private readonly PlanDocumentService _service;
 
-        internal PlanDocumentToolHandler(string toolId, ChatSession session)
+        public PlanDocumentToolHandler(string toolId, ChatSession session)
         {
             if (!PlanDocumentToolCatalog.Owns(toolId))
                 throw new ArgumentException(
@@ -28,7 +27,7 @@ namespace RNAssistant.Office.Tools
             _service = new PlanDocumentService();
         }
 
-        internal static ToolBinding BindingFor(string toolId)
+        public static ToolBinding BindingFor(string toolId)
         {
             if (string.Equals(toolId, PlanDocumentToolCatalog.SaveToolId,
                 StringComparison.Ordinal))
@@ -47,40 +46,43 @@ namespace RNAssistant.Office.Tools
         {
             cancellationToken.ThrowIfCancellationRequested();
             if (_session == null)
-                return OfficeToolFailure.Rejected(
+                return Rejected(
                     "Plan document requires an active chat.",
                     "plan_session_required");
             try
             {
-                using (DocumentAccessGate.BeginOperation())
-                {
-                    return Task.FromResult(context.Complete(Project(Execute(context), context)));
-                }
+                return Task.FromResult(context.Complete(Project(Execute(context), context)));
             }
             catch (InvalidOperationException ex) when (!context.MayHaveDispatched)
             {
-                return OfficeToolFailure.Rejected(ex.Message,
+                return Rejected(ex.Message,
                     "invalid_plan_document", ToolRetryPolicy.Replan, true);
             }
         }
 
+        private static Task<ToolHandlerResult> Rejected(string message, string code,
+            ToolRetryPolicy retryPolicy = ToolRetryPolicy.None, bool retryable = false)
+        { return Task.FromResult(new ToolHandlerResult(RuntimeResult.Error(message, ErrorData(code, retryable)),
+            ToolEffectEvidence.None, recovery: new ToolRecoveryContract(ToolFailureKind.RejectedNoEffect, retryPolicy))); }
+
         private PlanDocumentMutation Execute(ToolHandlerContext context)
         {
+            var intent = PlanDocumentArguments.Read(context.Arguments);
             if (string.Equals(_toolId, PlanDocumentToolCatalog.SaveToolId,
                 StringComparison.Ordinal))
             {
                 return _service.Save(_session,
-                    ToolArgumentReader.String(context.Arguments, "title", string.Empty),
-                    ToolArgumentReader.String(context.Arguments, "markdown", string.Empty),
-                    ToolArgumentReader.String(context.Arguments, "status", "draft"),
+                    intent.Title,
+                    intent.Markdown,
+                    intent.Status,
                     context.MarkDispatchPossible, PlanDocumentService.CreationId(_session, context.Execution),
-                    ToolArgumentReader.Boolean(context.Arguments, "startNew", false));
+                    intent.StartNew);
             }
             if (string.Equals(_toolId, PlanDocumentToolCatalog.RestoreToolId,
                 StringComparison.Ordinal))
             {
                 return _service.RestoreVersion(_session,
-                    ToolArgumentReader.Int32(context.Arguments, "version"),
+                    intent.Version,
                     context.MarkDispatchPossible);
             }
             return _service.DeleteActive(_session, context.MarkDispatchPossible);
@@ -163,5 +165,15 @@ namespace RNAssistant.Office.Tools
             return JsonConvert.SerializeObject(new { code, retryable });
         }
 
+    }
+    internal sealed class PlanDocumentArguments
+    {
+        [JsonProperty("title")] public string Title { get; set; }
+        [JsonProperty("markdown")] public string Markdown { get; set; }
+        [JsonProperty("status")] public string Status { get; set; }
+        [JsonProperty("startNew", NullValueHandling = NullValueHandling.Ignore)] public bool StartNew { get; set; }
+        [JsonProperty("version")] public int Version { get; set; }
+        internal static PlanDocumentArguments Read(System.Collections.Generic.IDictionary<string, object> arguments)
+        { return JObject.FromObject(arguments).ToObject<PlanDocumentArguments>(); }
     }
 }

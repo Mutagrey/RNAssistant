@@ -29,10 +29,11 @@ namespace RNAssistant.Core.Storage
         {
             ArtifactWorkingSet.Validate(session);
             var root = JObject.FromObject(session, JsonSerializer.Create(ProjectionJsonSettings));
-            // Committed document originals are reconstructed from their exact refs.
+            // Document artifacts and workspace Plans are reconstructed from exact refs.
             // The conversation never becomes a second owner of artifact metadata.
             root["Artifacts"] = new JArray(((JArray)root["Artifacts"] ?? new JArray()).Where(item =>
-                string.IsNullOrWhiteSpace((string)item["DocumentAuthorityId"])));
+                string.IsNullOrWhiteSpace((string)item["DocumentAuthorityId"]) &&
+                string.IsNullOrWhiteSpace((string)item["WorkspaceId"])));
             RuntimePayloadService.ExternalizeProjection(root, _blobs);
             return root;
         }
@@ -119,7 +120,7 @@ namespace RNAssistant.Core.Storage
             session.StorageTailByteOffset = tailByteOffset;
             session.StorageByteLength = byteLength;
             session.StorageLastWriteUtcTicks = lastWriteUtcTicks;
-            if (rebuildDerivedProjections && !string.IsNullOrWhiteSpace(session.DocumentAuthorityId))
+            if (rebuildDerivedProjections && (!string.IsNullOrWhiteSpace(session.DocumentAuthorityId) || !string.IsNullOrWhiteSpace(session.WorkspaceId)))
             {
                 var references = (session.Messages ?? new List<ChatMessage>()).Where(message => message != null)
                     .SelectMany(message => message.ResourceRefs ?? new List<ResourceRef>())

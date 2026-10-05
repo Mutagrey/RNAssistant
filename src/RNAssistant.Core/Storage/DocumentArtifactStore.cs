@@ -137,7 +137,8 @@ namespace RNAssistant.Core.Storage
             // body, timestamp or writable head is asserted or persisted.
             return new ChatArtifact
             {
-                Id = id, DocumentAuthorityId = owner, Revision = revision,
+                Id = id, DocumentAuthorityId = string.IsNullOrWhiteSpace(session.DocumentAuthorityId) ? null : owner,
+                WorkspaceId = string.IsNullOrWhiteSpace(session.DocumentAuthorityId) ? owner : null, Revision = revision,
                 Kind = IsPlan(session, reference) ? ChatArtifactKinds.PlanDocument :
                     HtmlWorkspaceIdentity.LogicalId(id) != null ? ChatArtifactKinds.HtmlWorkspace :
                     MarkdownDocumentIdentity.LogicalId(id) != null ? ChatArtifactKinds.Markdown : ContextLogicalId(id) != null ? SharedContextKind : ChatArtifactKinds.File,
@@ -178,9 +179,11 @@ namespace RNAssistant.Core.Storage
         {
             string owner, id;
             int revision;
-            return !string.IsNullOrWhiteSpace(session?.DocumentAuthorityId) &&
-                ChatResourceUri.TryParseArtifactRevision(reference, out owner, out id, out revision) &&
-                owner == session.DocumentAuthorityId && (id.StartsWith("attachment_", StringComparison.Ordinal) ||
+            if (!ChatResourceUri.TryParseArtifactRevision(reference, out owner, out id, out revision)) return false;
+            if (string.IsNullOrWhiteSpace(session?.DocumentAuthorityId))
+                return !string.IsNullOrWhiteSpace(session?.WorkspaceId) && owner == session.WorkspaceId &&
+                    id.StartsWith("plan_doc_", StringComparison.Ordinal);
+            return owner == session.DocumentAuthorityId && (id.StartsWith("attachment_", StringComparison.Ordinal) ||
                     id.StartsWith("plan_doc_", StringComparison.Ordinal) || HtmlWorkspaceIdentity.LogicalId(id) != null ||
                     id.StartsWith("artifact_", StringComparison.Ordinal));
         }

@@ -4,27 +4,27 @@ using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
 using RNAssistant.Core.Models;
 using RNAssistant.Core.Tools;
-using RNAssistant.Office.Services;
+using RNAssistant.Core.Services;
 
-namespace RNAssistant.Office.Tools
+namespace RNAssistant.Core.Tools
 {
-    internal static class PlanDocumentToolCatalog
+    public static class PlanDocumentToolCatalog
     {
-        internal const string SaveToolId = "common.plan_doc_save";
-        internal const string RestoreToolId = "common.plan_doc_restore";
-        internal const string DeleteToolId = "common.plan_doc_delete";
+        public const string SaveToolId = "common.plan_doc_save";
+        public const string RestoreToolId = "common.plan_doc_restore";
+        public const string DeleteToolId = "common.plan_doc_delete";
 
-        internal static bool Owns(string toolId)
+        public static bool Owns(string toolId)
         {
             return string.Equals(toolId, SaveToolId, StringComparison.Ordinal) ||
                 string.Equals(toolId, RestoreToolId, StringComparison.Ordinal) ||
                 string.Equals(toolId, DeleteToolId, StringComparison.Ordinal);
         }
 
-        internal static IEnumerable<ToolCatalogEntry> GetTools()
+        public static IEnumerable<ToolCatalogEntry> GetTools()
         {
             yield return Projection(SaveToolId,
-                "Plan document: Save a complete document-owned Markdown plan. Update the selected plan, or set startNew=true to create an independent plan for a different task without removing the previous one.",
+                "Plan document: Save a complete Markdown plan. Update the selected plan, or set startNew=true to create an independent plan for a different task without removing the previous one.",
                 SaveSchema(), "plan_doc_save", 0, true);
             yield return Projection(RestoreToolId,
                 "Plan document: On explicit request, restore one user-visible historical version as a new exactly guarded linear head without modifying history.",
@@ -37,14 +37,18 @@ namespace RNAssistant.Office.Tools
         private static ToolCatalogEntry Projection(string id, string description,
             string schema, string name, int riskLevel, bool agentAllowed = false)
         {
-            return ControllerToolCatalogEntry.CreateTypedProjection(
-                new ToolDescriptor(id, description, schema),
-                new ToolPolicy(ToolEffect.Write, ToolVerification.Tool,
-                    false, false, agentAllowed ? new[] { "agent", "plan" } : new[] { "plan" }, riskLevel),
-                name: name, scope: "session", mutatesLocalState: true);
+            var policy = new ToolPolicy(ToolEffect.Write, ToolVerification.Tool,
+                false, false, agentAllowed ? new[] { "agent", "plan" } : new[] { "plan" }, riskLevel);
+            return new ToolCatalogEntry
+            {
+                Id = id, Host = "Common", Name = name, Description = description,
+                ArgumentSchemaJson = schema, BuiltIn = true, Enabled = true, Scope = "session",
+                AgentCanRun = true, MutatesLocalState = true, RiskLevel = riskLevel,
+                Policy = policy, Binding = PlanDocumentToolHandler.BindingFor(id)
+            };
         }
 
-        internal static string SchemaFor(string toolId)
+        public static string SchemaFor(string toolId)
         {
             if (string.Equals(toolId, SaveToolId, StringComparison.Ordinal))
                 return SaveSchema();

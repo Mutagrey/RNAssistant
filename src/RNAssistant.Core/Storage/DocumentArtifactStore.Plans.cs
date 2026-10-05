@@ -11,6 +11,20 @@ namespace RNAssistant.Core.Storage
 {
     public sealed partial class DocumentArtifactStore
     {
+        public static ResourceAuthorityScopeId PlanScope(ChatSession session)
+        {
+            if (!string.IsNullOrWhiteSpace(session?.DocumentAuthorityId)) return Scope(session);
+            if (!string.IsNullOrWhiteSpace(session?.WorkspaceId)) return new ResourceAuthorityScopeId("workspace", session.WorkspaceId);
+            throw new InvalidOperationException("A bound document or workspace identity is required for Plan access.");
+        }
+
+        private static ChatArtifact PlanSnapshot(ChatSession session, string id, int revision)
+        {
+            var artifact = new ChatArtifact { Id = id, Revision = revision, Kind = ChatArtifactKinds.PlanDocument };
+            AssignOwner(artifact, PlanScope(session));
+            return artifact;
+        }
+
         private const string PlanRecordView = "artifact-plan-record";
 
         // The snapshot id is runtime-generated; recovery never guesses a title,
@@ -46,13 +60,12 @@ namespace RNAssistant.Core.Storage
             if (marker < 0 || end <= marker + 2 || !int.TryParse(artifactId.Substring(marker + 2, end - marker - 2), out revision))
                 throw new InvalidDataException("The selected Plan identity is invalid.");
             ParsePlanSnapshotId(artifactId, revision);
-            return ChatResourceUri.CreateArtifactRevision(session, new ChatArtifact
-                { Id = artifactId, Revision = revision, DocumentAuthorityId = Scope(session).Id });
+            return ChatResourceUri.CreateArtifactRevision(session, PlanSnapshot(session, artifactId, revision));
         }
 
         public static ResourceIdentity PlanIdentity(ChatSession session, string planId)
         {
-            var scope = Scope(session);
+            var scope = PlanScope(session);
             if (string.IsNullOrWhiteSpace(planId) || !planId.StartsWith("plan_doc_", StringComparison.Ordinal))
                 throw new InvalidDataException("A logical Plan identity is required.");
             return new ResourceIdentity(ResourceUri.Create("state", scope.Kind, scope.Id, planId));
@@ -71,7 +84,7 @@ namespace RNAssistant.Core.Storage
         public IReadOnlyList<ResourceMutationReadBack> RetainPlan(ChatSession session, string planId, ChatArtifact artifact, string mutationAttemptId, string operationKey,
             bool removed, ResourceRef restoredFrom = null)
         {
-            var scope = Scope(session);
+            var scope = PlanScope(session);
             var identity = PlanIdentity(session, planId);
             if (string.IsNullOrWhiteSpace(mutationAttemptId) || string.IsNullOrWhiteSpace(operationKey)) throw new InvalidDataException("The prepared Plan attempt is required.");
             if (artifact?.Kind != ChatArtifactKinds.PlanDocument || string.IsNullOrWhiteSpace(artifact.Id) || artifact.Revision < 1 ||
@@ -85,7 +98,9 @@ namespace RNAssistant.Core.Storage
                 logicalRestore = LogicalRevisionForSnapshot(session, identity, restoredFrom);
             }
             var retained = RetainRecord(session, artifact, artifact.InlineText ?? string.Empty,
-                PlanRecordView, "application/vnd.rnassistant.artifact-plan+json", mutationAttemptId, operationKey, restoredFrom);
+                PlanRecordView, "application/vnd.rnassistant.artifact-plan+json", mutationAttemptId, operationKey, restoredFrom, ownerScope: scope);
+            if (_payloads.ReadText(retained.Payload.ToBlobReference()) != (artifact.InlineText ?? string.Empty))
+                throw new InvalidDataException("The retained Plan body failed exact read-back.");
             var exact = retained.Revision;
             var link = PayloadRef.FromBlob(_payloads.StoreText(JsonConvert.SerializeObject(exact), "application/json"));
             return new[] {
@@ -99,7 +114,7 @@ namespace RNAssistant.Core.Storage
 
         public ResourceRef CurrentPlan(ChatSession session, string planId)
         {
-            var scope = Scope(session);
+            var scope = PlanScope(session);
             var head = _authority.GetHead(scope, PlanIdentity(session, planId));
             if (head == null) return null;
             if (head.Knowledge != HeadKnowledge.Known)
@@ -113,7 +128,7 @@ namespace RNAssistant.Core.Storage
 
         public IReadOnlyList<ChatArtifact> PlanHistory(ChatSession session, string planId, bool includeBodies = true)
         {
-            var scope = Scope(session);
+            var scope = PlanScope(session);
             var result = new List<ChatArtifact>();
             var current = CurrentPlan(session, planId);
             if (current == null) return result;
@@ -131,7 +146,7 @@ namespace RNAssistant.Core.Storage
                     break;
                 }
                 if (string.IsNullOrEmpty(item.ParentArtifactId)) throw new InvalidDataException("Missing Plan parent.");
-                var parent = new ChatArtifact { Id = item.ParentArtifactId, Revision = item.Revision - 1, DocumentAuthorityId = scope.Id };
+                var parent = PlanSnapshot(session, item.ParentArtifactId, item.Revision - 1);
                 item = ReadPlan(session, ChatResourceUri.CreateArtifactRevision(session, parent), includeBodies);
             }
             return result.OrderBy(value => value.Revision).ToArray();
@@ -139,7 +154,7 @@ namespace RNAssistant.Core.Storage
 
         public ResourceRef FindPlanOperation(ChatSession session, string operationKey)
         {
-            var scope = Scope(session);
+            var scope = PlanScope(session);
             var head = _authority.GetHead(scope, PlanOperationIdentity(session, operationKey));
             if (head == null) return null;
             if (head.Knowledge != HeadKnowledge.Known) throw new InvalidDataException("The Plan operation receipt is unavailable; reconcile without replay.");
@@ -156,7 +171,7 @@ namespace RNAssistant.Core.Storage
 
         private static ResourceIdentity PlanOperationIdentity(ChatSession session, string operationKey)
         {
-            var scope = Scope(session);
+            var scope = PlanScope(session);
             if (string.IsNullOrWhiteSpace(operationKey)) throw new InvalidDataException("A stable runtime Plan operation key is required.");
             return new ResourceIdentity(ResourceUri.Create("state", scope.Kind, scope.Id, "plan-operation-" + operationKey));
         }
@@ -164,7 +179,7 @@ namespace RNAssistant.Core.Storage
         private ChatArtifact ReadPlan(ChatSession session, ResourceRef reference, bool includeBody)
         {
             if (!IsPlan(session, reference)) throw new InvalidDataException("The Plan belongs to another document.");
-            return ReadRecordSnapshot(session, reference, PlanRecordView, ChatArtifactKinds.PlanDocument, includeBody);
+            return ReadRecordSnapshot(session, reference, PlanRecordView, ChatArtifactKinds.PlanDocument, includeBody, PlanScope(session));
         }
     }
 }

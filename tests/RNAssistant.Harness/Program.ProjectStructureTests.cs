@@ -702,13 +702,17 @@ namespace RNAssistant.Harness
                     "UserQuestionToolExecutor.cs")),
                 "questions_ask must use its shared native handler without an Office duplicate or controller executor");
             AssertTrue(
-                File.Exists(Path.Combine(officeRoot, "Tools",
+                File.Exists(Path.Combine(coreRoot, "Tools",
                     "PlanDocumentToolCatalog.cs")) &&
-                File.Exists(Path.Combine(officeRoot, "Tools",
+                File.Exists(Path.Combine(coreRoot, "Tools",
                     "PlanDocumentToolHandler.cs")) &&
+                File.Exists(Path.Combine(coreRoot, "Services", "PlanDocumentService.cs")) &&
+                File.Exists(Path.Combine(officeRoot, "Tools", "OfficePlanDocumentToolHandler.cs")) &&
+                !File.Exists(Path.Combine(officeRoot, "Services", "PlanDocumentService.cs")) &&
+                !File.Exists(Path.Combine(officeRoot, "Tools", "PlanDocumentToolHandler.cs")) &&
                 !File.Exists(Path.Combine(officeRoot, "Tools",
                     "PlanDocumentToolExecutor.cs")),
-                "plan_doc tools must use exact native handlers without a controller executor");
+                "plan_doc tools share their service and native handler while Office keeps its document gate");
             AssertTrue(
                 File.Exists(Path.Combine(root, "src", "RNAssistant.Core", "Tools",
                     "TaskListToolCatalog.cs")) &&

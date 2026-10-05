@@ -1,5 +1,42 @@
 # Stabilization progress
 
+Shared CLI Markdown Plan slice (2026-10-05): Plan mode exposes save/restore/delete;
+Agent exposes save. Core `PlanDocumentService`, catalog/handler and
+`PlanDocumentPublication` now serve both hosts. Office-only implementations are
+removed; Office retains its DocumentAccessGate wrapper. The existing artifact
+store supports explicit workspace ownership for Plan records only, without a
+fabricated document identity. Owner: conversation/planning runtime.
+
+Workspace Plans retain exact Markdown, immutable metadata and linear history in
+existing CAS/authority. A prepared mutation publishes snapshot, logical head and
+operation receipt after exact body read-back, then persists chat links/selection.
+No second writer, store or loop. Plans are service artifacts, not mounted `.md`
+files; file-backed authoring remains M6 scope. Save/restore/delete and read-only
+file policy do not contribute to file-write acceptance.
+
+CLI `common.resources_find/read type=plan` supports bounded discovery (100 heads,
+50 results), exact unique title/current selection and explicit historical versions.
+Incomplete discovery cannot prove title uniqueness. Current reads select their
+exact revision and depend on the logical head; historical reads do not change
+selection. Shared frozen compilation invalidates old current reads after updates.
+`inspect.plan` / required `RUNTIME_CONTEXT.active_plan` expose metadata only.
+Same-workspace chats share the owner; stale saves reject before dispatch and
+another workspace cannot read the Plan. Prepared attempts are abandoned, published
+attempts recover only the journal link, and uncertain effects become unknown without
+replay. Explicit uncertain Plan/Task List reconciliation is still open.
+
+Checks: CLI build clean; Plan mode 3/3, native Plan 3/3, shared document Plan 2/2,
+artifact working set 3/3, dependency direction 2/2. CLI scripted HTTP: Plan 2/2
+(native tool and user roles), Task List 2/2, modes/questions 3/3, selectors 1/1.
+Plan checks cover exact whitespace, restart, current/historical evidence, competing
+chat writes, frozen selection within read batches, duplicate titles, restore/tombstone,
+isolated ownership, publication recovery and no replay/file-write credit. New/moved old-style project includes
+were checked directly. The known SDK-unaware all-source guard still fails (187
+reported entries); its existing BACKLOG item remains open. Harness build retains
+two existing PDF CA1416 warnings. These are host-neutral/scripted checks, not new
+real-model or Windows/Office qualification. Full M4/M5 remain open; next scope is
+§11 accepted-input idempotency and snapshot/event reconnection semantics.
+
 Shared CLI Task List slice (2026-10-05): Plan and Agent now expose
 `common.task_list_set` through Core's existing domain service, catalog and handler;
 the Office-only copies are removed. Core `TaskListPublication` owns logical
@@ -24,7 +61,7 @@ filter 4/5: the existing Office conversation-port assertion flags 13 unchanged
 ChatStore calls, also present verbatim in `cf662c60`; recorded separately in BACKLOG.
 Harness build retains two existing PDF CA1416 warnings. This is host-neutral and
 scripted evidence; no new real-model or Windows/Office qualification was performed.
-Markdown Plan with actual workspace authority is next; full M4/M5 remain open.
+Markdown Plan with actual workspace authority was completed by the slice above; full M4/M5 remain open.
 
 Clean-memory CLI evaluation (2026-10-05): the previous CSV runner log, matched to
 its last HTTP request timestamp, recorded 8013.399 MiB of retained prompt cache
@@ -1107,30 +1144,26 @@ boundary, not a functional CSV score. Scripted HTTP tests confirmed both CLI
 transport modes and saved metadata. The existing v6 parser correctly rejected
 these outputs; no permissive JSON repair or separate agent loop was added.
 
-Next concrete slice (2026-10-05): CLI Markdown Plan documents through existing
-publication/mutation owners and actual workspace authority, then remaining §11 UX.
-Conversation-owned Task Lists now work in CLI Plan/Agent through shared Core owners.
-The existing DocumentArtifactStore Plan path requires document authority; do not
-invent an Office document identity to reuse it. The fixed narrow question task
-passes read → question → explicit answer → fresh read → done. The unchanged CSV
-rerun after schema/selector corrections still times out with failed chart evidence
-and 2/3 final reads; its correctly blocked no-change retry is not a new guard defect.
-Keep task/checks/bounds fixed and declare each changed factor in further comparisons.
-Modes, typed answer/restart handling, published skills and frozen skill context
-are implemented.
-M5 still needs autonomous fixed CSV
-creation with current final reads and then the unchanged feature follow-up, plus
-remaining E-FILE/E-RESUME/E-CONTEXT/E-CAPABILITY evidence. Keep the task, checks
-and bounds fixed when comparing model/endpoint profiles, and record actual skill
-selection: the newest Gemma CSV run again skipped both available skills and timed out.
-Latest-pair retention, typed read recovery, frozen read-progress metadata and final
-authority refresh are implemented; the quality/completion gap is still open.
-M4's first useful result is achieved, not its entire §11 scope.
-Raw/binary
-views, general preview UI and common Office/file dispatch remain open §8.1/M5–M7
-scope. Scripted runtime checks do not close real-model acceptance. M6–M11 have not
-started. The document-owned HTML writer remains active only for its old Office
-flow; no CLI file is dual-written.
+Next concrete slice (2026-10-05): complete the §11 application request boundary:
+accepted-input idempotency (duplicate SubmitInput returns the accepted receipt),
+state snapshot with a canonical event high-water marker, and reconnect/resync
+without replaying mutations. Owner: conversation application services. Then close
+remaining CLI UX and bounded continuation evidence against the same kernel.
+Modes, typed answer/restart handling, published skills, frozen context, Task Lists
+and workspace-owned Markdown Plans are implemented with the evidence limits above.
+Explicit reconciliation of uncertain planning mutations remains open.
+
+M4's first useful real-model/file result is achieved; its complete §11 surface is
+not closed. M5 still needs autonomous fixed CSV creation with current final reads
+and the unchanged feature follow-up, plus remaining E-FILE/E-RESUME/E-CONTEXT/
+E-CAPABILITY evidence. The latest controlled memory runs recorded normal pressure
+and no new swap-out, but still ended with failing checks at iteration/time limits;
+the follow-up was not run. Keep task/checks/bounds fixed and declare each changed
+factor in further model comparisons. Scripted runtime checks do not close that gap.
+Raw/binary views, general preview UI and common Office/file dispatch remain open
+§8.1/M5–M7 scope. File authoring cutover M6 and M7–M11 have not started. Existing
+Office document authoring remains active; CLI Plans use service artifacts pending
+the explicit M6 file-backed transition. No CLI source file is dual-written.
 
 ## Current operating status — 2026-09-30
 

@@ -426,7 +426,7 @@ namespace RNAssistant.Office.Services
             try
             {
                 var snapshot = _authority.CaptureMany(new[] { scope }).Get(scope);
-                var impacts = RNAssistant.Office.Tools.PlanDocumentToolCatalog.Owns(context.Call.Name)
+                var impacts = RNAssistant.Core.Tools.PlanDocumentToolCatalog.Owns(context.Call.Name)
                     ? PreparePlan(context, arguments)
                     : RNAssistant.Office.Tools.MarkdownDocumentToolCatalog.Owns(context.Call.Name)
                         ? MarkdownDocumentService.PreparePublication(_session, context, preparedStateJson,
@@ -445,7 +445,7 @@ namespace RNAssistant.Office.Services
                     _attempts[attempt.AttemptId] = attempt; _leases[attempt.AttemptId] = lease;
                     if (HtmlWorkspacePublication.Owns(context.Call.Name))
                         _documentOperationKeys[attempt.AttemptId] = HtmlWorkspacePublication.OperationKey(_session, context);
-                    if (RNAssistant.Office.Tools.PlanDocumentToolCatalog.Owns(context.Call.Name))
+                    if (RNAssistant.Core.Tools.PlanDocumentToolCatalog.Owns(context.Call.Name))
                         _documentOperationKeys[attempt.AttemptId] = PlanDocumentService.CreationId(_session, context);
                 }
                 return attempt.AttemptId;
@@ -460,51 +460,8 @@ namespace RNAssistant.Office.Services
         }
 
         private IReadOnlyList<ResourceImpact> PreparePlan(ToolExecutionContext context, IDictionary<string, object> arguments)
-        {
-            try { return PrepareDocumentPlan(context, arguments); }
-            catch (System.IO.InvalidDataException ex)
-            { throw new ToolMutationPreparationException("plan_snapshot_unavailable", ex.Message); }
-        }
-
-        private IReadOnlyList<ResourceImpact> PrepareDocumentPlan(ToolExecutionContext context, IDictionary<string, object> arguments)
-        {
-            var owner = new DocumentArtifactStore(_authority.Store, _authority.Revisions, _payloads);
-            if (owner.FindPlanOperation(_session, PlanDocumentService.CreationId(_session, context)) != null)
-                throw new ToolMutationPreparationException("plan_attempt_already_published", "This Plan operation is already published; recover its exact resource without replaying the mutation.");
-            var candidates = (_session.Artifacts ?? new List<ChatArtifact>()).Where(item => item != null && item.Id == _session.ActivePlanDocumentArtifactId).Take(2).ToArray();
-            if (candidates.Length > 1) throw new ToolMutationPreparationException("plan_active_revision_invalid", "The selected Plan projection is ambiguous; reload its exact document snapshot.");
-            var selected = candidates.SingleOrDefault();
-            string planId;
-            var startNew = context.Call.Name == RNAssistant.Office.Tools.PlanDocumentToolCatalog.SaveToolId &&
-                RNAssistant.Office.Tools.ToolArgumentReader.Boolean(arguments, "startNew", false);
-            if (string.IsNullOrWhiteSpace(_session.ActivePlanDocumentArtifactId) || startNew)
-            {
-                if (context.Call.Name != RNAssistant.Office.Tools.PlanDocumentToolCatalog.SaveToolId)
-                    throw new ToolMutationPreparationException("plan_not_found", "Select a document Plan before restoring or removing it.");
-                planId = PlanDocumentService.CreationId(_session, context);
-                if (owner.CurrentPlan(_session, planId) != null)
-                    throw new ToolMutationPreparationException("plan_attempt_already_published", "This Plan creation attempt is already published; recover its exact resource without repeating the mutation.");
-            }
-            else
-            {
-                if (selected == null || selected.DocumentAuthorityId != _session.DocumentAuthorityId)
-                    throw new ToolMutationPreparationException("plan_active_revision_invalid", "The selected Plan is not document-owned or is unavailable; start a new Plan explicitly. Old chats are not migrated.");
-                planId = PlanDocumentService.PlanId(selected);
-                var current = owner.CurrentPlan(_session, planId);
-                var expected = ChatResourceUri.CreateArtifactRevision(_session, selected);
-                if (current == null || current.Uri != expected.Uri || current.Revision != expected.Revision)
-                    throw new ToolMutationPreparationException("stale_plan_revision", "The selected Plan changed in another chat. Read and select its current revision before editing; the stale write was not dispatched.");
-                var history = owner.PlanHistory(_session, planId, false).ToList();
-                var bodyVersion = context.Call.Name == RNAssistant.Office.Tools.PlanDocumentToolCatalog.RestoreToolId
-                    ? RNAssistant.Office.Tools.ToolArgumentReader.Int32(arguments, "version") : selected.Revision;
-                for (var index = 0; index < history.Count; index++)
-                    if (history[index].Revision == bodyVersion)
-                        history[index] = owner.Read(_session, ChatResourceUri.CreateArtifactRevision(_session, history[index]));
-                _session.Artifacts.RemoveAll(item => PlanDocumentService.PlanId(item) == planId);
-                _session.Artifacts.AddRange(history);
-            }
-            return new[] { new ResourceImpact(DocumentArtifactStore.PlanIdentity(_session, planId), ResourceImpactRelation.Exact) };
-        }
+        { return PlanDocumentPublication.Prepare(_session, context, arguments,
+            new DocumentArtifactStore(_authority.Store, _authority.Revisions, _payloads)); }
 
         public ResourceAuthorityCommit Complete(string attemptId, ToolExecutionRecord record, string preparedStateJson = null)
         {
@@ -530,20 +487,8 @@ namespace RNAssistant.Office.Services
                         readBack.AddRange(MarkdownDocumentService.ReadBack(_session, attempt, record, preparedStateJson,
                             new DocumentArtifactStore(_authority.Store, _authority.Revisions, _payloads), _payloads));
                     else if (record.Evidence?.Effect == ToolEffectEvidence.VerifiedChange)
-                    {
-                        var planId = ResourceUri.Parse(attempt.Target.Uri).Segments.Last();
-                        var artifact = (_session.Artifacts ?? new List<ChatArtifact>())
-                            .Where(item => PlanDocumentService.PlanId(item) == planId).OrderByDescending(item => item.Revision).FirstOrDefault();
-                        ResourceRef restoredFrom = null;
-                        if (attempt.Operation == RNAssistant.Office.Tools.PlanDocumentToolCatalog.RestoreToolId)
-                        {
-                            var sourceId = (string)Newtonsoft.Json.Linq.JObject.Parse(artifact.MetadataJson)["restoredFromArtifactId"];
-                            restoredFrom = ChatResourceUri.CreateArtifactRevision(_session, _session.Artifacts.Single(item => item.Id == sourceId));
-                        }
-                        readBack.AddRange(new DocumentArtifactStore(_authority.Store, _authority.Revisions, _payloads)
-                            .RetainPlan(_session, planId, artifact, attempt.AttemptId, documentOperationKey,
-                                PlanDocumentService.IsTombstone(artifact), restoredFrom));
-                    }
+                        readBack.AddRange(PlanDocumentPublication.Retain(_session, attempt, documentOperationKey,
+                            new DocumentArtifactStore(_authority.Store, _authority.Revisions, _payloads)));
                     ResourceAuthorityCommit publication = null;
                     for (var retry = 0; retry < 8; retry++)
                     {
@@ -616,6 +561,8 @@ namespace RNAssistant.Office.Services
             ResourceMutationJournal journal, MutationAttempt attempt, ToolExecutionRecord record,
             IReadOnlyList<ResourceMutationReadBack> capturedReadBack = null)
         {
+            if (PlanDocumentToolCatalog.Owns(attempt.Operation))
+                return PlanDocumentPublication.Publish(authority.Store, authority.Revisions, journal, attempt, record, capturedReadBack);
             if (TaskListToolCatalog.Owns(attempt.Operation))
                 return TaskListPublication.Publish(authority.Store, authority.Revisions, journal, attempt, record,
                     capturedReadBack?.SingleOrDefault(item => item.Identity.Equals(attempt.Target)));

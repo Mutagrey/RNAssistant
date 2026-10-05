@@ -205,7 +205,6 @@
     <Compile Include="Services\ToolResultPresentationService.cs" />
     <Compile Include="Services\ArtifactPdfViewerService.cs" />
     <Compile Include="Services\ArtifactViewerService.cs" />
-    <Compile Include="Services\PlanDocumentService.cs" />
     <Compile Include="Services\ChatCloneService.cs" />
     <Compile Include="Services\ChatResourceReferenceService.cs" />
     <Compile Include="Services\ChatResourcePromptIndex.cs" />
@@ -359,10 +358,9 @@
     <Compile Include="Tools\HtmlWorkspaceToolService.Source.cs" />
     <Compile Include="Services\LocalHtmlAssetLibraryService.cs" />
     <Compile Include="Tools\DocumentTaskListToolHandler.cs" />
-    <Compile Include="Tools\PlanDocumentToolCatalog.cs" />
     <Compile Include="Tools\MarkdownDocumentToolCatalog.cs" />
     <Compile Include="Tools\MarkdownDocumentToolHandler.cs" />
-    <Compile Include="Tools\PlanDocumentToolHandler.cs" />
+    <Compile Include="Tools\OfficePlanDocumentToolHandler.cs" />
     <Compile Include="Tools\ToolSafetyPolicy.cs" />
     <Compile Include="Tools\VbaToolExecutor.cs" />
     <Compile Include="Tools\VbaToolExecutor.Native.cs" />
