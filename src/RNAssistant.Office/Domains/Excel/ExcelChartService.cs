@@ -600,22 +600,44 @@ namespace RNAssistant.Office.Domains.Excel
                 throw InvalidBackend(
                     "Excel chart backend returned an invalid collection snapshot.");
             var identities = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-            foreach (var chart in snapshot.Charts)
+            for (var index = 0; index < snapshot.Charts.Count; index++)
             {
-                if (chart == null || string.IsNullOrWhiteSpace(chart.Sheet) ||
-                    string.IsNullOrWhiteSpace(chart.Name) ||
-                    string.IsNullOrWhiteSpace(chart.ChartType) ||
-                    chart.Series == null || chart.Series.Count > MaxChartSeries ||
-                    chart.Series.Any(series => series == null) ||
-                    double.IsNaN(chart.Left) || double.IsInfinity(chart.Left) ||
-                    double.IsNaN(chart.Top) || double.IsInfinity(chart.Top) ||
-                    double.IsNaN(chart.Width) || double.IsInfinity(chart.Width) ||
-                    double.IsNaN(chart.Height) || double.IsInfinity(chart.Height) ||
-                    chart.Width <= 0 || chart.Height <= 0 ||
-                    !identities.Add(chart.Sheet + "\n" + chart.Name))
-                    throw InvalidBackend(
-                        "Excel chart backend returned invalid chart state.");
+                var chart = snapshot.Charts[index];
+                if (chart == null)
+                    throw InvalidChartState(index, "chart");
+                if (string.IsNullOrWhiteSpace(chart.Sheet))
+                    throw InvalidChartState(index, "sheet");
+                if (string.IsNullOrWhiteSpace(chart.Name))
+                    throw InvalidChartState(index, "name");
+                if (string.IsNullOrWhiteSpace(chart.ChartType))
+                    throw InvalidChartState(index, "chartType");
+                if (chart.Series == null || chart.Series.Count > MaxChartSeries ||
+                    chart.Series.Any(series => series == null))
+                    throw InvalidChartState(index, "series");
+                if (double.IsNaN(chart.Left) || double.IsInfinity(chart.Left))
+                    throw InvalidChartState(index, "left");
+                if (double.IsNaN(chart.Top) || double.IsInfinity(chart.Top))
+                    throw InvalidChartState(index, "top");
+                if (double.IsNaN(chart.Width) || double.IsInfinity(chart.Width) ||
+                    chart.Width <= 0)
+                    throw InvalidChartState(index, "width");
+                if (double.IsNaN(chart.Height) || double.IsInfinity(chart.Height) ||
+                    chart.Height <= 0)
+                    throw InvalidChartState(index, "height");
+                if (!identities.Add(chart.Sheet + "\n" + chart.Name))
+                    throw InvalidChartState(index, "duplicateIdentity");
             }
+        }
+
+        private static ExcelChartBackendException InvalidChartState(
+            int index, string field)
+        {
+            return new ExcelChartBackendException(
+                "Excel chart backend returned invalid chart state at index " +
+                    index + " (" + field + ").",
+                "excel_chart_snapshot_invalid", false,
+                new JObject { ["chartIndex"] = index, ["field"] = field }
+                    .ToString(Formatting.None));
         }
 
         private static ExcelChartOutcome Success(

@@ -191,6 +191,39 @@ namespace RNAssistant.Harness
             WithTempExecutor(FakeOfficeAdapter.ForHost("Excel"),
                 delegate(OfficeToolExecutor executor, FakeOfficeAdapter adapter)
                 {
+                    adapter.AddExcelChartForTest(
+                        "Data", "A1:B4", "BrokenGeometry");
+                    adapter.ExcelChartReadTransform = snapshot =>
+                    {
+                        snapshot.Charts[0].Width = double.NaN;
+                        return snapshot;
+                    };
+                    var runtime = ExcelChartRuntime(executor, adapter);
+                    var call = new ToolCall(
+                        "chart-invalid-snapshot", ExcelChartToolIds.UpsertChart,
+                        "{\"sheet\":\"Data\",\"chartName\":\"BrokenGeometry\"}");
+                    var invalid = ExecuteNativeConfirmed(
+                        runtime, call, runtime.Describe(call));
+                    AssertEqual(ToolExecutionOutcome.Error, invalid.Outcome,
+                        "invalid chart snapshot fails before dispatch");
+                    AssertEqual(ToolDispatchEvidence.NotDispatched,
+                        invalid.Evidence.Dispatch,
+                        "invalid chart snapshot has no mutation effect");
+                    var diagnostic = JObject.Parse(invalid.Result.DataJson);
+                    AssertEqual("excel_chart_snapshot_invalid",
+                        (string)diagnostic["code"],
+                        "invalid chart retains its error code");
+                    AssertEqual("width",
+                        (string)diagnostic.SelectToken("details.field"),
+                        "invalid chart identifies the rejected field");
+                    AssertEqual(0,
+                        (int)diagnostic.SelectToken("details.chartIndex"),
+                        "invalid chart identifies the item index");
+                });
+
+            WithTempExecutor(FakeOfficeAdapter.ForHost("Excel"),
+                delegate(OfficeToolExecutor executor, FakeOfficeAdapter adapter)
+                {
                     var runtime = ExcelChartRuntime(executor, adapter);
                     adapter.BeforeExcelBackendCall = operation =>
                     {
