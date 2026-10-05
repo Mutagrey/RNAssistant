@@ -110,6 +110,9 @@ namespace RNAssistant.Office
                 _resourceAuthorityStore,
                 session => _conversationStore.Save(session),
                 attachment => _attachmentStore.ReadBytes(attachment));
+            _toolExecutor.MigratePromptSchemaIfNeeded(
+                published => _settingsService.HasPromptMigrationEvidence(published),
+                () => _settingsService.Save(_settingsService.Load()));
             _resourceData = new ResourceDataPlaneService(_toolExecutor.ResourceGateway, ResourceOwnerIsActive);
             _resourceDataRouter = new ResourceDataRouter(_resourceData);
             _uploadedHtmlResources = new UploadedHtmlResourceService(_toolExecutor.ResourceGateway);

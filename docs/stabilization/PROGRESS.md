@@ -1,5 +1,19 @@
 # Stabilization progress
 
+Desktop run/settings repair (2026-10-05): screenshots show three no-call Agent
+`continue` decisions ending in `no_tool_progress`; the v6 kernel correctly
+stops that loop, while default schema 38 guidance allowed repeated preparation
+narration. Schema 39 now directs the next needed tool call or terminal decision
+after skill/schema loading. A separate reproducible settings fault came from
+normalized prompt settings diverging from the committed prompt publication:
+`saveSettings` rejected the stale head. Startup now archives old prompt text,
+persists the current schema and commits the current prompt publication through
+the existing mutation/read-back barrier, including the case where another save
+already persisted the new marker. Focused host-neutral migration, dispatch,
+kernel and web projection checks pass. Windows/Office/WebView2 behavior remains
+unqualified; the cross-document panel switch guard still rejects switching
+while a run is active.
+
 Latest workspace selector slice (2026-10-05): CLI resource schemas now use closed
 file/skill alternatives in the prompt, structured output and exact runtime gate.
 File reads cannot carry `referencePath`; skill discovery cannot carry `directory`.

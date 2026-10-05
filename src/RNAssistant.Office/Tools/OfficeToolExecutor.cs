@@ -623,6 +623,31 @@ namespace RNAssistant.Office.Tools
             SaveSettingsPublication(intended, () => save(intended), expected);
         }
 
+        internal void MigratePromptSchemaIfNeeded(Func<AppSettings, bool> pending, Action saveMigrated)
+        {
+            if (pending == null || saveMigrated == null) return;
+            var expected = _catalogPublication.Current("prompts");
+            var published = PromptSettingsService.ApplyPublishedTemplates(new AppSettings(), _catalogPublication.Read(expected));
+            if (!pending(published)) return;
+            var live = _promptSettingsService.CaptureTemplates();
+            if (live == _catalogPublication.Read(expected))
+            {
+                saveMigrated();
+                return;
+            }
+            MutateCatalog("common.prompts_schema_migrate", new Dictionary<string, object> {
+                ["expectedRevision"] = expected.Revision,
+                ["templates"] = JsonConvert.DeserializeObject<Dictionary<string, string>>(live) },
+                () => { saveMigrated(); return ToolEffectEvidence.VerifiedChange; },
+                value => true, value => value, () =>
+                {
+                    var current = _catalogPublication.Current("prompts");
+                    if (!pending(published) || current.Revision != expected.Revision ||
+                        _promptSettingsService.CaptureTemplates() != live)
+                        throw new ResourceRequestException("Prompt schema migration changed before publication.", "RESOURCE_REVISION_CHANGED", false);
+                });
+        }
+
         private void SaveSettingsPublication(AppSettings intended, Action save, ResourceRef expected)
         {
             // The durable intent contains only editable templates, never credentials/settings secrets.

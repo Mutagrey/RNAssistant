@@ -29,6 +29,45 @@ namespace RNAssistant.Core.Storage
             return Normalize(_json.Load(_paths.SettingsFile, new AppSettings()));
         }
 
+        public bool HasPendingPromptSchemaMigration()
+        {
+            var stored = _json.Load<AppSettings>(_paths.SettingsFile, null);
+            return stored != null && stored.AgentPromptSchemaVersion != AppSettings.CurrentAgentPromptSchemaVersion;
+        }
+
+        public bool HasPromptMigrationEvidence(AppSettings published)
+        {
+            if (HasPendingPromptSchemaMigration()) return true;
+            if (published == null) return false;
+            var current = Load();
+            if (SamePromptBodies(published, current) || !SamePromptBodies(current, new AppSettings())) return false;
+            var directory = Path.Combine(_paths.Root, "prompt-backups");
+            if (!Directory.Exists(directory)) return false;
+            foreach (var path in Directory.GetFiles(directory, "prompts-v*.json"))
+            {
+                var backup = _json.Load<PromptMigrationBackup>(path, null);
+                if (backup != null && backup.AgentPromptSchemaVersion != AppSettings.CurrentAgentPromptSchemaVersion &&
+                    SamePromptBodies(published, backup)) return true;
+            }
+            return false;
+        }
+
+        private static bool SamePromptBodies(AppSettings left, AppSettings right)
+        {
+            return left.SystemPrompt == right.SystemPrompt && left.AgentToolsPrompt == right.AgentToolsPrompt &&
+                left.AgentSkillsPrompt == right.AgentSkillsPrompt && left.ChatSystemPrompt == right.ChatSystemPrompt &&
+                left.PlanSystemPrompt == right.PlanSystemPrompt && left.ContextCompactionPrompt == right.ContextCompactionPrompt &&
+                left.ChatTitlePrompt == right.ChatTitlePrompt && left.AttachmentAnalysisPrompt == right.AttachmentAnalysisPrompt;
+        }
+
+        private static bool SamePromptBodies(AppSettings left, PromptMigrationBackup right)
+        {
+            return left.SystemPrompt == right.SystemPrompt && left.AgentToolsPrompt == right.AgentToolsPrompt &&
+                left.AgentSkillsPrompt == right.AgentSkillsPrompt && left.ChatSystemPrompt == right.ChatSystemPrompt &&
+                left.PlanSystemPrompt == right.PlanSystemPrompt && left.ContextCompactionPrompt == right.ContextCompactionPrompt &&
+                left.ChatTitlePrompt == right.ChatTitlePrompt && left.AttachmentAnalysisPrompt == right.AttachmentAnalysisPrompt;
+        }
+
         public void Save(AppSettings settings)
         {
             Save(settings, null, null);

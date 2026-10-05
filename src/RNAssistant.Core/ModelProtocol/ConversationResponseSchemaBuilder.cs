@@ -39,7 +39,7 @@ namespace RNAssistant.Core.ModelProtocol
                 ["type"] = "object",
                 ["description"] = "V6: message/action/tool_calls. Runtime owns IDs, lifecycle and effects. " +
                     "Only independent local reads may be batched. Return every mutation and other call alone; wait for the result before proposing another mutation. " +
-                    "Use tool for calls, continue for a short no-call progress step, done only for a completed answer, blocked or needs_input for unfinished work. Action is not execution evidence.",
+                    "Use tool for calls, continue only for a new concrete finding or decision when no call or terminal decision is ready, done only for a completed answer, blocked or needs_input for unfinished work. Never repeat an intention to start. Action is not execution evidence.",
                 ["properties"] = new JObject
                 {
                     ["message"] = new JObject { ["type"] = "string", ["description"] = "User-facing message. On tool turns, briefly connect a relevant observed finding, the purpose of the actual upcoming calls, and what their results will clarify. Omit parts not yet known; do not invent findings or narrate private reasoning. Wording never determines execution success; runtime owns status and effects." },
@@ -47,7 +47,7 @@ namespace RNAssistant.Core.ModelProtocol
                     {
                         ["type"] = "string",
                         ["enum"] = new JArray("tool", "continue", "done", "blocked", "needs_input"),
-                        ["description"] = "tool requires calls; continue is a no-call progress step; done/blocked/needs_input end the turn with no calls."
+                        ["description"] = "tool requires calls; continue is a new finding or decision without calls, never a repeated intention; done/blocked/needs_input end the turn with no calls."
                     },
                     ["tool_calls"] = new JObject
                     {

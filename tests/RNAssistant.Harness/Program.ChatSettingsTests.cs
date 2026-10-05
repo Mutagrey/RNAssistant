@@ -362,6 +362,10 @@ namespace RNAssistant.Harness
 
         private static void SettingsMigratePromptsOnSchemaChange()
         {
+            AssertContains(AgentPromptDefaults.GeneralInstructions, "A loaded skill does not admit any tool named in its text",
+                "Agent loads executable schemas after skill guidance");
+            AssertContains(AgentPromptDefaults.GeneralInstructions, "Never use it to announce intended work, repeat an earlier message",
+                "Agent cannot treat repeated promises as progress");
             foreach (var version in new[] { 0, AppSettings.CurrentAgentPromptSchemaVersion - 1,
                 AppSettings.CurrentAgentPromptSchemaVersion, AppSettings.CurrentAgentPromptSchemaVersion + 1 })
             {
@@ -415,6 +419,80 @@ namespace RNAssistant.Harness
                     "previous helper text is recoverable");
                 service.Save(saved);
                 AssertEqual(1, Directory.GetFiles(directory, "*.json").Length, "later saves do not duplicate the backup");
+            });
+
+            WithTempPaths(paths =>
+            {
+                var legacy = new AppSettings { AgentPromptSchemaVersion = AppSettings.CurrentAgentPromptSchemaVersion - 1,
+                    SystemPrompt = "OLD_PUBLISHED_PROMPT" };
+                new JsonFileStore().Save(paths.SettingsFile, legacy);
+                var adapter = FakeOfficeAdapter.ForHost("Excel");
+                var oldSource = new AppSettings { SystemPrompt = legacy.SystemPrompt };
+                var oldExecutor = new OfficeToolExecutor(adapter, new VbaJournalStore(paths),
+                    new SkillStore(paths), new ToolStore(paths), () => oldSource, value => oldSource = value, paths);
+                var oldPublication = oldExecutor.GetPromptLibrary().Publication;
+                var service = new SettingsService(paths);
+                var executor = new OfficeToolExecutor(adapter, new VbaJournalStore(paths),
+                    new SkillStore(paths), new ToolStore(paths), service.Load, service.Save, paths);
+                AssertTrue(service.HasPendingPromptSchemaMigration(), "old durable schema requires publication migration");
+                var request = new RNAssistant.Office.Contracts.SaveSettingsPayload {
+                    Settings = RNAssistant.Office.Contracts.SettingsControlsDto.From(service.Load()),
+                    ExpectedPromptPublication = oldPublication };
+                AssertEqual("RESOURCE_REVISION_CHANGED", RuntimeThrows<ResourceRequestException>(() =>
+                    executor.SaveSettingsControls(service.Load(), request, null, service.Save)).ErrorCode,
+                    "old publication and normalized settings reproduce the save refusal");
+                executor.MigratePromptSchemaIfNeeded(service.HasPromptMigrationEvidence,
+                    () => service.Save(service.Load()));
+                AssertTrue(!service.HasPendingPromptSchemaMigration(), "migration persists the current prompt schema");
+                var published = executor.GetPromptLibrary().Publication;
+                AssertTrue(published.Revision != oldPublication.Revision, "new built-in prompts replace the stale publication");
+                AssertEqual(new AppSettings().SystemPrompt,
+                    PromptSettingsService.ApplyPublishedTemplates(service.Load(), executor.CaptureCatalogs().PromptsJson).SystemPrompt,
+                    "the model receives current instructions after migration");
+                request.ExpectedPromptPublication = published;
+                executor.SaveSettingsControls(service.Load(), request, null, service.Save);
+                AssertEqual(1, Directory.GetFiles(Path.Combine(paths.Root, "prompt-backups"), "*.json").Length,
+                    "previous custom prompt is archived once");
+            });
+
+            WithTempPaths(paths =>
+            {
+                var legacy = new AppSettings { AgentPromptSchemaVersion = AppSettings.CurrentAgentPromptSchemaVersion - 1,
+                    SystemPrompt = "OLD_PUBLISHED_PROMPT" };
+                new JsonFileStore().Save(paths.SettingsFile, legacy);
+                var adapter = FakeOfficeAdapter.ForHost("Excel");
+                var oldSource = new AppSettings { SystemPrompt = legacy.SystemPrompt };
+                var oldExecutor = new OfficeToolExecutor(adapter, new VbaJournalStore(paths),
+                    new SkillStore(paths), new ToolStore(paths), () => oldSource, value => oldSource = value, paths);
+                var oldPublication = oldExecutor.GetPromptLibrary().Publication;
+                var service = new SettingsService(paths);
+                service.Save(service.Load());
+                AssertTrue(!service.HasPendingPromptSchemaMigration(), "unrelated settings save persisted the new marker");
+                var executor = new OfficeToolExecutor(adapter, new VbaJournalStore(paths),
+                    new SkillStore(paths), new ToolStore(paths), service.Load, service.Save, paths);
+                executor.MigratePromptSchemaIfNeeded(service.HasPromptMigrationEvidence,
+                    () => service.Save(service.Load()));
+                AssertTrue(executor.GetPromptLibrary().Publication.Revision != oldPublication.Revision,
+                    "archived old prompts identify a stale publication after the marker was already saved");
+                AssertEqual(1, Directory.GetFiles(Path.Combine(paths.Root, "prompt-backups"), "*.json").Length,
+                    "publication repair does not create a second backup");
+            });
+
+            WithTempPaths(paths =>
+            {
+                var adapter = FakeOfficeAdapter.ForHost("Excel");
+                var oldSource = new AppSettings { SystemPrompt = "UNRELATED_PUBLISHED_PROMPT" };
+                var oldExecutor = new OfficeToolExecutor(adapter, new VbaJournalStore(paths),
+                    new SkillStore(paths), new ToolStore(paths), () => oldSource, value => oldSource = value, paths);
+                var oldPublication = oldExecutor.GetPromptLibrary().Publication;
+                var service = new SettingsService(paths);
+                service.Save(new AppSettings());
+                var executor = new OfficeToolExecutor(adapter, new VbaJournalStore(paths),
+                    new SkillStore(paths), new ToolStore(paths), service.Load, service.Save, paths);
+                executor.MigratePromptSchemaIfNeeded(service.HasPromptMigrationEvidence,
+                    () => service.Save(service.Load()));
+                AssertEqual(oldPublication.Revision, executor.GetPromptLibrary().Publication.Revision,
+                    "unrelated publication drift without migration evidence is not silently overwritten");
             });
         }
 
