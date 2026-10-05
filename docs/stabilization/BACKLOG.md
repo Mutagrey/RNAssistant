@@ -53,6 +53,17 @@ does not establish that every historical loop has the same cause or that receipt
 roles must change. A new reproducible case should compare durable outcomes,
 compiled messages and actual wire requests before changing history or prompts.
 
+The retained CSV-check slice adds a fresh reproduction: Gemma 12B created only
+`index.html` and repeated create until the fixed 16-iteration bound. All 16 wire
+requests were captured; 120 cumulative checks found no missing or duplicated
+terminal results, including the first verified write and target-exists/repeat
+errors. It never reached CSV verification; the feature turn was not run. No
+protocol rejection or token-cap hit occurred; swap usage/out count increased.
+Keep cause open: this evidence does not prove either a weak model or a context
+projection/renderer defect. Use the recorded frozen request for a controlled
+continuation comparison before changing roles, prompts or budgets. See current
+[progress](PROGRESS.md) for exact profile, hashes, metrics and temporary evidence.
+
 ## SDK project source-inclusion audit — 2026-10-05
 
 Owner: harness / project structure. `harness: production projects include all

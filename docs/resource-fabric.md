@@ -84,10 +84,10 @@ open the writable workspace through that server. The tool records exact file
 evidence alongside its result; CLI acceptance refreshes those files and requires
 the evidence to remain current at completion. Dependency discovery currently
 covers HTML script/stylesheet references, CSS imports/URLs and static JS imports;
-dynamic asset discovery, binary assets, behavior beyond the 1.5-second post-load
-observation window, functional assertions within `web.verify` and the remaining
-preview/viewer routing remain open. The separate CSV
-grader provides behavioral checks for its specific task, not generic UI acceptance.
+dynamic asset discovery, binary assets, behavior beyond the observation window
+and configured functional checks, and remaining preview/viewer routing stay open.
+CSV assertions use this same verifier and retained manifest; the separate Node
+grader and its workspace reader have been removed.
 
 ### Retained web project snapshots — 2026-10-05
 
@@ -114,7 +114,9 @@ cancellation records `NotRun`. Reading/listing records never retries browser wor
 An optional immutable `WebFunctionalChecks` contract is accepted before the run
 and included in the pending record. Terminal records retain ordered typed step
 results bound to the same snapshot. A passing result requires every requested step
-to pass, with observed text matching each `TextEquals` expectation. Smoke-only,
+to pass, with observed values matching the operation's typed expectation. Core
+rechecks text/numbers, ordered CSV rows and proportional bar geometry at publication.
+Smoke-only,
 missing/renamed assertions and checks for another entry cannot satisfy that contract.
 `verifications` returns at most 20 records in resource order with total, generation
 and next offset; concurrent new publications require refreshing the listing.
@@ -138,9 +140,19 @@ semantic check results; the contract digest and resource references stay in runt
 `verification --id <id>` reads a recorded result without running a browser.
 The saved digest describes captured routes/bytes; the manifest's own CAS payload
 also pins entry and exact revisions. General UI preview routing, binary assets,
-screenshots/browser traces and CSV upload/export assertions remain open M5–M7 work.
-The current development verifier supports bounded pointer clicks and exact text
-assertions in one captured document, without arbitrary evaluator code or navigation.
+screenshots/browser traces remain open M5–M7 work.
+The development verifier supports bounded pointer clicks, text/numeric assertions,
+input/select changes, CSV uploads, table/export comparison and SVG bar geometry
+in one captured document, without caller-supplied evaluator code or navigation.
+Inputs/expected outputs are frozen values from a caller-selected contract outside
+the writable project. Fixture files and actual downloads exist only in a fresh
+browser profile, removed on teardown. Uploads use a file input; export checks click
+the real button and observe one completed browser download, named by its browser
+UUID rather than a page-suggested path. Permission to download is scoped to that
+assertion. The download must come from the snapshot origin or a blob/data CSV,
+fit 64 KiB and 700 decoded characters, and match the expected ordered CSV cells.
+Malformed/truncated/extra data fails. No project file is opened by this check runner;
+all source materialization remains with the filesystem provider and file owner.
 
 One resource identity, shared current-state authority, immutable historical evidence
 and one model-context compiler serve model reads, HTML and viewers. Reading content

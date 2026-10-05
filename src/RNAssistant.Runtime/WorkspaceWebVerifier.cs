@@ -41,7 +41,7 @@ namespace RNAssistant.Runtime
 
     // Development-only browser verifier. The browser receives an immutable,
     // bounded snapshot over loopback, never the writable workspace directory.
-    public sealed class WorkspaceWebVerifier
+    public sealed partial class WorkspaceWebVerifier
     {
         private const int MaximumFiles = WorkspaceWebSnapshotStore.MaximumFiles;
         private const int MaximumSnapshotBytes = WorkspaceWebSnapshotStore.MaximumSnapshotBytes;
@@ -537,6 +537,8 @@ namespace RNAssistant.Runtime
                         await devtools.CommandAsync("Network.enable", null, cancellationToken).ConfigureAwait(false);
                         await devtools.CommandAsync("Network.setBypassServiceWorker",
                             new JObject { ["bypass"] = true }, cancellationToken).ConfigureAwait(false);
+                        await devtools.CommandAsync("Browser.setDownloadBehavior",
+                            new JObject { ["behavior"] = "deny", ["eventsEnabled"] = true }, cancellationToken).ConfigureAwait(false);
                         var navigate = await devtools.CommandAsync("Page.navigate",
                             new JObject { ["url"] = page.AbsoluteUri }, cancellationToken).ConfigureAwait(false);
                         if ((string)navigate["result"]?["errorText"] != null)
@@ -553,7 +555,7 @@ namespace RNAssistant.Runtime
                             using (var deadline = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken))
                             {
                                 deadline.CancelAfter(TimeSpan.FromSeconds(30));
-                                await RunChecksAsync(devtools, checks, checkResults, deadline.Token).ConfigureAwait(false);
+                                await RunChecksAsync(devtools, checks, checkResults, profile, deadline.Token).ConfigureAwait(false);
                             }
                         }
                         await devtools.ObserveForAsync(TimeSpan.FromMilliseconds(1500),
@@ -582,68 +584,6 @@ namespace RNAssistant.Runtime
             return errors.Take(16).ToArray();
         }
 
-        private sealed class BrowserCheckTarget
-        {
-            public string Error { get; set; }
-            public string Text { get; set; }
-            public double X { get; set; }
-            public double Y { get; set; }
-        }
-
-        private static async Task RunChecksAsync(DevToolsClient devtools, WebFunctionalChecks checks,
-            List<WebCheckResult> results, CancellationToken token)
-        {
-            for (var index = 0; index < checks.Steps.Count; index++)
-            {
-                var step = checks.Steps[index];
-                var elapsed = Stopwatch.StartNew();
-                BrowserCheckTarget target;
-                do
-                {
-                    // Only selector data is interpolated, as a JSON string. The caller
-                    // cannot supply executable code. Pointer events come from CDP.
-                    var expression = "(() => { try { const nodes = document.querySelectorAll(" +
-                        JsonConvert.SerializeObject(step.Selector) + "); " +
-                        "if (nodes.length !== 1) return {Error:'Selector must match exactly one element; found ' + nodes.length}; " +
-                        "const el = nodes[0]; if (!(el instanceof HTMLElement)) return {Error:'Target must be an HTML element'}; " +
-                        "el.scrollIntoView({block:'center',inline:'center'}); const r = el.getBoundingClientRect(); " +
-                        "const s = getComputedStyle(el); if (!r.width || !r.height || s.visibility !== 'visible' || Number(s.opacity) === 0) " +
-                        "return {Error:'Target is not visible'}; " +
-                        (step.Operation == WebCheckOperation.Click
-                            ? "if (el.matches(':disabled') || el.getAttribute('aria-disabled') === 'true') return {Error:'Target is disabled'}; " +
-                              "const x=r.x+r.width/2,y=r.y+r.height/2,hit=document.elementFromPoint(x,y); " +
-                              "if (!hit || !(hit===el || el.contains(hit))) return {Error:'Target is obscured'}; return {X:x,Y:y}; "
-                            : "return {Text:(el.textContent || '').trim().slice(0,700)}; ") +
-                        "} catch (e) { return {Error:String(e).slice(0,700)}; } })()";
-                    var evaluated = await devtools.CommandAsync("Runtime.evaluate", new JObject {
-                        ["expression"] = expression, ["returnByValue"] = true, ["timeout"] = 1000 }, token).ConfigureAwait(false);
-                    var evaluation = evaluated["result"];
-                    target = evaluation?["exceptionDetails"] == null
-                        ? evaluation?["result"]?["value"]?.ToObject<BrowserCheckTarget>() : null;
-                    if (target == null) throw new IOException("Browser could not evaluate the functional check target.");
-                    if (devtools.Errors.Count != 0)
-                        target.Error = "Browser reported an error during functional checks.";
-                    if (target.Error != null || step.Operation == WebCheckOperation.Click || target.Text == step.Expected) break;
-                    await Task.Delay(50, token).ConfigureAwait(false);
-                } while (elapsed.Elapsed < TimeSpan.FromSeconds(2));
-
-                var error = target.Error;
-                if (error == null && step.Operation == WebCheckOperation.TextEquals && target.Text != step.Expected)
-                    error = "Text differs from expected: " + step.Expected;
-                if (error != null)
-                {
-                    results[index] = new WebCheckResult(step.Id, WebCheckStatus.Failed, target.Text, error);
-                    return; // Later steps have not run and cannot become successful.
-                }
-                if (step.Operation == WebCheckOperation.Click)
-                    foreach (var type in new[] { "mousePressed", "mouseReleased" })
-                        await devtools.CommandAsync("Input.dispatchMouseEvent", new JObject {
-                            ["type"] = type, ["x"] = target.X, ["y"] = target.Y,
-                            ["button"] = "left", ["clickCount"] = 1 }, token).ConfigureAwait(false);
-                results[index] = new WebCheckResult(step.Id, WebCheckStatus.Passed, target.Text);
-            }
-        }
-
         private sealed class DevToolsClient : IDisposable
         {
             private readonly ClientWebSocket _socket = new ClientWebSocket();
@@ -653,6 +593,7 @@ namespace RNAssistant.Runtime
             private int _id;
             private bool _loaded;
             public bool RejectNavigation { get; set; }
+            public List<BrowserDownload> Downloads { get; } = new List<BrowserDownload>();
             public IReadOnlyList<string> Errors { get { return _errors.Distinct(StringComparer.Ordinal).Take(16).ToArray(); } }
             public DevToolsClient(string url, Uri origin) { _url = url; _origin = origin; }
             public Task ConnectAsync(CancellationToken token)
@@ -727,6 +668,26 @@ namespace RNAssistant.Runtime
                 var method = (string)message["method"];
                 var args = message["params"];
                 if (method == "Page.loadEventFired") _loaded = true;
+                else if (method == "Browser.downloadWillBegin")
+                {
+                    var id = (string)args?["guid"];
+                    var url = (string)args?["url"] ?? "";
+                    if (!Guid.TryParse(id, out _) || Downloads.Count >= 8)
+                        throw new IOException("Invalid or excessive browser downloads.");
+                    Downloads.Add(new BrowserDownload { Id = id, AllowedSource =
+                        url.StartsWith("blob:" + _origin.AbsoluteUri, StringComparison.Ordinal) ||
+                        url.StartsWith(_origin.AbsoluteUri, StringComparison.Ordinal) ||
+                        url.StartsWith("data:text/csv", StringComparison.OrdinalIgnoreCase) });
+                }
+                else if (method == "Browser.downloadProgress")
+                {
+                    var download = Downloads.FirstOrDefault(item => item.Id == (string)args?["guid"]);
+                    if (download != null)
+                    {
+                        download.State = (string)args?["state"];
+                        download.Bytes = (double?)args?["receivedBytes"] ?? 0;
+                    }
+                }
                 else if (method == "Page.frameNavigated" && RejectNavigation && args?["frame"]?["parentId"] == null)
                     _errors.Add("Functional checks navigated away from the captured document.");
                 else if (method == "Runtime.exceptionThrown")

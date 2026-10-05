@@ -70,17 +70,22 @@ exception. Success requires fixing it, rereading the current source and passing
 all nine steps against a retained snapshot. Preserve the CLI trace, verification
 records, model config/digest, exact fixture/checks and code/binary revision.
 
-The independent M5 CSV dashboard task is `tests/cli/csv_dashboard_task.md`.
-Run `node tests/cli/csv_dashboard_grader.mjs <workspace>` on the resulting files,
-then send `tests/cli/csv_dashboard_followup.md` in the same session and use
-`--require-threshold` after that feature turn. The grader uses
-only Node built-ins and a fresh local Chromium profile. It uploads private CSV
-fixtures, checks actual table/filter/sort/total/chart/export/error behavior and
-external requests against a bounded read-only snapshot. Its JSON result is
-independent acceptance evidence; the current `web.verify` functional contract
-covers clicks/text, not CSV upload, table/export or chart assertions yet.
-Run `python3 tests/cli/csv_dashboard_grader_smoke.py` to confirm a working fixture
-passes and broken JavaScript, missing browser and blocked outbound requests do not.
+The M5 CSV dashboard task is `tests/cli/csv_dashboard_task.md`. Run it with
+`--web-checks tests/cli/csv_dashboard_checks.json --expect-files index.html,styles.css,app.js
+--min-reads 3 --min-writes 3`. Continue with `tests/cli/csv_dashboard_followup.md`
+in the same session, `--web-checks tests/cli/csv_dashboard_followup_checks.json`
+and `--min-reads 3 --min-writes 1`. The base contract has 24 steps; the follow-up
+has 31, including upload, both sort directions, category/amount filtering,
+totals, proportional bars, actual CSV downloads and invalid/empty input handling.
+The same `web.verify` owns snapshot capture, browser checks and durable results;
+there is no longer a separate Node grader or direct project reader. Checks and
+fixtures remain outside the writable workspace. A standalone `verify --web-checks`
+can inspect results without a model, but cannot retroactively pass an agent run.
+Run `python3 -B tests/cli/csv_dashboard_checks_smoke.py`: wrong export, equal-size
+bars, lexical sorting, broken JS, missing browser and outbound attempts fail;
+retained historical verification still passes after live files change/disappear.
+`workspace snapshots:` also rejects forged passing CSV/table/chart results at
+publication and checks exact result reopening with the original expectations.
 
 After building the CLI, run `python3 tests/cli/interrupted_run_smoke.py` for a
 process-killed model wait. It checks durable interrupted/unknown acceptance,
@@ -426,7 +431,7 @@ old argument. Existing Outlook tool cases also check bound-STA/closed-window sea
 | Pure AgentKernel / typed run evidence | `Program.AgentKernelTests.cs` | `kernel:` |
 | Immutable run/UI projection and ordering | `Program.RunViewStateTests.cs`, replay/recovery in `Program.SessionEventStoreTests.cs`, boundary check in `Program.ProjectStructureTests.cs`; static UI in `tests/web/run-view-state.test.js` | `run view:`, `kernel replay:`, `kernel recovery:`, `architecture:` |
 | Physical/layer dependency direction | `Program.ProjectStructureTests.cs`: Core.Agent, ModelProtocol, VBA, resources (including no legacy execution adapter in the resource catalog), OfficeHosts and UI boundaries, dependency identifier-prefix regression, explicit VBA marker contract, root application façade, plus production source inclusion | `architecture: mandatory dependency direction`, `harness: production projects include all source files` |
-| Local native portable publishing | `Program.ProjectStructureTests.cs`; exact owned-destination cleanup and full current-file copy | `build: portable publish` |
+| Local native portable publishing | `Program.ProjectStructureTests.cs`; manifest-scoped replacement, `lib` layout and architecture destinations | `build: portable publish` |
 | Office model-context owner | `Program.ToolDiscoveryTests.cs`; result/projection coverage in `Program.AgentSafetyTests.cs` | `agent: model session`, `agent: bounds oversized`, `context inspector:`, `protocol context:` |
 | ModelProtocol boundary | `Program.AgentSafetyTests.cs`; media integration in `Program.ResourceGatewayTests.cs` | `model protocol:`, `agent: hydrates artifact media`, `causal trace:` |
 | Active wire / compatibility probes | `Program.AgentSafetyTests.cs` | `model compatibility:`, `agent: supports selectable`, `model protocol:` |

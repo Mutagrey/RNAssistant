@@ -163,14 +163,27 @@ it, and `done` requires its saved passing result plus current source evidence.
 Keep independent checks outside the agent's writable workspace. The tool cannot
 replace them or choose another entry. The saved result retains the complete
 contract and each step's `Passed` / `Failed` / `NotRun` outcome and observed text.
-Current operations are real pointer `Click` and `TextEquals` (trimmed text content,
-exactly one visible HTML element). Bounds: 32 KiB contract, 32 steps including a
-text assertion, two seconds for text to match and 30 seconds for the sequence.
+Operations include real pointer `Click`, `TextEquals`, case-insensitive literal
+`TextContains`, `NumberEquals`, `SelectValue`, `InputValue`, `UploadCsv`,
+`TableEquals`, `BarChartEquals` and `DownloadCsvEquals`. Each selects one visible
+HTML/SVG element. `expected` contains a scalar value, CSV text for table/upload/export,
+or comma-separated positive amounts for the SVG bar chart. Table/export comparison
+preserves row/column order and accepts equivalent numeric cells and CSV quoting.
+Fixtures/downloads stay in the verifier's private temporary profile. Bounds: 32 KiB
+contract, 32 steps including an assertion, 512 characters per expectation, 700 per
+observed value, 12 rows/eight columns, two seconds for assertions to match, five
+seconds for a download and 30 seconds for the sequence.
 The first failed step stops the sequence; later steps remain `NotRun`.
 See [counter checks](tests/cli/counter_checks.json) for the JSON format. To exercise
 real verify/repair, copy `tests/cli/fixtures/counter-repair/` into a disposable
 workspace and use `tests/cli/counter_repair_task.md` with these checks. Page-load
 success alone deliberately misses the fixture's click-time exception.
+
+The CSV dashboard task uses [base checks](tests/cli/csv_dashboard_checks.json)
+(24 steps), then [follow-up checks](tests/cli/csv_dashboard_followup_checks.json)
+(31 steps) for the minimum-amount filter. Pass the corresponding file to
+`run --web-checks`; `verify --web-checks` also works without a model. Both use the
+same retained manifest, saved result and freshness checks at accepted completion.
 
 After an interrupted file mutation, `recover --workspace
 <path> --path <relative-path>` reports the exact recovery outcome without replaying

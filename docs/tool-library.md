@@ -54,12 +54,18 @@ never writes the source. Without a browser the tool is absent from the catalog;
 the explicit CLI `verify` command returns `not-run`.
 After document load it observes browser events for 1.5 seconds; later timers and
 long-running interactions require a functional check. CLI `--web-checks` supplies
-a frozen typed contract (up to 32 `Click` / `TextEquals` steps) before the run.
+a frozen typed contract (up to 32 steps) before the run.
 `web.verify` executes these checks on the exact snapshot and reports each observed
 result; its model arguments remain only `entryPath`. The model cannot change the
 checks, select another entry or substitute a smoke result for functional acceptance.
-Steps require a unique visible HTML target; clicks use browser pointer events and
-reject disabled/obscured targets. The first failure leaves later steps `NotRun`.
+Steps require a unique visible HTML/SVG target (an empty table section may have
+zero height); clicks use browser pointer events and reject disabled/obscured targets.
+`TextEquals`, `TextContains` and `NumberEquals` assert bounded text. `SelectValue`
+and `InputValue` set an enabled control and dispatch its change/input events.
+`UploadCsv` uses a private fixture file, `TableEquals` checks ordered cell values,
+`BarChartEquals` checks positive proportional SVG bar lengths in table order, and
+`DownloadCsvEquals` checks a real completed export. Expected CSV strings are data,
+never paths or executable code. The first failure leaves later steps `NotRun`.
 Checks and results are retained with the snapshot in the verification resource.
 Both passed and failed browser evaluations carry their captured source evidence.
 After an edit, the compiler marks the old failure as historical while retaining

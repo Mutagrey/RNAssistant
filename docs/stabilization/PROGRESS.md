@@ -1,6 +1,62 @@
 # Stabilization progress
 
-M5 diagnostic freshness / continuation fix (2026-10-05): the failed counter-repair
+M4/M5 status and retained CSV checks (2026-10-05): **neither full stage is closed**.
+M4's first useful independent real-LLM/file result is achieved. Its remaining
+scope includes non-agent mode filtering, actual skills (the CLI currently supplies
+an empty catalog), structured questions/answers and complete §11 acceptance.
+Delete/move approvals, cancel and explicit recovery/resume already exist; the
+stage table no longer lists these as wholly missing or asks for automatic replay.
+M5 has one successful real counter repair; autonomous CSV creation + a feature
+follow-up, long-task compaction/resume evidence, general preview and browser
+screenshots/traces remain open. M6–M11 have not started: file-based authored
+HTML/MD/JSON migration → common UI API/viewer → external Office provider → dedicated
+Excel launcher → VBA/export/import → final cleanup/performance/qualification.
+
+This slice adds immutable CSV operations to the existing functional contract and
+browser verifier: upload, input/select, ordered table cells, numeric totals,
+proportional positive SVG bars and actual downloaded CSV. Base/follow-up contracts
+have 24/31 steps. Fixtures and downloads stay in the private browser profile;
+source bytes still come only from the retained filesystem provider manifest.
+Core rechecks observed values before publishing Passed. All results use the same
+authority/CAS records and existing freshness-bound run acceptance. The separate
+Node CSV grader/browser/physical workspace reader was removed and its consumers
+switched. Owners: Core check contract/publication, Runtime browser checks, CLI
+admission; no new loop, source store or project reader.
+
+Final CLI build: zero warnings/errors. Focused `workspace snapshots:` passed 2/2,
+including rejection of forged passing table/total/chart/export values. Real
+Chromium passed all 31 fixture steps and historical replay after live files were
+changed/deleted. Wrong exports, lexical sorting, decorative equal-size bars,
+duplicate downloads, missing browser, outbound attempts and broken JS are rejected.
+Existing counter functional smoke and scripted production-runtime verify/repair
+checks passed, including frozen admission and stale final-evidence rejection.
+Version-format and diff checks passed. These tests establish runtime behavior;
+they are not autonomous LLM acceptance.
+
+Real Gemma creation attempt: v6 probe passed; `rna-gemma4-12b-32k:latest`, digest
+`cf94f3793da5f501e0a2948b34825db5baceed926438a78551ffaa83f85a4082`, Ollama 0.35.0,
+32K context / 4096 output, system instructions, json_schema, thinking off, one
+request at a time. Bounds were fixed before the new CSV task: 16 iterations /
+24 tool steps. It created only `index.html`, then repeated create. Sixteen requests,
+16 tool calls, one verified write, zero reads/verifications, zero protocol rejection;
+331.90 s, `iteration_limit`, acceptance **failed**. The second feature turn was
+**not run**, since the first did not pass. Failure category: MODEL_ERROR (observed
+repetition; its underlying cause remains unresolved). No repair feedback or limit
+increase was used. HTTP audit: 120 cumulative completed-result presence checks,
+zero missing/duplicate results. Input/output: 46325/7051 cumulative tokens,
+3676/504 maximum per request, below the configured caps. Swap-outs rose from
+900005 to 954405 and swap use from 6954.69 to 7628.69 MiB; memory pressure was
+present, with no reported context/OOM failure. The model was unloaded afterwards.
+
+Temporary local evidence:
+`/var/folders/k9/hr_94nt142x1f43jr6g0wr_00000gp/T/rna-m5-csv-gemma-6x_dj0ux` retains
+task/checks, model config/digest, actual binary/source hashes, HTTP trace/CAS,
+terminal run result, context audit and memory samples. The live attempt never
+reached the browser checks. Windows/Office/WebView2 remain unqualified here.
+Next: isolate creation repetition with this frozen trace, then rerun autonomous
+CSV creation/follow-up; remaining M4 surface and E-* evidence stay explicit.
+
+Historical M5 diagnostic freshness / continuation fix (2026-10-05): the failed counter-repair
 run exposed a reproducible context defect. `web.verify` discarded source evidence
 when the browser failed, CLI refreshed only successful verification dependencies,
 and the common compiler exempted every failed result from source-currentness checks.
@@ -174,8 +230,8 @@ records temporary adapters. This work does not qualify Windows/Office/WebView2.
 | M1 | `ToolRuntime` and exact handler registry moved to Core; `ConversationRunCoordinator` is called by Office and CLI. Net8 Core and Runtime assemblies build with project references and no Office/WebView2/WinForms/fake dependency in CLI. | Focused `tool runtime:` 15/15; CLI dependency search/build. Office project compilation and platform delivery remain open. |
 | M2 | Portable workspace manifest, user-state association, read-only opening, existing ChatStore workspace sessions without document authority, root relocation and copy-ID conflict. File locators retain identity across a known root move. | Focused `workspace:` 2/2. External moves not associated with an opened workspace and mount/Office identity resolution remain open. |
 | M3 | Real UTF-8 files: bounded single-directory discovery/read, create, exact patch/replace, copy from an accepted complete source to a new identity with immutable source provenance, guarded historical restore, recoverable delete to managed workspace trash and explicit restore after deletion. Confirmed `files.move` keeps logical identity, advances revision and relocates the file locator. CAS views, authority heads, mutation journal, read-back, external-edit conflict and non-replay after an interrupted dispatch remain one file-owner path. `recover` distinguishes prepared-only abandonment, an already-published effect and unknown causality after dispatch; it never replays the command. Ordinary reads and writes are blocked while an effect is unresolved. External invalid UTF-8 or oversized text marks the old known head unknown; BOM, CRLF and verified no-change are preserved. | Focused `workspace files:` 7/7. Directory discovery scans at most 5000 entries and returns `truncated` rather than implying a complete result; optional filename search is case-insensitive. Move retains a durable two-path intent; reads of both paths block until an interrupted move is reconciled. A delete verifies absent source plus exact trash preimage before publishing an unavailable head; restore requires that deletion head and creates a new revision. Cross-volume move semantics, trash retention policy, binary/large streaming, full cross-platform path races, directory pagination and the remaining §8.1 provider operations/views remain open. |
-| M4 | Net8 CLI calls one application service for workspace/session open and listing, exact capability catalog, new/continued runs, inspect and explicit file recovery; it supports JSONL output. It uses production `LlmClient` and v6 `ModelProtocolClient`. A live `gemma4:31b:cloud` run through the local Ollama API created `index.html`, `app.js`, `styles.css` as externally visible files, with 3 verified writes and `model_done`. File tools now include copy from an accepted source. Exact read evidence and direct file authority commits enter durable tool records. Prior-turn read results are projected as stale; current-turn reads are refreshed before a model request. A cross-process session lease serializes accepted input and the run; continuation reloads the chat under that lease. The CLI development profile now requests 4096 output tokens and propagates the session's reasoning-off setting as `reasoning_effort=none`. | CLI build, environment/session listing, scripted HTTP protocol smoke and one real-model task passed. External inspection confirmed three files, HTML references/DOM targets and `node --check` of JS. A scripted read/copy turn produced a byte-identical real `index-copy.html`. An earlier `glm-5.3-flash:cloud` attempt returned HTTP 402 and wrote nothing. Focused transport test verifies explicit reasoning-off serialization. The scripted smoke verified stale read projection after external edit without a model-facing `rna://` reference; historical create-call text still appears as past action. The local `qwen3.5:9b` profile and live CLI task were exercised; detailed result and false-completion risk are below. The shared frozen Core `ModelContextCompiler` is connected (2026-10-05; see below). Other interactive questions/approvals, automatic safe resume and full M4 acceptance remain open. |
-| M5 | Development `rna verify` and optional `web.verify` capture bounded exact retained UTF-8 through the filesystem provider, refresh source authority before browser launch, validate discovered static dependencies, serve only captured bytes over loopback to a fresh headless Chromium profile, and report missing assets, console/page exceptions or `not-run`. `--require-web-verify` is a persisted CLI acceptance condition; a passing tool result carries exact file evidence, refreshed and checked against current authority at `done`. Manifests and pending/terminal verification records now live in authority/CAS; CLI reopens historical snapshots and lists saved results after restart. A separate read-only CSV-dashboard grader checks actual UI behavior against private fixtures. | Real Chrome passed a valid 3-file app and a 5-file HTML/CSS/JS import graph; immediate and 650 ms delayed JS errors and missing CSS failed; missing browser removed the model tool and returned `not-run`/exit 4. Scripted agent verify/read/patch/read/verify/done passed; verification before a later patch failed acceptance. The CSV grader passed a known-good fixture on 13 checks and rejected a JS-throwing fixture, missing browser and blocked outbound attempt. A fresh Qwen CSV task falsely returned `done` with no tools; after explicit feedback it wrote three files and passed smoke, but independent functional acceptance failed 3 of 11 assertions. Repair feedback led to no changed file and another false `done`. Autonomous CSV task, behavior after the 1.5-second observation window, binary assets, general preview UI, browser traces/screenshots, autonomous diagnosis and other M5 acceptance remain open. |
+| M4 — first useful result achieved; full scope open | Independent Net8 CLI uses the production LlmClient/v6, shared coordinator → kernel, ToolRuntime, filesystem owner and frozen ModelContextCompiler. Real-model creation of three external files is proven. Sessions, JSONL, exact reads/mutations, delete/move approvals, cancel, explicit recovery and abandoned-run resume are implemented. | CLI currently fixes mode to `agent` and passes an empty SkillCatalogSnapshot. Non-agent mode filtering, actual skill catalog/activation, structured question/answer handling and full §11 acceptance remain open. Explicit resume does not replay effects; “automatic safe resume” is not a remaining permission to add replay. Historical model failures/evidence are below. |
+| M5 — in progress | Optional browser verifier uses bounded exact retained snapshots; pending/terminal records and historical replay use existing authority/CAS. Frozen click/text and CSV functional contracts feed the same model web.verify and freshness-bound final acceptance. The separate Node CSV grader/source reader is retired. | Counter repair passed once with real Gemma 12B. CSV runtime checks cover upload/filter/sort/total/chart/export/error handling; live two-turn CSV acceptance is recorded at the top. General preview UI, screenshots/browser traces, longer compaction/resume E-* evidence and full M5 acceptance remain open. Binary assets/common Office dispatch are still §8.1/M5–M7 scope. |
 
 Historical M3/M4 resource routing slice (2026-10-04, extended below): canonical provider registration and
 URI selection moved from the Office-only registry into Core
@@ -478,7 +534,7 @@ exit 4 before creating a session or calling a model. Browser absence is therefor
 explicit in the CLI capability and acceptance path; broader provider/mode
 capability changes remain open.
 
-M5 independent CSV dashboard check (2026-10-04):
+Historical M5 independent CSV dashboard check (2026-10-04; grader retired by the retained-check slice above):
 `tests/cli/csv_dashboard_task.md` fixes the user-visible controls; the separate
 `csv_dashboard_grader.mjs` captures up to 32 files/four MiB in memory, serves only
 that snapshot to a fresh Chrome profile, uploads private fixture CSVs, and checks
@@ -572,12 +628,16 @@ boundary, not a functional CSV score. Scripted HTTP tests confirmed both CLI
 transport modes and saved metadata. The existing v6 parser correctly rejected
 these outputs; no permissive JSON repair or separate agent loop was added.
 
-Next concrete slice (2026-10-05): M5 CSV dashboard functional grading on retained
-snapshots, then the remaining E-FILE/E-RESUME/E-CONTEXT/E-CAPABILITY evidence for
-that task. The counter verify/repair loop passed one real Gemma run after fixing
+Next concrete slice (2026-10-05): isolate repeated creation using the retained
+CSV run trace, then qualify autonomous creation/follow-up against the integrated
+checks and collect the remaining
+E-FILE/E-RESUME/E-CONTEXT/E-CAPABILITY evidence for that task. The counter
+verify/repair loop passed one real Gemma run after fixing
 historical diagnostic currency; broader repetition cases still need their own
 wire trace. Bounded find/read, one frozen compiler, explicit CLI recovery, durable
-historical snapshot verification and frozen click/text checks are implemented.
+historical snapshot verification and frozen click/text/CSV checks are implemented.
+M4 still needs mode filtering, real skills and structured question/answer handling;
+its first useful result is achieved, not its entire §11 scope.
 Raw/binary
 views, general preview UI and common Office/file dispatch remain open §8.1/M5–M7
 scope. Scripted runtime checks do not close real-model acceptance. M6–M11 have not

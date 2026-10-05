@@ -1,0 +1,147 @@
+{
+  "entryPath": "index.html",
+  "steps": [
+    {
+      "id": "upload",
+      "operation": "UploadCsv",
+      "selector": "#csv-file",
+      "expected": "name,category,amount\nAlpha,A,2\nBeta,B,10\nGamma,A,100\nDelta,B,3\nEpsilon,A,20\n"
+    },
+    {
+      "id": "loaded",
+      "operation": "TableEquals",
+      "selector": "#rows",
+      "expected": "Alpha,A,2\nBeta,B,10\nGamma,A,100\nDelta,B,3\nEpsilon,A,20"
+    },
+    {
+      "id": "category",
+      "operation": "SelectValue",
+      "selector": "#category-filter",
+      "expected": "A"
+    },
+    {
+      "id": "filtered-rows",
+      "operation": "TableEquals",
+      "selector": "#rows",
+      "expected": "Alpha,A,2\nGamma,A,100\nEpsilon,A,20"
+    },
+    {
+      "id": "filtered-total",
+      "operation": "NumberEquals",
+      "selector": "#total",
+      "expected": "122"
+    },
+    {
+      "id": "sort-ascending",
+      "operation": "Click",
+      "selector": "#sort-amount"
+    },
+    {
+      "id": "ascending",
+      "operation": "TableEquals",
+      "selector": "#rows",
+      "expected": "Alpha,A,2\nEpsilon,A,20\nGamma,A,100"
+    },
+    {
+      "id": "sort-descending",
+      "operation": "Click",
+      "selector": "#sort-amount"
+    },
+    {
+      "id": "descending",
+      "operation": "TableEquals",
+      "selector": "#rows",
+      "expected": "Gamma,A,100\nEpsilon,A,20\nAlpha,A,2"
+    },
+    {
+      "id": "filtered-chart",
+      "operation": "BarChartEquals",
+      "selector": "#chart",
+      "expected": "100,20,2"
+    },
+    {
+      "id": "filtered-export",
+      "operation": "DownloadCsvEquals",
+      "selector": "#export",
+      "expected": "name,category,amount\nGamma,A,100\nEpsilon,A,20\nAlpha,A,2\n"
+    },
+    {
+      "id": "all-categories",
+      "operation": "SelectValue",
+      "selector": "#category-filter",
+      "expected": "all"
+    },
+    {
+      "id": "all-rows",
+      "operation": "TableEquals",
+      "selector": "#rows",
+      "expected": "Gamma,A,100\nEpsilon,A,20\nBeta,B,10\nDelta,B,3\nAlpha,A,2"
+    },
+    {
+      "id": "all-total",
+      "operation": "NumberEquals",
+      "selector": "#total",
+      "expected": "135"
+    },
+    {
+      "id": "all-chart",
+      "operation": "BarChartEquals",
+      "selector": "#chart",
+      "expected": "100,20,10,3,2"
+    },
+    {
+      "id": "all-export",
+      "operation": "DownloadCsvEquals",
+      "selector": "#export",
+      "expected": "name,category,amount\nGamma,A,100\nEpsilon,A,20\nBeta,B,10\nDelta,B,3\nAlpha,A,2\n"
+    },
+    {
+      "id": "invalid-upload",
+      "operation": "UploadCsv",
+      "selector": "#csv-file",
+      "expected": "name,category,amount\nBad,A,not-a-number\n"
+    },
+    {
+      "id": "invalid-message",
+      "operation": "TextContains",
+      "selector": "#status",
+      "expected": "invalid"
+    },
+    {
+      "id": "invalid-rows",
+      "operation": "TableEquals",
+      "selector": "#rows",
+      "expected": ""
+    },
+    {
+      "id": "invalid-total",
+      "operation": "NumberEquals",
+      "selector": "#total",
+      "expected": "0"
+    },
+    {
+      "id": "empty-upload",
+      "operation": "UploadCsv",
+      "selector": "#csv-file",
+      "expected": ""
+    },
+    {
+      "id": "empty-message",
+      "operation": "TextContains",
+      "selector": "#status",
+      "expected": "empty"
+    },
+    {
+      "id": "empty-rows",
+      "operation": "TableEquals",
+      "selector": "#rows",
+      "expected": ""
+    },
+    {
+      "id": "empty-total",
+      "operation": "NumberEquals",
+      "selector": "#total",
+      "expected": "0"
+    }
+  ]
+}

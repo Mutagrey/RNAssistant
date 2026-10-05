@@ -188,6 +188,35 @@ namespace RNAssistant.Harness
                 try { new WebFunctionalChecks("index.html", new[] { new WebCheckStep("only-click", WebCheckOperation.Click, "button") }); }
                 catch (ArgumentException) { rejected = true; }
                 AssertTrue(rejected, "interaction alone is not an assertion");
+
+                var csvSteps = new[] {
+                    new WebCheckStep("table", WebCheckOperation.TableEquals, "tbody", "Alpha,\"A,A\",2\nBeta,B,10"),
+                    new WebCheckStep("total", WebCheckOperation.NumberEquals, "output", "12"),
+                    new WebCheckStep("chart", WebCheckOperation.BarChartEquals, "svg", "2,10"),
+                    new WebCheckStep("export", WebCheckOperation.DownloadCsvEquals, "button", "name,amount\nAlpha,2\nBeta,10")
+                };
+                var csvChecks = new WebFunctionalChecks("index.html", csvSteps);
+                var observed = new[] { "Alpha,\"A,A\",2.00\r\nBeta,B,10\r\n", "12.0", "10,20\n10,100",
+                    "\uFEFFname,amount\r\nAlpha,2\r\nBeta,10\r\n" };
+                var csvRun = store.BeginVerification(workspace, "index.html", false, checks: csvChecks);
+                store.AttachSnapshot(workspace, csvRun, snapshot);
+                for (var index = 0; index < csvSteps.Length; index++)
+                {
+                    var supplied = observed.Select((value, i) => new WebCheckResult(csvSteps[i].Id, WebCheckStatus.Passed,
+                        i == index ? (i == 2 ? "10,20\n10,20" : "wrong") : value)).ToArray();
+                    rejected = false;
+                    try { store.CompleteVerification(workspace, csvRun, WebVerificationState.Passed,
+                        "test-runner", new string[0], new string[0], supplied); }
+                    catch (WorkspaceFileException) { rejected = true; }
+                    AssertTrue(rejected, "CSV assertion cannot publish an unsubstantiated Passed flag: " + csvSteps[index].Id);
+                }
+                store.CompleteVerification(workspace, csvRun, WebVerificationState.Passed, "test-runner", new string[0], new string[0],
+                    observed.Select((value, i) => new WebCheckResult(csvSteps[i].Id, WebCheckStatus.Passed, value)).ToArray());
+                AssertEqual(csvChecks.Sha256, new WorkspaceWebSnapshotStore(paths, files).ReadVerification(workspace,
+                    store.ReadVerification(workspace, csvRun).Reference).Checks.Sha256, "CSV expectations persist through exact result reads");
+                AssertTrue(!csvSteps[0].Accepts("Alpha,\"A,A\",2\nBeta,B,10\nExtra,C,2"), "extra CSV rows fail");
+                AssertTrue(!csvSteps[0].Accepts("Beta,B,10\nAlpha,\"A,A\",2"), "wrong CSV order fails");
+                AssertTrue(!csvSteps[0].Accepts("Alpha,\"A,A\",2\nBeta,\"B,10"), "unterminated CSV quote fails");
             });
         }
     }
