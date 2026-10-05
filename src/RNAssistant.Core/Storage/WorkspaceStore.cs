@@ -83,9 +83,9 @@ namespace RNAssistant.Core.Storage
                 StorageFileSystem.WriteAllTextAtomic(byPath, JsonConvert.SerializeObject(association), Utf8);
                 return new WorkspaceDescriptor
                 {
-                    WorkspaceId = id, Name = name, RootPath = root, ReadOnly = manifest == null,
+                    WorkspaceId = id, Name = name, RootPath = root, ReadOnly = !permitManifestWrite || manifest == null,
                     Mounts = new[] { new WorkspaceMountDescriptor
-                    { Id = "root", Kind = "directory", RootPath = root, ReadOnly = manifest == null } }
+                    { Id = "root", Kind = "directory", RootPath = root, ReadOnly = !permitManifestWrite || manifest == null } }
                 };
             }
         }

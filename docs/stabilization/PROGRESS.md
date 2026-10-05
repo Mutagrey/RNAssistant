@@ -1,5 +1,20 @@
 # Stabilization progress
 
+Latest read-only correction (2026-10-05): skill capability filtering exposed an
+existing permission bug. `--read-only` prevented manifest creation but an existing
+manifest still produced a writable descriptor and advertised all file mutations.
+`WorkspaceStore.Open` now keeps both the descriptor and root mount read-only for
+that open, regardless of manifest presence. Identity is preserved and a later
+explicit writable open still works. Owner: Core workspace admission/file owner.
+
+The CLI capability regression failed before the fix and now passes. The focused
+workspace harness test also verifies that an exact source read cannot authorize a
+replacement through the read-only descriptor and that original bytes are intact.
+The skills/runtime test checks that writable built-ins disappear in this mode.
+CLI build: zero warnings/errors; harness: two existing PDF CA1416 warnings.
+Version-format and diff checks passed. Windows/Office are not qualified. This
+permission fix is a separate slice from the shared skill catalog work in progress.
+
 Latest final-read evidence slice (2026-10-05): Runtime now supplies typed
 `RUNTIME_CONTEXT.readAcceptance` when the accepted task requires file reads.
 It reports current distinct reads, the remaining count and expected paths without

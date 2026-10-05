@@ -62,6 +62,19 @@ namespace RNAssistant.Harness
                 var workspaces = new WorkspaceStore(paths);
                 var root = Path.Combine(paths.Root, "project");
                 var opened = workspaces.Open(root);
+                var protectedOpen = workspaces.Open(root, false, false);
+                AssertTrue(protectedOpen.ReadOnly && protectedOpen.Mounts.Single().ReadOnly,
+                    "an existing manifest cannot override an explicit read-only open");
+                AssertEqual(opened.WorkspaceId, protectedOpen.WorkspaceId, "read-only open preserves workspace identity");
+                var files = new WorkspaceFileService(paths);
+                File.WriteAllText(Path.Combine(root, "protected.txt"), "original");
+                var observed = files.ReadText(protectedOpen, "protected.txt");
+                var writeRejected = false;
+                try { files.ReplaceText(protectedOpen, "protected.txt", observed.Reference, "unwanted"); }
+                catch (WorkspaceFileException error) { writeRejected = error.Code == "read_only_mount"; }
+                AssertTrue(writeRejected, "read-only file owner rejects writes even with exact read evidence");
+                AssertEqual("original", File.ReadAllText(Path.Combine(root, "protected.txt")), "read-only source is intact");
+                AssertTrue(!workspaces.Open(root, false, true).ReadOnly, "read-only permission is per open, not persisted");
                 var copy = Path.Combine(paths.Root, "copy");
                 Directory.CreateDirectory(Path.Combine(copy, ".rnassistant"));
                 File.Copy(Path.Combine(root, ".rnassistant", "workspace.json"),

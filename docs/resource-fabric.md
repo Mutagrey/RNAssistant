@@ -26,6 +26,10 @@ byte length and exact evidence. It enforces the one MiB text bound and rejects
 unpublished revisions and missing/corrupt payloads without a live-file fallback.
 Reading an old revision does not refresh or republish the head; its currentness
 still comes from frozen authority. The
+An explicit CLI `--read-only` open denies file mutations even when the workspace
+already has a manifest. The descriptor and root mount retain that permission for
+the open; workspace identity and later explicitly writable opens are unchanged.
+
 CLI exposes relative paths through `common.resources_find/read`; a workspace-bound
 filesystem provider now uses the shared Core `ResourceProviderRouter<TProvider>`.
 The Office `ResourceGatewayService` also uses this router and retains its authority,
