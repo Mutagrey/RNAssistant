@@ -1416,6 +1416,70 @@ namespace RNAssistant.Harness
                 "empty callable set permits no calls");
         }
 
+        private static void AgentJsonSchemaPreservesNamesAndLiterals()
+        {
+            // Reproduce the real CLI question failure against the schema actually
+            // sent to the provider, then validate the same intent at both gates.
+            var questions = UserQuestionToolCatalog.GetTools().Single();
+            var options = ModelProtocolWire.CreateRequestOptions(AgentResponseModes.JsonSchema, new[] { questions });
+            var request = LlmClient.BuildRequestBody(new AppSettings(), new ChatMessage[0], 4096, options);
+            var argumentsSchema = (JObject)request.SelectToken(
+                "response_format.json_schema.schema.properties.tool_calls.items.anyOf[0].properties.arguments");
+            var valid = JObject.Parse("{\"questions\":[{\"header\":\"Layout\",\"prompt\":\"Choose the interface\",\"selection\":\"single\",\"allowFreeText\":null,\"options\":[" +
+                "{\"label\":\"List\",\"description\":\"Compact rows\",\"recommended\":null}," +
+                "{\"label\":\"Table\",\"description\":\"Comparable columns\",\"recommended\":true}]}]}");
+            string error;
+            AssertTrue(ToolSchemaSupport.ValidateArguments(valid, argumentsSchema, false, out error),
+                "provider schema must allow the required question description: " + error);
+            var runtimeSchema = JObject.Parse(questions.ArgumentSchemaJson);
+            var normalized = (JObject)valid.DeepClone();
+            ToolSchemaSupport.RemoveOptionalNulls(normalized, runtimeSchema);
+            AssertTrue(ToolSchemaSupport.ValidateArguments(normalized, runtimeSchema, true, out error),
+                "the provider-admitted intent must satisfy the runtime schema: " + error);
+            ((JObject)normalized.SelectToken("questions[0].options[0]")).Remove("description");
+            AssertTrue(!ToolSchemaSupport.ValidateArguments(normalized, runtimeSchema, false, out error),
+                "missing descriptions remain invalid; no permissive argument repair");
+
+            // A keyword used as an argument name or inside const/enum/default is
+            // data. None of the structured-output passes may rewrite that data.
+            var literal = JObject.Parse("{\"type\":\"object\",\"description\":\"Keep this value\",\"default\":true}");
+            var payload = new JObject
+            {
+                ["type"] = "object", ["description"] = "Literal domain payload.",
+                ["properties"] = new JObject
+                {
+                    ["type"] = new JObject { ["type"] = "string", ["description"] = "Domain kind." },
+                    ["description"] = new JObject { ["type"] = "string", ["description"] = "Domain prose." },
+                    ["default"] = new JObject { ["type"] = "boolean", ["description"] = "Domain flag." }
+                },
+                ["required"] = new JArray("type", "description", "default"), ["additionalProperties"] = false,
+                ["const"] = literal.DeepClone(), ["enum"] = new JArray(literal.DeepClone()), ["default"] = literal.DeepClone()
+            };
+            var runtime = new JObject
+            {
+                ["type"] = "object", ["properties"] = new JObject { ["payload"] = payload },
+                ["required"] = new JArray("payload"), ["additionalProperties"] = false
+            };
+            var before = runtime.ToString(Formatting.None);
+            AssertTrue(ToolSchemaSupport.TryParse(new ToolCatalogEntry
+                { Id = "fixture.literal", ArgumentSchemaJson = before }, out runtimeSchema, out error),
+                "the literal fixture is a supported runtime schema: " + error);
+            var strict = ToolSchemaSupport.ForStructuredOutput(runtimeSchema);
+            var strictPayload = (JObject)strict.SelectToken("properties.payload");
+            AssertTrue(JToken.DeepEquals(literal, strictPayload["const"]) &&
+                JToken.DeepEquals(literal, strictPayload["enum"][0]), "literal constraints stay byte-for-byte equivalent");
+            AssertTrue(strictPayload["default"] == null && strictPayload["description"] == null,
+                "schema annotations are removed only at schema nodes");
+            AssertTrue(strictPayload.SelectToken("properties.description") != null &&
+                strictPayload.SelectToken("properties.default") != null,
+                "annotation-named arguments survive strict projection");
+            AssertTrue(ToolSchemaSupport.ValidateArguments(new JObject { ["payload"] = literal.DeepClone() }, strict, false, out error),
+                "the literal remains valid under the actual output contract: " + error);
+            AssertEqual(before, runtime.ToString(Formatting.None), "conversion leaves source schema untouched");
+            AssertTrue(JToken.DeepEquals(payload, ToolSchemaSupport.ForPrompt(runtime).SelectToken("properties.payload")),
+                "prompt projection also preserves literal values and annotations");
+        }
+
         private static void AgentJsonSchemaSupportsTypeNamedArguments()
         {
             WithTempExecutor(FakeOfficeAdapter.ForHost("Excel"), delegate(OfficeToolExecutor executor, FakeOfficeAdapter adapter)

@@ -409,6 +409,23 @@ The cutover is atomic per tool family. Resources + Capabilities are switched; un
 another slice switches, its existing contract remains authoritative. No alias,
 dual schema, guessed value or compatibility fallback is added.
 
+### Structured-output schema projection
+
+`ToolSchemaSupport.ForStructuredOutput` derives the provider's strict response
+schema from the same runtime argument contract. Its transformations traverse only
+schema nodes under `properties` values, `items` and `anyOf`. Property names are
+data: an argument named `description`, `default` or `type` must survive. Likewise,
+literal values inside `const`, `enum` and defaults are not nested schemas.
+Optional-null conversion, strict object shaping and alternative normalization
+must preserve those values and leave the source contract unchanged.
+Only schema-node annotations `description` and `default` are removed from the
+structured output; prompt descriptions and runtime defaults keep their owners.
+Required argument names must remain declared in the closed output object.
+The regression uses the actual `common.questions_ask` wire schema: its required
+option `description` is both generatable and checked by the runtime. Missing
+descriptions still fail; parser, format-repair bounds and execution policy remain
+strict. This conversion is shared by Office and CLI, independent of model/result role.
+
 ## Human documentation without model-context cost
 
 Every built-in/system tool must have non-empty human documentation in Library.

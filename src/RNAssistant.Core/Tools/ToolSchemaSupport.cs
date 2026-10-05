@@ -299,18 +299,31 @@ namespace RNAssistant.Core.Tools
             };
         }
 
-        private static void RemoveStructuredOutputAnnotations(JToken node)
+        // Visit schema nodes, never the property-name map or literal values in
+        // const/enum/default. A domain argument may itself be named description,
+        // default or type. These are the child-schema positions supported above.
+        private static void VisitSchemaNodes(JObject schema, Action<JObject> visit)
         {
-            var obj = node as JObject;
-            if (obj != null)
+            if (schema == null) return;
+            var properties = schema["properties"] as JObject;
+            if (properties != null)
+                foreach (var property in properties.Properties().ToArray())
+                    VisitSchemaNodes(property.Value as JObject, visit);
+            VisitSchemaNodes(schema["items"] as JObject, visit);
+            var alternatives = schema["anyOf"] as JArray;
+            if (alternatives != null)
+                foreach (var alternative in alternatives.OfType<JObject>().ToArray())
+                    VisitSchemaNodes(alternative, visit);
+            visit(schema);
+        }
+
+        private static void RemoveStructuredOutputAnnotations(JObject schema)
+        {
+            VisitSchemaNodes(schema, node =>
             {
-                obj.Property("description")?.Remove();
-                obj.Property("default")?.Remove();
-            }
-            foreach (var child in node == null ? new JToken[0] : node.Children().ToArray())
-            {
-                RemoveStructuredOutputAnnotations(child);
-            }
+                node.Property("description")?.Remove();
+                node.Property("default")?.Remove();
+            });
         }
 
         private static bool ValidateValue(JToken value, JObject schema, string path, bool applyDefaults, out string error)
@@ -850,94 +863,54 @@ namespace RNAssistant.Core.Tools
                 string.Equals((string)type, expected, StringComparison.OrdinalIgnoreCase));
         }
 
-        private static void MakeObjectSchemasStrict(JToken token)
+        private static void MakeObjectSchemasStrict(JObject schema)
         {
-            var obj = token as JObject;
-            if (obj != null)
+            VisitSchemaNodes(schema, node =>
             {
-                if (ContainsType(obj["type"], "object"))
+                if (ContainsType(node["type"], "object"))
                 {
-                    var properties = obj["properties"] as JObject ?? new JObject();
-                    obj["properties"] = properties;
-                    obj["required"] = new JArray(properties.Properties().Select(property => property.Name));
-                    obj["additionalProperties"] = false;
+                    var properties = node["properties"] as JObject ?? new JObject();
+                    node["properties"] = properties;
+                    node["required"] = new JArray(properties.Properties().Select(property => property.Name));
+                    node["additionalProperties"] = false;
                 }
-                foreach (var property in obj.Properties().ToList())
-                {
-                    MakeObjectSchemasStrict(property.Value);
-                }
-                return;
-            }
-            var array = token as JArray;
-            if (array != null)
-            {
-                foreach (var item in array) MakeObjectSchemasStrict(item);
-            }
+            });
         }
 
-        private static void CollapseObjectAnyOfConstraints(JToken token)
+        private static void CollapseObjectAnyOfConstraints(JObject schema)
         {
-            var obj = token as JObject;
-            if (obj != null)
+            VisitSchemaNodes(schema, node =>
             {
-                foreach (var property in obj.Properties().ToList())
-                {
-                    CollapseObjectAnyOfConstraints(property.Value);
-                }
-
-                if (ContainsType(obj["type"], "object") && obj["anyOf"] is JArray)
+                if (ContainsType(node["type"], "object") && node["anyOf"] is JArray)
                 {
                     // Runtime validation treats anyOf branches as complete alternatives. Keep the
                     // structured-output schema equivalent: a strict parent object with the union of
                     // branch properties would otherwise require fields that every branch forbids.
-                    obj.Remove("type");
-                    obj.Remove("properties");
-                    obj.Remove("required");
-                    obj.Remove("additionalProperties");
+                    node.Remove("type");
+                    node.Remove("properties");
+                    node.Remove("required");
+                    node.Remove("additionalProperties");
                 }
-                return;
-            }
-
-            var array = token as JArray;
-            if (array != null)
-            {
-                foreach (var item in array) CollapseObjectAnyOfConstraints(item);
-            }
+            });
         }
 
-        private static void MakeOptionalPropertiesNullable(JToken token)
+        private static void MakeOptionalPropertiesNullable(JObject schema)
         {
-            var obj = token as JObject;
-            if (obj != null)
+            VisitSchemaNodes(schema, node =>
             {
-                if (ContainsType(obj["type"], "object"))
+                if (ContainsType(node["type"], "object"))
                 {
-                    var properties = obj["properties"] as JObject ?? new JObject();
+                    var properties = node["properties"] as JObject ?? new JObject();
                     var required = new HashSet<string>(
-                        (obj["required"] as JArray ?? new JArray()).Values<string>(),
+                        (node["required"] as JArray ?? new JArray()).Values<string>(),
                         StringComparer.Ordinal);
                     foreach (var property in properties.Properties())
                     {
-                        MakeOptionalPropertiesNullable(property.Value);
                         var propertySchema = property.Value as JObject;
                         if (propertySchema != null && !required.Contains(property.Name)) MakeNullable(propertySchema);
                     }
-                    foreach (var keyword in obj.Properties().Where(property =>
-                        !string.Equals(property.Name, "properties", StringComparison.Ordinal)).ToList())
-                    {
-                        MakeOptionalPropertiesNullable(keyword.Value);
-                    }
-                    return;
                 }
-                foreach (var property in obj.Properties().ToList()) MakeOptionalPropertiesNullable(property.Value);
-                return;
-            }
-
-            var array = token as JArray;
-            if (array != null)
-            {
-                foreach (var item in array) MakeOptionalPropertiesNullable(item);
-            }
+            });
         }
 
         private static void MakeNullable(JObject schema)

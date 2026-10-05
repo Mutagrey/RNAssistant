@@ -1,6 +1,41 @@
 # Stabilization progress
 
-Latest CLI mode/question slice (2026-10-05): Core `ConversationRunPolicy` and
+Latest structured-schema correction (2026-10-05): the saved native question
+request revealed a reproducible harness bug, not merely a missing model field.
+`ForStructuredOutput` recursively removed every JSON property named `description`
+or `default`, including argument declarations. Thus the question option schema
+required `description`, omitted it from `properties`, and forbade additional
+properties: no option could satisfy it. The same unrestricted walkers could
+rewrite object-shaped `const`/`enum` literals. Owner: Core tool-schema projection.
+
+All four schema transforms now visit only schema positions (`properties` values,
+`items`, `anyOf`). Argument names and literal values survive; actual schema
+annotations are still stripped, optional nulls/strict objects/alternatives keep
+their existing rules. Prompt projection and structured output share that traversal;
+source schemas remain immutable. No parser relaxation, repair-budget change,
+endpoint-specific prompt or additional agent loop was introduced.
+
+The real-question wire regression failed before the fix and passes afterward,
+including the runtime gate, named fields, literal constraints and immutable source.
+Focused host-neutral checks: schema 4/4, strict constraints 1/1, controller catalog
+1/1, v6 schema/parser 2/2; all three scripted CLI mode/question cases pass. CLI
+build has no warnings/errors; harness retains two existing PDF CA1416 warnings.
+Windows/Office/WebView2 qualification remains open.
+
+The same native Gemma question task still fails at file selectors (51.53 s, exit 5,
+no_tool_progress), before an accepted question. Ten HTTP requests/responses,
+24 pair checks without errors; two format rejections for surrounding prose.
+Tokens 17523/773 total, maxima 2185/147. Both a file read with `referencePath`
+and root find with an unsafe directory were rejected; repeated failures were not
+redispatched. Zero successful reads/writes; no answer phase. Initial HTTP requests
+are identical except for the restored `description` declaration; task, model
+digest, profile and bounds are unchanged. This isolates the schema correction,
+but does not qualify real question completion or explain every historical loop.
+Model unloaded; source/binaries, HTTP/CAS and audits:
+`/var/folders/k9/hr_94nt142x1f43jr6g0wr_00000gp/T/rna-schema-names-gemma-ayxqwnsp`.
+Selector-contract clarity is the next local slice; M4/M5 remain open.
+
+Previous CLI mode/question slice (2026-10-05): Core `ConversationRunPolicy` and
 `UserQuestionToolCatalog/Handler` now serve Office and CLI; the Office-only copies
 are removed. CLI `--mode chat|plan|agent` selects a persisted session mode, rejects
 unknown values and mode drift, and filters both model schemas and exact runtime
@@ -918,11 +953,11 @@ boundary, not a functional CSV score. Scripted HTTP tests confirmed both CLI
 transport modes and saved metadata. The existing v6 parser correctly rejected
 these outputs; no permissive JSON repair or separate agent loop was added.
 
-Next concrete slice (2026-10-05): isolate the failed Gemma question task's argument
-and schema adherence with the saved actual requests, before claiming M4 question
-acceptance. File-only-invalid referencePath, root directory selection and omitted
-option descriptions are the observed failures; result pairing passed. Keep the
-task/bounds fixed and change one declared profile/contract factor at a time.
+Next concrete slice (2026-10-05): clarify/enforce the workspace resource selectors
+in their public contract, then rerun the fixed question task. The shared structured
+schema corruption of `description` is now fixed and tested. File-only-invalid
+referencePath and root directory selection still block real Gemma completion;
+result pairing passed. Keep task/bounds fixed and declare each changed factor.
 Modes, typed answer/restart handling, published skills and frozen skill context
 are implemented. The next missing application capability is CLI Plan documents /
 Task Lists through the existing publication/mutation owners, then remaining §11 UX.

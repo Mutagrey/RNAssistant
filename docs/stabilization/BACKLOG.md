@@ -42,10 +42,14 @@ with Gemma 12B before any accepted question. Native tool results lead to an inva
 file reference selector, then missing option descriptions through bounded format
 repair. Textual user results lead to invalid file/root selectors and no-tool
 progress. Both actual-wire pair audits pass; neither run reaches answer admission.
-Do not attribute this to missing call/results or context limits from these traces.
-The next controlled investigation is selector/schema guidance and provider
-adherence, retaining exact task/bounds and declaring each changed factor. Runtime
-mode/answer contracts are covered separately by scripted production CLI checks.
+Subsequent wire inspection confirmed a schema-conversion bug: `description` was
+required but its declaration removed by recursive annotation stripping. This is
+fixed with a failing-then-passing actual-wire regression; details are in progress.
+An otherwise identical native rerun still fails on file reference/root selectors,
+before questions. Remaining work is selector-contract clarity and real completion,
+retaining exact task/bounds and declaring each changed factor. Runtime mode/answer
+contracts are covered separately by scripted production CLI checks. Pair audits
+pass and the current failures do not establish missing results or a context limit.
 
 ## CLI final-read acceptance after CSV repair — 2026-10-05
 

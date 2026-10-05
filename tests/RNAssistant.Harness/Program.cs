@@ -173,6 +173,7 @@ namespace RNAssistant.Harness
                 Test("agent: supports selectable response formats", AgentSupportsSelectableResponseFormats),
                 Test("agent: json schema mirrors tool contracts", AgentJsonSchemaMirrorsToolContracts),
                 Test("agent: json schema supports type-named arguments", AgentJsonSchemaSupportsTypeNamedArguments),
+                Test("agent: json schema preserves argument names and literal values", AgentJsonSchemaPreservesNamesAndLiterals),
                 Test("agent: supports selectable tool result roles", AgentSupportsSelectableToolResultRoles),
                 Test("agent: json schema fallback is request-local", AgentJsonSchemaFallbackIsRequestLocal),
                 Test("conversation v6: status-free round trip", ConversationV4RoundTripsWithoutStatus),
