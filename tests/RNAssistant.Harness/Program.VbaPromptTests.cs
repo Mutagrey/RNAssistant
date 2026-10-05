@@ -222,8 +222,8 @@ namespace RNAssistant.Harness
                 var patch = JObject.Parse(tools.Single(tool =>
                     tool.Id == VbaToolCatalog.ApplyPatch).ArgumentSchemaJson);
                 var hunk = (JObject)patch.SelectToken("properties.patch.items");
-                AssertEqual(4, ((JObject)hunk["properties"]).Properties().Count(),
-                    "VBA patch hunk contains replacement plus optional exact context");
+                AssertEqual(6, ((JObject)hunk["properties"]).Properties().Count(),
+                    "VBA patch hunk contains replacement, exact context and location");
                 AssertTrue(hunk.SelectToken("properties.op") == null,
                     "fixed replace operation belongs to runtime");
                 var editingSkill = BuiltInSkillProvider.GetSkills(adapter)
@@ -345,6 +345,34 @@ namespace RNAssistant.Harness
                     projected.Content.IndexOf("rna://",
                         StringComparison.OrdinalIgnoreCase) < 0,
                     "VBA model result hides runtime identity in data and message");
+
+                var verificationHash = new string('b', 64);
+                var diagnostic = AgentJsonProtocol.CreateToolResultMessage(
+                    new ToolInvocation
+                    {
+                        ToolCallId = "vba_verification_failure",
+                        ToolId = VbaToolCatalog.WriteModule
+                    },
+                    RNAssistant.Core.Tools.Contracts.ToolResult.Error(
+                        "VBA module creation verification failed: " +
+                            verificationHash,
+                        "{\"code\":\"vba_module_create_failed\",\"failure\":{\"message\":\"expected/actual live hashes " +
+                            verificationHash + "/" + opaqueHash +
+                            "\",\"rootMessage\":\"VBE-comparable hashes " +
+                            opaqueHash + "/" + verificationHash +
+                            "\"},\"rollbackDisposition\":\"created-module-removed\"}"),
+                    ToolResultRoles.Tool);
+                var projectedDiagnostic = ModelToolResultProjection.Project(diagnostic);
+                AssertContains(diagnostic.Content, verificationHash,
+                    "durable VBA diagnostic retains exact verification evidence");
+                AssertTrue(projectedDiagnostic.Content.IndexOf(verificationHash,
+                        StringComparison.OrdinalIgnoreCase) < 0 &&
+                    projectedDiagnostic.Content.IndexOf(opaqueHash,
+                        StringComparison.OrdinalIgnoreCase) < 0,
+                    "VBA model projection strips hashes from nested diagnostic text");
+                AssertContains(projectedDiagnostic.Content,
+                    "vba_module_create_failed",
+                    "VBA model diagnostic keeps actionable error code");
             });
         }
 

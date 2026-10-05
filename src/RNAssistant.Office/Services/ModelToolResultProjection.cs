@@ -106,7 +106,13 @@ namespace RNAssistant.Office.Services
             }
             else if (IsVbaResult(name))
             {
-                message = SanitizeVbaMessage(message, data);
+                var runtimeValues = VbaRuntimeValues(data)
+                    .Where(item => item.Length >= 4)
+                    .Distinct(StringComparer.Ordinal)
+                    .OrderByDescending(item => item.Length)
+                    .ToArray();
+                message = SanitizeVbaMessage(message, runtimeValues);
+                SanitizeVbaTextValues(data, runtimeValues);
                 RemoveVbaRuntimeState(data);
             }
             else
@@ -445,13 +451,26 @@ namespace RNAssistant.Office.Services
             foreach (var item in array) RemoveVbaRuntimeState(item);
         }
 
-        private static string SanitizeVbaMessage(string message, JToken data)
+        private static void SanitizeVbaTextValues(
+            JToken token, IEnumerable<string> runtimeValues)
+        {
+            var value = token as JValue;
+            if (value != null)
+            {
+                if (value.Type == JTokenType.String)
+                    value.Value = SanitizeVbaMessage((string)value, runtimeValues);
+                return;
+            }
+            if (token == null) return;
+            foreach (var child in token.Children())
+                SanitizeVbaTextValues(child, runtimeValues);
+        }
+
+        private static string SanitizeVbaMessage(
+            string message, IEnumerable<string> runtimeValues)
         {
             var result = message ?? string.Empty;
-            foreach (var value in VbaRuntimeValues(data)
-                .Where(item => item.Length >= 4)
-                .Distinct(StringComparer.Ordinal)
-                .OrderByDescending(item => item.Length))
+            foreach (var value in runtimeValues ?? Enumerable.Empty<string>())
             {
                 result = result.Replace(value, "[runtime value]");
             }
