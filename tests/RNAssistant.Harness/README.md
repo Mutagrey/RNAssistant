@@ -147,6 +147,12 @@ then submit an explicit test-user choice with `answer`. Keep the two CLI traces,
 actual HTTP/CAS, selected profile/digest and source/binaries. Success proves this
 interaction route, not autonomous clarification quality or full M4/M5 acceptance.
 
+`python3 -B tests/cli/resource_selectors_smoke.py` checks closed file/skill argument
+alternatives in the actual prompt and structured-output wire, wrong-kind selectors
+rejected before dispatch, nullable file defaults, invalid root paths with repair
+guidance, relative directory discovery and exact file/skill reads. It uses scripted
+HTTP through the production CLI and preserves separate file-read acceptance.
+
 ## Find a test
 
 ```bash

@@ -25,7 +25,7 @@ that retained text as a typed `ResourceReadObservation` with whole-view payload,
 byte length and exact evidence. It enforces the one MiB text bound and rejects
 unpublished revisions and missing/corrupt payloads without a live-file fallback.
 Reading an old revision does not refresh or republish the head; its currentness
-still comes from frozen authority. The
+still comes from frozen authority.
 An explicit CLI `--read-only` open denies file mutations even when the workspace
 already has a manifest. The descriptor and root mount retain that permission for
 the open; workspace identity and later explicitly writable opens are unchanged.
@@ -45,6 +45,14 @@ an empty result. File descriptors expose metadata/stat without reading content o
 claiming an exact revision. The returned targets are sorted within the
 captured window, not across a truncated directory; there is no pagination or
 recursive search yet. Protected metadata and credential-shaped names stay hidden.
+The file branch defaults to `type="file"`. Omitted/null/empty `directory` selects
+the workspace root; `/`, `.`, `..` and absolute paths are not aliases. A rejected
+directory keeps the file owner's error code and supplies this root-selection hint.
+File and skill selectors are closed schema alternatives in both the runtime gate
+and model wire: `directory` belongs only to file discovery, `referencePath` only
+to skill reads, and the skill branch requires explicit `type="skill"`. Wrong-kind
+selectors fail before dispatch rather than being silently ignored. Chat exposes
+only the file branch. Existing nullable optional arguments preserve their defaults.
 CLI `common.resources_read(target)` returns complete whole UTF-8 text with matching
 retained payload, coverage and exact evidence. CLI prepares fresh current-run
 authority through the same file owner, then passes the frozen tuple and accepted

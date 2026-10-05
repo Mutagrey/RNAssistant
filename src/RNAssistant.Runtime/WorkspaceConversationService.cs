@@ -628,10 +628,10 @@ namespace RNAssistant.Runtime
                 _skillPublications = new SkillPublicationService(authorityStore, authorityStore,
                     new ResourceMutationJournal(paths), payloads, new SkillStore(paths), "Workspace", WorkspaceSkillProvider.GetSkills());
                 _skillCatalog = new SkillCatalogService("Workspace", _skillPublications.Capture);
-                Register(registry, entries, "common.resources_find", _mode.AllowsSkills ? "Find workspace files (default type=file, one directory, up to 200) or enabled skills (type=skill, up to 50). Use semantic targets; narrow the query when incomplete." : "Find workspace files in one directory, up to 200. Narrow the query when incomplete.",
+                Register(registry, entries, "common.resources_find", _mode.AllowsSkills ? "Find workspace files (default type=file, one directory, up to 200) or enabled skills (type=skill, up to 50). For workspace root omit directory or use null, never / or .; directory applies only to files. Narrow the query when incomplete." : "Find workspace files in one directory, up to 200. For workspace root omit directory or use null, never / or .; narrow the query when incomplete.",
                     ResourceSchema(true, _mode.AllowsSkills), false,
                     new WorkspaceResourceHandler(_resources.Select("file"), _skillPublications, () => _skills, _observed, true));
-                Register(registry, entries, "common.resources_read", _mode.AllowsSkills ? "Read a complete UTF-8 file (default type=file) or published skill instructions (type=skill) using a semantic target. For a skill reference, also provide its listed referencePath. Bound: 16000 characters; no partial skill activation." : "Read a complete UTF-8 file using its semantic target, up to 16000 characters.",
+                Register(registry, entries, "common.resources_read", _mode.AllowsSkills ? "Read a complete UTF-8 file (default type=file, target is its workspace-relative path) or published skill instructions (type=skill, target is the skill ID). referencePath belongs only to a listed skill reference. Bound: 16000 characters; no partial skill activation." : "Read a complete UTF-8 file using its workspace-relative path as target, up to 16000 characters.",
                     ResourceSchema(false, _mode.AllowsSkills), false,
                     new WorkspaceResourceHandler(_resources.Select("file"), _skillPublications, () => _skills, _observed, false));
                 if (WorkspaceWebVerifier.FindBrowserExecutable() != null)
@@ -732,11 +732,35 @@ namespace RNAssistant.Runtime
 
             private static string ResourceSchema(bool find, bool allowSkills)
             {
-                var schema = JObject.Parse(find ? Schema("directory", false, "query", false) : Schema("target", true, "referencePath", false));
-                if (!allowSkills && !find) ((JObject)schema["properties"]).Remove("referencePath");
-                schema["properties"]["type"] = new JObject { ["type"] = "string", ["enum"] = allowSkills ? new JArray("file", "skill") : new JArray("file"),
-                    ["description"] = allowSkills ? "Resource kind; defaults to file. Skill targets are enabled skill IDs." : "Resource kind; defaults to file." };
-                return schema.ToString(Formatting.None);
+                var files = ResourceVariant(find, false);
+                if (!allowSkills) return files.ToString(Formatting.None);
+                // Complete alternatives: the exact runtime gate and structured output
+                // must reject selectors belonging to the other resource kind.
+                return new JObject { ["type"] = "object", ["properties"] = new JObject(),
+                    ["required"] = new JArray(), ["additionalProperties"] = false,
+                    ["anyOf"] = new JArray(files, ResourceVariant(find, true)) }.ToString(Formatting.None);
+            }
+
+            private static JObject ResourceVariant(bool find, bool skill)
+            {
+                var schema = JObject.Parse(find
+                    ? (skill ? Schema("query", false) : Schema("directory", false, "query", false))
+                    : (skill ? Schema("target", true, "referencePath", false) : Schema("target", true)));
+                var properties = (JObject)schema["properties"];
+                properties["type"] = new JObject { ["type"] = "string", ["enum"] = new JArray(skill ? "skill" : "file"),
+                    ["description"] = skill ? "Select published skills explicitly." : "Resource kind; defaults to file when omitted or null." };
+                if (skill) ((JArray)schema["required"]).Add("type");
+                if (find)
+                {
+                    properties["query"]["description"] = skill ? "Optional skill search text." : "Optional file-name search text within this directory.";
+                    if (!skill) properties["directory"]["description"] = "Workspace-relative directory. Omit or use null/empty for workspace root; never /, ., .. or an absolute path.";
+                }
+                else
+                {
+                    properties["target"]["description"] = skill ? "Enabled skill ID from discovery or the catalog." : "Workspace-relative file path, for example notes.txt or src/app.js.";
+                    if (skill) properties["referencePath"]["description"] = "One listed reference path of this skill. Omit or use null to read its core instructions.";
+                }
+                return schema;
             }
 
             private SkillCatalogSnapshot VisibleSkills(SkillCatalogSnapshot published)

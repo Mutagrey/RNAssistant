@@ -73,7 +73,12 @@ namespace RNAssistant.Runtime
             catch (ResourceRequestException error)
             { return Return(ToolResult.Error(error.Message, JsonConvert.SerializeObject(new ResourceFailure { Code = error.ErrorCode, Retryable = error.Retryable }))); }
             catch (RNAssistant.Core.Storage.WorkspaceFileException error)
-            { return Return(ToolResult.Error(error.Message, JsonConvert.SerializeObject(new ResourceFailure { Code = error.Code }))); }
+            {
+                var message = error.Message;
+                if (_find && error.Code == "path_outside_mount")
+                    message += " For workspace root, omit directory or use null; otherwise use a safe workspace-relative directory.";
+                return Return(ToolResult.Error(message, JsonConvert.SerializeObject(new ResourceFailure { Code = error.Code })));
+            }
         }
 
         private sealed class ResourceFailure

@@ -1,6 +1,33 @@
 # Stabilization progress
 
-Latest structured-schema correction (2026-10-05): the saved native question
+Latest workspace selector slice (2026-10-05): CLI resource schemas now use closed
+file/skill alternatives in the prompt, structured output and exact runtime gate.
+File reads cannot carry `referencePath`; skill discovery cannot carry `directory`.
+Skill type is explicit, file type still defaults, and Chat retains its file-only
+catalog. Root directory omission/null/empty is documented; `/` and `.` stay
+rejected with the same file-owner code and an actionable root-selection hint.
+Owner: workspace resource admission. File authority, bounded discovery, exact
+evidence, frozen compiler, mutation/recovery and the single kernel are unchanged.
+
+CLI build passes without warnings/errors. The new scripted selector regression
+passes actual-wire schemas, pre-dispatch rejection/frozen repair, nullable defaults,
+unsafe roots, relative discovery and isolated file/skill evidence. Existing
+Chat/Plan/Agent question cases (3/3) and shared skills runtime checks also pass.
+
+The unchanged narrow Gemma question task now **passes**: 20.94 s to one accepted
+question, exit 3; explicit test-user Table selection, then 23.44 s to `done`, exit 0
+and passed acceptance in a new CLI process. Each run reads notes.txt freshly;
+the final plan incorporates Table, and user files are unchanged. Five HTTP
+requests/responses, six pair checks without errors, zero format rejections;
+tokens 9301/545 total, maxima 2166/202. Task/model digest/profile/bounds match the
+previous failed native run; declared changes are selector alternatives and their
+guidance, on top of schema fix `536b1b32`. This qualifies the narrow interaction,
+not autonomous clarification quality, every historical loop or full M4/M5.
+Model unloaded; source/binaries, HTTP/CAS and acceptance/wire audits:
+`/var/folders/k9/hr_94nt142x1f43jr6g0wr_00000gp/T/rna-selectors-gemma-_679rgxs`.
+Windows/Office/WebView2 qualification remains open.
+
+Previous structured-schema correction (2026-10-05): the saved native question
 request revealed a reproducible harness bug, not merely a missing model field.
 `ForStructuredOutput` recursively removed every JSON property named `description`
 or `default`, including argument declarations. Thus the question option schema
@@ -953,11 +980,11 @@ boundary, not a functional CSV score. Scripted HTTP tests confirmed both CLI
 transport modes and saved metadata. The existing v6 parser correctly rejected
 these outputs; no permissive JSON repair or separate agent loop was added.
 
-Next concrete slice (2026-10-05): clarify/enforce the workspace resource selectors
-in their public contract, then rerun the fixed question task. The shared structured
-schema corruption of `description` is now fixed and tested. File-only-invalid
-referencePath and root directory selection still block real Gemma completion;
-result pairing passed. Keep task/bounds fixed and declare each changed factor.
+Next concrete slice (2026-10-05): rerun the unchanged CSV acceptance task after
+the shared structured-schema correction and closed workspace resource selectors.
+The fixed narrow question task now passes read → question → explicit answer →
+fresh read → done; it does not replace the CSV creation/follow-up gate.
+Keep task/bounds fixed and declare each changed factor.
 Modes, typed answer/restart handling, published skills and frozen skill context
 are implemented. The next missing application capability is CLI Plan documents /
 Task Lists through the existing publication/mutation owners, then remaining §11 UX.

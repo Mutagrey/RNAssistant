@@ -45,11 +45,15 @@ progress. Both actual-wire pair audits pass; neither run reaches answer admissio
 Subsequent wire inspection confirmed a schema-conversion bug: `description` was
 required but its declaration removed by recursive annotation stripping. This is
 fixed with a failing-then-passing actual-wire regression; details are in progress.
-An otherwise identical native rerun still fails on file reference/root selectors,
-before questions. Remaining work is selector-contract clarity and real completion,
-retaining exact task/bounds and declaring each changed factor. Runtime mode/answer
-contracts are covered separately by scripted production CLI checks. Pair audits
-pass and the current failures do not establish missing results or a context limit.
+The first schema-only native rerun still failed on file reference/root selectors.
+The subsequent declared selector-contract change closes file/skill alternatives
+and explains root selection. With the same task/profile/bounds, native Gemma now
+passes: read, one question, explicit test-user Table answer in a new process,
+fresh read, accepted done. No format/pair errors or user-file changes. This narrow
+reproduction is resolved; autonomous clarification quality and general adherence
+remain open through full M4/M5 acceptance. Runtime mode/answer contracts are covered
+separately by scripted production CLI checks. Earlier failures do not establish
+missing results or a context limit. Evidence and exact limits are in progress.
 
 ## CLI final-read acceptance after CSV repair — 2026-10-05
 
