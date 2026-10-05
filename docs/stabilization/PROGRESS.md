@@ -1,5 +1,64 @@
 # Stabilization progress
 
+Clean-memory CLI evaluation (2026-10-05): the previous CSV runner log, matched to
+its last HTTP request timestamp, recorded 8013.399 MiB of retained prompt cache
+(8192 MiB cap), separate from the live inference state. A temporary Ollama 0.35.0
+server on loopback used `LLAMA_ARG_CACHE_RAM=0`, explicit Flash Attention, one
+loaded model/request and unchanged f16 KV / 32K. Runner logs confirm those settings
+and GPU offload. No system pager/swap-file changes or application force-quits.
+Owner: CLI evaluation / local LLM environment; no production code changed.
+
+The retained `7d924d76` RNAssistant binaries, model digest, all four task/check
+files and model settings match the previous CSV run. The complete initial HTTP
+JSON body is identical. Thus later schema-39 edits are excluded from this memory
+experiment. Server settings and host state changed; this is not a single-factor
+speed benchmark. Existing swap was not zeroed; measured deltas distinguish it
+from new paging. The temporary server/model were stopped after this run.
+
+The original 16-iteration / 24-tool run failed at **537.07 s**, `iteration_limit`,
+before the old 600 s boundary. Six verified file changes, 0/3 current final reads,
+no accepted current browser verification. Browser failures progressed from clipped
+chart (9 passed), through category-reset ordering (12 passed), a newly introduced
+syntax error, then initial row ordering (1 passed). The model did not finish;
+the feature follow-up was not started. Sixteen HTTP requests/responses, 88 pair
+checks without errors, no format rejection; tokens 137836/5665, maxima 12942/1754.
+
+Memory telemetry: 108 samples, at most 5.09 s apart, no sampling errors;
+pressure level 1 throughout, **0 MiB new swap-out**, 71.33 MiB swap-in, existing
+swap 3649.62 → 3577.62 MiB. Minimum free RAM 2.34 GiB; peak runner-process RSS
+12.07 GiB (not total unique CPU/GPU allocation). No other model was loaded.
+This reproduction did not encounter observed RAM pressure; the stopping condition
+was the software iteration limit with still-failing application checks. It does
+not prove that every earlier failure had the same cause. Exact source/binaries,
+driver, server log, telemetry, initial-wire and result audits:
+`/var/folders/k9/hr_94nt142x1f43jr6g0wr_00000gp/T/rna-clean-memory-gemma-m_oanimy`.
+
+A separate diagnostic run used a new empty workspace and **32 iterations / 48
+tools**, with the same inputs/profile/binaries and the same initial HTTP body.
+Its old 600 s checkpoint was recorded as unfinished; it was cancelled at the
+declared 1200 s diagnostic bound (1200.71 s), exit 5. Six verified file changes,
+0/3 final reads, no accepted current verification; no feature follow-up. Nineteen
+HTTP requests / eighteen responses, 114 pair checks without errors; two invalid
+action batches were rejected by the existing protocol gate. Tokens 229353/16370,
+maxima 22758/2208. The last browser result was 17 passed / 1 failed / 6 not run,
+`invalid-message`: the generated code calls `showStatus`, then `resetUI`, which
+immediately clears that message. An explicitly operator-initiated `verify` after
+termination reproduced the same failure (2.36 s); source hashes stayed unchanged.
+This is a visible generated-code defect, not a demonstrated lost tool result.
+
+The diagnostic run has 240 memory samples, maximum gap 5.09 s, no sample errors:
+pressure level 1 throughout, **0 MiB new swap-out**, 121.77 MiB swap-in, existing
+swap 3577.62 → 3457.62 MiB. Peak runner-process RSS 12.06 GiB. Raw free RAM briefly
+reached 0.08 GiB, but `memory_pressure -Q` never reported less than 46% and pressure
+stayed normal; a raw free-page minimum alone is not the memory-pressure assessment.
+No other model was loaded. Temporary server stopped and model unloaded after both
+runs. No forced memory purge, pager change or lowered verification requirements.
+The memory concern was tested; neither original nor expanded run completed the
+CSV task. Full M4/M5 remain open. This diagnostic does not replace the original
+16/24/600 acceptance result. Evidence including the independent final check:
+`/var/folders/k9/hr_94nt142x1f43jr6g0wr_00000gp/T/rna-clean-memory-extended-gemma-vjzeu8rv`.
+The repeatable preparation rules are in [development rules §9](../development-rules.md#сравнение-моделей).
+
 Desktop run/settings repair (2026-10-05): screenshots show three no-call Agent
 `continue` decisions ending in `no_tool_progress`; the v6 kernel correctly
 stops that loop, while default schema 38 guidance allowed repeated preparation

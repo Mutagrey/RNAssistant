@@ -98,6 +98,17 @@ pass. Swap use increased substantially on the non-isolated Mac, so this run does
 not separate model quality from execution speed/capacity. Creation and follow-up
 acceptance remain open; source/profile/result evidence is recorded in progress.
 
+The subsequent memory experiment disabled the local runner's retained prompt
+cache (previously about 8 GiB), kept 32K/f16 and the exact RNAssistant binaries,
+and sampled paging/pressure throughout. Both fresh runs had zero new swap-out and
+normal pressure. Original 16/24 limits ended at `iteration_limit`; a separately
+declared 32/48 diagnostic still timed out at 1200 s. The final source passes 17/24
+browser steps but clears its invalid-CSV status immediately in `resetUI`.
+An independent read-only verification reproduced that defect. Memory cleanup did
+not establish autonomous completion; do not attribute these remaining failures
+to missing RAM or lost results without new evidence. Full traces and bounds are
+in progress; the expanded budget does not replace the original acceptance result.
+
 ## CLI continuation after completed-operation receipts — 2026-10-05
 
 Historical isolation below precedes the pair/role and typed recovery fixes.

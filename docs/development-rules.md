@@ -291,6 +291,26 @@ Modelfile; RNAssistant должен иметь такой же или меньш
 состав запроса/резервы и фактическую память на целевой машине; загруженные tools,
 skills и история могут превысить и этот лимит.
 
+Для диагностики памяти на Mac измерять `vm_stat` (дельты `Swapins`/`Swapouts`),
+`memory_pressure -Q`, `vm.swapusage` и процессы во время всего прогона. Сам объём
+уже занятого swap не заменяет измерение текущей подкачки и давления памяти;
+см. [пояснение Apple](https://support.apple.com/en-euro/guide/activity-monitor/actmntr1004/mac).
+Не удалять swap-файлы и не отключать системный pager ради теста.
+
+У Ollama 0.35.0 на этом Mac обнаружен отдельный кэш прошлых prompts до 8192 MiB.
+Для ограниченного эксперимента можно запустить отдельный локальный сервер с
+`LLAMA_ARG_CACHE_RAM=0`, `OLLAMA_NUM_PARALLEL=1`, `OLLAMA_MAX_LOADED_MODELS=1`,
+`OLLAMA_FLASH_ATTENTION=1` и `OLLAMA_KV_CACHE_TYPE=f16`. Значение `0` отключает
+серверный кэш прошлых prompts ([llama.cpp](https://github.com/ggml-org/llama.cpp/blob/master/tools/server/README.md#server-specific-params));
+оно не меняет передаваемую RNAssistant историю или размер контекста. Проверить
+применение по runner log, включая Flash Attention и фактический `n_ctx_slot`.
+Это явный эксперимент с endpoint, не новая настройка agent loop и не глобальное
+изменение пользовательского Ollama. Выгрузить модель и остановить временный
+сервер после прогона. Если увеличен wall-clock timeout, отдельно сохранить
+результат на прежнем рубеже; позднее завершение не выдавать за pass старого бюджета.
+Увеличение iteration/tool budgets также оформлять отдельным диагностическим
+прогоном; оно не заменяет результат исходной ограниченной проверки.
+
 Для сравнения зафиксировать RNAssistant commit, task, исходный workspace, tool
 catalog, skills, acceptance tests и по возможности temperature/reasoning policy.
 Для каждого run сохранить model/tag и digest, context, response mode, instruction role, thinking/reasoning mode,
