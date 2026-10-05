@@ -72,9 +72,25 @@ namespace RNAssistant.Core.Agent
             return await LoopAsync(state, cancellationToken).ConfigureAwait(false);
         }
 
+        public async Task<AgentRunResult> ContinueAsync(AgentRunContinuation continuation, CancellationToken cancellationToken)
+        {
+            if (continuation == null) throw new ArgumentNullException(nameof(continuation));
+            // Revalidate even when called without the application factory. The
+            // first append claims the supplied invocation cursor before any model call.
+            var checkedContinuation = AgentRunContinuation.RestoreCheckpoint(
+                new AgentRunState(continuation.Summary, continuation.Limits), continuation.Revision, continuation.AcceptedMessages);
+            var state = new State(checkedContinuation.Summary.RunId, checkedContinuation);
+            await AppendAsync(state, new AgentRunEvent(AgentRunEventKind.SummaryChanged, state.Summary())).ConfigureAwait(false);
+            return await LoopAsync(state, cancellationToken).ConfigureAwait(false);
+        }
+
         private async Task<AgentRunResult> LoopAsync(State state, CancellationToken cancellationToken)
         {
-            var consecutiveNarrativeSteps = 0;
+            var consecutiveNarrativeSteps = state.Messages.AsEnumerable().Reverse().TakeWhile(message =>
+                message.Kind == AgentMessageKind.Assistant && message.Action == ConversationResponse.ContinueAction).Count();
+            if (consecutiveNarrativeSteps >= 3 || state.Progress.RecoveryIgnored)
+                return await FinishAsync(state, RunLifecycle.Failed, "restored_no_progress",
+                    "The checkpoint already exhausted its no-progress allowance.").ConfigureAwait(false);
             while (state.Iterations < state.Limits.MaxIterations)
             {
                 if (cancellationToken.IsCancellationRequested)

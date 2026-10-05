@@ -815,6 +815,84 @@ namespace RNAssistant.Harness
             throw new InvalidOperationException("Expected " + typeof(TException).Name);
         }
 
+        private static void KernelCheckpointRejected(Action action, string reason)
+        {
+            var rejected = false;
+            try { action(); }
+            catch (InvalidOperationException) { rejected = true; }
+            AssertTrue(rejected, reason);
+        }
+
+        private static async Task KernelContinuesStoppedCheckpoint()
+        {
+            foreach (var nextTool in new[] { false, true })
+            using (var cancel = new CancellationTokenSource())
+            {
+                var f = new KernelFixture(KernelResponse(KernelCall("write")),
+                    nextTool ? KernelResponse(KernelCall("read")) : KernelResponse());
+                f.Store.OnAppended = fact => { if (fact.Kind == AgentRunEventKind.ToolCompleted) cancel.Cancel(); };
+                var limits = new AgentRunLimits(2, 1);
+                var stopped = await f.RunAsync(cancel.Token, limits);
+                var continuation = AgentRunContinuation.RestoreCheckpoint(new AgentRunState(stopped.Summary, limits),
+                    f.Store.Events.Count, stopped.AcceptedMessages);
+                f.Store.OnAppended = null;
+                var result = await f.Kernel.ContinueAsync(continuation, CancellationToken.None);
+                AssertEqual("run", result.Summary.RunId, "run identity retained");
+                AssertEqual("turn", result.Summary.TurnId, "turn identity retained");
+                AssertEqual(2, result.Summary.IterationsUsed, "remaining iteration spent exactly once");
+                AssertEqual(1, result.Summary.ToolStepsUsed, "tool budget not reset");
+                AssertEqual(1, f.Tools.Calls.Count, "completed write not replayed and new call cannot exceed budget");
+                AssertEqual(1, result.Summary.ToolCounts.WriteOk, "verified effect count retained");
+                AssertEqual(nextTool ? "tool_step_limit" : "model_done", result.Summary.Reason, "original limit enforced");
+                await KernelThrowsAsync<RunStoreException>(() => f.Kernel.ContinueAsync(continuation, CancellationToken.None));
+                AssertEqual(2, f.Model.Requests.Count, "stale cursor cannot dispatch model");
+                KernelCheckpointRejected(() => AgentRunContinuation.RestoreCheckpoint(
+                    new AgentRunState(result.Summary, limits), f.Store.Events.Count, result.AcceptedMessages), "terminal run cannot continue");
+            }
+        }
+
+        private static async Task KernelRejectsUnsafeCheckpoint()
+        {
+            using (var cancel = new CancellationTokenSource())
+            {
+                var f = new KernelFixture(KernelResponse(KernelCall("write")));
+                f.Store.OnAppended = fact => { if (fact.Kind == AgentRunEventKind.ResponseAccepted) cancel.Cancel(); };
+                var stopped = await f.RunAsync(cancel.Token);
+                var limits = new AgentRunLimits(10, 10);
+                var incomplete = stopped.AcceptedMessages.Where(message => message.Kind != AgentMessageKind.ToolResult).ToArray();
+                KernelCheckpointRejected(() => AgentRunContinuation.RestoreCheckpoint(
+                    new AgentRunState(stopped.Summary, limits), 0, incomplete), "unresolved accepted call cannot be replayed");
+                var context = new ToolExecutionContext(new ToolCall("unfinished", "write", "{}"), f.Tools.Policies["write"],
+                    "run", "turn", "step", DateTime.UtcNow, false, 1);
+                KernelCheckpointRejected(() => AgentRunContinuation.RestoreCheckpoint(
+                    new AgentRunState(stopped.Summary, limits, context), 0, stopped.AcceptedMessages), "in-flight tool blocks continuation");
+                var unknown = new RunSummary("run", "turn", RunLifecycle.Cancelled, new ToolCounts(writeUnknown: 1),
+                    1, 1, "", "cancelled", null);
+                KernelCheckpointRejected(() => AgentRunContinuation.RestoreCheckpoint(
+                    new AgentRunState(unknown, limits), 0, stopped.AcceptedMessages), "unknown effect blocks continuation");
+                var exhausted = new RunSummary("run", "turn", RunLifecycle.Running, new ToolCounts(), 10, 0, "", null, null);
+                KernelCheckpointRejected(() => AgentRunContinuation.RestoreCheckpoint(
+                    new AgentRunState(exhausted, limits), 0, new[] { AgentMessage.User("Task") }), "abandoned request still consumed its iteration");
+            }
+        }
+
+        private static async Task KernelContinuesNarrativeLimit()
+        {
+            using (var cancel = new CancellationTokenSource())
+            {
+                var narrative = new AgentResponseDraft("Still planning.", new ToolCallDraft[0], ConversationResponse.ContinueAction);
+                var f = new KernelFixture(narrative, narrative, narrative);
+                f.Store.OnAppended = fact => { if (fact.Kind == AgentRunEventKind.ResponseAccepted && fact.Summary.IterationsUsed == 2) cancel.Cancel(); };
+                var stopped = await f.RunAsync(cancel.Token);
+                f.Store.OnAppended = null;
+                var continuation = AgentRunContinuation.RestoreCheckpoint(new AgentRunState(stopped.Summary, new AgentRunLimits(10, 10)),
+                    f.Store.Events.Count, stopped.AcceptedMessages);
+                var result = await f.Kernel.ContinueAsync(continuation, CancellationToken.None);
+                AssertEqual("no_tool_progress", result.Summary.Reason, "cancellation cannot reset consecutive narrative limit");
+                AssertEqual(3, result.Summary.IterationsUsed, "third narrative ends the same run");
+            }
+        }
+
         private sealed class KernelFixture
         {
             internal readonly KernelModelFake Model;

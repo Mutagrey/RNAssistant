@@ -63,6 +63,13 @@ namespace RNAssistant.Core.Storage
                 return;
             }
 
+            if (IsTerminalRunStatus(before == null ? null : before.Status) &&
+                string.Equals(after.Status, "running", StringComparison.OrdinalIgnoreCase))
+            {
+                // Explicit continuation reopens the same logical turn. Keep
+                // its invocation boundaries visible without inventing user input.
+                pending.Add(TurnStarted(after));
+            }
             if (!IsTerminalRunStatus(before == null ? null : before.Status) &&
                 IsTerminalRunStatus(after == null ? null : after.Status))
             {

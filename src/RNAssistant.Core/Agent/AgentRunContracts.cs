@@ -2,6 +2,8 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using RNAssistant.Core.Tools;
+using RNAssistant.Core.Persistence;
+using RNAssistant.Core.ModelProtocol;
 
 namespace RNAssistant.Core.Agent
 {
@@ -120,6 +122,50 @@ namespace RNAssistant.Core.Agent
             if (original == null || original.Name != pending.Name || original.ArgumentsJson != pending.ArgumentsJson ||
                 completed.Contains(pending.Id) || calls.Any(call => call.Id != pending.Id && !completed.Contains(call.Id)))
                 throw new InvalidOperationException("Pending call differs from accepted history or is already resolved.");
+            return new AgentRunContinuation(summary, limits, revision, messages, ids);
+        }
+
+        // The application must own the exact session lease. A Running checkpoint
+        // is eligible only after that lease proves its previous owner has exited.
+        public static AgentRunContinuation RestoreCheckpoint(AgentRunState checkpoint, long revision,
+            IEnumerable<AgentMessage> acceptedMessages)
+        {
+            var summary = checkpoint?.Summary;
+            var limits = checkpoint?.Limits;
+            var stopped = summary != null && (summary.Lifecycle == RunLifecycle.Running ||
+                summary.Lifecycle == RunLifecycle.Cancelled && (summary.Reason == "cancelled" || summary.Reason == "Cancelled" ||
+                    summary.Reason == "execution_interrupted") ||
+                summary.Lifecycle == RunLifecycle.Failed && summary.Reason == "runtime_interrupted");
+            if (!stopped || checkpoint.InFlightTool != null || summary.PendingConfirmation != null ||
+                summary.ExecutionHealth == ExecutionHealth.Unknown || revision < 0 ||
+                summary.IterationsUsed >= limits.MaxIterations || summary.ToolStepsUsed > limits.MaxToolSteps)
+                throw new InvalidOperationException("Continuation requires a stopped checkpoint, remaining iterations and no pending or uncertain effect.");
+            var messages = (acceptedMessages ?? new AgentMessage[0]).ToArray();
+            if (messages.Length == 0 || messages.Any(message => message == null))
+                throw new InvalidOperationException("Complete accepted history is required for continuation.");
+            var ids = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            var open = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            foreach (var message in messages)
+            {
+                if (message.Kind == AgentMessageKind.ToolResult)
+                {
+                    if (!open.Remove(message.ToolCallId))
+                        throw new InvalidOperationException("Continuation contains an orphan or duplicate tool result.");
+                }
+                else
+                {
+                    if (open.Count != 0) throw new InvalidOperationException("Continuation contains an incomplete tool exchange.");
+                    foreach (var call in message.ToolCalls)
+                    {
+                        if (!ids.Add(call.Id)) throw new InvalidOperationException("Duplicate accepted call in continuation.");
+                        open.Add(call.Id);
+                    }
+                }
+            }
+            if (open.Count != 0) throw new InvalidOperationException("An accepted tool call is unresolved; it cannot be replayed.");
+            var last = messages.Last();
+            if (last.Kind == AgentMessageKind.Assistant && last.Action != ConversationResponse.ContinueAction)
+                throw new InvalidOperationException("The accepted model decision cannot be continued.");
             return new AgentRunContinuation(summary, limits, revision, messages, ids);
         }
     }

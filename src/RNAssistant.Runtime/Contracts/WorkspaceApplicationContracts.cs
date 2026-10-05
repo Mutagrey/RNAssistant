@@ -1,6 +1,7 @@
 using Newtonsoft.Json;
 using RNAssistant.Core.Models;
 using RNAssistant.Core.Services;
+using RNAssistant.Core.Agent;
 
 namespace RNAssistant.Runtime.Contracts
 {
@@ -37,6 +38,10 @@ namespace RNAssistant.Runtime.Contracts
         public long Revision { get; set; }
         public string Cursor { get; set; }
         public string Status { get; set; }
+        public string RunId { get; set; }
+        public int? IterationsUsed { get; set; }
+        public int? ToolStepsUsed { get; set; }
+        public AgentRunLimits Limits { get; set; }
         [JsonProperty("modelConfiguration")] public ModelRunMetadata ModelConfiguration { get; set; }
         [JsonProperty("contextReceipt")] public ContextReceipt ContextReceipt { get; set; }
         [JsonProperty("acceptance")] public WorkspaceRunAcceptance Acceptance { get; set; }
@@ -47,5 +52,22 @@ namespace RNAssistant.Runtime.Contracts
         [JsonProperty("interruptedPath")] public string InterruptedPath { get; set; }
         [JsonProperty("interruptedEffectPossible")] public bool? InterruptedEffectPossible { get; set; }
         [JsonProperty("messageCount")] public int MessageCount { get; set; }
+    }
+
+    public sealed class WorkspaceRunControlRequest
+    {
+        public string SessionId { get; set; }
+        public string RunId { get; set; }
+        public string Cursor { get; set; }
+    }
+
+    [JsonConverter(typeof(Newtonsoft.Json.Converters.StringEnumConverter))]
+    public enum WorkspaceCancellationStatus { Requested, AlreadyStopped, StaleState, Unconfirmed }
+
+    public sealed class WorkspaceCancellationReceipt
+    {
+        public string SessionId { get; set; }
+        public string RunId { get; set; }
+        public WorkspaceCancellationStatus Status { get; set; }
     }
 }

@@ -1,5 +1,33 @@
 # Stabilization progress
 
+CLI cancellation and bounded continuation slice (2026-10-05): typed controls bind
+session/run to the exact canonical inspect cursor. `cancel` signals the local
+process holding the run lease through an ephemeral current-user pipe; only that
+kernel records lifecycle/effects. Acknowledgement is not completion. Stale state
+and unconfirmed delivery are explicit, and a delayed request cannot cancel a
+later continuation. Run/answer/approve/continue share Ctrl+C handling; cancelled
+invocations now emit `run.cancelled` and exit 130. Owner: conversation application services.
+
+Explicit `resume --continue` uses the shared coordinator/kernel with the original
+run, task/acceptance, call history, limits, spent iterations/tool steps and known
+outcomes. A mandatory append claims the checkpoint before model dispatch. Closed
+history and remaining iterations are required; in-flight, excluded or unknown
+effects, pending approvals and completed model decisions cannot continue. Narrative
+and rejected-call guards retain their state. Plain `resume` still reconciles and
+reports without model calls. There is no new queue/store or agent loop.
+Existing stream lifecycle owners close abandoned model steps and record resumed
+turn segments under the same turn ID; previous terminal facts stay intact.
+
+Checks: CLI build clean; kernel 55/55 and storage turn lifecycle 1/1. Scripted HTTP/process smoke covers active
+cancellation, rejected late tool response, same-run native pairs, no repeated file
+write, preserved budgets, stale/conflicting requests, lease exclusion, process loss,
+exhausted budget and a verified deletion followed by cancel/continue. Input receipts/
+reconnect, modes/questions 3/3, response roles/approval inheritance and plain
+interrupted-run recovery also pass. Harness retains two existing PDF CA1416 warnings.
+No new real-model or Windows/Office qualification. Full M4/M5 remain open: push
+events/interactive UX, UI adoption, remaining resource views and the fixed CSV
+creation/follow-up still need their own evidence.
+
 CLI input receipts and event reconnect slice (2026-10-05): `run` and `answer`
 now use typed `SubmitInputAsync`. Core `ConversationInputJournal` owns existing
 input event/CAS serialization for both the Office inbox and workspace application.
@@ -23,8 +51,8 @@ paging during appends and unavailable/corrupt history. Modes/questions 3/3 inclu
 duplicate/conflicting typed answers; response roles/native pairs and guarded
 approval inheritance pass. Harness build retains two existing PDF CA1416 warnings.
 No new real-model or Windows/Office qualification. Output is bounded but event
-reads still scan full history; push subscription, cross-process cancellation,
-interactive UX, same-run continuation and Office UI adoption remain open. Full
+reads still scan full history; push subscription, interactive UX and Office UI
+adoption remain open. Cancellation/continuation are covered by the newer slice. Full
 M4/M5 remain open; the failed fixed CSV task/follow-up evidence is unchanged.
 
 Shared CLI Markdown Plan slice (2026-10-05): Plan mode exposes save/restore/delete;
@@ -1171,12 +1199,11 @@ boundary, not a functional CSV score. Scripted HTTP tests confirmed both CLI
 transport modes and saved metadata. The existing v6 parser correctly rejected
 these outputs; no permissive JSON repair or separate agent loop was added.
 
-Next concrete slice (2026-10-05): bounded continuation/cancellation through the
-existing application lifecycle and kernel. Preserve accepted run identity,
-remaining limits and exact pending-call guards; uncertain effects cannot replay.
-Owner: conversation application services. Accepted-input receipts and canonical
-snapshot/event polling are implemented above; push subscription, incremental
-event reads, interactive CLI UX and UI adoption remain open.
+Next concrete slice (2026-10-05): bounded event subscription for CLI consumers,
+with cancellation, exact cursor continuity and explicit resync. Owner: conversation
+application services / canonical event store. Reuse the existing stream and remove
+full-history scans from repeated event reads through its owner; do not add a second
+event store. Interactive CLI UX and Office UI adoption remain open.
 Modes, typed answer/restart handling, published skills, frozen context, Task Lists
 and workspace-owned Markdown Plans are implemented with the evidence limits above.
 Explicit reconciliation of uncertain planning mutations remains open.

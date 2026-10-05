@@ -196,7 +196,9 @@ excluded from replay. These are minimal summary/recovery adaptations; the comple
 persistence/UI matrix remains Phase 9. [Phase 3B2 evidence](stabilization/PHASE_3B2_KERNEL_CUTOVER.md)
 covers actual event replay, pending/cancelled confirmation, stale CAS and faults.
 
-For the independent workspace CLI, `resume` takes the session's cross-process
+### Workspace run control
+
+For the independent workspace CLI, plain `resume` takes the session's cross-process
 lease, reloads the canonical chat, and marks an abandoned `running` run interrupted.
 An in-flight file mutation is recorded as a possible effect; its original call is
 never replayed. Incomplete protocol exchanges are excluded from later model
@@ -205,6 +207,42 @@ CLI acceptance assessment becomes `unknown`. `resume` then reports the stopped
 run and requires explicit new input; it does not continue that run's model budget.
 Any unresolved file journal attempt requires explicit `recover` before editing
 that file. Pending confirmations retain their separate approve/deny route.
+
+Explicit `resume --continue` uses `WorkspaceRunControlRequest` (session, run ID,
+exact inspect cursor), acquires that same lease and rechecks the canonical cursor
+before calling the shared coordinator/kernel `ContinueAsync`. The kernel claims
+the invocation cursor with a mandatory append before any model request. No user
+message or run ID is generated; accepted history, call IDs, original limits,
+iterations, charged tool steps and known outcomes are retained. A request abandoned
+during model wait still consumed its iteration. Narrative/rejected-call progress
+guards are restored, so interruption cannot reset their allowance.
+The existing event store closes any abandoned model step with a synthetic
+`step.ended` before continuation. Reopening a terminal checkpoint appends another
+`turn.started`/`turn.ended` pair with the same logical turn ID; this records a new
+invocation segment, not another user input. Canonical history is never rewritten.
+
+Only an abandoned Running checkpoint, an eligible Cancelled checkpoint or the
+existing `runtime_interrupted` recovery result may continue. The accepted history
+must contain closed, ordered call/result exchanges. An in-flight tool, excluded
+current-run protocol exchange, pending approval, unknown write, terminal model
+decision or exhausted iteration limit rejects continuation without model dispatch.
+Task criteria and model/endpoint/digest/context/protocol/thinking settings stay
+bound to the accepted run. Current source authority is refreshed through existing
+owners and the frozen compiler. New model calls are allowed; old calls never replay.
+
+`CancelRunAsync` is a bounded local signal to the process holding the run lease.
+Its ephemeral current-user named pipe carries only an exact cursor and an
+acknowledgement; no mailbox or second durable store is created. Both the caller
+and owner check run/checkpoint scope. The owner requires an append after invocation
+start, so an old request cannot cancel a later continuation of the same run.
+Cursor drift returns `StaleState`; refresh state before making another explicit
+request. `Requested` confirms signal acceptance only. `Unconfirmed` covers a missing
+owner, delivery timeout or a run whose kernel start has not yet been recorded;
+it never means the run stopped. `AlreadyStopped` leaves pending approvals intact.
+Only the owning kernel persists cancellation and effect evidence. CLI run, answer,
+approval and continuation share this cancellation lifetime and Ctrl+C handling.
+Mac process/HTTP checks qualify this transport locally; Windows/Office delivery
+remains unverified.
 
 The default SHA-256 hash-chain detects accidental edits, truncation in the middle of the log, and reordered records. Optional HMAC-SHA256 prevents recomputing valid edited records without the selected secret. Neither mode prevents deletion of an unanchored final suffix.
 

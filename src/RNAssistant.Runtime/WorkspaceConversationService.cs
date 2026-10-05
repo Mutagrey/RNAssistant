@@ -249,18 +249,21 @@ namespace RNAssistant.Runtime
                 inputs.Append(session, new ConversationInputEvent { Input = input });
                 receipt.DeliveryRecorded = true;
 
-                var result = await ConversationRunCoordinator.RunAsync(
-                    new AgentRunRequest(runId, runId, message,
-                        new AgentRunLimits(Math.Max(1, settings.MaxAgentIterations), Math.Max(1, settings.MaxAgentToolSteps)), previous),
-                    ports, ports.Tools, ports, cancellationToken).ConfigureAwait(false);
-                if (acceptedContract.Requested)
+                using (var control = OpenRunControl(session, cancellationToken))
                 {
-                    AssessAcceptance(workspace, session, result.Summary, acceptedContract);
-                    session.LastRun.WorkspaceAcceptance = acceptedContract;
-                    _chats.Save(session);
+                    var result = await ConversationRunCoordinator.RunAsync(
+                        new AgentRunRequest(runId, runId, message,
+                            new AgentRunLimits(Math.Max(1, settings.MaxAgentIterations), Math.Max(1, settings.MaxAgentToolSteps)), previous),
+                        ports, ports.Tools, ports, control.Token).ConfigureAwait(false);
+                    if (acceptedContract.Requested)
+                    {
+                        AssessAcceptance(workspace, session, result.Summary, acceptedContract);
+                        session.LastRun.WorkspaceAcceptance = acceptedContract;
+                        _chats.Save(session);
+                    }
+                    return new WorkspaceRunResult(session.Id, result.Summary, acceptedContract, GetPendingQuestions(session),
+                        receipt, ConversationEventFeed.Cursor(session));
                 }
-                return new WorkspaceRunResult(session.Id, result.Summary, acceptedContract, GetPendingQuestions(session),
-                    receipt, ConversationEventFeed.Cursor(session));
             }
         }
 
@@ -310,17 +313,20 @@ namespace RNAssistant.Runtime
                 var acceptance = session.LastRun.WorkspaceAcceptance ?? new WorkspaceRunAcceptance();
                 var ports = new WorkspacePorts(_paths, _chats, _files, _payloads, _webSnapshots, workspace, session,
                     settings ?? new AppSettings(), apiKeyProvider, progress, acceptance, approve);
-                var result = await ConversationRunCoordinator.ResumeAsync(session.LastRun.RunId,
-                    pendingId, continuation, ports, ports.Tools, ports, cancellationToken,
-                    rejectPending: !approve).ConfigureAwait(false);
-                if (acceptance.Requested)
+                using (var control = OpenRunControl(session, cancellationToken))
                 {
-                    AssessAcceptance(workspace, session, result.Summary, acceptance);
-                    session.LastRun.WorkspaceAcceptance = acceptance;
-                    _chats.Save(session);
+                    var result = await ConversationRunCoordinator.ResumeAsync(session.LastRun.RunId,
+                        pendingId, continuation, ports, ports.Tools, ports, control.Token,
+                        rejectPending: !approve).ConfigureAwait(false);
+                    if (acceptance.Requested)
+                    {
+                        AssessAcceptance(workspace, session, result.Summary, acceptance);
+                        session.LastRun.WorkspaceAcceptance = acceptance;
+                        _chats.Save(session);
+                    }
+                    return new WorkspaceRunResult(session.Id, result.Summary, acceptance, GetPendingQuestions(session),
+                        cursor: ConversationEventFeed.Cursor(session));
                 }
-                return new WorkspaceRunResult(session.Id, result.Summary, acceptance, GetPendingQuestions(session),
-                    cursor: ConversationEventFeed.Cursor(session));
             }
         }
 

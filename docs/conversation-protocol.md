@@ -275,8 +275,34 @@ use `NextCursor` and the first page's `HighWater` as `--through` while `HasMore`
 Pages default to 50 notices, maximum 100. `events.resync_required` (exit 3) means
 the client must refresh state/resolve history, never resubmit mutations. This is
 bounded polling; it is not yet push subscription or incremental indexed I/O.
-Cross-process cancellation, interactive UX, safe same-run continuation and full
-Office UI adoption remain open §11 scope.
+Interactive UX, push subscription and full Office UI adoption remain open §11 scope.
+
+### Workspace cancellation and bounded continuation
+
+`inspect` exposes `RunId`, `IterationsUsed`, `ToolStepsUsed` and the original
+`Limits` alongside `Cursor`. Control an exact inspected checkpoint with:
+
+```text
+rna cancel --workspace <path> --session <id> --run <RunId> --cursor <Cursor> --jsonl
+rna resume --workspace <path> --session <id> --continue --run <RunId> --cursor <Cursor> --jsonl
+```
+
+Cancellation reports `run.cancel_request`: `Requested` or `AlreadyStopped` exits
+0; `StaleState` or `Unconfirmed` exits 3. The acknowledgement does not certify
+completion or undo changes. Observe `inspect`/events or the owning process's
+terminal output. A cancelled invocation emits `run.cancelled`, exit 130, including
+explicit denial of a pending approval. Pending approvals use approve/deny;
+cancelling an already paused run does not approve or deny its call.
+
+Continuation is explicit and requires the current cursor after cancellation or
+process loss. It retains the original run, task contract and remaining budget;
+changing task/mode/limits is rejected. Reusing a stale cursor fails before dispatch.
+It cannot reopen a completed decision, replenish an exhausted budget, bypass an
+approval or resume an incomplete/uncertain tool exchange. Endpoint/model/digest,
+context, roles and thinking must match the accepted settings. Terminal acceptance
+is recomputed from current evidence; a previously completed write is counted once.
+See [durable recovery rules](session-events.md#workspace-run-control);
+plain `resume` still inspects/reconciles without calling the model.
 
 ## Conversation context
 

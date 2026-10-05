@@ -24,5 +24,11 @@ namespace RNAssistant.Core.Agent
             return new AgentKernel(model, tools, store, input: input).ResumeAsync(
                 runId, pendingId, continuation, cancellationToken, supersedePending, rejectPending);
         }
+
+        public static Task<AgentRunResult> ContinueAsync(AgentRunContinuation continuation,
+            IModelProtocol model, IToolRuntime tools, IRunStore store, CancellationToken cancellationToken)
+        {
+            return new AgentKernel(model, tools, store).ContinueAsync(continuation, cancellationToken);
+        }
     }
 }

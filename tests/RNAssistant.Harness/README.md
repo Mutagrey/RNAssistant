@@ -1,5 +1,17 @@
 # RNAssistant Harness
 
+After building the CLI, `python3 -B tests/cli/run_control_smoke.py` checks local
+cross-process cancel and explicit same-run continuation: exact cursors, late model
+response exclusion, unchanged limits/counters/history, retained verified writes,
+stale/settings conflicts, active lease exclusion, owner loss, consumed abandoned
+iterations and cancellation after a confirmed deletion. It uses controlled HTTP,
+not a real LLM, and checks reopened turn segments and synthetic closure of abandoned
+model steps in canonical events. Run `kernel:` for the shared boundary: stopped checkpoint accounting,
+no replay/unknown-effect continuation, stale append claims and retained no-progress
+limits, alongside existing cancellation and confirmation tests. Plain non-executing
+resume remains covered by `tests/cli/interrupted_run_smoke.py`. Windows/Office
+control transport is not qualified by these Mac checks.
+
 After building the CLI, `python3 -B tests/cli/application_requests_smoke.py` checks
 typed SubmitInput and snapshot/event reconnect through controlled HTTP waits:
 active/completed/older/pre-delivery/crashed duplicates, conflicting request IDs,

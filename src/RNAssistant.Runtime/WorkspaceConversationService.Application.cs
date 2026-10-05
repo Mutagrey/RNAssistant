@@ -21,6 +21,8 @@ namespace RNAssistant.Runtime
                 Id = session.Id, WorkspaceId = session.WorkspaceId, Title = session.Title, Model = session.Model,
                 Mode = session.Mode, Revision = session.Revision, Cursor = ConversationEventFeed.Cursor(session),
                 Status = session.LastRun?.Status, ModelConfiguration = session.LastRun?.ModelConfiguration,
+                RunId = session.LastRun?.RunId, IterationsUsed = session.LastRun?.KernelState?.Summary.IterationsUsed,
+                ToolStepsUsed = session.LastRun?.KernelState?.Summary.ToolStepsUsed, Limits = session.LastRun?.KernelState?.Limits,
                 ContextReceipt = session.LastContextReceipt, Acceptance = session.LastRun?.WorkspaceAcceptance,
                 UserInput = GetPendingQuestions(session), TaskList = GetTaskList(session), Plan = GetPlan(workspace, session),
                 InterruptedToolId = session.LastRun?.InterruptedToolId, InterruptedPath = session.LastRun?.InterruptedFilePath,
