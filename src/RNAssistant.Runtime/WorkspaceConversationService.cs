@@ -269,16 +269,13 @@ namespace RNAssistant.Runtime
         private void AssessAcceptance(WorkspaceDescriptor workspace, ChatSession session, RunSummary summary,
             WorkspaceRunAcceptance acceptance)
         {
-            var completeReads = new List<ResourceEvidence>();
+            var completeReads = CompleteFileReads(session, summary.RunId);
             var changed = 0;
             foreach (var fact in session.Messages.Where(item => item.RunId == summary.RunId &&
                 item.ProtocolMessage && !string.IsNullOrWhiteSpace(item.ToolCallId)))
             {
                 var wire = ToolResultWire.Read(fact.Content);
                 if (!wire.Success || wire.Result.Status != ToolResultStatus.Ok) continue;
-                if (fact.ToolName == "common.resources_read")
-                    foreach (var evidence in fact.ResourceEvidence ?? new List<ResourceEvidence>())
-                        if (evidence.Complete && evidence.View == "text") completeReads.Add(evidence);
                 if (fact.ToolName != null && fact.ToolName.StartsWith("files.", StringComparison.Ordinal) &&
                     (fact.ResourceEffect?.Outcome == ResourceEffectOutcome.VerifiedChanged ||
                         fact.ResourceEffect?.Outcome == ResourceEffectOutcome.Restored))
@@ -289,11 +286,16 @@ namespace RNAssistant.Runtime
             {
                 if (summary.Lifecycle != RunLifecycle.AwaitingConfirmation)
                     acceptance.MissingFiles = MissingExpectedFiles(workspace, acceptance.ExpectedFiles).ToList();
-                var frozen = _files.CaptureAuthority(completeReads);
-                var reducer = new EvidenceStateReducer();
-                acceptance.AcceptedCompleteFileReads = completeReads.Where(evidence =>
-                    reducer.IsCurrentExactText(evidence, evidence.Resource, frozen))
-                    .Select(evidence => evidence.Resource.Uri).Distinct(StringComparer.Ordinal).Count();
+                // A file can change during the final model wait. Revalidate all
+                // accepted read targets, including files outside ExpectedFiles.
+                foreach (var path in completeReads.Select(read => read.Target).Distinct(StringComparer.Ordinal))
+                {
+                    try { _files.ReadText(workspace, path); }
+                    catch (FileNotFoundException) { /* Owner marked the head unavailable. */ }
+                    catch (DirectoryNotFoundException) { /* Owner marked the head unavailable. */ }
+                }
+                var frozen = _files.CaptureAuthority(completeReads.Select(read => read.Evidence));
+                acceptance.AcceptedCompleteFileReads = CurrentCompleteFileReads(completeReads, frozen).Count;
                 acceptance.VerifiedWebSnapshot = acceptance.RequireWebVerification &&
                     AssessWebVerification(workspace, session, summary.RunId, acceptance);
                 if (summary.Lifecycle == RunLifecycle.AwaitingConfirmation)
@@ -312,6 +314,53 @@ namespace RNAssistant.Runtime
                 acceptance.State = WorkspaceAcceptanceState.Unknown;
                 acceptance.Error = ex.Message;
             }
+        }
+
+        private sealed class CompleteFileRead
+        {
+            public string Target { get; set; }
+            public ResourceEvidence Evidence { get; set; }
+        }
+
+        // The final assessment and model projection use the same accepted read
+        // facts and pure currency predicate. Neither grants model write authority.
+        private static IReadOnlyList<CompleteFileRead> CompleteFileReads(ChatSession session, string runId)
+        {
+            var reads = new List<CompleteFileRead>();
+            foreach (var fact in session.Messages.Where(item => item.RunId == runId && item.ProtocolMessage &&
+                item.ToolName == "common.resources_read" && !string.IsNullOrWhiteSpace(item.ToolCallId)))
+            {
+                var wire = ToolResultWire.Read(fact.Content);
+                if (!wire.Success || wire.Result.Status != ToolResultStatus.Ok) continue;
+                var data = JsonConvert.DeserializeObject<ResourceReadProjection>(wire.Result.DataJson);
+                if (string.IsNullOrWhiteSpace(data?.Target))
+                    throw new InvalidDataException("Accepted file read has no semantic target.");
+                foreach (var evidence in fact.ResourceEvidence ?? new List<ResourceEvidence>())
+                    if (evidence != null && evidence.Complete && evidence.View == ResourceRepresentations.Text)
+                        reads.Add(new CompleteFileRead { Target = data?.Target, Evidence = evidence });
+            }
+            return reads;
+        }
+
+        private static IReadOnlyList<CompleteFileRead> CurrentCompleteFileReads(
+            IEnumerable<CompleteFileRead> reads, ResourceAuthoritySnapshotSet frozen)
+        {
+            var reducer = new EvidenceStateReducer();
+            return reads.Where(read => reducer.IsCurrentExactText(read.Evidence, read.Evidence.Resource, frozen))
+                .GroupBy(read => read.Evidence.Resource.Uri, StringComparer.Ordinal).Select(group => group.Last()).ToArray();
+        }
+
+        private sealed class WorkspaceModelContext
+        {
+            [JsonProperty("readAcceptance")] public WorkspaceReadAcceptance ReadAcceptance { get; set; }
+        }
+
+        private sealed class WorkspaceReadAcceptance
+        {
+            [JsonProperty("currentCompleteFileReads")] public int CurrentCompleteFileReads { get; set; }
+            [JsonProperty("minimumCompleteFileReads")] public int MinimumCompleteFileReads { get; set; }
+            [JsonProperty("remainingCompleteFileReads")] public int RemainingCompleteFileReads { get; set; }
+            [JsonProperty("expectedFilesWithoutCurrentRead")] public IReadOnlyList<string> ExpectedFilesWithoutCurrentRead { get; set; }
         }
 
         private sealed class WebVerificationToolData
@@ -614,8 +663,24 @@ namespace RNAssistant.Runtime
                 ModelContextSnapshot snapshot;
                 try
                 {
+                    var required = new List<ChatMessage>
+                    { new ChatMessage { Role = _settings.SystemPromptRole, Content = Prompt() } };
+                    if (_acceptance?.MinimumVerifiedReads > 0)
+                    {
+                        var reads = CurrentCompleteFileReads(CompleteFileReads(_session, request.RunId), frozen);
+                        var context = new WorkspaceModelContext { ReadAcceptance = new WorkspaceReadAcceptance
+                        {
+                            CurrentCompleteFileReads = reads.Count,
+                            MinimumCompleteFileReads = _acceptance.MinimumVerifiedReads,
+                            RemainingCompleteFileReads = Math.Max(0, _acceptance.MinimumVerifiedReads - reads.Count),
+                            ExpectedFilesWithoutCurrentRead = _acceptance.ExpectedFiles.Except(
+                                reads.Select(read => read.Target), StringComparer.Ordinal).ToArray()
+                        } };
+                        required.Add(new ChatMessage { Role = _settings.SystemPromptRole,
+                            Content = "RUNTIME_CONTEXT:\n" + JsonConvert.SerializeObject(context) });
+                    }
                     snapshot = _compiler.Compile(authority,
-                        new[] { new ChatMessage { Role = _settings.SystemPromptRole, Content = Prompt() } },
+                        required,
                         AcceptedFacts(request.AcceptedMessages), null, _catalog, _settings,
                         Math.Max(1, ModelContextBudget.InputBudgetTokens(_settings) - fixedTokens));
                 }
@@ -762,6 +827,10 @@ namespace RNAssistant.Runtime
                             minimumVerifiedWrites = _acceptance.MinimumVerifiedWrites,
                             requireWebVerification = _acceptance.RequireWebVerification,
                             webChecks = _acceptance.WebChecks }) + ". " : string.Empty) +
+                    (_acceptance?.MinimumVerifiedReads > 0 ? "RUNTIME_CONTEXT.readAcceptance reports accepted complete file reads at the frozen current authority for this run. " +
+                        "The minimum counts distinct files read with common.resources_read at their final revision; a later edit invalidates that read. " +
+                        "Creation, mutation read-back and web.verify do not count as these reads. Before done, satisfy remainingCompleteFileReads by reading the final files. " +
+                        "This summary contains no source bytes and grants no permission to overwrite. " : string.Empty) +
                     "Respond with exactly one conversation-response v6 JSON object: message, action, tool_calls. " +
                     "Use action=tool for calls, continue for a short checkpoint, done only when the requested work is complete, " +
                     "blocked or needs_input when it cannot continue. One mutation per response. " +

@@ -1,6 +1,58 @@
 # Stabilization progress
 
-Latest workspace read-recovery slice (2026-10-05): file copy/move/patch/replace/delete
+Latest final-read evidence slice (2026-10-05): Runtime now supplies typed
+`RUNTIME_CONTEXT.readAcceptance` when the accepted task requires file reads.
+It reports current distinct reads, the remaining count and expected paths without
+a current read, from this run's accepted facts and the same frozen authority
+passed to the shared compiler. One predicate serves both projection and final
+assessment. The required projection is budgeted and stays frozen during format
+repair; it neither grants source/write authority nor changes kernel `done`.
+The instruction now states that writes/read-back/browser checks do not satisfy
+this file-read criterion. Owner: Runtime workspace acceptance; no second loop,
+durable read model or filesystem reader was added.
+
+A separate false-pass regression was confirmed and fixed in the same assessment:
+with only `--min-reads`, an external edit during the final model wait previously
+left stale reads counted as current. Final assessment now refreshes every accepted
+read target through the existing file owner, not just `--expect-files` paths.
+The old result was `passed`; the regression now correctly returns `failed`.
+
+The new scripted context test first failed on the missing projection. All three
+cases now pass: premature `done`, repair/next-run isolation and external final
+edit without expected files. They cover duplicate-read counting, invalidation
+after write/external edit, frozen format repair and native result roles. Existing
+browser runtime checks confirm that verification/read-back add no file reads;
+the omitted-source test confirms metadata grants no overwrite authority. CLI
+build: zero warnings/errors; version-format and diff checks passed. No harness
+or Office build was needed; Windows/Office/WebView2 remain unqualified.
+
+Real Gemma CSV rerun: three files created, one replacement after typed read
+recovery, one exact file read, one failed and one passing browser verification.
+The final snapshot passed **24/24**, but full acceptance **failed**, `model_done`,
+exit 5, 370.44 s: the model still skipped final reads. Its last HTTP request
+explicitly contained **0 current / 3 remaining** and all three file paths.
+This change does **not** establish a fix for premature completion. Category:
+`VERIFICATION_ERROR`; feature follow-up **not run**, full M4/M5 remain open.
+Nine HTTP requests, zero protocol rejections; 32 cumulative pair checks found no
+errors. Tokens: 58585/6337 total input/output, 11106/1840 maximum per request.
+Task/checks/model/digest/profile and 16-iteration/24-tool bounds stayed unchanged;
+the first request differs only by the declared read guidance and projection.
+No operator repair or raised limits. Swap-outs 1003804 → 1027252, swap use
+2955.75 → 3314.12 MiB; no reported context/OOM failure. Model unloaded afterwards.
+
+The installed model config selects renderer `gemma4`. Inspection of the matching
+[Ollama 0.35 renderer](https://github.com/ollama/ollama/blob/v0.35.0/model/renderers/gemma4.go#L26-L139)
+and [prompt assembly](https://github.com/ollama/ollama/blob/v0.35.0/server/prompt.go#L18-L85)
+found no dropped second system message. This is source/config evidence, not a
+measurement of model attention. Saved HTTP/CAS, exact source/binaries, driver,
+model config and audits:
+`/var/folders/k9/hr_94nt142x1f43jr6g0wr_00000gp/T/rna-read-acceptance-gemma-bdaut27s`.
+Next: connect the existing skill catalog/activation and minimal file/web
+verify-repair skills to the CLI, then rerun the fixed creation/follow-up task.
+The remaining premature-done case stays in
+[BACKLOG](BACKLOG.md#cli-final-read-acceptance-after-csv-repair--2026-10-05).
+
+Previous workspace read-recovery slice (2026-10-05): file copy/move/patch/replace/delete
 now return target-bound typed `RefreshRequired` when a complete source read is
 missing. Owner: Runtime `WorkspaceConversationService.FileHandler`; existing Core
 recovery/progress logic is unchanged. `WorkspaceFileService.Describe` supplies
@@ -27,8 +79,8 @@ and both JS observations preceded later patches, leaving **0/3 current complete
 file reads** at completion. The final gate correctly rejected the premature
 `done`; browser verification is not a substitute for the explicit read criterion.
 Category: `VERIFICATION_ERROR` (missing final read evidence). Feature follow-up
-was **not run**. Full M4/M5 remain open; next isolate final-read completion with
-the existing frozen acceptance contract, then rerun creation/follow-up. See
+was **not run**. Full M4/M5 remain open; the subsequent final-read projection,
+assessment fix and rerun are recorded above. See
 [BACKLOG](BACKLOG.md#cli-final-read-acceptance-after-csv-repair--2026-10-05).
 
 Same `rna-gemma4-12b-32k:latest` digest/profile as below: 32K/4096, system/user
@@ -721,14 +773,16 @@ boundary, not a functional CSV score. Scripted HTTP tests confirmed both CLI
 transport modes and saved metadata. The existing v6 parser correctly rejected
 these outputs; no permissive JSON repair or separate agent loop was added.
 
-Next concrete slice (2026-10-05): isolate premature completion without current
-final file reads against the existing frozen acceptance contract, then rerun
+Next concrete slice (2026-10-05): connect the existing shared skill catalog and
+activation to CLI, including minimal file/web verify-repair skills; then rerun
 autonomous CSV creation/follow-up and collect the remaining
 E-FILE/E-RESUME/E-CONTEXT/E-CAPABILITY evidence for that task. The counter
 verify/repair loop passed one real Gemma run after fixing
 historical diagnostic currency. Latest call/result retention and CLI role selection
-and target-bound read recovery are now implemented. The CSV rerun passed all
-24 browser checks but failed final-read acceptance; details are above. Bounded
+and target-bound read recovery are now implemented. Frozen read-progress metadata
+and final authority refresh are also implemented; Gemma still returned premature
+done despite the explicit remaining count. The CSV reruns passed all 24 browser
+checks but failed final-read acceptance; details are above. Bounded
 find/read, one frozen compiler, explicit CLI recovery, durable
 historical snapshot verification and frozen click/text/CSV checks are implemented.
 M4 still needs mode filtering, real skills and structured question/answer handling;

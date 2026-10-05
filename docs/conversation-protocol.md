@@ -95,6 +95,22 @@ effects. The assessment is a separate durable fact and exit condition. It does
 not rewrite the model's `done` action, the kernel lifecycle, or semantic/browser
 quality evidence.
 
+When a workspace task has a read minimum, each model request also contains a
+typed `RUNTIME_CONTEXT.readAcceptance`: current distinct complete file reads,
+the required/remaining count and expected paths without a current read. The
+runtime derives it from this run's accepted `common.resources_read` facts using
+the same currency predicate as final acceptance and the exact frozen authority
+passed to `ModelContextCompiler`. Creation, mutation read-back, browser source
+evidence and previous runs do not increase this count. A later edit invalidates
+the earlier read. The projection is required context, participates in budgeting
+and survives format repair unchanged; it carries no source body or write authority.
+The compiler still controls source delivery/omission and mutation prerequisites.
+This is derived metadata, not another durable read model or a completion gate.
+A premature `done` still terminates the kernel and fails the separate assessment.
+At final assessment the file owner refreshes every accepted read target, even
+without `--expect-files`, before freezing read authority; changes during the last
+model wait cannot pass using an old head. An unavailable refresh fails assessment.
+
 The workspace CLI uses the existing `AppSettings.SystemPromptRole` for its frozen
 instruction message: `--instruction-role` / `RNA_INSTRUCTION_ROLE` selects `system`
 or `developer` (default). Changing the role does not change the instruction text,

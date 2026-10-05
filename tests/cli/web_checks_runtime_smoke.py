@@ -12,6 +12,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 
 from web_verifier_smoke import CLI, REPO, record
+from read_acceptance_context_smoke import read_progress
 
 
 def run_case(root, change_after_verify):
@@ -74,6 +75,8 @@ def run_case(root, change_after_verify):
         assert result["acceptance"] == ("failed" if change_after_verify else "passed"), result
         assert result["webSnapshotVerified"] == (not change_after_verify), result
         assert result["webCheckCount"] == 9 and len(requests) == 6, result
+        assert [read_progress(request)["currentCompleteFileReads"] for request in requests] == [0, 0, 1, 0, 1, 1], \
+            "Browser evidence and mutation read-back must not count as accepted final file reads"
         assert "rna://" not in json.dumps(requests), "Runtime references leaked into the model context"
         def receipts(request, tool):
             return [body for message in request["messages"]

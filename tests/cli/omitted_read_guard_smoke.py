@@ -60,9 +60,9 @@ def main():
                        RNA_MODEL="scripted", RNA_API_KEY="ollama")
             run = subprocess.run(["dotnet", str(CLI), "run", "--workspace", str(workspace),
                 "--message", "Read large.txt and replace it only after seeing its complete source.",
-                "--context-tokens", "16384", "--max-iterations", "4", "--max-tool-steps", "3",
+                "--context-tokens", "16384", "--min-reads", "1", "--max-iterations", "4", "--max-tool-steps", "3",
                 "--jsonl"], cwd=REPO, env=env, text=True, capture_output=True, timeout=45, check=False)
-            assert run.returncode == 0, (run.stdout, run.stderr)
+            assert run.returncode == 5, (run.stdout, run.stderr)
             assert len(requests) == 4, (len(requests), run.stdout, run.stderr)
             initial_context = "\n".join(message.get("content") or "" for message in requests[1]["messages"])
             assert "source_observation_required" in initial_context and "RefreshRequired" in initial_context
@@ -75,6 +75,7 @@ def main():
             assert "rna://" not in json.dumps(requests), "Runtime identity leaked to the model"
             final = json.loads(run.stdout.splitlines()[-1])["data"]
             assert final["reason"] == "model_blocked", final
+            assert final["completeFileReads"] == 1 and final["acceptance"] == "failed", final
             assert final["ToolCounts"]["WriteOk"] == 0 and final["ToolCounts"]["WriteUnknown"] == 0, final
             print("PASS typed recovery and shared compiler: omitted exact read cannot authorize replacement; original bytes preserved")
     finally:

@@ -47,6 +47,13 @@ successful mutation, with typed recovery and no runtime identity in HTTP. Move/d
 still require approval. A separate-process approval test proves that recovery
 survives accepted-history restoration and an unrelated verified deletion does not
 clear the target's failed call. These use scripted HTTP models, not real-model quality evidence.
+`python3 -B tests/cli/read_acceptance_context_smoke.py` checks the dynamic final-read
+projection: distinct counts, invalidation after edits, frozen JSON repair, native
+result transport and no credit from an earlier run. Premature `done` remains
+terminal and fails acceptance. An external edit during the final model wait is
+rejected even with only `--min-reads` and no `--expect-files`. The browser runtime
+smoke confirms that verification/read-back do not add file reads; the omitted-read
+smoke confirms that this metadata does not grant overwrite authority.
 `python3 tests/cli/response_mode_smoke.py` checks explicit CLI `json_schema` /
 `json_object` selection, `system` / `developer` instruction roles, all three
 `--tool-result-role` transports through compiler/actual HTTP and persisted metadata.

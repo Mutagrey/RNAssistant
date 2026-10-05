@@ -23,13 +23,22 @@ verified current web snapshot. The follow-up was not run. The read criterion is
 already present in `WorkspacePorts.Prompt`; this is not evidence of lost results
 or an absent task contract. Exact traces/profile are in [PROGRESS](PROGRESS.md).
 
-Next: isolate how final-read requirements and their remaining evidence appear
-in frozen requests after repair, with a targeted premature-done regression.
-Preserve final freshness checks and separate browser/read evidence; do not lower
-acceptance or add a second loop to obtain a pass. Closure needs autonomous
-creation with current final reads, then the unchanged feature follow-up under
-fixed bounds. The preceding typed recovery defect is fixed and tested; it no
-longer blocks a correctly read identical mutation.
+The subsequent slice now exposes typed read-progress metadata in every required
+frozen context, shares its currency predicate with final assessment, and fixes a
+confirmed false pass after an external edit without `--expect-files`. Regressions
+cover duplicate/stale reads, frozen repair, a new run and premature `done`.
+Nevertheless, the next unchanged Gemma task again ended after 24/24 browser checks
+with 0/3 final reads. Its last HTTP request includes the remaining count and paths;
+matching Ollama renderer/config inspection found no dropped second system message.
+Transport evidence does not prove model attention. Traces/metrics are in progress.
+
+Next implementation: connect the existing shared skill catalog/activation and
+minimal file/web verify-repair skills (currently missing M4/M5 scope), then repeat
+the fixed task. Preserve final freshness and separate browser/read evidence; do
+not lower acceptance or add a second loop to obtain a pass. Closure still needs
+autonomous creation with current final reads, then the unchanged feature follow-up
+under fixed bounds. Target-bound read recovery is fixed and tested; it no longer
+blocks a correctly read identical mutation.
 
 ## CLI continuation after completed-operation receipts — 2026-10-05
 
