@@ -1,6 +1,17 @@
 # Stabilization progress
 
-Latest shared workspace skills slice (2026-10-05): Office and CLI now use Core
+Latest waiting-status correction (2026-10-05): the Office conversation projection
+now maps the kernel's typed `awaiting_user` terminal reason to the corresponding
+response status. Previously it showed `completed`, although the kernel had stopped
+for questions. The existing `plan mode: native question pauses kernel` test fails
+identically on the isolated pre-slice `2a6525fe` baseline and passes after this
+one-line correction. Owner: Office conversation result projection. No lifecycle,
+question dispatch or resume semantics changed. Source-linked harness build has
+the two existing PDF CA1416 warnings; version-format/diff checks passed.
+Windows/Office/WebView2 delivery remains unqualified. The CLI mode/question slice
+is in progress and will receive its own status and commit.
+
+Previous shared workspace skills slice (2026-10-05): Office and CLI now use Core
 `SkillPublicationService` for committed skill catalogs, exact body/reference CAS
 reads and publication dependencies; `SkillCatalogService` selects host metadata.
 The former Office-only selection/publication/read implementations are removed.

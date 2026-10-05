@@ -148,7 +148,7 @@ namespace RNAssistant.Office.Services
                 ResponseStatus = summary.Reason == "provider_refused" ? AgentResponseStatuses.Refused
                     : summary.Lifecycle == RunLifecycle.Completed ?
                         summary.Reason == "model_blocked" ? AgentResponseStatuses.Blocked :
-                        summary.Reason == "model_needs_input" ? AgentResponseStatuses.AwaitingUser :
+                        summary.Reason == "model_needs_input" || summary.Reason == "awaiting_user" ? AgentResponseStatuses.AwaitingUser :
                         AgentResponseStatuses.Completed : null,
                 RunViewState = RunViewStateProjector.Create(_session)
             };
