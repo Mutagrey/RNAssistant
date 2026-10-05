@@ -8,6 +8,40 @@ retired or deferred is not an active P0/P1 implementation defect merely because
 that original severity remains in the table. Release qualification is a separate
 exact-build gate.
 
+## Harness follow-up review — 2026-10-05
+
+Current-code follow-up to the 2026-10-01 continuity audit; its original compiler,
+claim-generation and skill-retention findings are not all still-open defects.
+Detailed contracts, evidence and public harness comparison are in the
+[system review](../conversation-protocol.md#системное-ревью-harness--2026-10-05).
+
+- **P2 / Core recovery:** a `Replan` failure without `ResourceIdentity` is cleared
+  by an unrelated verified mutation. A host-neutral probe observes the same
+  invalid read rejected before a Task List effect and allowed after it. Retain
+  the failure until relevant recovery or corrected arguments; do not reset it
+  merely because some state changed. Owner: `AgentProgressTracker`.
+- **P2 / Office read cancellation:** snapshot search calls `CaptureSearch` with
+  `CancellationToken.None`; its per-cell cancellation checks cannot observe run
+  cancellation. Thread the operation token through Gateway/provider reads. This
+  proves a cancellation gap, not the duration or cause of the photographed hang.
+  Owner: Resource Gateway / Excel search; real Office latency remains open.
+- **P2 / context retention:** archived operation receipts use optional residual
+  budget and stop selection at the first oversized receipt. With budget 4000,
+  a long newest diagnostic prevented an older short receipt from being selected
+  (0 vs 1 in the probe). No durable facts were lost. Pin bounded unresolved-effect
+  metadata, select remaining receipts within budget and report omissions.
+  Owner: `ContextWorkingSet` / context compiler.
+- **Projection contract risk:** generic `data` has no closed metadata boundary.
+  A synthetic nested hash survives the generic path; this is not evidence that
+  the current Excel chart producer emits that field. The concrete nested VBA
+  error-string leak is addressed in the photo follow-up below. Prefer explicit
+  metadata projection while preserving arbitrary business data, not recursive
+  removal by property name. Owner: model projection / domain result producers.
+
+Validation: existing `context continuity:` 8/8 without rebuild; a temporary
+host-neutral probe against the existing Harness assembly, no model HTTP and no
+Office/VSTO validation. These issues are recorded, not fixed by this review.
+
 ## Workspace CLI false completion with local Qwen — 2026-10-04
 
 Owner: shared agent completion contract and CLI acceptance evidence (M4–M5).
@@ -636,6 +670,36 @@ claiming the user scenario qualified; do not infer that a rejected patch wrote c
 The older R72 and R78 entries below describe their historical implementations;
 the current empty-call and definite no-effect recovery rules are in
 `docs/conversation-protocol.md`.
+
+Follow-up photos (2026-10-05) show `RESOURCE_SNAPSHOT_TOO_LARGE` while the
+`excel.find_cells` card names a narrow `B115:B137` range. The earlier assumption
+of a broad requested range was incorrect. Two host-neutral defects could cause
+this: an explicit `scope=sheet` plus `address` silently searched the sheet's
+UsedRange even though the activity card displayed `sheet!address` without scope,
+and regex capture retained and counted the duplicated `Formula` body
+of every non-formula cell. Scope/address conflicts now reject before Excel access;
+capture stores only real formulas. A 23-cell range with long values and a large
+UsedRange passes the focused regression. Exact screenshot cause remains unknown
+without the call arguments; no screenshot shows a `PromptBudgetExceeded` model
+diagnostic. The resource target schema also now permits a direct known A1 range
+read through `common.resources_read`.
+
+The same photos show a VBA creation verification mismatch reported as generic
+`vba_access_error`, and separate rejected replacement/patch attempts. Direct
+creation now returns typed failure after verified removal, or unknown effect when
+cleanup cannot be verified; typed rollback reaches the mutation journal. A silent
+failed removal is also detected by component-count read-back. The comparable-hash
+mismatch itself still needs exact submitted/live module source and Windows/VBE
+reproduction. The visible hash strings are durable diagnostics, but nested exception text could
+previously pass them into the model projection. The projection now redacts runtime
+hashes/IDs in nested VBA result strings while retaining the error code and durable
+diagnostic. A focused regression covers the archived and model-facing forms.
+`vba_snapshot_refresh_required` is a deliberate stale-source guard;
+the model's later creation of a different module does not resolve that source
+conflict. Chart snapshot rejection now reports the invalid chart index and field
+without dispatching a mutation; the photo does not identify which field failed.
+The cancelled run with two unknown effects needs an exact trajectory before
+assigning a code cause.
 
 ## Outlook VSTO pane report — 2026-09-29
 

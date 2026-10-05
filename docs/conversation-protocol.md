@@ -1654,6 +1654,165 @@ OpenAI описывает agent loop как последовательное п�
 Это обоснование принципов; предложенная реализация — вывод из кода RNAssistant,
 а не утверждение, что другой framework автоматически исправит его дефекты.
 
+## Системное ревью harness — 2026-10-05
+
+Scope: текущая цепочка Office/Core от результата инструмента до следующего model
+request, включая projection, working set, compaction и recovery. Это повторная
+оценка **после** исправлений аудита 2026-10-01; таблица воспроизведений выше
+описывает прежнее поведение. Сравнение основано на публичных первичных источниках,
+а не на предположениях о закрытых компонентах Codex.
+
+### Оценка текущей архитектуры
+
+Основа пригодна для сопровождения: единый kernel, immutable events/CAS, exact
+document binding, проверка effect после исполнения, frozen authority и отдельный
+compiler уже решают нужные задачи. Текущий код сохраняет исходную ошибку read,
+различает выполненную операцию и устаревший after-state, восстанавливает ограниченный
+набор skill/source bodies и блокирует одинаковые отказы. Удаление этих механизмов
+ради более короткого prompt ухудшит корректность.
+
+Незавершённая граница — единообразный **смысл результата** для всех consumers.
+Типизированный runtime соседствует с произвольным `ToolResult.DataJson`,
+family-specific удалением полей, JSON summaries и отдельным распознаванием payload
+форм для UI. Поэтому одинаково называемые `complete`, `status`, `retryable` или
+`revision` могут относиться к разным вещам. Разделение существует в коде, но ещё
+не является закрытым контрактом на всём пути.
+
+| Слой / текущие типы | Назначение | Что передавать модели |
+|---|---|---|
+| `ToolCall`, `ToolExecutionRecord`, `ResourceEffect`, `ToolRecoveryContract` | Принятый вызов, dispatch, terminal outcome, проверенный эффект и разрешённое восстановление | Короткий факт операции и следующий допустимый шаг; `ok` отдельно от изменения |
+| `ResourceRef`, `ResourceEvidence`, `ResourceCoverage`, `PayloadRef`, authority snapshot | Exact identity/revision, область прочитанного, целостность и актуальность относительно известного runtime состояния | Semantic target, view, coverage, currentness и факт доставки тела |
+| Append-only events + CAS | Полная история, исходные ошибки, точные bytes, повторная материализация и диагностика | Выбранная проекция; сохранённый объект сам по себе не означает, что модель его прочитала |
+| `ContextAtom`, `CompletedToolOperation`, `ResourceObservationNotice`, structured claims | Подготовка следующего запроса, независимые операция/наблюдение/интерпретация | Обязательные ограничения, незавершённая работа, нужные текущие данные и receipts |
+| Tool Result v1 | `tool_call_id`, `name`, `status`, `message`, `data`; durable `resources` | Та же корреляция, semantic metadata и domain content; runtime refs исключаются |
+| Conversation Response v6 | Собственный JSON `message + action + tool_calls`; call IDs назначает runtime | Модель выбирает действие и semantic arguments; не формирует guards/revisions |
+| `ToolResultPresentationDto` / activity diagnostics | Читаемое представление и техническая диагностика в UI | UI JSON не является источником model request |
+
+`current` означает соответствие frozen authority, известной runtime. Это не
+обещание отсутствия внешнего редактирования Office во время ожидания модели;
+проверка live preconditions перед записью остаётся обязательной.
+
+### Подтверждённые остаточные проблемы
+
+1. **P2, recovery owner:** `AgentProgressTracker.Observe` снимает отказы без
+   `ResourceIdentity` после любого `VerifiedChanged/Restored/ExternalDriftObserved`.
+   В probe одинаковый `resources_read` с ошибкой пути сначала блокируется, затем
+   разрешается после несвязанного сохранения Task List. Отказы `Replan` не должны
+   очищаться только из-за чужой записи. Нормализация JSON в signature полезна,
+   но не распознаёт одинаковое намерение под другим именем/selector; это отдельная
+   граница эффективности, а не доказательство обхода всех domain guards.
+   Код: `AgentProgressTracker.cs`, ветка обработки подтверждённого effect.
+2. **P2, Resource Gateway / Excel search owner:** `ReadSearch` передаёт
+   `CancellationToken.None` в `CaptureSearch`. Последний умеет проверять отмену
+   перед чтением и на каждой ячейке, но отмена run туда не доходит. Это относится
+   к snapshot-пути regex/длинного literal, не к native short-literal find.
+   Возможна задержка освобождения document gate до окончания scan; длительность
+   зависания с фотографий этим ревью не установлена.
+3. **P2, context owner:** архивные operation receipts выбираются из остаточного
+   бюджета (`min(2048, budget/4)`, максимум 24), а слишком дорогой последний
+   receipt вызывает `break`. В probe один длинный diagnostic message вытеснил
+   и более ранний короткий receipt: 0 вместо 1 при одинаковом бюджете 4000.
+   При нулевом остатке нет receipts вообще. Events не теряются; LLM-summary может
+   сохранить факт, но отдельного обязательного удержания unresolved failures /
+   unknown effects здесь нет. Нужны bounded metadata, отдельный приоритет для
+   нерешённых эффектов и явный счётчик исключённых receipts.
+4. **Риск контракта, model projection owner:** generic projection копирует
+   произвольный `data`, затем удаляет известные runtime refs и отдельные поля
+   известных семейств. Synthetic generic error с `diagnostics.expectedHash`
+   сохраняет этот hash в model result. Это проверка открытой границы, а не новый
+   доказанный источник hash в `excel.upsert_chart`. Подтверждённая утечка вложенных
+   VBA error strings уже исправлена отдельно. Новый metadata field пока может
+   потребовать ещё одного ручного sanitizer; имена business columns фильтровать
+   глобально нельзя.
+
+Связанные исходники:
+[progress](../src/RNAssistant.Core/Agent/AgentProgressTracker.cs),
+[search](../src/RNAssistant.Office/Services/ExcelResourceProvider.Search.cs),
+[working set](../src/RNAssistant.Office/Services/ContextWorkingSet.cs),
+[generic projection](../src/RNAssistant.Core/Services/ModelResultProjection.cs),
+[Office projection](../src/RNAssistant.Office/Services/ModelToolResultProjection.cs).
+
+Хеши нужны для integrity/preconditions/read-back и остаются в журнале. Модели
+достаточно причины несовпадения, проверенного disposition (`restored`, `unknown`
+и т. п.) и способа восстановления. Показ hash в техническом UI не доказывает его
+включение в prompt; это проверяется через сохранённый `llm.request`. По фотографиям
+не установлен источник самого VBE mismatch, поэтому отключать проверку hash нельзя.
+
+### Что действительно сравнивать с Codex и другими harness
+
+| Система | Публично описанный механизм | Применимость к RNAssistant |
+|---|---|---|
+| Codex / OpenAI | App Server имеет отдельные typed thread/turn/item events (`commandExecution`, `fileChange`, `mcpToolCall`, `contextCompaction`), включая failed/interrupted outcomes. Responses tool outputs связываются с call через `call_id` и могут содержать JSON, text или media. Managed Codex harness ведёт session/tool loop | Отделять UI lifecycle, runtime authority и model input. Технические IDs допустимы для корреляции, но не должны становиться задачей модели. App Server DTO не равен model prompt |
+| OpenAI compaction | Responses поддерживает opaque compaction item для переноса состояния в следующее окно | Нужна контролируемая непрерывность, а не бесконечная история. Это provider-specific механизм; он не доказывает качество сохранения всех Office facts и не требует переносить RNAssistant на один provider |
+| Claude Code / Anthropic | Just-in-time reads, минимально пересекающиеся tools, compaction с сохранением решений/незавершённой работы; подробные старые outputs могут выгружаться | Ясный выбор read/search/inspect, точная область чтения и полезное recovery важнее количества полей. Данные извлекаются по необходимости |
+| Deep Agents / LangGraph | Отдельно выгружаются большие tool outputs, старые write arguments и затем сжимается история. Checkpoints сохраняют состояние исполнения | RNAssistant уже имеет CAS/folding/checkpoints. Нужны корректная повторная доставка и targeted compaction evals; другая библиотека сама по себе не исправляет Office selectors, read-back или отмену |
+
+Первичные источники, проверены 2026-10-05:
+[Codex App Server events](https://learn.chatgpt.com/docs/app-server#events),
+[OpenAI harness architecture](https://developers.openai.com/api/docs/guides/agents-api/architecture),
+[function calling](https://developers.openai.com/api/docs/guides/function-calling#how-it-works),
+[compaction](https://developers.openai.com/api/docs/guides/compaction),
+[Anthropic context engineering](https://www.anthropic.com/engineering/effective-context-engineering-for-ai-agents),
+[Deep Agents context management](https://www.langchain.com/blog/context-management-for-deepagents),
+[LangGraph persistence](https://docs.langchain.com/oss/python/langgraph/persistence).
+
+Ни один из этих механизмов не гарантирует, что модель всегда выберет правильный
+tool или выполнит задачу. Harness отвечает за правдивый feedback, ограничения
+действий, восстановимость и наблюдаемость; модель — за выбор стратегии и понимание
+результатов. Сила модели не исправляет проигнорированный диапазон или потерянный
+error code. Исправный harness также не гарантирует правильный VBA/JS. Собственные
+CLI trajectories Qwen/Gemma в risk register показывают ошибки стратегии и
+преждевременный `done` даже при сохранённых execution facts.
+
+### Рекомендуемые изменения и оценка
+
+Продолжать существующий план из предыдущего аудита, без второго runtime/store:
+
+1. Исправить три воспроизводимых recovery/cancellation/receipt дефекта выше
+   отдельными локальными срезами. Не ослаблять whole-source и read-back guards.
+2. Для затрагиваемых producers явно отделять typed **operation/error/observation
+   metadata** от **domain content**. Metadata имеет закрытую модельную проекцию;
+   строки source и пользовательские columns остаются точными. Применять текущие
+   `ResourceEffect`, `ToolRecoveryContract`, `ResourceEvidence`, `ResourceCoverage`
+   и `ResourceTableBatch`. `retryable`, `hasMore`, `truncated` должны выводиться
+   из одного состояния, а не независимо задаваться разными слоями. Не заменять
+   domain payload универсальным урезанным JSON.
+3. Распределять контекст по назначению: обязательные пользовательские ограничения,
+   активная задача и unresolved effects; затем нужные skill/source bodies; затем
+   подробная история. Большие тела остаются в CAS с доступным semantic target.
+   Omitted body всегда явно помечен и не даёт authority на whole overwrite.
+   Existing inspector должен показывать окончательную доставку и её стоимость,
+   включая исключённые receipts; не ещё один приблизительный transcript.
+4. Отдельно оценить ergonomics каталога и wire v6. В Agent/Excel VBA write/patch
+   входят в core даже при задаче чтения. Явное ограничение задачи «только читать»
+   полезно закреплять execution policy, а не оставлять только текстом skill.
+   Смена native tool transport против собственного v6 — эксперимент с тем же
+   kernel/effects и fixtures, не обязательная миграция и не model-name fallback.
+
+Измерение defaults: `BuildAgentInstruction(new AppSettings())` даёт **15 049
+символов**, без каталога, schemas, истории и данных. Само число не доказывает
+перегрузку; считать доли фактического request и повторяемые инструкции. Большой
+контекст не компенсирует неверную область чтения или противоречивую семантику.
+
+Минимальная evaluation matrix: одинаковые исходные документы/fixtures и задачи,
+фиксированные model digest, context и режим; сравнение текущего и изменённого
+harness на одной модели, затем сравнение моделей на неизменном harness. Не
+приписывать процент успеха harness/model без такого эксперимента. Нужны сценарии
+«23 ячейки при большом UsedRange», внешний edit между read/write, conflict → exact
+refresh, повтор после несвязанного task update, unknown effect → compaction,
+исчезнувшее из окна тело skill, большой output → bounded re-read и отмена scan.
+В отдельных evals принудительно вызывать compaction рано. Метрики: фактическая
+правильность результата, повторные одинаковые отказы, лишние reads, recoverability,
+ложный успех, latency отмены и input tokens по слоям. Количество вызовов или `done`
+не заменяет проверку содержимого результата.
+
+Evidence этого ревью: существующие `context continuity:` **8/8**, без rebuild;
+временный .NET 8 probe использует ту же host-neutral Harness assembly для
+failure-reset, receipt selection, generic projection и размера default prompt.
+Собирался только probe вне репозитория. Реальные модели не вызывались; Windows,
+Office/VSTO/WebView2 не запускались. Сценарии фотографий остаются частично
+неподтверждёнными без exact accepted arguments и фактических request bodies.
+
 ## Incoming messages during a run
 
 Owner: `ConversationInboxService` accepts input and owns the FIFO queue;
