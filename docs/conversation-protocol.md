@@ -95,6 +95,15 @@ effects. The assessment is a separate durable fact and exit condition. It does
 not rewrite the model's `done` action, the kernel lifecycle, or semantic/browser
 quality evidence.
 
+The workspace CLI uses the existing `AppSettings.SystemPromptRole` for its frozen
+instruction message: `--instruction-role` / `RNA_INSTRUCTION_ROLE` selects `system`
+or `developer` (default). Changing the role does not change the instruction text,
+v6 schema/parser or tool-result role. Runtime rejects other roles before starting
+a run. The selected role is saved in `ModelRunMetadata`; approval inherits it when
+omitted and rejects an explicit/environment mismatch before dispatch. A historical
+run whose model metadata lacks the role cannot be approved by guessing it; denial
+remains available. There is no model-name heuristic or automatic role fallback.
+
 The CLI's `files.delete` uses the kernel's durable `AwaitingConfirmation` state.
 `approve` reconstructs the accepted call and complete file read from the chat
 stream; the file owner rechecks current bytes before dispatch. `deny` records a

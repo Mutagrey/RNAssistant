@@ -403,6 +403,7 @@ namespace RNAssistant.Core.Models
         public string EndpointSha256 { get; set; }
         public int ContextWindowTokens { get; set; }
         public string AgentResponseMode { get; set; }
+        public string SystemPromptRole { get; set; }
         public string ReasoningRequestMode { get; set; }
         public bool ReasoningEnabled { get; set; }
     }

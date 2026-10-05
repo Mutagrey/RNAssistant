@@ -8,6 +8,12 @@ still failed autonomous continuation. CLI now uses the shared production trace w
 for exact HTTP requests, rejected bodies and attempt/snapshot correlation. Full
 real-agent acceptance and the remaining §8.1 views/consumers stay open.
 
+Provider isolation (2026-10-05): GPT-OSS returns native tool calls with empty v6
+content; its installed template also drops `developer` instructions. CLI now honors
+the existing `SystemPromptRole` setting and pins it through approval. Gemma still
+stopped after two files with `system`. Neither run reached a token limit; no new
+swap-out occurred during the Gemma run. Model/task acceptance remains open.
+
 Local model context (2026-10-04): the 8K Qwen 27B profile cannot admit a CLI
 Agent request with the current 4096-token output policy and mandatory reserves;
 it is retained only for context rejection checks. A 16K profile is the candidate
@@ -152,6 +158,59 @@ under the same frozen snapshot and no API key in trace bodies/metadata. Interrup
 model wait, idempotent non-replaying `resume` and explicit continuation passed.
 These are trace/runtime checks; the real-model failures above predate the passive
 trace change and are not claimed fixed. Windows/Office delivery remains unverified.
+
+### CLI instruction role and provider isolation — 2026-10-05
+
+Owner: workspace application / CLI profile. At `8cd708f7`, the fresh GPT-OSS
+counter run recorded all 10 rejected attempts and raw stream frames. It failed
+`ProtocolExhausted` in 73.27 s, exit 5, with zero dispatched tools/files. The
+provider returned empty content, reasoning and native `tool_calls`; those calls
+were never promoted into the v6 execution contract. This is `PROTOCOL_ERROR`.
+The installed GPT-OSS template renders system/user/assistant/tool messages but
+omits `developer`, including RNAssistant's tool catalog (`CONTEXT_ERROR` /
+`ENVIRONMENT_ERROR`). Two single-request probes with the same seed 17 and unchanged
+text confirmed the omission: developer used 158 prompt tokens and invented
+`tool.create_file`; system used 1074 and named `files.create`. Both still returned
+native calls, not v6 JSON. System-role `json_object` and `tool_choice=none` probes
+also failed; no probe dispatched a tool or qualified the full task.
+
+The concrete CLI defect was a hardcoded instruction role despite the existing
+`AppSettings.SystemPromptRole`. `--instruction-role` / `RNA_INSTRUCTION_ROLE` now
+selects system/developer explicitly; the default remains developer. Runtime validates
+the role, passes it into the same frozen compiler and saves it in model metadata.
+Approval inherits the saved role or rejects a conflicting override before dispatch;
+missing historical role metadata requires denial/new input. No prompt text, native
+tool-call fallback, model-name rule, retry/output/context limit or agent loop changed.
+
+A fresh Gemma 12B counter run on this working change with `system` failed in
+41.76 s: 5 requests, 2 successful creates, 0 protocol/tool errors or retries, then
+3 no-call `continue` responses; `no_tool_progress`, acceptance failed, exit 5.
+`index.html` and `styles.css` exist; no `app.js`, reads or browser verification.
+It used the previously recorded `rna-gemma4-12b-32k:latest` digest, context 32768,
+output 4096, reasoning off and json_schema. Prompt usage was 1032–1408 tokens;
+completion usage 43–355. `MODEL_ERROR` / possible `CONTEXT_ERROR` remains open.
+GPT-OSS used the previously recorded 16K profile/digest, output 4096, reasoning off
+and json_schema; observed native-call stops were `tool_calls`, not `length`.
+
+Memory check: GPT-OSS was resident alone, Ollama reported 12 GB / 100% GPU.
+The Mac had 24 GiB physical RAM and about 7.2 GiB system swap in use; this cumulative
+value alone does not establish an OOM. During the entire Gemma run, swap use remained
+7386.75 MiB and swap-out stayed 900005 pages; swap-in increased by 20 pages (320 KiB).
+No OOM/timeout or output truncation was observed. These measurements do not qualify
+larger models/contexts, but do not support increasing limits for these failures.
+Profiles were run sequentially and unloaded after testing. Ollama's documented
+[thinking controls](https://docs.ollama.com/api/openai-compatibility) distinguish
+requested thinking output from guaranteed model/protocol behavior.
+
+Evidence directories under `/var/folders/k9/hr_94nt142x1f43jr6g0wr_00000gp/T/`:
+`rna-gptoss-trace-e0tu8zz_` (session `4c677a9b088e45f589a1d12c166cdff1`, exact
+requests, SSE, rejected bodies, installed template and four isolated probes),
+`rna-gemma-system-role-rl9q2919` (session `8942d820582d4941aa6a9ec73b0c1de4`,
+trace, memory counters and summary). The targeted CLI response-mode smoke passed:
+both roles/formats and durable metadata, identical instruction text, invalid-role
+rejection, pending deletion preserved on role drift and exactly one verified delete
+after approval inherited the system role. CLI build passed. M4/M5 real acceptance,
+the remaining §8.1 provider/view work and Windows/Office qualification remain open.
 
 Previous local-model result: on the same clean CSV task and then-current CLI source,
 Gemma 4 12B wrote three real files and passed 10/11 independent browser checks;

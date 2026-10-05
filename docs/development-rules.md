@@ -252,7 +252,9 @@ Full harness не заменяет Windows/COM проверку. Число фа
 
 Модель — конфигурация environment/profile одного RNAssistant runtime, а не
 вариант реализации агента. При переключении допустимо менять только `BaseUrl`,
-`Model`, лимит контекста, явный response mode, reasoning/thinking и capability metadata. `AgentKernel`,
+`Model`, лимит контекста, явный response mode, instruction role по поддержке endpoint,
+reasoning/thinking и capability metadata. Смена `SystemPromptRole` сохраняет текст
+инструкций; роль фиксируется в run metadata, без автоматического выбора по имени модели. `AgentKernel`,
 `ModelProtocol`, `ToolRuntime`, tool schemas, skills, workspace, правила проверки
 и acceptance tests остаются теми же. System prompts меняются только по отдельной
 причине, не ради адаптации к слабой модели.
@@ -291,7 +293,7 @@ skills и история могут превысить и этот лимит.
 
 Для сравнения зафиксировать RNAssistant commit, task, исходный workspace, tool
 catalog, skills, acceptance tests и по возможности temperature/reasoning policy.
-Для каждого run сохранить model/tag и digest, context, response mode, thinking/reasoning mode,
+Для каждого run сохранить model/tag и digest, context, response mode, instruction role, thinking/reasoning mode,
 число LLM и tool calls, protocol violations, tool errors, retries, final action,
 результат независимой acceptance-проверки и duration. `action=done` не является
 критерием успеха. Каждый провал пометить хотя бы одной категорией:

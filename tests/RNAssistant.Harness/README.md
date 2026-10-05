@@ -13,7 +13,10 @@ attempt/snapshot correlation and API-key exclusion from trace metadata/payloads.
 omitted by the compiler's budget cannot authorize replacement and preserves the
 original bytes. Both use a scripted HTTP model, not real-model quality evidence.
 `python3 tests/cli/response_mode_smoke.py` checks explicit CLI `json_schema` /
-`json_object` selection and persisted model metadata.
+`json_object` selection, `system` / `developer` instruction roles and persisted
+model metadata. It verifies unchanged prompt text, invalid-role rejection and
+cross-process approval inheriting the recorded role; a conflicting role must leave
+the pending file unchanged and send no model request.
 
 The small real-model continuation task is `tests/cli/counter_task.md`. Use a fresh
 workspace/session and the normal CLI with these arguments:
@@ -24,7 +27,7 @@ workspace/session and the normal CLI with these arguments:
 ```
 
 Record the exact model
-digest, context and `--thinking on|off`; see [model comparison rules](../../docs/development-rules.md#сравнение-моделей).
+digest, context, instruction role and `--thinking on|off`; see [model comparison rules](../../docs/development-rules.md#сравнение-моделей).
 This is an opt-in real-model task, not a deterministic harness test. A passing CLI
 contract proves file/read/verification evidence; counter button behavior still
 requires an independent browser check.

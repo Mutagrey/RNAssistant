@@ -85,8 +85,12 @@ The CLI requests 4096 output tokens; `RNA_REASONING_MODE` defaults to
 comparison. `--response-mode` / `RNA_RESPONSE_MODE` explicitly selects
 `json_schema` (CLI default) or `json_object` for an endpoint that needs it;
 both use the same v6 parser and agent loop. The run saves model, Ollama digest
-when available, context, response mode and reasoning mode; `rna inspect` shows
-that snapshot. Use a new session for each
+when available, context, response mode, instruction role and reasoning mode;
+`rna inspect` shows that snapshot. `--instruction-role` / `RNA_INSTRUCTION_ROLE`
+selects `developer` (default) or `system` using the existing `SystemPromptRole`
+setting, with identical instruction text. Select a role that the endpoint's model
+template actually renders. Approval inherits the recorded role; a conflicting
+override fails before dispatch. Use a new session for each
 model comparison. Do not append `/v1` to the CLI base URL; `LlmClient` addresses
 `/v1/chat/completions` itself. A loopback Ollama endpoint needs no API key.
 For other endpoints, `RNA_MODEL_DIGEST` is an operator-supplied label; verify it
@@ -104,6 +108,10 @@ The `gemma4:cloud` tag through Ollama 0.35.0 has not passed the CLI v6 probe:
 both response modes failed the full task before any tool call. See
 [current evidence](docs/stabilization/PROGRESS.md#workspace-first-implementation--2026-10-04-in-progress)
 before using it as a reference model.
+The tested `rna-gpt-oss-20b-16k` template omits `developer` messages. A `system`
+probe delivered the instructions, but still returned provider-native tool calls
+instead of v6 JSON. This profile has not passed the protocol gate; increasing its
+context/output limits is not supported by that failure's evidence.
 In the Office UI, set the selected model's capability metadata/context limit to
 the same profile values before a separate test session.
 

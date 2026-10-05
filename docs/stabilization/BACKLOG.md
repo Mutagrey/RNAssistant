@@ -32,6 +32,15 @@ receipt-role defect justifying a projection change. Closure needs a real multi-s
 create/read/verify result with the same production compiler and preserved mutation
 guards. Run metadata and local evidence are in [PROGRESS](PROGRESS.md).
 
+Further isolation: GPT-OSS's installed template drops `developer` instructions.
+CLI now honors the existing `SystemPromptRole` setting and pins it across approval.
+With `system`, GPT-OSS sees the correct tools but still emits provider-native calls
+instead of v6 content; explicit `json_object` and `tool_choice=none` probes did not
+fix that. Gemma's fresh `system` run still ended after two writes and three empty-call
+`continue` responses, with input/output far below their limits and no new swap-out.
+Keep the protocol gate strict; do not raise budgets or rewrite receipts without
+evidence. GPT-OSS continuation quality remains unmeasured.
+
 ## SDK project source-inclusion audit — 2026-10-05
 
 Owner: harness / project structure. `harness: production projects include all

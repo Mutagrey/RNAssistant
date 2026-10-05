@@ -103,6 +103,12 @@ namespace RNAssistant.Runtime
             return missing;
         }
 
+        private static void ValidateInstructionRole(AppSettings settings)
+        {
+            if (settings.SystemPromptRole != "system" && settings.SystemPromptRole != "developer")
+                throw new ArgumentException("Workspace instructions require role system or developer.", nameof(settings));
+        }
+
         public async Task<WorkspaceRunResult> RunAsync(WorkspaceDescriptor workspace, string sessionId,
             string message, AppSettings settings, Func<string> apiKeyProvider,
             Action<WorkspaceRunEvent> progress = null, CancellationToken cancellationToken = default(CancellationToken),
@@ -112,6 +118,7 @@ namespace RNAssistant.Runtime
             if (string.IsNullOrWhiteSpace(message)) throw new ArgumentException("A task message is required.", nameof(message));
             if (settings == null || string.IsNullOrWhiteSpace(settings.BaseUrl) || string.IsNullOrWhiteSpace(settings.Model))
                 throw new ArgumentException("An LLM endpoint and model are required.", nameof(settings));
+            ValidateInstructionRole(settings);
             var acceptedContract = PrepareAcceptance(acceptance);
             var session = string.IsNullOrWhiteSpace(sessionId)
                 ? _workspaces.CreateSession(_chats, workspace, "Workspace chat")
@@ -143,6 +150,7 @@ namespace RNAssistant.Runtime
                         EndpointSha256 = EndpointSha256(settings.BaseUrl),
                         ContextWindowTokens = ModelContextBudget.ContextWindowTokens(settings),
                         AgentResponseMode = settings.AgentResponseMode,
+                        SystemPromptRole = settings.SystemPromptRole,
                         ReasoningRequestMode = settings.ReasoningRequestMode,
                         ReasoningEnabled = session.ReasoningEnabled
                     },
@@ -176,6 +184,7 @@ namespace RNAssistant.Runtime
             if (approve && (settings == null || string.IsNullOrWhiteSpace(settings.BaseUrl) ||
                 string.IsNullOrWhiteSpace(settings.Model)))
                 throw new ArgumentException("The LLM endpoint and model are required after approval.", nameof(settings));
+            if (approve) ValidateInstructionRole(settings);
             using (AcquireSessionLease(sessionId))
             {
                 var session = _workspaces.LoadSession(_chats, workspace, sessionId);
@@ -186,6 +195,8 @@ namespace RNAssistant.Runtime
                 if (approve && !string.Equals(settings.Model, session.Model, StringComparison.Ordinal))
                     throw new InvalidOperationException("Approval must continue with the accepted run's model.");
                 var modelConfiguration = session.LastRun.ModelConfiguration;
+                if (approve && string.IsNullOrWhiteSpace(modelConfiguration?.SystemPromptRole))
+                    throw new InvalidOperationException("The accepted run has no recorded instruction role. Deny the pending call and submit a new turn.");
                 if (approve && modelConfiguration != null &&
                     (ModelContextBudget.ContextWindowTokens(settings) != modelConfiguration.ContextWindowTokens ||
                      EndpointSha256(settings.BaseUrl) != modelConfiguration.EndpointSha256 ||
@@ -193,9 +204,11 @@ namespace RNAssistant.Runtime
                      !string.Equals(settings.AgentResponseMode,
                          modelConfiguration.AgentResponseMode ?? AgentResponseModes.JsonSchema,
                          StringComparison.Ordinal) ||
+                     !string.Equals(settings.SystemPromptRole, modelConfiguration.SystemPromptRole,
+                         StringComparison.Ordinal) ||
                      !string.Equals(settings.ReasoningRequestMode, modelConfiguration.ReasoningRequestMode,
                          StringComparison.Ordinal)))
-                    throw new InvalidOperationException("Approval must continue with the accepted run's endpoint, model digest, context and reasoning mode.");
+                    throw new InvalidOperationException("Approval must continue with the accepted run's endpoint, model digest, context, response mode, instruction role and reasoning mode.");
                 var history = RestoreAcceptedHistory(session);
                 var continuation = AgentRunContinuation.Restore(run.Summary, run.Limits, 0, history);
                 var acceptance = session.LastRun.WorkspaceAcceptance ?? new WorkspaceRunAcceptance();
@@ -576,7 +589,7 @@ namespace RNAssistant.Runtime
                 try
                 {
                     snapshot = _compiler.Compile(authority,
-                        new[] { new ChatMessage { Role = "developer", Content = Prompt() } },
+                        new[] { new ChatMessage { Role = _settings.SystemPromptRole, Content = Prompt() } },
                         AcceptedFacts(request.AcceptedMessages), null, _catalog, _settings,
                         Math.Max(1, ModelContextBudget.InputBudgetTokens(_settings) - fixedTokens));
                 }
