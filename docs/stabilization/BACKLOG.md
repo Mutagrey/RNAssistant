@@ -12,29 +12,29 @@
 новая возможность требует явной задачи, scope и owner; дефекты работающей системы
 приоритетнее расширения без конкретного пользовательского результата.
 
-## Workspace read prerequisite does not unblock retry — 2026-10-05
+## CLI final-read acceptance after CSV repair — 2026-10-05
 
-Owner: Runtime `WorkspaceConversationService.FileHandler`, using the existing
-Core `ToolRecoveryContract` / `AgentProgressTracker`. The post-pair-preservation
-Gemma CSV trace records `files.replace(app.js)` → `source_observation_required` →
-successful complete `common.resources_read(app.js)` → identical replace rejected
-as `repeated_tool_failure`; three refusals end the run. The read reaches the HTTP
-context. The handler returns only message/code, with no typed `RefreshRequired`
-contract, so the kernel cannot recognize satisfaction of that prerequisite.
+Owner: Runtime acceptance / shared model context. After the target-bound read
+recovery fix, the unchanged Gemma CSV run created three files, recovered two
+identical failed patches after exact reads, and passed all 24 browser checks.
+It then returned `done` without reading HTML/CSS or the final JS revision.
+`AssessAcceptance` correctly rejected it: 0/3 current complete file reads,
+verified current web snapshot. The follow-up was not run. The read criterion is
+already present in `WorkspacePorts.Prompt`; this is not evidence of lost results
+or an absent task contract. Exact traces/profile are in [PROGRESS](PROGRESS.md).
 
-Closure: bind recovery to the exact target through its current authority owner;
-verify fail → complete matching read → identical mutation executes once, also
-after accepted-history restoration. Unrelated/partial/omitted reads, unsatisfied
-recovery and unknown effects must not unlock the call. Keep kernel logic domain
-neutral; do not parse error strings or clear all failures on any read. Then rerun
-the unchanged autonomous CSV creation/follow-up task. The prior creation loop did
-not recur in the controlled rerun; full acceptance still failed. Evidence and
-profile are in [PROGRESS](PROGRESS.md).
+Next: isolate how final-read requirements and their remaining evidence appear
+in frozen requests after repair, with a targeted premature-done regression.
+Preserve final freshness checks and separate browser/read evidence; do not lower
+acceptance or add a second loop to obtain a pass. Closure needs autonomous
+creation with current final reads, then the unchanged feature follow-up under
+fixed bounds. The preceding typed recovery defect is fixed and tested; it no
+longer blocks a correctly read identical mutation.
 
 ## CLI continuation after completed-operation receipts — 2026-10-05
 
-Historical isolation below precedes the current pair/role fix. The newest active
-failure and concrete next slice are the missing typed recovery contract above.
+Historical isolation below precedes the pair/role and typed recovery fixes.
+The newest remaining acceptance failure and concrete next slice are above.
 
 Owner: model context / CLI evaluation. The fresh Gemma 12B counter task after the
 shared-compiler integration created `index.html` then repeated the same creation;

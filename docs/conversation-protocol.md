@@ -1190,6 +1190,20 @@ Owner: Conversation/model context; совместные границы — Core 
   точное complete observation для RefreshRequired и verified state change позволяют
   продолжение. Unknown не очищается посторонним успешным чтением или записью.
   Старый pending continuation без typed progress явно отвергается; история не удаляется.
+- Workspace `files.copy/move/patch/replace/delete` возвращают отсутствие полного
+  чтения как `source_observation_required` с typed `RefreshRequired`:
+  `RejectedNoEffect`, exact runtime file identity, view `text` и semantic target.
+  Identity разрешает существующий `WorkspaceFileService.Describe`; metadata lookup
+  не читает source body и не создаёт write observation. Эта проверка выполняется
+  через `IPreparableToolHandler` до подтверждения move/delete и повторно перед
+  исполнением. Прежнее исключение в confirmation registrar удалено.
+  Совпадающее complete whole observation снимает только связанный отказ при
+  восстановлении/продолжении kernel history. Постороннее или частичное чтение не
+  удовлетворяет recovery; kernel не разбирает строки ошибок. Если compiler опустил
+  прочитанное тело, runtime по-прежнему отклоняет запись без model write authority.
+  File owner сохраняет version guard, journal и read-back; typed recovery не
+  разрешает повтор unknown effect. Pending-вызов без требуемого prepared state
+  не исполняется через fallback: его следует отклонить и запросить операцию заново.
 - `ContextWorkingSet` заменяет `ArchivedCurrentSources`: оба потребителя (реальный
   запрос и preview) восстанавливают точные тела из events/CAS в пределах бюджета.
   До 32 недавних current bodies, в том числе skills/references и ограниченные

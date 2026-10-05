@@ -39,8 +39,14 @@ saved request bytes with actual HTTP bodies and checks rejected-response retenti
 attempt/snapshot correlation, exact verification-resource linkage with origin and
 API-key exclusion from trace metadata/payloads.
 `python3 tests/cli/omitted_read_guard_smoke.py` verifies that an exact file read
-omitted by the compiler's budget cannot authorize replacement and preserves the
-original bytes. Both use a scripted HTTP model, not real-model quality evidence.
+omitted by the compiler's budget cannot authorize a repeated replacement after
+`RefreshRequired`, and preserves the original bytes.
+`python3 tests/cli/read_recovery_smoke.py` covers replace/patch/copy/move/delete:
+failure → unrelated read → rejected identical call → exact target read → one
+successful mutation, with typed recovery and no runtime identity in HTTP. Move/delete
+still require approval. A separate-process approval test proves that recovery
+survives accepted-history restoration and an unrelated verified deletion does not
+clear the target's failed call. These use scripted HTTP models, not real-model quality evidence.
 `python3 tests/cli/response_mode_smoke.py` checks explicit CLI `json_schema` /
 `json_object` selection, `system` / `developer` instruction roles, all three
 `--tool-result-role` transports through compiler/actual HTTP and persisted metadata.

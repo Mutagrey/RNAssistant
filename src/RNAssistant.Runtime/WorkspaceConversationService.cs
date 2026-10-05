@@ -543,16 +543,7 @@ namespace RNAssistant.Runtime
                 }
                 _catalog = entries;
                 Tools = new ToolRuntime(registry, "agent", false, true,
-                    (context, preparation) =>
-                    {
-                        if (context.Call.Name == "files.delete" || context.Call.Name == "files.move")
-                        {
-                            var path = (string)JObject.Parse(context.Call.ArgumentsJson)["relativePath"];
-                            if (string.IsNullOrWhiteSpace(path) || !_observed.ContainsKey(path))
-                                throw new InvalidOperationException("Read the complete current file before requesting move or deletion confirmation.");
-                        }
-                        return "pending_" + Guid.NewGuid().ToString("N");
-                    });
+                    (context, preparation) => "pending_" + Guid.NewGuid().ToString("N"));
                 if (restorePendingObservation) RestorePendingObservation();
             }
 
@@ -826,7 +817,7 @@ namespace RNAssistant.Runtime
             }
         }
 
-        private sealed class FileHandler : IReadOnlyToolHandler, IManagedMutationToolHandler
+        private sealed class FileHandler : IReadOnlyToolHandler, IManagedMutationToolHandler, IPreparableToolHandler
         {
             private readonly WorkspaceFileService _files;
             private readonly WorkspaceDescriptor _workspace;
@@ -838,6 +829,35 @@ namespace RNAssistant.Runtime
                 Dictionary<string, ResourceRef> observed, string operation)
             { _files = files; _workspace = workspace; _resources = resources;
                 _observed = observed; _operation = operation; }
+
+            private bool RequiresRead => _operation == "copy" || _operation == "move" ||
+                _operation == "patch" || _operation == "replace" || _operation == "delete";
+
+            public Task<ToolPreparationResult> PrepareAsync(ToolHandlerContext context, CancellationToken cancellationToken)
+            {
+                cancellationToken.ThrowIfCancellationRequested();
+                var path = Value(context, "relativePath");
+                if (RequiresRead && !_observed.ContainsKey(path))
+                {
+                    var missing = MissingRead(path);
+                    return Task.FromResult(new ToolPreparationResult(missing.Result, recovery: missing.Recovery));
+                }
+                // Existing accepted read evidence pins the revision across confirmation.
+                // Execution still rechecks observation and the file owner's live guard.
+                return Task.FromResult(new ToolPreparationResult(ToolResult.Ok("File prerequisites accepted."), "{}"));
+            }
+
+            private ToolHandlerResult MissingRead(string path)
+            {
+                // Resolve runtime identity through the existing filesystem owner.
+                // Metadata is neither a source read nor model write authority.
+                var resource = _files.Describe(_workspace, path);
+                var recovery = new ToolRecoveryContract(ToolFailureKind.RejectedNoEffect, ToolRetryPolicy.RefreshRequired,
+                    resource.Reference.Identity, ResourceRepresentations.Text, path);
+                var action = _operation == "copy" ? "copying it." : _operation == "move" ? "moving it." : "editing it.";
+                return new ToolHandlerResult(ToolResult.Error("Read the complete current file before " + action,
+                    "{\"code\":\"source_observation_required\"}"), ToolEffectEvidence.None, recovery: recovery);
+            }
 
             public Task<ToolHandlerResult> ExecuteAsync(ToolHandlerContext context, CancellationToken cancellationToken)
             {
@@ -868,6 +888,8 @@ namespace RNAssistant.Runtime
                     }
                     WorkspaceFileObservation changed;
                     ResourceRef expected = null;
+                    if (RequiresRead && !_observed.TryGetValue(path, out expected))
+                        return Task.FromResult(MissingRead(path));
                     if (_operation == "restore")
                     {
                         changed = _files.RestoreDeletedText(_workspace, path, context.MarkDispatchPossible);
@@ -880,9 +902,6 @@ namespace RNAssistant.Runtime
                         changed = _files.CreateText(_workspace, path, Value(context, "text"), context.MarkDispatchPossible);
                     else if (_operation == "copy")
                     {
-                        if (!_observed.TryGetValue(path, out expected))
-                            return Return(ToolResult.Error("Read the complete current source before copying it.",
-                                "{\"code\":\"source_observation_required\"}"), ToolEffectEvidence.None);
                         var target = Value(context, "targetPath");
                         changed = _files.CopyText(_workspace, path, expected, target, context.MarkDispatchPossible);
                         path = target;
@@ -890,9 +909,6 @@ namespace RNAssistant.Runtime
                     }
                     else if (_operation == "move")
                     {
-                        if (!_observed.TryGetValue(path, out expected))
-                            return Return(ToolResult.Error("Read the complete current source before moving it.",
-                                "{\"code\":\"source_observation_required\"}"), ToolEffectEvidence.None);
                         var target = Value(context, "targetPath");
                         changed = _files.MoveText(_workspace, path, expected, target, context.MarkDispatchPossible);
                         _observed.Remove(path);
@@ -903,9 +919,6 @@ namespace RNAssistant.Runtime
                     }
                     else
                     {
-                        if (!_observed.TryGetValue(path, out expected))
-                            return Return(ToolResult.Error("Read the complete current file before editing it.",
-                                "{\"code\":\"source_observation_required\"}"), ToolEffectEvidence.None);
                         if (_operation == "delete")
                         {
                             var deleted = _files.DeleteText(_workspace, path, expected, context.MarkDispatchPossible);

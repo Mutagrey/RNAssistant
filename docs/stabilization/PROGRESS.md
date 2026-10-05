@@ -1,6 +1,47 @@
 # Stabilization progress
 
-Latest context/transport slice (2026-10-05): the shared compiler now preserves the
+Latest workspace read-recovery slice (2026-10-05): file copy/move/patch/replace/delete
+now return target-bound typed `RefreshRequired` when a complete source read is
+missing. Owner: Runtime `WorkspaceConversationService.FileHandler`; existing Core
+recovery/progress logic is unchanged. `WorkspaceFileService.Describe` supplies
+runtime identity without granting read authority. Preparation rejects before
+move/delete approval; execution retains the existing observation, version,
+journal and read-back guards. The registrar's ad-hoc exception path is removed.
+No second loop, filesystem reader or error-string inference was added.
+
+The scripted regression failed on the previous binary, then passed all six cases:
+five file operations and recovery restored through a separate-process approval.
+Unrelated reads and verified mutations do not unlock the failed target; its exact
+complete read does. Omitted-source replacement remains denied with bytes intact.
+Existing partial-read, unknown-effect and CLI role/approval checks passed.
+CLI build: zero warnings/errors. Version-format and diff checks passed.
+Windows/Office/WebView2 remain unqualified.
+
+The unchanged real Gemma CSV task now reached `model_done` in 302.82 s: three
+created files, two verified patches, two complete `app.js` reads and three browser
+checks. Both `source_observation_required` failures recovered after matching
+reads and identical patches; no repeated-call deadlock occurred. The final
+immutable snapshot passed **24/24 browser checks** and remained current.
+Full acceptance nevertheless **failed** (exit 5): neither HTML nor CSS was read,
+and both JS observations preceded later patches, leaving **0/3 current complete
+file reads** at completion. The final gate correctly rejected the premature
+`done`; browser verification is not a substitute for the explicit read criterion.
+Category: `VERIFICATION_ERROR` (missing final read evidence). Feature follow-up
+was **not run**. Full M4/M5 remain open; next isolate final-read completion with
+the existing frozen acceptance contract, then rerun creation/follow-up. See
+[BACKLOG](BACKLOG.md#cli-final-read-acceptance-after-csv-repair--2026-10-05).
+
+Same `rna-gemma4-12b-32k:latest` digest/profile as below: 32K/4096, system/user
+roles, json_schema, thinking off, one request at a time, bounds 16 iterations /
+24 tools. First HTTP request is byte-identical to the preceding failed run.
+13 requests, no protocol rejections; 62 cumulative pair checks found no errors.
+Input/output tokens: 88949/4740 total, 10628/1719 maximum per request. No operator
+repair, changed task/checks or raised limits. Swap-outs stayed 1003804, swap use
+2987.81 → 2979.75 MiB; no reported context/OOM failure. Model unloaded afterwards.
+Temporary evidence (profile, hashes, source patch, HTTP/CAS, driver and audits):
+`/var/folders/k9/hr_94nt142x1f43jr6g0wr_00000gp/T/rna-read-recovery-gemma-a19abh1c`.
+
+Previous context/transport slice (2026-10-05): the shared compiler now preserves the
 latest completed call/result pair and its selected role. Older mutation pairs stay
 intact while they fit; budget folding keeps operation outcomes, recovery data and
 semantic targets. Source omission/staleness remains separate and removes read
@@ -39,12 +80,11 @@ Ten requests, one repaired mutation-batch violation; 42 cumulative call/result
 checks have no pairing errors. Tokens: 70757/12805 cumulative, 13211/3342 maximum,
 below caps. No operator feedback or limit increase; follow-up **not run**.
 
-This exposed a separate reproducible recovery-contract gap: file handlers return
+This exposed a separate reproducible recovery-contract gap: file handlers returned
 `source_observation_required` without typed `RefreshRequired` recovery, so the
-kernel still rejects an identical mutation after the required complete read.
-The read is present in HTTP; this failure is not missing model context. Next slice:
-attach target-bound recovery and verify failed edit → exact read → identical edit,
-preserving unrelated-failure and unknown-effect guards; see [BACKLOG](BACKLOG.md#workspace-read-prerequisite-does-not-unblock-retry--2026-10-05).
+kernel still rejected an identical mutation after the required complete read.
+The read is present in HTTP; this failure is not missing model context. The
+target-bound recovery fix and its deterministic/live results are recorded above.
 **Full M4/M5 remain open.** One improved run does not explain every historical loop.
 
 Temporary evidence (profile/digest, binaries, source snapshot, HTTP/CAS, audits):
@@ -106,7 +146,7 @@ Temporary local evidence:
 task/checks, model config/digest, actual binary/source hashes, HTTP trace/CAS,
 terminal run result, context audit and memory samples. The live attempt never
 reached the browser checks. Windows/Office/WebView2 remain unqualified here.
-This is the pre-fix baseline; the controlled rerun and next recovery slice are
+This is the pre-fix baseline; the controlled reruns and completed recovery slice are
 recorded above. Remaining M4 surface and E-* evidence stay explicit.
 
 Historical M5 diagnostic freshness / continuation fix (2026-10-05): the failed counter-repair
@@ -681,13 +721,14 @@ boundary, not a functional CSV score. Scripted HTTP tests confirmed both CLI
 transport modes and saved metadata. The existing v6 parser correctly rejected
 these outputs; no permissive JSON repair or separate agent loop was added.
 
-Next concrete slice (2026-10-05): add target-bound typed recovery for the workspace
-read prerequisite, then rerun autonomous CSV creation/follow-up against the
-integrated checks and collect the remaining
+Next concrete slice (2026-10-05): isolate premature completion without current
+final file reads against the existing frozen acceptance contract, then rerun
+autonomous CSV creation/follow-up and collect the remaining
 E-FILE/E-RESUME/E-CONTEXT/E-CAPABILITY evidence for that task. The counter
 verify/repair loop passed one real Gemma run after fixing
 historical diagnostic currency. Latest call/result retention and CLI role selection
-are now implemented; the CSV rerun exposed the recovery gap above. Bounded
+and target-bound read recovery are now implemented. The CSV rerun passed all
+24 browser checks but failed final-read acceptance; details are above. Bounded
 find/read, one frozen compiler, explicit CLI recovery, durable
 historical snapshot verification and frozen click/text/CSV checks are implemented.
 M4 still needs mode filtering, real skills and structured question/answer handling;

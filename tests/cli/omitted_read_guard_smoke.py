@@ -18,6 +18,8 @@ def main():
         raise SystemExit("Build src/RNAssistant.Cli/RNAssistant.Cli.csproj first.")
     requests = []
     responses = [
+        {"message": "Attempt a replacement before reading.", "action": "tool", "tool_calls": [
+            {"name": "files.replace", "arguments": {"relativePath": "large.txt", "text": "UNSAFE_REPLACEMENT"}}]},
         {"message": "Read the source.", "action": "tool", "tool_calls": [
             {"name": "common.resources_read", "arguments": {"target": "large.txt"}}]},
         {"message": "Attempt a replacement despite the omitted source.", "action": "tool", "tool_calls": [
@@ -58,20 +60,23 @@ def main():
                        RNA_MODEL="scripted", RNA_API_KEY="ollama")
             run = subprocess.run(["dotnet", str(CLI), "run", "--workspace", str(workspace),
                 "--message", "Read large.txt and replace it only after seeing its complete source.",
-                "--context-tokens", "16384", "--max-iterations", "3", "--max-tool-steps", "2",
+                "--context-tokens", "16384", "--max-iterations", "4", "--max-tool-steps", "3",
                 "--jsonl"], cwd=REPO, env=env, text=True, capture_output=True, timeout=45, check=False)
             assert run.returncode == 0, (run.stdout, run.stderr)
-            assert len(requests) == 3, (len(requests), run.stdout, run.stderr)
-            read_context = "\n".join(message.get("content") or "" for message in requests[1]["messages"])
+            assert len(requests) == 4, (len(requests), run.stdout, run.stderr)
+            initial_context = "\n".join(message.get("content") or "" for message in requests[1]["messages"])
+            assert "source_observation_required" in initial_context and "RefreshRequired" in initial_context
+            read_context = "\n".join(message.get("content") or "" for message in requests[2]["messages"])
             assert '"bodyIncluded":false' in read_context, read_context
             assert "large.txt" in read_context and "ORIGINAL_BODY" not in read_context, read_context
-            mutation_context = "\n".join(message.get("content") or "" for message in requests[2]["messages"])
+            mutation_context = "\n".join(message.get("content") or "" for message in requests[3]["messages"])
             assert "source_observation_required" in mutation_context, mutation_context
             assert target.read_text(encoding="utf-8") == source, "Omitted source authorized a destructive write"
             assert "rna://" not in json.dumps(requests), "Runtime identity leaked to the model"
             final = json.loads(run.stdout.splitlines()[-1])["data"]
             assert final["reason"] == "model_blocked", final
-            print("PASS shared compiler: omitted exact read cannot authorize replacement; original bytes preserved")
+            assert final["ToolCounts"]["WriteOk"] == 0 and final["ToolCounts"]["WriteUnknown"] == 0, final
+            print("PASS typed recovery and shared compiler: omitted exact read cannot authorize replacement; original bytes preserved")
     finally:
         server.shutdown()
         server.server_close()
