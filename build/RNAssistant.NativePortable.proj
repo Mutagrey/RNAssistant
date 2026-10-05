@@ -7,15 +7,11 @@
     <NativePlatform Condition="'$(Architecture)' == 'x64'">x64</NativePlatform>
     <NativePlatform Condition="'$(Architecture)' == 'x86'">Win32</NativePlatform>
     <KnownPortableDestination>$(RepoRoot)artifacts\portable\$(Configuration)\$(Architecture)\</KnownPortableDestination>
-    <KnownLocalTempDestination Condition="'$(Architecture)' == 'x64'">C:\Temp\RNAssistant\</KnownLocalTempDestination>
-    <KnownLocalTempDestination Condition="'$(Architecture)' == 'x86'">C:\Temp\RNAssistant-x86\</KnownLocalTempDestination>
     <Destination Condition="'$(Destination)' == ''">$(KnownPortableDestination)</Destination>
     <DestinationFull>$([System.IO.Path]::GetFullPath('$(Destination)'))</DestinationFull>
     <PublishRoot>$(DestinationFull)\</PublishRoot>
-    <KnownPortableDestinationFull>$([System.IO.Path]::GetFullPath('$(KnownPortableDestination)'))</KnownPortableDestinationFull>
-    <KnownLocalTempDestinationFull>$([System.IO.Path]::GetFullPath('$(KnownLocalTempDestination)'))</KnownLocalTempDestinationFull>
-    <DestinationIsKnown Condition="'$(DestinationFull)' == '$(KnownPortableDestinationFull)' or '$(DestinationFull)' == '$(KnownLocalTempDestinationFull)'">true</DestinationIsKnown>
     <DestinationMarker>$(PublishRoot).rnassistant-portable-output</DestinationMarker>
+    <OwnedFileManifest>$(PublishRoot).rnassistant-portable-files</OwnedFileManifest>
     <NativeOutput>$(RepoRoot)artifacts\$(Configuration)\$(NativePlatform)\</NativeOutput>
     <CoreOutput>$(RepoRoot)src\RNAssistant.Core\bin\$(Configuration)\</CoreOutput>
     <OfficeOutput>$(RepoRoot)src\RNAssistant.Office\bin\$(Configuration)\</OfficeOutput>
@@ -70,28 +66,46 @@
 
     <PortableDoc Include="$(RepoRoot)wrappers\native\README.md" />
     <PortableDoc Include="$(RepoRoot)wrappers\native\Outlook2013_Setup.md" />
+    <!-- Finished Office add-ins can be supplied without invoking Office during build-local. -->
+    <AddInBinary Include="$(RepoRoot)wrappers\native\binaries\*.xlam;$(RepoRoot)wrappers\native\binaries\*.dotm;$(RepoRoot)wrappers\native\binaries\*.ppam" />
   </ItemGroup>
 
   <Target Name="PrepareDestination">
     <Error Condition="'$(Configuration)' != 'Release'" Text="Native portable publishing supports Release only." />
     <Error Condition="'$(Architecture)' != 'x64' and '$(Architecture)' != 'x86'" Text="Architecture must be x64 or x86." />
     <Error Condition="!Exists('%(RequiredFile.Identity)')" Text="Required portable input not found: %(RequiredFile.Identity)" />
-    <Error Condition="Exists('$(DestinationFull)') and '$(DestinationIsKnown)' != 'true' and !Exists('$(DestinationMarker)')"
-           Text="Refusing to clean unowned portable destination: $(DestinationFull). Use an empty directory or a destination containing $(DestinationMarker)." />
-    <RemoveDir Directories="$(DestinationFull)"
-               Condition="Exists('$(DestinationFull)') and ('$(DestinationIsKnown)' == 'true' or Exists('$(DestinationMarker)'))" />
     <MakeDir Directories="$(PublishRoot)" />
-    <WriteLinesToFile File="$(DestinationMarker)" Lines="RNAssistant.NativePortable.v1" Encoding="ASCII" Overwrite="true" />
+    <ReadLinesFromFile File="$(OwnedFileManifest)" Condition="Exists('$(OwnedFileManifest)')">
+      <Output TaskParameter="Lines" ItemName="PreviousOwnedFile" />
+    </ReadLinesFromFile>
+    <Error Condition="$([System.Text.RegularExpressions.Regex]::IsMatch('%(PreviousOwnedFile.Identity)', '(^[\\/]|(^|[\\/])\.\.([\\/]|$)|:)'))"
+           Text="Invalid relative path in portable ownership manifest: %(PreviousOwnedFile.Identity)" />
   </Target>
 
   <Target Name="Publish" DependsOnTargets="PrepareDestination">
-    <MakeDir Directories="$(PublishRoot)web;$(PublishRoot)addins\sources;$(PublishRoot)docs;$(PublishRoot)logs" />
-    <Copy SourceFiles="@(RequiredFile)" DestinationFolder="$(PublishRoot)" />
-    <Copy SourceFiles="@(InteropFile)" DestinationFolder="$(PublishRoot)" Condition="'@(InteropFile)' != ''" />
+    <ItemGroup>
+      <CurrentOwnedFile Include="@(RequiredFile->'lib\%(Filename)%(Extension)')" />
+      <CurrentOwnedFile Include="@(InteropFile->'lib\%(Filename)%(Extension)')" />
+      <CurrentOwnedFile Include="@(WebFile->'web\%(RecursiveDir)%(Filename)%(Extension)')" />
+      <CurrentOwnedFile Include="@(AddInSource->'addins\sources\%(TargetRoot)%(RecursiveDir)%(Filename)%(Extension)')" />
+      <CurrentOwnedFile Include="@(PortableDoc->'docs\%(Filename)%(Extension)')" />
+      <CurrentOwnedFile Include="@(AddInBinary->'%(Filename)%(Extension)')" />
+      <StaleOwnedFile Include="@(PreviousOwnedFile)" Exclude="@(CurrentOwnedFile)" />
+      <!-- One-time migration of files published by the old flat layout. -->
+      <LegacyRootLibrary Include="@(RequiredFile->'$(PublishRoot)%(Filename)%(Extension)');@(InteropFile->'$(PublishRoot)%(Filename)%(Extension)')" />
+    </ItemGroup>
+    <MakeDir Directories="$(PublishRoot)lib;$(PublishRoot)web;$(PublishRoot)addins\sources;$(PublishRoot)docs;$(PublishRoot)logs" />
+    <Copy SourceFiles="@(RequiredFile)" DestinationFolder="$(PublishRoot)lib" />
+    <Copy SourceFiles="@(InteropFile)" DestinationFolder="$(PublishRoot)lib" Condition="'@(InteropFile)' != ''" />
     <Copy SourceFiles="@(WebFile)" DestinationFiles="@(WebFile->'$(PublishRoot)web\%(RecursiveDir)%(Filename)%(Extension)')" />
     <Copy SourceFiles="@(AddInSource)" DestinationFiles="@(AddInSource->'$(PublishRoot)addins\sources\%(TargetRoot)%(RecursiveDir)%(Filename)%(Extension)')" />
     <Copy SourceFiles="@(PortableDoc)" DestinationFolder="$(PublishRoot)docs" />
-    <WriteLinesToFile File="$(PublishRoot)panel-owner-mode.txt" Lines="OwnerWindow" Encoding="ASCII" Overwrite="true" />
+    <Copy SourceFiles="@(AddInBinary)" DestinationFolder="$(PublishRoot)" Condition="'@(AddInBinary)' != ''" />
+    <Delete Files="@(StaleOwnedFile->'$(PublishRoot)%(Identity)')" Condition="'@(StaleOwnedFile)' != ''" />
+    <Delete Files="@(LegacyRootLibrary)" Condition="'@(LegacyRootLibrary)' != ''" />
+    <WriteLinesToFile File="$(PublishRoot)panel-owner-mode.txt" Lines="OwnerWindow" Encoding="ASCII" Overwrite="true" Condition="!Exists('$(PublishRoot)panel-owner-mode.txt')" />
+    <WriteLinesToFile File="$(OwnedFileManifest)" Lines="@(CurrentOwnedFile)" Encoding="UTF-8" Overwrite="true" />
+    <WriteLinesToFile File="$(DestinationMarker)" Lines="RNAssistant.NativePortable.v2" Encoding="ASCII" Overwrite="true" />
 
     <Message Importance="High" Text="Native portable output: $(PublishRoot)" />
   </Target>

@@ -25,42 +25,49 @@ build-local.cmd
 
 Use `build-local.cmd x64` or `build-local.cmd x86` for one architecture. Output
 is written under `artifacts\portable\Release` and also published directly to
-`C:\Temp\RNAssistant` (x64) or `C:\Temp\RNAssistant-x86` (x86). The x86 package
+`C:\Temp\RNAssistant-x64` (x64) or `C:\Temp\RNAssistant-x86` (x86). The x86 package
 contains the managed AnyCPU PdfPig reader plus matching PE32 x86 PDFium/Skia native
 libraries. Project output keeps architecture subdirectories; the portable publisher
-copies only the requested architecture's pair into its package root, which is the
+copies only the requested architecture's pair into `lib`, which is the
 loader's matching fallback. Never copy the x64 pair into an x86 package. Exact
 Windows x86 import, page preview, scanned-page rendering and image-capable model
 sending remain qualification gates despite the complete package wiring. See the exact
 [PDF bitness boundary](../../docs/dependencies.md#pdf-bitness-boundary).
 
-Each publish replaces its known output directory as one exact package, so files
-removed or renamed since an older build cannot remain in `artifacts\portable` or
-`C:\Temp`. Custom destinations are cleaned only after the publisher has created
-its `.rnassistant-portable-output` ownership marker; an existing unmarked custom
-directory is rejected. Close Office before rebuilding because loaded DLLs can
-prevent the old package from being removed.
+Each publish replaces current product files and removes stale files recorded in
+`.rnassistant-portable-files`. It preserves unrelated files and directories,
+including user-created add-ins and `logs`. On the first migration from the old
+flat layout, named product DLLs and worker files are removed from the root after
+their new copies reach `lib`; unrelated root files remain. The existing
+`panel-owner-mode.txt` setting is preserved. Close Office before rebuilding
+because loaded DLLs cannot be replaced.
 
 Expected layout:
 
 ```text
 artifacts\portable\Release\x64\
   .rnassistant-portable-output
-  RNAssistant.NativeHostCli.dll
-  RNAssistant.Core.dll
-  RNAssistant.Office.dll
-  RNAssistant.OfficeHosts.dll
-  Microsoft.Office.Interop.*.dll
-  Microsoft.Web.WebView2.Core.dll
-  Microsoft.Web.WebView2.WinForms.dll
-  Newtonsoft.Json.dll
-  UglyToad.PdfPig*.dll
-  PDFtoImage.dll
-  SkiaSharp.dll
-  pdfium.dll                 # x64 package
-  libSkiaSharp.dll           # x64 package
-  WebView2Loader.dll
+  .rnassistant-portable-files
+  RNAssistantExcel.xlam      # if a compiled add-in was supplied
+  RNAssistantWord.dotm       # if supplied
+  RNAssistantPowerPoint.ppam # if supplied
   panel-owner-mode.txt
+  lib\
+    RNAssistant.NativeHostCli.dll
+    RNAssistant.Core.dll
+    RNAssistant.Office.dll
+    RNAssistant.OfficeHosts.dll
+    RNAssistant.JsWorker.exe
+    RNAssistant.JsWorker.exe.config
+    Microsoft.Office.Interop.*.dll
+    Microsoft.Web.WebView2.*.dll
+    Newtonsoft.Json.dll
+    UglyToad.PdfPig*.dll
+    PDFtoImage.dll
+    SkiaSharp.dll
+    pdfium.dll               # matching architecture
+    libSkiaSharp.dll         # matching architecture
+    WebView2Loader.dll       # matching architecture
   web\
   addins\sources\
   docs\
@@ -98,9 +105,15 @@ the required size including the terminator.
 - Add the matching `ribbon/<host>/customUI14.xml` with an Office Ribbon editor.
 - Outlook 2013: follow `Outlook2013_Setup.md`.
 
+Place finished `.xlam`, `.dotm` and `.ppam` files in
+`wrappers\native\binaries\` before running `build-local.cmd`; the publisher
+copies them to the root of each architecture package. They are Office-authored
+artifacts and are not generated from `.bas`/Ribbon XML by MSBuild. Outlook uses
+the user's `VbaProject.OTM` rather than a distributable add-in file.
+
 For Excel, Word and PowerPoint the binary add-in normally lives under
-`C:\Temp\RNAssistant\addins`; the VBA code checks that folder and its parent for
-the native DLL.
+the package root; the VBA code also accepts the historical `addins` subfolder
+and resolves its parent. It loads the native DLL from `lib`.
 
 The DLL remains loaded and locked until the owning Office process exits. Close
 Office before rebuilding or republishing. The publish script deliberately does

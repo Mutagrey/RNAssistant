@@ -62,41 +62,33 @@ namespace RNAssistant.Harness
 
             AssertTrue(prepare != null && publish != null,
                 "portable publishing requires explicit prepare and publish targets");
-            AssertTrue(prepare.Elements().Any(element =>
-                    element.Name.LocalName == "RemoveDir" &&
-                    ((string)element.Attribute("Condition") ?? string.Empty)
-                        .IndexOf("DestinationIsKnown", StringComparison.Ordinal) >= 0 &&
-                    ((string)element.Attribute("Condition") ?? string.Empty)
-                        .IndexOf("DestinationMarker", StringComparison.Ordinal) >= 0),
-                "portable publishing must clean only known or previously owned destinations");
-            AssertTrue(prepare.Elements().Any(element =>
-                    element.Name.LocalName == "Error" &&
-                    ((string)element.Attribute("Text") ?? string.Empty)
-                        .IndexOf("unowned portable destination", StringComparison.Ordinal) >= 0),
-                "portable publishing must reject an existing unowned custom destination");
+            AssertTrue(!document.Descendants().Any(element => element.Name.LocalName == "RemoveDir"),
+                "portable publishing must preserve files outside its ownership manifest");
             AssertTrue(prepare.Elements().Any(element =>
                     element.Name.LocalName == "Error" &&
                     string.Equals((string)element.Attribute("Condition"),
                         "!Exists('%(RequiredFile.Identity)')", StringComparison.Ordinal)),
-                "portable publishing must validate every required input before cleanup");
-            AssertTrue(prepare.Elements().Any(element =>
-                    element.Name.LocalName == "WriteLinesToFile" &&
-                    string.Equals((string)element.Attribute("File"),
-                        "$(DestinationMarker)", StringComparison.Ordinal)),
-                "portable publishing must mark destination ownership after cleanup");
+                "portable publishing must validate every required input before copying");
+            AssertTrue(prepare.Elements().Any(element => element.Name.LocalName == "ReadLinesFromFile" &&
+                    string.Equals((string)element.Attribute("File"), "$(OwnedFileManifest)", StringComparison.Ordinal)),
+                "portable publishing must read the previous owned-file manifest");
+            AssertTrue(publish.Elements().Any(element => element.Name.LocalName == "Delete" &&
+                    ((string)element.Attribute("Files") ?? string.Empty).Contains("StaleOwnedFile")),
+                "portable publishing must remove only stale owned files");
+            AssertTrue(publish.Elements().Any(element => element.Name.LocalName == "Copy" &&
+                    string.Equals((string)element.Attribute("DestinationFolder"), "$(PublishRoot)lib", StringComparison.Ordinal)),
+                "portable libraries must be published to lib");
             AssertTrue(((string)publish.Attribute("DependsOnTargets") ?? string.Empty)
                     .Split(';').Contains("PrepareDestination", StringComparer.Ordinal),
-                "publish must prepare an exact destination before copying files");
+                "publish must validate inputs and inspect ownership before copying files");
             AssertTrue(!publish.Descendants().Where(element =>
                     element.Name.LocalName == "Copy").Any(element =>
                     element.Attribute("SkipUnchangedFiles") != null),
-                "exact portable publishing must copy every current file after cleanup");
+                "portable publishing must overwrite every current product file");
 
-            var source = File.ReadAllText(projectPath);
-            AssertContains(source, "C:\\Temp\\RNAssistant\\",
-                "x64 local temp output is an explicitly known clean destination");
-            AssertContains(source, "C:\\Temp\\RNAssistant-x86\\",
-                "x86 local temp output is an explicitly known clean destination");
+            var source = File.ReadAllText(Path.Combine(root, "build", "RNAssistant.LocalBuild.proj"));
+            AssertContains(source, "C:\\Temp\\RNAssistant-x64\\", "x64 local output must use its architecture name");
+            AssertContains(source, "C:\\Temp\\RNAssistant-x86\\", "x86 local output must use its architecture name");
         }
 
         private static string FindHarnessRepositoryRoot()

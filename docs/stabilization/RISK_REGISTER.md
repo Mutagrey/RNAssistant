@@ -96,7 +96,9 @@ in the Office or JS worker outputs, but found older worker `System.Memory`,
 references and generated redirects now match Core. Desktop/VSTO targets explicitly
 copy the full managed and architecture-matched native closure. Local copy targets
 and package integrity passed; exact Windows Desktop, VSTO and NativeHost loading
-remain open evidence.
+remain open evidence. The portable `lib/` relocation and x64/x86 VBA DLL search
+also require an exact Windows/Office load check with rebuilt macro add-ins;
+host-neutral publisher checks establish file placement only.
 
 ## Local-data reset and active WebView profile — 2026-10-02
 

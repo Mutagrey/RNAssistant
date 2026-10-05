@@ -8,8 +8,9 @@ Outlook VBA is stored per user in:
 
 1. Open the Outlook VBA editor and import `RNAssistantOutlook.bas` into a normal
    module.
-2. Set `RNASSISTANT_ROOT=C:\Temp\RNAssistant`, or use the built-in
-   `C:\Temp\RNAssistant` fallback.
+2. Set `RNASSISTANT_ROOT=C:\Temp\RNAssistant-x64`, or use the built-in
+   `C:\Temp\RNAssistant-x64` fallback. For x86, set it to
+   `C:\Temp\RNAssistant-x86`.
 3. Restart Outlook and allow the signed/approved macro project.
 4. Add `Project1.RNAssistantOutlook.ShowAiPanel` through:
    `File → Options → Quick Access Toolbar → Choose commands from: Macros`.
@@ -23,4 +24,4 @@ Programmatic Ribbon integration requires an `IRibbonExtensibility` COM add-in,
 which is outside this no-registration MVP.
 
 If the macro does not run, check Trust Center macro policy, Trusted Locations,
-bitness matching and `C:\Temp\RNAssistant\logs`.
+bitness matching and `<RNASSISTANT_ROOT>\logs`.

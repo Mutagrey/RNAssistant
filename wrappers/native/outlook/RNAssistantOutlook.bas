@@ -42,7 +42,7 @@ End Sub
 
 Private Function GetRootPath() As String
     GetRootPath = Environ$("RNASSISTANT_ROOT")
-    If Len(GetRootPath) = 0 Then GetRootPath = "C:\Temp\RNAssistant"
+    If Len(GetRootPath) = 0 Then GetRootPath = "C:\Temp\RNAssistant-x64"
 End Function
 
 Private Function CurrentHwnd() As LongPtr
@@ -54,8 +54,10 @@ Private Function CurrentHwnd() As LongPtr
 End Function
 
 Private Sub PrepareDllFolder(ByVal rootPath As String)
-    If Len(Dir$(rootPath & "\RNAssistant.NativeHostCli.dll")) = 0 Then Err.Raise vbObjectError + 4001, , "RNAssistant.NativeHostCli.dll not found: " & rootPath
-    If SetDllDirectoryW(StrPtr(rootPath)) = 0 Then Err.Raise vbObjectError + 4002, , "SetDllDirectoryW failed: " & rootPath
+    Dim libPath As String
+    libPath = rootPath & "\lib"
+    If Len(Dir$(libPath & "\RNAssistant.NativeHostCli.dll")) = 0 Then Err.Raise vbObjectError + 4001, , "RNAssistant.NativeHostCli.dll not found: " & libPath
+    If SetDllDirectoryW(StrPtr(libPath)) = 0 Then Err.Raise vbObjectError + 4002, , "SetDllDirectoryW failed: " & libPath
 End Sub
 
 Private Sub ReportHostResult(ByVal result As Long)

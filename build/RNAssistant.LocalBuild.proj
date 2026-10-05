@@ -7,7 +7,7 @@
     <NativeProject>$(RepoRoot)src\RNAssistant.NativeHostCli\RNAssistant.NativeHostCli.vcxproj</NativeProject>
     <DesktopProject>$(RepoRoot)src\RNAssistant.Desktop\RNAssistant.Desktop.csproj</DesktopProject>
     <PublisherProject>$(MSBuildThisFileDirectory)RNAssistant.NativePortable.proj</PublisherProject>
-    <TempX64Destination Condition="'$(TempX64Destination)' == ''">C:\Temp\RNAssistant\</TempX64Destination>
+    <TempX64Destination Condition="'$(TempX64Destination)' == ''">C:\Temp\RNAssistant-x64\</TempX64Destination>
     <TempX86Destination Condition="'$(TempX86Destination)' == ''">C:\Temp\RNAssistant-x86\</TempX86Destination>
   </PropertyGroup>
 

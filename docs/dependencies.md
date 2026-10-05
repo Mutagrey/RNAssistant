@@ -21,7 +21,10 @@ Desktop and VSTO outputs explicitly copy the pinned managed SQLite, WebView2,
 PdfPig and PDF-rendering closure from local `packages/` and `vendor/`. The
 matching x64/x86 WebView2Loader, PDFium and SkiaSharp native files are copied
 into architecture subdirectories. The NativeHost portable manifest requires
-every managed DLL from the Office output.
+every managed DLL from the Office output and places the selected architecture's
+native files alongside managed libraries under `lib/`. The Windows portable
+output retains the cross-platform SQLite provider because Core references it in
+the shared initializer; removing it requires a separate loader check.
 The JavaScript worker uses the same `System.Memory`, `System.Buffers` and `Unsafe`
 versions as Core; its generated binding redirects match the delivered DLLs. A
 missing file fails the build/publish instead of producing an incomplete offline

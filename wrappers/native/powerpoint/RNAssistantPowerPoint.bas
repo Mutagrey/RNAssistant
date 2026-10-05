@@ -76,13 +76,15 @@ Private Function ResolvePortableRoot(ByVal containerFolder As String) As String
 End Function
 
 Private Sub PrepareDllFolder(ByVal rootPath As String)
+    Dim libPath As String
     If Len(rootPath) = 0 Then Err.Raise vbObjectError + 3001, , "PowerPoint add-in path is empty."
     If Not DllExists(rootPath) Then Err.Raise vbObjectError + 3002, , "RNAssistant.NativeHostCli.dll not found: " & rootPath
-    If SetDllDirectoryW(StrPtr(rootPath)) = 0 Then Err.Raise vbObjectError + 3003, , "SetDllDirectoryW failed: " & rootPath
+    libPath = rootPath & "\lib"
+    If SetDllDirectoryW(StrPtr(libPath)) = 0 Then Err.Raise vbObjectError + 3003, , "SetDllDirectoryW failed: " & libPath
 End Sub
 
 Private Function DllExists(ByVal folder As String) As Boolean
-    If Len(folder) > 0 Then DllExists = Len(Dir$(folder & "\RNAssistant.NativeHostCli.dll")) > 0
+    If Len(folder) > 0 Then DllExists = Len(Dir$(folder & "\lib\RNAssistant.NativeHostCli.dll")) > 0
 End Function
 
 Private Function ParentFolder(ByVal path As String) As String

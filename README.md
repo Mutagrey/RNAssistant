@@ -235,9 +235,16 @@ The command uses Visual Studio `MSBuild.exe` directly. It does not install or
 register add-ins, change PowerShell policy, create certificates, access the
 network or terminate Office. Outputs are written both to
 `artifacts\portable\Release\x64` / `x86` and directly to
-`C:\Temp\RNAssistant` / `C:\Temp\RNAssistant-x86`; the build log is
+`C:\Temp\RNAssistant-x64` / `C:\Temp\RNAssistant-x86`; the build log is
 `artifacts\build-local.log`. Close Office before building because the native DLL
 remains loaded in the Office process and cannot be replaced.
+
+Portable DLLs and the JavaScript worker are placed in `lib\`. The publisher
+overwrites product files and removes only files listed in its previous ownership
+manifest; other files in the destination remain. Ready-made Excel, Word and
+PowerPoint add-ins, when supplied in `wrappers\native\binaries\`, are copied to
+the package root. This repository contains their VBA/Ribbon sources but no
+compiled `.xlam`, `.dotm` or `.ppam` files.
 
 The x86 output includes the managed AnyCPU PdfPig reader and matching PE32 x86
 PDFium/Skia native libraries from the same reviewed package versions as x64. The

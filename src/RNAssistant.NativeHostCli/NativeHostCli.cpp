@@ -212,7 +212,7 @@ private:
         {
             AssemblyName^ assemblyName = gcnew AssemblyName(args->Name);
             String^ simpleName = assemblyName->Name;
-            String^ candidate = Path::Combine(_rootPath, simpleName + ".dll");
+            String^ candidate = Path::Combine(Path::Combine(_rootPath, "lib"), simpleName + ".dll");
             return File::Exists(candidate) ? Assembly::LoadFrom(candidate) : nullptr;
         }
         catch (Exception^ ex)
@@ -226,7 +226,7 @@ private:
     {
         try
         {
-            String^ assemblyPath = Path::Combine(rootPath, "RNAssistant.OfficeHosts.dll");
+            String^ assemblyPath = Path::Combine(Path::Combine(rootPath, "lib"), "RNAssistant.OfficeHosts.dll");
             if (!File::Exists(assemblyPath))
             {
                 throw gcnew FileNotFoundException("RNAssistant.OfficeHosts.dll was not found.", assemblyPath);
