@@ -1,5 +1,49 @@
 # Stabilization progress
 
+## Fixed CSV evaluation and native-role comparison — 2026-10-06
+
+Production HEAD `1c457044`, clean CLI build, fresh disposable workspaces. Same
+four task/check files, Gemma `rna-gemma4-12b-32k:latest` digest
+`cf94f3793da5f501e0a2948b34825db5baceed926438a78551ffaa83f85a4082`,
+Ollama 0.35.0, 32K/4096, system instructions, json_schema, thinking off and
+16 iterations / 24 tool steps / 600 s per phase. Each temporary server used one
+model/request, Flash Attention, f16 KV and disabled retained prompt cache.
+Owner: CLI evaluation / shared model-context and acceptance evidence.
+
+| Attempt | Result |
+|---|---|
+| Unchanged `user` result role | 160.16 s, `model_done`, exit 5, acceptance failed. Three verified file creations and **24/24 browser checks passed**, but **0/3 final file reads**. Five iterations, four tool calls. The last HTTP request explicitly contains 3 remaining reads and all three paths; the user task and latest result remain visible. Neither published skill was read. |
+| Separate native `tool` diagnostic | Only result role changed. 78.56 s, `no_tool_progress`, exit 5, acceptance failed. One verified `index.html` creation, then three accepted `continue` responses with no calls. Two rejected responses: a trailing tool-response marker and `action=continue` with a file call. Four kernel iterations, six HTTP attempts; no browser check or file read. |
+
+Both v6 probes passed. Paired source archives/binaries, task/check hashes, model
+digest and other settings match; the entire initial HTTP body is byte-identical.
+All 5/5 and 6/6 HTTP requests/responses were retained in canonical events/CAS;
+10 JSON/user-role and 5 native-pair checks found no broken exchanges, missing latest
+results or runtime resource URIs. The native failure is model/protocol behavior
+on this endpoint, not an observed missing tool result. A single attempt per role
+does not establish their general quality or the model's internal attention.
+Categories: first `MODEL_ERROR` / `VERIFICATION_ERROR`; native `MODEL_ERROR` /
+`PROTOCOL_ERROR`. The existing guards rejected both runs without repeating effects.
+
+Input/output tokens: 34059/2717 (max 8953/1636) and 34544/1178 (max 6141/492).
+No compaction occurred: these requests fit 32K, so real-model compaction quality
+remains unqualified. Neither creation met full acceptance; follow-ups were not run.
+No operator hints, file repair or increased limits. Full M4/M5 remain open.
+
+Memory: 33/17 samples, maximum gaps 5.10/5.09 s, no sampling errors, pressure level
+1 throughout and **0 MiB new swap-out** in both runs. Swap-in was 0.125/0 MiB;
+existing swap stayed about 995.94 MiB. Peak runner RSS was 10.35/11.13 GiB (not
+total unique CPU/GPU allocation); no other local model was loaded. Both test
+models were unloaded and temporary servers stopped. These failures were not
+accompanied by observed memory pressure or context overflow.
+
+Exact source archives, binaries, drivers, profiles, HTTP/CAS, browser result and
+audits are retained locally:
+`/var/folders/k9/hr_94nt142x1f43jr6g0wr_00000gp/T/rna-m5-compaction-gemma-cfm_0eor`;
+native comparison:
+`/var/folders/k9/hr_94nt142x1f43jr6g0wr_00000gp/T/rna-m5-native-gemma-gg9tk44o`.
+This slice changes evidence/status only; Windows/Office remain unqualified.
+
 ## Shared compaction and CLI continuation — 2026-10-06
 
 M5 E-CONTEXT/E-RESUME integration slice, owned by conversation application services.
@@ -1284,11 +1328,13 @@ boundary, not a functional CSV score. Scripted HTTP tests confirmed both CLI
 transport modes and saved metadata. The existing v6 parser correctly rejected
 these outputs; no permissive JSON repair or separate agent loop was added.
 
-Next concrete slice (2026-10-06): rerun the unchanged real CSV creation/follow-up
-with the shared compactor wired into production CLI, retaining fixture, model
-profile, limits and external checks. Audit actual request/result/compaction traces
-for lost requirements or unnecessary repeated calls. The controlled HTTP
-E-CONTEXT/E-RESUME integration now passes; real-model quality still needs evidence.
+Next concrete slice (2026-10-06): cross-family regression of the fixed CSV task
+with the documented Qwen 3.5 9B / 32K profile and the same fixture, checks and
+16/24/600 bounds, followed by the unchanged feature task only if creation passes.
+The Gemma baseline and isolated native-role diagnostic above both failed; changing
+result role is not an established fix. Inspect exact response/context evidence
+before changing runtime behavior. Controlled HTTP E-CONTEXT/E-RESUME passes;
+real-model compaction/resume quality still needs a separate pressure scenario.
 Bounded event subscription is implemented above. Interactive CLI UX and Office UI
 adoption remain open; no extra runtime or widened model budget is the next step.
 Modes, typed answer/restart handling, published skills, frozen context, Task Lists

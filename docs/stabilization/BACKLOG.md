@@ -119,6 +119,17 @@ not establish autonomous completion; do not attribute these remaining failures
 to missing RAM or lost results without new evidence. Full traces and bounds are
 in progress; the expanded budget does not replace the original acceptance result.
 
+At HEAD `1c457044`, the fixed `user`-role CSV task again passed 24/24 browser
+checks but ended with 0/3 final reads, despite explicit current requirements in
+the actual request. A paired diagnostic changed only result role to native `tool`:
+one file was created, followed by three repeated no-tool `continue` responses,
+and the kernel stopped at `no_tool_progress`. Two responses also violated v6.
+Both runs had normal pressure and zero new swap-out; call/result pairs and the
+latest result were present on wire. No compaction was needed. These observations
+do not establish a context-loss bug or a fix through native role selection.
+Keep the user-selectable role setting explicit, and retain the fixed acceptance
+for the next cross-family comparison. See the 2026-10-06 evidence in progress.
+
 ## CLI continuation after completed-operation receipts — 2026-10-05
 
 Historical isolation below precedes the pair/role and typed recovery fixes.
