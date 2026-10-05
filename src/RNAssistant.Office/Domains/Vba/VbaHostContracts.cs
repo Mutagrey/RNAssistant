@@ -125,6 +125,12 @@ namespace RNAssistant.Office.Domains.Vba
         Unknown
     }
 
+    public enum VbaBackendRollbackDisposition
+    {
+        None,
+        RolledBack
+    }
+
     public sealed class VbaBackendActionResult
     {
         private readonly JObject _data;
@@ -138,33 +144,39 @@ namespace RNAssistant.Office.Domains.Vba
         }
         public string ErrorCode { get; private set; }
         public bool Retryable { get; private set; }
+        public VbaBackendRollbackDisposition RollbackDisposition { get; private set; }
 
         private VbaBackendActionResult(
             VbaBackendActionStatus status,
             string message,
             object data,
             string errorCode,
-            bool retryable)
+            bool retryable,
+            VbaBackendRollbackDisposition rollbackDisposition)
         {
             Status = status;
             Message = message ?? string.Empty;
             _data = NormalizeData(data);
             ErrorCode = errorCode;
             Retryable = status == VbaBackendActionStatus.Error && retryable;
+            RollbackDisposition = status == VbaBackendActionStatus.Error
+                ? rollbackDisposition : VbaBackendRollbackDisposition.None;
         }
 
         public static VbaBackendActionResult Ok(
             string message, object data = null)
         {
             return new VbaBackendActionResult(
-                VbaBackendActionStatus.Ok, message, data, null, false);
+                VbaBackendActionStatus.Ok, message, data, null, false,
+                VbaBackendRollbackDisposition.None);
         }
 
         public static VbaBackendActionResult Error(
             string message,
             object data = null,
             string errorCode = null,
-            bool retryable = false)
+            bool retryable = false,
+            VbaBackendRollbackDisposition rollbackDisposition = VbaBackendRollbackDisposition.None)
         {
             return new VbaBackendActionResult(
                 VbaBackendActionStatus.Error,
@@ -172,7 +184,8 @@ namespace RNAssistant.Office.Domains.Vba
                 data,
                 string.IsNullOrWhiteSpace(errorCode)
                     ? "vba_backend_failed" : errorCode,
-                retryable);
+                retryable,
+                rollbackDisposition);
         }
 
         public static VbaBackendActionResult Unknown(
@@ -186,7 +199,8 @@ namespace RNAssistant.Office.Domains.Vba
                 data,
                 string.IsNullOrWhiteSpace(errorCode)
                     ? "vba_backend_unknown" : errorCode,
-                false);
+                false,
+                VbaBackendRollbackDisposition.None);
         }
 
         private static JObject NormalizeData(object data)

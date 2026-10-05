@@ -203,6 +203,13 @@ cause and rollback disposition. A verified restoration/removal is a definite err
 (`vba_module_replace_failed`); inability to verify rollback is
 `vba_module_replace_rollback_failed` with unknown effect. Generic
 `vba_access_error` no longer hides this replacement distinction.
+Creation follows the same rule: verified removal reports
+`vba_module_create_failed`; failed or unidentifiable cleanup reports an unknown
+effect. The host passes verified rollback as a typed disposition to the journal;
+diagnostic text and JSON labels do not classify it.
+If an unidentifiable create reports unknown and the requested module is absent,
+the journal still records unknown: that target read-back cannot rule out a new
+component under another name.
 
 Excel, Word and PowerPoint macro dispatch qualifies the requested
 module/procedure with the exact bound document name before `Application.Run`.

@@ -144,6 +144,7 @@ namespace RNAssistant.OfficeHosts.Vba
             dynamic module = null;
             var originalCode = string.Empty;
             var mutationStarted = false;
+            var componentCountBeforeCreate = 0;
             try
             {
                 if (component == null)
@@ -157,6 +158,7 @@ namespace RNAssistant.OfficeHosts.Vba
                             true);
                     }
 
+                    componentCountBeforeCreate = (int)vbProject.VBComponents.Count;
                     component = vbProject.VBComponents.Add(StdModuleType);
                     created = true;
                     component.Name = moduleName;
@@ -184,7 +186,8 @@ namespace RNAssistant.OfficeHosts.Vba
                     if (created)
                     {
                         vbProject.VBComponents.Remove(component);
-                        if (FindComponent(vbProject, moduleName) != null)
+                        if (FindComponent(vbProject, moduleName) != null ||
+                            (int)vbProject.VBComponents.Count != componentCountBeforeCreate)
                         {
                             throw new InvalidOperationException("Incomplete VBA module is still present after rollback: " + moduleName);
                         }
@@ -229,7 +232,10 @@ namespace RNAssistant.OfficeHosts.Vba
                         ex,
                         null),
                     "vba_module_replace_failed",
-                    false);
+                    false,
+                    created || mutationStarted
+                        ? VbaBackendRollbackDisposition.RolledBack
+                        : VbaBackendRollbackDisposition.None);
             }
             return VbaBackendActionResult.Ok(
                 "VBA module replaced: " + component.Name,
@@ -317,11 +323,14 @@ namespace RNAssistant.OfficeHosts.Vba
                     null,
                     "vba_module_exists",
                     false);
+            var componentCountBeforeCreate = (int)vbProject.VBComponents.Count;
             dynamic component = null;
+            var mutationStarted = false;
             try
             {
                 component = vbProject.VBComponents.Add(type);
                 component.Name = moduleName;
+                mutationStarted = true;
                 ReplaceCode(component.CodeModule, code);
                 VerifyComponentLiveCode(component, code, "VBA module creation");
                 return VbaBackendActionResult.Ok(
@@ -342,7 +351,8 @@ namespace RNAssistant.OfficeHosts.Vba
                     try
                     {
                         vbProject.VBComponents.Remove(component);
-                        if (FindComponent(vbProject, moduleName) != null)
+                        if (FindComponent(vbProject, moduleName) != null ||
+                            (int)vbProject.VBComponents.Count != componentCountBeforeCreate)
                         {
                             throw new InvalidOperationException("Incomplete VBA module is still present after create rollback: " + moduleName);
                         }
@@ -354,11 +364,26 @@ namespace RNAssistant.OfficeHosts.Vba
                 }
                 if (cleanupError != null)
                 {
-                    throw new InvalidOperationException(
-                        "VBA module creation failed and the incomplete component could not be removed: " + cleanupError.Message,
-                        ex);
+                    return VbaBackendActionResult.Unknown(
+                        "VBA module creation failed and removal could not be verified. Inspect the module before retrying.",
+                        ReplacementFailureData(moduleName, component != null,
+                            mutationStarted, false, ex, cleanupError),
+                        "vba_module_create_rollback_failed");
                 }
-                throw;
+                if (component == null)
+                {
+                    return VbaBackendActionResult.Unknown(
+                        "VBA module creation failed before the new component could be identified. Inspect the project before retrying.",
+                        ReplacementFailureData(moduleName, false, false, false, ex, null),
+                        "vba_module_create_unknown");
+                }
+                return VbaBackendActionResult.Error(
+                    "VBA module creation failed; the incomplete module was removed.",
+                    ReplacementFailureData(moduleName, true, mutationStarted,
+                        true, ex, null),
+                    "vba_module_create_failed",
+                    false,
+                    VbaBackendRollbackDisposition.RolledBack);
             }
         }
 

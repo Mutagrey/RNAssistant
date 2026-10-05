@@ -32,6 +32,8 @@ namespace RNAssistant.Harness
 
         public int Count { get { return _items.Count; } }
         public bool FailNextAddedModuleWrite { get; set; }
+        public bool FailNextRemove { get; set; }
+        public bool SkipNextRemove { get; set; }
         public Func<string, string> AddedModuleWriteTransform { get; set; }
 
         public FakeVbaComponent Add(int type)
@@ -58,6 +60,16 @@ namespace RNAssistant.Harness
 
         public void Remove(FakeVbaComponent component)
         {
+            if (FailNextRemove)
+            {
+                FailNextRemove = false;
+                throw new InvalidOperationException("scripted VBA removal failure");
+            }
+            if (SkipNextRemove)
+            {
+                SkipNextRemove = false;
+                return;
+            }
             _items.Remove(component);
         }
 

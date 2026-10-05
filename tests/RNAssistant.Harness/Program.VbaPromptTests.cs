@@ -603,6 +603,36 @@ namespace RNAssistant.Harness
                         .Single(item => item.Prepared.ModuleName == raceName)
                         .Terminal.Status,
                     "type-diverged create is durably unknown");
+
+                const string uncertainName = "UnidentifiedCreate";
+                var uncertainCorrelation = new VbaMutationCorrelation { SessionId = "whole-write-service" };
+                var uncertainPreparation = service.PrepareWholeModuleWriteGuard(
+                    new VbaWholeModuleWriteGuardRequest
+                    {
+                        RequestedModuleName = uncertainName,
+                        Correlation = uncertainCorrelation
+                    });
+                adapter.QueueVbaActionResult(FakeVbaOperation.CreateModule,
+                    RNAssistant.Office.Domains.Vba.VbaBackendActionResult.Unknown(
+                        "Add returned before the component was identified.",
+                        null, "vba_module_create_unknown"));
+                var uncertainCreate = service.WriteWholeModule(
+                    new VbaWholeModuleWriteRequest
+                    {
+                        ModuleName = uncertainPreparation.ResolvedModuleName,
+                        Code = "Sub Main()\nEnd Sub",
+                        ComponentType = "StdModule",
+                        Mode = VbaWholeModuleWriteMode.CreateOnly,
+                        Guard = uncertainPreparation.Guard,
+                        Correlation = uncertainCorrelation
+                    }, CancellationToken.None);
+                AssertEqual(VbaMutationOutcomeStatus.Unknown, uncertainCreate.Status,
+                    "absent requested target cannot prove an unknown create had no effect elsewhere");
+                AssertEqual(VbaMutationStatuses.Unknown,
+                    store.ListMutations(adapter.HostName, adapter.DocumentKey)
+                        .Single(item => item.Prepared.ModuleName == uncertainName)
+                        .Terminal.Status,
+                    "unidentified create remains durably unknown");
             });
         }
 
@@ -3013,6 +3043,18 @@ namespace RNAssistant.Harness
             AssertEqual("original-source-restored",
                 (string)failedReplacement.Data["rollbackDisposition"],
                 "verified rollback is structured evidence");
+            AssertEqual(RNAssistant.Office.Domains.Vba.VbaBackendRollbackDisposition.RolledBack,
+                failedReplacement.RollbackDisposition,
+                "verified rollback crosses the host boundary as typed evidence");
+            AssertEqual(VbaMutationDisposition.RolledBack,
+                VbaMutationHostBackend.Map(failedReplacement, "missing", "missing").Disposition,
+                "domain journal receives typed rollback disposition");
+            AssertEqual(VbaMutationDisposition.None,
+                VbaMutationHostBackend.Map(
+                    RNAssistant.Office.Domains.Vba.VbaBackendActionResult.Error(
+                        "failed", new { rollbackDisposition = "original-source-restored" }, "failed"),
+                    "missing", "missing").Disposition,
+                "diagnostic labels cannot certify rollback");
             AssertTrue(failedReplacement.Data["failure"] != null,
                 "replacement failure retains exception diagnostics");
 
@@ -3032,6 +3074,40 @@ namespace RNAssistant.Harness
                 (string)failedCreate.Data["rollbackDisposition"],
                 "created module cleanup is structured evidence");
             AssertEqual(0, newDocument.VBProject.VBComponents.Count, "incomplete module removed");
+
+            var changedByVbe = new FakeVbaDocumentObject();
+            changedByVbe.VBProject.VBComponents.AddedModuleWriteTransform = code =>
+                code.Replace("End Sub", "End Function");
+            var failedDirectCreate = VbaProjectSupport.CreateModule(
+                changedByVbe, "NewModule", "StdModule", "Sub Main()\nEnd Sub");
+            AssertEqual("vba_module_create_failed", failedDirectCreate.ErrorCode,
+                "creation verification failure keeps a specific code");
+            AssertEqual(RNAssistant.Office.Domains.Vba.VbaBackendRollbackDisposition.RolledBack,
+                failedDirectCreate.RollbackDisposition,
+                "verified removal is typed rollback evidence");
+            AssertEqual(0, changedByVbe.VBProject.VBComponents.Count,
+                "verification failure removes the incomplete component");
+
+            var removalFailed = new FakeVbaDocumentObject();
+            removalFailed.VBProject.VBComponents.FailNextAddedModuleWrite = true;
+            removalFailed.VBProject.VBComponents.FailNextRemove = true;
+            var unknownCreate = VbaProjectSupport.CreateModule(
+                removalFailed, "NewModule", "StdModule", "Sub Main()\nEnd Sub");
+            AssertEqual(RNAssistant.Office.Domains.Vba.VbaBackendActionStatus.Unknown, unknownCreate.Status,
+                "unverified creation rollback is not a definite error");
+            AssertEqual("vba_module_create_rollback_failed", unknownCreate.ErrorCode,
+                "failed cleanup remains diagnosable");
+            AssertEqual(1, removalFailed.VBProject.VBComponents.Count,
+                "unknown result leaves the component for explicit inspection");
+
+            var silentRemoval = new FakeVbaDocumentObject();
+            silentRemoval.VBProject.VBComponents.FailNextAddedModuleWrite = true;
+            silentRemoval.VBProject.VBComponents.SkipNextRemove = true;
+            var unverifiedRemoval = VbaProjectSupport.CreateModule(
+                silentRemoval, "NewModule", "StdModule", "Sub Main()\nEnd Sub");
+            AssertEqual(RNAssistant.Office.Domains.Vba.VbaBackendActionStatus.Unknown,
+                unverifiedRemoval.Status,
+                "silent removal cannot certify rollback from a missing name alone");
         }
 
         private static void VbaReadBackRejectsWriteDrift()

@@ -193,7 +193,10 @@ namespace RNAssistant.Office.Tools
                 result.Message,
                 result.Data,
                 result.ErrorCode,
-                result.Retryable);
+                result.Retryable,
+                result.RollbackDisposition == VbaBackendRollbackDisposition.RolledBack
+                    ? VbaMutationDisposition.RolledBack
+                    : VbaMutationDisposition.None);
         }
     }
 

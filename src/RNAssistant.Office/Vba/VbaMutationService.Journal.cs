@@ -149,6 +149,18 @@ namespace RNAssistant.Office.Vba
                     assessment.Message =
                         "The backend explicitly reported rollback and live state matches the recorded before state.";
                 }
+                else if (actionResult.Status == VbaMutationActionStatus.Unknown &&
+                    !prepared.BeforeExists && prepared.IntendedAfterExists &&
+                    string.Equals(assessment.Status, VbaMutationStatuses.NotApplied,
+                        StringComparison.Ordinal))
+                {
+                    // An add may have produced an unidentifiable component even when
+                    // the requested name is absent. Target read-back alone cannot
+                    // certify that the whole VBA project was unchanged.
+                    assessment.Status = VbaMutationStatuses.Unknown;
+                    assessment.Message =
+                        "The requested module is absent, but creation may have affected another component. Inspect the VBA project before retrying.";
+                }
             }
 
             TraceMutation(prepared, SessionEventKind.DomainEffectVerified, assessment.Status);
