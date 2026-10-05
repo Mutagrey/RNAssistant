@@ -63,14 +63,26 @@ namespace RNAssistant.Core.Services
 
         public ResourceReadObservation Read(string relativePath)
         {
-            var observed = _files.ReadText(_workspace, relativePath);
+            return Project(_files.ReadText(_workspace, relativePath), false);
+        }
+
+        // Runtime-only retained read. This does not observe or republish the live head;
+        // callers assess currentness separately against frozen authority.
+        public ResourceReadObservation ReadExact(string relativePath, ResourceRef exact)
+        {
+            return Project(_files.ReadExactText(_workspace, relativePath, exact), true);
+        }
+
+        private ResourceReadObservation Project(WorkspaceFileObservation observed, bool retained)
+        {
             var descriptor = new ResourceDescriptor { Reference = observed.Reference,
-                Provider = Id, Kind = "file", Title = Path.GetFileName(relativePath),
-                Mutable = !_workspace.ReadOnly, Tracking = "current",
+                Provider = Id, Kind = "file", Title = Path.GetFileName(observed.RelativePath),
+                Mutable = !retained && !_workspace.ReadOnly, Tracking = retained ? "snapshot" : "current",
+                ByteLength = observed.Evidence.Payload.ByteLength,
                 ContentSha256 = observed.ContentSha256, Coverage = ResourceCoverage.Whole() };
             descriptor.Representations.Add(ResourceRepresentations.Metadata);
             descriptor.Representations.Add(ResourceRepresentations.Text);
-            descriptor.Metadata["relativePath"] = relativePath;
+            descriptor.Metadata["relativePath"] = observed.RelativePath;
             var result = new ResourceReadResult { Resource = descriptor,
                 Representation = ResourceRepresentations.Text, Text = observed.Text,
                 ContentSha256 = observed.ContentSha256, Coverage = ResourceCoverage.Whole(),

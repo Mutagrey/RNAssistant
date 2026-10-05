@@ -4,6 +4,7 @@ Build RNAssistant.Cli first, then run this file with Python 3. No Python package
 or user browser profile are used; the CLI verifier owns its isolated profile.
 """
 
+import hashlib
 import json
 import os
 import subprocess
@@ -41,9 +42,9 @@ def main():
         workspace = root / "work"
         workspace.mkdir()
         state = root / "state"
-        (workspace / "index.html").write_text(
-            '<!doctype html><link rel="stylesheet" href="styles.css">'
-            '<button id="go">Go</button><script src="app.js"></script>', encoding="utf-8"
+        (workspace / "index.html").write_bytes(
+            ('\ufeff<!doctype html>\r\n<link rel="stylesheet" href="styles.css">'
+             '<button id="go">Go</button><script src="app.js"></script>\r\n').encode("utf-8")
         )
         (workspace / "styles.css").write_text("body {color:black}", encoding="utf-8")
         script = workspace / "app.js"
@@ -51,6 +52,20 @@ def main():
         code, result = verify(workspace, state)
         assert code == 0 and result["status"] == "passed", result
         assert result["checkedFiles"] == ["app.js", "index.html", "styles.css"]
+        hashes = {name: hashlib.sha256((workspace / name).read_bytes()).hexdigest()
+                  for name in result["checkedFiles"]}
+        manifest = "\n".join(f"{name} {digest}" for name, digest in hashes.items())
+        assert result["snapshotSha256"] == hashlib.sha256(manifest.encode("utf-8")).hexdigest(), result
+
+        # The live source still exists. Verification must fail when its retained
+        # exact payload disappears instead of quietly serving the current file.
+        digest = hashes["app.js"]
+        payload = state / "chat-blobs" / digest[:2] / f"{digest}.blob"
+        payload.unlink()
+        code, result = verify(workspace, state)
+        assert code == 5 and result["status"] == "failed", result
+        assert result["browser"] is None, result
+        assert any("Cannot read app.js" in error and "payload" in error for error in result["errors"]), result
 
         script.write_text('throw new Error("BROWSER_SMOKE_FAILURE");', encoding="utf-8")
         code, result = verify(workspace, state)
@@ -75,7 +90,8 @@ def main():
         (workspace / "styles.css").write_text("body {color:black}", encoding="utf-8")
         code, result = verify(workspace, state, "/missing/chromium")
         assert code == 4 and result["status"] == "not-run", result
-        print("PASS workspace CLI web verifier: passed, immediate/delayed error, DOM hint, missing asset, not-run")
+        print("PASS workspace CLI web verifier: exact BOM/CRLF snapshot, missing retained payload, "
+              "immediate/delayed error, DOM hint, missing asset, not-run")
 
 
 if __name__ == "__main__":

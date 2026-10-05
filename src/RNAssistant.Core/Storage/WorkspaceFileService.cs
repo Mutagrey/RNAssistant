@@ -219,20 +219,34 @@ namespace RNAssistant.Core.Storage
             return _authority.CaptureMany(scopes);
         }
 
-        public string ReadHistoricalText(WorkspaceDescriptor workspace, string relativePath, ResourceRef exact)
+        public WorkspaceFileObservation ReadExactText(WorkspaceDescriptor workspace, string relativePath, ResourceRef exact)
         {
             var path = ResolvePath(workspace, relativePath, false);
             var id = FileIdentity(path);
             if (exact == null || !exact.IsExact || exact.Uri != ResourceUri.Create("file", id))
-                throw new WorkspaceFileException("invalid_resource_ref", "Historical reference does not belong to this file.");
-            var view = _authority.GetView(Scope(id), exact, "text");
-            if (view?.Payload == null || !_blobs.HasStoredReference(view.Payload.ToBlobReference()))
-                throw new WorkspaceFileException("snapshot_unavailable", "Exact historical file payload is unavailable.");
-            if (!_authority.Capture(Scope(id)).Commits.Any(commit => commit.HeadChanges.Any(change =>
+                throw new WorkspaceFileException("invalid_resource_ref", "Exact reference does not belong to this file.");
+            var scope = Scope(id);
+            var snapshot = _authority.Capture(scope);
+            if (!snapshot.Commits.Any(commit => commit.HeadChanges.Any(change =>
                 change.After.Knowledge == HeadKnowledge.Known &&
                 change.After.Revision.Revision == exact.Revision)))
                 throw new WorkspaceFileException("snapshot_unavailable", "Exact file revision was not published.");
-            return Decode(_blobs.ReadBytes(view.Payload.ToBlobReference()));
+            var revision = _authority.GetRevision(scope, exact);
+            var view = _authority.GetView(scope, exact, "text");
+            if (view?.Payload == null || view.Coverage?.Kind != ResourceCoverageKinds.Whole ||
+                view.ContentSha256 != view.Payload.Sha256 || revision?.ContentSha256 != view.ContentSha256)
+                throw new WorkspaceFileException("snapshot_unavailable", "Exact whole-text file view is unavailable.");
+            if (view.Payload.ByteLength > MaximumTextBytes)
+                throw new WorkspaceFileException("file_too_large", "Exact text exceeds the one MiB whole-read bound.");
+            var bytes = _blobs.ReadBytes(view.Payload.ToBlobReference());
+            if (bytes == null)
+                throw new WorkspaceFileException("snapshot_unavailable", "Exact file payload is missing or corrupt.");
+            return new WorkspaceFileObservation
+            { RelativePath = relativePath, Text = Decode(bytes), Reference = exact.Copy(),
+                ContentSha256 = view.ContentSha256,
+                Evidence = new ResourceEvidence("ev_" + Guid.NewGuid().ToString("N"), scope, exact,
+                    "text", ResourceCoverage.Whole(), true, snapshot.Generation, view.Payload,
+                    contentSha256: view.ContentSha256) };
         }
 
         public WorkspaceFileObservation CreateText(WorkspaceDescriptor workspace, string relativePath, string text,
@@ -398,7 +412,7 @@ namespace RNAssistant.Core.Storage
         public WorkspaceFileObservation RestoreHistoricalText(WorkspaceDescriptor workspace, string relativePath,
             ResourceRef expectedCurrent, ResourceRef historical, Action onDispatch = null)
         {
-            var text = ReadHistoricalText(workspace, relativePath, historical);
+            var text = ReadExactText(workspace, relativePath, historical).Text;
             return ReplaceTextCore(workspace, relativePath, expectedCurrent, text,
                 historical, "files.restore", onDispatch);
         }

@@ -20,7 +20,12 @@ An unresolved possible effect blocks ordinary reads and later writes to that fil
 explicit recovery inspects the current bytes and records unknown causality without
 replaying the command. External edits advance observation rather than silently
 accepting a stale replace. Exact historical text reads use published retained CAS
-bytes and fail when unavailable. The
+bytes and fail when unavailable. `WorkspaceFileResourceProvider.ReadExact` exposes
+that retained text as a typed `ResourceReadObservation` with whole-view payload,
+byte length and exact evidence. It enforces the one MiB text bound and rejects
+unpublished revisions and missing/corrupt payloads without a live-file fallback.
+Reading an old revision does not refresh or republish the head; its currentness
+still comes from frozen authority. The
 CLI exposes relative paths through `common.resources_find/read`; a workspace-bound
 filesystem provider now uses the shared Core `ResourceProviderRouter<TProvider>`.
 The Office `ResourceGatewayService` also uses this router and retains its authority,
@@ -62,22 +67,27 @@ from ordinary reads until reconciliation. An uncertain move is never replayed.
 Cross-volume move semantics, large/binary files, trash retention policy and full
 symlink/hardlink race guarantees remain open M3–M5 work. The immediate text-file
 contract and shared compiler do not complete workspace-first plan §8.1:
-raw/binary views, exact retained-view access through the provider, preview/viewer
+raw/binary views, durable project snapshot manifests, remaining preview/viewer
 consumers and a shared Office/filesystem operation API remain open scope. These
 close when the corresponding consumers use the common contracts with bounded
 coverage, exact evidence and existing host guards; the target architecture is unchanged. See
 [progress](stabilization/PROGRESS.md#workspace-first-implementation--2026-10-04-in-progress).
 
-Development `web.verify` reads bounded UTF-8 source through this same file owner,
-rechecks each observed revision, then serves only those captured bytes from an
-in-memory snapshot on loopback to an isolated Chromium profile. The browser cannot
+Development `verify` / `web.verify` select the workspace-bound filesystem provider
+through the same router as model resource reads. They observe the current reference,
+read its exact retained text through that provider, check byte length/hash, refresh
+each source and require current evidence against one frozen authority snapshot.
+The verifier no longer reads `WorkspaceFileService` directly. Only the captured
+bytes are served from a bounded in-memory snapshot on loopback to isolated Chromium;
+missing retained bytes fail before browser launch. The browser cannot
 open the writable workspace through that server. The tool records exact file
 evidence alongside its result; CLI acceptance refreshes those files and requires
 the evidence to remain current at completion. Dependency discovery currently
 covers HTML script/stylesheet references, CSS imports/URLs and static JS imports;
 dynamic asset discovery, binary assets, behavior beyond the 1.5-second post-load
-observation window, functional browser
-assertions and Gateway-based preview routing remain open.
+observation window, functional assertions within `web.verify`, durable exact project
+manifests and the remaining preview/viewer routing remain open. The separate CSV
+grader provides behavioral checks for its specific task, not generic UI acceptance.
 
 One resource identity, shared current-state authority, immutable historical evidence
 and one model-context compiler serve model reads, HTML and viewers. Reading content

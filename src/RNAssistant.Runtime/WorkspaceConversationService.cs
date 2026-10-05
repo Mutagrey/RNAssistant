@@ -87,7 +87,9 @@ namespace RNAssistant.Runtime
         public Task<WebVerificationResult> VerifyWebAsync(WorkspaceDescriptor workspace,
             string entryPath, CancellationToken cancellationToken = default(CancellationToken))
         {
-            return new WorkspaceWebVerifier(_files).VerifyAsync(workspace, entryPath, cancellationToken);
+            var resources = new ResourceProviderRouter<WorkspaceFileResourceProvider>(new[]
+                { new WorkspaceFileResourceProvider(_files, workspace) });
+            return new WorkspaceWebVerifier(resources).VerifyAsync(entryPath, cancellationToken);
         }
 
         public IReadOnlyList<string> MissingExpectedFiles(WorkspaceDescriptor workspace,
@@ -481,7 +483,7 @@ namespace RNAssistant.Runtime
                 if (WorkspaceWebVerifier.FindBrowserExecutable() != null)
                     Register(registry, entries, "web.verify", "Load an immutable local HTML/CSS/JS snapshot in an isolated browser and report asset and runtime errors.",
                         Schema("entryPath", true), false,
-                        new WebVerifierHandler(files, workspace), independentRead: false);
+                        new WebVerifierHandler(_resources), independentRead: false);
                 if (!workspace.ReadOnly)
                 {
                     Register(registry, entries, "files.create", "Create a new real UTF-8 file; never overwrite.",
@@ -905,9 +907,8 @@ namespace RNAssistant.Runtime
         private sealed class WebVerifierHandler : IReadOnlyToolHandler
         {
             private readonly WorkspaceWebVerifier _verifier;
-            private readonly WorkspaceDescriptor _workspace;
-            public WebVerifierHandler(WorkspaceFileService files, WorkspaceDescriptor workspace)
-            { _verifier = new WorkspaceWebVerifier(files); _workspace = workspace; }
+            public WebVerifierHandler(ResourceProviderRouter<WorkspaceFileResourceProvider> resources)
+            { _verifier = new WorkspaceWebVerifier(resources); }
 
             public async Task<ToolHandlerResult> ExecuteAsync(ToolHandlerContext context,
                 CancellationToken cancellationToken)
@@ -916,7 +917,7 @@ namespace RNAssistant.Runtime
                 var entry = context.Arguments.TryGetValue("entryPath", out value)
                     ? Convert.ToString(value) : string.Empty;
                 WebVerificationResult result;
-                try { result = await _verifier.VerifyAsync(_workspace, entry, cancellationToken).ConfigureAwait(false); }
+                try { result = await _verifier.VerifyAsync(entry, cancellationToken).ConfigureAwait(false); }
                 catch (WorkspaceFileException ex)
                 {
                     return new ToolHandlerResult(ToolResult.Error(ex.Message,

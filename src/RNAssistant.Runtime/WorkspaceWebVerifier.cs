@@ -15,6 +15,7 @@ using System.Threading.Tasks;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
 using RNAssistant.Core.Models;
+using RNAssistant.Core.Services;
 using RNAssistant.Core.Storage;
 
 namespace RNAssistant.Runtime
@@ -54,7 +55,7 @@ namespace RNAssistant.Runtime
             RegexOptions.IgnoreCase | RegexOptions.Compiled, TimeSpan.FromMilliseconds(100));
         private static readonly Regex JsElementId = new Regex("\\bgetElementById\\s*\\(\\s*(?<quote>[\"'])(?<value>[^\"']+)\\k<quote>\\s*\\)",
             RegexOptions.Compiled, TimeSpan.FromMilliseconds(100));
-        private readonly WorkspaceFileService _files;
+        private readonly ResourceProviderRouter<WorkspaceFileResourceProvider> _resources;
 
         private sealed class SnapshotFile
         {
@@ -65,8 +66,8 @@ namespace RNAssistant.Runtime
             public ResourceEvidence Evidence;
         }
 
-        public WorkspaceWebVerifier(WorkspaceFileService files)
-        { _files = files ?? throw new ArgumentNullException(nameof(files)); }
+        public WorkspaceWebVerifier(ResourceProviderRouter<WorkspaceFileResourceProvider> resources)
+        { _resources = resources ?? throw new ArgumentNullException(nameof(resources)); }
 
         public static string StatusCode(WebVerificationStatus status)
         { return status == WebVerificationStatus.NotRun ? "not-run" : status.ToString().ToLowerInvariant(); }
@@ -86,10 +87,9 @@ namespace RNAssistant.Runtime
             return candidates.FirstOrDefault(File.Exists);
         }
 
-        public async Task<WebVerificationResult> VerifyAsync(WorkspaceDescriptor workspace,
-            string entryPath, CancellationToken cancellationToken = default(CancellationToken))
+        public async Task<WebVerificationResult> VerifyAsync(string entryPath,
+            CancellationToken cancellationToken = default(CancellationToken))
         {
-            if (workspace == null) throw new ArgumentNullException(nameof(workspace));
             try { entryPath = NormalizeDependency("", entryPath); }
             catch (Exception ex) when (ex is WorkspaceFileException || ex is UriFormatException)
             {
@@ -104,7 +104,7 @@ namespace RNAssistant.Runtime
                     Errors = new[] { "Static web entry must be an HTML file." },
                     Hints = new string[0], SnapshotSha256 = null, Evidence = new ResourceEvidence[0] };
             var errors = new List<string>();
-            var snapshot = CaptureSnapshot(workspace, entryPath, errors, cancellationToken);
+            var snapshot = CaptureSnapshot(entryPath, errors, cancellationToken);
             var result = new WebVerificationResult { EntryPath = entryPath,
                 CheckedFiles = snapshot.Keys.OrderBy(path => path, StringComparer.Ordinal).ToArray(),
                 Errors = errors, SnapshotSha256 = SnapshotHash(snapshot), Browser = null,
@@ -181,8 +181,8 @@ namespace RNAssistant.Runtime
             catch (RegexMatchTimeoutException) { return new string[0]; }
         }
 
-        private Dictionary<string, SnapshotFile> CaptureSnapshot(WorkspaceDescriptor workspace,
-            string entryPath, List<string> errors, CancellationToken cancellationToken)
+        private Dictionary<string, SnapshotFile> CaptureSnapshot(string entryPath,
+            List<string> errors, CancellationToken cancellationToken)
         {
             var snapshot = new Dictionary<string, SnapshotFile>(StringComparer.Ordinal);
             var queue = new Queue<string>();
@@ -197,22 +197,31 @@ namespace RNAssistant.Runtime
                 { errors.Add("Snapshot exceeds the 32-file bound."); break; }
                 if (!SupportedText(path))
                 { errors.Add("Unsupported local asset in static snapshot: " + path); continue; }
-                WorkspaceFileObservation observed;
-                try { observed = _files.ReadText(workspace, path); }
-                catch (Exception ex) when (ex is WorkspaceFileException || ex is IOException || ex is UnauthorizedAccessException)
+                ResourceReadObservation observed;
+                try
+                {
+                    var current = _resources.Select("file").Read(path);
+                    current.RequireCompleteExactText();
+                    var exact = current.Result.Resource.Reference;
+                    observed = _resources.ForUri(exact.Uri).ReadExact(path, exact);
+                    observed.RequireCompleteExactText();
+                }
+                catch (Exception ex) when (ex is WorkspaceFileException || ex is IOException ||
+                    ex is UnauthorizedAccessException || ex is InvalidOperationException)
                 { errors.Add("Cannot read " + path + ": " + ex.Message); continue; }
-                var bytes = StrictUtf8.GetBytes(observed.Text);
-                if (Hash(bytes) != observed.ContentSha256)
+                var read = observed.Result;
+                var bytes = StrictUtf8.GetBytes(read.Text);
+                if (bytes.LongLength != read.CompleteViewPayload.ByteLength || Hash(bytes) != read.ContentSha256)
                 { errors.Add("Snapshot bytes differ from the observed source: " + path); continue; }
                 total += bytes.Length;
                 if (total > MaximumSnapshotBytes)
                 { errors.Add("Snapshot exceeds the four MiB bound."); break; }
                 snapshot.Add(path, new SnapshotFile { Path = path, Bytes = bytes,
-                    Sha256 = observed.ContentSha256, Reference = observed.Reference,
-                    Evidence = observed.Evidence });
+                    Sha256 = read.ContentSha256, Reference = read.Resource.Reference,
+                    Evidence = observed.Evidence.Single() });
                 try
                 {
-                    foreach (var dependency in Dependencies(path, observed.Text, errors))
+                    foreach (var dependency in Dependencies(path, read.Text, errors))
                         if (!snapshot.ContainsKey(dependency)) queue.Enqueue(dependency);
                 }
                 catch (RegexMatchTimeoutException)
@@ -223,13 +232,27 @@ namespace RNAssistant.Runtime
                 cancellationToken.ThrowIfCancellationRequested();
                 try
                 {
-                    var current = _files.ReadText(workspace, file.Path);
-                    if (current.Reference.Revision != file.Reference.Revision ||
+                    var current = _resources.Select("file").Read(file.Path).Result;
+                    if (current.Resource.Reference.Uri != file.Reference.Uri ||
+                        current.Resource.Reference.Revision != file.Reference.Revision ||
                         current.ContentSha256 != file.Sha256)
                         errors.Add("Source changed during snapshot: " + file.Path);
                 }
                 catch (Exception ex) when (ex is WorkspaceFileException || ex is IOException || ex is UnauthorizedAccessException)
                 { errors.Add("Source became unavailable during snapshot: " + file.Path + ": " + ex.Message); }
+            }
+            if (errors.Count == 0)
+            {
+                try
+                {
+                    var frozen = _resources.Select("file").CaptureAuthority(snapshot.Values.Select(file => file.Evidence));
+                    var reducer = new EvidenceStateReducer();
+                    foreach (var file in snapshot.Values)
+                        if (reducer.Reduce(file.Evidence, frozen).State != EvidenceState.Current)
+                            errors.Add("Source authority is no longer current: " + file.Path);
+                }
+                catch (WorkspaceFileException ex)
+                { errors.Add("Snapshot authority is unavailable: " + ex.Message); }
             }
             return snapshot;
         }

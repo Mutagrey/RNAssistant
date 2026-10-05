@@ -3,7 +3,11 @@
 The independent CLI's optional real-browser check is
 `python3 tests/cli/web_verifier_smoke.py` after building `RNAssistant.Cli`. It uses
 a temporary workspace and fresh Chromium profile; it is not an Office/WebView2
-qualification or an agent functional grader.
+qualification or an agent functional grader. It checks the exact snapshot digest
+with BOM/CRLF and rejects a missing retained CAS payload before browser launch,
+even when the workspace file still exists. Focused `workspace files:` tests cover
+retained provider evidence after edit/deletion, empty text, unpublished revisions,
+corrupt/missing payloads and the existing mutation/recovery guards.
 `python3 tests/cli/tool_result_projection_smoke.py` checks bounded semantic find,
 exact read delivery, invalidation after external edit, failed browser-result
 delivery, frozen format repair and the persisted context receipt. It also compares

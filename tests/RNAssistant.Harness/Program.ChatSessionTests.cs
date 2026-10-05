@@ -106,7 +106,7 @@ namespace RNAssistant.Harness
                 AssertTrue(readEvidence != null && readEvidence.Complete &&
                     readEvidence.Resource.Revision == patched.Reference.Revision,
                     "read retains complete exact resource evidence");
-                AssertEqual("const value = 1;\r\n", files.ReadHistoricalText(workspace, "dashboard/app.js", first.Reference),
+                AssertEqual("const value = 1;\r\n", files.ReadExactText(workspace, "dashboard/app.js", first.Reference).Text,
                     "historical view reads retained CAS bytes");
                 var sourceForCopy = files.ReadText(workspace, "dashboard/app.js");
                 var copied = files.CopyText(workspace, "dashboard/app.js", sourceForCopy.Reference,
@@ -222,10 +222,10 @@ namespace RNAssistant.Harness
                 var original = files.CreateText(workspace, "index.html", "<h1>safe</h1>");
                 var other = files.CreateText(workspace, "app.js", "safe");
                 var wrongRef = false;
-                try { files.ReadHistoricalText(workspace, "app.js", original.Reference); }
+                try { files.ReadExactText(workspace, "app.js", original.Reference); }
                 catch (WorkspaceFileException ex) { wrongRef = ex.Code == "invalid_resource_ref"; }
                 AssertTrue(wrongRef, "historical reference cannot cross file identity");
-                AssertEqual("safe", files.ReadHistoricalText(workspace, "app.js", other.Reference), "exact read");
+                AssertEqual("safe", files.ReadExactText(workspace, "app.js", other.Reference).Text, "exact read");
                 AssertTrue(files.ListPage(workspace).Names.Contains("index.html"), "bounded real file listing");
                 var badText = Path.Combine(workspace.RootPath, "bad.txt");
                 File.WriteAllBytes(badText, new byte[] { 0xff, 0xfe });
@@ -248,6 +248,68 @@ namespace RNAssistant.Harness
                 try { files.CreateText(workspace, "INDEX.HTML", "collision"); }
                 catch (WorkspaceFileException ex) { caseCollision = ex.Code == "case_collision"; }
                 AssertTrue(caseCollision, "portable case collision is rejected");
+            });
+        }
+
+        private static void WorkspaceFilesRetainExactProviderSnapshots()
+        {
+            WithTempPaths(paths =>
+            {
+                var workspace = new WorkspaceStore(paths).Open(Path.Combine(paths.Root, "project"));
+                var files = new WorkspaceFileService(paths);
+                var provider = new WorkspaceFileResourceProvider(files, workspace);
+                const string original = "\uFEFFconst value = 1;\r\n";
+                var created = files.CreateText(workspace, "app.js", original);
+                var livePath = Path.Combine(workspace.RootPath, "app.js");
+                File.WriteAllText(livePath, "changed externally");
+                var current = provider.Read("app.js");
+                var exact = provider.ReadExact("app.js", created.Reference);
+                exact.RequireCompleteExactText();
+                AssertEqual(original, exact.Result.Text, "retained text preserves BOM and CRLF after external edit");
+                AssertTrue(!exact.Result.Resource.Mutable, "retained descriptor does not advertise mutation");
+                AssertEqual(created.ContentSha256, exact.Result.CompleteViewPayload.Sha256,
+                    "exact payload identifies original bytes");
+                var frozen = provider.CaptureAuthority(exact.Evidence);
+                var reducer = new EvidenceStateReducer();
+                AssertEqual(EvidenceState.Superseded, reducer.Reduce(exact.Evidence.Single(), frozen).State,
+                    "retained read remains stale against refreshed authority");
+                AssertEqual(EvidenceState.Current, reducer.Reduce(current.Evidence.Single(), frozen).State,
+                    "retained read does not republish the historical head");
+
+                var authority = new ResourceAuthorityStore(paths);
+                var unpublished = new ResourceRef(created.Reference.Uri, "r_" + Guid.NewGuid().ToString("N"));
+                var scope = exact.Evidence.Single().ScopeId;
+                authority.RegisterRevision(scope, new ResourceRevisionMetadata(unpublished,
+                    created.ContentSha256, exact.Result.CompleteViewPayload));
+                authority.RegisterView(scope, new ResourceRevisionView(unpublished, "text",
+                    created.ContentSha256, exact.Result.CompleteViewPayload, ResourceCoverage.Whole()));
+                var rejected = false;
+                try { provider.ReadExact("app.js", unpublished); }
+                catch (WorkspaceFileException ex) { rejected = ex.Code == "snapshot_unavailable"; }
+                AssertTrue(rejected, "registered but unpublished revision is not readable evidence");
+
+                var blob = new ChatBlobStore(paths).PathFor(created.ContentSha256);
+                File.WriteAllBytes(blob, new byte[] { 1, 2, 3 });
+                foreach (var missing in new[] { false, true })
+                {
+                    if (missing) File.Delete(blob);
+                    rejected = false;
+                    try { provider.ReadExact("app.js", created.Reference); }
+                    catch (WorkspaceFileException ex) { rejected = ex.Code == "snapshot_unavailable"; }
+                    AssertTrue(rejected, "missing/corrupt exact payload never falls back to the live file");
+                }
+                AssertEqual("changed externally", File.ReadAllText(livePath), "retained reads leave live bytes untouched");
+
+                var empty = files.CreateText(workspace, "empty.css", string.Empty);
+                File.Delete(Path.Combine(workspace.RootPath, "empty.css"));
+                try { provider.Read("empty.css"); }
+                catch (FileNotFoundException) { }
+                var deleted = provider.ReadExact("empty.css", empty.Reference);
+                deleted.RequireCompleteExactText();
+                AssertEqual(string.Empty, deleted.Result.Text, "empty retained view remains readable after deletion");
+                AssertEqual(EvidenceState.Unavailable,
+                    reducer.Reduce(deleted.Evidence.Single(), provider.CaptureAuthority(deleted.Evidence)).State,
+                    "retained bytes do not make the deleted source current");
             });
         }
 
@@ -307,7 +369,7 @@ namespace RNAssistant.Harness
                 var sourcePath = Path.Combine(workspace.RootPath, "src", "app.js");
                 AssertTrue(!File.Exists(sourcePath), "delete removes only the workspace source path");
                 AssertEqual("files.delete", deleted.AuthorityCommit.Effect.Operation, "delete publishes verified effect");
-                AssertEqual("const ready = true;\n", files.ReadHistoricalText(workspace, "src/app.js", source.Reference),
+                AssertEqual("const ready = true;\n", files.ReadExactText(workspace, "src/app.js", source.Reference).Text,
                     "deleted bytes remain available as an exact historical view");
                 var oldState = new ResourceAuthorityStore(paths).CaptureMany(new[] { accepted.Evidence.ScopeId });
                 AssertEqual(EvidenceState.Unavailable,
@@ -381,7 +443,7 @@ namespace RNAssistant.Harness
                 AssertEqual(created.Reference.Revision,
                     new ResourceAuthorityStore(paths).GetRevision(accepted.Evidence.ScopeId, moved.Reference).Parent.Revision,
                     "moved revision retains parent");
-                AssertEqual("const app = 1;\n", files.ReadHistoricalText(workspace, "dst/app.js", created.Reference),
+                AssertEqual("const app = 1;\n", files.ReadExactText(workspace, "dst/app.js", created.Reference).Text,
                     "historical view follows moved identity");
                 AssertEqual(moved.Reference.Revision, files.ReadText(workspace, "dst/app.js").Reference.Revision,
                     "target read resolves published head");
