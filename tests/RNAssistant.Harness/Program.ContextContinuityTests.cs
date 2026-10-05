@@ -18,6 +18,80 @@ namespace RNAssistant.Harness
 {
     internal static partial class Program
     {
+        private static void ContextContinuityKeepsRecentPair()
+        {
+            var authority = new ModelAuthoritySnapshot(new ResourceAuthoritySnapshotSet(new ResourceAuthoritySnapshot[0]),
+                "pack", new SkillCatalogSnapshot(null), null, 1);
+            var compiler = new ModelContextCompiler();
+            foreach (var role in new[] { "user", "developer", "tool" })
+            foreach (var status in new[] { ToolResultStatus.Ok, ToolResultStatus.Error, ToolResultStatus.Unknown })
+            {
+                var result = ContinuityResult("recent", "files.create", new ToolResult(status,
+                    "Exact terminal result.", "{\"code\":\"fixture_result\",\"path\":\"index.html\"}"), role);
+                result.ResourceEffect = new ResourceEffect("effect", "create", status == ToolResultStatus.Ok
+                    ? ResourceEffectOutcome.VerifiedChanged : status == ToolResultStatus.Error
+                    ? ResourceEffectOutcome.FailedNoEffect : ResourceEffectOutcome.UnknownAfterDispatch);
+                var call = AgentJsonProtocol.CreateToolCallMessage(new AgentToolCall { Id = "recent", Name = "files.create",
+                    Arguments = new Dictionary<string, object> { { "relativePath", "index.html" }, { "content", "<p>exact body</p>" } } },
+                    "Create the page.", null, role, FixtureCallOrigin("recent"));
+                var snapshot = compiler.Compile(authority, new ChatMessage[0], new[] { call, result }, null,
+                    new ToolCatalogEntry[0], new AppSettings(), 10000);
+                AssertEqual(2, snapshot.Messages.Count, "recent mutation remains a call/result pair");
+                AssertEqual(role, snapshot.Messages[1].Role, "compiler respects result transport role");
+                AssertEqual("recent", snapshot.Messages[1].ToolCallId, "result correlation preserved");
+                ToolResultWireReadResult wire; string error;
+                AssertTrue(ToolResultHistoryReader.TryRead(snapshot.Messages[1], out wire, out error), "result stays Tool Result v1");
+                AssertEqual(status, wire.Result.Status, "outcome is not upgraded or replaced");
+                AssertContains(wire.Result.DataJson, "fixture_result", "short receipt stays complete");
+                AssertEqual(0, snapshot.Receipt.OperationReceipts, "no unconditional folding");
+                var request = JArray.FromObject(new LlmMessageBuilder().Build(snapshot.Messages, new AppSettings()).Messages);
+                AssertEqual(role, (string)request[1]["role"], "actual wire uses selected role");
+                if (role == "tool")
+                {
+                    AssertEqual("recent", (string)request[0]["tool_calls"][0]["id"], "native call reaches wire");
+                    AssertEqual("recent", (string)request[1]["tool_call_id"], "native result reaches wire");
+                    AssertContains((string)request[0]["tool_calls"][0]["function"]["arguments"], "<p>exact body</p>", "native arguments are exact");
+                }
+                else AssertContains((string)request[0]["content"], "<p>exact body</p>", "v6 accepted arguments are exact");
+                AssertEqual(result.Content, snapshot.Messages[1].Content, "short result is unchanged");
+                var repaired = new LlmMessageBuilder().Build(compiler.CompileRepair(snapshot,
+                    new ChatMessage { Role = "user", Content = "Repair format only." }), new AppSettings()).Messages;
+                AssertTrue(JToken.DeepEquals(request, JArray.FromObject(repaired.Take(2))), "format repair reuses the frozen pair in every role");
+            }
+        }
+
+        private static void ContextContinuityFoldsOnlyForBudget()
+        {
+            var authority = new ModelAuthoritySnapshot(new ResourceAuthoritySnapshotSet(new ResourceAuthoritySnapshot[0]),
+                "pack", new SkillCatalogSnapshot(null), null, 1);
+            foreach (var role in new[] { "user", "developer", "tool" })
+            {
+                var old = ContinuityResult("old", "files.create", ToolResult.Error("Already exists.", "{\"code\":\"target_exists\"}"), role);
+                old.ResourceEffect = new ResourceEffect("effect", "create", ResourceEffectOutcome.FailedNoEffect);
+                var call = AgentJsonProtocol.CreateToolCallMessage(new AgentToolCall { Id = "old", Name = "files.create",
+                    Arguments = new Dictionary<string, object> { { "relativePath", "index.html" }, { "content", new string('x', 20000) } } },
+                    "Attempted create.", null, role, FixtureCallOrigin("old"));
+                var latest = ContinuityResult("last", "files.patch", ToolResult.Error("Ambiguous patch.", "{\"code\":\"patch_ambiguous\"}"), role);
+                var latestCall = AgentJsonProtocol.CreateToolCallMessage(new AgentToolCall { Id = "last", Name = "files.patch",
+                    Arguments = new Dictionary<string, object> { { "relativePath", "index.html" } } },
+                    "Attempted patch.", null, role, FixtureCallOrigin("last"));
+                var facts = new[] { call, old, latestCall, latest };
+                var compiler = new ModelContextCompiler();
+                var roomy = compiler.Compile(authority, new ChatMessage[0], facts, null, new ToolCatalogEntry[0], new AppSettings(), 20000);
+                AssertEqual(4, roomy.Messages.Count, "older pairs also remain intact when they fit");
+                var tight = compiler.Compile(authority, new ChatMessage[0], facts, null, new ToolCatalogEntry[0], new AppSettings(), 1400);
+                AssertEqual(3, tight.Messages.Count, "only the old frame folds under budget pressure");
+                var receipt = tight.Messages.First().CompletedOperation;
+                AssertEqual(ToolResultStatus.Error, receipt.Status, "budget folding preserves failure");
+                AssertContains(receipt.DataJson, "target_exists", "rejection detail survives folding");
+                AssertTrue(receipt.Targets.Contains("index.html"), "target recovered from accepted semantic arguments when result omits it");
+                AssertEqual(role, tight.Messages.Last().Role, "latest pair survives budget folding");
+                AssertEqual(latest.Content, tight.Messages.Last().Content, "latest short receipt stays complete");
+                AssertEqual(latestCall.Content, tight.Messages[1].Content, "latest call text stays exact");
+                AssertTrue(tight.Receipt.EstimatedTokens <= 1400, "compiled request fits the actual budget");
+            }
+        }
+
         private static void ContextContinuityPreservesFacts()
         {
             var scope = new ResourceAuthorityScopeId("document", "continuity");
@@ -66,16 +140,24 @@ namespace RNAssistant.Harness
             mutation.ResourceEffect = new ResourceEffect("effect", "write", ResourceEffectOutcome.VerifiedChanged, verification: "read-back");
             var folded = compiler.Compile(authority, new ChatMessage[0], new[] { ContinuityCall(mutation), mutation },
                 null, new ToolCatalogEntry[0], new AppSettings(), 10000);
-            AssertEqual(ToolResultStatus.Ok, folded.Messages.Single().CompletedOperation.Status, "typed operation survives folding");
-            AssertEqual(ResourceEffectOutcome.VerifiedChanged, folded.Messages.Single().ResourceEffect.Outcome, "verified effect survives folding");
+            ToolResultWireReadResult terminal; string wireError;
+            AssertTrue(ToolResultHistoryReader.TryRead(folded.Messages.Last(), out terminal, out wireError), "recent outcome retains its result transport");
+            var operation = ModelContextCompiler.CompleteOperation(folded.Messages.Last(), terminal);
+            AssertEqual(ToolResultStatus.Ok, operation.CompletedOperation.Status, "typed operation survives folding");
+            AssertEqual(ResourceEffectOutcome.VerifiedChanged, operation.ResourceEffect.Outcome, "verified effect survives folding");
             LlmCompletionDelegate unused = (s, m, o, p, c) => Task.FromResult(new LlmCompletionResult());
             var compactor = new ContextCompactionService(unused);
-            var arguments = new object[] { new ChatSession(), folded.Messages, 10000, new AppSettings(), authority, null };
-            typeof(ContextCompactionService).GetMethod("BuildCompactionSource", BindingFlags.Instance | BindingFlags.NonPublic)
-                .Invoke(compactor, arguments);
-            var inputs = (Dictionary<string, StructuredContextClaim>)arguments[5];
-            AssertEqual("operation_source", inputs.Values.Single().Kind, "compaction receives execution provenance, not assistant interpretation");
-            AssertEqual("tool", inputs.Values.Single().SourceRoles.Single(), "operation retains source role through all projections");
+            foreach (var compactionInput in new IEnumerable<ChatMessage>[] { new[] { operation }, folded.Messages })
+            {
+                var arguments = new object[] { new ChatSession(), compactionInput, 10000, new AppSettings(), authority, null };
+                typeof(ContextCompactionService).GetMethod("BuildCompactionSource", BindingFlags.Instance | BindingFlags.NonPublic)
+                    .Invoke(compactor, arguments);
+                var inputs = (Dictionary<string, StructuredContextClaim>)arguments[5];
+                var terminalSource = inputs.Values.Single(item => item.ClaimId == mutation.Id);
+                AssertEqual("operation_source", terminalSource.Kind, "both paired and folded results retain execution provenance");
+                AssertEqual("tool", terminalSource.SourceRoles.Single(), "operation retains source role through all projections");
+                AssertEqual(0, terminalSource.Evidence.Count, "an execution outcome does not expire with its after-state");
+            }
         }
 
         private static ChatMessage ContinuityResult(string id, string tool, ToolResult result, string role = "tool")
@@ -118,19 +200,28 @@ namespace RNAssistant.Harness
 
                 var changed = compiler.Compile(authority(ResourceHeadState.Known(new ResourceRef(style.Uri, "r2"), 2)),
                     new ChatMessage[0], facts, null, new ToolCatalogEntry[0], new AppSettings(), 10000);
-                var receipt = changed.Messages.Single(m => m.CompletedOperation != null);
-                AssertEqual(ToolResultStatus.Error, receipt.CompletedOperation.Status, "historical failure is not upgraded or replaced");
-                AssertContains(receipt.CompletedOperation.Message, "ReferenceError", "original diagnostic survives hydration and folding");
-                AssertContains(receipt.CompletedOperation.DataJson, "CLICK_ERROR", "structured error remains available as historical data");
-                AssertContains(receipt.CompletedOperation.DataJson, "after-plus", "failed assertion is retained");
-                AssertTrue(receipt.CompletedOperation.Targets.Contains("index.html"), "historical check keeps its semantic entry");
-                var body = JObject.Parse(receipt.Content.Substring(receipt.Content.IndexOf('\n') + 1));
+                AssertEqual(2, changed.Messages.Count, "even a stale latest observation keeps its causal pair");
+                var receipt = changed.Messages.Last();
+                AssertEqual("user", receipt.Role, "stale diagnostic retains the selected result role");
+                AssertTrue(ToolResultHistoryReader.TryRead(receipt, out wire, out error), "historical result remains valid wire");
+                AssertEqual(ToolResultStatus.Error, wire.Result.Status, "historical failure is not upgraded or replaced");
+                AssertContains(wire.Result.Message, "ReferenceError", "original diagnostic survives hydration");
+                AssertContains(wire.Result.DataJson, "CLICK_ERROR", "structured error remains available as historical data");
+                AssertContains(wire.Result.DataJson, "after-plus", "failed assertion is retained");
+                var body = JObject.Parse(wire.Result.DataJson);
+                AssertTrue(body["targets"].Values<string>().Contains("index.html"), "historical check keeps its semantic entry");
                 AssertEqual("Superseded", (string)body["observation"]["state"], "change to either source invalidates diagnostic currency");
                 AssertContains((string)body["observation"]["nextAction"], "completed", "historical error cannot instruct mutation replay");
                 AssertTrue(changed.Receipt.ExcludedSuperseded > 0, "receipt records source invalidation");
                 AssertTrue(!receipt.Content.Contains("rna://"), "source identities stay runtime-only");
                 AssertContains(failed.Content, "Archived diagnostic", "compilation does not mutate durable facts");
                 AssertTrue(failed.ResultPayload != null, "historical exact payload remains retained");
+                var later = ContinuityResult("later", "files.patch", ToolResult.Error("No dispatch.", "{\"code\":\"no_effect\"}"));
+                var older = compiler.Compile(authority(ResourceHeadState.Known(new ResourceRef(style.Uri, "r2"), 2)),
+                    new ChatMessage[0], facts.Concat(new[] { ContinuityCall(later), later }).ToArray(), null,
+                    new ToolCatalogEntry[0], new AppSettings(), 10000);
+                AssertContains(older.Messages.Single(m => m.CompletedOperation != null).CompletedOperation.DataJson,
+                    "CLICK_ERROR", "older historical frame also preserves the actual diagnostic");
                 var rejected = false;
                 try { new ModelContextCompiler().Compile(authority(ResourceHeadState.Known(new ResourceRef(style.Uri, "r2"), 2)),
                     new ChatMessage[0], facts, null, new ToolCatalogEntry[0], new AppSettings(), 10000); }
@@ -161,7 +252,9 @@ namespace RNAssistant.Harness
                 var compiler = new ModelContextCompiler(projection: ModelToolResultProjection.Instance);
                 var immediate = compiler.Compile(authority, new ChatMessage[0], new[] { ContinuityCall(mutation), mutation },
                     null, new ToolCatalogEntry[0], new AppSettings(), 10000);
-                AssertEqual(status, immediate.Messages.Single(m => m.CompletedOperation != null).CompletedOperation.Status,
+                ToolResultWireReadResult wire; string error;
+                AssertTrue(ToolResultHistoryReader.TryRead(immediate.Messages.Last(), out wire, out error), "recent receipt remains a result");
+                AssertEqual(status, wire.Result.Status,
                     "next request preserves mutation status for every result role");
                 var checkpoint = new ContextCheckpoint { ThroughMessageId = mutation.Id,
                     Claims = new List<StructuredContextClaim> { new StructuredContextClaim {

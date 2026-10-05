@@ -646,6 +646,33 @@ See [ADR-0003](decisions/ADR-0003-tool-result-three-states.md#phase-4b-wire-gate
   pre-cutover resource/capability calls that no longer satisfy the current schema
   require an explicit new chat/reset before another model request.
 
+The workspace CLI honors the same setting through `--tool-result-role` or
+`RNA_TOOL_RESULT_ROLE` (`user` by default). It records the role in
+`ModelRunMetadata`, inherits it on cross-process approval and rejects drift before
+tool execution. A pending run without that recorded role requires denial and a
+new turn; there is no guessed legacy profile. `resume` only reports/reconciles the
+interrupted lifecycle; it does not issue another model request or replay a tool.
+For a new turn, the selected role shapes accepted history through the same compiler;
+durable v6 facts and runtime call IDs are unchanged.
+
+`ModelContextCompiler` preserves the latest completed call/result pair, including
+its result role, exact accepted arguments, status and short receipt. Older mutation
+pairs also remain intact while they fit. Under budget pressure they may become
+atomic completed-operation receipts, retaining error/recovery data and semantic
+targets from the result or accepted arguments. Large archived call payloads may
+stay unhydrated when such an older receipt suffices. The latest call requires its
+exact bounded payload; missing/oversized arguments stop preparation instead of
+producing a fabricated native call.
+
+Source-body reduction is independent from transport: a latest stale/omitted read
+still has a correlated Tool Result v1, with an explicit `data.observation` and no
+delivered read authority. A stale failed evaluation keeps its original diagnostics
+in `data.tool_data`; its outcome is not upgraded. Older stale observations and
+identical reads may be folded atomically. Short mutation outcomes are not folded
+unconditionally on the next request. These deterministic rules run regardless of
+`AutoCompressContext`, which controls the separate checkpoint/LLM summary step.
+Format repair reuses the frozen request, including the chosen pairs.
+
 ```text
 TOOL_RESULT:
 {"tool_call_id":"call_1","name":"common.resources_read","status":"ok","message":"Complete resource representation read.","data":{"kind":"resource-read","target":"note: Example","type":"artifact","scope":"conversation","representation":"text","text":"Hello","coverage":{"kind":"whole","fields":[]},"returnedCharacters":5,"totalCharacters":5,"complete":true,"hydratedForNextModelStep":false,"rawContentIncluded":true}}

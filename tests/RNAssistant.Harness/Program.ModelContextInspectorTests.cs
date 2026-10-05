@@ -311,7 +311,8 @@ namespace RNAssistant.Harness
                 mutation.ResourceEffect = new ResourceEffect("effect", "write", ResourceEffectOutcome.VerifiedChanged, verification: "read-back");
                 var folded = compiler.Compile(authority, new ChatMessage[0], new[] { ContinuityCall(mutation), mutation }, null,
                     new RNAssistant.Core.Tools.ToolCatalogEntry[0], new AppSettings(), 10000);
-                AssertEqual(ContextPresentationKind.Summary, folded.Receipt.Messages.First(e => e.MessageIndex.HasValue).Presentation, "folded operation is summary");
+                AssertEqual(2, folded.Messages.Count, "latest operation is a pair");
+                AssertEqual(ContextPresentationKind.Full, folded.Receipt.Messages.Single(e => e.SourceMessageId == mutation.Id).Presentation, "short recent result is complete, not a summary");
             });
         }
 

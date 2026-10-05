@@ -115,10 +115,13 @@ namespace RNAssistant.Runtime
             return missing;
         }
 
-        private static void ValidateInstructionRole(AppSettings settings)
+        private static void ValidateMessageRoles(AppSettings settings)
         {
             if (settings.SystemPromptRole != "system" && settings.SystemPromptRole != "developer")
                 throw new ArgumentException("Workspace instructions require role system or developer.", nameof(settings));
+            if (settings.ToolResultRole != ToolResultRoles.User && settings.ToolResultRole != ToolResultRoles.Developer &&
+                settings.ToolResultRole != ToolResultRoles.Tool)
+                throw new ArgumentException("Workspace tool results require role user, developer or tool.", nameof(settings));
         }
 
         public async Task<WorkspaceRunResult> RunAsync(WorkspaceDescriptor workspace, string sessionId,
@@ -130,7 +133,7 @@ namespace RNAssistant.Runtime
             if (string.IsNullOrWhiteSpace(message)) throw new ArgumentException("A task message is required.", nameof(message));
             if (settings == null || string.IsNullOrWhiteSpace(settings.BaseUrl) || string.IsNullOrWhiteSpace(settings.Model))
                 throw new ArgumentException("An LLM endpoint and model are required.", nameof(settings));
-            ValidateInstructionRole(settings);
+            ValidateMessageRoles(settings);
             var acceptedContract = PrepareAcceptance(acceptance);
             var session = string.IsNullOrWhiteSpace(sessionId)
                 ? _workspaces.CreateSession(_chats, workspace, "Workspace chat")
@@ -163,6 +166,7 @@ namespace RNAssistant.Runtime
                         ContextWindowTokens = ModelContextBudget.ContextWindowTokens(settings),
                         AgentResponseMode = settings.AgentResponseMode,
                         SystemPromptRole = settings.SystemPromptRole,
+                        ToolResultRole = settings.ToolResultRole,
                         ReasoningRequestMode = settings.ReasoningRequestMode,
                         ReasoningEnabled = session.ReasoningEnabled
                     },
@@ -196,7 +200,7 @@ namespace RNAssistant.Runtime
             if (approve && (settings == null || string.IsNullOrWhiteSpace(settings.BaseUrl) ||
                 string.IsNullOrWhiteSpace(settings.Model)))
                 throw new ArgumentException("The LLM endpoint and model are required after approval.", nameof(settings));
-            if (approve) ValidateInstructionRole(settings);
+            if (approve) ValidateMessageRoles(settings);
             using (AcquireSessionLease(sessionId))
             {
                 var session = _workspaces.LoadSession(_chats, workspace, sessionId);
@@ -209,6 +213,8 @@ namespace RNAssistant.Runtime
                 var modelConfiguration = session.LastRun.ModelConfiguration;
                 if (approve && string.IsNullOrWhiteSpace(modelConfiguration?.SystemPromptRole))
                     throw new InvalidOperationException("The accepted run has no recorded instruction role. Deny the pending call and submit a new turn.");
+                if (approve && string.IsNullOrWhiteSpace(modelConfiguration?.ToolResultRole))
+                    throw new InvalidOperationException("The accepted run has no recorded tool result role. Deny the pending call and submit a new turn.");
                 if (approve && modelConfiguration != null &&
                     (ModelContextBudget.ContextWindowTokens(settings) != modelConfiguration.ContextWindowTokens ||
                      EndpointSha256(settings.BaseUrl) != modelConfiguration.EndpointSha256 ||
@@ -218,9 +224,11 @@ namespace RNAssistant.Runtime
                          StringComparison.Ordinal) ||
                      !string.Equals(settings.SystemPromptRole, modelConfiguration.SystemPromptRole,
                          StringComparison.Ordinal) ||
+                     !string.Equals(settings.ToolResultRole, modelConfiguration.ToolResultRole,
+                         StringComparison.Ordinal) ||
                      !string.Equals(settings.ReasoningRequestMode, modelConfiguration.ReasoningRequestMode,
                          StringComparison.Ordinal)))
-                    throw new InvalidOperationException("Approval must continue with the accepted run's endpoint, model digest, context, response mode, instruction role and reasoning mode.");
+                    throw new InvalidOperationException("Approval must continue with the accepted run's endpoint, model digest, context, response mode, instruction role, tool result role and reasoning mode.");
                 var history = RestoreAcceptedHistory(session);
                 var continuation = AgentRunContinuation.Restore(run.Summary, run.Limits, 0, history);
                 var acceptance = session.LastRun.WorkspaceAcceptance ?? new WorkspaceRunAcceptance();
@@ -696,9 +704,10 @@ namespace RNAssistant.Runtime
 
             // Normalize accepted kernel facts into the compiler's existing causal
             // frame input. No freshness, projection or budgeting decisions live here.
-            private static IReadOnlyList<ChatMessage> AcceptedFacts(IReadOnlyList<AgentMessage> accepted)
+            private IReadOnlyList<ChatMessage> AcceptedFacts(IReadOnlyList<AgentMessage> accepted)
             {
                 var facts = new List<ChatMessage>();
+                var role = _settings.ToolResultRole;
                 foreach (var item in accepted)
                 {
                     if (item.Kind == AgentMessageKind.User)
@@ -711,9 +720,11 @@ namespace RNAssistant.Runtime
                         foreach (var call in item.ToolCalls)
                             facts.Add(new ChatMessage { Id = "call_" + call.Id, Role = "assistant", ProtocolMessage = true,
                                 ResponseProtocolVersion = ConversationResponse.ProtocolVersion,
-                                ToolResultProtocolVersion = ToolResultWire.CurrentVersion, ToolResultRole = ToolResultRoles.User,
+                                ToolResultProtocolVersion = ToolResultWire.CurrentVersion, ToolResultRole = role,
                                 ToolCallId = call.Id, ToolName = call.Name,
-                                Content = new ConversationResponse(item.Text, new[] { new ConversationToolCall {
+                                ToolCalls = role == ToolResultRoles.Tool ? new List<LlmToolCall> { new LlmToolCall {
+                                    Id = call.Id, Type = "function", Name = call.Name, ArgumentsJson = call.ArgumentsJson } } : new List<LlmToolCall>(),
+                                Content = role == ToolResultRoles.Tool ? item.Text : new ConversationResponse(item.Text, new[] { new ConversationToolCall {
                                     Name = call.Name, Arguments = JObject.Parse(call.ArgumentsJson) } }, item.Action).ToJson() });
                     }
                     else if (item.Kind == AgentMessageKind.ToolResult)
@@ -723,10 +734,10 @@ namespace RNAssistant.Runtime
                         var wire = ToolResultWire.Read(json);
                         if (!wire.Success || wire.ToolCallId != item.ToolCallId)
                             throw new InvalidOperationException("Accepted tool result has no matching terminal body.");
-                        facts.Add(new ChatMessage { Id = "result_" + item.ToolCallId, Role = ToolResultRoles.User,
+                        facts.Add(new ChatMessage { Id = "result_" + item.ToolCallId, Role = role,
                             ProtocolMessage = true, ToolCallId = item.ToolCallId, ToolName = wire.Name,
-                            ToolResultRole = ToolResultRoles.User, ToolResultProtocolVersion = ToolResultWire.CurrentVersion,
-                            Content = "TOOL_RESULT:\n" + json,
+                            ToolResultRole = role, ToolResultProtocolVersion = ToolResultWire.CurrentVersion,
+                            Content = role == ToolResultRoles.Tool ? json : "TOOL_RESULT:\n" + json,
                             ResourceRefs = wire.Result.Resources.ToList(),
                             ResourceEvidence = (item.ResourceEvidence ?? new ResourceEvidence[0]).ToList(),
                             ResourceEffect = item.ResourceEffect, ExecutionProgress = item.Progress });

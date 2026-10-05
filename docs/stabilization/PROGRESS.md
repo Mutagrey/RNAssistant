@@ -1,6 +1,59 @@
 # Stabilization progress
 
-M4/M5 status and retained CSV checks (2026-10-05): **neither full stage is closed**.
+Latest context/transport slice (2026-10-05): the shared compiler now preserves the
+latest completed call/result pair and its selected role. Older mutation pairs stay
+intact while they fit; budget folding keeps operation outcomes, recovery data and
+semantic targets. Source omission/staleness remains separate and removes read
+authority without fabricating a new outcome or orphaning native results. Exact
+latest accepted arguments hydrate from CAS or fail preparation. Office compaction
+classifies both paired and folded typed effects as operation evidence, independent
+of later source changes. Owners: Core model context, Runtime/CLI transport, Office
+compaction. No second loop, provider catalog or filesystem reader was added.
+
+CLI now honors `ToolResultRole` via `--tool-result-role user|developer|tool` /
+`RNA_TOOL_RESULT_ROLE`, persists it in run metadata and pins it across approval.
+An incompatible/missing pending profile fails before tool dispatch. Generation
+remains v6 JSON; `tool` selects native accepted-history transport only.
+
+The regression failed on the previous compiler (one folded message instead of
+the latest pair). Focused `context continuity:` passed 8/8, `agent continuity:` 5/5;
+correctness-before-budget, latest/archived CAS calls, current-source carry-forward
+and compiler presentation passed. Four scripted CLI checks passed: role/approval
+HTTP, omitted-read guard, exact trace/frozen repair, browser verify/read/repair.
+CLI build: zero warnings/errors; harness retains two existing PDF CA1416 warnings.
+Version-format and diff checks passed. Windows/Office/WebView2 remain unqualified.
+
+Real Gemma native-role smoke passed: create `out.txt` → read → done, acceptance
+passed, one verified write/read, 19.60 s. Four HTTP requests include one repaired
+non-JSON response; 4/4 cumulative native-pair checks found no orphan/mismatch.
+Same `rna-gemma4-12b-32k:latest` digest as below, 32K/4096, system instructions,
+json_schema, thinking off; bounded to four iterations/tool steps.
+
+Controlled CSV rerun kept the prior task/checks/model/profile, result role `user`
+and bounds 16 iterations/24 tools. Its first HTTP request is byte-identical to the
+baseline. It created all three files, attempted browser verification, then read
+`app.js`; the previous index.html creation loop did not recur in this run. But
+acceptance **failed**, `repeated_tool_no_progress`, 597.85 s: three writes, one exact
+read, one failed browser check and one rejected replace before repeated refusals.
+Ten requests, one repaired mutation-batch violation; 42 cumulative call/result
+checks have no pairing errors. Tokens: 70757/12805 cumulative, 13211/3342 maximum,
+below caps. No operator feedback or limit increase; follow-up **not run**.
+
+This exposed a separate reproducible recovery-contract gap: file handlers return
+`source_observation_required` without typed `RefreshRequired` recovery, so the
+kernel still rejects an identical mutation after the required complete read.
+The read is present in HTTP; this failure is not missing model context. Next slice:
+attach target-bound recovery and verify failed edit → exact read → identical edit,
+preserving unrelated-failure and unknown-effect guards; see [BACKLOG](BACKLOG.md#workspace-read-prerequisite-does-not-unblock-retry--2026-10-05).
+**Full M4/M5 remain open.** One improved run does not explain every historical loop.
+
+Temporary evidence (profile/digest, binaries, source snapshot, HTTP/CAS, audits):
+`/var/folders/k9/hr_94nt142x1f43jr6g0wr_00000gp/T/rna-context-pair-gemma-4j_p1hsv`;
+native smoke: `/var/folders/k9/hr_94nt142x1f43jr6g0wr_00000gp/T/rna-native-pair-gemma-37tq3ibj`.
+The model was unloaded after both runs. CSV swap-outs rose 996904 → 1003804;
+swap use 3000.06 → 3011.81 MiB, without a reported OOM/context failure.
+
+Earlier M4/M5 status and retained CSV checks (2026-10-05): **neither full stage is closed**.
 M4's first useful independent real-LLM/file result is achieved. Its remaining
 scope includes non-agent mode filtering, actual skills (the CLI currently supplies
 an empty catalog), structured questions/answers and complete §11 acceptance.
@@ -53,8 +106,8 @@ Temporary local evidence:
 task/checks, model config/digest, actual binary/source hashes, HTTP trace/CAS,
 terminal run result, context audit and memory samples. The live attempt never
 reached the browser checks. Windows/Office/WebView2 remain unqualified here.
-Next: isolate creation repetition with this frozen trace, then rerun autonomous
-CSV creation/follow-up; remaining M4 surface and E-* evidence stay explicit.
+This is the pre-fix baseline; the controlled rerun and next recovery slice are
+recorded above. Remaining M4 surface and E-* evidence stay explicit.
 
 Historical M5 diagnostic freshness / continuation fix (2026-10-05): the failed counter-repair
 run exposed a reproducible context defect. `web.verify` discarded source evidence
@@ -628,13 +681,14 @@ boundary, not a functional CSV score. Scripted HTTP tests confirmed both CLI
 transport modes and saved metadata. The existing v6 parser correctly rejected
 these outputs; no permissive JSON repair or separate agent loop was added.
 
-Next concrete slice (2026-10-05): isolate repeated creation using the retained
-CSV run trace, then qualify autonomous creation/follow-up against the integrated
-checks and collect the remaining
+Next concrete slice (2026-10-05): add target-bound typed recovery for the workspace
+read prerequisite, then rerun autonomous CSV creation/follow-up against the
+integrated checks and collect the remaining
 E-FILE/E-RESUME/E-CONTEXT/E-CAPABILITY evidence for that task. The counter
 verify/repair loop passed one real Gemma run after fixing
-historical diagnostic currency; broader repetition cases still need their own
-wire trace. Bounded find/read, one frozen compiler, explicit CLI recovery, durable
+historical diagnostic currency. Latest call/result retention and CLI role selection
+are now implemented; the CSV rerun exposed the recovery gap above. Bounded
+find/read, one frozen compiler, explicit CLI recovery, durable
 historical snapshot verification and frozen click/text/CSV checks are implemented.
 M4 still needs mode filtering, real skills and structured question/answer handling;
 its first useful result is achieved, not its entire §11 scope.

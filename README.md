@@ -85,12 +85,19 @@ The CLI requests 4096 output tokens; `RNA_REASONING_MODE` defaults to
 comparison. `--response-mode` / `RNA_RESPONSE_MODE` explicitly selects
 `json_schema` (CLI default) or `json_object` for an endpoint that needs it;
 both use the same v6 parser and agent loop. The run saves model, Ollama digest
-when available, context, response mode, instruction role and reasoning mode;
+when available, context, response mode, instruction/result roles and reasoning mode;
 `rna inspect` shows that snapshot. `--instruction-role` / `RNA_INSTRUCTION_ROLE`
 selects `developer` (default) or `system` using the existing `SystemPromptRole`
 setting, with identical instruction text. Select a role that the endpoint's model
-template actually renders. Approval inherits the recorded role; a conflicting
-override fails before dispatch. Use a new session for each
+template actually renders. `--tool-result-role` / `RNA_TOOL_RESULT_ROLE` selects
+`user` (default), `developer`, or `tool` (native accepted call/result pairs).
+This uses the existing `ToolResultRole` setting; generation still uses v6 JSON,
+with no second native tool catalog or loop. The common compiler keeps the latest
+pair and compresses older write frames only under context pressure. Source bodies
+can be omitted or marked stale independently; an omitted read cannot authorize
+replacement. Approval inherits both recorded roles; a conflicting override fails
+before dispatch. A new turn may explicitly select another role for its active
+history projection. Use a new session for each
 model comparison. Do not append `/v1` to the CLI base URL; `LlmClient` addresses
 `/v1/chat/completions` itself. A loopback Ollama endpoint needs no API key.
 For other endpoints, `RNA_MODEL_DIGEST` is an operator-supplied label; verify it

@@ -21,10 +21,15 @@ scripted HTTP model through the production runtime for verify/read/patch/read/
 verify/done, frozen admission checks and rejection of a source edit after the last
 passing verification. This is deterministic contract evidence, not LLM quality.
 It also inspects the actual HTTP context after each step: current diagnostic,
-historical failure after an external dependency edit, completed write with its
-target/effect, then current source bytes. `context continuity:` covers source-bound
+historical failure after an external dependency edit, completed write result with
+its target/change status, then current source bytes. `context continuity:` covers source-bound
 failure invalidation after CAS hydration, original argument-error preservation,
 semantic mutation receipts through compaction and existing repeat/recovery guards.
+It also checks the latest call/result pair through compiler and wire in all three
+result roles, frozen repair, budget-only folding of older writes and target recovery
+from accepted arguments. `resource cutover: large call` checks exact CAS hydration
+for the latest call versus archived older arguments; `agent continuity: oversized
+source` keeps pair/status/role while removing overwrite authority in all three roles.
 The `workspace snapshots:` filter also checks that incomplete/substituted
 assertions or mismatched actual text cannot become a durable passing result.
 `python3 tests/cli/tool_result_projection_smoke.py` checks bounded semantic find,
@@ -37,9 +42,11 @@ API-key exclusion from trace metadata/payloads.
 omitted by the compiler's budget cannot authorize replacement and preserves the
 original bytes. Both use a scripted HTTP model, not real-model quality evidence.
 `python3 tests/cli/response_mode_smoke.py` checks explicit CLI `json_schema` /
-`json_object` selection, `system` / `developer` instruction roles and persisted
-model metadata. It verifies unchanged prompt text, invalid-role rejection and
-cross-process approval inheriting the recorded role; a conflicting role must leave
+`json_object` selection, `system` / `developer` instruction roles, all three
+`--tool-result-role` transports through compiler/actual HTTP and persisted metadata.
+It verifies exact native call IDs/arguments without orphans or a second generation
+catalog, invalid-role rejection and cross-process approval inheriting both roles;
+a conflicting role must leave
 the pending file unchanged and send no model request.
 
 The small real-model continuation task is `tests/cli/counter_task.md`. Use a fresh

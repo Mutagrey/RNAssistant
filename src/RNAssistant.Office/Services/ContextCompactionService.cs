@@ -466,10 +466,10 @@ namespace RNAssistant.Office.Services
                 // it must not become a stale natural-language claim.
                 if (message.ToolName == "common.capabilities_search" || toolResult &&
                     (string)(ToolResultWire.ParseData(sourceWire.Result.DataJson) as JObject)?["kind"] == "tool-schema") continue;
-                var operation = message.CompletedOperation != null;
+                var operation = message.CompletedOperation != null || toolResult && message.ResourceEffect != null;
                 var sourceRole = toolResult || operation ? "tool" : projected.Role;
                 var userSource = sourceRole == "user" && !toolDependent && !message.ProtocolMessage;
-                var observed = toolResult && (message.ResourceEvidence?.Count ?? 0) > 0 &&
+                var observed = !operation && toolResult && (message.ResourceEvidence?.Count ?? 0) > 0 &&
                     sourceWire.Result.Status == RNAssistant.Core.Tools.Contracts.ToolResultStatus.Ok;
                 sources.Add(sourceId, new StructuredContextClaim { ClaimId = message.Id, Text = projected.Content,
                     Kind = operation ? "operation_source" : observed ? "observation_source" : userSource ? "user_source" : "interpretation_source",
@@ -477,7 +477,10 @@ namespace RNAssistant.Office.Services
                     SourceSnapshots = new List<ContextClaimSource> { new ContextClaimSource { MessageId = message.Id,
                         Role = sourceRole, Text = session.Messages.FirstOrDefault(item => item.Id == message.Id)?.Content ?? message.Content ?? "",
                         Preview = CompactionText(projected) } },
-                    SourceMessageIds = new List<string> { message.Id }, Evidence = message.ResourceEvidence ?? new List<ResourceEvidence>() });
+                    SourceMessageIds = new List<string> { message.Id },
+                    // An execution outcome remains true when its after-state changes.
+                    // Current source observations are selected independently.
+                    Evidence = operation ? new List<ResourceEvidence>() : message.ResourceEvidence ?? new List<ResourceEvidence>() });
                 builder.AppendLine(JsonConvert.SerializeObject(new { sourceId, role = sourceRole, userSource, observationEligible = observed,
                     text = CompactionText(projected), toolCalls = CompactionToolCalls(projected.ToolCalls) }));
             }

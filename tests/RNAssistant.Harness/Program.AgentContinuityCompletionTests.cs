@@ -288,16 +288,24 @@ namespace RNAssistant.Harness
                 var session = new ChatSession(); var scope = authority.Scope(session, false);
                 var body = "alpha\r\nbeta\rgamma\ndelta\n" + new string('z', 40000);
                 var evidence = PublishContinuitySource(store, payloads, scope, "lines", body);
-                var result = ContinuityResult("large", "common.resources_read", ToolResult.Ok("Read", JsonConvert.SerializeObject(new {
-                    kind = "resource-read", target = "Source lines", text = body, complete = true })));
-                result.ResourceEvidence.Add(evidence);
-                result.ResultPayload = PayloadRef.FromBlob(payloads.StoreText(result.Content, "application/json"));
                 var snapshot = new ModelAuthoritySnapshot(authority.CaptureMany(new[] { scope }), "pack", new SkillCatalogSnapshot(null), null, 0);
-                var compiled = new ModelContextCompiler(payloads, projection: ModelToolResultProjection.Instance).Compile(snapshot, new ChatMessage[0], new[] { ContinuityCall(result), result }, null, new ToolCatalogEntry[0], new AppSettings(), 1000);
-                var receipt = compiled.Messages.Single(m => m.CompletedOperation != null);
-                AssertEqual(ToolResultStatus.Ok, receipt.CompletedOperation.Status, "oversized read keeps its actual outcome");
-                AssertContains(receipt.Content, "startLine/lineCount", "model can recover using bounded lines");
-                AssertTrue(compiled.Messages.All(m => m.ResourceEvidence.Count == 0), "omitted body gives no overwrite authority");
+                foreach (var role in new[] { "user", "developer", "tool" })
+                {
+                    var result = ContinuityResult("large", "common.resources_read", ToolResult.Ok("Read", JsonConvert.SerializeObject(new {
+                        kind = "resource-read", target = "Source lines", text = body, complete = true })), role);
+                    result.ResourceEvidence.Add(evidence);
+                    result.ResultPayload = PayloadRef.FromBlob(payloads.StoreText(result.Content, "application/json"));
+                    var compiled = new ModelContextCompiler(payloads, projection: ModelToolResultProjection.Instance).Compile(snapshot, new ChatMessage[0], new[] { ContinuityCall(result), result }, null, new ToolCatalogEntry[0], new AppSettings(), 1000);
+                    AssertEqual(2, compiled.Messages.Count, "body omission retains the latest pair");
+                    var receipt = compiled.Messages.Last();
+                    ToolResultWireReadResult wire; string error;
+                    AssertTrue(ToolResultHistoryReader.TryRead(receipt, out wire, out error), "omitted source is a valid terminal result");
+                    AssertEqual(ToolResultStatus.Ok, wire.Result.Status, "oversized read keeps its actual outcome");
+                    AssertEqual(role, receipt.Role, "source omission keeps the chosen result role");
+                    AssertEqual("large", receipt.ToolCallId, "source omission keeps call correlation");
+                    AssertContains(receipt.Content, "startLine/lineCount", "model can recover using bounded lines");
+                    AssertTrue(compiled.Messages.All(m => m.ResourceEvidence.Count == 0), "omitted body gives no overwrite authority");
+                }
                 var gateway = new ResourceGatewayService(null, null, null, authority: authority);
                 var selected = gateway.ReadLines(session, evidence.Resource, "text", 2, 2);
                 AssertEqual("beta\rgamma\n", selected.Result.Text, "line selection preserves mixed newlines exactly");

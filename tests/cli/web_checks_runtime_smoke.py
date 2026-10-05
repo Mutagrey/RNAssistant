@@ -88,9 +88,11 @@ def run_case(root, change_after_verify):
         assert len(historical) == 1 and historical[0]["outcome"] == "Error", historical
         assert historical[0]["observation"]["state"] == "Superseded", historical
         assert historical[0]["targets"] == ["index.html"] and historical[0]["data"]["checks"], historical
-        writes = receipts(requests[3], "files.patch")
-        assert len(writes) == 1 and writes[0]["targets"] == ["app.js"], writes
-        assert writes[0]["data"]["changed"] and writes[0]["effect"]["outcome"] == "VerifiedChanged", writes
+        writes = [json.loads(message["content"].split("\n", 1)[1]) for message in requests[3]["messages"]
+                  if message.get("content", "").startswith("TOOL_RESULT") and '"name":"files.patch"' in message["content"]]
+        assert len(writes) == 1 and writes[0]["data"]["path"] == "app.js", writes
+        assert writes[0]["status"] == "ok" and writes[0]["data"]["changed"], writes
+        assert not receipts(requests[3], "files.patch"), "a recent patch remains a call/result pair"
         current_read = [message["content"] for message in requests[4]["messages"]
                         if message.get("content", "").startswith("TOOL_RESULT") and '"target":"app.js"' in message["content"]]
         assert len(current_read) == 1 and "count += 1" in current_read[0] and "count += increment" not in current_read[0], current_read

@@ -12,7 +12,29 @@
 новая возможность требует явной задачи, scope и owner; дефекты работающей системы
 приоритетнее расширения без конкретного пользовательского результата.
 
+## Workspace read prerequisite does not unblock retry — 2026-10-05
+
+Owner: Runtime `WorkspaceConversationService.FileHandler`, using the existing
+Core `ToolRecoveryContract` / `AgentProgressTracker`. The post-pair-preservation
+Gemma CSV trace records `files.replace(app.js)` → `source_observation_required` →
+successful complete `common.resources_read(app.js)` → identical replace rejected
+as `repeated_tool_failure`; three refusals end the run. The read reaches the HTTP
+context. The handler returns only message/code, with no typed `RefreshRequired`
+contract, so the kernel cannot recognize satisfaction of that prerequisite.
+
+Closure: bind recovery to the exact target through its current authority owner;
+verify fail → complete matching read → identical mutation executes once, also
+after accepted-history restoration. Unrelated/partial/omitted reads, unsatisfied
+recovery and unknown effects must not unlock the call. Keep kernel logic domain
+neutral; do not parse error strings or clear all failures on any read. Then rerun
+the unchanged autonomous CSV creation/follow-up task. The prior creation loop did
+not recur in the controlled rerun; full acceptance still failed. Evidence and
+profile are in [PROGRESS](PROGRESS.md).
+
 ## CLI continuation after completed-operation receipts — 2026-10-05
+
+Historical isolation below precedes the current pair/role fix. The newest active
+failure and concrete next slice are the missing typed recovery contract above.
 
 Owner: model context / CLI evaluation. The fresh Gemma 12B counter task after the
 shared-compiler integration created `index.html` then repeated the same creation;
@@ -27,8 +49,9 @@ before any tool, so it did not provide a continuation comparison.
 
 The concrete missing-attempt diagnostic gap is fixed: CLI now uses the common trace
 writer for actual HTTP requests, rejected bodies and attempt/snapshot correlation.
-Use those traces for the next protocol/continuation isolation; there is no confirmed
-receipt-role defect justifying a projection change. Closure needs a real multi-step
+That isolation had not established a receipt-role cause. A later compiler test
+confirmed unconditional folding of the latest mutation and ignored CLI result-role
+selection; both are now fixed. Closure still needs a real multi-step
 create/read/verify result with the same production compiler and preserved mutation
 guards. Run metadata and local evidence are in [PROGRESS](PROGRESS.md).
 

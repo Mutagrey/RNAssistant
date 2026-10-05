@@ -1080,7 +1080,7 @@ namespace RNAssistant.Harness
             });
         }
 
-        private static void ResourceCompletedCallDoesNotHydrateArguments()
+        private static void ResourceCompletedCallsPreserveLatestPayload()
         {
             WithTempPaths(paths =>
             {
@@ -1088,13 +1088,14 @@ namespace RNAssistant.Harness
                 var arguments = "{\"content\":\"" + new string('x', 100000) + "\"}";
                 var invocation = new ToolInvocation { ToolCallId = "large", ToolId = "common.html_workspace_write_file" };
                 var call = new ChatMessage { Role = "assistant", ProtocolMessage = true, ToolCallId = invocation.ToolCallId, ToolName = invocation.ToolId,
-                    Content = arguments, AcceptedCallOrigin = new AcceptedToolCallOrigin("step", "attempt", 0), ToolCalls = new List<RNAssistant.Core.Llm.LlmToolCall> {
+                    Content = "Large accepted write.", ToolResultProtocolVersion = ToolResultWire.CurrentVersion, ToolResultRole = "tool",
+                    AcceptedCallOrigin = new AcceptedToolCallOrigin("step", "attempt", 0), ToolCalls = new List<RNAssistant.Core.Llm.LlmToolCall> {
                         new RNAssistant.Core.Llm.LlmToolCall { Id = invocation.ToolCallId, Name = invocation.ToolId, Type = "function", ArgumentsJson = arguments } },
                     ArgumentPayload = PayloadRef.FromBlob(payloads.StoreText(arguments, "application/json")) };
                 AcceptedCallPayloadService.Externalize(call, payloads);
                 AssertTrue(call.Content.Length < 256 && call.ToolCalls.Count == 0, "durable accepted fact contains metadata only");
                 var result = AgentJsonProtocol.CreateToolResultMessage(invocation,
-                    RNAssistant.Core.Tools.Contracts.ToolResult.Ok("saved"), "tool");
+                    RNAssistant.Core.Tools.Contracts.ToolResult.Ok("saved", "{\"path\":\"index.html\"}"), "tool");
                 var changedResource = new ResourceIdentity("rna://state/conversation/runtime-only");
                 result.ResourceRefs.Add(new ResourceRef(changedResource.Uri, "r1"));
                 result.ResourceEffect = new ResourceEffect("effect", invocation.ToolId,
@@ -1103,8 +1104,16 @@ namespace RNAssistant.Harness
                             changeKind: "updated")
                     });
                 var frozen = new ModelAuthoritySnapshot(new ResourceAuthoritySnapshotSet(new ResourceAuthoritySnapshot[0]), "tools", new SkillCatalogSnapshot(null), null, 3);
-                var compiled = new ModelContextCompiler(projection: ModelToolResultProjection.Instance).Compile(frozen, new ChatMessage[0], new[] { call, result }, null, new ToolCatalogEntry[0], new AppSettings(), 1024);
-                AssertEqual(0, compiled.Receipt.HydratedPayloads, "terminal frame compiles without even a payload reader");
+                RuntimeThrows<PromptBudgetExceededException>(() => new ModelContextCompiler().Compile(frozen, new ChatMessage[0],
+                    new[] { call, result }, null, new ToolCatalogEntry[0], new AppSettings(), 1024));
+                var recent = new ModelContextCompiler(payloads).Compile(frozen, new ChatMessage[0], new[] { call, result },
+                    null, new ToolCatalogEntry[0], new AppSettings(), 100000);
+                AssertEqual(1, recent.Receipt.HydratedPayloads, "latest accepted call requires its exact CAS body");
+                AssertEqual(arguments, recent.Messages[0].ToolCalls.Single().ArgumentsJson, "hydrated native arguments remain exact");
+                var later = ContinuityResult("later", "files.patch", RNAssistant.Core.Tools.Contracts.ToolResult.Error("No effect."));
+                var compiled = new ModelContextCompiler(projection: ModelToolResultProjection.Instance).Compile(frozen,
+                    new ChatMessage[0], new[] { call, result, ContinuityCall(later), later }, null, new ToolCatalogEntry[0], new AppSettings(), 1024);
+                AssertEqual(0, compiled.Receipt.HydratedPayloads, "older archived frame can fold without reloading its large arguments");
                 AssertTrue(string.Join("", compiled.Messages.Select(item => item.Content)).Length < 4096, "completed large source is not reserialized into prompt");
                 AssertTrue(string.Join("", compiled.Messages.Select(item => item.Content)).IndexOf(
                         changedResource.Uri, StringComparison.Ordinal) < 0,
@@ -2243,11 +2252,15 @@ namespace RNAssistant.Harness
             var text = string.Join("\n", compiled.Messages.Select(item => item.Content));
             AssertTrue(!text.Contains("OBSOLETE_BODY"), "stale payload excluded before tight budget");
             AssertTrue(!text.Contains(r1.Uri), "stale evidence marker hides runtime-owned resource identity");
-            AssertEqual(1, compiled.Messages.Count, "obsolete native exchange becomes one closed receipt");
+            AssertEqual(2, compiled.Messages.Count, "latest native exchange keeps its pair while obsolete bytes are removed");
             AssertEqual(1, compiled.Receipt.ExcludedSuperseded, "receipt explains exclusion");
+            var staleResult = ToolResultWire.Read(compiled.Messages[1].Content);
+            AssertTrue(staleResult.Success, "latest stale observation remains valid Tool Result v1");
+            AssertEqual("tool", compiled.Messages[1].Role, "stale latest result retains native transport");
+            AssertEqual("call1", compiled.Messages[0].ToolCalls.Single().Id, "native pair has no orphan result");
             AssertEqual(RNAssistant.Core.Tools.Contracts.ToolResultStatus.Ok,
-                compiled.Messages[0].CompletedOperation.Status, "a historical successful read does not become a failed invocation");
-            var staleData = JObject.Parse(compiled.Messages[0].Content.Split(new[] { '\n' }, 2)[1]);
+                staleResult.Result.Status, "a historical successful read does not become a failed invocation");
+            var staleData = JObject.Parse(staleResult.Result.DataJson);
             AssertEqual("Superseded", (string)staleData["observation"]?["state"], "observation currency is separate");
             AssertEqual("VBA module: Module1", (string)staleData["observation"]?["target"], "semantic target survives");
             AssertTrue(!(bool)staleData["observation"]["bodyIncluded"], "obsolete content is not delivered");
@@ -2336,13 +2349,14 @@ namespace RNAssistant.Harness
                     failure.Content = compact.Content;
                     var replay = new ModelContextCompiler(payloads, projection: ModelToolResultProjection.Instance).Compile(authority, new ChatMessage[0],
                         new[] { mutationCall, failure }, null, new[] { mutationTool }, new AppSettings(), 16000);
-                    var frame = replay.Messages.Single().Content;
-                    var frameData = JObject.Parse(frame.Substring(frame.IndexOf('\n') + 1));
+                    AssertEqual(2, replay.Messages.Count, "latest failed mutation retains its pair");
+                    var frame = replay.Messages.Last().Content;
+                    var frameData = JObject.Parse(role == "tool" ? frame : frame.Substring(frame.IndexOf('\n') + 1));
                     AssertEqual(mutationCall.ToolCallId, (string)frameData["tool_call_id"],
                         "completed mutation keeps the runtime call/result correlation");
-                    AssertEqual("Error", (string)frameData["outcome"], "actual failure status survives folding");
+                    AssertEqual("error", (string)frameData["status"], "actual failure status survives projection");
                     AssertEqual("vba_patch_ambiguous", (string)frameData["data"]?["code"],
-                        "folded failure retains the real patch recovery code in " + role);
+                        "failure retains the real patch recovery code in " + role);
                     AssertEqual(3, (int)frameData["data"]["matchCount"], "ambiguous locations retain their count");
                     AssertEqual(12, (int)frameData["data"]["locations"][0]["startLine"],
                         "semantic patch coordinates survive mutation folding and runtime-evidence sanitization");
@@ -2389,7 +2403,8 @@ namespace RNAssistant.Harness
             var omitted = new ModelContextCompiler(projection: ModelToolResultProjection.Instance).Compile(authority,
                 new ChatMessage[0], new[] { oversizedCall, oversizedResult },
                 null, new ToolCatalogEntry[0], new AppSettings(), 1024);
-            var omission = JObject.Parse(omitted.Messages.Single().Content.Split(new[] { '\n' }, 2)[1]);
+            AssertEqual(2, omitted.Messages.Count, "latest oversized read keeps its pair");
+            var omission = JObject.Parse(ToolResultWire.Read(omitted.Messages.Last().Content).Result.DataJson);
             AssertTrue(!(bool)omission["observation"]["bodyIncluded"],
                 "oversized whole source becomes an explicit omission receipt");
             AssertEqual("VBA module: Module1", (string)omission["observation"]["target"],
