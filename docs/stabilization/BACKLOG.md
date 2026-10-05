@@ -37,11 +37,11 @@ report the overall source-inclusion guard as passed.
 
 ## CLI question argument adherence — 2026-10-05
 
-Owner: model context / CLI evaluation. The new fixed `questions_task.md` fails
-with Gemma 12B before any accepted question. Native tool results lead to an invalid
-file reference selector, then missing option descriptions through bounded format
-repair. Textual user results lead to invalid file/root selectors and no-tool
-progress. Both actual-wire pair audits pass; neither run reaches answer admission.
+Owner: model context / CLI evaluation. Initial runs of the fixed `questions_task.md`
+failed with Gemma 12B before any accepted question. Native tool results led to an
+invalid file reference selector, then missing option descriptions through bounded
+format repair. Textual user results led to invalid file/root selectors and no-tool
+progress. Both actual-wire pair audits passed; neither run reached answer admission.
 Subsequent wire inspection confirmed a schema-conversion bug: `description` was
 required but its declaration removed by recursive annotation stripping. This is
 fixed with a failing-then-passing actual-wire regression; details are in progress.
@@ -87,6 +87,16 @@ second loop to obtain a pass. Closure still needs
 autonomous creation with current final reads, then the unchanged feature follow-up
 under fixed bounds. Target-bound read recovery is fixed and tested; it no longer
 blocks a correctly read identical mutation.
+
+After the shared schema correction and closed file/skill selectors, another
+unchanged CSV run timed out at 600.12 s: 9 browser checks passed, chart clipping
+failed, 14 were not run and final reads were 2/3. The model still skipped both
+skills. HTTP retained all call/result pairs with zero format errors. An identical
+verification after a `changed:false` replacement was correctly blocked; a later
+real replacement occurred before timeout. Do not remove that guard to force a
+pass. Swap use increased substantially on the non-isolated Mac, so this run does
+not separate model quality from execution speed/capacity. Creation and follow-up
+acceptance remain open; source/profile/result evidence is recorded in progress.
 
 ## CLI continuation after completed-operation receipts — 2026-10-05
 

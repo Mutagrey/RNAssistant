@@ -14,7 +14,35 @@ kernel and web projection checks pass. Windows/Office/WebView2 behavior remains
 unqualified; the cross-document panel switch guard still rejects switching
 while a run is active.
 
-Latest workspace selector slice (2026-10-05): CLI resource schemas now use closed
+Latest fixed CSV evaluation (2026-10-05): **failed**, cancelled by the unchanged
+600 s phase bound (600.12 s, exit 5). Model/digest, 32K/4096, system/user roles,
+json_schema, reasoning off, sequential requests, 16 iterations / 24 tools and all
+four task/check files match the prior skills CSV run byte-for-byte where applicable.
+Declared cumulative changes are mode/questions, shared schema correction and
+workspace selector contracts; this is not single-factor attribution. Binaries and
+source were captured at `7d924d76`; the concurrent schema-39/settings changes in
+`dd3ab212` were not in this run (confirmed against all 14 actual HTTP schemas).
+
+Three files were created; one patch and one replacement changed app.js, and one
+replacement verified no change (five verified changes total). Both dispatched
+browser checks passed 9/24, failed `filtered-chart` (hidden/clipped bar), leaving
+14 not run. A third identical `web.verify` was correctly blocked: the immediately
+preceding replacement had `changed:false`, so there was no new source state to
+verify. That explicit no-change result was present in HTTP context. A later
+replacement changed app.js, then model wait hit the wall bound. Current final reads
+were 2/3; no verified current snapshot, no operator repair and no follow-up run.
+Neither published skill was read. The failed repeat is not a demonstrated kernel
+guard defect, and this run does not establish a universal model/loop cause.
+
+Fourteen HTTP requests / thirteen responses, 83 pair checks without errors and
+zero format rejections. Tokens 115225/9570 total, maxima 16215/1904. No reported
+context/OOM error; swap use rose 3268.56 → 6431.44 MiB on this non-isolated Mac,
+so this is not a clean speed/capacity benchmark. The model was unloaded. Source,
+binaries, task/profile comparison, HTTP/CAS and result/wire audits:
+`/var/folders/k9/hr_94nt142x1f43jr6g0wr_00000gp/T/rna-csv-selectors-gemma-ye__blon`.
+Full M4/M5 remain open; the narrow native question pass below is unaffected.
+
+Previous workspace selector slice (2026-10-05): CLI resource schemas now use closed
 file/skill alternatives in the prompt, structured output and exact runtime gate.
 File reads cannot carry `referencePath`; skill discovery cannot carry `directory`.
 Skill type is explicit, file type still defaults, and Chat retains its file-only
@@ -596,7 +624,7 @@ records temporary adapters. This work does not qualify Windows/Office/WebView2.
 | M1 | `ToolRuntime` and exact handler registry moved to Core; `ConversationRunCoordinator` is called by Office and CLI. Net8 Core and Runtime assemblies build with project references and no Office/WebView2/WinForms/fake dependency in CLI. | Focused `tool runtime:` 15/15; CLI dependency search/build. Office project compilation and platform delivery remain open. |
 | M2 | Portable workspace manifest, user-state association, read-only opening, existing ChatStore workspace sessions without document authority, root relocation and copy-ID conflict. File locators retain identity across a known root move. | Focused `workspace:` 2/2. External moves not associated with an opened workspace and mount/Office identity resolution remain open. |
 | M3 | Real UTF-8 files: bounded single-directory discovery/read, create, exact patch/replace, copy from an accepted complete source to a new identity with immutable source provenance, guarded historical restore, recoverable delete to managed workspace trash and explicit restore after deletion. Confirmed `files.move` keeps logical identity, advances revision and relocates the file locator. CAS views, authority heads, mutation journal, read-back, external-edit conflict and non-replay after an interrupted dispatch remain one file-owner path. `recover` distinguishes prepared-only abandonment, an already-published effect and unknown causality after dispatch; it never replays the command. Ordinary reads and writes are blocked while an effect is unresolved. External invalid UTF-8 or oversized text marks the old known head unknown; BOM, CRLF and verified no-change are preserved. | Focused `workspace files:` 7/7. Directory discovery scans at most 5000 entries and returns `truncated` rather than implying a complete result; optional filename search is case-insensitive. Move retains a durable two-path intent; reads of both paths block until an interrupted move is reconciled. A delete verifies absent source plus exact trash preimage before publishing an unavailable head; restore requires that deletion head and creates a new revision. Cross-volume move semantics, trash retention policy, binary/large streaming, full cross-platform path races, directory pagination and the remaining §8.1 provider operations/views remain open. |
-| M4 — first useful result achieved; full scope open | Independent Net8 CLI uses production LlmClient/v6, shared coordinator → kernel, ToolRuntime, filesystem owner and frozen ModelContextCompiler. Sessions/JSONL, exact file operations, delete/move approvals, cancel and explicit recovery/resume exist. Shared published skills, mode filtering and typed question/answer admission are implemented. Real file creation and a narrow explicit skill/file task passed. | Real question/answer completion is unproven: both new Gemma role profiles failed before an accepted question. CLI Plan documents/checklists, complete §11 host UX and acceptance remain open. Explicit resume never replays effects. Full independent multi-file task quality/evidence remains distinct from scripted runtime checks. |
+| M4 — first useful result achieved; full scope open | Independent Net8 CLI uses production LlmClient/v6, shared coordinator → kernel, ToolRuntime, filesystem owner and frozen ModelContextCompiler. Sessions/JSONL, exact file operations, delete/move approvals, cancel and explicit recovery/resume exist. Shared published skills, mode filtering and typed question/answer admission are implemented. Real file creation, a narrow explicit skill/file task and read → question → answer → fresh read → done passed with Gemma. | CLI Plan documents/checklists, complete §11 host UX and acceptance remain open. The native question pass follows the shared schema correction and closed resource selectors; it does not qualify autonomous clarification quality or every earlier loop. Explicit resume never replays effects. Full independent multi-file task quality/evidence remains distinct from scripted runtime checks. |
 | M5 — in progress | Optional browser verifier uses bounded exact retained snapshots; pending/terminal records and historical replay use existing authority/CAS. Frozen click/text and CSV functional contracts feed the same model web.verify and freshness-bound final acceptance. The separate Node CSV grader/source reader is retired. | Counter repair passed once with real Gemma 12B. CSV runtime checks cover upload/filter/sort/total/chart/export/error handling; live two-turn CSV acceptance is recorded at the top. General preview UI, screenshots/browser traces, longer compaction/resume E-* evidence and full M5 acceptance remain open. Binary assets/common Office dispatch are still §8.1/M5–M7 scope. |
 
 Historical M3/M4 resource routing slice (2026-10-04, extended below): canonical provider registration and
@@ -994,19 +1022,21 @@ boundary, not a functional CSV score. Scripted HTTP tests confirmed both CLI
 transport modes and saved metadata. The existing v6 parser correctly rejected
 these outputs; no permissive JSON repair or separate agent loop was added.
 
-Next concrete slice (2026-10-05): rerun the unchanged CSV acceptance task after
-the shared structured-schema correction and closed workspace resource selectors.
-The fixed narrow question task now passes read → question → explicit answer →
-fresh read → done; it does not replace the CSV creation/follow-up gate.
-Keep task/bounds fixed and declare each changed factor.
+Next concrete slice (2026-10-05): CLI Plan documents / Task Lists through existing
+publication/mutation owners and actual workspace authority, then remaining §11 UX.
+The existing DocumentArtifactStore Plan path requires document authority; do not
+invent an Office document identity to reuse it. The fixed narrow question task
+passes read → question → explicit answer → fresh read → done. The unchanged CSV
+rerun after schema/selector corrections still times out with failed chart evidence
+and 2/3 final reads; its correctly blocked no-change retry is not a new guard defect.
+Keep task/checks/bounds fixed and declare each changed factor in further comparisons.
 Modes, typed answer/restart handling, published skills and frozen skill context
-are implemented. The next missing application capability is CLI Plan documents /
-Task Lists through the existing publication/mutation owners, then remaining §11 UX.
+are implemented.
 M5 still needs autonomous fixed CSV
 creation with current final reads and then the unchanged feature follow-up, plus
 remaining E-FILE/E-RESUME/E-CONTEXT/E-CAPABILITY evidence. Keep the task, checks
 and bounds fixed when comparing model/endpoint profiles, and record actual skill
-selection: the newest Gemma CSV run skipped both available skills and timed out.
+selection: the newest Gemma CSV run again skipped both available skills and timed out.
 Latest-pair retention, typed read recovery, frozen read-progress metadata and final
 authority refresh are implemented; the quality/completion gap is still open.
 M4's first useful result is achieved, not its entire §11 scope.
