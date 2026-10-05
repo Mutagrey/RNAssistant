@@ -497,7 +497,7 @@ namespace RNAssistant.Harness
                 RuntimeToolResult.Ok("Read"), ToolResultRoles.Developer);
             // A body claiming call_1 cannot add this different metadata call to its exchange.
             mismatchedResult.Content = secondResult.Content;
-            AssertTrue(ToolProtocolMessages.Ids(mismatchedResult).SetEquals(new[] { "unrelated-call" }),
+            AssertTrue(RNAssistant.Core.Services.ToolProtocolMessages.Ids(mismatchedResult).SetEquals(new[] { "unrelated-call" }),
                 "result body cannot introduce IDs beside the canonical metadata ID");
             messages.Insert(5, mismatchedResult);
             var selectedWithMismatchedBody = ChatHistoryEditService.SelectMessagesForDeletion(messages, 4);

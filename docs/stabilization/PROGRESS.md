@@ -1,5 +1,39 @@
 # Stabilization progress
 
+## Shared compaction and CLI continuation — 2026-10-06
+
+M5 E-CONTEXT/E-RESUME integration slice, owned by conversation application services.
+The previous CLI path only failed when history exceeded budget; it now invokes
+Core `ContextCompactionRuntime`, extracted from the Office service. Both hosts use
+the same structured provenance, prefix selection and ModelContextCompiler. Office
+keeps host capture/domain projection. One bounded LLM summary request creates the
+existing checkpoint artifact; there is no second agent loop, store or filesystem
+reader. CLI saves before using the checkpoint and recaptures frozen authority
+after the model wait. A remaining budget failure is explicit.
+
+CLI context normalization now preserves durable message IDs. Checkpoints cannot
+split the original accepted batch when presentation expands it into separate
+pairs. The latest user task remains verbatim; claims are filtered against current
+authority. Kernel resume still restores the complete accepted call history,
+original counters and criteria. Summaries provide no exact-source write authority.
+
+Checks: CLI build clean; host-neutral harness build retains the two existing PDF
+CA1416 warnings. `compaction` 8/8, `shared context:` 2/2 and `context continuity:`
+8/8, exchange-scoped deletion 1/1, diff and version gate passed.
+Controlled HTTP/process smoke passed both `user` premature-done and
+`tool` repair branches: 24K budget → genuine checkpoint → process stop → external
+edit → same-run resume. Stale claims disappear, stale writes fail, current reads
+are required, previous effects stay single and counters do not reset. Existing
+run-control, response-mode/role, read-acceptance (3 cases) and omitted-read smokes
+pass. The omitted-read fixture moved from 16K, which cannot admit today's catalog,
+to 24K; the omitted body and refused-write assertions remain unchanged.
+
+This closes the scripted integration gap identified in the previous next slice.
+Real-model E-CONTEXT/E-RESUME quality and fixed autonomous CSV creation/follow-up
+remain open, as do the rest of M4/M5 below. No new real LLM or Windows/Office
+qualification is claimed. The implementation follows §21/M5 without narrowing
+the target architecture or changing task acceptance.
+
 ## Workspace plan reconciliation and event subscription — 2026-10-05
 
 Reviewed HEAD `cd068c86` against the supplied
@@ -15,7 +49,7 @@ conversation application services; resource/Office boundaries retain their owner
 | M2 | Workspace/session without document authority, stable identity, known root relocation and read-only association tested. Only the root directory mount is supplied; managed/multiple/external mounts and shared-source identity/heads (A24) remain open. |
 | M3 | Single WorkspaceFileService owns UTF-8 find/read/create/patch/replace/copy/move/delete/restore, exact history, drift and non-replay recovery. Focused tests pass. Remaining §8.1 stat/raw/binary/large views, directory pagination, complete Office/filesystem dispatch and cross-platform path qualification are open. |
 | M4 | First useful real-model multi-file result achieved. Modes, skills, typed questions/answers, approvals, Task Lists/Plans, receipts, cancel/explicit continuation and event following exist. Full §11 remains open: interactive host UX/changed-file presentation, general resource/preview commands and UI use of the shared application contracts. Scripted runs do not close real task quality. |
-| M5 | Retained browser snapshots, dependency checks, structured functional verification, repair and bounded same-run continuation implemented. A real counter repair passed previously; fixed autonomous CSV creation + unchanged feature follow-up still has no passing evidence. General preview, browser screenshots/traces and integrated long-context compaction/resume evidence remain open. |
+| M5 | Retained browser snapshots, dependency checks, structured functional verification, repair, bounded same-run continuation and shared compaction implemented. The integrated long-context compaction/resume scenario passes with controlled HTTP; real-model quality remains open. A real counter repair passed previously; fixed autonomous CSV creation + unchanged feature follow-up still has no passing evidence. General preview and browser screenshots/traces remain open. |
 | M6 | Authoring cutover not started. Office HTML/MD/JSON and Plan authoring remain on their existing owners; file materialization/linkage/crash guards and old-writer removal are required. CLI files have no dual writer. |
 | M7 | Receipts/cursors/subscription provide shared primitives; Office UI transport/application migration, file tree, preview isolation, bounded body delivery and pane-independent lifetime are not closed. |
 | M8 | External Office provider/mount/target cutover remains open; exact binding/discovery/SaveAs and multiple-instance behavior need Windows evidence. |
@@ -1250,11 +1284,11 @@ boundary, not a functional CSV score. Scripted HTTP tests confirmed both CLI
 transport modes and saved metadata. The existing v6 parser correctly rejected
 these outputs; no permissive JSON repair or separate agent loop was added.
 
-Next concrete slice (2026-10-05): M5 E-CONTEXT/E-RESUME integration through the
-production CLI: force compaction across a stopped/continued run, retain task and
-acceptance requirements, introduce an external file edit and prove stale evidence
-cannot authorize a write or final success. Reuse the compiler/kernel/file owners;
-fix any reproduced gap before another unchanged real CSV creation/follow-up run.
+Next concrete slice (2026-10-06): rerun the unchanged real CSV creation/follow-up
+with the shared compactor wired into production CLI, retaining fixture, model
+profile, limits and external checks. Audit actual request/result/compaction traces
+for lost requirements or unnecessary repeated calls. The controlled HTTP
+E-CONTEXT/E-RESUME integration now passes; real-model quality still needs evidence.
 Bounded event subscription is implemented above. Interactive CLI UX and Office UI
 adoption remain open; no extra runtime or widened model budget is the next step.
 Modes, typed answer/restart handling, published skills, frozen context, Task Lists

@@ -3104,6 +3104,48 @@ namespace RNAssistant.Harness
             AssertTrue(FlattenSimple(danglingCaptured).IndexOf("DANGLING_ARGUMENT", StringComparison.Ordinal) < 0,
                 "dangling tool call is not summarized");
 
+            // CLI presents adjacent pairs, but the durable accepted call still
+            // owns the whole batch. A budget boundary after its first result
+            // must not discard the original call for the second result.
+            var batchSession = NewSession(FakeOfficeAdapter.ForHost("Excel"));
+            var task = new ChatMessage { Role = "user", Content = "KEEP_EXACT_TASK: read both sources." };
+            var safeBatchThrough = new ChatMessage { Role = "assistant", Content = "Earlier context." };
+            var batch = HistoricalContextProjector.Project(call);
+            batch.ToolCallId = null;
+            var batchResults = batch.ToolCalls.Select(item =>
+            {
+                var output = AgentJsonProtocol.CreateToolResultMessage(
+                    new ToolInvocation { ToolCallId = item.Id, ToolId = item.Name },
+                    RNAssistant.Core.Tools.Contracts.ToolResult.Ok("Read"), ToolResultRoles.Tool);
+                output.RunId = batch.RunId;
+                return output;
+            }).ToList();
+            batchSession.Messages.AddRange(new[] { task, safeBatchThrough, batch });
+            batchSession.Messages.AddRange(batchResults);
+            var adjacent = new List<ChatMessage> { task, safeBatchThrough };
+            for (var index = 0; index < batch.ToolCalls.Count; index++)
+            {
+                var single = HistoricalContextProjector.Project(batch);
+                single.Id = batch.Id + ":" + index;
+                single.ToolCalls = new List<LlmToolCall> { batch.ToolCalls[index] };
+                single.ToolCallId = batch.ToolCalls[index].Id;
+                adjacent.Add(single);
+                adjacent.Add(batchResults[index]);
+            }
+            var frozen = new ModelAuthoritySnapshot(new ResourceAuthoritySnapshotSet(new ResourceAuthoritySnapshot[0]),
+                "pack", new SkillCatalogSnapshot(null), null, 1);
+            var batchCheckpoint = new ContextCompactionRuntime(completion).EnsureWithinBudgetAsync(
+                batchSession, new AppSettings(), null, true, null, CancellationToken.None,
+                frozen, new ToolCatalogEntry[0], replayFacts: adjacent).GetAwaiter().GetResult();
+            AssertTrue(batchCheckpoint != null, "safe durable prefix can be compacted");
+            AssertEqual(safeBatchThrough.Id, batchCheckpoint.ThroughMessageId,
+                "checkpoint cannot split an accepted batch after presentation split it into pairs");
+            var batchReplay = ContextCompactionRuntime.BuildActiveWindow(batchSession);
+            AssertTrue(batchReplay.Any(item => item.Id == task.Id && item.Content == task.Content),
+                "current user instruction survives verbatim even when the summary omits it");
+            AssertTrue(batchReplay.Contains(batch) && batchResults.All(batchReplay.Contains),
+                "both accepted batch results retain their original call after compaction");
+
             var oversized = NewSession(FakeOfficeAdapter.ForHost("Excel"));
             oversized.Messages.Add(new ChatMessage { Role = "user", Content = new string('x', 500000) });
             oversized.Messages.Add(new ChatMessage { Role = "assistant", Content = "Recent answer." });

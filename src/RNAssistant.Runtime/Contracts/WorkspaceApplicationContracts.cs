@@ -42,6 +42,7 @@ namespace RNAssistant.Runtime.Contracts
         public int? IterationsUsed { get; set; }
         public int? ToolStepsUsed { get; set; }
         public AgentRunLimits Limits { get; set; }
+        public string ContextCheckpointId { get; set; }
         [JsonProperty("modelConfiguration")] public ModelRunMetadata ModelConfiguration { get; set; }
         [JsonProperty("contextReceipt")] public ContextReceipt ContextReceipt { get; set; }
         [JsonProperty("acceptance")] public WorkspaceRunAcceptance Acceptance { get; set; }

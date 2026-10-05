@@ -905,13 +905,30 @@ tool-call IDs from its text transcript; exact provenance is reattached locally.
 Compaction checkpoint artifacts are runtime replay state: they are absent from the
 model resource index and semantic resource discovery. Only their authority-filtered
 structured claims enter a later request.
+Core `ContextCompactionRuntime` owns prefix selection, structured claims and
+checkpoint creation for both Office and the independent workspace CLI. Office's
+`ContextCompactionService` captures host authority and supplies its domain result
+projection; it has no separate compaction algorithm. CLI uses the same LlmClient
+for the bounded summary request and retains its exact request/response trace.
+With auto-compression enabled, a compactable CLI budget failure permits one helper
+request, durable checkpoint publication, fresh authority capture and recompilation.
+If the request still cannot fit, it fails explicitly. The helper cannot call tools
+or change kernel counters, acceptance criteria or the original run limits.
+
+Checkpoint boundaries refer to stable durable message IDs and cannot split an
+original accepted tool batch, even when presentation expands it into adjacent
+call/result pairs. Model replay keeps the latest user task verbatim alongside
+authority-filtered claims and the remaining history. Kernel recovery always reads
+the complete accepted history. A compacted observation is not a delivered exact
+source body and grants no workspace write authority; external edits invalidate
+its evidence and require a new read before mutation.
 Compaction `context-claims-v4` requires `claims[{kind,text,sourceIds}]`. Runtime
 reattaches source roles, exact evidence and generations; the model cannot author
 them. The compiler preserves claim kind/roles and rejects untyped claims. User
 constraints/decisions, supported tool observations and assistant interpretations
 remain distinct; proposed work is `next_action`. Recompaction cannot upgrade an
 interpretation to a decision or observation. Older checkpoints are preserved but
-skipped. Successful compaction also publishes document-owned versioned context through
+skipped. In Office, successful compaction also publishes document-owned versioned context through
 existing Resource Fabric/CAS. Cross-chat reads explicitly select it; the compiler
 filters current claims and projects safe source excerpts, retaining raw source
 snapshots only as runtime provenance. Oversized archives may be hydrated within a

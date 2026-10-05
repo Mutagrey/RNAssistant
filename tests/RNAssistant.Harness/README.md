@@ -1,5 +1,16 @@
 # RNAssistant Harness
 
+After building the CLI, `python3 -B tests/cli/compaction_resume_smoke.py` checks
+24K context pressure through actual structured compaction, process loss, external
+file edits and same-run continuation. It verifies checkpoint persistence, exact
+user task, stale-claim exclusion, read-before-write guards, final read acceptance,
+original counters, no repeated effects and native pairs in `user`/`tool` profiles.
+This uses controlled HTTP claims, not real-model compaction quality. Run
+`compaction` for shared checkpoint/publication regression and durable batch
+boundaries; `context continuity:` for source/result projection. The omitted-read
+CLI smoke also uses 24K: it admits the current catalog while omitting the oversized
+body, and still requires the original bytes to survive a refused replacement.
+
 After building the CLI, `python3 -B tests/cli/event_subscription_smoke.py` checks
 bounded `events --follow` pages across real processes, snapshot continuity, Ctrl+C
 isolation from an active run, timeout and explicit corruption resync without replay.

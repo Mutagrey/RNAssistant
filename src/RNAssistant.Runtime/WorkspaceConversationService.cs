@@ -625,6 +625,7 @@ namespace RNAssistant.Runtime
             private readonly IReadOnlyList<ToolCatalogEntry> _catalog;
             private readonly ResourceProviderRouter<WorkspaceFileResourceProvider> _resources;
             private readonly ModelContextCompiler _compiler;
+            private readonly ContextCompactionRuntime _compaction;
             private readonly WorkspaceTaskListObserver _taskLists;
             private readonly WorkspacePlanService _plans;
             private readonly SkillPublicationService _skillPublications;
@@ -652,6 +653,13 @@ namespace RNAssistant.Runtime
                 _resources = new ResourceProviderRouter<WorkspaceFileResourceProvider>(new[]
                     { new WorkspaceFileResourceProvider(files, workspace) });
                 var client = new LlmClient(apiKeyProvider);
+                _compaction = new ContextCompactionRuntime((configuration, messages, options, stream, token) =>
+                {
+                    options.TraceStepId = _session.LastRun.RunId + ":" + _session.LastRun.KernelState.Summary.IterationsUsed;
+                    options.TraceModelAttemptId = "attempt_" + Guid.NewGuid().ToString("N");
+                    _modelTrace.Configure(options);
+                    return client.CompleteAsync(configuration, messages, options, stream, token);
+                }, payloads);
                 _protocol = new ModelProtocolClient(client.CompleteAsync);
                 var registry = new ToolHandlerRegistry();
                 var entries = new List<ToolCatalogEntry>();
@@ -826,47 +834,34 @@ namespace RNAssistant.Runtime
 
             public async Task<AgentModelResult> SendAsync(AgentModelRequest request, CancellationToken cancellationToken)
             {
-                var frozen = CaptureContextAuthority(request.RunId, cancellationToken);
-                _skills = VisibleSkills(_skillPublications.Capture(frozen.Get(SkillPublicationService.ScopeId)));
+                var authority = CaptureModelAuthority(request.RunId, cancellationToken);
                 var options = ModelProtocolWire.CreateRequestOptions(_settings.AgentResponseMode, _catalog);
                 options.ReasoningEnabled = _session.ReasoningEnabled;
                 options.TraceStepId = request.StepId;
                 options.TraceModelAttemptId = "attempt_" + Guid.NewGuid().ToString("N");
-                var authority = new ModelAuthoritySnapshot(frozen,
-                    TextPatternEngine.Sha256(JsonConvert.SerializeObject(_catalog)),
-                    _skills, null, _session.Revision);
-                var fixedTokens = ModelContextBudget.EstimateRequestOptionsTokens(options, _settings) +
-                    ModelProtocolClient.EstimateFormatRepairOverheadTokens(_settings) +
-                    ModelContextBudget.ContinuationReserveTokens(_settings);
                 ModelContextSnapshot snapshot;
-                try
-                {
-                    var required = new List<ChatMessage>
-                    { new ChatMessage { Role = _settings.SystemPromptRole, Content = Prompt() } };
-                    var context = new WorkspaceModelContext { ActiveTaskList = _taskLists.Project(frozen), ActivePlan = _plans.Project(frozen) };
-                    if (_acceptance?.MinimumVerifiedReads > 0)
-                    {
-                        var reads = CurrentCompleteFileReads(CompleteFileReads(_session, request.RunId), frozen);
-                        context.ReadAcceptance = new WorkspaceReadAcceptance
-                        {
-                            CurrentCompleteFileReads = reads.Count,
-                            MinimumCompleteFileReads = _acceptance.MinimumVerifiedReads,
-                            RemainingCompleteFileReads = Math.Max(0, _acceptance.MinimumVerifiedReads - reads.Count),
-                            ExpectedFilesWithoutCurrentRead = _acceptance.ExpectedFiles.Except(
-                                reads.Select(read => read.Target), StringComparer.Ordinal).ToArray()
-                        };
-                    }
-                    if (context.ActiveTaskList != null || context.ActivePlan != null || context.ReadAcceptance != null)
-                        required.Add(new ChatMessage { Role = _settings.SystemPromptRole,
-                            Content = "RUNTIME_CONTEXT:\n" + JsonConvert.SerializeObject(context) });
-                    snapshot = _compiler.Compile(authority,
-                        required,
-                        AcceptedFacts(request.AcceptedMessages), null, _catalog, _settings,
-                        Math.Max(1, ModelContextBudget.InputBudgetTokens(_settings) - fixedTokens));
-                }
+                try { snapshot = CompileCurrent(authority, options, request.RunId); }
                 catch (PromptBudgetExceededException ex)
                 {
-                    return AgentModelResult.Failed(ModelProtocolFailureKind.PromptBudgetExceeded, ex.Message);
+                    if (!ex.CanCompact || !_settings.AutoCompressContext)
+                        return AgentModelResult.Failed(ModelProtocolFailureKind.PromptBudgetExceeded, ex.Message);
+                    var checkpoint = await _compaction.EnsureWithinBudgetAsync(_session, _settings, string.Empty, true,
+                        (phase, message, activity) =>
+                        {
+                            if (phase == "compacting") _progress?.Invoke(new WorkspaceRunEvent(phase,
+                                _session.LastRun.KernelState.Summary, null, ConversationEventFeed.Cursor(_session)));
+                        }, cancellationToken, authority, _catalog, ModelContextBudget.EstimateTextTokens(Prompt(), _settings),
+                        AcceptedFacts(ContextCompactionRuntime.BuildReplayTail(_session))).ConfigureAwait(false);
+                    if (checkpoint == null) return AgentModelResult.Failed(ModelProtocolFailureKind.PromptBudgetExceeded, ex.Message);
+                    // Publish the checkpoint before it can change a model request.
+                    // Complete accepted history still belongs to the kernel, not the summary.
+                    _chats.Save(_session);
+                    _progress?.Invoke(new WorkspaceRunEvent("compacted", _session.LastRun.KernelState.Summary,
+                        null, ConversationEventFeed.Cursor(_session)));
+                    authority = CaptureModelAuthority(request.RunId, cancellationToken);
+                    try { snapshot = CompileCurrent(authority, options, request.RunId); }
+                    catch (PromptBudgetExceededException remaining)
+                    { return AgentModelResult.Failed(ModelProtocolFailureKind.PromptBudgetExceeded, remaining.Message); }
                 }
                 RetainDeliveredObservations(snapshot);
                 options.TraceContextReceipt = snapshot.Receipt;
@@ -889,6 +884,42 @@ namespace RNAssistant.Runtime
                 return AgentModelResult.Accepted(new AgentResponseDraft(result.Response.Message,
                     result.Response.ToolCalls.Select(call => new ToolCallDraft(call.Name,
                         call.Arguments.ToString(Formatting.None))), result.Response.Action));
+            }
+
+            private ModelAuthoritySnapshot CaptureModelAuthority(string runId, CancellationToken cancellationToken)
+            {
+                var frozen = CaptureContextAuthority(runId, cancellationToken);
+                _skills = VisibleSkills(_skillPublications.Capture(frozen.Get(SkillPublicationService.ScopeId)));
+                return new ModelAuthoritySnapshot(frozen, TextPatternEngine.Sha256(JsonConvert.SerializeObject(_catalog)),
+                    _skills, null, _session.Revision);
+            }
+
+            private ModelContextSnapshot CompileCurrent(ModelAuthoritySnapshot authority, LlmRequestOptions options, string runId)
+            {
+                var fixedTokens = ModelContextBudget.EstimateRequestOptionsTokens(options, _settings) +
+                    ModelProtocolClient.EstimateFormatRepairOverheadTokens(_settings) +
+                    ModelContextBudget.ContinuationReserveTokens(_settings);
+                var required = new List<ChatMessage>
+                { new ChatMessage { Role = _settings.SystemPromptRole, Content = Prompt() } };
+                var context = new WorkspaceModelContext { ActiveTaskList = _taskLists.Project(authority.Resources), ActivePlan = _plans.Project(authority.Resources) };
+                if (_acceptance?.MinimumVerifiedReads > 0)
+                {
+                    var reads = CurrentCompleteFileReads(CompleteFileReads(_session, runId), authority.Resources);
+                    context.ReadAcceptance = new WorkspaceReadAcceptance
+                    {
+                        CurrentCompleteFileReads = reads.Count,
+                        MinimumCompleteFileReads = _acceptance.MinimumVerifiedReads,
+                        RemainingCompleteFileReads = Math.Max(0, _acceptance.MinimumVerifiedReads - reads.Count),
+                        ExpectedFilesWithoutCurrentRead = _acceptance.ExpectedFiles.Except(
+                            reads.Select(read => read.Target), StringComparer.Ordinal).ToArray()
+                    };
+                }
+                if (context.ActiveTaskList != null || context.ActivePlan != null || context.ReadAcceptance != null)
+                    required.Add(new ChatMessage { Role = _settings.SystemPromptRole,
+                        Content = "RUNTIME_CONTEXT:\n" + JsonConvert.SerializeObject(context) });
+                return _compiler.Compile(authority, required,
+                    AcceptedFacts(ContextCompactionRuntime.BuildActiveWindow(_session)), null, _catalog, _settings,
+                    Math.Max(1, ModelContextBudget.InputBudgetTokens(_settings) - fixedTokens));
             }
 
             private ResourceAuthoritySnapshotSet CaptureContextAuthority(string runId, CancellationToken cancellationToken)
@@ -941,45 +972,49 @@ namespace RNAssistant.Runtime
                         _observed.Remove(path);
             }
 
-            // Normalize accepted kernel facts into the compiler's existing causal
-            // frame input. No freshness, projection or budgeting decisions live here.
-            private IReadOnlyList<ChatMessage> AcceptedFacts(IReadOnlyList<AgentMessage> accepted)
+            // Normalize durable accepted facts without changing their causal order.
+            // Stable message IDs let compaction refer back to the canonical prefix.
+            private IReadOnlyList<ChatMessage> AcceptedFacts(IReadOnlyList<ChatMessage> accepted)
             {
                 var facts = new List<ChatMessage>();
                 var role = _settings.ToolResultRole;
                 foreach (var item in accepted)
                 {
-                    if (item.Kind == AgentMessageKind.User)
-                        facts.Add(new ChatMessage { Role = "user", Content = item.Text });
-                    else if (item.Kind == AgentMessageKind.Assistant)
+                    if (!item.ProtocolMessage) { facts.Add(HistoricalContextProjector.Project(item)); continue; }
+                    if (item.Role == "assistant")
                     {
-                        if (item.ToolCalls.Count == 0)
-                            facts.Add(new ChatMessage { Role = "assistant", ProtocolMessage = true,
-                                Content = new ConversationResponse(item.Text, new ConversationToolCall[0], item.Action).ToJson() });
-                        foreach (var call in item.ToolCalls)
-                            facts.Add(new ChatMessage { Id = "call_" + call.Id, Role = "assistant", ProtocolMessage = true,
+                        var parsed = ConversationResponseJson.Read(item.Content);
+                        if (!parsed.Success) throw new InvalidOperationException("Stored workspace response is invalid: " + parsed.Error);
+                        var calls = item.ToolCalls ?? new List<LlmToolCall>();
+                        if (calls.Count != parsed.Response.ToolCalls.Count)
+                            throw new InvalidOperationException("Stored workspace accepted-call IDs are incomplete.");
+                        if (calls.Count == 0) facts.Add(HistoricalContextProjector.Project(item));
+                        for (var index = 0; index < calls.Count; index++)
+                        {
+                            var call = calls[index];
+                            if (string.IsNullOrEmpty(call.Id) || call.Name != parsed.Response.ToolCalls[index].Name ||
+                                call.ArgumentsJson != parsed.Response.ToolCalls[index].Arguments.ToString(Formatting.None))
+                                throw new InvalidOperationException("Stored workspace accepted call differs from response.");
+                            facts.Add(new ChatMessage { Id = calls.Count == 1 ? item.Id : item.Id + ":" + index,
+                                RunId = item.RunId, Role = "assistant", ProtocolMessage = true,
                                 ResponseProtocolVersion = ConversationResponse.ProtocolVersion,
                                 ToolResultProtocolVersion = ToolResultWire.CurrentVersion, ToolResultRole = role,
                                 ToolCallId = call.Id, ToolName = call.Name,
                                 ToolCalls = role == ToolResultRoles.Tool ? new List<LlmToolCall> { new LlmToolCall {
                                     Id = call.Id, Type = "function", Name = call.Name, ArgumentsJson = call.ArgumentsJson } } : new List<LlmToolCall>(),
-                                Content = role == ToolResultRoles.Tool ? item.Text : new ConversationResponse(item.Text, new[] { new ConversationToolCall {
-                                    Name = call.Name, Arguments = JObject.Parse(call.ArgumentsJson) } }, item.Action).ToJson() });
+                                Content = role == ToolResultRoles.Tool ? parsed.Response.Message : new ConversationResponse(parsed.Response.Message,
+                                    new[] { parsed.Response.ToolCalls[index] }, parsed.Response.Action).ToJson() });
+                        }
                     }
-                    else if (item.Kind == AgentMessageKind.ToolResult)
+                    else if (!string.IsNullOrEmpty(item.ToolCallId))
                     {
-                        var json = !string.IsNullOrWhiteSpace(item.ResultJson) ? item.ResultJson :
-                            item.Execution == null ? null : WireResult(item.Execution);
-                        var wire = ToolResultWire.Read(json);
+                        var wire = ToolResultWire.Read(item.Content);
                         if (!wire.Success || wire.ToolCallId != item.ToolCallId)
                             throw new InvalidOperationException("Accepted tool result has no matching terminal body.");
-                        facts.Add(new ChatMessage { Id = "result_" + item.ToolCallId, Role = role,
-                            ProtocolMessage = true, ToolCallId = item.ToolCallId, ToolName = wire.Name,
-                            ToolResultRole = role, ToolResultProtocolVersion = ToolResultWire.CurrentVersion,
-                            Content = role == ToolResultRoles.Tool ? json : "TOOL_RESULT:\n" + json,
-                            ResourceRefs = wire.Result.Resources.ToList(),
-                            ResourceEvidence = (item.ResourceEvidence ?? new ResourceEvidence[0]).ToList(),
-                            ResourceEffect = item.ResourceEffect, ExecutionProgress = item.Progress });
+                        var result = HistoricalContextProjector.Project(item);
+                        result.Role = role; result.ToolResultRole = role;
+                        result.Content = role == ToolResultRoles.Tool ? item.Content : "TOOL_RESULT:\n" + item.Content;
+                        facts.Add(result);
                     }
                 }
                 return facts;

@@ -51,7 +51,8 @@ def main():
             root = Path(folder)
             workspace = root / "workspace"
             workspace.mkdir()
-            # Below the tool's 16000-character limit, above this request's budget.
+            # The 24K profile admits the current catalog, but not this body.
+            # Stay below the tool's 16000-character limit.
             source = "ORIGINAL_BODY\n" + "界" * 15000 + "\n"
             target = workspace / "large.txt"
             target.write_text(source, encoding="utf-8")
@@ -60,7 +61,7 @@ def main():
                        RNA_MODEL="scripted", RNA_API_KEY="ollama")
             run = subprocess.run(["dotnet", str(CLI), "run", "--workspace", str(workspace),
                 "--message", "Read large.txt and replace it only after seeing its complete source.",
-                "--context-tokens", "16384", "--min-reads", "1", "--max-iterations", "4", "--max-tool-steps", "3",
+                "--context-tokens", "24576", "--min-reads", "1", "--max-iterations", "4", "--max-tool-steps", "3",
                 "--jsonl"], cwd=REPO, env=env, text=True, capture_output=True, timeout=45, check=False)
             assert run.returncode == 5, (run.stdout, run.stderr)
             assert len(requests) == 4, (len(requests), run.stdout, run.stderr)

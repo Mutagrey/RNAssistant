@@ -146,11 +146,11 @@ namespace RNAssistant.Harness
             AssertEqual(ToolResultStatus.Ok, operation.CompletedOperation.Status, "typed operation survives folding");
             AssertEqual(ResourceEffectOutcome.VerifiedChanged, operation.ResourceEffect.Outcome, "verified effect survives folding");
             LlmCompletionDelegate unused = (s, m, o, p, c) => Task.FromResult(new LlmCompletionResult());
-            var compactor = new ContextCompactionService(unused);
+            var compactor = new ContextCompactionRuntime(unused);
             foreach (var compactionInput in new IEnumerable<ChatMessage>[] { new[] { operation }, folded.Messages })
             {
                 var arguments = new object[] { new ChatSession(), compactionInput, 10000, new AppSettings(), authority, null };
-                typeof(ContextCompactionService).GetMethod("BuildCompactionSource", BindingFlags.Instance | BindingFlags.NonPublic)
+                typeof(ContextCompactionRuntime).GetMethod("BuildCompactionSource", BindingFlags.Instance | BindingFlags.NonPublic)
                     .Invoke(compactor, arguments);
                 var inputs = (Dictionary<string, StructuredContextClaim>)arguments[5];
                 var terminalSource = inputs.Values.Single(item => item.ClaimId == mutation.Id);

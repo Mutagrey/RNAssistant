@@ -230,6 +230,15 @@ Task criteria and model/endpoint/digest/context/protocol/thinking settings stay
 bound to the accepted run. Current source authority is refreshed through existing
 owners and the frozen compiler. New model calls are allowed; old calls never replay.
 
+Workspace compaction uses the same Core checkpoint/artifact owner as Office. The
+CLI saves its checkpoint through ChatStore before emitting `compacted` or sending
+a request based on the new window. `ReadState`/`inspect.ContextCheckpointId` exposes
+the active canonical checkpoint. A fresh process restores that checkpoint for
+model context, retains the latest user task verbatim, and refreshes file authority
+before compiling claims. Kernel counters and recovery still use complete accepted
+history, including exchanges before the checkpoint. Neither compaction nor resume
+can grant mutation authority from a summary or reset acceptance requirements.
+
 `CancelRunAsync` is a bounded local signal to the process holding the run lease.
 Its ephemeral current-user named pipe carries only an exact cursor and an
 acknowledgement; no mailbox or second durable store is created. Both the caller
