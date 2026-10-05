@@ -68,6 +68,12 @@ terminal and fails acceptance. An external edit during the final model wait is
 rejected even with only `--min-reads` and no `--expect-files`. The browser runtime
 smoke confirms that verification/read-back do not add file reads; the omitted-read
 smoke confirms that this metadata does not grant overwrite authority.
+`python3 -B tests/cli/task_list_smoke.py` verifies shared Task Lists in Plan/user
+and Agent/native-tool transport: save/reorder/progress/notes/block/close, invalid
+index atomicity, process restart and pinned current context, journal/publication
+read-back, crash before dispatch and after publication, unknown effect denial,
+identity-free model results and no credit toward file-write acceptance. It uses
+scripted HTTP, not real-model qualification.
 `python3 tests/cli/response_mode_smoke.py` checks explicit CLI `json_schema` /
 `json_object` selection, `system` / `developer` instruction roles, all three
 `--tool-result-role` transports through compiler/actual HTTP and persisted metadata.

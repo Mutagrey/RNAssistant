@@ -146,11 +146,28 @@ callable catalog and exact ToolRuntime registrations enforce the selected policy
 | Mode | Available operations |
 | --- | --- |
 | Chat | Bounded file find/read only; skill type/reference arguments are unavailable |
-| Plan | File find/read, enabled skills, `web.verify` when the browser exists, typed questions; no file writes or confirmation |
-| Agent | Available file/skill/web operations, guarded writes and confirmations, typed questions |
+| Plan | File find/read, enabled skills, `web.verify` when the browser exists, typed questions, durable Task Lists; no file writes or confirmation |
+| Agent | Available file/skill/web operations, guarded writes and confirmations, typed questions and durable Task Lists |
 
-CLI Plan does not yet expose revisioned Plan documents or Task Lists. This is an
-explicit host capability gap, not completion of the full Plan contract above.
+CLI uses the shared Core Task List service, catalog, handler and logical authority
+publisher. Task Lists remain conversation-owned revisions in ChatStore events/CAS;
+no workspace file or fabricated Office document identity stores their state.
+The workspace session lease and a short conversation authority lease cover
+preparation, dispatch, save, durable read-back and publication. Office retains its
+DocumentAccessGate wrapper. Invalid updates have no effect; uncertain dispatched
+attempts become unknown without replay. A published commit with a missing journal
+terminal recovers only that terminal link. Unknown/mismatched authority exposes
+`available=false` and denies another write; an explicit Task List reconciliation
+command is still open scope.
+
+`inspect` exposes the current `taskList`. Each model request pins its identity-free
+`active_task_list` in required RUNTIME_CONTEXT against the frozen conversation
+authority, before optional history/source bodies. Native tool transport retains
+accepted call/result pairing; runtime list/step/artifact IDs stay out of model
+results. Task List statuses express agent assessment and never count toward CLI
+file-write acceptance. A read-only workspace still permits these chat-owned writes
+in Plan/Agent. CLI revisioned Markdown Plan documents remain an explicit host
+capability gap; the full Plan contract above is not yet complete.
 
 The shared question tool produces 1–3 questions, each with 2–4 choices, a single
 or multiple selection and an optional free-text answer. Runtime IDs are persisted

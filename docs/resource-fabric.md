@@ -75,6 +75,17 @@ write authority nor file-read acceptance. The 16000-character whole-read bound
 fails explicitly; CLI reference continuation is open scope. See
 [skills](skills.md#independent-workspace-runtime) for selection and publication.
 
+Task Lists use the shared Core `TaskListPublication` owner for
+`state/conversation/<chat>/task-list`. Their immutable bodies and revisions remain
+in the existing ChatStore/CAS. The CLI pins this conversation scope alongside file
+and skill scopes; its required current-list projection is admitted only when its
+selected artifact matches the frozen published head. Unknown authority yields an
+unavailable projection and cannot authorize another save. Workspace mutation
+composition persists and reads back the appended revision before publication;
+interrupted possible effects are not replayed. Office retains its bound gate and
+uses the same logical publisher. This does not introduce a filesystem reader or
+an artifact store, and does not implement workspace-owned Markdown Plans.
+
 The file owner publishes mutation effects. Guarded `files.delete` moves an accepted complete
 UTF-8 file into `.rnassistant/trash`, verifies its retained preimage and publishes an
 unavailable head. Explicit `files.restore` moves that managed preimage back only

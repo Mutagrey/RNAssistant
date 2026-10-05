@@ -130,6 +130,10 @@
     <Compile Include="Services\SkillCatalogService.cs" />
     <Compile Include="Services\ConversationRunPolicy.cs" />
     <Compile Include="Tools\UserQuestionToolCatalog.cs" />
+    <Compile Include="Services\TaskListService.cs" />
+    <Compile Include="Services\TaskListPublication.cs" />
+    <Compile Include="Tools\TaskListToolCatalog.cs" />
+    <Compile Include="Tools\TaskListToolHandler.cs" />
     <Compile Include="Tools\UserQuestionToolHandler.cs" />
     <Compile Include="Models\UserQuestions.cs" />
     <Compile Include="Services\UserQuestionAnswers.cs" />

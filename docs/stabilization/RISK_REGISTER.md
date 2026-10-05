@@ -324,7 +324,7 @@ model requests отсутствуют; нельзя доказать причи�
    [EvaluateFinalResponse](../../src/RNAssistant.Office/Services/ConversationKernelAdapter.Store.cs)
    возвращает `Complete`, если активного Task List нет. Список необязателен.
    При его наличии проверяется факт закрытия, а
-   [TaskListService.Close](../../src/RNAssistant.Office/Services/TaskListService.cs)
+   [TaskListService.Close](../../src/RNAssistant.Core/Services/TaskListService.cs)
    принимает model-authored `status=completed` без связи шага с mutation/read-back
    evidence. Поэтому один успешный CSS patch и финал с утверждением о двух файлах
    допустимы для runtime. Это gap семантической проверки, а не ошибка wire parser:

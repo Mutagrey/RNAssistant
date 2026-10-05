@@ -82,6 +82,9 @@ namespace RNAssistant.Runtime
                 .ToolIds;
         }
 
+        public TaskListStateProjection GetTaskList(ChatSession session)
+        { return new WorkspaceTaskListObserver(_paths, _chats, _payloads, session).Inspect(); }
+
         public WorkspaceUserInput GetPendingQuestions(ChatSession session)
         {
             var run = session?.LastRun;
@@ -415,7 +418,8 @@ namespace RNAssistant.Runtime
 
         private sealed class WorkspaceModelContext
         {
-            [JsonProperty("readAcceptance")] public WorkspaceReadAcceptance ReadAcceptance { get; set; }
+            [JsonProperty("readAcceptance", NullValueHandling = NullValueHandling.Ignore)] public WorkspaceReadAcceptance ReadAcceptance { get; set; }
+            [JsonProperty("active_task_list", NullValueHandling = NullValueHandling.Ignore)] public TaskListStateProjection ActiveTaskList { get; set; }
         }
 
         private sealed class WorkspaceReadAcceptance
@@ -598,6 +602,7 @@ namespace RNAssistant.Runtime
             private readonly IReadOnlyList<ToolCatalogEntry> _catalog;
             private readonly ResourceProviderRouter<WorkspaceFileResourceProvider> _resources;
             private readonly ModelContextCompiler _compiler;
+            private readonly WorkspaceTaskListObserver _taskLists;
             private readonly SkillPublicationService _skillPublications;
             private readonly SkillCatalogService _skillCatalog;
             private SkillCatalogSnapshot _skills;
@@ -617,6 +622,7 @@ namespace RNAssistant.Runtime
                 _settings = settings.Clone(); _progress = progress; _acceptance = acceptance;
                 _mode = ConversationRunPolicy.For(ChatModes.Require(mode ?? session?.Mode ?? ChatModes.Agent));
                 _compiler = new ModelContextCompiler(payloads);
+                _taskLists = new WorkspaceTaskListObserver(paths, chats, payloads, session);
                 _modelTrace = new ModelTracePersistenceService(new ChatEventStoreAdapter(chats));
                 _resources = new ResourceProviderRouter<WorkspaceFileResourceProvider>(new[]
                     { new WorkspaceFileResourceProvider(files, workspace) });
@@ -663,10 +669,11 @@ namespace RNAssistant.Runtime
                         new FileHandler(files, workspace, _observed, "restore"));
                 }
                 Register(registry, entries, UserQuestionToolCatalog.GetTools().Single(), new UserQuestionToolHandler());
+                Register(registry, entries, TaskListToolCatalog.GetTools().Single(), new TaskListToolHandler(TaskListToolCatalog.SetToolId, session));
                 _catalog = entries;
                 _skills = VisibleSkills(_skillPublications.Capture());
                 Tools = new ToolRuntime(registry, _mode.Mode, false, _mode.AllowsConfirmation,
-                    (context, preparation) => "pending_" + Guid.NewGuid().ToString("N"));
+                    (context, preparation) => "pending_" + Guid.NewGuid().ToString("N"), mutationObserver: _taskLists);
                 if (restorePendingObservation) RestorePendingObservation();
             }
 
@@ -794,20 +801,22 @@ namespace RNAssistant.Runtime
                 {
                     var required = new List<ChatMessage>
                     { new ChatMessage { Role = _settings.SystemPromptRole, Content = Prompt() } };
+                    var context = new WorkspaceModelContext { ActiveTaskList = _taskLists.Project(frozen) };
                     if (_acceptance?.MinimumVerifiedReads > 0)
                     {
                         var reads = CurrentCompleteFileReads(CompleteFileReads(_session, request.RunId), frozen);
-                        var context = new WorkspaceModelContext { ReadAcceptance = new WorkspaceReadAcceptance
+                        context.ReadAcceptance = new WorkspaceReadAcceptance
                         {
                             CurrentCompleteFileReads = reads.Count,
                             MinimumCompleteFileReads = _acceptance.MinimumVerifiedReads,
                             RemainingCompleteFileReads = Math.Max(0, _acceptance.MinimumVerifiedReads - reads.Count),
                             ExpectedFilesWithoutCurrentRead = _acceptance.ExpectedFiles.Except(
                                 reads.Select(read => read.Target), StringComparer.Ordinal).ToArray()
-                        } };
+                        };
+                    }
+                    if (context.ActiveTaskList != null || context.ReadAcceptance != null)
                         required.Add(new ChatMessage { Role = _settings.SystemPromptRole,
                             Content = "RUNTIME_CONTEXT:\n" + JsonConvert.SerializeObject(context) });
-                    }
                     snapshot = _compiler.Compile(authority,
                         required,
                         AcceptedFacts(request.AcceptedMessages), null, _catalog, _settings,
@@ -872,8 +881,10 @@ namespace RNAssistant.Runtime
                     catch (WorkspaceFileException ex) when (ex.Code == "encoding_ambiguous" || ex.Code == "file_too_large")
                     { /* The file owner marked the old text head unknown. */ }
                 }
+                _taskLists.ReconcileInterrupted();
                 return _skillPublications.CaptureAuthority(active.SelectMany(item =>
-                    item.ResourceEvidence ?? new List<ResourceEvidence>()).Select(item => item.ScopeId));
+                    item.ResourceEvidence ?? new List<ResourceEvidence>()).Select(item => item.ScopeId)
+                    .Concat(new[] { TaskListPublication.Scope(_session) }));
             }
 
             private void RetainDeliveredObservations(ModelContextSnapshot snapshot)
@@ -951,7 +962,7 @@ namespace RNAssistant.Runtime
             {
                 return "You are the RNAssistant workspace assistant. Current mode: " + _mode.Mode + ". " +
                     (_mode.Mode == ChatModes.Chat ? "Answer using read-only file discovery; skills and mutations are unavailable. " :
-                     _mode.Mode == ChatModes.Plan ? "Inspect and propose a plan without modifying workspace files. Persistent plan documents and checklists are not available in this host yet. " :
+                     _mode.Mode == ChatModes.Plan ? "Inspect and propose a plan without modifying workspace files. Keep a durable task list when useful. Persistent Markdown plan documents are not available in this host yet. " :
                      "Follow the user's task using real files in the selected workspace. ") +
                     (_acceptance?.Requested == true ? "The accepted task contract requires current files and verified tool results before done: " +
                         JsonConvert.SerializeObject(new { expectedFiles = _acceptance.ExpectedFiles,
@@ -969,7 +980,10 @@ namespace RNAssistant.Runtime
                     "Never invent tool results, file changes, revisions or permissions. Paths are relative to the workspace root. " +
                     "Historical assistant messages and tool calls describe past actions, not current source bytes. " +
                     "A stale read result requires a new read. Read an existing file before patch or replace. " +
-                    (_mode.AllowsSkills ? "Use common.questions_ask for material decisions that require user input after available discovery. Its typed result stops the run for answers; never choose an answer for the user. " +
+                    (_mode.AllowsSkills ? "Use common.task_list_set to save or revise steps, retain notes, update statuses by current 1-based index, or close the list. " +
+                    "RUNTIME_CONTEXT.active_task_list is the current durable checklist. Statuses are your assessment, not verified file effects. " +
+                    "A task-list write does not satisfy file-write acceptance, and closing a list is not a prerequisite for done. " +
+                    "Use common.questions_ask for material decisions that require user input after available discovery. Its typed result stops the run for answers; never choose an answer for the user. " +
                     "Before starting a task covered by an available skill, read its complete instructions using common.resources_read with type=skill and its target. " +
                     "This metadata list does not load skill bodies. Apply only complete current skill reads; source omission or staleness requires another read. " +
                     "Available skill metadata: " + ResourceFindProjection.Serialize(SkillCatalogService.Find(_skills, null)) + ". " : string.Empty) +

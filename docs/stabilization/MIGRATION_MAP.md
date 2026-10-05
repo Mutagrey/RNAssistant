@@ -24,7 +24,7 @@ gates; active tool compatibility adapter отсутствует. Windows/Office 
 |---|---|---|
 | `Host="Workspace"`, `DocumentKey=WorkspaceId` as ChatStore path partition | `WorkspaceStore` creates workspace chats in the canonical event store; CLI loads them through the same association. `DocumentAuthorityId` is null. These fields are internal routing, not a fake Office document. | M7: native workspace partition in session/catalog paths, then remove the routing adapter without rewriting historical events. |
 | Net8 Core project over the same production source tree | `RNAssistant.Core.Net8.csproj` builds Core for CLI; .NET Framework project remains for Office. DPAPI `SettingsService` is excluded from the net8 text path; CLI reads key from process environment. | M11: settle the cross-target secret/storage ports and packaging; no copied source files or fake Office dependency. |
-| CLI accepted-fact and authority preparation | `WorkspaceConversationService` normalizes accepted kernel facts, refreshes current-run file authority through `WorkspaceFileService` and pins committed skill metadata through the shared Core publication owner. Core `ModelContextCompiler` owns all request assembly, filtering, budgeting and repair; the separate CLI result projector is removed (2026-10-05). Office retains pure domain projection and prompt preparation. | M5–M7: consolidate application preparation when host profiles share the same capability/context inputs; preserve one compiler and one file authority owner. |
+| CLI accepted-fact and authority preparation | `WorkspaceConversationService` normalizes accepted kernel facts, refreshes current-run file authority through `WorkspaceFileService` and pins committed skill metadata and conversation-owned Task Lists through shared Core publication owners. Core `ModelContextCompiler` owns all request assembly, filtering, budgeting and repair; the separate CLI result projector is removed (2026-10-05). Office retains pure domain projection and prompt preparation. | M5–M7: consolidate application preparation when host profiles share the same capability/context inputs; preserve one compiler and one file authority owner. |
 | Filesystem text-only provider surface | Office and CLI use shared `ResourceFindPage`/`ResourceReadProjection` and exact `ResourceReadObservation`; bounded CLI discovery carries metadata descriptors and explicit incompleteness. The filesystem provider now exposes exact retained text to the browser verifier (2026-10-05). `ResourceProviderRouter<TProvider>` still only routes providers. | §8.1 remains open for raw/binary views, remaining preview/viewer consumers and shared Office/filesystem operation dispatch. Close each with a concrete consumer, bounded coverage and exact evidence, preserving Office host guards; the text slice does not replace the target architecture. |
 | CLI abandoned-run reconciliation | `WorkspaceConversationService.PrepareResume` closes a process-abandoned run under the session lease and leaves tool replay disabled; `ChatRunRecord` keeps small interrupted-tool diagnostics. It asks for a new turn rather than resuming the stopped kernel budget. | M5–M7: consolidate startup and CLI recovery in the common application lifecycle and add validated same-run continuation where safe; remove the CLI-only projection path. |
 | Existing document-owned HTML authoring | `HtmlWorkspacePublication` and Office UI still own old document results; CLI files have no dual writer. | M6: explicit materialization/linkage and guarded old-writer removal for cut-over authored types. |
@@ -35,8 +35,14 @@ The Office-only mode policy and question catalog/handler seam was removed on
 workspace application owner under its existing lease. Question state is derived
 from the accepted result and kernel summary, with no second pending store.
 The shared compiler projects semantic questions and preserves transport pairing.
-CLI Plan document/Task List capabilities and the Office UI's typed answer
-admission remain open: the existing UI still sends semantic `PLAN_ANSWERS` text.
+The Office-only Task List service/catalog/handler path was removed on 2026-10-05.
+Core `TaskListService`, `TaskListToolCatalog/Handler` and `TaskListPublication`
+serve both hosts. The permanent Office wrapper owns DocumentAccessGate only;
+workspace composition owns its existing session lease, journal, ChatStore save and
+durable read-back. Both use the same conversation artifact/CAS ownership.
+
+CLI Markdown Plan capabilities, explicit uncertain Task List reconciliation and
+the Office UI's typed answer admission remain open: the existing UI still sends semantic `PLAN_ANSWERS` text.
 Owner: conversation/planning application services. Close by reusing the existing
 publication/mutation owners, switching consumers and preserving read-back and
 append-only history; do not implement a separate CLI plan writer.

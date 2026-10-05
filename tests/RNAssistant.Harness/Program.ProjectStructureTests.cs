@@ -710,15 +710,17 @@ namespace RNAssistant.Harness
                     "PlanDocumentToolExecutor.cs")),
                 "plan_doc tools must use exact native handlers without a controller executor");
             AssertTrue(
-                File.Exists(Path.Combine(officeRoot, "Tools",
+                File.Exists(Path.Combine(root, "src", "RNAssistant.Core", "Tools",
                     "TaskListToolCatalog.cs")) &&
-                File.Exists(Path.Combine(officeRoot, "Tools",
+                File.Exists(Path.Combine(root, "src", "RNAssistant.Core", "Tools",
                     "TaskListToolHandler.cs")) &&
-                File.Exists(Path.Combine(officeRoot, "Services",
+                File.Exists(Path.Combine(root, "src", "RNAssistant.Core", "Services",
                     "TaskListService.cs")) &&
+                File.Exists(Path.Combine(officeRoot, "Tools", "DocumentTaskListToolHandler.cs")) &&
+                !File.Exists(Path.Combine(officeRoot, "Services", "TaskListService.cs")) &&
                 !File.Exists(Path.Combine(officeRoot, "Tools",
                     "TaskListToolExecutor.cs")),
-                "task-list tools must use their typed service and exact native handlers");
+                "task-list tools share their typed service and handler while Office keeps its document gate");
             AssertTrue(
                 File.Exists(Path.Combine(officeRoot, "Tools",
                     "ToolAuthoringCatalog.cs")) &&

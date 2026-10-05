@@ -213,7 +213,7 @@ namespace RNAssistant.Office.Runtime
                 else if (TaskListToolCatalog.Owns(
                     registration.Descriptor.Id))
                 {
-                    handler = new TaskListToolHandler(
+                    handler = new DocumentTaskListToolHandler(
                         registration.Descriptor.Id, session);
                 }
                 else if (HtmlWorkspaceToolCatalog.Owns(

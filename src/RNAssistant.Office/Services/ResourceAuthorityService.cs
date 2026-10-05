@@ -436,7 +436,7 @@ namespace RNAssistant.Office.Services
                             new DocumentArtifactStore(_authority.Store, _authority.Revisions, _payloads), _authority)
                         : ResourceMutationDomains.Impacts(scope, context.Call.Name, arguments, snapshot);
                 var target = impacts[0].Identity;
-                if (ResourceMutationDomains.IsDocumentArtifactOperation(context.Call.Name))
+                if (ResourceMutationDomains.IsDocumentArtifactOperation(context.Call.Name) || TaskListToolCatalog.Owns(context.Call.Name))
                     expected = snapshot.GetHead(target)?.Revision?.Revision;
                 var payload = PayloadRef.FromBlob(_payloads.StoreText(context.Call.ArgumentsJson, "application/json"));
                 var attempt = _journal.Prepare(scope, context.Call.Name, target, expected, payload, intendedImpacts: impacts);
@@ -595,23 +595,7 @@ namespace RNAssistant.Office.Services
                     continue;
                 }
                 if (name != "task-list") continue;
-                var artifactId = _session.ActiveTaskListArtifactId;
-                if (string.IsNullOrWhiteSpace(artifactId))
-                {
-                    yield return new ResourceMutationReadBack(impact.Identity, false);
-                    continue;
-                }
-                var artifact = (_session.Artifacts ?? new List<ChatArtifact>()).SingleOrDefault(item => item != null && item.Id == artifactId);
-                // A dangling pointer or missing CAS body is unknown, not proven removal.
-                if (artifact == null) continue;
-                var body = artifact.InlineText;
-                if (body == null && artifact.ContentByteLength.HasValue && artifact.ContentByteLength <= 8L * 1024 * 1024)
-                    body = _payloads.ReadText(new ChatBlobReference { Sha256 = artifact.ContentSha256,
-                        ByteLength = artifact.ContentByteLength.Value, ContentType = artifact.MimeType });
-                if (body == null) continue;
-                var payload = PayloadRef.FromBlob(_payloads.StoreText(body, artifact.MimeType ?? "text/plain"));
-                yield return new ResourceMutationReadBack(impact.Identity, true, "text", payload.Sha256, payload,
-                    dependencies: new[] { new ResourceDependency(ChatResourceUri.CreateArtifactRevision(_session, artifact), kind: "immutable-snapshot") });
+                yield return TaskListPublication.Capture(_session, _payloads);
             }
         }
 
@@ -632,6 +616,9 @@ namespace RNAssistant.Office.Services
             ResourceMutationJournal journal, MutationAttempt attempt, ToolExecutionRecord record,
             IReadOnlyList<ResourceMutationReadBack> capturedReadBack = null)
         {
+            if (TaskListToolCatalog.Owns(attempt.Operation))
+                return TaskListPublication.Publish(authority.Store, authority.Revisions, journal, attempt, record,
+                    capturedReadBack?.SingleOrDefault(item => item.Identity.Equals(attempt.Target)));
             var prior = authority.Store.Capture(attempt.ScopeId).Commits.FirstOrDefault(item => item.MutationAttemptId == attempt.AttemptId);
             if (prior != null) { journal.Resolve(attempt.AttemptId, prior.CommitId); return prior; }
             var snapshot = authority.Store.Capture(attempt.ScopeId);

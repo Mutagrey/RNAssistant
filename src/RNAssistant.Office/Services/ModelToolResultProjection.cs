@@ -395,14 +395,7 @@ namespace RNAssistant.Office.Services
                     "restoredFromArtifactId", "referencingMessageIds");
                 return;
             }
-            if (!TaskListToolCatalog.Owns(name)) return;
-            RemoveProperties(root, "artifactId", "revision");
-            var taskList = root["taskList"] as JObject;
-            if (taskList == null) return;
-            RemoveProperties(taskList, "id");
-            foreach (var step in (taskList["steps"] as JArray ??
-                new JArray()).OfType<JObject>())
-                RemoveProperties(step, "id");
+            ModelResultProjection.RemoveTaskListRuntimeState(name, token);
         }
 
         private static void RemoveHtmlRuntimeState(JToken token)

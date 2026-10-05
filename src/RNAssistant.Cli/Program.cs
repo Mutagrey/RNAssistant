@@ -114,6 +114,7 @@ namespace RNAssistant.Cli
                     contextReceipt = session.LastContextReceipt,
                     acceptance = session.LastRun?.WorkspaceAcceptance,
                     userInput = service.GetPendingQuestions(session),
+                    taskList = service.GetTaskList(session),
                     interruptedToolId = session.LastRun?.InterruptedToolId,
                     interruptedPath = session.LastRun?.InterruptedFilePath,
                     interruptedEffectPossible = session.LastRun?.InterruptedEffectPossible,

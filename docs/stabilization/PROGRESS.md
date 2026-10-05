@@ -1,5 +1,31 @@
 # Stabilization progress
 
+Shared CLI Task List slice (2026-10-05): Plan and Agent now expose
+`common.task_list_set` through Core's existing domain service, catalog and handler;
+the Office-only copies are removed. Core `TaskListPublication` owns logical
+conversation publication for both hosts. Office retains DocumentAccessGate;
+workspace composition uses the existing session lease plus a short authority lease,
+prepared/dispatch journal, ChatStore append/CAS save and durable revision read-back.
+No document identity, second store, file writer or agent loop was introduced.
+Owner: conversation/planning runtime.
+
+The CLI supports save/reorder, progress and notes, blocked resumption and closure.
+`inspect.taskList` and required `RUNTIME_CONTEXT.active_task_list` expose the current
+identity-free assessment checked against frozen authority. Runtime IDs stay out of
+model results in ordinary and native tool transport. Task List writes cannot
+satisfy file-write acceptance. A prepared undispatched operation is abandoned;
+a published result recovers its journal link; an uncertain dispatched operation
+becomes unknown and rejects another save. Explicit uncertain Task List
+reconciliation is still open; no automatic mutation or restoration is attempted.
+
+Checks: CLI build clean; shared Task List harness 4/4, Plan mode 3/3; CLI Task List
+scripted HTTP 2/2, modes/questions 3/3 and read-acceptance context 3/3. Architecture
+filter 4/5: the existing Office conversation-port assertion flags 13 unchanged
+ChatStore calls, also present verbatim in `cf662c60`; recorded separately in BACKLOG.
+Harness build retains two existing PDF CA1416 warnings. This is host-neutral and
+scripted evidence; no new real-model or Windows/Office qualification was performed.
+Markdown Plan with actual workspace authority is next; full M4/M5 remain open.
+
 Clean-memory CLI evaluation (2026-10-05): the previous CSV runner log, matched to
 its last HTTP request timestamp, recorded 8013.399 MiB of retained prompt cache
 (8192 MiB cap), separate from the live inference state. A temporary Ollama 0.35.0
@@ -1081,8 +1107,9 @@ boundary, not a functional CSV score. Scripted HTTP tests confirmed both CLI
 transport modes and saved metadata. The existing v6 parser correctly rejected
 these outputs; no permissive JSON repair or separate agent loop was added.
 
-Next concrete slice (2026-10-05): CLI Plan documents / Task Lists through existing
+Next concrete slice (2026-10-05): CLI Markdown Plan documents through existing
 publication/mutation owners and actual workspace authority, then remaining §11 UX.
+Conversation-owned Task Lists now work in CLI Plan/Agent through shared Core owners.
 The existing DocumentArtifactStore Plan path requires document authority; do not
 invent an Office document identity to reuse it. The fixed narrow question task
 passes read → question → explicit answer → fresh read → done. The unchanged CSV

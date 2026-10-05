@@ -4,18 +4,18 @@ using System.Linq;
 using Newtonsoft.Json;
 using RNAssistant.Core.Models;
 
-namespace RNAssistant.Office.Services
+namespace RNAssistant.Core.Services
 {
-    internal sealed class TaskListService
+    public sealed class TaskListService
     {
-        internal const int MaxSteps = 32;
-        internal const int MaxGoalCharacters = 500;
-        internal const int MaxStepCharacters = 500;
+        public const int MaxSteps = 32;
+        public const int MaxGoalCharacters = 500;
+        public const int MaxStepCharacters = 500;
 
         private static bool IsOpen(ChatTaskList task)
         { return task != null && (task.Status == "active" || task.Status == "blocked"); }
 
-        internal TaskListMutation Set(ChatSession session, string goal,
+        public TaskListMutation Set(ChatSession session, string goal,
             List<ChatTaskStep> steps, Action beforeMutation, string reason = null)
         {
             RequireSession(session);
@@ -39,7 +39,7 @@ namespace RNAssistant.Office.Services
                 BindStepIds(steps, current), beforeMutation, goal, reason);
         }
 
-        internal TaskListMutation UpdateStatuses(ChatSession session, string goal,
+        public TaskListMutation UpdateStatuses(ChatSession session, string goal,
             List<TaskListStatusUpdate> updates, Action beforeMutation)
         {
             RequireSession(session);
@@ -68,7 +68,7 @@ namespace RNAssistant.Office.Services
             return Update(session, currentArtifact.Id, steps, beforeMutation);
         }
 
-        internal TaskListMutation CloseActive(ChatSession session,
+        public TaskListMutation CloseActive(ChatSession session,
             string outcome, List<TaskListStatusUpdate> updates,
             Action beforeMutation, string reason = null)
         {
@@ -424,18 +424,18 @@ namespace RNAssistant.Office.Services
                     "Task-list tools require an active chat session.");
         }
 
-        internal static ChatTaskList Active(ChatSession session)
+        public static ChatTaskList Active(ChatSession session)
         { ChatTaskList task; return session == null || string.IsNullOrEmpty(session.ActiveTaskListArtifactId) ||
             FindRevision(session, null, out task) == null ? null : task; }
 
-        internal static TaskListStateProjection ProjectCurrent(ChatSession session)
+        public static TaskListStateProjection ProjectCurrent(ChatSession session)
         {
             if (string.IsNullOrEmpty(session?.ActiveTaskListArtifactId)) return null;
             var task = Active(session);
             return Project(task);
         }
 
-        internal static TaskListStateProjection Project(ChatTaskList task)
+        public static TaskListStateProjection Project(ChatTaskList task)
         {
             return new TaskListStateProjection
             {
@@ -450,12 +450,12 @@ namespace RNAssistant.Office.Services
 
         private sealed class TaskListRevision
         {
-            internal ChatArtifact Artifact { get; set; }
-            internal ChatTaskList TaskList { get; set; }
+            public ChatArtifact Artifact { get; set; }
+            public ChatTaskList TaskList { get; set; }
         }
     }
 
-    internal sealed class TaskListStateProjection
+    public sealed class TaskListStateProjection
     {
         [JsonProperty("available")] public bool Available { get; set; }
         [JsonProperty("goal")] public string Goal { get; set; }
@@ -465,20 +465,20 @@ namespace RNAssistant.Office.Services
         [JsonProperty("reason")] public string Reason { get; set; }
         [JsonProperty("steps")] public List<TaskStepProjection> Steps { get; set; }
     }
-    internal sealed class TaskStepProjection
+    public sealed class TaskStepProjection
     {
         [JsonProperty("index")] public int Index { get; set; }
         [JsonProperty("text")] public string Text { get; set; }
         [JsonProperty("status")] public string Status { get; set; }
         [JsonProperty("note", NullValueHandling = NullValueHandling.Ignore)] public string Note { get; set; }
     }
-    internal sealed class TaskListRevisionMetadata
+    public sealed class TaskListRevisionMetadata
     {
         [JsonProperty("taskListId")] public string TaskListId { get; set; }
         [JsonProperty("status")] public string Status { get; set; }
     }
 
-    internal sealed class TaskListStatusUpdate
+    public sealed class TaskListStatusUpdate
     {
         [JsonProperty("index")]
         public int Index { get; set; }
@@ -490,20 +490,20 @@ namespace RNAssistant.Office.Services
         public string Note { get; set; }
     }
 
-    internal sealed class TaskListMutation
+    public sealed class TaskListMutation
     {
-        internal bool Success { get; private set; }
-        internal string Message { get; private set; }
-        internal string ErrorCode { get; private set; }
-        internal bool? Retryable { get; private set; }
-        internal ChatTaskList TaskList { get; private set; }
-        internal ChatTaskList CurrentTaskList { get; private set; }
-        internal ChatArtifact Artifact { get; private set; }
-        internal bool Closed { get; private set; }
+        public bool Success { get; private set; }
+        public string Message { get; private set; }
+        public string ErrorCode { get; private set; }
+        public bool? Retryable { get; private set; }
+        public ChatTaskList TaskList { get; private set; }
+        public ChatTaskList CurrentTaskList { get; private set; }
+        public ChatArtifact Artifact { get; private set; }
+        public bool Closed { get; private set; }
 
         private TaskListMutation() { }
 
-        internal static TaskListMutation Ok(string message,
+        public static TaskListMutation Ok(string message,
             ChatTaskList taskList, ChatArtifact artifact, bool closed)
         {
             return new TaskListMutation
@@ -516,7 +516,7 @@ namespace RNAssistant.Office.Services
             };
         }
 
-        internal static TaskListMutation Fail(
+        public static TaskListMutation Fail(
             string message, string errorCode, bool? retryable,
             ChatTaskList currentTaskList = null)
         {

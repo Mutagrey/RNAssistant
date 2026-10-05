@@ -7,18 +7,17 @@ using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
 using RNAssistant.Core.Models;
 using RNAssistant.Core.Tools;
-using RNAssistant.Office.Runtime;
-using RNAssistant.Office.Services;
+using RNAssistant.Core.Services;
 using RuntimeResult = RNAssistant.Core.Tools.Contracts.ToolResult;
 
-namespace RNAssistant.Office.Tools
+namespace RNAssistant.Core.Tools
 {
-    internal sealed class TaskListToolHandler : IManagedMutationToolHandler
+    public sealed class TaskListToolHandler : IManagedMutationToolHandler
     {
         private readonly ChatSession _session;
         private readonly TaskListService _service;
 
-        internal TaskListToolHandler(string toolId, ChatSession session)
+        public TaskListToolHandler(string toolId, ChatSession session)
         {
             if (!TaskListToolCatalog.Owns(toolId))
                 throw new ArgumentException(
@@ -27,7 +26,7 @@ namespace RNAssistant.Office.Tools
             _service = new TaskListService();
         }
 
-        internal static ToolBinding BindingFor(string toolId)
+        public static ToolBinding BindingFor(string toolId)
         {
             if (string.Equals(toolId, TaskListToolCatalog.SetToolId,
                 StringComparison.Ordinal))
@@ -40,51 +39,62 @@ namespace RNAssistant.Office.Tools
         {
             cancellationToken.ThrowIfCancellationRequested();
             if (_session == null)
-                return OfficeToolFailure.Rejected(
+                return Rejected(
                     "Task-list tools require an active chat session.",
                     "task_list_session_required");
             try
             {
-                using (DocumentAccessGate.BeginOperation())
-                {
-                    return Task.FromResult(context.Complete(Project(Execute(context), context)));
-                }
+                return Task.FromResult(context.Complete(Project(Execute(context), context)));
             }
             catch (JsonException ex) when (!context.MayHaveDispatched)
             {
-                return OfficeToolFailure.Rejected(
+                return Rejected(
                     "Task-list JSON is invalid: " + ex.Message,
                     "invalid_task_list", ToolRetryPolicy.Replan, true);
             }
             catch (InvalidOperationException ex) when (!context.MayHaveDispatched)
             {
-                return OfficeToolFailure.Rejected(ex.Message,
+                return Rejected(ex.Message,
                     "invalid_task_list", ToolRetryPolicy.Replan, true);
             }
         }
 
+        private static Task<ToolHandlerResult> Rejected(string message, string code,
+            ToolRetryPolicy retryPolicy = ToolRetryPolicy.None, bool retryable = false)
+        {
+            return Task.FromResult(new ToolHandlerResult(RuntimeResult.Error(message, ErrorData(code, retryable)),
+                ToolEffectEvidence.None, recovery: new ToolRecoveryContract(ToolFailureKind.RejectedNoEffect, retryPolicy)));
+        }
+
         private TaskListMutation Execute(ToolHandlerContext context)
         {
-            var action = ToolArgumentReader.String(
+            var action = StringArgument(
                 context.Arguments, "action", string.Empty);
             if (string.Equals(action, "save", StringComparison.Ordinal))
             {
                 return _service.Set(_session,
-                    ToolArgumentReader.String(context.Arguments, "goal", string.Empty),
+                    StringArgument(context.Arguments, "goal", string.Empty),
                     ReadSteps(context.Arguments, "steps"),
-                    context.MarkDispatchPossible, ToolArgumentReader.String(context.Arguments, "reason", null));
+                    context.MarkDispatchPossible, StringArgument(context.Arguments, "reason", null));
             }
             if (string.Equals(action, "update_statuses", StringComparison.Ordinal))
             {
                 return _service.UpdateStatuses(_session,
-                    ToolArgumentReader.String(context.Arguments, "goal", null),
+                    StringArgument(context.Arguments, "goal", null),
                     ReadStatusUpdates(context.Arguments, "updates"),
                     context.MarkDispatchPossible);
             }
             return _service.CloseActive(_session,
-                ToolArgumentReader.String(context.Arguments, "outcome", string.Empty),
+                StringArgument(context.Arguments, "outcome", string.Empty),
                 ReadStatusUpdates(context.Arguments, "updates"),
-                context.MarkDispatchPossible, ToolArgumentReader.String(context.Arguments, "reason", null));
+                context.MarkDispatchPossible, StringArgument(context.Arguments, "reason", null));
+        }
+
+        private static string StringArgument(IDictionary<string, object> arguments, string name, string fallback)
+        {
+            object value;
+            if (arguments == null || !arguments.TryGetValue(name, out value)) return fallback;
+            return value as string ?? (value as JValue)?.Value as string ?? fallback;
         }
 
         private ToolHandlerResult Project(

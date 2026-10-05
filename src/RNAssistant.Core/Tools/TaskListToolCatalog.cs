@@ -4,20 +4,20 @@ using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
 using RNAssistant.Core.Models;
 using RNAssistant.Core.Tools;
-using RNAssistant.Office.Services;
+using RNAssistant.Core.Services;
 
-namespace RNAssistant.Office.Tools
+namespace RNAssistant.Core.Tools
 {
-    internal static class TaskListToolCatalog
+    public static class TaskListToolCatalog
     {
-        internal const string SetToolId = "common.task_list_set";
+        public const string SetToolId = "common.task_list_set";
 
-        internal static bool Owns(string toolId)
+        public static bool Owns(string toolId)
         {
             return string.Equals(toolId, SetToolId, StringComparison.Ordinal);
         }
 
-        internal static IEnumerable<ToolCatalogEntry> GetTools()
+        public static IEnumerable<ToolCatalogEntry> GetTools()
         {
             yield return Projection(SetToolId,
                 "Task list: Save or revise your plan, update progress and durable step notes by current 1-based index, or record an outcome. Statuses express your assessment, not verified tool effects. An open list does not prevent a final answer. Runtime owns list and step identity.",
@@ -27,11 +27,15 @@ namespace RNAssistant.Office.Tools
         private static ToolCatalogEntry Projection(
             string id, string description, string schema, string name)
         {
-            return ControllerToolCatalogEntry.CreateTypedProjection(
-                new ToolDescriptor(id, description, schema),
-                new ToolPolicy(ToolEffect.Write, ToolVerification.Tool,
+            return new ToolCatalogEntry
+            {
+                Id = id, Host = "Common", Name = name, Description = description,
+                ArgumentSchemaJson = schema, BuiltIn = true, Enabled = true,
+                Scope = "session", AgentCanRun = true, MutatesLocalState = true,
+                Policy = new ToolPolicy(ToolEffect.Write, ToolVerification.Tool,
                     false, false, new[] { "agent", "plan" }),
-                name: name, scope: "session", mutatesLocalState: true);
+                Binding = TaskListToolHandler.BindingFor(id)
+            };
         }
 
         private static JObject NoteSchema()
@@ -40,7 +44,7 @@ namespace RNAssistant.Office.Tools
                 ["description"] = "Optional concise finding or decision with evidence, uncertainty or remaining dependency; keep only what later steps need. Omit to preserve an unchanged stage note; empty clears it." };
         }
 
-        internal static string Schema()
+        public static string Schema()
         {
             var action = new JObject
             {

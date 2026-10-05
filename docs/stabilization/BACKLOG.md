@@ -12,6 +12,16 @@
 новая возможность требует явной задачи, scope и owner; дефекты работающей системы
 приоритетнее расширения без конкретного пользовательского результата.
 
+## Office conversation-port source assertion — 2026-10-05
+
+Owner: Harness / conversation persistence. `architecture: Office conversation
+consumers use typed port` flags 13 `_chatStore` calls for DocumentArtifacts,
+performance/header diagnostics and runtime-data reset. All 13 matched source lines
+are identical in baseline `cf662c60`; the Task List slice did not change them.
+Audit each call against the typed conversation port and artifact/CAS ownership,
+then update consumers or the narrowly scoped source assertion. Do not suppress the
+entire test. Other four architecture checks passed; no Office qualification implied.
+
 ## Outlook compact catalog count assertion — 2026-10-05
 
 Owner: Tool catalog / Harness. The existing test
