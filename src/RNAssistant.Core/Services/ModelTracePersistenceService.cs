@@ -4,22 +4,25 @@ using RNAssistant.Core.Llm;
 using RNAssistant.Core.Models;
 using RNAssistant.Core.Persistence;
 
-namespace RNAssistant.Office.Services
+namespace RNAssistant.Core.Services
 {
-    internal sealed class ModelTracePersistenceService
+    public sealed class ModelTracePersistenceService
     {
         private readonly IEventStore _eventStore;
         private readonly SessionTraceWriteQueue _queue;
+        private readonly Action<string> _diagnosticLog;
 
-        public ModelTracePersistenceService(IEventStore eventStore)
-            : this(eventStore, new SessionTraceWriteQueue())
+        public ModelTracePersistenceService(IEventStore eventStore, Action<string> diagnosticLog = null)
+            : this(eventStore, new SessionTraceWriteQueue(), diagnosticLog)
         {
         }
 
-        internal ModelTracePersistenceService(IEventStore eventStore, SessionTraceWriteQueue queue)
+        internal ModelTracePersistenceService(IEventStore eventStore, SessionTraceWriteQueue queue,
+            Action<string> diagnosticLog = null)
         {
             _eventStore = eventStore ?? throw new ArgumentNullException(nameof(eventStore));
             _queue = queue ?? throw new ArgumentNullException("queue");
+            _diagnosticLog = diagnosticLog;
         }
 
         public void Configure(LlmRequestOptions options)
@@ -54,6 +57,7 @@ namespace RNAssistant.Office.Services
             record.TurnId = turnId;
             record.StepId = options.TraceStepId ?? record.RequestId;
             record.ModelAttemptId = options.TraceModelAttemptId ?? record.RequestId;
+            record.ContextSnapshotId = options.TraceContextReceipt?.SnapshotId;
             record.DocumentRuntimeId = documentRuntimeId;
             var payload = record.PayloadUtf8Bytes == null
                 ? SessionEventPayload.FromText(record.PayloadJson, record.PayloadContentType)
@@ -75,7 +79,7 @@ namespace RNAssistant.Office.Services
             finally
             {
                 if (timer.ElapsedMilliseconds >= 250)
-                    RNAssistant.Office.Diagnostics.RuntimeLog.Info(
+                    _diagnosticLog?.Invoke(
                         "Model trace timing: stage=" + descriptor.Kind + ", persist=" +
                         timer.ElapsedMilliseconds + "ms.");
             }

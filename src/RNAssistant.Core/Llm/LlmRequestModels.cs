@@ -97,6 +97,7 @@ namespace RNAssistant.Core.Llm
         public string TurnId { get; set; }
         public string StepId { get; set; }
         public string ModelAttemptId { get; set; }
+        public string ContextSnapshotId { get; set; }
         public string DocumentRuntimeId { get; set; }
         public List<ContextMessagePresentation> ContextMessages { get; set; }
         public bool? Streaming { get; set; }

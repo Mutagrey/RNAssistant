@@ -101,6 +101,16 @@ Neither a raw event type string nor a tool name can choose these properties.
 The model-trace adapter rejects an unknown source type instead of relabelling it as a
 failure, and the causal writer accepts only best-effort Domain Diagnostic kinds.
 
+Office and the workspace CLI configure the same Core `ModelTracePersistenceService`
+over `IEventStore`. `LlmClient` records the exact serialized request before dispatch,
+responses and streamed frames; `ModelProtocolClient` records rejected bodies and
+accepted diagnostic verdicts. Each attempt retains its transport `RequestId`,
+`ModelAttemptId`, logical `StepId` and, when compiled, `ContextSnapshotId`. Format
+repair gets a new attempt/request identity while retaining the frozen snapshot.
+The bounded per-session queue drains before terminal trace writes. These records
+use the existing stream/CAS; there is no separate CLI trace store or synthetic
+request built from compiler messages. Authorization headers are not trace payloads.
+
 | Event group | Lane | Meaning | Durability | Writer |
 |---|---|---|---|---|
 | `session.*`, `turn.*`, `step.*` | Agent | authority | mandatory | `ChatStore` internal only |

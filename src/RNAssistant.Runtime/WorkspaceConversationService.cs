@@ -438,6 +438,7 @@ namespace RNAssistant.Runtime
             private readonly IReadOnlyList<ToolCatalogEntry> _catalog;
             private readonly ResourceProviderRouter<WorkspaceFileResourceProvider> _resources;
             private readonly ModelContextCompiler _compiler;
+            private readonly ModelTracePersistenceService _modelTrace;
             private readonly Dictionary<string, ResourceRef> _observed = new Dictionary<string, ResourceRef>(StringComparer.Ordinal);
             private long _cursor;
             public ToolRuntime Tools { get; private set; }
@@ -451,6 +452,7 @@ namespace RNAssistant.Runtime
                 _chats = chats; _files = files; _workspace = workspace; _session = session;
                 _settings = settings.Clone(); _progress = progress; _acceptance = acceptance;
                 _compiler = new ModelContextCompiler(payloads);
+                _modelTrace = new ModelTracePersistenceService(new ChatEventStoreAdapter(chats));
                 _resources = new ResourceProviderRouter<WorkspaceFileResourceProvider>(new[]
                     { new WorkspaceFileResourceProvider(files, workspace) });
                 var client = new LlmClient(apiKeyProvider);
@@ -584,13 +586,12 @@ namespace RNAssistant.Runtime
                 }
                 RetainDeliveredObservations(snapshot);
                 options.TraceContextReceipt = snapshot.Receipt;
+                options.TraceSession = _session;
+                options.TracePurpose = "conversation";
+                _modelTrace.Configure(options);
                 _session.LastContextReceipt = snapshot.Receipt;
                 _chats.Save(_session);
                 var callContext = new ModelProtocolCallContext(_catalog.Where(tool => tool.Policy.IndependentLocalRead).Select(tool => tool.Id));
-                _chats.AppendTrace(_session, SessionEventTypes.LlmRequest,
-                    new { request.StepId, Protocol = ConversationResponse.ProtocolVersion, WorkspaceId = _workspace.WorkspaceId,
-                        ContextSnapshotId = snapshot.Id },
-                    JsonConvert.SerializeObject(snapshot.Messages), "application/json", request.RunId, request.TurnId, request.StepId);
                 var result = await _protocol.GetResponseAsync(new ModelProtocolRequest
                 {
                     Settings = _settings, AcceptedMessages = snapshot.Messages, ContextSnapshot = snapshot,
@@ -598,9 +599,6 @@ namespace RNAssistant.Runtime
                     CallableTools = _catalog, RunnableCatalog = _catalog,
                     CallContext = callContext, Options = options
                 }, null, cancellationToken).ConfigureAwait(false);
-                _chats.AppendTrace(_session, result.Failure == null ? SessionEventTypes.LlmResponse : SessionEventTypes.LlmFailure,
-                    new { request.StepId, Accepted = result.Response != null, Failure = result.Failure?.Kind.ToString() },
-                    result.Completion?.Content, "application/json", request.RunId, request.TurnId, request.StepId);
                 if (result.Failure != null) return AgentModelResult.Failed(result.Failure.Kind, result.Failure.Message);
                 if (result.ProviderRefusal != null) return AgentModelResult.Refused(result.ProviderRefusal);
                 if (result.Response == null) return AgentModelResult.Failed(ModelProtocolFailureKind.Infrastructure, "Missing accepted response.");

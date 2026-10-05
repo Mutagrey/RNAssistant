@@ -4,7 +4,7 @@ using System.Runtime.ExceptionServices;
 using System.Threading;
 using System.Threading.Tasks;
 
-namespace RNAssistant.Office.Services
+namespace RNAssistant.Core.Services
 {
     internal sealed class SessionTraceWriteQueue
     {

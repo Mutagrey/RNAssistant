@@ -18,10 +18,19 @@ Owner: model context / CLI evaluation. The fresh Gemma 12B counter task after th
 shared-compiler integration created `index.html` then repeated the same creation;
 runtime stopped it and acceptance failed. Traces retain both the verified change
 and subsequent errors as the compiler's existing completed-operation receipts.
-Isolate continuation behavior using the saved request and a comparable baseline /
-another model before changing projection or blaming model size. Closure needs a
-real multi-step create/read/verify result with the same production compiler and
-preserved mutation guards. Run metadata and local evidence are in [PROGRESS](PROGRESS.md).
+Isolation found no missing wire messages: all five requests in a fresh captured run
+matched the frozen compiler output. Seven single-request probes selected the next
+file with either receipt role; same-seed streaming/non-streaming output also matched.
+They do not prove autonomous completion. A full Gemma run still stopped after two
+files; reasoning on repeated the first create and timed out. GPT-OSS failed protocol
+before any tool, so it did not provide a continuation comparison.
+
+The concrete missing-attempt diagnostic gap is fixed: CLI now uses the common trace
+writer for actual HTTP requests, rejected bodies and attempt/snapshot correlation.
+Use those traces for the next protocol/continuation isolation; there is no confirmed
+receipt-role defect justifying a projection change. Closure needs a real multi-step
+create/read/verify result with the same production compiler and preserved mutation
+guards. Run metadata and local evidence are in [PROGRESS](PROGRESS.md).
 
 ## SDK project source-inclusion audit — 2026-10-05
 

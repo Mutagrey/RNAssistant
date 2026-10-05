@@ -6,12 +6,28 @@ a temporary workspace and fresh Chromium profile; it is not an Office/WebView2
 qualification or an agent functional grader.
 `python3 tests/cli/tool_result_projection_smoke.py` checks bounded semantic find,
 exact read delivery, invalidation after external edit, failed browser-result
-delivery, frozen format repair and the persisted context receipt.
+delivery, frozen format repair and the persisted context receipt. It also compares
+saved request bytes with actual HTTP bodies and checks rejected-response retention,
+attempt/snapshot correlation and API-key exclusion from trace metadata/payloads.
 `python3 tests/cli/omitted_read_guard_smoke.py` verifies that an exact file read
 omitted by the compiler's budget cannot authorize replacement and preserves the
 original bytes. Both use a scripted HTTP model, not real-model quality evidence.
 `python3 tests/cli/response_mode_smoke.py` checks explicit CLI `json_schema` /
 `json_object` selection and persisted model metadata.
+
+The small real-model continuation task is `tests/cli/counter_task.md`. Use a fresh
+workspace/session and the normal CLI with these arguments:
+
+```text
+--task-file tests/cli/counter_task.md --expect-files index.html,styles.css,app.js
+--min-reads 3 --min-writes 3 --require-web-verify --max-iterations 12 --max-tool-steps 12
+```
+
+Record the exact model
+digest, context and `--thinking on|off`; see [model comparison rules](../../docs/development-rules.md#сравнение-моделей).
+This is an opt-in real-model task, not a deterministic harness test. A passing CLI
+contract proves file/read/verification evidence; counter button behavior still
+requires an independent browser check.
 
 The independent M5 CSV dashboard task is `tests/cli/csv_dashboard_task.md`.
 Run `node tests/cli/csv_dashboard_grader.mjs <workspace>` on the resulting files,

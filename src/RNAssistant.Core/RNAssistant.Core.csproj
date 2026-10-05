@@ -186,6 +186,8 @@
     <Compile Include="Services\ResourceUri.cs" />
     <Compile Include="Services\ResourceProviderRouter.cs" />
     <Compile Include="Services\ModelContextCompiler.cs" />
+    <Compile Include="Services\ModelTracePersistenceService.cs" />
+    <Compile Include="Services\SessionTraceWriteQueue.cs" />
     <Compile Include="Services\ModelResultProjection.cs" />
     <Compile Include="Services\ToolResultMaterialization.cs" />
     <Compile Include="Services\ToolResultHistoryReader.cs" />

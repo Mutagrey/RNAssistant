@@ -3,8 +3,10 @@
 Shared compiler status (2026-10-05): CLI and Office now use the same frozen Core
 `ModelContextCompiler`; the separate CLI assembler is removed. Bounded semantic
 file discovery, exact reads, stale-body filtering and omitted-source write guards
-passed focused checks. The fresh Gemma 12B task failed after one file and repeated
-creates; full real-agent acceptance and the remaining §8.1 views/consumers stay open.
+passed focused checks. Follow-up isolation found no missing wire messages, but Gemma
+still failed autonomous continuation. CLI now uses the shared production trace writer
+for exact HTTP requests, rejected bodies and attempt/snapshot correlation. Full
+real-agent acceptance and the remaining §8.1 views/consumers stay open.
 
 Local model context (2026-10-04): the 8K Qwen 27B profile cannot admit a CLI
 Agent request with the current 4096-token output policy and mandatory reserves;
@@ -84,7 +86,7 @@ In 96.9 seconds it made 8 model requests / 8 accepted calls with no protocol
 violation: 1 verified create, 3 dispatched `target_exists` errors and 4 rejected
 repeat calls. It created only `index.html`, performed no exact reads or browser
 verification and stopped with `repeated_tool_no_progress`, acceptance failed,
-exit 5. Canonical request traces contain the successful path/effect and every
+exit 5. Saved compiler-message traces contain the successful path/effect and every
 error receipt; the final context is only 2108 estimated tokens, with no resource
 exclusion. This is a `MODEL_ERROR`/possible `CONTEXT_ERROR` case requiring isolation,
 not proof that Gemma is weak or that shared compilation improved task quality.
@@ -92,6 +94,64 @@ Session `0343a46fdbc847a0a57660cac4539388`; local task/log/state are retained in
 `/var/folders/k9/hr_94nt142x1f43jr6g0wr_00000gp/T/rna-shared-compiler-gemma-6g89vanv`.
 The model was unloaded after the run. A successful autonomous create/read/verify/
 repair scenario remains open; no model-specific prompt workaround was added.
+
+### CLI continuation isolation and shared model trace — 2026-10-05
+
+Owner: model context / CLI evaluation / Core trace persistence. At `b420fcab`,
+all five HTTP message arrays in a fresh Gemma run exactly matched the saved frozen
+compiler output. Successful write receipts were present and within budget. Seven
+isolated request replays, without tool execution, chose the next missing file:
+assistant receipts, user receipts and the original call/result pair all worked.
+The same-seed streaming/non-streaming replay produced identical output. This does
+not establish a receipt-role or transport defect, or prove full-task completion.
+Prompt/model sensitivity remains open; no prompt, result role or agent loop changed.
+
+The task is now retained as [counter_task.md](../../tests/cli/counter_task.md).
+Full runs used fresh empty workspaces, the same CLI/catalog/acceptance contract,
+Ollama 0.35.0, `json_schema`, 4096 output, temperature 0.2, top-p 1, one request at
+a time and limits of 12 iterations/12 tool steps. Required evidence was three
+files, three exact reads, three verified writes and current `web.verify` success.
+Gemma used `rna-gemma4-12b-32k:latest`, 32768 context, digest
+`cf94f3793da5f501e0a2948b34825db5baceed926438a78551ffaa83f85a4082`.
+GPT-OSS used `rna-gpt-oss-20b-16k:latest`, 16384 context, digest
+`236b951778f336db7e66af76ee93038d1fb7de34a790b89a508756373575aca9`.
+
+| Run | Observed result | Acceptance / classification |
+|---|---|---|
+| Gemma, reasoning off, 34.02 s | 5 captured HTTP attempts; 2 accepted/dispatched creates, 0 tool errors, 0 protocol repairs, then 3 no-call `continue` responses. `index.html` and `styles.css` only; 0 reads/verification. | `no_tool_progress`, failed, exit 5; `MODEL_ERROR`, possible `CONTEXT_ERROR`. |
+| GPT-OSS, reasoning off, 82.6 s | 10 invalid format attempts in the first step; 0 tool calls/files. The old trace omitted rejected bodies, so their exact malformed shape is unavailable. | `ProtocolExhausted`, failed, exit 5; `PROTOCOL_ERROR`; continuation quality unmeasured. |
+| Gemma, reasoning on, 360 s limit | 6 prepared model steps, 5 accepted create calls: 1 verified write, 3 dispatched `target_exists`, 1 rejected repeat. Only `index.html`; 0 reads/verification. Process stopped during step 6; old traces do not establish the total format-attempt count. | Timeout exit 124; explicit idempotent `resume` closed it as interrupted/unknown without replay (exit 3). `MODEL_ERROR`, possible `CONTEXT_ERROR`; no successful terminal action. |
+
+Local evidence is under `/var/folders/k9/hr_94nt142x1f43jr6g0wr_00000gp/T/`:
+`rna-gemma-wire-run-9bnn5i1i` (session `9214de7b920341ee8698039c113946b7`,
+including wire comparison and same-seed probes), `rna-shared-compiler-gptoss-eysi7epn`
+(session `5ded79ca923b41da8887624d9f8fd335`), `rna-gemma-thinking-run-xbx10c5r`
+(session `41fdd63ada144f71996260e597125091`) and
+`rna-receipt-diagnostic-z73r_0hs` (first three isolated probes).
+The proxy could not expose the model digest to CLI metadata; the exact Gemma digest
+was recorded separately in that run's summary. Models were unloaded between full
+runs and after the final run. The local Gemma profile uses the native `gemma4`
+renderer/parser; its generic template alone is not evidence of a broken profile.
+The [Ollama API contract](https://docs.ollama.com/api/openai-compatibility) documents
+streaming, structured response formats and `reasoning_effort`; these capabilities
+do not guarantee RNAssistant protocol or task acceptance.
+
+Concrete fix from this investigation: the existing `ModelTracePersistenceService`
+and bounded `SessionTraceWriteQueue` moved from Office to Core. CLI configures the
+same `LlmClient`/`ModelProtocolClient` sink through `IEventStore`; its synthetic
+compiler-message request and accepted-only response appends were removed. Actual
+request bytes, streamed frames, rejected bodies and verdicts enter the existing
+chat stream/CAS with attempt and frozen-snapshot correlation. Office retains its
+diagnostic logger through an injected callback. No model-call, mutation, recovery
+or source-authority policy changed.
+
+Evidence: CLI build passed; `storage: streaming` 3/3, `storage: model` 2/2 and
+dependency direction 2/2 passed. The extended scripted projection smoke verified
+all 5 actual request byte payloads, retained rejection, distinct repair identities
+under the same frozen snapshot and no API key in trace bodies/metadata. Interrupted
+model wait, idempotent non-replaying `resume` and explicit continuation passed.
+These are trace/runtime checks; the real-model failures above predate the passive
+trace change and are not claimed fixed. Windows/Office delivery remains unverified.
 
 Previous local-model result: on the same clean CSV task and then-current CLI source,
 Gemma 4 12B wrote three real files and passed 10/11 independent browser checks;

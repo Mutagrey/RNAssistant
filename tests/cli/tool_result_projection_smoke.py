@@ -1,5 +1,7 @@
 """Exercise current-turn file and browser results at the CLI model boundary."""
 
+import gzip
+import hashlib
 import json
 import os
 import subprocess
@@ -17,6 +19,7 @@ def main():
     if not CLI.is_file():
         raise SystemExit("Build src/RNAssistant.Cli/RNAssistant.Cli.csproj first.")
     requests = []
+    request_bodies = []
     responses = [
         {"message": "Find workspace files.", "action": "tool", "tool_calls": [
             {"name": "common.resources_find", "arguments": {"directory": "", "query": "app"}}]},
@@ -31,7 +34,8 @@ def main():
     class Handler(BaseHTTPRequestHandler):
         def do_POST(self):
             assert self.path == "/v1/chat/completions", self.path
-            requests.append(json.loads(self.rfile.read(int(self.headers["Content-Length"]))))
+            request_bodies.append(self.rfile.read(int(self.headers["Content-Length"])))
+            requests.append(json.loads(request_bodies[-1]))
             index = len(requests) - 1
             assert index < len(responses), "Unexpected extra model request"
             if index == 2:
@@ -67,7 +71,7 @@ def main():
                 'throw new Error("TOOL_RESULT_VISIBLE");', encoding="utf-8")
             env = dict(os.environ, RNA_STATE_ROOT=str(root / "state"),
                        RNA_BASE_URL=f"http://127.0.0.1:{server.server_port}",
-                       RNA_MODEL="scripted", RNA_API_KEY="ollama")
+                       RNA_MODEL="scripted", RNA_API_KEY="TRACE_MUST_NOT_CONTAIN_THIS_KEY")
             run = subprocess.run(["dotnet", str(CLI), "run", "--workspace", str(workspace),
                 "--message", "Find and read app.js, then verify index.html", "--max-iterations", "4",
                 "--max-tool-steps", "3", "--jsonl"], cwd=REPO, env=env,
@@ -102,7 +106,52 @@ def main():
             receipt = json.loads(inspected.stdout.splitlines()[-1])["data"]["contextReceipt"]
             assert receipt["ExcludedSuperseded"] > 0, receipt
             assert receipt["SnapshotId"] and receipt["ResourceGenerations"], receipt
-            print("PASS shared compiler: bounded find, exact read, stale receipt, frozen repair and saved receipt")
+
+            events = [json.loads(line)
+                      for path in (root / "state/chats").rglob("*.events.jsonl")
+                      for line in path.read_text(encoding="utf-8").splitlines()]
+
+            def payload(event):
+                reference = event["Payload"]
+                assert reference["Encryption"] == "none", reference
+                sha = reference["Sha256"]
+                body = (root / "state/chat-blobs" / sha[:2] / (sha + ".blob")).read_bytes()
+                if body.startswith(b"RNACAS01"):
+                    body = gzip.decompress(body[28:])
+                assert len(body) == reference["ByteLength"], reference
+                assert hashlib.sha256(body).hexdigest() == sha, reference
+                assert env["RNA_API_KEY"].encode() not in body, "API key leaked to trace payload"
+                return body
+
+            prepared = [event for event in events if event["Type"] == "llm.request"]
+            assert len(prepared) == len(requests), "Every wire attempt must have exactly one request trace"
+            for index, event in enumerate(prepared):
+                assert payload(event) == request_bodies[index], "Saved request differs from dispatched UTF-8 bytes"
+                assert event["Data"]["ContextSnapshotId"], event
+                assert event["RunId"] == final["RunId"], event
+            rejected = [event for event in events if event["Type"] == "agent.response.rejected"]
+            assert len(rejected) == 1, rejected
+            assert json.loads(payload(rejected[0])) == responses[3], "Rejected model body was lost"
+            assert rejected[0]["Data"]["Error"], rejected
+            assert rejected[0]["Data"]["RequestId"] == prepared[3]["Data"]["RequestId"], rejected
+            assert rejected[0]["Data"]["ModelAttemptId"] == prepared[3]["Data"]["ModelAttemptId"], rejected
+            for event in prepared[3:] + rejected:
+                assert event["Data"]["ContextSnapshotId"] == receipt["SnapshotId"], event
+            assert prepared[3]["Data"]["StepId"] == prepared[4]["Data"]["StepId"], prepared[3:]
+            for key in ("RequestId", "ModelAttemptId"):
+                assert prepared[3]["Data"][key] != prepared[4]["Data"][key], "Repair reused an attempt identity"
+            received = [event for event in events if event["Type"] == "llm.response"]
+            accepted = [event for event in events if event["Type"] == "model.response.accepted"]
+            assert len(received) == 5 and len(accepted) == 4, (len(received), len(accepted))
+            for index, event in enumerate(received):
+                assert event["Data"]["RequestId"] == prepared[index]["Data"]["RequestId"], event
+                # Streaming trace stores the assembled LlmCompletionResult;
+                # raw provider frames have their separate assistant.chunk records.
+                assert requests[index]["stream"] is True, requests[index]
+                content = json.loads(payload(event))["Content"]
+                assert json.loads(content) == responses[index], "Assembled response content was lost"
+            assert env["RNA_API_KEY"] not in json.dumps(events), "API key leaked to trace metadata"
+            print("PASS shared compiler and trace: exact wire bytes, rejected body, correlated repair, stale and saved receipts")
     finally:
         server.shutdown()
         server.server_close()

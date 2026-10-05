@@ -89,7 +89,7 @@ namespace RNAssistant.Office
             _conversationStore = new ChatConversationStoreAdapter(_chatStore);
             _eventStore = new ChatEventStoreAdapter(_chatStore);
             _inbox = ConversationInboxService.AcquireShared(_paths.Root, _eventStore);
-            _modelTracePersistence = new ModelTracePersistenceService(_eventStore);
+            _modelTracePersistence = new ModelTracePersistenceService(_eventStore, RuntimeLog.Info);
             _attachmentStore = new AttachmentStore(_paths, () => _settingsService.LoadStorageProtector());
             _chatResourceIngestion = new ChatResourceIngestionService(_attachmentStore, _chatStore.DocumentArtifacts);
             _toolStore = new ToolStore(_paths);
