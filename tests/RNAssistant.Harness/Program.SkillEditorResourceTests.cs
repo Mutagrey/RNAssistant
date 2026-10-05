@@ -1,4 +1,5 @@
 using System;
+using RNAssistant.Core.Services;
 using System.IO;
 using System.Linq;
 using System.Text;
@@ -51,7 +52,7 @@ namespace RNAssistant.Harness
                 File.WriteAllBytes(file, new byte[] { 239, 187, 191 }.Concat(Encoding.UTF8.GetBytes(body)).ToArray());
                 var adapter = FakeOfficeAdapter.ForHost("Word");
                 var executor = new OfficeToolExecutor(adapter, new VbaJournalStore(paths), store, new ToolStore(paths));
-                var catalog = new SkillCatalogService(adapter, executor.CapturePublishedSkills);
+                var catalog = new SkillCatalogService(adapter.HostName, executor.CapturePublishedSkills);
                 var published = catalog.GetVisibleSkills().Single(item => item.Id == skill.Id);
                 var session = NewSession(adapter);
                 using (var data = new ResourceDataPlaneService(executor.ResourceGateway))
@@ -98,7 +99,7 @@ namespace RNAssistant.Harness
                     BodyMarkdown = "# Core\r\n" + new string('ж', 70000) + "\r\n" });
                 var adapter = FakeOfficeAdapter.ForHost("Word");
                 var executor = new OfficeToolExecutor(adapter, new VbaJournalStore(paths), store, new ToolStore(paths));
-                var catalog = new SkillCatalogService(adapter, executor.CapturePublishedSkills);
+                var catalog = new SkillCatalogService(adapter.HostName, executor.CapturePublishedSkills);
                 var published = catalog.GetVisibleSkills();
                 var original = published.Single(item => item.Id == skill.Id);
                 var metadata = SkillPackageDto.From(original);
@@ -178,7 +179,7 @@ namespace RNAssistant.Harness
                 var original = store.SaveOne(new SkillDefinition { Id = "common.upload_original", Name = "Original", Description = "Before", BodyMarkdown = "# Keep" });
                 var adapter = FakeOfficeAdapter.ForHost("Word");
                 var executor = new OfficeToolExecutor(adapter, new VbaJournalStore(paths), store, new ToolStore(paths));
-                var catalog = new SkillCatalogService(adapter, executor.CapturePublishedSkills);
+                var catalog = new SkillCatalogService(adapter.HostName, executor.CapturePublishedSkills);
                 var session = NewSession(adapter);
                 using (var data = new ResourceDataPlaneService(executor.ResourceGateway))
                 {
@@ -232,7 +233,7 @@ namespace RNAssistant.Harness
                 var session = NewSession(adapter);
                 using (var data = new ResourceDataPlaneService(executor.ResourceGateway))
                 {
-                    var editor = new SkillEditorResourceService(executor.ResourceGateway, data, new SkillCatalogService(adapter, executor.CapturePublishedSkills));
+                    var editor = new SkillEditorResourceService(executor.ResourceGateway, data, new SkillCatalogService(adapter.HostName, executor.CapturePublishedSkills));
                     var body = new SkillReferenceMutationBody { Type = SkillReferencePayload.ContractType, ContractVersion = 1,
                         SkillId = "common.upload", ExpectedPackageRevision = "guard", Path = "references/rules.md", Content = "# Content" };
                     var request = UploadSkillMutation(data, editor, session, body);
@@ -276,7 +277,7 @@ namespace RNAssistant.Harness
                 var adapter = FakeOfficeAdapter.ForHost("Word");
                 var executor = new OfficeToolExecutor(adapter, new VbaJournalStore(paths), store, new ToolStore(paths));
                 var captures = 0;
-                var catalog = new SkillCatalogService(adapter, () => { captures++; return executor.CapturePublishedSkills(); });
+                var catalog = new SkillCatalogService(adapter.HostName, () => { captures++; return executor.CapturePublishedSkills(); });
                 var session = NewSession(adapter);
                 var request = SkillReferenceRequest(session, skill.Id, SkillRevision.Compute(store.Load().Single()));
                 using (var data = new ResourceDataPlaneService(executor.ResourceGateway))

@@ -25,8 +25,46 @@ up to 64 direct UTF-8 `references/*.md` files. The core front matter contains `i
 `host`, `name`, `description`, human-authored `version` and `enabled`.
 
 The visible catalog is built-in first, then custom, filtered to `Common` plus the
-current adapter host. A custom package cannot shadow a built-in id. Tool and skill
+current host (`Workspace` for the independent CLI). A custom package cannot shadow a built-in id. Tool and skill
 ids share one namespace and a collision fails request construction.
+
+### Independent workspace runtime
+
+Office and CLI share Core `SkillPublicationService` and `SkillCatalogService`.
+The former owns skill catalog publication, exact package/reference CAS reads and
+publication dependencies; the latter selects host metadata. Office's catalog
+provider delegates skill reads to that owner and retains its bounded continuation
+and host/runtime guards. Tools and prompts keep their existing publication owners.
+There is no second catalog store or persistent loaded-skill registry.
+
+The CLI supplies only enabled skill metadata to the model. It exposes bounded
+`common.resources_find(type="skill", query?)` (up to 50 entries, explicit
+incompleteness) and `common.resources_read(type="skill", target=<skill id>,
+referencePath?)`. Reference paths come from the core read's metadata. Whole skill
+cores/references above 16000 characters fail explicitly; partial instructions are
+not marked loaded and CLI reference pagination is not implemented. File reads
+remain the default `type="file"`. A skill read never grants a file mutation
+observation or counts toward file-read acceptance, even when the names match.
+
+CLI captures the committed skill generation and resource authority at the model
+request boundary. The existing frozen `ModelContextCompiler` owns hydration,
+freshness, omission, budgeting and repair. Body reads carry immutable CAS evidence
+with a dependency on their catalog publication. No live filesystem skill reader
+is used by the compiler. Deleting or editing authoring files cannot change an
+already published package; an explicit publication through the existing authoring
+owner is required. CLI skill authoring/import commands remain outside this slice.
+A workspace-local `SKILL.md` is an ordinary file, not an installed instruction.
+
+The workspace built-ins are `workspace.files` and
+`workspace.web_verify_repair`. They cover exact source/edit/final-read workflow
+and local browser verification/repair. Both require available file mutation
+tools; the web skill also requires `web.verify`. They are omitted for a read-only
+workspace, and the web skill is omitted when no supported browser is available.
+Skill selection stays with the single existing agent loop; the runtime does not
+force a skill call or retry `done` to satisfy an acceptance check. Actual LLM
+selection and task completion are separate evidence from scripted contract tests.
+
+### Publication and authoring
 
 Custom authoring uses atomic current-file replacement; published catalog generations
 retain immutable package bodies in the existing CAS/authority, without an editor

@@ -663,7 +663,7 @@ namespace RNAssistant.Harness
                     "exact CAS skill result remains readable");
                 AssertContains(durable.Result.DataJson, "\"revision\":\"" + revision + "\"",
                     "durable skill result retains exact revision");
-                var exactSkill = CatalogResourceProvider.SkillResource(skill);
+                var exactSkill = SkillPublicationService.SkillResource(skill);
                 AssertTrue(durableMessage.ResourceEvidence.Any(evidence => evidence.Resource.Uri == exactSkill.Uri &&
                     evidence.Resource.Revision == exactSkill.Revision),
                     "durable skill evidence pins the committed publication");

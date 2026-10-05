@@ -12,6 +12,17 @@
 новая возможность требует явной задачи, scope и owner; дефекты работающей системы
 приоритетнее расширения без конкретного пользовательского результата.
 
+## Outlook compact catalog count assertion — 2026-10-05
+
+Owner: Tool catalog / Harness. The existing test
+`tools: compact catalog rejects removed aliases` expects 3 Outlook runnable tools
+but the catalog returns 4. Reproduced unchanged on the pre-slice HEAD
+`2a6525fe3f2f9d1162ca70103a8134d4b260c175` in an isolated source archive;
+the shared skills slice also fails only this assertion in its 16-test `catalog`
+filter (15 pass). Audit current public membership and correct the contract or
+expectation as a separate slice; do not weaken removed-alias checks. This is
+host-neutral evidence, not real Outlook qualification.
+
 ## CLI final-read acceptance after CSV repair — 2026-10-05
 
 Owner: Runtime acceptance / shared model context. After the target-bound read
@@ -32,10 +43,15 @@ with 0/3 final reads. Its last HTTP request includes the remaining count and pat
 matching Ollama renderer/config inspection found no dropped second system message.
 Transport evidence does not prove model attention. Traces/metrics are in progress.
 
-Next implementation: connect the existing shared skill catalog/activation and
-minimal file/web verify-repair skills (currently missing M4/M5 scope), then repeat
-the fixed task. Preserve final freshness and separate browser/read evidence; do
-not lower acceptance or add a second loop to obtain a pass. Closure still needs
+The shared published skill catalog and file/web verify-repair instructions are now
+connected. A narrow explicit skill/file task passes with real Gemma, including
+recovery from an invented referencePath. The fixed CSV rerun still skips skill
+reads despite both metadata entries being present, reaches only 17 passed browser
+checks (1 failed / 6 not run) and is cancelled at the unchanged 600 s wall bound.
+There is no evidence here of autonomous skill selection or CSV completion.
+Preserve task/checks/bounds in subsequent model/endpoint comparisons, final
+freshness and separate browser/read evidence; do not lower acceptance or add a
+second loop to obtain a pass. Closure still needs
 autonomous creation with current final reads, then the unchanged feature follow-up
 under fixed bounds. Target-bound read recovery is fixed and tested; it no longer
 blocks a correctly read identical mutation.

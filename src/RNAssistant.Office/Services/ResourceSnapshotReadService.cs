@@ -1,7 +1,5 @@
 using System;
-using System.IO;
 using System.Linq;
-using System.Security.Cryptography;
 using RNAssistant.Core.Models;
 using RNAssistant.Core.Storage;
 
@@ -53,13 +51,7 @@ namespace RNAssistant.Office.Services
         // Callers negotiate their domain-specific size bound before hydration.
         internal static string ReadPayload(ChatBlobStore payloads, PayloadRef payload)
         {
-            if (payloads == null || payload == null) throw Error("RESOURCE_SNAPSHOT_UNAVAILABLE", "The exact snapshot payload is unavailable.");
-            string text;
-            try { text = payloads.ReadText(payload.ToBlobReference()); }
-            catch (Exception error) when (error is IOException || error is InvalidDataException || error is CryptographicException || error is System.Text.DecoderFallbackException)
-            { throw Error("RESOURCE_SNAPSHOT_UNAVAILABLE", "The exact snapshot payload is unavailable or corrupt."); }
-            if (text == null) throw Error("RESOURCE_SNAPSHOT_UNAVAILABLE", "The exact snapshot payload is unavailable.");
-            return text;
+            return RNAssistant.Core.Services.ResourcePublicationReader.ReadPayload(payloads, payload, long.MaxValue);
         }
 
         private static ResourceRequestException Error(string code, string message)

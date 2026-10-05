@@ -1547,7 +1547,7 @@ namespace RNAssistant.Harness
                 using (var data = new ResourceDataPlaneService(executor.ResourceGateway))
                 {
                     var reader = new SkillEditorResourceService(executor.ResourceGateway, data,
-                        new SkillCatalogService(adapter, executor.CapturePublishedSkills));
+                        new SkillCatalogService(adapter.HostName, executor.CapturePublishedSkills));
                     var session = NewSession(adapter);
                     var request = SkillReferenceRequest(session, original.Id, reference.Package.Revision);
                     var read = reader.Open(session, request, CancellationToken.None);

@@ -77,7 +77,7 @@ namespace RNAssistant.Runtime
 
         public IReadOnlyList<string> AvailableToolIds(WorkspaceDescriptor workspace)
         {
-            return new WorkspacePorts(_chats, _files, _payloads, _webSnapshots, workspace, null, new AppSettings(), null, null)
+            return new WorkspacePorts(_paths, _chats, _files, _payloads, _webSnapshots, workspace, null, new AppSettings(), null, null)
                 .ToolIds;
         }
 
@@ -152,7 +152,7 @@ namespace RNAssistant.Runtime
                 if (reasoningEnabled.HasValue) session.ReasoningEnabled = reasoningEnabled.Value;
 
                 var previous = RestoreAcceptedHistory(session);
-                var ports = new WorkspacePorts(_chats, _files, _payloads, _webSnapshots, workspace, session, settings, apiKeyProvider,
+                var ports = new WorkspacePorts(_paths, _chats, _files, _payloads, _webSnapshots, workspace, session, settings, apiKeyProvider,
                     progress, acceptedContract);
                 var runId = Guid.NewGuid().ToString("N");
                 session.LastRun = new ChatRunRecord
@@ -232,7 +232,7 @@ namespace RNAssistant.Runtime
                 var history = RestoreAcceptedHistory(session);
                 var continuation = AgentRunContinuation.Restore(run.Summary, run.Limits, 0, history);
                 var acceptance = session.LastRun.WorkspaceAcceptance ?? new WorkspaceRunAcceptance();
-                var ports = new WorkspacePorts(_chats, _files, _payloads, _webSnapshots, workspace, session,
+                var ports = new WorkspacePorts(_paths, _chats, _files, _payloads, _webSnapshots, workspace, session,
                     settings ?? new AppSettings(), apiKeyProvider, progress, acceptance, approve);
                 var result = await ConversationRunCoordinator.ResumeAsync(session.LastRun.RunId,
                     pendingId, continuation, ports, ports.Tools, ports, cancellationToken,
@@ -333,7 +333,8 @@ namespace RNAssistant.Runtime
                 var wire = ToolResultWire.Read(fact.Content);
                 if (!wire.Success || wire.Result.Status != ToolResultStatus.Ok) continue;
                 var data = JsonConvert.DeserializeObject<ResourceReadProjection>(wire.Result.DataJson);
-                if (string.IsNullOrWhiteSpace(data?.Target))
+                if (data?.Type != "file") continue;
+                if (string.IsNullOrWhiteSpace(data.Target))
                     throw new InvalidDataException("Accepted file read has no semantic target.");
                 foreach (var evidence in fact.ResourceEvidence ?? new List<ResourceEvidence>())
                     if (evidence != null && evidence.Complete && evidence.View == ResourceRepresentations.Text)
@@ -534,13 +535,16 @@ namespace RNAssistant.Runtime
             private readonly IReadOnlyList<ToolCatalogEntry> _catalog;
             private readonly ResourceProviderRouter<WorkspaceFileResourceProvider> _resources;
             private readonly ModelContextCompiler _compiler;
+            private readonly SkillPublicationService _skillPublications;
+            private readonly SkillCatalogService _skillCatalog;
+            private SkillCatalogSnapshot _skills;
             private readonly ModelTracePersistenceService _modelTrace;
             private readonly Dictionary<string, ResourceRef> _observed = new Dictionary<string, ResourceRef>(StringComparer.Ordinal);
             private long _cursor;
             public ToolRuntime Tools { get; private set; }
             public IReadOnlyList<string> ToolIds { get { return _catalog.Select(item => item.Id).ToArray(); } }
 
-            public WorkspacePorts(ChatStore chats, WorkspaceFileService files, ChatBlobStore payloads,
+            public WorkspacePorts(AppDataPaths paths, ChatStore chats, WorkspaceFileService files, ChatBlobStore payloads,
                 WorkspaceWebSnapshotStore webSnapshots, WorkspaceDescriptor workspace,
                 ChatSession session, AppSettings settings, Func<string> apiKeyProvider,
                 Action<WorkspaceRunEvent> progress, WorkspaceRunAcceptance acceptance = null,
@@ -556,12 +560,16 @@ namespace RNAssistant.Runtime
                 _protocol = new ModelProtocolClient(client.CompleteAsync);
                 var registry = new ToolHandlerRegistry();
                 var entries = new List<ToolCatalogEntry>();
-                Register(registry, entries, "common.resources_find", "Find up to 200 workspace resources in one directory; use returned semantic targets for reads. Narrow directory or query when incomplete.",
-                    Schema("directory", false, "query", false), false,
-                    new FileHandler(files, workspace, _resources, _observed, "find"));
-                Register(registry, entries, "common.resources_read", "Read a complete UTF-8 workspace file using a semantic target returned by discovery, or a known relative path.",
-                    Schema("target", true), false,
-                    new FileHandler(files, workspace, _resources, _observed, "read"));
+                var authorityStore = new ResourceAuthorityStore(paths);
+                _skillPublications = new SkillPublicationService(authorityStore, authorityStore,
+                    new ResourceMutationJournal(paths), payloads, new SkillStore(paths), "Workspace", WorkspaceSkillProvider.GetSkills());
+                _skillCatalog = new SkillCatalogService("Workspace", _skillPublications.Capture);
+                Register(registry, entries, "common.resources_find", "Find workspace files (default type=file, one directory, up to 200) or enabled skills (type=skill, up to 50). Use semantic targets; narrow the query when incomplete.",
+                    ResourceSchema(true), false,
+                    new WorkspaceResourceHandler(_resources.Select("file"), _skillPublications, () => _skills, _observed, true));
+                Register(registry, entries, "common.resources_read", "Read a complete UTF-8 file (default type=file) or published skill instructions (type=skill) using a semantic target. For a skill reference, also provide its listed referencePath. Bound: 16000 characters; no partial skill activation.",
+                    ResourceSchema(false), false,
+                    new WorkspaceResourceHandler(_resources.Select("file"), _skillPublications, () => _skills, _observed, false));
                 if (WorkspaceWebVerifier.FindBrowserExecutable() != null)
                     Register(registry, entries, "web.verify", "Load an immutable local HTML/CSS/JS snapshot in an isolated browser; check asset/runtime errors and any functional checks fixed by the accepted task contract.",
                         Schema("entryPath", true), false,
@@ -570,27 +578,28 @@ namespace RNAssistant.Runtime
                 {
                     Register(registry, entries, "files.create", "Create a new real UTF-8 file; never overwrite.",
                         Schema("relativePath", true, "text", true), true,
-                        new FileHandler(files, workspace, _resources, _observed, "create"));
+                        new FileHandler(files, workspace, _observed, "create"));
                     Register(registry, entries, "files.copy", "Copy a previously read complete UTF-8 file to a new path; never overwrite.",
                         Schema("relativePath", true, "targetPath", true), true,
-                        new FileHandler(files, workspace, _resources, _observed, "copy"));
+                        new FileHandler(files, workspace, _observed, "copy"));
                     Register(registry, entries, "files.move", "Move a previously read complete UTF-8 file to a new path; preserve file identity and never overwrite.",
                         Schema("relativePath", true, "targetPath", true), true,
-                        new FileHandler(files, workspace, _resources, _observed, "move"), true);
+                        new FileHandler(files, workspace, _observed, "move"), true);
                     Register(registry, entries, "files.patch", "Replace one exact unique text anchor in a previously read file.",
                         Schema("relativePath", true, "oldText", true, "newText", true), true,
-                        new FileHandler(files, workspace, _resources, _observed, "patch"));
+                        new FileHandler(files, workspace, _observed, "patch"));
                     Register(registry, entries, "files.replace", "Replace a previously read whole UTF-8 file.",
                         Schema("relativePath", true, "text", true), true,
-                        new FileHandler(files, workspace, _resources, _observed, "replace"));
+                        new FileHandler(files, workspace, _observed, "replace"));
                     Register(registry, entries, "files.delete", "Move a previously read UTF-8 file into managed workspace trash.",
                         Schema("relativePath", true), true,
-                        new FileHandler(files, workspace, _resources, _observed, "delete"), true);
+                        new FileHandler(files, workspace, _observed, "delete"), true);
                     Register(registry, entries, "files.restore", "Restore the latest managed deletion to its original path without overwriting.",
                         Schema("relativePath", true), true,
-                        new FileHandler(files, workspace, _resources, _observed, "restore"));
+                        new FileHandler(files, workspace, _observed, "restore"));
                 }
                 _catalog = entries;
+                _skills = VisibleSkills(_skillPublications.Capture());
                 Tools = new ToolRuntime(registry, "agent", false, true,
                     (context, preparation) => "pending_" + Guid.NewGuid().ToString("N"));
                 if (restorePendingObservation) RestorePendingObservation();
@@ -608,7 +617,8 @@ namespace RNAssistant.Runtime
                     if (fact.RunId != _session.LastRun.RunId || fact.ToolName != "common.resources_read") continue;
                     var wire = ToolResultWire.Read(fact.Content);
                     if (!wire.Success || wire.Result.Status != ToolResultStatus.Ok) continue;
-                    if ((string)JObject.Parse(wire.Result.DataJson)["target"] != path) continue;
+                    var source = JsonConvert.DeserializeObject<ResourceReadProjection>(wire.Result.DataJson);
+                    if (source?.Type != "file" || source.Target != path) continue;
                     var evidence = fact.ResourceEvidence?.SingleOrDefault(item => item.Complete &&
                         item.View == ResourceRepresentations.Text && item.Coverage?.Kind == ResourceCoverageKinds.Whole &&
                         item.Payload != null);
@@ -647,16 +657,37 @@ namespace RNAssistant.Runtime
                     ["required"] = required, ["additionalProperties"] = false }.ToString(Formatting.None);
             }
 
+            private static string ResourceSchema(bool find)
+            {
+                var schema = JObject.Parse(find ? Schema("directory", false, "query", false) : Schema("target", true, "referencePath", false));
+                schema["properties"]["type"] = new JObject { ["type"] = "string", ["enum"] = new JArray("file", "skill"),
+                    ["description"] = "Resource kind; defaults to file. Skill targets are enabled skill IDs." };
+                return schema.ToString(Formatting.None);
+            }
+
+            private SkillCatalogSnapshot VisibleSkills(SkillCatalogSnapshot published)
+            {
+                var selected = _skillCatalog.SelectPublished(published);
+                var ids = new HashSet<string>(_catalog.Select(tool => tool.Id), StringComparer.OrdinalIgnoreCase);
+                var skills = selected.Skills.Where(skill => skill.Enabled &&
+                    (skill.Id != WorkspaceSkillProvider.FilesId || ids.Contains("files.create")) &&
+                    (skill.Id != WorkspaceSkillProvider.WebId || ids.Contains("web.verify") && ids.Contains("files.patch"))).ToArray();
+                if (skills.Any(skill => ids.Contains(skill.Id)))
+                    throw new InvalidOperationException("A skill ID collides with an available tool ID.");
+                return new SkillCatalogSnapshot(skills, selected.Generation);
+            }
+
             public async Task<AgentModelResult> SendAsync(AgentModelRequest request, CancellationToken cancellationToken)
             {
                 var frozen = CaptureContextAuthority(request.RunId, cancellationToken);
+                _skills = VisibleSkills(_skillPublications.Capture(frozen.Get(SkillPublicationService.ScopeId)));
                 var options = ModelProtocolWire.CreateRequestOptions(_settings.AgentResponseMode, _catalog);
                 options.ReasoningEnabled = _session.ReasoningEnabled;
                 options.TraceStepId = request.StepId;
                 options.TraceModelAttemptId = "attempt_" + Guid.NewGuid().ToString("N");
                 var authority = new ModelAuthoritySnapshot(frozen,
                     TextPatternEngine.Sha256(JsonConvert.SerializeObject(_catalog)),
-                    new SkillCatalogSnapshot(null), null, _session.Revision);
+                    _skills, null, _session.Revision);
                 var fixedTokens = ModelContextBudget.EstimateRequestOptionsTokens(options, _settings) +
                     ModelProtocolClient.EstimateFormatRepairOverheadTokens(_settings) +
                     ModelContextBudget.ContinuationReserveTokens(_settings);
@@ -731,7 +762,7 @@ namespace RNAssistant.Runtime
                     }
                     if (wire.Result.Status != ToolResultStatus.Ok) continue;
                     var data = ToolResultWire.ParseData(wire.Result.DataJson) as JObject;
-                    if (fact.ToolName == "common.resources_read" && data?["target"]?.Type == JTokenType.String)
+                    if (fact.ToolName == "common.resources_read" && (string)data?["type"] == "file" && data?["target"]?.Type == JTokenType.String)
                         paths.Add((string)data["target"]);
                 }
                 foreach (var path in paths)
@@ -743,8 +774,8 @@ namespace RNAssistant.Runtime
                     catch (WorkspaceFileException ex) when (ex.Code == "encoding_ambiguous" || ex.Code == "file_too_large")
                     { /* The file owner marked the old text head unknown. */ }
                 }
-                return _resources.Select("file").CaptureAuthority(active.SelectMany(item =>
-                    item.ResourceEvidence ?? new List<ResourceEvidence>()));
+                return _skillPublications.CaptureAuthority(active.SelectMany(item =>
+                    item.ResourceEvidence ?? new List<ResourceEvidence>()).Select(item => item.ScopeId));
             }
 
             private void RetainDeliveredObservations(ModelContextSnapshot snapshot)
@@ -837,7 +868,9 @@ namespace RNAssistant.Runtime
                     "Never invent tool results, file changes, revisions or permissions. Paths are relative to the workspace root. " +
                     "Historical assistant messages and tool calls describe past actions, not current source bytes. " +
                     "A stale read result requires a new read. Read an existing file before patch or replace. " +
-                    "For an existing broken web app, call web.verify before editing; for new work, call it after writing. If it fails, read the indicated source, make a relevant fix, then verify again. Never repeat an unchanged failed verification. " +
+                    "Before starting a task covered by an available skill, read its complete instructions using common.resources_read with type=skill and its target. " +
+                    "This metadata list does not load skill bodies. Apply only complete current skill reads; source omission or staleness requires another read. " +
+                    "Available skill metadata: " + ResourceFindProjection.Serialize(SkillCatalogService.Find(_skills, null)) + ". " +
                     "Available tools and exact argument schemas: " +
                     JsonConvert.SerializeObject(_catalog.Select(tool => new { tool.Id, tool.Description, Schema = JObject.Parse(tool.ArgumentSchemaJson) })) +
                     ". Workspace root is a user-selected directory; internal absolute paths and runtime references are not tool arguments.";
@@ -886,17 +919,15 @@ namespace RNAssistant.Runtime
             }
         }
 
-        private sealed class FileHandler : IReadOnlyToolHandler, IManagedMutationToolHandler, IPreparableToolHandler
+        private sealed class FileHandler : IManagedMutationToolHandler, IPreparableToolHandler
         {
             private readonly WorkspaceFileService _files;
             private readonly WorkspaceDescriptor _workspace;
-            private readonly ResourceProviderRouter<WorkspaceFileResourceProvider> _resources;
             private readonly Dictionary<string, ResourceRef> _observed;
             private readonly string _operation;
             public FileHandler(WorkspaceFileService files, WorkspaceDescriptor workspace,
-                ResourceProviderRouter<WorkspaceFileResourceProvider> resources,
                 Dictionary<string, ResourceRef> observed, string operation)
-            { _files = files; _workspace = workspace; _resources = resources;
+            { _files = files; _workspace = workspace;
                 _observed = observed; _operation = operation; }
 
             private bool RequiresRead => _operation == "copy" || _operation == "move" ||
@@ -933,28 +964,7 @@ namespace RNAssistant.Runtime
                 try
                 {
                     cancellationToken.ThrowIfCancellationRequested();
-                    if (_operation == "find")
-                    {
-                        var directory = Value(context, "directory");
-                        var query = Value(context, "query");
-                        var page = _resources.Select("file").Find(directory, query);
-                        return Return(ToolResult.Ok(ResourceFindProjection.Message(page),
-                            ResourceFindProjection.Serialize(page), page.ResourceRefs), ToolEffectEvidence.None);
-                    }
-                    var path = Value(context, _operation == "read" ? "target" : "relativePath");
-                    if (_operation == "read")
-                    {
-                        var read = _resources.Select("file").Read(path);
-                        if (read.Result.Text.Length > 16000)
-                            return Return(ToolResult.Error("Whole file exceeds the model read bound; no write observation was accepted.",
-                                JsonConvert.SerializeObject(new { target = path, length = read.Result.Text.Length, code = "read_too_large" })), ToolEffectEvidence.None);
-                        read.RequireCompleteExactText();
-                        _observed[path] = read.Result.Resource.Reference;
-                        return Return(ToolResult.Ok("Complete resource representation read.",
-                            JsonConvert.SerializeObject(ResourceReadProjection.From(read.Result,
-                                path, "file", "workspace")), new[] { read.Result.Resource.Reference }),
-                            ToolEffectEvidence.None, read.Evidence.Single());
-                    }
+                    var path = Value(context, "relativePath");
                     WorkspaceFileObservation changed;
                     ResourceRef expected = null;
                     if (RequiresRead && !_observed.TryGetValue(path, out expected))

@@ -1,6 +1,68 @@
 # Stabilization progress
 
-Latest read-only correction (2026-10-05): skill capability filtering exposed an
+Latest shared workspace skills slice (2026-10-05): Office and CLI now use Core
+`SkillPublicationService` for committed skill catalogs, exact body/reference CAS
+reads and publication dependencies; `SkillCatalogService` selects host metadata.
+The former Office-only selection/publication/read implementations are removed.
+Existing custom catalog identity, CAS, mutation publication barriers and Office
+continuations remain in use. The shared resource publication/payload reader and
+typed request failure moved to Core; no second store or agent loop was introduced.
+
+CLI exposes `common.resources_find/read` with optional `type=skill` (file remains
+the default), semantic skill id and optional listed `referencePath`. Discovery is
+bounded to 50 enabled entries with explicit incompleteness; complete bodies above
+16000 characters fail explicitly. Only metadata is present before a body read.
+Frozen catalog scope/generation goes to the existing `ModelContextCompiler`;
+source omission/currentness stays there. Skill reads do not grant file mutation
+observations or count as file reads, including an identical skill/file name.
+Installed Common/Workspace skills are visible; Office-only and disabled entries
+are hidden, built-ins win collisions, and a workspace-local SKILL.md stays a file.
+The two new built-ins cover workspace files and local web verify/repair, filtered
+by actual writable/browser capabilities. CLI skill authoring and reference
+pagination remain outside this slice. Owner: shared skills storage/context and
+Runtime resource admission; the broader Office/filesystem dispatch scope stays open.
+
+Scripted production CLI evidence passes metadata/body separation, exact references,
+authoring drift/deletion with separate-process continuation, native tool pairing,
+file authority/read-count isolation, repair and unavailable-browser/read-only
+filtering. Existing read-acceptance (3 cases), read recovery (6), omitted-source,
+browser runtime and capability checks pass. Host-neutral harness: skills 5/5,
+skill editor 6/6, frozen prompt 1/1; catalog filter 15/16. Its Outlook tool-count
+assertion also fails identically on pre-slice HEAD `2a6525fe`; recorded separately
+in [BACKLOG](BACKLOG.md#outlook-compact-catalog-count-assertion--2026-10-05).
+CLI build: zero warnings/errors. Harness has two existing PDF CA1416 warnings.
+Version-format and diff checks passed. No Windows/Office/WebView2 qualification.
+
+Real Gemma: the new narrow [skill/file task](../../tests/cli/skill_file_task.md)
+passes in 29.51 s: an invented referencePath is rejected, the model retries the
+core correctly, receives the complete published `workspace.files` body, creates
+note.txt, reads its exact bytes and returns done. Acceptance passed, 1 current file
+read / 1 verified change. Five HTTP requests, no protocol rejections, 10 cumulative
+pair checks without errors. Input/output totals 10164/306, maxima 2524/70. This
+explicit skill request proves the route, not autonomous skill selection. Traces,
+source/binaries/profile and byte/body audits:
+`/var/folders/k9/hr_94nt142x1f43jr6g0wr_00000gp/T/rna-skill-file-gemma-v5awtzem`.
+
+The unchanged full CSV task still fails: the driver cancels at the existing 600 s
+wall bound (600.17 s, exit 5). Three creates and one replacement verified; the last
+browser check passes 17, fails invalid-message, leaves 6 not run. Final reads are
+0/3. Both skill metadata entries were present in every request, but the model read
+neither. Two multi-write batches were rejected before dispatch. Twelve HTTP
+requests / eleven completed responses, 53 cumulative pair checks without errors;
+input/output totals 88479/11374, maxima 13671/1831. No reported context/OOM error.
+No operator repair, reduced checks, raised bounds or follow-up run. The same
+Gemma digest, 32K/4096, system/user roles, json_schema, thinking off, sequential
+requests and 16-iteration/24-tool limits were used; the declared change is the
+skill catalog/schema/instruction route. Swap use 3266.12 → 3364.56 MiB; this was not
+an isolated performance benchmark. Exact failed-run source/binaries, profile,
+HTTP/CAS and audits:
+`/var/folders/k9/hr_94nt142x1f43jr6g0wr_00000gp/T/rna-skills-gemma-2dv8tzmw`.
+Both real runs unloaded the model afterwards. The later read-only guard is covered
+by the final narrow run and deterministic checks. The replaced file-handler read
+dependency/marker was removed; focused recovery checks cover the final write-only
+handler. Full M4/M5 remain open; the next concrete scope is below.
+
+Previous read-only correction (2026-10-05): skill capability filtering exposed an
 existing permission bug. `--read-only` prevented manifest creation but an existing
 manifest still produced a writable descriptor and advertised all file mutations.
 `WorkspaceStore.Open` now keeps both the descriptor and root mount read-only for
@@ -15,7 +77,7 @@ CLI build: zero warnings/errors; harness: two existing PDF CA1416 warnings.
 Version-format and diff checks passed. Windows/Office are not qualified. This
 permission fix is a separate slice from the shared skill catalog work in progress.
 
-Latest final-read evidence slice (2026-10-05): Runtime now supplies typed
+Previous final-read evidence slice (2026-10-05): Runtime now supplies typed
 `RUNTIME_CONTEXT.readAcceptance` when the accepted task requires file reads.
 It reports current distinct reads, the remaining count and expected paths without
 a current read, from this run's accepted facts and the same frozen authority
@@ -62,8 +124,8 @@ found no dropped second system message. This is source/config evidence, not a
 measurement of model attention. Saved HTTP/CAS, exact source/binaries, driver,
 model config and audits:
 `/var/folders/k9/hr_94nt142x1f43jr6g0wr_00000gp/T/rna-read-acceptance-gemma-bdaut27s`.
-Next: connect the existing skill catalog/activation and minimal file/web
-verify-repair skills to the CLI, then rerun the fixed creation/follow-up task.
+The then-planned skill catalog and file/web instruction slice is implemented
+and rerun evidence is recorded above; autonomous creation/follow-up remains open.
 The remaining premature-done case stays in
 [BACKLOG](BACKLOG.md#cli-final-read-acceptance-after-csv-repair--2026-10-05).
 
@@ -788,20 +850,17 @@ boundary, not a functional CSV score. Scripted HTTP tests confirmed both CLI
 transport modes and saved metadata. The existing v6 parser correctly rejected
 these outputs; no permissive JSON repair or separate agent loop was added.
 
-Next concrete slice (2026-10-05): connect the existing shared skill catalog and
-activation to CLI, including minimal file/web verify-repair skills; then rerun
-autonomous CSV creation/follow-up and collect the remaining
-E-FILE/E-RESUME/E-CONTEXT/E-CAPABILITY evidence for that task. The counter
-verify/repair loop passed one real Gemma run after fixing
-historical diagnostic currency. Latest call/result retention and CLI role selection
-and target-bound read recovery are now implemented. Frozen read-progress metadata
-and final authority refresh are also implemented; Gemma still returned premature
-done despite the explicit remaining count. The CSV reruns passed all 24 browser
-checks but failed final-read acceptance; details are above. Bounded
-find/read, one frozen compiler, explicit CLI recovery, durable
-historical snapshot verification and frozen click/text/CSV checks are implemented.
-M4 still needs mode filtering, real skills and structured question/answer handling;
-its first useful result is achieved, not its entire §11 scope.
+Next concrete slice (2026-10-05): M4 mode filtering (Chat/Plan/Agent) and
+structured question/answer handling in the same workspace runtime. Published
+skills, frozen skill context and the file/web instruction route are now implemented;
+a narrow real-model skill/file run passed. M5 still needs autonomous fixed CSV
+creation with current final reads and then the unchanged feature follow-up, plus
+remaining E-FILE/E-RESUME/E-CONTEXT/E-CAPABILITY evidence. Keep the task, checks
+and bounds fixed when comparing model/endpoint profiles, and record actual skill
+selection: the newest Gemma CSV run skipped both available skills and timed out.
+Latest-pair retention, typed read recovery, frozen read-progress metadata and final
+authority refresh are implemented; the quality/completion gap is still open.
+M4's first useful result is achieved, not its entire §11 scope.
 Raw/binary
 views, general preview UI and common Office/file dispatch remain open §8.1/M5–M7
 scope. Scripted runtime checks do not close real-model acceptance. M6–M11 have not

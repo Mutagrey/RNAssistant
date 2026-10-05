@@ -44,11 +44,11 @@ namespace RNAssistant.Office.Services
                         string.Equals(tool.Host, "Common", StringComparison.OrdinalIgnoreCase)))
                         items.Add(DescribeTool(root, tool));
                 if (!SkillKind(name)) continue;
-                foreach (var skill in Skills(root))
+                foreach (var skill in _catalogs.Skills.ReadDefinitions(root))
                 {
-                    items.Add(DescribeSkill(root, skill, null));
+                    items.Add(SkillPublicationService.DescribeSkill(root, skill, null));
                     foreach (var reference in skill.References ?? new List<SkillReferenceMetadata>())
-                        items.Add(DescribeSkill(root, skill, reference));
+                        items.Add(SkillPublicationService.DescribeSkill(root, skill, reference));
                 }
             }
             items = items.Where(item => string.IsNullOrEmpty(kind) || item.Kind == kind).ToList();
@@ -124,11 +124,8 @@ namespace RNAssistant.Office.Services
             }
             else
             {
-                var root = new ResourceRef(ResourceUri.Create("catalog", address.Segments[0]), exact.Revision);
-                var skill = FindSkill(root, address.Segments[1]);
-                var reference = address.Segments.Count == 4 ? FindReference(skill, address.Segments[3]) : null;
-                descriptor = DescribeSkill(root, skill, reference);
-                text = reference == null ? skill.BodyMarkdown ?? string.Empty : _catalogs.ReadReference(reference);
+                var read = _catalogs.Skills.ReadSkill(exact).Result;
+                descriptor = read.Resource; text = read.Text;
             }
             var payload = PayloadRef.FromBlob(_payloads.StoreText(text, descriptor.MimeType));
             if (position.Offset > text.Length) throw Error("Catalog cursor exceeds the exact snapshot.", "RESOURCE_CURSOR_INVALID");
@@ -142,15 +139,6 @@ namespace RNAssistant.Office.Services
                 RawContentIncluded = true, CompleteViewPayload = payload,
                 NextCursor = next < text.Length ? ResourceReadCursor.CreateRevisionBound(next, exact.Revision, binding) : null
             }, ResourceRefs = new[] { exact.Copy() } };
-        }
-
-        internal static ResourceRef SkillResource(SkillDefinition skill, string referencePath = null)
-        {
-            if (skill?.Publication == null || !skill.Publication.IsExact)
-                throw Error("The skill has no active publication.", "RESOURCE_SNAPSHOT_UNAVAILABLE");
-            var root = ResourceUri.Parse(skill.Publication.Uri).Segments[0];
-            return new ResourceRef(referencePath == null ? ResourceUri.Create("catalog", root, skill.Id, "body") :
-                ResourceUri.Create("catalog", root, skill.Id, "reference", ReferenceName(referencePath)), skill.Publication.Revision);
         }
 
         private ResourceAddress Address(string uri)
@@ -174,8 +162,7 @@ namespace RNAssistant.Office.Services
             var root = new ResourceRef(ResourceUri.Create("catalog", address.Segments[0]), exact.Revision);
             if (PromptKind(address.Segments[0])) return DescribePrompt(root, address.Segments[1]);
             if (ToolKind(address.Segments[0])) return DescribeTool(root, FindTool(root, address.Segments[1]), address.Segments[2] == "documentation");
-            var skill = FindSkill(root, address.Segments[1]);
-            return DescribeSkill(root, skill, address.Segments.Count == 4 ? FindReference(skill, address.Segments[3]) : null);
+            return _catalogs.Skills.Describe(exact);
         }
 
         private string ReadPrompt(ResourceRef root, string key)
@@ -199,8 +186,6 @@ namespace RNAssistant.Office.Services
             return descriptor;
         }
 
-        private SkillDefinition[] Skills(ResourceRef root)
-        { return JsonConvert.DeserializeObject<SkillDefinition[]>(_catalogs.Read(root)); }
         private IEnumerable<ToolCatalogEntry> Tools(ResourceRef root)
         {
             var tools = ResourceUri.Parse(root.Uri).Segments[0] == _catalogs.BuiltInToolsKind
@@ -232,30 +217,6 @@ namespace RNAssistant.Office.Services
                 MimeType = documentation ? "text/markdown" : "application/json", Mutable = false, Tracking = "strongly-tracked" };
             descriptor.Metadata["host"] = tool.Host;
             if (documentation) descriptor.Metadata["libraryRevision"] = ToolAuthoringService.LibraryRevision(tool);
-            descriptor.Representations.Add("text"); descriptor.Capabilities.Add("read");
-            descriptor.Dependencies.Add(new ResourceDependency(root, "text", ResourceCoverage.Whole(), "catalog-publication"));
-            return descriptor;
-        }
-        private SkillDefinition FindSkill(ResourceRef root, string id)
-        {
-            var values = Skills(root).Where(item => item.Id == id).Take(2).ToArray();
-            if (values.Length != 1) throw Error("The exact skill definition is unavailable or ambiguous.", "RESOURCE_SNAPSHOT_UNAVAILABLE");
-            return values[0];
-        }
-        private static string ReferenceName(string path) { return (path ?? "").Replace('\\', '/').Split('/').Last(); }
-        private static SkillReferenceMetadata FindReference(SkillDefinition skill, string name)
-        {
-            var matches = (skill.References ?? new List<SkillReferenceMetadata>()).Where(item => ReferenceName(item.Path) == name).Take(2).ToArray();
-            if (matches.Length != 1) throw Error("The exact reference is unavailable or ambiguous.", "RESOURCE_SNAPSHOT_UNAVAILABLE");
-            return matches[0];
-        }
-        private static ResourceDescriptor DescribeSkill(ResourceRef root, SkillDefinition skill, SkillReferenceMetadata reference)
-        {
-            skill.Publication = root.Copy();
-            var descriptor = new ResourceDescriptor { Reference = SkillResource(skill, reference?.Path), Provider = "catalog",
-                Title = skill.Id + (reference == null ? "" : " / " + reference.Path),
-                Kind = reference == null ? "skill" : "skill-reference", MimeType = "text/markdown", Mutable = false,
-                ByteLength = reference?.ByteLength, Tracking = "strongly-tracked" };
             descriptor.Representations.Add("text"); descriptor.Capabilities.Add("read");
             descriptor.Dependencies.Add(new ResourceDependency(root, "text", ResourceCoverage.Whole(), "catalog-publication"));
             return descriptor;

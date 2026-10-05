@@ -718,7 +718,7 @@ namespace RNAssistant.Core.Storage
             if ((skill.Version ?? string.Empty).Length > 64) return "Skill version is too long.";
             if ((skill.BodyMarkdown ?? string.Empty).Length > 500000) return "Skill bodyMarkdown is too large.";
             var skillHost = FirstNonEmpty(skill.Host, "Common");
-            if (!new[] { "Common", "Excel", "Word", "PowerPoint", "Outlook" }
+            if (!new[] { "Common", "Workspace", "Excel", "Word", "PowerPoint", "Outlook" }
                 .Any(host => string.Equals(host, skillHost, StringComparison.OrdinalIgnoreCase)))
             {
                 return "Unsupported skill host: " + (skill.Host ?? string.Empty) + ".";

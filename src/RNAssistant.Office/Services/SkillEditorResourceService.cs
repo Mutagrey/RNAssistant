@@ -1,3 +1,4 @@
+using RNAssistant.Core.Services;
 using System;
 using System.Collections.Generic;
 using System.Linq;
@@ -49,7 +50,7 @@ namespace RNAssistant.Office.Services
                     if (references.Length != 1) throw Error("RESOURCE_NOT_FOUND", "The exact published reference is unavailable or ambiguous.");
                     reference = references[0];
                 }
-                var exact = CatalogResourceProvider.SkillResource(skill, reference?.Path);
+                var exact = SkillPublicationService.SkillResource(skill, reference?.Path);
                 var read = _gateway.Read(session, new ResourceReadRequest { Reference = exact,
                     Representation = ResourceRepresentations.Text, MaxChars = 32000 }).Result;
                 var payload = read?.CompleteViewPayload;

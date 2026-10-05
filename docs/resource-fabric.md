@@ -56,6 +56,17 @@ request assembler are removed. A prior-turn read without freshly admitted author
 is unavailable. A body omitted by the compiler, or an incomplete/stale read, cannot
 authorize a CLI overwrite. `inspect` exposes the persisted context receipt.
 
+CLI resources also accept `type="skill"`: discovery returns up to 50 enabled
+host-visible metadata entries with explicit incompleteness; read selects the
+published core by skill id or a listed `referencePath`. Core
+`SkillPublicationService` supplies the same exact CAS body/descriptor used by
+Office's catalog provider. Its evidence depends on the committed catalog root;
+raw authoring drift is not activation. The CLI adds that catalog scope and skill
+generation to the compiler's frozen authority. Skill reads grant neither file
+write authority nor file-read acceptance. The 16000-character whole-read bound
+fails explicitly; CLI reference continuation is open scope. See
+[skills](skills.md#independent-workspace-runtime) for selection and publication.
+
 The file owner publishes mutation effects. Guarded `files.delete` moves an accepted complete
 UTF-8 file into `.rnassistant/trash`, verifies its retained preimage and publishes an
 unavailable head. Explicit `files.restore` moves that managed preimage back only

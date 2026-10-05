@@ -58,7 +58,7 @@ namespace RNAssistant.Office.Tools
             cancellationToken.ThrowIfCancellationRequested();
             CapabilityToolOutcome outcome;
             try { outcome = _service.Execute(_toolId, context.Arguments, _catalog, _skills, _session, _manualRun); }
-            catch (RNAssistant.Office.Services.ResourceRequestException error)
+            catch (RNAssistant.Core.Models.ResourceRequestException error)
             { return OfficeToolFailure.Resource(error); }
             if (outcome == null)
                 throw new InvalidOperationException(

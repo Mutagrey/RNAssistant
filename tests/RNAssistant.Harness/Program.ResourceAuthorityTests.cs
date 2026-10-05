@@ -676,8 +676,8 @@ namespace RNAssistant.Harness
                 var active = executor.CaptureSkills();
                 var publishedSkill = active.Skills.Single(item => item.Id == skill.Id);
                 var r1 = publishedSkill.Publication;
-                var references = new[] { r1, CatalogResourceProvider.SkillResource(publishedSkill),
-                    CatalogResourceProvider.SkillResource(publishedSkill, "references/details.md") };
+                var references = new[] { r1, SkillPublicationService.SkillResource(publishedSkill),
+                    SkillPublicationService.SkillResource(publishedSkill, "references/details.md") };
                 Func<ResourceRef, string, int, ResourceReadResult> read = (reference, cursor, max) => gateway.Read(session,
                     new ResourceReadRequest { Reference = reference, Representation = "text", Cursor = cursor, MaxChars = max }).Result;
                 var first = references.Select(reference => read(reference, null, 8)).ToArray();
@@ -780,7 +780,7 @@ namespace RNAssistant.Harness
                 var publishedSkill = active.Skills.Skills.Single(item => item.Id == skill.Id);
                 System.IO.File.WriteAllText(executor.Payloads.PathFor(publishedSkill.References.Single().Payload.Sha256), "CORRUPT CAS");
                 AssertEqual("RESOURCE_SNAPSHOT_UNAVAILABLE", RuntimeThrows<ResourceRequestException>(() => read(
-                    CatalogResourceProvider.SkillResource(publishedSkill, "references/details.md"))).ErrorCode, "corrupt reference CAS has a typed unavailable result");
+                    SkillPublicationService.SkillResource(publishedSkill, "references/details.md"))).ErrorCode, "corrupt reference CAS has a typed unavailable result");
                 AssertEqual(generation, executor.ResourceAuthority.Store.Capture(scope).Generation, "missing/corrupt catalog reads cannot advance authority");
                 AssertEqual(root.Revision, executor.ResourceAuthority.Store.GetHead(scope, root.Identity).Revision.Revision, "failures never replace a catalog head");
             });

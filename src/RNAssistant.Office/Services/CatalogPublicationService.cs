@@ -12,19 +12,15 @@ namespace RNAssistant.Office.Services
     // Catalog files are authoring storage. Only a committed exact CAS snapshot is active.
     internal sealed class CatalogPublicationService
     {
-        internal static readonly ResourceAuthorityScopeId ScopeId = new ResourceAuthorityScopeId("catalog", "local");
+        internal static readonly ResourceAuthorityScopeId ScopeId = SkillPublicationService.ScopeId;
         internal const string PromptDefaultsKind = "prompt-defaults";
         private readonly ResourceAuthorityService _authority;
         private readonly ResourceMutationJournal _journal;
         private readonly ToolStore _tools;
-        private readonly SkillStore _skills;
         private readonly Func<string> _prompts;
         private readonly string _promptDefaults = PromptSettingsService.CaptureTemplates(new AppSettings());
-        private readonly object _sync = new object();
-        private string _skillRevision;
-        private SkillCatalogSnapshot _skillSnapshot;
-        private readonly SkillCatalogSnapshot _builtIns;
-        internal string BuiltInKind { get; private set; }
+        internal SkillPublicationService Skills { get; private set; }
+        internal string BuiltInKind { get { return Skills.BuiltInKind; } }
         private BuiltInToolPublication[] _builtInTools;
         internal string BuiltInToolsKind { get; private set; }
         internal bool HasBuiltInTools { get { return _builtInTools != null; } }
@@ -32,12 +28,11 @@ namespace RNAssistant.Office.Services
         internal CatalogPublicationService(ResourceAuthorityService authority, ResourceMutationJournal journal,
             ToolStore tools, SkillStore skills, Func<string> prompts, IOfficeApplicationAdapter adapter = null)
         {
-            _authority = authority; _journal = journal; _tools = tools; _skills = skills; _prompts = prompts;
-            BuiltInKind = "builtin-skills-" + (adapter?.HostName ?? "common").ToLowerInvariant();
+            _authority = authority; _journal = journal; _tools = tools; _prompts = prompts;
             BuiltInToolsKind = "builtin-tools-" + (adapter?.HostName ?? "common").ToLowerInvariant();
-            _builtIns = new SkillCatalogSnapshot(BuiltInSkillProvider.GetSkills(adapter));
+            Skills = new SkillPublicationService(authority.Store, authority.Revisions, journal, authority.Payloads,
+                skills, adapter?.HostName, BuiltInSkillProvider.GetSkills(adapter));
             // Registration is a publication boundary, never a provider/COM read during compile.
-            PublishBuiltIns(BuiltInKind);
             PublishBuiltIns(PromptDefaultsKind);
         }
 
@@ -63,28 +58,16 @@ namespace RNAssistant.Office.Services
             var address = ResourceUri.Parse(identity.Uri);
             if (address.Provider != "catalog" || address.Segments.Count != 1)
                 throw new InvalidOperationException("An exact catalog publication target is required.");
+            if (Skills.Owns(address.Segments[0])) return Skills.CaptureReadBack(identity);
             string json;
             var parts = new List<PayloadRef>();
             switch (address.Segments[0])
             {
                 case "tools": json = JsonConvert.SerializeObject(_tools?.Load() ?? new List<RNAssistant.Core.Tools.ToolCatalogEntry>()); break;
-                case "skills":
-                    var skills = _skills.Load();
-                    foreach (var skill in skills)
-                        foreach (var reference in skill.References ?? new List<SkillReferenceMetadata>())
-                        {
-                            string body, error; SkillReferenceMetadata verified;
-                            if (!_skills.TryReadReference(skill, reference.Path, out body, out verified, out error))
-                                throw new ResourceRequestException("Skill reference cannot be published: " + error, "RESOURCE_SNAPSHOT_UNAVAILABLE", false);
-                            reference.Payload = PayloadRef.FromBlob(_authority.Payloads.StoreText(body, "text/markdown"));
-                            parts.Add(reference.Payload);
-                        }
-                    json = JsonConvert.SerializeObject(skills); break;
                 case "prompts": json = _prompts(); break;
                 case PromptDefaultsKind: json = _promptDefaults; break;
                 default:
-                    if (address.Segments[0] == BuiltInKind) json = JsonConvert.SerializeObject(_builtIns.Skills);
-                    else if (HasBuiltInTools && address.Segments[0] == BuiltInToolsKind)
+                    if (HasBuiltInTools && address.Segments[0] == BuiltInToolsKind)
                     { json = JsonConvert.SerializeObject(_builtInTools); parts.AddRange(_builtInTools.Select(item => item.Documentation)); }
                     else throw new InvalidOperationException("Unsupported catalog publication.");
                     break;
@@ -95,6 +78,7 @@ namespace RNAssistant.Office.Services
 
         internal ResourceRef Current(string kind)
         {
+            if (Skills.Owns(kind)) return Skills.Current(kind);
             if (kind != "skills" && kind != "tools" && kind != "prompts" && kind != PromptDefaultsKind && kind != BuiltInKind &&
                 !(HasBuiltInTools && kind == BuiltInToolsKind)) throw new InvalidOperationException("Unsupported catalog kind.");
             var identity = new ResourceIdentity(ResourceUri.Create("catalog", kind));
@@ -127,16 +111,13 @@ namespace RNAssistant.Office.Services
         internal PublishedCatalogSnapshot Capture()
         {
             var frozen = CaptureReady();
-            return new PublishedCatalogSnapshot(frozen, CaptureSkills(frozen),
+            return new PublishedCatalogSnapshot(frozen, Skills.Capture(frozen),
                 JsonConvert.DeserializeObject<RNAssistant.Core.Tools.ToolCatalogEntry[]>(Read(Known(frozen, "tools"))),
                 Read(Known(frozen, "prompts")));
         }
 
         internal SkillCatalogSnapshot CaptureSkills()
-        {
-            Current("skills"); Current(BuiltInKind);
-            return CaptureSkills(_authority.CaptureMany(new[] { ScopeId }).Get(ScopeId));
-        }
+        { return Skills.Capture(); }
 
         private static ResourceRef Known(ResourceAuthoritySnapshot snapshot, string kind)
         {
@@ -144,27 +125,6 @@ namespace RNAssistant.Office.Services
             if (head?.Knowledge != HeadKnowledge.Known)
                 throw new ResourceRequestException("Catalog publication is unresolved.", "RESOURCE_HEAD_UNKNOWN", false);
             return head.Revision;
-        }
-
-        private SkillCatalogSnapshot CaptureSkills(ResourceAuthoritySnapshot frozen)
-        {
-            var exact = frozen.GetHead(new ResourceIdentity("rna://catalog/skills"));
-            var builtin = frozen.GetHead(new ResourceIdentity("rna://catalog/" + BuiltInKind));
-            if (exact.Knowledge != HeadKnowledge.Known || builtin.Knowledge != HeadKnowledge.Known)
-                throw new ResourceRequestException("Catalog publication is unresolved.", "RESOURCE_HEAD_UNKNOWN", false);
-            var generation = exact.Revision.Revision + ":" + builtin.Revision.Revision;
-            lock (_sync)
-            {
-                if (_skillRevision == generation) return _skillSnapshot;
-                var entries = new[] { builtin.Revision, exact.Revision }.SelectMany(reference => {
-                    var values = JsonConvert.DeserializeObject<SkillDefinition[]>(Read(reference));
-                    foreach (var entry in values) entry.Publication = reference.Copy();
-                    return values;
-                }).GroupBy(item => item.Id, StringComparer.OrdinalIgnoreCase).Select(group => group.First());
-                var snapshot = new SkillCatalogSnapshot(entries, generation);
-                _skillSnapshot = snapshot; _skillRevision = generation;
-                return snapshot;
-            }
         }
 
         internal IReadOnlyList<RNAssistant.Core.Tools.ToolCatalogEntry> CaptureTools()
@@ -198,13 +158,11 @@ namespace RNAssistant.Office.Services
             var address = ResourceUri.Parse(exact.Uri);
             if (address.Provider != "catalog" || address.Segments.Count != 1)
                 throw Unavailable("A catalog publication root is required.");
+            if (Skills.Owns(address.Segments[0])) return Skills.Read(exact);
             var snapshot = _authority.Store.Capture(ScopeId);
             var metadata = _authority.RequirePublished(snapshot, exact);
             return ReadPayload(metadata?.Payload, 8L * 1024 * 1024);
         }
-
-        internal string ReadReference(SkillReferenceMetadata reference)
-        { return ReadPayload(reference?.Payload, SkillStore.MaximumSkillReferenceBytes); }
 
         internal BuiltInToolPublication[] ReadBuiltInTools(ResourceRef root)
         { return ParseBuiltInTools(Read(root)); }

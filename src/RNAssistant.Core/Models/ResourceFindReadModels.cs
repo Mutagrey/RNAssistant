@@ -85,6 +85,8 @@ namespace RNAssistant.Core.Models
         [JsonProperty("complete")] public bool Complete { get; set; }
         [JsonProperty("hydratedForNextModelStep")] public bool HydratedForNextModelStep { get; set; }
         [JsonProperty("rawContentIncluded")] public bool RawContentIncluded { get; set; }
+        [JsonProperty("references", NullValueHandling = NullValueHandling.Ignore)]
+        public IReadOnlyList<SkillReferenceProjection> References { get; set; }
 
         public static ResourceReadProjection From(ResourceReadResult result, string target, string type, string scope)
         {
@@ -96,6 +98,12 @@ namespace RNAssistant.Core.Models
                 Complete = result.Complete, HydratedForNextModelStep = result.HydratedForNextModelStep,
                 RawContentIncluded = result.RawContentIncluded };
         }
+    }
+
+    public sealed class SkillReferenceProjection
+    {
+        [JsonProperty("path")] public string Path { get; set; }
+        [JsonProperty("byteLength")] public long ByteLength { get; set; }
     }
 
     // A provider read and the evidence delivered with that same observation.

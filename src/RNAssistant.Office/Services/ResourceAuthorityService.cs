@@ -48,13 +48,7 @@ namespace RNAssistant.Office.Services
                     if (fork != null) return new[] { fork.NewGeneration }.Concat(copy.SourcePublicationPath).ToArray();
                 }
             }
-            var head = snapshot.GetHead(exact.Identity);
-            if (head?.Knowledge == HeadKnowledge.Known && head.Revision.Uri == exact.Uri && head.Revision.Revision == exact.Revision)
-                return new[] { head.AuthorityGeneration };
-            var publication = snapshot.Commits.LastOrDefault(commit => commit.HeadChanges.Any(change =>
-                change.After.Knowledge == HeadKnowledge.Known && change.After.Revision.Uri == exact.Uri &&
-                change.After.Revision.Revision == exact.Revision));
-            return publication == null ? null : new[] { publication.NewGeneration };
+            return ResourcePublicationReader.PublicationOrder(snapshot, exact);
         }
 
         internal ResourceRevisionMetadata RequirePublished(ResourceAuthoritySnapshot snapshot, ResourceRef exact, ChatSession session = null)

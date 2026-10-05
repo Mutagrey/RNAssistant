@@ -126,6 +126,11 @@
     <Compile Include="Models\ChartArtifactModels.cs" />
     <Compile Include="Models\ContextModels.cs" />
     <Compile Include="Models\SkillModels.cs" />
+    <Compile Include="Models\ResourceRequestException.cs" />
+    <Compile Include="Services\SkillCatalogService.cs" />
+    <Compile Include="Services\SkillPublicationService.cs" />
+    <Compile Include="Services\ResourcePublicationReader.cs" />
+    <Compile Include="Services\WorkspaceSkillProvider.cs" />
     <Compile Include="Tools\ToolCatalogEntry.cs" />
     <Compile Include="Tools\ToolInvocation.cs" />
     <Compile Include="Tools\ToolDisplayMetadata.cs" />

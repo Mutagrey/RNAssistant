@@ -1,4 +1,5 @@
 using System;
+using RNAssistant.Core.Services;
 using System.Collections.Generic;
 using System.Linq;
 using Newtonsoft.Json;
@@ -19,7 +20,7 @@ namespace RNAssistant.Office.Tools
             Func<SkillCatalogSnapshot> publishedSkills, ResourceGatewayService resources)
         {
             _resources = resources ?? throw new ArgumentNullException(nameof(resources));
-            _skillCatalog = new SkillCatalogService(adapter ?? throw new ArgumentNullException(nameof(adapter)), publishedSkills);
+            _skillCatalog = new SkillCatalogService((adapter ?? throw new ArgumentNullException(nameof(adapter))).HostName, publishedSkills);
         }
 
         private IReadOnlyList<SkillDefinition> CapabilitySkills(bool manualRun, IReadOnlyList<SkillDefinition> runtimeSkills)
@@ -37,7 +38,7 @@ namespace RNAssistant.Office.Tools
             if (HasArgument(arguments, "referencePath")) return ReadSkillReference(arguments, skill, session);
             if (HasArgument(arguments, "offset") || HasArgument(arguments, "maxChars"))
                 return CapabilityToolOutcome.Error("Offsets and page sizes belong to resource continuation.", null, "capability_runtime_state_not_allowed", false);
-            var exact = CatalogResourceProvider.SkillResource(skill);
+            var exact = SkillPublicationService.SkillResource(skill);
             var result = _resources.ReadWhole(session, exact, "text").Result;
             return CapabilityToolOutcome.Ok("Skill loaded: " + skill.Id + ". No tool schema was admitted by this resource read.",
                 JsonConvert.SerializeObject(new {
@@ -56,7 +57,7 @@ namespace RNAssistant.Office.Tools
             var path = ToolArgumentReader.String(arguments, "referencePath", string.Empty);
             var metadata = (skill.References ?? new List<SkillReferenceMetadata>()).SingleOrDefault(item => item.Path == path);
             if (metadata == null) return CapabilityToolOutcome.Error("The selected reference is not part of this publication.", null, "skill_reference_unavailable", false);
-            var exact = CatalogResourceProvider.SkillResource(skill, path);
+            var exact = SkillPublicationService.SkillResource(skill, path);
             var action = ToolArgumentReader.String(arguments, "action", "read").Trim().ToLowerInvariant();
             string cursor = null;
             if (action == "next")

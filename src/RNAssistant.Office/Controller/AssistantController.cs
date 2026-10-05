@@ -119,7 +119,7 @@ namespace RNAssistant.Office
             _toolCatalog = new ToolCatalogService(_adapter, _toolExecutor);
             _officeContextCapture = new OfficeContextCaptureService(_adapter, _toolExecutor.DocumentRuntime,
                 _toolExecutor.ResourceAuthority, _toolExecutor.Payloads);
-            _skillCatalog = new SkillCatalogService(_adapter, _toolExecutor.CapturePublishedSkills);
+            _skillCatalog = new SkillCatalogService(_adapter.HostName, _toolExecutor.CapturePublishedSkills);
             _chatRuns = new ChatRunRegistry(_paths);
             _casMaintenanceService = new CasMaintenanceService(
                 _paths,

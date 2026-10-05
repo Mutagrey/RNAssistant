@@ -1,5 +1,19 @@
 # RNAssistant Harness
 
+`python3 tests/cli/skills_runtime_smoke.py` checks the production CLI with a scripted
+HTTP model: metadata-only discovery, Common/Workspace and enabled filtering,
+built-in precedence, exact core/reference CAS reads after authoring drift/deletion,
+native call/result pairing, no file authority/count from a skill read, file repair
+and continuation in a new process. It is contract evidence, not LLM qualification.
+For changes to the shared publication owner, use `skills:`, `skill editor:` and
+the `resource cutover: ... catalog ...` tests for immutable publications, exact
+continuations and missing/corrupt snapshots. No Office/VSTO build is required for
+these host-neutral checks; real Windows/Office behavior remains a separate gate.
+`tests/cli/skill_file_task.md` is the narrow real-model skill/create/read fixture:
+use a fresh workspace with `--expect-files note.txt --min-reads 1 --min-writes 1`,
+and additionally audit an accepted complete skill body in the actual HTTP context
+and exact `note.txt` bytes. It does not replace the autonomous CSV task/follow-up.
+
 The independent CLI's optional real-browser check is
 `python3 tests/cli/web_verifier_smoke.py` after building `RNAssistant.Cli`. It uses
 a temporary workspace and fresh Chromium profile; it is not an Office/WebView2
