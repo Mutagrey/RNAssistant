@@ -58,7 +58,8 @@ namespace RNAssistant.Cli
             if (args[0] == "env")
             {
                 Output(jsonl, "environment", new { workspace.WorkspaceId, workspace.RootPath,
-                    profile = "development", capabilities = service.AvailableToolIds(workspace) });
+                    profile = "development", capabilities = service.AvailableToolIds(workspace,
+                        ChatModes.Require(Value(options, "mode", ChatModes.Agent))) });
                 return 0;
             }
             if (args[0] == "sessions")
@@ -112,6 +113,7 @@ namespace RNAssistant.Cli
                     modelConfiguration = session.LastRun?.ModelConfiguration,
                     contextReceipt = session.LastContextReceipt,
                     acceptance = session.LastRun?.WorkspaceAcceptance,
+                    userInput = service.GetPendingQuestions(session),
                     interruptedToolId = session.LastRun?.InterruptedToolId,
                     interruptedPath = session.LastRun?.InterruptedFilePath,
                     interruptedEffectPossible = session.LastRun?.InterruptedEffectPossible,
@@ -121,6 +123,13 @@ namespace RNAssistant.Cli
             if (args[0] == "resume")
             {
                 var session = service.PrepareResume(workspace, Required(options, "session"));
+                var questions = service.GetPendingQuestions(session);
+                if (questions != null)
+                {
+                    Output(jsonl, "run.needs_input", new QuestionsRequired
+                    { SessionId = session.Id, RunId = questions.RunId, UserInput = questions });
+                    return 3;
+                }
                 var pending = session.LastRun?.KernelState?.Summary?.PendingConfirmation;
                 if (pending != null)
                 {
@@ -155,6 +164,8 @@ namespace RNAssistant.Cli
                 var pendingId = Required(options, "pending");
                 var session = service.GetSession(workspace, sessionId);
                 if (session == null) throw new ArgumentException("Session not found.");
+                if (options.ContainsKey("mode") && ChatModes.Require(options["mode"]) != session.Mode)
+                    throw new ArgumentException("Approval must keep the accepted session's mode.");
                 var approve = args[0] == "approve";
                 AppSettings continuationSettings = null;
                 string continuationKey = null;
@@ -176,16 +187,27 @@ namespace RNAssistant.Cli
                     continuationSettings, () => continuationKey, modelDigest: continuationDigest).GetAwaiter().GetResult();
                 return ReportRun(jsonl, result);
             }
-            if (args[0] != "run") throw new ArgumentException("Unknown command. Use --help.");
+            var answering = args[0] == "answer";
+            if (args[0] != "run" && !answering) throw new ArgumentException("Unknown command. Use --help.");
             if (options.ContainsKey("profile") && options["profile"] != "development")
                 throw new ArgumentException("Only the development profile is available in the CLI.");
+            var mode = options.ContainsKey("mode") ? ChatModes.Require(options["mode"]) : null;
+            var sessionIdForRun = answering ? Required(options, "session") : Value(options, "session", null);
+            var existingSession = sessionIdForRun == null ? null : service.GetSession(workspace, sessionIdForRun);
+            if (sessionIdForRun != null && existingSession == null) throw new ArgumentException("Session not found.");
+            if (mode != null && existingSession?.LastRun != null && mode != existingSession.Mode)
+                throw new ArgumentException("Mode is fixed for this session; create a new session to change it.");
+            if (answering && new[] { "message", "task-file", "expect-files", "min-reads", "min-writes", "require-web-verify", "web-checks" }.Any(options.ContainsKey))
+                throw new ArgumentException("Answers continue the accepted task contract; do not supply a new task or acceptance criteria.");
+            if (!answering && options.ContainsKey("answers-file")) throw new ArgumentException("Use the answer command for typed answers.");
+            var answers = answering ? ReadAnswers(Required(options, "answers-file")) : null;
             var message = options.ContainsKey("message") ? options["message"] : null;
             if (options.ContainsKey("task-file"))
             {
                 if (message != null) throw new ArgumentException("Choose --message or --task-file.");
                 message = File.ReadAllText(Path.GetFullPath(options["task-file"]));
             }
-            if (string.IsNullOrWhiteSpace(message)) throw new ArgumentException("--message or --task-file is required.");
+            if (!answering && string.IsNullOrWhiteSpace(message)) throw new ArgumentException("--message or --task-file is required.");
             var expectedFiles = options.ContainsKey("expect-files")
                 ? options["expect-files"].Split(',').Select(path => path.Trim()).ToArray()
                 : new string[0];
@@ -203,7 +225,10 @@ namespace RNAssistant.Cli
                 Console.Error.WriteLine("Browser verification requires an available Chromium executable (RNA_BROWSER_EXECUTABLE).");
                 return 4;
             }
-            var settings = Settings(options, Environment.GetEnvironmentVariable("RNA_MODEL"));
+            var settings = Settings(options, Environment.GetEnvironmentVariable("RNA_MODEL") ?? existingSession?.Model,
+                existingSession?.LastRun?.ModelConfiguration?.AgentResponseMode,
+                existingSession?.LastRun?.ModelConfiguration?.SystemPromptRole,
+                existingSession?.LastRun?.ModelConfiguration?.ToolResultRole);
             string key;
             if (!EndpointReady(settings, out key)) return 4;
             var thinking = OptionalThinking(options);
@@ -216,14 +241,18 @@ namespace RNAssistant.Cli
                 Console.CancelKeyPress += interrupt;
                 try
                 {
-                    var result = service.RunAsync(workspace, Value(options, "session", null), message,
-                        settings, () => key, update =>
+                    Action<WorkspaceRunEvent> progress = update =>
                         {
                             if (update.Kind == "ToolStarted" || update.Kind == "ToolCompleted")
                                 Output(jsonl, update.Kind == "ToolStarted" ? "tool.started" : "tool.completed",
                                     new { update.Summary.RunId, update.ToolId, lifecycle = update.Summary.Lifecycle.ToString(),
                                         health = update.Summary.ExecutionHealth.ToString() });
-                        }, cancellation.Token, acceptance, thinking, modelDigest).GetAwaiter().GetResult();
+                        };
+                    var result = (answering
+                        ? service.AnswerAsync(workspace, sessionIdForRun, answers, settings, () => key, progress,
+                            cancellation.Token, thinking, modelDigest, mode)
+                        : service.RunAsync(workspace, sessionIdForRun, message, settings, () => key, progress,
+                            cancellation.Token, acceptance, thinking, modelDigest, mode)).GetAwaiter().GetResult();
                     return ReportRun(jsonl, result);
                 }
                 finally { Console.CancelKeyPress -= interrupt; }
@@ -386,18 +415,20 @@ namespace RNAssistant.Cli
             var checkedAcceptance = result.Acceptance;
             var summary = result.Summary;
             var pending = summary.PendingConfirmation;
+            var needsInput = result.UserInput != null || summary.Reason == "model_needs_input";
             var acceptancePassed = checkedAcceptance.State == WorkspaceAcceptanceState.NotRequested ||
                 checkedAcceptance.State == WorkspaceAcceptanceState.Passed;
-            Output(jsonl, pending == null ? "run.completed" : "run.awaiting_confirmation",
+            Output(jsonl, pending != null ? "run.awaiting_confirmation" : needsInput ? "run.needs_input" : "run.completed",
                 new { result.SessionId, summary.RunId,
                     lifecycle = summary.Lifecycle.ToString(), reason = summary.Reason,
                     action = summary.Reason == "model_done" ? "done" :
                         summary.Reason == "model_blocked" ? "blocked" :
-                        summary.Reason == "model_needs_input" ? "needs_input" : "other",
+                        needsInput ? "needs_input" : "other",
                     health = summary.ExecutionHealth.ToString(), summary.AssistantMessage, summary.ToolCounts,
                     pendingId = pending?.PendingId, pendingTool = pending?.Call.Name,
                     pendingPath = pending == null ? null : PendingPath(pending.Call.Name, pending.Call.ArgumentsJson),
                     pendingTargetPath = pending == null ? null : PendingTarget(pending.Call.Name, pending.Call.ArgumentsJson),
+                    userInput = result.UserInput,
                     acceptance = checkedAcceptance.State.ToString().ToLowerInvariant(),
                     expectedFiles = checkedAcceptance.ExpectedFiles,
                     missingFiles = checkedAcceptance.MissingFiles,
@@ -409,10 +440,39 @@ namespace RNAssistant.Cli
                     verifiedFileChanges = checkedAcceptance.VerifiedFileChanges,
                     webSnapshotVerified = checkedAcceptance.VerifiedWebSnapshot,
                     acceptanceError = checkedAcceptance.Error });
-            if (pending != null) return 3;
+            if (pending != null || needsInput) return 3;
             if (!acceptancePassed) return 5;
             return summary.Lifecycle == RNAssistant.Core.Agent.RunLifecycle.Failed ? 5 :
                 summary.Reason == "model_needs_input" ? 3 : 0;
+        }
+
+        private sealed class QuestionsRequired
+        {
+            public string SessionId { get; set; }
+            public string RunId { get; set; }
+            [JsonProperty("action")] public string Action { get { return "needs_input"; } }
+            [JsonProperty("userInput")] public WorkspaceUserInput UserInput { get; set; }
+        }
+
+        private static UserQuestionAnswerCommand ReadAnswers(string path)
+        {
+            using (var stream = File.OpenRead(Path.GetFullPath(path)))
+            {
+                if (stream.Length > 32768) throw new ArgumentException("Answers exceed 32 KiB.");
+                using (var reader = new StreamReader(stream, new UTF8Encoding(false, true), true))
+                {
+                    var buffer = new char[32769];
+                    var count = reader.ReadBlock(buffer, 0, buffer.Length);
+                    if (count > 32768) throw new ArgumentException("Answers exceed their input bound.");
+                    try
+                    {
+                        return JsonConvert.DeserializeObject<UserQuestionAnswerCommand>(new string(buffer, 0, count),
+                            new JsonSerializerSettings { MissingMemberHandling = MissingMemberHandling.Error, MaxDepth = 8 })
+                            ?? throw new ArgumentException("Answers must be a JSON object.");
+                    }
+                    catch (JsonException ex) { throw new ArgumentException("Invalid answers: " + ex.Message); }
+                }
+            }
         }
 
         private static WebFunctionalChecks ReadWebChecks(Dictionary<string, string> options)
@@ -507,9 +567,10 @@ namespace RNAssistant.Cli
         {
             Console.WriteLine("RNAssistant workspace CLI (development profile)");
             Console.WriteLine("rna workspace open <path> [--read-only]");
-            Console.WriteLine("rna env --workspace <path>");
+            Console.WriteLine("rna env --workspace <path> [--mode chat|plan|agent]");
             Console.WriteLine("rna sessions --workspace <path> [--jsonl]");
-            Console.WriteLine("rna run --workspace <path> (--message <text> | --task-file <file>) [--session <id>] [--profile development] [--model <name>] [--base-url <url>] [--context-tokens <n>] [--response-mode json_schema|json_object] [--instruction-role system|developer] [--tool-result-role user|developer|tool] [--reasoning-mode <mode>] [--thinking on|off] [--max-iterations <1..256>] [--max-tool-steps <1..4096>] [--expect-files <comma-separated paths>] [--min-reads <n>] [--min-writes <n>] [--require-web-verify] [--web-checks <json-file>] [--jsonl]");
+            Console.WriteLine("rna run --workspace <path> (--message <text> | --task-file <file>) [--session <id>] [--mode chat|plan|agent] [--profile development] [--model <name>] [--base-url <url>] [--context-tokens <n>] [--response-mode json_schema|json_object] [--instruction-role system|developer] [--tool-result-role user|developer|tool] [--reasoning-mode <mode>] [--thinking on|off] [--max-iterations <1..256>] [--max-tool-steps <1..4096>] [--expect-files <comma-separated paths>] [--min-reads <n>] [--min-writes <n>] [--require-web-verify] [--web-checks <json-file>] [--jsonl]");
+            Console.WriteLine("rna answer --workspace <path> --session <id> --answers-file <json-file> [LLM options] [--jsonl]  (validate answers and start the next turn)");
             Console.WriteLine("rna inspect --workspace <path> --session <id> [--jsonl]");
             Console.WriteLine("rna recover --workspace <path> --path <relative-path> [--jsonl]  (inspect an uncertain file effect)");
             Console.WriteLine("rna verify --workspace <path> [--entry index.html | --snapshot <id>] [--web-checks <json-file>] [--jsonl]  (historical success does not verify current files)");

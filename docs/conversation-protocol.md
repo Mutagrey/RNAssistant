@@ -4,7 +4,7 @@ RNAssistant has three explicit modes and one `Core/Agent/AgentKernel` loop, invo
 
 - `chat`: the editable `ChatSystemPrompt`, a dynamic `RUNTIME_CONTEXT`, and exactly the safe read-only semantic `common.resources_find/read` catalog. Skills, Office tools, local mutations, and confirmation are unavailable by runtime policy.
 - `plan`: the editable `PlanSystemPrompt`, read-only discovery, enabled skills, exact native `common.questions_ask`, one revisioned Markdown plan through `common.plan_doc_save/restore/delete`, and an optional checklist through `common.task_list_set`. The question handler returns typed `AwaitingUser`; Plan and Task List mutations carry source-owned verified-write evidence. Message prose cannot pause a run. Office/shared mutations and confirmation are unavailable by runtime policy.
-- `agent`: the same structured loop with progressive tool discovery and enabled skill metadata. Complex work can save the revisioned document Plan as well as a chat Task List. The complete mode/session-filtered catalog remains local execution authority; the model receives only the current callable schema working set. The runtime does not route the request, select a phase, activate skills, retry tools, or verify mutations as a separate stage.
+- `agent`: the same structured loop with progressive tool discovery, enabled skill metadata and typed `common.questions_ask` when a material decision requires user input. Complex work can save the revisioned document Plan as well as a chat Task List. The complete mode/session-filtered catalog remains local execution authority; the model receives only the current callable schema working set. The runtime does not route the request, select a phase, activate skills, retry tools, or verify mutations as a separate stage.
 
 All modes return conversation-response v6: `message` (string), `action` (enum)
 and `tool_calls` (array); calls contain `name` and `arguments`, never a
@@ -133,6 +133,68 @@ adding required `final`. Full-history/context preflight rejects incompatible
 chats before preparation or confirmation; no historical migration or dual-write is
 performed. v6 replaces `final` with explicit action and permits bounded no-call
 continuation; see the [canonical v6 contract](protocols/CONVERSATION_RESPONSE_V6.md).
+
+### Workspace CLI modes and questions
+
+Core `ConversationRunPolicy` and `UserQuestionToolCatalog/Handler` are shared by
+Office and the workspace runtime. The former Office implementations are removed.
+CLI `run --mode chat|plan|agent` defaults a new session to Agent; later turns inherit
+its persisted mode and reject changes. Invalid modes fail explicitly. Both the
+callable catalog and exact ToolRuntime registrations enforce the selected policy.
+`env --mode ...` lists that capability set. The current workspace surface is:
+
+| Mode | Available operations |
+| --- | --- |
+| Chat | Bounded file find/read only; skill type/reference arguments are unavailable |
+| Plan | File find/read, enabled skills, `web.verify` when the browser exists, typed questions; no file writes or confirmation |
+| Agent | Available file/skill/web operations, guarded writes and confirmations, typed questions |
+
+CLI Plan does not yet expose revisioned Plan documents or Task Lists. This is an
+explicit host capability gap, not completion of the full Plan contract above.
+
+The shared question tool produces 1–3 questions, each with 2–4 choices, a single
+or multiple selection and an optional free-text answer. Runtime IDs are persisted
+in the accepted tool result for UI/CLI correlation. The shared model projector
+removes them; native `role: tool` still keeps the accepted call/result pairing.
+Recommended choices are display metadata and never submitted automatically.
+
+The kernel terminates with typed reason `awaiting_user`. CLI returns
+`run.needs_input`, action `needs_input`, exit 3 and `userInput` containing `RunId`
+and `QuestionSet`. `resume` and `inspect` recover the same data without a model
+request or replay. Submit a chosen answer with:
+
+```text
+rna answer --workspace <path> --session <id> --answers-file answers.json
+```
+
+```json
+{
+  "runId": "<returned RunId>",
+  "questionSetId": "<returned questionSetId>",
+  "answers": [
+    { "questionId": "<returned question id>", "optionIds": ["<chosen option id>"], "freeText": "" }
+  ]
+}
+```
+
+The application owner validates these bindings against the current completed
+question run under the session lease, before appending input or calling the model.
+Unknown/duplicate/missing questions or choices, stale/already answered sets,
+multiple choices for a single selection and disallowed free text fail explicitly.
+Input is bounded to 32 KiB; each free-text answer to 4000 characters. The accepted
+user fact contains semantic question/choice text (`PLAN_ANSWERS`), not runtime IDs.
+It starts a new user turn through the same coordinator/kernel, inheriting the
+session mode and default instruction/result roles. No second loop or pending store
+is introduced. Ordinary explicit `run --message` starts a new task and supersedes
+unanswered questions; stale `answer` submissions then fail. Approval waits still
+require explicit approve/deny and cannot be bypassed by a new turn.
+
+Typed answers carry the accepted file/count criteria forward. Runtime-owned prior
+question-run IDs retain already verified writes in that assessment (up to 256
+question turns); they are never model context or mutation authority. Reads/browser
+verification are assessed for the new run at current authority. An unrelated new
+task cannot borrow these write counts. While waiting for questions, plain model
+`needs_input` or approval, assessment remains pending; none is reported as success.
 
 ## Conversation context
 

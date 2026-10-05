@@ -3,14 +3,15 @@ using System.Threading;
 using System.Threading.Tasks;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
+using RNAssistant.Core.Models;
 using RNAssistant.Core.Tools;
 using RuntimeResult = RNAssistant.Core.Tools.Contracts.ToolResult;
 
-namespace RNAssistant.Office.Tools
+namespace RNAssistant.Core.Tools
 {
-    internal sealed class UserQuestionToolHandler : IReadOnlyToolHandler
+    public sealed class UserQuestionToolHandler : IReadOnlyToolHandler
     {
-        internal static readonly ToolBinding Binding =
+        public static readonly ToolBinding Binding =
             new ToolBinding("conversation.questions.ask.intent.v2");
 
         public Task<ToolHandlerResult> ExecuteAsync(
@@ -28,17 +29,18 @@ namespace RNAssistant.Office.Tools
                     throw new InvalidOperationException(
                         "questions must be a native JSON array.");
                 UserQuestionToolCatalog.Validate(questions);
-                var projectedQuestions = AddRuntimeIds(questions);
-                var data = new JObject
+                var projectedQuestions = questions.ToObject<System.Collections.Generic.List<UserQuestion>>();
+                foreach (var question in projectedQuestions)
                 {
-                    ["type"] = "rnassistant.questions",
-                    ["questionSetId"] = "questions_" +
-                        Guid.NewGuid().ToString("N"),
-                    ["questions"] = projectedQuestions
-                }.ToString(Formatting.None);
+                    question.Id = "question_" + Guid.NewGuid().ToString("N");
+                    foreach (var option in question.Options)
+                        option.Id = "option_" + Guid.NewGuid().ToString("N");
+                }
+                var data = JsonConvert.SerializeObject(new UserQuestionSet
+                { QuestionSetId = "questions_" + Guid.NewGuid().ToString("N"), Questions = projectedQuestions });
                 return Task.FromResult(new ToolHandlerResult(
                     RuntimeResult.Ok(
-                        "Ответьте на ключевые вопросы плана.", data),
+                        "Ответьте на ключевые вопросы.", data),
                     ToolEffectEvidence.None,
                     awaitingUser: true));
             }
@@ -57,26 +59,5 @@ namespace RNAssistant.Office.Tools
             }
         }
 
-        private static JArray AddRuntimeIds(JArray questions)
-        {
-            var result = new JArray();
-            var questionIndex = 0;
-            foreach (var token in questions)
-            {
-                questionIndex++;
-                var question = (JObject)token.DeepClone();
-                question["id"] = "question_" + questionIndex + "_" +
-                    Guid.NewGuid().ToString("N").Substring(0, 8);
-                var options = (JArray)question["options"];
-                for (var optionIndex = 0; optionIndex < options.Count; optionIndex++)
-                {
-                    ((JObject)options[optionIndex])["id"] = "option_" +
-                        (optionIndex + 1) + "_" +
-                        Guid.NewGuid().ToString("N").Substring(0, 8);
-                }
-                result.Add(question);
-            }
-            return result;
-        }
     }
 }

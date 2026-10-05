@@ -5,26 +5,30 @@ using Newtonsoft.Json.Linq;
 using RNAssistant.Core.Models;
 using RNAssistant.Core.Tools;
 
-namespace RNAssistant.Office.Tools
+namespace RNAssistant.Core.Tools
 {
-    internal static class UserQuestionToolCatalog
+    public static class UserQuestionToolCatalog
     {
         public const string AskToolId = "common.questions_ask";
 
-        internal static IEnumerable<ToolCatalogEntry> GetTools()
+        public static IEnumerable<ToolCatalogEntry> GetTools()
         {
             var descriptor = new ToolDescriptor(AskToolId,
-                "Plan mode: Present one to three key typed questions and stop until the user answers. Use only after read-only discovery cannot resolve a material decision.",
+                "Present one to three key typed questions and stop until the user answers. Use only after read-only discovery cannot resolve a material decision.",
                 Schema());
             var policy = new ToolPolicy(ToolEffect.Read,
                 ToolVerification.None, false, false,
-                new[] { "plan" }, 0);
-            yield return ControllerToolCatalogEntry.CreateTypedProjection(
-                descriptor, policy, name: "questions_ask", scope: "session",
-                mutatesLocalState: true);
+                new[] { "plan", "agent" }, 0);
+            yield return new ToolCatalogEntry
+            {
+                Id = descriptor.Id, Host = "Common", Name = "questions_ask",
+                Description = descriptor.Description, ArgumentSchemaJson = descriptor.ParametersJson,
+                BuiltIn = true, Enabled = true, Scope = "session", AgentCanRun = true,
+                MutatesLocalState = true, Policy = policy, Binding = UserQuestionToolHandler.Binding
+            };
         }
 
-        internal static void Validate(JArray questions)
+        public static void Validate(JArray questions)
         {
             if (questions.Count < 1 || questions.Count > 3) throw new InvalidOperationException("questions must contain 1-3 items.");
             var prompts = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
@@ -53,7 +57,7 @@ namespace RNAssistant.Office.Tools
             }
         }
 
-        internal static string Schema()
+        public static string Schema()
         {
             var option = new JObject
             {

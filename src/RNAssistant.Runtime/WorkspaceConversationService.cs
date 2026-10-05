@@ -75,10 +75,42 @@ namespace RNAssistant.Runtime
             return _workspaces.ListSessions(_chats, workspace);
         }
 
-        public IReadOnlyList<string> AvailableToolIds(WorkspaceDescriptor workspace)
+        public IReadOnlyList<string> AvailableToolIds(WorkspaceDescriptor workspace, string mode = ChatModes.Agent)
         {
-            return new WorkspacePorts(_paths, _chats, _files, _payloads, _webSnapshots, workspace, null, new AppSettings(), null, null)
+            return new WorkspacePorts(_paths, _chats, _files, _payloads, _webSnapshots, workspace, null, new AppSettings(), null, null,
+                mode: ChatModes.Require(mode))
                 .ToolIds;
+        }
+
+        public WorkspaceUserInput GetPendingQuestions(ChatSession session)
+        {
+            var run = session?.LastRun;
+            var summary = run?.KernelState?.Summary;
+            if (summary?.Lifecycle != RunLifecycle.Completed || summary.Reason != "awaiting_user") return null;
+            var fact = session.Messages.LastOrDefault(item => item.RunId == run.RunId &&
+                item.ProtocolMessage && !string.IsNullOrWhiteSpace(item.ToolCallId));
+            if (fact?.ToolName != UserQuestionToolCatalog.AskToolId)
+                throw new InvalidOperationException("The waiting run has no accepted question result.");
+            var wire = ToolResultWire.Read(fact.Content);
+            if (!wire.Success || wire.Result.Status != ToolResultStatus.Ok || wire.ToolCallId != fact.ToolCallId ||
+                wire.Name != UserQuestionToolCatalog.AskToolId)
+                throw new InvalidOperationException("The accepted question result is invalid.");
+            var questions = JsonConvert.DeserializeObject<UserQuestionSet>(wire.Result.DataJson);
+            if (questions?.Type != "rnassistant.questions" || string.IsNullOrWhiteSpace(questions.QuestionSetId) ||
+                questions.Questions == null || questions.Questions.Count < 1 || questions.Questions.Count > 3)
+                throw new InvalidOperationException("The accepted questions are missing.");
+            return new WorkspaceUserInput { RunId = run.RunId, QuestionSet = questions };
+        }
+
+        public Task<WorkspaceRunResult> AnswerAsync(WorkspaceDescriptor workspace, string sessionId,
+            UserQuestionAnswerCommand answers, AppSettings settings, Func<string> apiKeyProvider,
+            Action<WorkspaceRunEvent> progress = null, CancellationToken cancellationToken = default(CancellationToken),
+            bool? reasoningEnabled = null, string modelDigest = null, string mode = null)
+        {
+            if (string.IsNullOrWhiteSpace(sessionId) || answers == null)
+                throw new ArgumentException("An existing session and typed answers are required.");
+            return RunAsync(workspace, sessionId, null, settings, apiKeyProvider, progress, cancellationToken,
+                null, reasoningEnabled, modelDigest, mode, answers);
         }
 
         public WorkspaceFileRecoveryResult ReconcileFile(WorkspaceDescriptor workspace, string relativePath)
@@ -127,10 +159,14 @@ namespace RNAssistant.Runtime
         public async Task<WorkspaceRunResult> RunAsync(WorkspaceDescriptor workspace, string sessionId,
             string message, AppSettings settings, Func<string> apiKeyProvider,
             Action<WorkspaceRunEvent> progress = null, CancellationToken cancellationToken = default(CancellationToken),
-            WorkspaceRunAcceptance acceptance = null, bool? reasoningEnabled = null, string modelDigest = null)
+            WorkspaceRunAcceptance acceptance = null, bool? reasoningEnabled = null, string modelDigest = null,
+            string mode = null, UserQuestionAnswerCommand answers = null)
         {
             if (workspace == null) throw new ArgumentNullException(nameof(workspace));
-            if (string.IsNullOrWhiteSpace(message)) throw new ArgumentException("A task message is required.", nameof(message));
+            if (answers == null && string.IsNullOrWhiteSpace(message)) throw new ArgumentException("A task message is required.", nameof(message));
+            if (answers != null && (string.IsNullOrWhiteSpace(sessionId) || message != null))
+                throw new ArgumentException("Typed answers require an existing session and cannot include a task message.");
+            if (mode != null) mode = ChatModes.Require(mode);
             if (settings == null || string.IsNullOrWhiteSpace(settings.BaseUrl) || string.IsNullOrWhiteSpace(settings.Model))
                 throw new ArgumentException("An LLM endpoint and model are required.", nameof(settings));
             ValidateMessageRoles(settings);
@@ -145,11 +181,32 @@ namespace RNAssistant.Runtime
                 if (!string.IsNullOrWhiteSpace(sessionId))
                     session = _workspaces.LoadSession(_chats, workspace, sessionId);
                 if (session == null) throw new InvalidOperationException("Workspace session was removed.");
+                var acceptedMode = mode ?? ChatModes.Require(session.Mode);
+                if (session.LastRun != null && acceptedMode != ChatModes.Require(session.Mode))
+                    throw new ArgumentException("Mode is fixed for this session; create a new session to change it.");
                 if (session.LastRun?.KernelState?.Summary?.Lifecycle == RunLifecycle.AwaitingConfirmation)
                     throw new InvalidOperationException("The pending approval must be resolved before another turn.");
+                if (answers != null)
+                {
+                    var pending = GetPendingQuestions(session);
+                    if (pending == null || pending.RunId != answers.RunId)
+                        throw new ArgumentException("The question run is stale, missing or already answered.");
+                    message = UserQuestionAnswers.Accept(pending.QuestionSet, answers);
+                    acceptedContract = PrepareAcceptance(session.LastRun.WorkspaceAcceptance);
+                    var prior = session.LastRun.WorkspaceAcceptance?.PriorQuestionRunIds ?? new List<string>();
+                    if (prior.Count >= 256 || prior.Any(string.IsNullOrWhiteSpace) || prior.Contains(pending.RunId) ||
+                        prior.Distinct(StringComparer.Ordinal).Count() != prior.Count)
+                        throw new ArgumentException("Question continuation lineage is invalid or exceeds 256 turns; submit a new task.");
+                    acceptedContract.PriorQuestionRunIds = prior.Concat(new[] { pending.RunId }).ToList();
+                }
+                if (acceptedMode != ChatModes.Agent && acceptedContract.MinimumVerifiedWrites > 0)
+                    throw new ArgumentException("This mode cannot satisfy a file-write acceptance criterion.");
+                if (acceptedMode == ChatModes.Chat && acceptedContract.RequireWebVerification)
+                    throw new ArgumentException("Chat mode does not expose browser verification.");
                 InterruptAbandonedRun(session);
 
                 if (reasoningEnabled.HasValue) session.ReasoningEnabled = reasoningEnabled.Value;
+                session.Mode = acceptedMode;
 
                 var previous = RestoreAcceptedHistory(session);
                 var ports = new WorkspacePorts(_paths, _chats, _files, _payloads, _webSnapshots, workspace, session, settings, apiKeyProvider,
@@ -172,7 +229,6 @@ namespace RNAssistant.Runtime
                     },
                     WorkspaceAcceptance = acceptedContract };
                 session.Model = settings.Model;
-                session.Mode = "agent";
                 session.Messages.Add(new ChatMessage { Role = "user", Content = message, RunId = runId });
                 _chats.Save(session);
 
@@ -186,7 +242,7 @@ namespace RNAssistant.Runtime
                     session.LastRun.WorkspaceAcceptance = acceptedContract;
                     _chats.Save(session);
                 }
-                return new WorkspaceRunResult(session.Id, result.Summary, acceptedContract);
+                return new WorkspaceRunResult(session.Id, result.Summary, acceptedContract, GetPendingQuestions(session));
             }
         }
 
@@ -210,6 +266,8 @@ namespace RNAssistant.Runtime
                     throw new InvalidOperationException("Pending confirmation was not found or was already resolved.");
                 if (approve && !string.Equals(settings.Model, session.Model, StringComparison.Ordinal))
                     throw new InvalidOperationException("Approval must continue with the accepted run's model.");
+                if (approve && ChatModes.Require(session.Mode) != ChatModes.Agent)
+                    throw new InvalidOperationException("This mode cannot approve a file mutation.");
                 var modelConfiguration = session.LastRun.ModelConfiguration;
                 if (approve && string.IsNullOrWhiteSpace(modelConfiguration?.SystemPromptRole))
                     throw new InvalidOperationException("The accepted run has no recorded instruction role. Deny the pending call and submit a new turn.");
@@ -243,7 +301,7 @@ namespace RNAssistant.Runtime
                     session.LastRun.WorkspaceAcceptance = acceptance;
                     _chats.Save(session);
                 }
-                return new WorkspaceRunResult(session.Id, result.Summary, acceptance);
+                return new WorkspaceRunResult(session.Id, result.Summary, acceptance, GetPendingQuestions(session));
             }
         }
 
@@ -270,8 +328,10 @@ namespace RNAssistant.Runtime
             WorkspaceRunAcceptance acceptance)
         {
             var completeReads = CompleteFileReads(session, summary.RunId);
+            var writeRuns = new HashSet<string>(acceptance.PriorQuestionRunIds ?? new List<string>(), StringComparer.Ordinal)
+            { summary.RunId };
             var changed = 0;
-            foreach (var fact in session.Messages.Where(item => item.RunId == summary.RunId &&
+            foreach (var fact in session.Messages.Where(item => writeRuns.Contains(item.RunId) &&
                 item.ProtocolMessage && !string.IsNullOrWhiteSpace(item.ToolCallId)))
             {
                 var wire = ToolResultWire.Read(fact.Content);
@@ -284,7 +344,9 @@ namespace RNAssistant.Runtime
             acceptance.VerifiedFileChanges = changed;
             try
             {
-                if (summary.Lifecycle != RunLifecycle.AwaitingConfirmation)
+                var waiting = summary.Lifecycle == RunLifecycle.AwaitingConfirmation ||
+                    summary.Reason == "awaiting_user" || summary.Reason == "model_needs_input";
+                if (!waiting)
                     acceptance.MissingFiles = MissingExpectedFiles(workspace, acceptance.ExpectedFiles).ToList();
                 // A file can change during the final model wait. Revalidate all
                 // accepted read targets, including files outside ExpectedFiles.
@@ -298,7 +360,7 @@ namespace RNAssistant.Runtime
                 acceptance.AcceptedCompleteFileReads = CurrentCompleteFileReads(completeReads, frozen).Count;
                 acceptance.VerifiedWebSnapshot = acceptance.RequireWebVerification &&
                     AssessWebVerification(workspace, session, summary.RunId, acceptance);
-                if (summary.Lifecycle == RunLifecycle.AwaitingConfirmation)
+                if (waiting)
                 {
                     acceptance.State = WorkspaceAcceptanceState.Pending;
                     return;
@@ -532,6 +594,7 @@ namespace RNAssistant.Runtime
             private readonly IMaterializedModelProtocol _protocol;
             private readonly Action<WorkspaceRunEvent> _progress;
             private readonly WorkspaceRunAcceptance _acceptance;
+            private readonly ConversationRunPolicy _mode;
             private readonly IReadOnlyList<ToolCatalogEntry> _catalog;
             private readonly ResourceProviderRouter<WorkspaceFileResourceProvider> _resources;
             private readonly ModelContextCompiler _compiler;
@@ -548,10 +611,11 @@ namespace RNAssistant.Runtime
                 WorkspaceWebSnapshotStore webSnapshots, WorkspaceDescriptor workspace,
                 ChatSession session, AppSettings settings, Func<string> apiKeyProvider,
                 Action<WorkspaceRunEvent> progress, WorkspaceRunAcceptance acceptance = null,
-                bool restorePendingObservation = true)
+                bool restorePendingObservation = true, string mode = null)
             {
                 _chats = chats; _files = files; _workspace = workspace; _session = session;
                 _settings = settings.Clone(); _progress = progress; _acceptance = acceptance;
+                _mode = ConversationRunPolicy.For(ChatModes.Require(mode ?? session?.Mode ?? ChatModes.Agent));
                 _compiler = new ModelContextCompiler(payloads);
                 _modelTrace = new ModelTracePersistenceService(new ChatEventStoreAdapter(chats));
                 _resources = new ResourceProviderRouter<WorkspaceFileResourceProvider>(new[]
@@ -564,11 +628,11 @@ namespace RNAssistant.Runtime
                 _skillPublications = new SkillPublicationService(authorityStore, authorityStore,
                     new ResourceMutationJournal(paths), payloads, new SkillStore(paths), "Workspace", WorkspaceSkillProvider.GetSkills());
                 _skillCatalog = new SkillCatalogService("Workspace", _skillPublications.Capture);
-                Register(registry, entries, "common.resources_find", "Find workspace files (default type=file, one directory, up to 200) or enabled skills (type=skill, up to 50). Use semantic targets; narrow the query when incomplete.",
-                    ResourceSchema(true), false,
+                Register(registry, entries, "common.resources_find", _mode.AllowsSkills ? "Find workspace files (default type=file, one directory, up to 200) or enabled skills (type=skill, up to 50). Use semantic targets; narrow the query when incomplete." : "Find workspace files in one directory, up to 200. Narrow the query when incomplete.",
+                    ResourceSchema(true, _mode.AllowsSkills), false,
                     new WorkspaceResourceHandler(_resources.Select("file"), _skillPublications, () => _skills, _observed, true));
-                Register(registry, entries, "common.resources_read", "Read a complete UTF-8 file (default type=file) or published skill instructions (type=skill) using a semantic target. For a skill reference, also provide its listed referencePath. Bound: 16000 characters; no partial skill activation.",
-                    ResourceSchema(false), false,
+                Register(registry, entries, "common.resources_read", _mode.AllowsSkills ? "Read a complete UTF-8 file (default type=file) or published skill instructions (type=skill) using a semantic target. For a skill reference, also provide its listed referencePath. Bound: 16000 characters; no partial skill activation." : "Read a complete UTF-8 file using its semantic target, up to 16000 characters.",
+                    ResourceSchema(false, _mode.AllowsSkills), false,
                     new WorkspaceResourceHandler(_resources.Select("file"), _skillPublications, () => _skills, _observed, false));
                 if (WorkspaceWebVerifier.FindBrowserExecutable() != null)
                     Register(registry, entries, "web.verify", "Load an immutable local HTML/CSS/JS snapshot in an isolated browser; check asset/runtime errors and any functional checks fixed by the accepted task contract.",
@@ -598,9 +662,10 @@ namespace RNAssistant.Runtime
                         Schema("relativePath", true), true,
                         new FileHandler(files, workspace, _observed, "restore"));
                 }
+                Register(registry, entries, UserQuestionToolCatalog.GetTools().Single(), new UserQuestionToolHandler());
                 _catalog = entries;
                 _skills = VisibleSkills(_skillPublications.Capture());
-                Tools = new ToolRuntime(registry, "agent", false, true,
+                Tools = new ToolRuntime(registry, _mode.Mode, false, _mode.AllowsConfirmation,
                     (context, preparation) => "pending_" + Guid.NewGuid().ToString("N"));
                 if (restorePendingObservation) RestorePendingObservation();
             }
@@ -629,20 +694,28 @@ namespace RNAssistant.Runtime
                 throw new InvalidOperationException("Pending file mutation has no accepted complete read evidence.");
             }
 
-            private static void Register(ToolHandlerRegistry registry, List<ToolCatalogEntry> entries,
+            private void Register(ToolHandlerRegistry registry, List<ToolCatalogEntry> entries,
                 string id, string description, string schema, bool mutation, IToolHandler handler,
                 bool requiresConfirmation = false, bool independentRead = true)
             {
                 var policy = new ToolPolicy(mutation ? ToolEffect.Write : ToolEffect.Read,
                     mutation ? ToolVerification.Tool : ToolVerification.None,
-                    requiresConfirmation, !mutation && independentRead, new[] { "agent" }, mutation ? 1 : 0);
+                    requiresConfirmation, !mutation && independentRead,
+                    mutation ? new[] { ChatModes.Agent } : new[] { ChatModes.Chat, ChatModes.Plan, ChatModes.Agent }, mutation ? 1 : 0);
                 var binding = new ToolBinding(id, scope: "workspace", host: "Common");
-                registry.Register(new ToolRegistration(new ToolDescriptor(id, description, schema),
-                    policy, binding, "workspace-v1"), handler);
-                entries.Add(new ToolCatalogEntry
+                Register(registry, entries, new ToolCatalogEntry
                 { Id = id, Host = "Common", Name = id, Description = description,
                     ArgumentSchemaJson = schema, Policy = policy, Binding = binding, AgentCanRun = true,
-                    BuiltIn = true, Enabled = true });
+                    BuiltIn = true, Enabled = true, MutatesLocalState = mutation, RequiresConfirmation = requiresConfirmation }, handler);
+            }
+
+            private void Register(ToolHandlerRegistry registry, List<ToolCatalogEntry> entries,
+                ToolCatalogEntry entry, IToolHandler handler)
+            {
+                if (!_mode.SelectTools(new[] { entry }).Any() || !entry.Policy.AllowedModes.Contains(_mode.Mode)) return;
+                registry.Register(new ToolRegistration(new ToolDescriptor(entry.Id, entry.Description, entry.ArgumentSchemaJson),
+                    entry.Policy, entry.Binding, "workspace-v1"), handler);
+                entries.Add(entry);
             }
 
             private static string Schema(string first, bool firstRequired,
@@ -657,11 +730,12 @@ namespace RNAssistant.Runtime
                     ["required"] = required, ["additionalProperties"] = false }.ToString(Formatting.None);
             }
 
-            private static string ResourceSchema(bool find)
+            private static string ResourceSchema(bool find, bool allowSkills)
             {
                 var schema = JObject.Parse(find ? Schema("directory", false, "query", false) : Schema("target", true, "referencePath", false));
-                schema["properties"]["type"] = new JObject { ["type"] = "string", ["enum"] = new JArray("file", "skill"),
-                    ["description"] = "Resource kind; defaults to file. Skill targets are enabled skill IDs." };
+                if (!allowSkills && !find) ((JObject)schema["properties"]).Remove("referencePath");
+                schema["properties"]["type"] = new JObject { ["type"] = "string", ["enum"] = allowSkills ? new JArray("file", "skill") : new JArray("file"),
+                    ["description"] = allowSkills ? "Resource kind; defaults to file. Skill targets are enabled skill IDs." : "Resource kind; defaults to file." };
                 return schema.ToString(Formatting.None);
             }
 
@@ -669,7 +743,7 @@ namespace RNAssistant.Runtime
             {
                 var selected = _skillCatalog.SelectPublished(published);
                 var ids = new HashSet<string>(_catalog.Select(tool => tool.Id), StringComparer.OrdinalIgnoreCase);
-                var skills = selected.Skills.Where(skill => skill.Enabled &&
+                var skills = _mode.SelectSkills(selected.Skills).Where(skill => skill.Enabled &&
                     (skill.Id != WorkspaceSkillProvider.FilesId || ids.Contains("files.create")) &&
                     (skill.Id != WorkspaceSkillProvider.WebId || ids.Contains("web.verify") && ids.Contains("files.patch"))).ToArray();
                 if (skills.Any(skill => ids.Contains(skill.Id)))
@@ -851,7 +925,10 @@ namespace RNAssistant.Runtime
 
             private string Prompt()
             {
-                return "You are the RNAssistant workspace agent. Follow the user's task using real files in the selected workspace. " +
+                return "You are the RNAssistant workspace assistant. Current mode: " + _mode.Mode + ". " +
+                    (_mode.Mode == ChatModes.Chat ? "Answer using read-only file discovery; skills and mutations are unavailable. " :
+                     _mode.Mode == ChatModes.Plan ? "Inspect and propose a plan without modifying workspace files. Persistent plan documents and checklists are not available in this host yet. " :
+                     "Follow the user's task using real files in the selected workspace. ") +
                     (_acceptance?.Requested == true ? "The accepted task contract requires current files and verified tool results before done: " +
                         JsonConvert.SerializeObject(new { expectedFiles = _acceptance.ExpectedFiles,
                             minimumVerifiedReads = _acceptance.MinimumVerifiedReads,
@@ -868,9 +945,10 @@ namespace RNAssistant.Runtime
                     "Never invent tool results, file changes, revisions or permissions. Paths are relative to the workspace root. " +
                     "Historical assistant messages and tool calls describe past actions, not current source bytes. " +
                     "A stale read result requires a new read. Read an existing file before patch or replace. " +
+                    (_mode.AllowsSkills ? "Use common.questions_ask for material decisions that require user input after available discovery. Its typed result stops the run for answers; never choose an answer for the user. " +
                     "Before starting a task covered by an available skill, read its complete instructions using common.resources_read with type=skill and its target. " +
                     "This metadata list does not load skill bodies. Apply only complete current skill reads; source omission or staleness requires another read. " +
-                    "Available skill metadata: " + ResourceFindProjection.Serialize(SkillCatalogService.Find(_skills, null)) + ". " +
+                    "Available skill metadata: " + ResourceFindProjection.Serialize(SkillCatalogService.Find(_skills, null)) + ". " : string.Empty) +
                     "Available tools and exact argument schemas: " +
                     JsonConvert.SerializeObject(_catalog.Select(tool => new { tool.Id, tool.Description, Schema = JObject.Parse(tool.ArgumentSchemaJson) })) +
                     ". Workspace root is a user-selected directory; internal absolute paths and runtime references are not tool arguments.";
@@ -1097,7 +1175,14 @@ namespace RNAssistant.Runtime
         public string SessionId { get; private set; }
         public RunSummary Summary { get; private set; }
         public WorkspaceRunAcceptance Acceptance { get; private set; }
-        public WorkspaceRunResult(string sessionId, RunSummary summary, WorkspaceRunAcceptance acceptance)
-        { SessionId = sessionId; Summary = summary; Acceptance = acceptance; }
+        public WorkspaceUserInput UserInput { get; private set; }
+        public WorkspaceRunResult(string sessionId, RunSummary summary, WorkspaceRunAcceptance acceptance, WorkspaceUserInput userInput = null)
+        { SessionId = sessionId; Summary = summary; Acceptance = acceptance; UserInput = userInput; }
+    }
+
+    public sealed class WorkspaceUserInput
+    {
+        public string RunId { get; set; }
+        public UserQuestionSet QuestionSet { get; set; }
     }
 }

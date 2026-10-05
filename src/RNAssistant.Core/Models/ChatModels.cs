@@ -15,6 +15,14 @@ namespace RNAssistant.Core.Models
             value = (value ?? string.Empty).Trim().ToLowerInvariant();
             return value == Chat || value == Plan ? value : Agent;
         }
+
+        public static string Require(string value)
+        {
+            value = (value ?? string.Empty).Trim().ToLowerInvariant();
+            if (value != Chat && value != Plan && value != Agent)
+                throw new System.ArgumentException("Mode must be chat, plan or agent.");
+            return value;
+        }
     }
 
     public static class ChatStorageWarningLevels

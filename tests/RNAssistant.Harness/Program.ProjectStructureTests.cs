@@ -695,11 +695,12 @@ namespace RNAssistant.Harness
                     source.IndexOf("ExecuteTool(", StringComparison.Ordinal) >= 0),
                 "test fakes must script direct typed backends without retired generic queues");
             AssertTrue(
-                File.Exists(Path.Combine(officeRoot, "Tools",
+                File.Exists(Path.Combine(root, "src", "RNAssistant.Core", "Tools",
                     "UserQuestionToolHandler.cs")) &&
+                !File.Exists(Path.Combine(officeRoot, "Tools", "UserQuestionToolHandler.cs")) &&
                 !File.Exists(Path.Combine(officeRoot, "Tools",
                     "UserQuestionToolExecutor.cs")),
-                "questions_ask must use its exact native handler without a controller executor");
+                "questions_ask must use its shared native handler without an Office duplicate or controller executor");
             AssertTrue(
                 File.Exists(Path.Combine(officeRoot, "Tools",
                     "PlanDocumentToolCatalog.cs")) &&

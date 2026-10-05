@@ -132,6 +132,21 @@ before starting a model or session.
 
 Host-neutral tests run on this machine without Office COM. Locate the relevant test first; do not read or execute the full suite by default.
 
+`python3 -B tests/cli/mode_questions_smoke.py` checks the production CLI's Chat,
+Plan and Agent catalogs, rejected skill/write intent in Chat, no Plan writes,
+mode pinning, typed question stops, same questions after process restart and
+invalid/stale/replayed answer rejection before any durable change or model call.
+It covers single/multiple/free-text constraints, native call/result pairing and
+runtime-ID removal, acceptance across answers without repeating prior writes, and
+isolation of a new task's counts. This uses scripted HTTP responses. Shared Office
+paths are covered by `plan mode:`, `chat: uses only read-only` and
+`architecture: mandatory dependency direction`; these are not Office qualification.
+`tests/cli/questions_task.md` is a separate narrow real-model question test:
+create a temporary workspace containing notes.txt, run in Plan with `--min-reads 1`,
+then submit an explicit test-user choice with `answer`. Keep the two CLI traces,
+actual HTTP/CAS, selected profile/digest and source/binaries. Success proves this
+interaction route, not autonomous clarification quality or full M4/M5 acceptance.
+
 ## Find a test
 
 ```bash

@@ -283,7 +283,6 @@
     <Compile Include="Services\ContextWorkingSet.cs" />
     <Compile Include="Services\ConversationProtocolContext.cs" />
     <Compile Include="Services\ConversationStreamProgressProjector.cs" />
-    <Compile Include="Services\ConversationRunPolicy.cs" />
     <Compile Include="Services\AgentJsonProtocol.cs" />
     <Compile Include="Services\ConversationPromptComposer.cs" />
     <Compile Include="Services\CallableToolPack.cs" />
@@ -366,8 +365,6 @@
     <Compile Include="Tools\MarkdownDocumentToolCatalog.cs" />
     <Compile Include="Tools\MarkdownDocumentToolHandler.cs" />
     <Compile Include="Tools\PlanDocumentToolHandler.cs" />
-    <Compile Include="Tools\UserQuestionToolCatalog.cs" />
-    <Compile Include="Tools\UserQuestionToolHandler.cs" />
     <Compile Include="Tools\ToolSafetyPolicy.cs" />
     <Compile Include="Tools\VbaToolExecutor.cs" />
     <Compile Include="Tools\VbaToolExecutor.Native.cs" />

@@ -128,6 +128,11 @@
     <Compile Include="Models\SkillModels.cs" />
     <Compile Include="Models\ResourceRequestException.cs" />
     <Compile Include="Services\SkillCatalogService.cs" />
+    <Compile Include="Services\ConversationRunPolicy.cs" />
+    <Compile Include="Tools\UserQuestionToolCatalog.cs" />
+    <Compile Include="Tools\UserQuestionToolHandler.cs" />
+    <Compile Include="Models\UserQuestions.cs" />
+    <Compile Include="Services\UserQuestionAnswers.cs" />
     <Compile Include="Services\SkillPublicationService.cs" />
     <Compile Include="Services\ResourcePublicationReader.cs" />
     <Compile Include="Services\WorkspaceSkillProvider.cs" />

@@ -1,6 +1,62 @@
 # Stabilization progress
 
-Latest waiting-status correction (2026-10-05): the Office conversation projection
+Latest CLI mode/question slice (2026-10-05): Core `ConversationRunPolicy` and
+`UserQuestionToolCatalog/Handler` now serve Office and CLI; the Office-only copies
+are removed. CLI `--mode chat|plan|agent` selects a persisted session mode, rejects
+unknown values and mode drift, and filters both model schemas and exact runtime
+registrations. Chat exposes only file find/read, without skill selectors. Plan
+exposes reads, enabled skills, available web verification and questions, without
+file writes or approval. Agent retains guarded mutations and can ask questions.
+CLI Plan documents/checklists are still absent; this is not full Plan parity.
+Owner: shared conversation policy/questions and workspace application admission.
+
+Typed questions terminate the same kernel with `awaiting_user`; CLI emits
+`run.needs_input`, exit 3 and the accepted question set. `inspect`/`resume` recover
+it without model work. `answer --answers-file` validates run/set/question/option
+identity and answer constraints under the session lease, then starts an explicit
+new user turn through the same coordinator/kernel. Only semantic answer text
+enters model context. Shared projection removes question IDs while preserving
+native call/result pairing. Rejected/stale/replayed answers do not change history.
+The existing event stream remains the only pending source. No second agent loop.
+
+Acceptance remains pending while waiting. Typed answers carry criteria and prior
+question-run write receipts forward, so already verified file changes need not be
+repeated. This runtime-only lineage grants no file observation/overwrite authority;
+new-turn reads and web verification still require current evidence. A separate
+`run --message` supersedes unanswered questions and starts fresh acceptance counts.
+Approval waits still require explicit resolution.
+
+Scripted production CLI checks pass Chat/Plan/Agent, restart/answer, ten invalid
+answer variants in each question mode, native/text result roles, exact question
+pair/ID isolation, prior-write accounting and new-task isolation. Existing skills
+runtime, all six read-recovery/approval cases and three read-acceptance cases pass. Host-neutral harness:
+Plan 3/3, Chat 1/1, architecture 2/2, awaiting-user runtime 1/1. CLI build: no
+warnings/errors; harness retains two PDF CA1416 warnings. The general source-include
+guard fails on SDK default includes (176 paths), recorded in
+[BACKLOG](BACKLOG.md#source-inclusion-harness-guard-and-sdk-projects--2026-10-05);
+the five new Core files and removed Office includes were checked directly.
+Version-format and diff checks passed.
+Windows/Office/WebView2 delivery and full M4/M5 acceptance remain open.
+
+Real Gemma question tests **failed** with the unchanged narrow
+[task](../../tests/cli/questions_task.md), 32K/4096, system instructions,
+json_schema, reasoning off, sequential requests, 16 iterations / 24 tools and
+180 s per phase. Model/digest match the prior skill test. Native `tool`: 135.15 s,
+exit 5 / ProtocolExhausted. The model supplied file-only-invalid `referencePath`,
+repeated the rejected read, then omitted required option descriptions through ten
+format repairs. Fourteen HTTP requests/responses, 23 pair checks without errors;
+tokens 25308/2368 total, maxima 1960/197. The only comparison change was role `user`:
+21.86 s, exit 5 / no_tool_progress after two invalid resource calls and empty-call
+progress. Five HTTP requests/responses, seven pair checks without errors; tokens
+7336/272 total, maxima 1628/68. Neither produced accepted questions or reached
+answer submission; both made zero file changes and failed read acceptance.
+No reported context/OOM error. The model was unloaded after each run. These
+results do not qualify real-model question completion or isolate a universal
+role/model cause. Source/binaries, fixture/profile, actual HTTP/CAS and wire audits:
+`/var/folders/k9/hr_94nt142x1f43jr6g0wr_00000gp/T/rna-questions-gemma-um15kp23`;
+`/var/folders/k9/hr_94nt142x1f43jr6g0wr_00000gp/T/rna-questions-user-gemma-ddhvxg5w`.
+
+Previous waiting-status correction (2026-10-05): the Office conversation projection
 now maps the kernel's typed `awaiting_user` terminal reason to the corresponding
 response status. Previously it showed `completed`, although the kernel had stopped
 for questions. The existing `plan mode: native question pauses kernel` test fails
@@ -8,8 +64,8 @@ identically on the isolated pre-slice `2a6525fe` baseline and passes after this
 one-line correction. Owner: Office conversation result projection. No lifecycle,
 question dispatch or resume semantics changed. Source-linked harness build has
 the two existing PDF CA1416 warnings; version-format/diff checks passed.
-Windows/Office/WebView2 delivery remains unqualified. The CLI mode/question slice
-is in progress and will receive its own status and commit.
+Windows/Office/WebView2 delivery remains unqualified. Committed separately as
+`42eaa6bf`; the subsequent CLI slice is recorded above.
 
 Previous shared workspace skills slice (2026-10-05): Office and CLI now use Core
 `SkillPublicationService` for committed skill catalogs, exact body/reference CAS
@@ -234,9 +290,10 @@ The model was unloaded after both runs. CSV swap-outs rose 996904 → 1003804;
 swap use 3000.06 → 3011.81 MiB, without a reported OOM/context failure.
 
 Earlier M4/M5 status and retained CSV checks (2026-10-05): **neither full stage is closed**.
-M4's first useful independent real-LLM/file result is achieved. Its remaining
-scope includes non-agent mode filtering, actual skills (the CLI currently supplies
-an empty catalog), structured questions/answers and complete §11 acceptance.
+M4's first useful independent real-LLM/file result is achieved. At this historical
+point its remaining scope included non-agent modes, the actual skill catalog,
+structured questions/answers and complete §11 acceptance. The first three are now
+implemented with the explicit evidence limits at the top; full §11 remains open.
 Delete/move approvals, cancel and explicit recovery/resume already exist; the
 stage table no longer lists these as wholly missing or asks for automatic replay.
 M5 has one successful real counter repair; autonomous CSV creation + a feature
@@ -463,7 +520,7 @@ records temporary adapters. This work does not qualify Windows/Office/WebView2.
 | M1 | `ToolRuntime` and exact handler registry moved to Core; `ConversationRunCoordinator` is called by Office and CLI. Net8 Core and Runtime assemblies build with project references and no Office/WebView2/WinForms/fake dependency in CLI. | Focused `tool runtime:` 15/15; CLI dependency search/build. Office project compilation and platform delivery remain open. |
 | M2 | Portable workspace manifest, user-state association, read-only opening, existing ChatStore workspace sessions without document authority, root relocation and copy-ID conflict. File locators retain identity across a known root move. | Focused `workspace:` 2/2. External moves not associated with an opened workspace and mount/Office identity resolution remain open. |
 | M3 | Real UTF-8 files: bounded single-directory discovery/read, create, exact patch/replace, copy from an accepted complete source to a new identity with immutable source provenance, guarded historical restore, recoverable delete to managed workspace trash and explicit restore after deletion. Confirmed `files.move` keeps logical identity, advances revision and relocates the file locator. CAS views, authority heads, mutation journal, read-back, external-edit conflict and non-replay after an interrupted dispatch remain one file-owner path. `recover` distinguishes prepared-only abandonment, an already-published effect and unknown causality after dispatch; it never replays the command. Ordinary reads and writes are blocked while an effect is unresolved. External invalid UTF-8 or oversized text marks the old known head unknown; BOM, CRLF and verified no-change are preserved. | Focused `workspace files:` 7/7. Directory discovery scans at most 5000 entries and returns `truncated` rather than implying a complete result; optional filename search is case-insensitive. Move retains a durable two-path intent; reads of both paths block until an interrupted move is reconciled. A delete verifies absent source plus exact trash preimage before publishing an unavailable head; restore requires that deletion head and creates a new revision. Cross-volume move semantics, trash retention policy, binary/large streaming, full cross-platform path races, directory pagination and the remaining §8.1 provider operations/views remain open. |
-| M4 — first useful result achieved; full scope open | Independent Net8 CLI uses the production LlmClient/v6, shared coordinator → kernel, ToolRuntime, filesystem owner and frozen ModelContextCompiler. Real-model creation of three external files is proven. Sessions, JSONL, exact reads/mutations, delete/move approvals, cancel, explicit recovery and abandoned-run resume are implemented. | CLI currently fixes mode to `agent` and passes an empty SkillCatalogSnapshot. Non-agent mode filtering, actual skill catalog/activation, structured question/answer handling and full §11 acceptance remain open. Explicit resume does not replay effects; “automatic safe resume” is not a remaining permission to add replay. Historical model failures/evidence are below. |
+| M4 — first useful result achieved; full scope open | Independent Net8 CLI uses production LlmClient/v6, shared coordinator → kernel, ToolRuntime, filesystem owner and frozen ModelContextCompiler. Sessions/JSONL, exact file operations, delete/move approvals, cancel and explicit recovery/resume exist. Shared published skills, mode filtering and typed question/answer admission are implemented. Real file creation and a narrow explicit skill/file task passed. | Real question/answer completion is unproven: both new Gemma role profiles failed before an accepted question. CLI Plan documents/checklists, complete §11 host UX and acceptance remain open. Explicit resume never replays effects. Full independent multi-file task quality/evidence remains distinct from scripted runtime checks. |
 | M5 — in progress | Optional browser verifier uses bounded exact retained snapshots; pending/terminal records and historical replay use existing authority/CAS. Frozen click/text and CSV functional contracts feed the same model web.verify and freshness-bound final acceptance. The separate Node CSV grader/source reader is retired. | Counter repair passed once with real Gemma 12B. CSV runtime checks cover upload/filter/sort/total/chart/export/error handling; live two-turn CSV acceptance is recorded at the top. General preview UI, screenshots/browser traces, longer compaction/resume E-* evidence and full M5 acceptance remain open. Binary assets/common Office dispatch are still §8.1/M5–M7 scope. |
 
 Historical M3/M4 resource routing slice (2026-10-04, extended below): canonical provider registration and
@@ -861,10 +918,15 @@ boundary, not a functional CSV score. Scripted HTTP tests confirmed both CLI
 transport modes and saved metadata. The existing v6 parser correctly rejected
 these outputs; no permissive JSON repair or separate agent loop was added.
 
-Next concrete slice (2026-10-05): M4 mode filtering (Chat/Plan/Agent) and
-structured question/answer handling in the same workspace runtime. Published
-skills, frozen skill context and the file/web instruction route are now implemented;
-a narrow real-model skill/file run passed. M5 still needs autonomous fixed CSV
+Next concrete slice (2026-10-05): isolate the failed Gemma question task's argument
+and schema adherence with the saved actual requests, before claiming M4 question
+acceptance. File-only-invalid referencePath, root directory selection and omitted
+option descriptions are the observed failures; result pairing passed. Keep the
+task/bounds fixed and change one declared profile/contract factor at a time.
+Modes, typed answer/restart handling, published skills and frozen skill context
+are implemented. The next missing application capability is CLI Plan documents /
+Task Lists through the existing publication/mutation owners, then remaining §11 UX.
+M5 still needs autonomous fixed CSV
 creation with current final reads and then the unchanged feature follow-up, plus
 remaining E-FILE/E-RESUME/E-CONTEXT/E-CAPABILITY evidence. Keep the task, checks
 and bounds fixed when comparing model/endpoint profiles, and record actual skill

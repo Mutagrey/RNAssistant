@@ -3,25 +3,24 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using RNAssistant.Core.Models;
-using RNAssistant.Office.Tools;
 
-namespace RNAssistant.Office.Services
+namespace RNAssistant.Core.Services
 {
-    internal sealed class ConversationRunPolicy
+    public sealed class ConversationRunPolicy
     {
         private static readonly HashSet<string> ChatToolIds = new HashSet<string>(
             new[]
             {
-                ResourceToolCatalog.FindToolId,
-                ResourceToolCatalog.ReadToolId
+                "common.resources_find",
+                "common.resources_read"
             },
             StringComparer.OrdinalIgnoreCase);
         private static readonly HashSet<string> PlanLocalToolIds = new HashSet<string>(new[]
         {
-            TaskListToolCatalog.SetToolId,
-            PlanDocumentToolCatalog.SaveToolId,
-            PlanDocumentToolCatalog.RestoreToolId,
-            PlanDocumentToolCatalog.DeleteToolId,
+            "common.task_list_set",
+            "common.plan_doc_save",
+            "common.plan_doc_restore",
+            "common.plan_doc_delete",
             UserQuestionToolCatalog.AskToolId
         }, StringComparer.OrdinalIgnoreCase);
 

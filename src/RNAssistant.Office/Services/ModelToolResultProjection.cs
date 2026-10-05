@@ -384,15 +384,7 @@ namespace RNAssistant.Office.Services
             if (string.Equals(name, UserQuestionToolCatalog.AskToolId,
                 StringComparison.Ordinal))
             {
-                RemoveProperties(root, "questionSetId");
-                foreach (var question in (root["questions"] as JArray ??
-                    new JArray()).OfType<JObject>())
-                {
-                    RemoveProperties(question, "id");
-                    foreach (var option in (question["options"] as JArray ??
-                        new JArray()).OfType<JObject>())
-                        RemoveProperties(option, "id");
-                }
+                ModelResultProjection.RemoveQuestionRuntimeState(name, token);
                 return;
             }
             if (PlanDocumentToolCatalog.Owns(name))

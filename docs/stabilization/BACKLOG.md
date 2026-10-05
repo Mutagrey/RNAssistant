@@ -23,6 +23,30 @@ filter (15 pass). Audit current public membership and correct the contract or
 expectation as a separate slice; do not weaken removed-alias checks. This is
 host-neutral evidence, not real Outlook qualification.
 
+## Source-inclusion harness guard and SDK projects — 2026-10-05
+
+Owner: Harness/project structure. `harness: production projects include all source
+files` scans every project as old-style and reports 176 missing source includes
+in the current Core.Net8/Runtime/CLI SDK projects. It does not interpret default
+SDK Compile items; no production compilation error was observed. The existing
+guard predates the SDK CLI composition. Update its project-style handling in a
+separate slice while preserving explicit include checks for .NET Framework.
+The mode/question slice's five new Core files were independently checked against
+the old-style Core project, and retired Office includes were removed. Do not
+report the overall source-inclusion guard as passed.
+
+## CLI question argument adherence — 2026-10-05
+
+Owner: model context / CLI evaluation. The new fixed `questions_task.md` fails
+with Gemma 12B before any accepted question. Native tool results lead to an invalid
+file reference selector, then missing option descriptions through bounded format
+repair. Textual user results lead to invalid file/root selectors and no-tool
+progress. Both actual-wire pair audits pass; neither run reaches answer admission.
+Do not attribute this to missing call/results or context limits from these traces.
+The next controlled investigation is selector/schema guidance and provider
+adherence, retaining exact task/bounds and declaring each changed factor. Runtime
+mode/answer contracts are covered separately by scripted production CLI checks.
+
 ## CLI final-read acceptance after CSV repair — 2026-10-05
 
 Owner: Runtime acceptance / shared model context. After the target-bound read

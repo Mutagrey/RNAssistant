@@ -54,6 +54,9 @@ namespace RNAssistant.Core.Models
         public int MinimumVerifiedWrites { get; set; }
         public bool RequireWebVerification { get; set; }
         public WebFunctionalChecks WebChecks { get; set; }
+        // Runtime-owned lineage for write-count assessment after typed answers.
+        // This grants no read/overwrite authority and is never model context.
+        public List<string> PriorQuestionRunIds { get; set; } = new List<string>();
         public int AcceptedCompleteFileReads { get; set; }
         public int VerifiedFileChanges { get; set; }
         public bool VerifiedWebSnapshot { get; set; }

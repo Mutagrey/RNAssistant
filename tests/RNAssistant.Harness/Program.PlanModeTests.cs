@@ -179,8 +179,8 @@ namespace RNAssistant.Harness
                 AssertTrue(questionPolicy != null &&
                     questionPolicy.Effect == ToolEffect.Read &&
                     !questionPolicy.IndependentLocalRead &&
-                    questionPolicy.AllowedModes.SequenceEqual(new[] { "plan" }),
-                    "questions carry exact source-owned Plan policy");
+                    questionPolicy.AllowedModes.SequenceEqual(new[] { "agent", "plan" }),
+                    "questions carry exact source-owned Plan/Agent policy");
                 AssertTrue(selected.Any(item => item.Id == ResourceToolCatalog.ReadToolId), "resource read available");
                 AssertTrue(selected.All(item => !item.MutatesDocument), "document mutations excluded");
                 AssertTrue(!ConversationRunPolicy.For(ChatModes.Plan).AllowsConfirmation, "Plan cannot confirm mutations");

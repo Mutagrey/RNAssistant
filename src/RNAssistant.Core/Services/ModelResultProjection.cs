@@ -92,6 +92,19 @@ namespace RNAssistant.Core.Services
             return parts;
         }
 
+        public static void RemoveQuestionRuntimeState(string name, JToken data)
+        {
+            var root = data as JObject;
+            if (name != UserQuestionToolCatalog.AskToolId || root == null) return;
+            root.Remove("questionSetId");
+            foreach (var question in (root["questions"] as JArray ?? new JArray()).OfType<JObject>())
+            {
+                question.Remove("id");
+                foreach (var option in (question["options"] as JArray ?? new JArray()).OfType<JObject>())
+                    option.Remove("id");
+            }
+        }
+
         public static bool IsResourceEvidence(string name)
         {
             return string.Equals(name, "common.resources_find", StringComparison.OrdinalIgnoreCase) ||
@@ -134,6 +147,7 @@ namespace RNAssistant.Core.Services
             ToolResultMaterialization source)
         {
             var data = source.Data.DeepClone();
+            RemoveQuestionRuntimeState(name, data);
             RemoveRuntimeResourceValues(data, source.Result.Resources);
             var objectData = data as JObject;
             if (objectData != null && source.ResultResource != null &&
