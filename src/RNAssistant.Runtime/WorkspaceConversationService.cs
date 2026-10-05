@@ -17,12 +17,13 @@ using RNAssistant.Core.Services;
 using RNAssistant.Core.Storage;
 using RNAssistant.Core.Tools;
 using RNAssistant.Core.Tools.Contracts;
+using RNAssistant.Runtime.Contracts;
 
 namespace RNAssistant.Runtime
 {
     // The CLI host supplies input/output only. This service uses the same kernel,
     // materialized model protocol, ToolRuntime and canonical stores as Office.
-    public sealed class WorkspaceConversationService
+    public sealed partial class WorkspaceConversationService
     {
         private readonly AppDataPaths _paths;
         private readonly ChatStore _chats;
@@ -108,17 +109,6 @@ namespace RNAssistant.Runtime
             return new WorkspaceUserInput { RunId = run.RunId, QuestionSet = questions };
         }
 
-        public Task<WorkspaceRunResult> AnswerAsync(WorkspaceDescriptor workspace, string sessionId,
-            UserQuestionAnswerCommand answers, AppSettings settings, Func<string> apiKeyProvider,
-            Action<WorkspaceRunEvent> progress = null, CancellationToken cancellationToken = default(CancellationToken),
-            bool? reasoningEnabled = null, string modelDigest = null, string mode = null)
-        {
-            if (string.IsNullOrWhiteSpace(sessionId) || answers == null)
-                throw new ArgumentException("An existing session and typed answers are required.");
-            return RunAsync(workspace, sessionId, null, settings, apiKeyProvider, progress, cancellationToken,
-                null, reasoningEnabled, modelDigest, mode, answers);
-        }
-
         public WorkspaceFileRecoveryResult ReconcileFile(WorkspaceDescriptor workspace, string relativePath)
         {
             return _files.ReconcileUncertain(workspace, relativePath);
@@ -162,21 +152,25 @@ namespace RNAssistant.Runtime
                 throw new ArgumentException("Workspace tool results require role user, developer or tool.", nameof(settings));
         }
 
-        public async Task<WorkspaceRunResult> RunAsync(WorkspaceDescriptor workspace, string sessionId,
-            string message, AppSettings settings, Func<string> apiKeyProvider,
+        public async Task<WorkspaceRunResult> SubmitInputAsync(WorkspaceDescriptor workspace,
+            WorkspaceSubmitInputRequest request, AppSettings settings, Func<string> apiKeyProvider,
             Action<WorkspaceRunEvent> progress = null, CancellationToken cancellationToken = default(CancellationToken),
-            WorkspaceRunAcceptance acceptance = null, bool? reasoningEnabled = null, string modelDigest = null,
-            string mode = null, UserQuestionAnswerCommand answers = null)
+            string modelDigest = null)
         {
             if (workspace == null) throw new ArgumentNullException(nameof(workspace));
-            if (answers == null && string.IsNullOrWhiteSpace(message)) throw new ArgumentException("A task message is required.", nameof(message));
-            if (answers != null && (string.IsNullOrWhiteSpace(sessionId) || message != null))
-                throw new ArgumentException("Typed answers require an existing session and cannot include a task message.");
-            if (mode != null) mode = ChatModes.Require(mode);
+            ValidateInput(request);
+            var duplicate = FindAcceptedInput(workspace, request);
+            if (duplicate != null) return WorkspaceRunResult.AlreadyAccepted(duplicate);
+            var fingerprint = InputFingerprint(request);
+            var sessionId = request.SessionId;
+            var message = request.Message;
+            var mode = request.Mode == null ? null : ChatModes.Require(request.Mode);
+            var answers = request.Answers;
+            var reasoningEnabled = request.ReasoningEnabled;
             if (settings == null || string.IsNullOrWhiteSpace(settings.BaseUrl) || string.IsNullOrWhiteSpace(settings.Model))
                 throw new ArgumentException("An LLM endpoint and model are required.", nameof(settings));
             ValidateMessageRoles(settings);
-            var acceptedContract = PrepareAcceptance(acceptance);
+            var acceptedContract = PrepareAcceptance(request.Acceptance);
             var session = string.IsNullOrWhiteSpace(sessionId)
                 ? _workspaces.CreateSession(_chats, workspace, "Workspace chat")
                 : _workspaces.LoadSession(_chats, workspace, sessionId);
@@ -187,6 +181,11 @@ namespace RNAssistant.Runtime
                 if (!string.IsNullOrWhiteSpace(sessionId))
                     session = _workspaces.LoadSession(_chats, workspace, sessionId);
                 if (session == null) throw new InvalidOperationException("Workspace session was removed.");
+                if (request.RequestId != null)
+                {
+                    duplicate = FindAcceptedInput(session, request.RequestId, fingerprint);
+                    if (duplicate != null) return WorkspaceRunResult.AlreadyAccepted(duplicate);
+                }
                 var acceptedMode = mode ?? ChatModes.Require(session.Mode);
                 if (session.LastRun != null && acceptedMode != ChatModes.Require(session.Mode))
                     throw new ArgumentException("Mode is fixed for this session; create a new session to change it.");
@@ -218,6 +217,15 @@ namespace RNAssistant.Runtime
                 var ports = new WorkspacePorts(_paths, _chats, _files, _payloads, _webSnapshots, workspace, session, settings, apiKeyProvider,
                     progress, acceptedContract);
                 var runId = Guid.NewGuid().ToString("N");
+                var input = new ConversationInput { Id = Guid.NewGuid().ToString("N"),
+                    OperationId = request.RequestId ?? Guid.NewGuid().ToString("N"), Revision = 1, Text = message,
+                    Delivery = InputDelivery.Queue, Status = ConversationInputStatus.Delivering,
+                    CreatedUtc = DateTime.UtcNow, DocumentRuntimeKey = workspace.WorkspaceId,
+                    AcceptedRunId = runId, RequestFingerprint = fingerprint };
+                var inputs = new ConversationInputJournal(new ChatEventStoreAdapter(_chats));
+                var accepted = inputs.Append(session, new ConversationInputEvent { Input = input });
+                var receipt = Receipt(accepted, input, false);
+                progress?.Invoke(new WorkspaceRunEvent("InputAccepted", null, null, receipt.AcceptedCursor, receipt));
                 session.LastRun = new ChatRunRecord
                 { RunId = runId, TurnId = runId, StartedUtc = DateTime.UtcNow,
                     ResponseProtocolVersion = ConversationResponse.ProtocolVersion,
@@ -235,8 +243,11 @@ namespace RNAssistant.Runtime
                     },
                     WorkspaceAcceptance = acceptedContract };
                 session.Model = settings.Model;
-                session.Messages.Add(new ChatMessage { Role = "user", Content = message, RunId = runId });
+                session.Messages.Add(new ChatMessage { Id = input.Id, Role = "user", Content = message, RunId = runId });
                 _chats.Save(session);
+                input.Status = ConversationInputStatus.Applied; input.Revision++;
+                inputs.Append(session, new ConversationInputEvent { Input = input });
+                receipt.DeliveryRecorded = true;
 
                 var result = await ConversationRunCoordinator.RunAsync(
                     new AgentRunRequest(runId, runId, message,
@@ -248,7 +259,8 @@ namespace RNAssistant.Runtime
                     session.LastRun.WorkspaceAcceptance = acceptedContract;
                     _chats.Save(session);
                 }
-                return new WorkspaceRunResult(session.Id, result.Summary, acceptedContract, GetPendingQuestions(session));
+                return new WorkspaceRunResult(session.Id, result.Summary, acceptedContract, GetPendingQuestions(session),
+                    receipt, ConversationEventFeed.Cursor(session));
             }
         }
 
@@ -307,7 +319,8 @@ namespace RNAssistant.Runtime
                     session.LastRun.WorkspaceAcceptance = acceptance;
                     _chats.Save(session);
                 }
-                return new WorkspaceRunResult(session.Id, result.Summary, acceptance, GetPendingQuestions(session));
+                return new WorkspaceRunResult(session.Id, result.Summary, acceptance, GetPendingQuestions(session),
+                    cursor: ConversationEventFeed.Cursor(session));
             }
         }
 
@@ -1057,7 +1070,7 @@ namespace RNAssistant.Runtime
                 _chats.Save(_session);
                 _cursor++;
                 _progress?.Invoke(new WorkspaceRunEvent(fact.Kind.ToString(), fact.Summary,
-                    fact.ToolContext?.Call.Name ?? fact.Execution?.Context.Call.Name));
+                    fact.ToolContext?.Call.Name ?? fact.Execution?.Context.Call.Name, ConversationEventFeed.Cursor(_session)));
                 return Task.FromResult(_cursor);
             }
         }
@@ -1231,8 +1244,10 @@ namespace RNAssistant.Runtime
         public string Kind { get; private set; }
         public RunSummary Summary { get; private set; }
         public string ToolId { get; private set; }
-        public WorkspaceRunEvent(string kind, RunSummary summary, string toolId)
-        { Kind = kind; Summary = summary; ToolId = toolId; }
+        public string Cursor { get; private set; }
+        public WorkspaceInputReceipt Receipt { get; private set; }
+        public WorkspaceRunEvent(string kind, RunSummary summary, string toolId, string cursor = null, WorkspaceInputReceipt receipt = null)
+        { Kind = kind; Summary = summary; ToolId = toolId; Cursor = cursor; Receipt = receipt; }
     }
 
     public sealed class WorkspaceRunResult
@@ -1241,8 +1256,14 @@ namespace RNAssistant.Runtime
         public RunSummary Summary { get; private set; }
         public WorkspaceRunAcceptance Acceptance { get; private set; }
         public WorkspaceUserInput UserInput { get; private set; }
-        public WorkspaceRunResult(string sessionId, RunSummary summary, WorkspaceRunAcceptance acceptance, WorkspaceUserInput userInput = null)
-        { SessionId = sessionId; Summary = summary; Acceptance = acceptance; UserInput = userInput; }
+        public WorkspaceInputReceipt Receipt { get; private set; }
+        public string Cursor { get; private set; }
+        public bool Duplicate { get; private set; }
+        public WorkspaceRunResult(string sessionId, RunSummary summary, WorkspaceRunAcceptance acceptance,
+            WorkspaceUserInput userInput = null, WorkspaceInputReceipt receipt = null, string cursor = null)
+        { SessionId = sessionId; Summary = summary; Acceptance = acceptance; UserInput = userInput; Receipt = receipt; Cursor = cursor; }
+        public static WorkspaceRunResult AlreadyAccepted(WorkspaceInputReceipt receipt)
+        { return new WorkspaceRunResult(receipt.SessionId, null, null, receipt: receipt) { Duplicate = true }; }
     }
 
     public sealed class WorkspaceUserInput

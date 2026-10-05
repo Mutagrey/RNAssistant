@@ -374,3 +374,48 @@ resume reconciles claimed IDs against persisted messages and never reruns an alr
 recorded input. Restart pauses retained input independently of the last saved pause
 flag. Missing CAS input bodies fail explicitly. Old event streams need no backfill;
 absence of input events means an empty queue.
+
+### Application input receipts and event reconnect
+
+Core `ConversationInputJournal` owns the existing input event/CAS serialization
+for the Office inbox and workspace application service. Queue scheduling stays
+with its application owner. Workspace intake adds optional `AcceptedRunId` and
+`RequestFingerprint` metadata to that same event; it adds no store or event type.
+`OperationId` is the caller's request ID (or a runtime-generated ID when omitted).
+The accepted revision precedes user-message persistence and kernel invocation;
+the `applied` revision follows durable persistence of that message with the input
+ID. Input metadata never enters model context.
+
+`SubmitInputAsync` returns the original accepted identity for the same session,
+request ID and submitted intent. The fingerprint includes text/typed answers,
+supplied mode/thinking and acceptance criteria; endpoint/model configuration is
+not reapplied on a duplicate. Reusing an ID for different input fails with
+`request_id_conflict`. Receipt lookup precedes model availability and the run
+lease, with another lookup inside the lease before acceptance. A duplicate does
+not append events, start/reconcile a run, re-grade acceptance or replay tools.
+Caller-supplied IDs require a pre-existing session.
+
+Receipt `DeliveryRecorded` means the `applied` event was persisted, not that a run
+completed or a tool had an effect. It may advance from false to true. A receipt
+survives an interrupted process or a crash before delivery; false leaves delivery
+unconfirmed and never authorizes automatic resubmission. Inspect state and use
+explicit recovery/new input. These receipts are rebuilt from canonical events,
+including after deletion of the disposable SQLite projection.
+
+`ReadState` returns the canonical conversation snapshot's opaque `Cursor`, binding
+session ID, event sequence and hash. Resource availability hints are checked by
+their own authority owners; this is not an atomic snapshot of all workspace files.
+`ConversationEventFeed` reads the same stream through `IEventStore.RequireComplete`.
+`ReadEvents(after, through?, limit)` returns 1–100 event notices per nonempty page,
+with `HighWater`, exclusive `NextCursor` and `HasMore`. Pin subsequent pages to the
+returned `HighWater` using `through`; later appends cannot change that prefix.
+Notices carry event/correlation metadata and operation kinds, never event bodies,
+CAS payloads or a second replay protocol. Consumers refresh state as needed.
+
+Malformed/cross-session cursors, missing or replaced positions, unavailable streams
+and incomplete tails produce explicit `ResyncRequired` with a typed reason. Obtain
+a fresh snapshot (or resolve unavailable history explicitly); no mutation is
+repeated. Kernel invocation counters remain private and are not transport cursors.
+Output pages are bounded; the current implementation still validates/materializes
+the full event history through the existing port. Indexed incremental reads, push
+subscription and Office UI adoption remain open scope.

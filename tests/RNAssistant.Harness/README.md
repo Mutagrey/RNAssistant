@@ -1,5 +1,17 @@
 # RNAssistant Harness
 
+After building the CLI, `python3 -B tests/cli/application_requests_smoke.py` checks
+typed SubmitInput and snapshot/event reconnect through controlled HTTP waits:
+active/completed/older/pre-delivery/crashed duplicates, conflicting request IDs,
+offline receipt lookup, no extra model/file effects, canonical contiguous pages
+with pinned high-water, projection rebuild and explicit resync for invalid,
+cross-session, replaced or incomplete history. It verifies that duplicate intake
+does not close an abandoned run; explicit resume still owns that transition.
+`python3 -B tests/cli/mode_questions_smoke.py` also checks duplicate/conflicting
+typed answers. For shared input persistence, run the `inbox:` and
+`storage: typed event port preserves classified wire` harness filters. These are
+scripted/host-neutral checks, not real-model or Office qualification.
+
 `python3 tests/cli/skills_runtime_smoke.py` checks the production CLI with a scripted
 HTTP model: metadata-only discovery, Common/Workspace and enabled filtering,
 built-in precedence, exact core/reference CAS reads after authoring drift/deletion,

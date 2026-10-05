@@ -1,5 +1,32 @@
 # Stabilization progress
 
+CLI input receipts and event reconnect slice (2026-10-05): `run` and `answer`
+now use typed `SubmitInputAsync`. Core `ConversationInputJournal` owns existing
+input event/CAS serialization for both the Office inbox and workspace application.
+Caller `--request-id` binds the submitted input to its original accepted run;
+duplicates return its receipt, changed input conflicts. Duplicate lookup works
+while a run is active and with the model offline, without adding events, another
+run, acceptance re-evaluation or file effects. Owner: conversation application services.
+
+`session create` permits stable session identity before submission. Typed
+`ReadState`/`inspect` returns a canonical sequence/hash cursor. Core event feed and
+CLI `events` return bounded metadata pages with pinned high-water; invalid or lost
+history produces explicit resync. Kernel counters, model context and mutation
+authority are unchanged. Receipt delivery status is not run success; a crash before
+delivery or during a run never causes duplicate intake to resume/replay work.
+No second journal, queue store, event schema or agent loop was added.
+
+Checks: CLI build clean; shared inbox 9/9 and typed event port 1/1. Scripted CLI
+request/reconnect smoke passes, including active/older/abandoned input, a canonical
+prefix ending immediately after acceptance, SQLite projection removal, pinned
+paging during appends and unavailable/corrupt history. Modes/questions 3/3 includes
+duplicate/conflicting typed answers; response roles/native pairs and guarded
+approval inheritance pass. Harness build retains two existing PDF CA1416 warnings.
+No new real-model or Windows/Office qualification. Output is bounded but event
+reads still scan full history; push subscription, cross-process cancellation,
+interactive UX, same-run continuation and Office UI adoption remain open. Full
+M4/M5 remain open; the failed fixed CSV task/follow-up evidence is unchanged.
+
 Shared CLI Markdown Plan slice (2026-10-05): Plan mode exposes save/restore/delete;
 Agent exposes save. Core `PlanDocumentService`, catalog/handler and
 `PlanDocumentPublication` now serve both hosts. Office-only implementations are
@@ -34,8 +61,8 @@ isolated ownership, publication recovery and no replay/file-write credit. New/mo
 were checked directly. The known SDK-unaware all-source guard still fails (187
 reported entries); its existing BACKLOG item remains open. Harness build retains
 two existing PDF CA1416 warnings. These are host-neutral/scripted checks, not new
-real-model or Windows/Office qualification. Full M4/M5 remain open; next scope is
-§11 accepted-input idempotency and snapshot/event reconnection semantics.
+real-model or Windows/Office qualification. Full M4/M5 remain open; the subsequent
+§11 accepted-input/reconnect slice is recorded above.
 
 Shared CLI Task List slice (2026-10-05): Plan and Agent now expose
 `common.task_list_set` through Core's existing domain service, catalog and handler;
@@ -1144,11 +1171,12 @@ boundary, not a functional CSV score. Scripted HTTP tests confirmed both CLI
 transport modes and saved metadata. The existing v6 parser correctly rejected
 these outputs; no permissive JSON repair or separate agent loop was added.
 
-Next concrete slice (2026-10-05): complete the §11 application request boundary:
-accepted-input idempotency (duplicate SubmitInput returns the accepted receipt),
-state snapshot with a canonical event high-water marker, and reconnect/resync
-without replaying mutations. Owner: conversation application services. Then close
-remaining CLI UX and bounded continuation evidence against the same kernel.
+Next concrete slice (2026-10-05): bounded continuation/cancellation through the
+existing application lifecycle and kernel. Preserve accepted run identity,
+remaining limits and exact pending-call guards; uncertain effects cannot replay.
+Owner: conversation application services. Accepted-input receipts and canonical
+snapshot/event polling are implemented above; push subscription, incremental
+event reads, interactive CLI UX and UI adoption remain open.
 Modes, typed answer/restart handling, published skills, frozen context, Task Lists
 and workspace-owned Markdown Plans are implemented with the evidence limits above.
 Explicit reconciliation of uncertain planning mutations remains open.

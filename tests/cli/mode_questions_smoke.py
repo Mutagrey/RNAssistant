@@ -154,7 +154,7 @@ def run_case(root, mode, role):
         assert checked("inspect", "--session", session_id)["Revision"] == inspected["Revision"], "Rejected answers changed durable state"
         path.write_text(json.dumps(answer))
         responses.extend([call("common.resources_read", target="notes.txt"), DONE])
-        completed = checked("answer", "--session", session_id, "--answers-file", str(path))
+        completed = checked("answer", "--session", session_id, "--answers-file", str(path), "--request-id", "answer-once")
         assert completed["reason"] == "model_done" and completed["acceptance"] == "passed", completed
         assert completed["verifiedFileChanges"] == (1 if mode == "agent" else 0), "Answer required repeating a prior verified write"
         assert completed["RunId"] != pending["RunId"] and completed["userInput"] is None
@@ -176,6 +176,17 @@ def run_case(root, mode, role):
         else:
             assert not any(message["role"] == "tool" for message in continuation["messages"])
         before = len(requests)
+        revision = checked("inspect", "--session", session_id)["Revision"]
+        result, repeated = cli("answer", "--session", session_id, "--answers-file", str(path), "--request-id", "answer-once")
+        assert result.returncode == 0 and repeated["type"] == "input.already_accepted"
+        assert repeated["data"] == completed["inputReceipt"] and len(requests) == before
+        assert checked("inspect", "--session", session_id)["Revision"] == revision
+        changed_answer = copy.deepcopy(answer)
+        changed_answer["answers"][1]["freeText"] = "Different answer"
+        path.write_text(json.dumps(changed_answer))
+        result, _ = cli("answer", "--session", session_id, "--answers-file", str(path), "--request-id", "answer-once")
+        assert result.returncode == 2 and "request_id_conflict" in result.stderr and len(requests) == before
+        path.write_text(json.dumps(answer))
         result, _ = cli("answer", "--session", session_id, "--answers-file", str(path))
         assert result.returncode == 2 and len(requests) == before, "Answered question replayed"
         if mode == "agent":
@@ -185,7 +196,7 @@ def run_case(root, mode, role):
             assert new_task["verifiedFileChanges"] == 0 and new_task["acceptance"] == "failed", "Unrelated task borrowed earlier writes"
         assert not errors and not responses
         print(f"PASS {mode}/{role}: needs_input, restored questions, 10 invalid answers rejected without writes, "
-              "semantic answers/new turn, inherited mode/role, acceptance, no ID leak/replay")
+              "semantic answers/new turn, duplicate/conflicting receipts, inherited mode/role, acceptance, no ID leak/replay")
     finally:
         server.shutdown()
         server.server_close()

@@ -1,0 +1,102 @@
+using System;
+using System.IO;
+using System.Linq;
+using Newtonsoft.Json;
+using RNAssistant.Core.Models;
+using RNAssistant.Core.Services;
+using RNAssistant.Core.Storage;
+using RNAssistant.Core.Tools;
+using RNAssistant.Runtime.Contracts;
+
+namespace RNAssistant.Runtime
+{
+    public sealed partial class WorkspaceConversationService
+    {
+        public WorkspaceSessionSnapshot ReadState(WorkspaceDescriptor workspace, string sessionId)
+        {
+            var session = GetSession(workspace, sessionId);
+            if (session == null) throw new ArgumentException("Session not found.");
+            return new WorkspaceSessionSnapshot
+            {
+                Id = session.Id, WorkspaceId = session.WorkspaceId, Title = session.Title, Model = session.Model,
+                Mode = session.Mode, Revision = session.Revision, Cursor = ConversationEventFeed.Cursor(session),
+                Status = session.LastRun?.Status, ModelConfiguration = session.LastRun?.ModelConfiguration,
+                ContextReceipt = session.LastContextReceipt, Acceptance = session.LastRun?.WorkspaceAcceptance,
+                UserInput = GetPendingQuestions(session), TaskList = GetTaskList(session), Plan = GetPlan(workspace, session),
+                InterruptedToolId = session.LastRun?.InterruptedToolId, InterruptedPath = session.LastRun?.InterruptedFilePath,
+                InterruptedEffectPossible = session.LastRun?.InterruptedEffectPossible, MessageCount = session.Messages.Count
+            };
+        }
+
+        public ConversationEventPage ReadEvents(WorkspaceDescriptor workspace, string sessionId, string after,
+            string through = null, int limit = 50)
+        {
+            // Event metadata needs no run lease, LLM or reconciliation. Reconnecting
+            // cannot start a run, close a pending approval or repeat a tool.
+            if (limit < 1 || limit > 100) throw new ArgumentException("Event page limit must be 1–100.");
+            try
+            {
+                var session = GetSession(workspace, sessionId);
+                if (session == null) return new ConversationEventPage { SessionId = sessionId, After = after,
+                    Reason = ConversationResyncReason.HistoryUnavailable };
+                return new ConversationEventFeed(new ChatEventStoreAdapter(_chats)).Read(session, after, through, limit);
+            }
+            catch (Exception ex) when (ex is IOException || ex is InvalidOperationException || ex is JsonException || ex is UnauthorizedAccessException)
+            { return new ConversationEventPage { SessionId = sessionId, After = after, Reason = ConversationResyncReason.HistoryUnavailable }; }
+        }
+
+        public WorkspaceInputReceipt FindAcceptedInput(WorkspaceDescriptor workspace, WorkspaceSubmitInputRequest request)
+        {
+            ValidateInput(request);
+            if (request.RequestId == null) return null;
+            var session = GetSession(workspace, request.SessionId);
+            if (session == null) throw new ArgumentException("Session not found.");
+            return FindAcceptedInput(session, request.RequestId, InputFingerprint(request));
+        }
+
+        private WorkspaceInputReceipt FindAcceptedInput(ChatSession session, string requestId, string fingerprint)
+        {
+            var records = new ConversationInputJournal(new ChatEventStoreAdapter(_chats)).Read(session, false)
+                .Where(item => item.Change.Input?.OperationId == requestId).ToArray();
+            if (records.Length == 0) return null;
+            var first = records[0];
+            var input = first.Change.Input;
+            if (input.Revision != 1 || string.IsNullOrEmpty(input.AcceptedRunId) ||
+                string.IsNullOrEmpty(input.RequestFingerprint) || records.Any(item =>
+                    item.Change.Input.Id != input.Id || item.Change.Input.AcceptedRunId != input.AcceptedRunId ||
+                    item.Change.Input.RequestFingerprint != input.RequestFingerprint))
+                throw new InvalidOperationException("The accepted input receipt is unavailable; inspect the session without replaying input.");
+            if (fingerprint != input.RequestFingerprint)
+                throw new ArgumentException("request_id_conflict: this request ID already belongs to different input; use the original request or a new ID.");
+            return Receipt(first.Event, input, records[records.Length - 1].Change.Input.Status == ConversationInputStatus.Applied);
+        }
+
+        private static WorkspaceInputReceipt Receipt(SessionEvent fact, ConversationInput input, bool delivered)
+        { return new WorkspaceInputReceipt { SessionId = fact.SessionId, RequestId = input.OperationId,
+            InputId = input.Id, RunId = input.AcceptedRunId, AcceptedSequence = fact.Sequence,
+            AcceptedCursor = ConversationEventFeed.Cursor(fact), DeliveryRecorded = delivered }; }
+
+        private static void ValidateInput(WorkspaceSubmitInputRequest request)
+        {
+            if (request == null) throw new ArgumentNullException(nameof(request));
+            if (request.RequestId != null && (string.IsNullOrWhiteSpace(request.RequestId) || request.RequestId.Length > 128 ||
+                string.IsNullOrWhiteSpace(request.SessionId)))
+                throw new ArgumentException("A request ID must be 1–128 characters and requires an existing --session (use session create first).");
+            if (request.Answers == null && string.IsNullOrWhiteSpace(request.Message)) throw new ArgumentException("A task message is required.");
+            if (request.Answers != null && (string.IsNullOrWhiteSpace(request.SessionId) || request.Message != null))
+                throw new ArgumentException("Typed answers require an existing session and cannot include a task message.");
+            if (request.Mode != null) ChatModes.Require(request.Mode);
+            PrepareAcceptance(request.Acceptance);
+        }
+
+        private static string InputFingerprint(WorkspaceSubmitInputRequest request)
+        {
+            // Transport identity is bound to submitted intent. Environment/model
+            // settings are execution configuration; a duplicate never reapplies them.
+            var canonical = new WorkspaceSubmitInputRequest { Message = request.Message,
+                Mode = request.Mode == null ? null : ChatModes.Require(request.Mode), ReasoningEnabled = request.ReasoningEnabled,
+                Answers = request.Answers, Acceptance = PrepareAcceptance(request.Acceptance) };
+            return TextPatternEngine.Sha256(JsonConvert.SerializeObject(canonical));
+        }
+    }
+}

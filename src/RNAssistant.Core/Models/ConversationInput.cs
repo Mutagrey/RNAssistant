@@ -14,6 +14,10 @@ namespace RNAssistant.Core.Models
     {
         public string Id { get; set; }
         public string OperationId { get; set; }
+        [JsonProperty(NullValueHandling = NullValueHandling.Ignore)]
+        public string AcceptedRunId { get; set; }
+        [JsonProperty(NullValueHandling = NullValueHandling.Ignore)]
+        public string RequestFingerprint { get; set; }
         public long Revision { get; set; }
         public string Text { get; set; }
         public InputDelivery Delivery { get; set; }

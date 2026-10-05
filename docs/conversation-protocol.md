@@ -243,6 +243,41 @@ verification are assessed for the new run at current authority. An unrelated new
 task cannot borrow these write counts. While waiting for questions, plain model
 `needs_input` or approval, assessment remains pending; none is reported as success.
 
+### Workspace application requests and reconnect
+
+CLI `run` and `answer` use one typed `WorkspaceSubmitInputRequest` and
+`SubmitInputAsync`; the former separate application entry points are removed.
+For retryable client delivery, create a session before submitting input:
+
+```text
+rna session create --workspace <path> --title "My task" --jsonl
+rna run --workspace <path> --session <id> --request-id <client-id> --message "Create the app" --jsonl
+rna inspect --workspace <path> --session <id> --jsonl
+rna events --workspace <path> --session <id> --after <Cursor> --limit 50 --jsonl
+```
+
+`--request-id` accepts 1–128 characters and requires `--session`. Repeating the
+same ID with the same input/criteria returns only `input.already_accepted` and the
+original receipt, including for a currently running or older turn. Exit 0 confirms
+receipt lookup, not task success. Changed input returns `request_id_conflict`
+(exit 2). Typed `answer` supports the same flag; a repeated accepted answer is
+acknowledged before checking whether the question has already been answered.
+Without an ID, each explicit input is a new submission and stale answers fail.
+Duplicate lookup does not require the model/endpoint to be available and does not
+apply new model/endpoint settings. Persist the submitted input and criteria for
+retries; the ID alone is insufficient. See [receipt semantics](session-events.md#application-input-receipts-and-event-reconnect).
+
+`input.accepted` reports durable intake before delivery; `DeliveryRecorded` is not
+completion or effect evidence. Tool progress and final run output carry canonical
+event cursors. `inspect` exposes typed `WorkspaceSessionSnapshot` with a cursor
+for its conversation state. `events` reads metadata notices after that position;
+use `NextCursor` and the first page's `HighWater` as `--through` while `HasMore`.
+Pages default to 50 notices, maximum 100. `events.resync_required` (exit 3) means
+the client must refresh state/resolve history, never resubmit mutations. This is
+bounded polling; it is not yet push subscription or incremental indexed I/O.
+Cross-process cancellation, interactive UX, safe same-run continuation and full
+Office UI adoption remain open §11 scope.
+
 ## Conversation context
 
 `ConversationModelSession` is the Office owner for one start/confirmation invocation's

@@ -129,6 +129,9 @@
     <Compile Include="Models\ResourceRequestException.cs" />
     <Compile Include="Services\SkillCatalogService.cs" />
     <Compile Include="Services\ConversationRunPolicy.cs" />
+    <Compile Include="Services\ConversationInputJournal.cs" />
+    <Compile Include="Services\ConversationEventFeed.cs" />
+    <Compile Include="Models\ConversationEventFeedModels.cs" />
     <Compile Include="Tools\UserQuestionToolCatalog.cs" />
     <Compile Include="Services\TaskListService.cs" />
     <Compile Include="Services\PlanDocumentService.cs" />

@@ -6,6 +6,7 @@ using System.Threading;
 using Newtonsoft.Json;
 using RNAssistant.Core.Models;
 using RNAssistant.Core.Persistence;
+using RNAssistant.Core.Services;
 using RNAssistant.Office.Contracts;
 
 namespace RNAssistant.Office.Services
@@ -88,18 +89,10 @@ namespace RNAssistant.Office.Services
                 if (!_inboxes.TryGetValue(session.Id, out box))
                 {
                     box = new Inbox { Session = session };
-                    foreach (var fact in _events.Read(session, SessionEventReadMode.RequireComplete)
-                        .Where(e => e.Type == SessionEventTypes.ConversationInputChanged))
+                    foreach (var record in new ConversationInputJournal(_events).Read(session))
                     {
-                        var change = fact.Data.ToObject<ConversationInputEvent>();
-                        if (change == null) throw new InvalidOperationException("Invalid conversation input event.");
-                        if (change.Input != null)
-                        {
-                            change.Input.Text = _events.ReadPayload(session, fact);
-                            if (change.Input.Text == null) throw new InvalidOperationException("Conversation input body is missing.");
-                        }
-                        Apply(box, change);
-                        box.Revision = fact.Sequence;
+                        Apply(box, record.Change);
+                        box.Revision = record.Event.Sequence;
                         box.ViewRevision++;
                     }
                     if (box.Inputs.Any(IsPending)) { box.Paused = true; box.PauseReason = "После перезапуска"; }
@@ -326,11 +319,7 @@ namespace RNAssistant.Office.Services
         {
             var change = new ConversationInputEvent { Input = input, Paused = paused ?? box.Paused,
                 PauseReason = paused.HasValue ? reason : box.PauseReason };
-            var metadata = new ConversationInputEvent { Input = Clone(input), Paused = change.Paused, PauseReason = change.PauseReason };
-            if (metadata.Input != null) metadata.Input.Text = null;
-            var body = input == null ? null : SessionEventPayload.FromText(input.Text ?? string.Empty, "text/plain; charset=utf-8");
-            var fact = _events.Append(box.Session, new SessionEventWrite(
-                SessionEventDescriptors.For(SessionEventKind.ConversationInputChanged), metadata, body, null));
+            var fact = new ConversationInputJournal(_events).Append(box.Session, change);
             Apply(box, change);
             box.Revision = fact.Sequence;
             box.ViewRevision++;
