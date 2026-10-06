@@ -74,8 +74,10 @@ def run_case(root):
         assert len(requests) == len(responses) and not errors, (len(requests), errors)
         prompt_catalog = catalog(requests[0])
         wire = requests[0]["response_format"]["json_schema"]["schema"]
+        call_array = wire["properties"]["tool_calls"]
         wire_catalog = {item["properties"]["name"]["const"]: item["properties"]["arguments"]
-                        for item in wire["properties"]["tool_calls"]["items"]["anyOf"]}
+                        for branch in call_array.get("anyOf", [call_array])
+                        for item in branch["items"]["anyOf"]}
         for operation, file_keys, skill_keys in (
                 ("find", {"type", "directory", "query"}, {"type", "query"}),
                 ("read", {"type", "target"}, {"type", "target", "referencePath"})):

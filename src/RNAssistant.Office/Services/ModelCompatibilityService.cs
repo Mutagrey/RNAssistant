@@ -102,7 +102,7 @@ namespace RNAssistant.Office.Services
                         Content = "Return exactly one JSON object: " + sentinel
                     }
                 },
-                ModelProtocolWire.CreateRequestOptions(responseMode, new[] { tool }),
+                ModelProtocolWire.CreateRequestOptions(responseMode, new[] { tool }, new ModelProtocolCallContext(new string[0])),
                 completion => ValidateSentinel(completion, sentinel, new[] { tool },
                     new ModelProtocolCallContext(new string[0])),
                 cancellationToken);
@@ -121,7 +121,7 @@ namespace RNAssistant.Office.Services
                 "tool_result_json",
                 "Tool result · " + toolResultRole,
                 messages,
-                ModelProtocolWire.CreateRequestOptions(responseMode, new ToolCatalogEntry[0]),
+                ModelProtocolWire.CreateRequestOptions(responseMode, new ToolCatalogEntry[0], new ModelProtocolCallContext(new string[0])),
                 completion => ValidateSentinel(completion, sentinel, new ToolCatalogEntry[0],
                     new ModelProtocolCallContext(new string[0])),
                 cancellationToken);

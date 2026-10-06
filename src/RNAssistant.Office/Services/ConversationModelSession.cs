@@ -145,7 +145,7 @@ namespace RNAssistant.Office.Services
                 .SelectMany(item => item.ResourceEvidence ?? new List<ResourceEvidence>())
                 .Where(item => new RNAssistant.Core.Services.EvidenceStateReducer().Reduce(item, snapshot.Authority.Resources).State == EvidenceState.Current)
                 .GroupBy(item => item.EvidenceId, StringComparer.Ordinal).Select(group => group.First()).ToList();
-            var options = BuildRequestOptions(_mode, _settings.AgentResponseMode, activeTools, _session, _runCache);
+            var options = BuildRequestOptions(_mode, _settings.AgentResponseMode, activeTools, callContext, _session, _runCache);
             options.TraceStepId = stepId;
             options.TraceContextReceipt = snapshot.Receipt;
             return new ModelProtocolRequest
@@ -375,10 +375,11 @@ namespace RNAssistant.Office.Services
             string mode,
             string responseMode,
             IReadOnlyList<ToolCatalogEntry> tools,
+            ModelProtocolCallContext callContext,
             ChatSession session,
             LlmRunCache runCache)
         {
-            var options = ModelProtocolWire.CreateRequestOptions(responseMode, tools);
+            var options = ModelProtocolWire.CreateRequestOptions(responseMode, tools, callContext);
             options.ReasoningEnabled = session == null ? (bool?)null : session.ReasoningEnabled;
             options.RunCache = runCache;
             options.TraceSession = session;
@@ -704,7 +705,8 @@ namespace RNAssistant.Office.Services
             IReadOnlyList<ChatMessage> messages,
             IReadOnlyList<ToolCatalogEntry> tools)
         {
-            var options = BuildRequestOptions(_mode, _settings.AgentResponseMode, tools, _session, null);
+            var options = BuildRequestOptions(_mode, _settings.AgentResponseMode, tools,
+                new ModelProtocolCallContext(ConversationProtocolContext.SequentialBatchIds(_runnableCatalog)), _session, null);
             return ModelContextBudget.EstimateAdmittedRequestTokens(
                 messages,
                 options,
@@ -715,7 +717,8 @@ namespace RNAssistant.Office.Services
 
         private int RequestMessageBudget(IReadOnlyList<ToolCatalogEntry> tools)
         {
-            var options = BuildRequestOptions(_mode, _settings.AgentResponseMode, tools, _session, null);
+            var options = BuildRequestOptions(_mode, _settings.AgentResponseMode, tools,
+                new ModelProtocolCallContext(ConversationProtocolContext.SequentialBatchIds(_runnableCatalog)), _session, null);
             var fixedTokens = ModelContextBudget.EstimateRequestOptionsTokens(options, _settings) +
                 ModelProtocolClient.EstimateFormatRepairOverheadTokens(_settings) +
                 ModelContextBudget.ContinuationReserveTokens(_settings);

@@ -62,7 +62,7 @@ namespace RNAssistant.Harness
                 AssertEqual(ToolExecutionOutcome.Ok, whole.Outcome, "whole reads remain available after section reads");
                 AssertEqual(body, (string)Newtonsoft.Json.Linq.JObject.Parse(whole.Result.DataJson)["text"], "section retention cannot replace a whole representation");
                 AssertTrue(recovery.IsSatisfiedBy(whole.ResourceEvidence.Single()), "a subsequent whole read satisfies the exact refresh requirement");
-                var schema = Newtonsoft.Json.Linq.JObject.Parse(RNAssistant.Core.ModelProtocol.ConversationResponseSchemaBuilder.Build(new[] { tool }));
+                var schema = Newtonsoft.Json.Linq.JObject.Parse(RNAssistant.Core.ModelProtocol.ConversationResponseSchemaBuilder.Build(new[] { tool }, new RNAssistant.Core.ModelProtocol.ModelProtocolCallContext(new string[0])));
                 AssertContains((string)schema.SelectToken("properties.message.description"), "actual upcoming calls", "wire schema conveys action-purpose guidance");
             });
         }

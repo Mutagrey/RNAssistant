@@ -835,7 +835,8 @@ namespace RNAssistant.Runtime
             public async Task<AgentModelResult> SendAsync(AgentModelRequest request, CancellationToken cancellationToken)
             {
                 var authority = CaptureModelAuthority(request.RunId, cancellationToken);
-                var options = ModelProtocolWire.CreateRequestOptions(_settings.AgentResponseMode, _catalog);
+                var callContext = new ModelProtocolCallContext(_catalog.Where(tool => tool.Policy.IndependentLocalRead).Select(tool => tool.Id));
+                var options = ModelProtocolWire.CreateRequestOptions(_settings.AgentResponseMode, _catalog, callContext);
                 options.ReasoningEnabled = _session.ReasoningEnabled;
                 options.TraceStepId = request.StepId;
                 options.TraceModelAttemptId = "attempt_" + Guid.NewGuid().ToString("N");
@@ -870,7 +871,6 @@ namespace RNAssistant.Runtime
                 _modelTrace.Configure(options);
                 _session.LastContextReceipt = snapshot.Receipt;
                 _chats.Save(_session);
-                var callContext = new ModelProtocolCallContext(_catalog.Where(tool => tool.Policy.IndependentLocalRead).Select(tool => tool.Id));
                 var result = await _protocol.GetResponseAsync(new ModelProtocolRequest
                 {
                     Settings = _settings, AcceptedMessages = snapshot.Messages, ContextSnapshot = snapshot,

@@ -130,6 +130,7 @@ namespace RNAssistant.Office.Services
                 mode,
                 AgentResponseModes.Normalize(settings.AgentResponseMode),
                 runnableTools,
+                new ModelProtocolCallContext(ConversationProtocolContext.SequentialBatchIds(runnableCatalog)),
                 previewSession,
                 null);
             var repairReserveTokens = ModelProtocolClient.EstimateFormatRepairOverheadTokens(settings);

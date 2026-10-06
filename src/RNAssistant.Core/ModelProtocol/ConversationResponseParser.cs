@@ -27,7 +27,6 @@ namespace RNAssistant.Core.ModelProtocol
             var catalogIds = new HashSet<string>(runnableCatalog.Where(tool => tool != null).Select(tool => tool.Id), StringComparer.Ordinal);
             // Batching is opt-in from local authority. External or unresolved
             // effects must not be in this set; call identity belongs to runtime.
-            var batchSafeIds = new HashSet<string>(context.SequentialBatchToolIds, StringComparer.Ordinal);
             foreach (var call in parsed.Response.ToolCalls)
             {
                 ToolCatalogEntry tool;
@@ -38,7 +37,7 @@ namespace RNAssistant.Core.ModelProtocol
                             new JObject { ["id"] = call.Name }.ToString(Formatting.None) + ", wait for its complete TOOL_RESULT, then call the tool in a later response."
                         : "Unknown tool: " + call.Name + ". Use an exact name from the current callable tools.");
                 }
-                if (parsed.Response.ToolCalls.Count > 1 && !CanRunInSequentialBatch(tool, batchSafeIds))
+                if (parsed.Response.ToolCalls.Count > 1 && !context.AllowsSequentialBatch(tool))
                     return ConversationResponseParseResult.Fail("Only independent local reads may be returned in a sequential batch. " +
                         "Every mutation, confirmation-required, external, opaque or unclassified call must be returned one at a time; wait for its result before the next mutation.");
 
@@ -52,13 +51,6 @@ namespace RNAssistant.Core.ModelProtocol
                     return ConversationResponseParseResult.Fail("Invalid arguments for " + tool.Id + ": " + error);
             }
             return parsed;
-        }
-
-        private static bool CanRunInSequentialBatch(ToolCatalogEntry tool, ISet<string> batchSafeIds)
-        {
-            return tool != null && batchSafeIds.Contains(tool.Id) &&
-                !tool.MutatesDocument && !tool.MutatesLocalState && !tool.RequiresConfirmation &&
-                (tool.Policy == null || tool.Policy.IndependentLocalRead);
         }
     }
 }

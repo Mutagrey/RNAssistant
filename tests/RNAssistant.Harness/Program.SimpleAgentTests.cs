@@ -405,6 +405,8 @@ namespace RNAssistant.Harness
             AssertTrue(accepted.Response.ToolCalls.Select(call => (string)call.Arguments["query"]).SequenceEqual(new[] { "first", "second" }), "call order is preserved");
             AssertTrue(!parser.Parse(calls, new[] { read }, new[] { read }, new ModelProtocolCallContext(new string[0])).Success,
                 "absence of flags alone does not establish batch safety");
+            AssertResponseBatchSchema(true, calls, new[] { read }, new ModelProtocolCallContext(new[] { read.Id }));
+            AssertResponseBatchSchema(false, calls, new[] { read }, new ModelProtocolCallContext(new string[0]));
 
             foreach (var kind in new[] { "document", "local", "confirmation", "external", "unclassified" })
             {
@@ -419,9 +421,14 @@ namespace RNAssistant.Harness
                         : kind == "external"
                             ? new ToolPolicy(ToolEffect.External, ToolVerification.None, false, false, new[] { "agent" })
                             : new ToolPolicy(ToolEffect.Unclassified, ToolVerification.None, false, false, new[] { "agent" });
-                var batchSafe = kind == "document" || kind == "local"
-                    ? new[] { read.Id, tool.Id }
-                    : new[] { read.Id };
+                // Explicit IDs cannot override contradictory flags or policy.
+                var batchSafe = new[] { read.Id, tool.Id };
+                var context = new ModelProtocolCallContext(batchSafe);
+                var catalog = new[] { read, tool };
+                AssertResponseBatchSchema(true, calls, catalog, context);
+                AssertResponseBatchSchema(true, V4Envelope(), catalog, context);
+                AssertResponseBatchSchema(true, V4Envelope(V4Call(tool.Id)), catalog, context);
+                AssertResponseBatchSchema(false, V4Envelope(V4Call(tool.Id), V4Call(tool.Id)), catalog, context);
                 foreach (var batch in new[]
                 {
                     V4Envelope(V4Call(tool.Id), V4Call(read.Id)),
@@ -431,6 +438,7 @@ namespace RNAssistant.Harness
                     var result = parser.Parse(batch, new[] { read, tool }, new[] { read, tool }, new ModelProtocolCallContext(batchSafe));
                     AssertTrue(!result.Success, kind + " cannot be batched, regardless of position");
                     AssertContains(result.Error, "one at a time", "singleton diagnosis");
+                    AssertResponseBatchSchema(false, batch, catalog, context);
                 }
                 if (kind == "document" || kind == "local")
                     AssertTrue(!parser.Parse(V4Envelope(V4Call(tool.Id), V4Call(tool.Id)),
@@ -793,7 +801,7 @@ namespace RNAssistant.Harness
                             AssertTrue(result == null || !string.Equals(result.ErrorCode, "unknown_tool", StringComparison.OrdinalIgnoreCase), host + "/" + tool.Id + " dispatch is registered");
                             AssertTrue(result == null || !string.Equals(result.ErrorCode, "invalid_arguments", StringComparison.OrdinalIgnoreCase), host + "/" + tool.Id + " published branch reaches its handler");
                         }
-                        var responseSchema = ConversationResponseSchemaBuilder.Build(new[] { tool });
+                        var responseSchema = ConversationResponseSchemaBuilder.Build(new[] { tool }, new ModelProtocolCallContext(new string[0]));
                         AssertTrue(!string.IsNullOrWhiteSpace(responseSchema), host + "/" + tool.Id + " structured response schema");
                     }
                 });
@@ -1582,9 +1590,7 @@ namespace RNAssistant.Harness
                 AssertContains(prompt, "\"id\":\"common.vba_code_editing\"", "exact VBA skill id is in compact catalog");
                 AssertTrue(prompt.IndexOf("\"id\":\"common.vba_inspect\"", StringComparison.Ordinal) < 0,
                     "invented VBA capability id is absent from the authoritative catalog");
-                var callableNames = JObject.Parse(requestOptions.ResponseSchemaJson)
-                    .SelectTokens("properties.tool_calls.items.anyOf[*].properties.name.const")
-                    .Select(token => (string)token)
+                var callableNames = ResponseSchemaCallNames(requestOptions.ResponseSchemaJson)
                     .ToList();
                 AssertTrue(callableNames.Contains("common.vba_apply_patch", StringComparer.OrdinalIgnoreCase) &&
                     callableNames.Contains("common.vba_write_module", StringComparer.OrdinalIgnoreCase),
@@ -1680,9 +1686,11 @@ namespace RNAssistant.Harness
                     settings, session, null, false, 60000,
                     CapabilityCatalogService.BuildPromptCatalog(runnable, null, legacyCore));
                 var currentOptions = ConversationModelSession.BuildRequestOptions(
-                    ChatModes.Agent, settings.AgentResponseMode, currentPack.Tools, session, null);
+                    ChatModes.Agent, settings.AgentResponseMode, currentPack.Tools,
+                    new ModelProtocolCallContext(ConversationProtocolContext.SequentialBatchIds(runnable)), session, null);
                 var legacyOptions = ConversationModelSession.BuildRequestOptions(
-                    ChatModes.Agent, settings.AgentResponseMode, legacyCore, session, null);
+                    ChatModes.Agent, settings.AgentResponseMode, legacyCore,
+                    new ModelProtocolCallContext(ConversationProtocolContext.SequentialBatchIds(runnable)), session, null);
                 var repairReserve = ModelProtocolClient.EstimateFormatRepairOverheadTokens(settings);
                 var continuationReserve = ModelContextBudget.ContinuationReserveTokens(settings);
                 var currentTokens = ModelContextBudget.EstimateAdmittedRequestTokens(
@@ -1716,9 +1724,8 @@ namespace RNAssistant.Harness
                 AssertTrue(requests.SelectMany(items => items).All(message =>
                     !(message.Content ?? string.Empty).StartsWith("FORMAT_REPAIR:", StringComparison.Ordinal)),
                     "routine Excel task needs no format repair");
-                AssertTrue(JObject.Parse(requestOptions[0].ResponseSchemaJson)
-                    .SelectTokens("properties.tool_calls.items.anyOf[*].properties.name.const")
-                    .Any(token => (string)token == "excel.inspect"),
+                AssertTrue(ResponseSchemaCallNames(requestOptions[0].ResponseSchemaJson)
+                    .Any(name => name == "excel.inspect"),
                     "routine Excel intent remains callable on the initial step");
             });
         }
@@ -1950,12 +1957,8 @@ namespace RNAssistant.Harness
                     .GetAwaiter().GetResult();
 
                 AssertEqual(3, calls.Count, "schema load, macro execution, and final response");
-                var initialCallable = JObject.Parse(requestOptions[0].ResponseSchemaJson)
-                    .SelectTokens("properties.tool_calls.items.anyOf[*].properties.name.const")
-                    .Select(token => (string)token).ToArray();
-                var admittedCallable = JObject.Parse(requestOptions[1].ResponseSchemaJson)
-                    .SelectTokens("properties.tool_calls.items.anyOf[*].properties.name.const")
-                    .Select(token => (string)token).ToArray();
+                var initialCallable = ResponseSchemaCallNames(requestOptions[0].ResponseSchemaJson).ToArray();
+                var admittedCallable = ResponseSchemaCallNames(requestOptions[1].ResponseSchemaJson).ToArray();
                 AssertTrue(!initialCallable.Contains("common.office_run_macro", StringComparer.OrdinalIgnoreCase) &&
                     admittedCallable.Contains("common.office_run_macro", StringComparer.OrdinalIgnoreCase),
                     "arbitrary macro becomes callable only on the model step after exact schema admission");

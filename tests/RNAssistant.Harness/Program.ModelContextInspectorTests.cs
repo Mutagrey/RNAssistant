@@ -29,7 +29,8 @@ namespace RNAssistant.Harness
                 settings, NewSession(adapter), null);
             var fullPrompt = accepted[0].Content;
             AssertContains(fullPrompt, "\"parameters\"", "accepted prompt retains exact fallback contracts");
-            var options = ModelProtocolWire.CreateRequestOptions(AgentResponseModes.JsonSchema, tools);
+            var options = ModelProtocolWire.CreateRequestOptions(AgentResponseModes.JsonSchema, tools,
+                new ModelProtocolCallContext(ConversationProtocolContext.SequentialBatchIds(tools)));
             var driftedSchema = JObject.Parse(options.ResponseSchemaJson);
             driftedSchema.SelectToken("properties.tool_calls.items.anyOf[0].properties.name.const")
                 .Replace(new JValue("different.tool"));
@@ -89,7 +90,8 @@ namespace RNAssistant.Harness
             AssertTrue(options.ResponseSchemaJson == null, "fallback clears strict response schema");
             AssertEqual(fullPrompt, accepted[0].Content, "wire projection does not mutate accepted history");
 
-            var objectOptions = ModelProtocolWire.CreateRequestOptions(AgentResponseModes.JsonObject, tools);
+            var objectOptions = ModelProtocolWire.CreateRequestOptions(AgentResponseModes.JsonObject, tools,
+                new ModelProtocolCallContext(ConversationProtocolContext.SequentialBatchIds(tools)));
             var objectRequest = new ModelProtocolRequest
             {
                 Settings = settings, AcceptedMessages = accepted, CallableTools = tools,
@@ -144,7 +146,8 @@ namespace RNAssistant.Harness
                             "Inspect the workbook and update the report.", adapter, pack.Tools, new SkillDefinition[0],
                             new DocumentContext(), settings, session, null, false, 0, pack.CapabilityContext(null));
                         messages.Insert(1, admission.StateMessage);
-                        var options = ModelProtocolWire.CreateRequestOptions(mode, pack.Tools);
+                        var options = ModelProtocolWire.CreateRequestOptions(mode, pack.Tools,
+                            new ModelProtocolCallContext(ConversationProtocolContext.SequentialBatchIds(pack.Tools)));
                         var wireMessages = mode == AgentResponseModes.JsonSchema
                             ? ConversationPromptComposer.ProjectJsonSchemaMessages(messages, pack.Tools,
                                 options.ResponseSchemaJson)

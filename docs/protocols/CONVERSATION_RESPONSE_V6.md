@@ -45,6 +45,17 @@ shape again before acceptance. An accepted no-call `continue` is persisted as
 protocol history and a visible run step before the next model request. Call
 acceptance retains runtime IDs and exact tool policy as before.
 
+The strict response schema and parser use the same explicit local
+`ModelProtocolCallContext` for batch membership. `tool_calls` allows either up to
+32 authorized independent reads or one other call; mixed read/mutation batches
+and multiple mutations are excluded by the schema before generation. Every
+argument contract occurs once, including when both array alternatives are needed.
+Missing/incomplete authority cannot produce a schema. CLI and Office request,
+budget and inspector paths supply the captured catalog authority. `json_object`
+still relies on the same parser checks; action/call correlation remains validated
+by parser/kernel in both modes. Provider enforcement of the schema requires its
+own evidence and never replaces local validation.
+
 Accepted assistant history is marked `ResponseProtocolVersion=6`. Full-history
 preflight rejects incompatible or malformed records before dispatch. Existing
 v5 data stays intact and requires explicit reset/new chat. Windows/Office,

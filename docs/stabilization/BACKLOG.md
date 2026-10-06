@@ -130,6 +130,18 @@ do not establish a context-loss bug or a fix through native role selection.
 Keep the user-selectable role setting explicit, and retain the fixed acceptance
 for the next cross-family comparison. See the 2026-10-06 evidence in progress.
 
+The fixed Qwen 3.5 9B comparison exposed a shared schema/parser mismatch: the
+strict schema admitted multi-mutation responses, which the parser rejected.
+The schema now shares the explicit batch authority and excludes those arrays.
+In the paired run, protocol rejections fell from 3 to 0; Qwen created all three
+files and performed four verified patches. It reached 12/24 browser steps but
+exhausted the unchanged 16-iteration budget after a final unverified patch, leaving
+2/3 current reads. Category changes still lost sort order in the last verified
+snapshot; the final patch's functional outcome is unknown. No follow-up ran.
+This closes the schema mismatch, not fixed CSV acceptance or model reliability.
+All latest results remained on wire, pressure was normal and no new swap-out was
+observed. Source/profile/HTTP and paired evidence are linked in PROGRESS.md.
+
 ## CLI continuation after completed-operation receipts — 2026-10-05
 
 Historical isolation below precedes the pair/role and typed recovery fixes.

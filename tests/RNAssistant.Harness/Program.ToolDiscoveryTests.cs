@@ -568,15 +568,11 @@ namespace RNAssistant.Harness
                     file != null && string.Equals(file.Path, "progressive.html", StringComparison.OrdinalIgnoreCase)),
                     "admitted optional tool executes once");
                 AssertEqual(4, requests.Count, "unloaded repair, schema read, execution, and final requests");
-                var initialCallableNames = JObject.Parse(options[0].ResponseSchemaJson)
-                    .SelectTokens("properties.tool_calls.items.anyOf[*].properties.name.const")
-                    .Select(token => (string)token)
+                var initialCallableNames = ResponseSchemaCallNames(options[0].ResponseSchemaJson)
                     .ToList();
                 AssertTrue(!initialCallableNames.Contains(optionalId, StringComparer.OrdinalIgnoreCase),
                     "initial strict response schema omits unloaded tool as a callable name");
-                var loadedCallableNames = JObject.Parse(options[2].ResponseSchemaJson)
-                    .SelectTokens("properties.tool_calls.items.anyOf[*].properties.name.const")
-                    .Select(token => (string)token)
+                var loadedCallableNames = ResponseSchemaCallNames(options[2].ResponseSchemaJson)
                     .ToList();
                 AssertTrue(loadedCallableNames.Contains(optionalId, StringComparer.OrdinalIgnoreCase),
                     "strict response schema includes exact loaded tool as a callable name");

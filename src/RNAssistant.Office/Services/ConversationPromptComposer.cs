@@ -272,16 +272,20 @@ namespace RNAssistant.Office.Services
             JObject responseSchema;
             try { responseSchema = JObject.Parse(responseSchemaJson); }
             catch (JsonException) { return messages; }
-            var options = responseSchema.SelectToken("properties.tool_calls.items.anyOf") as JArray;
-            if (options == null || options.Count != expected.Count) return messages;
+            var options = responseSchema.SelectTokens("properties.tool_calls.items.anyOf[*]")
+                .Concat(responseSchema.SelectTokens("properties.tool_calls.anyOf[*].items.anyOf[*]")).ToArray();
+            if (options.Length != expected.Count) return messages;
             for (var index = 0; index < expected.Count; index++)
             {
+                // Read and single-call branches reorder the catalog. Match exact
+                // names uniquely before removing any duplicate prompt contract.
+                var matching = options.Where(option => string.Equals(
+                    (string)expected[index].SelectToken("function.name"),
+                    (string)option.SelectToken("properties.name.const"), StringComparison.Ordinal)).ToArray();
                 var parameters = expected[index].SelectToken("function.parameters") as JObject;
-                if (parameters == null ||
-                    !string.Equals((string)expected[index].SelectToken("function.name"),
-                        (string)options[index].SelectToken("properties.name.const"), StringComparison.Ordinal) ||
+                if (parameters == null || matching.Length != 1 ||
                     !JToken.DeepEquals(ToolSchemaSupport.ForStructuredOutput(parameters),
-                        options[index].SelectToken("properties.arguments"))) return messages;
+                        matching[0].SelectToken("properties.arguments"))) return messages;
             }
 
             const string marker = "\n\nRUNTIME_CONTEXT:\n";

@@ -341,7 +341,9 @@ namespace RNAssistant.Harness
                 AssertTrue(!incomplete.IsComplete, "incomplete context is not a valid empty safety projection");
                 AssertTrue(!new ConversationResponseParser().Parse(V4Envelope(), new ToolCatalogEntry[0], new ToolCatalogEntry[0], incomplete).Success,
                     "v6 rejects incomplete context even for a final response");
+                RuntimeThrows<ArgumentException>(() => ConversationResponseSchemaBuilder.Build(new ToolCatalogEntry[0], incomplete));
             }
+            RuntimeThrows<ArgumentException>(() => ConversationResponseSchemaBuilder.Build(new ToolCatalogEntry[0], null));
         }
 
         private static void ProtocolContextSeedsFullAcceptedTurn()
@@ -653,7 +655,7 @@ namespace RNAssistant.Harness
                 {
                     ResponseFormat = strict ? LlmResponseFormats.JsonSchema : LlmResponseFormats.JsonObject,
                     ResponseSchemaName = strict ? ConversationResponseSchemaBuilder.SchemaName : null,
-                    ResponseSchemaJson = strict ? ConversationResponseSchemaBuilder.Build(new ToolCatalogEntry[0]) : null,
+                    ResponseSchemaJson = strict ? ConversationResponseSchemaBuilder.Build(new ToolCatalogEntry[0], new ModelProtocolCallContext(new string[0])) : null,
                     TraceStepId = Guid.NewGuid().ToString("N")
                 }
             };
@@ -688,7 +690,7 @@ namespace RNAssistant.Harness
                 request.CallableTools = request.RunnableCatalog = new[] { read, write, external };
                 // Even an erroneous caller classification cannot override a mutation flag.
                 request.CallContext = new ModelProtocolCallContext(new[] { read.Id, write.Id });
-                request.Options = ModelProtocolWire.CreateRequestOptions(request.Settings.AgentResponseMode, request.CallableTools);
+                request.Options = ModelProtocolWire.CreateRequestOptions(request.Settings.AgentResponseMode, request.CallableTools, request.CallContext);
                 var trace = new List<LlmTraceRecord>();
                 request.Options.TraceSink = trace.Add;
                 var calls = 0;
@@ -1259,11 +1261,43 @@ namespace RNAssistant.Harness
             AssertEqual("http://127.0.0.1:8000/v1/models", LlmClient.BuildModelsConfigUrl(settings), "relative models endpoint");
         }
 
+        private static IEnumerable<string> ResponseSchemaCallNames(string schemaJson)
+        {
+            var schema = JObject.Parse(schemaJson);
+            return schema.SelectTokens("properties.tool_calls.items.anyOf[*].properties.name.const")
+                .Concat(schema.SelectTokens("properties.tool_calls.anyOf[*].items.anyOf[*].properties.name.const"))
+                .Select(token => (string)token);
+        }
+
+        private static void AssertResponseBatchSchema(bool accepted, string json, ToolCatalogEntry[] tools,
+            ModelProtocolCallContext context)
+        {
+            var options = ModelProtocolWire.CreateRequestOptions(AgentResponseModes.JsonSchema, tools, context);
+            var body = LlmClient.BuildRequestBody(new AppSettings { StreamResponses = false },
+                new List<object> { new { role = "user", content = "Read or write." } }, 10, options);
+            var schema = (JObject)body.SelectToken("response_format.json_schema.schema");
+            var response = JObject.Parse(json);
+            foreach (var call in response["tool_calls"].OfType<JObject>())
+            {
+                // Strict transport represents the fixture's optional fields as null.
+                call["arguments"]["limit"] = JValue.CreateNull();
+                call["arguments"]["at"] = JValue.CreateNull();
+            }
+            string error;
+            AssertEqual(accepted, ToolSchemaSupport.ValidateArguments(response, schema, false, out error),
+                "actual wire schema enforces local batch policy: " + error);
+            AssertEqual(accepted, new ConversationResponseParser().Parse(response.ToString(Formatting.None), tools, tools, context).Success,
+                "parser agrees with the actual wire batch policy");
+            AssertTrue(ResponseSchemaCallNames(options.ResponseSchemaJson).OrderBy(id => id, StringComparer.Ordinal)
+                .SequenceEqual(tools.Select(tool => tool.Id).OrderBy(id => id, StringComparer.Ordinal)),
+                "every callable argument contract appears exactly once across batch branches");
+        }
+
         private static void ConversationV4SchemaMatchesParserAndWire()
         {
             var tool = V4ReadTool();
             var originalSchema = tool.ArgumentSchemaJson;
-            var schemaJson = ConversationResponseSchemaBuilder.Build(new[] { tool });
+            var schemaJson = ConversationResponseSchemaBuilder.Build(new[] { tool }, new ModelProtocolCallContext(new string[0]));
             var schema = JObject.Parse(schemaJson);
             var valid = JObject.Parse(V4Envelope(V4Call(arguments: new JObject
             {
@@ -1313,14 +1347,14 @@ namespace RNAssistant.Harness
             invalid.ArgumentSchemaJson = "{}";
             foreach (var tools in new[] { new ToolCatalogEntry[0], new[] { invalid, null, new ToolCatalogEntry() } })
             {
-                var schema = JObject.Parse(ConversationResponseSchemaBuilder.Build(tools));
+                var schema = JObject.Parse(ConversationResponseSchemaBuilder.Build(tools, new ModelProtocolCallContext(new string[0])));
                 string error;
                 AssertTrue(ToolSchemaSupport.ValidateArguments(JObject.Parse(V4Envelope()), schema, false, out error), "empty callable set allows final message");
                 AssertTrue(!ToolSchemaSupport.ValidateArguments(JObject.Parse(V4Envelope(V4Call())), schema, false, out error),
                     "empty/invalid callable set never offers phantom calls");
             }
             var tool = V4ReadTool();
-            var bounded = JObject.Parse(ConversationResponseSchemaBuilder.Build(new[] { tool, tool, invalid }));
+            var bounded = JObject.Parse(ConversationResponseSchemaBuilder.Build(new[] { tool, tool, invalid }, new ModelProtocolCallContext(new[] { tool.Id })));
             AssertEqual(1, ((JArray)bounded.SelectToken("properties.tool_calls.items.anyOf")).Count,
                 "schema uses only unique valid callable contracts");
             var calls = Enumerable.Range(0, 32).Select(i => V4Call(arguments: new JObject
@@ -1345,7 +1379,7 @@ namespace RNAssistant.Harness
             });
             AssertEqual("json_object", (string)objectBody.SelectToken("response_format.type"), "json_object request type");
 
-            var schemaJson = ConversationResponseSchemaBuilder.Build(new ToolCatalogEntry[0]);
+            var schemaJson = ConversationResponseSchemaBuilder.Build(new ToolCatalogEntry[0], new ModelProtocolCallContext(new string[0]));
             var schemaBody = LlmClient.BuildRequestBody(settings, messages, 10, new LlmRequestOptions
             {
                 ResponseFormat = LlmResponseFormats.JsonSchema,
@@ -1379,7 +1413,7 @@ namespace RNAssistant.Harness
                     "\"mode\":{\"type\":\"string\",\"description\":\"Read mode.\",\"default\":\"values\",\"enum\":[\"values\",\"formulas\"]}" +
                     "},\"required\":[\"range\"],\"additionalProperties\":false}"
             };
-            var schema = JObject.Parse(ConversationResponseSchemaBuilder.Build(new[] { tool }));
+            var schema = JObject.Parse(ConversationResponseSchemaBuilder.Build(new[] { tool }, new ModelProtocolCallContext(new string[0])));
             var rootRequired = schema["required"] as JArray;
             AssertTrue(rootRequired != null && rootRequired.Values<string>().SequenceEqual(new[] { "message", "action", "tool_calls" }),
                 "strict response schema requires only the v6 envelope fields");
@@ -1411,7 +1445,7 @@ namespace RNAssistant.Harness
             AssertContains((string)schema.SelectToken("properties.action.description"),
                 "done", "terminal schema distinguishes completion from intermediate progress");
 
-            var noToolSchema = JObject.Parse(ConversationResponseSchemaBuilder.Build(new ToolCatalogEntry[0]));
+            var noToolSchema = JObject.Parse(ConversationResponseSchemaBuilder.Build(new ToolCatalogEntry[0], new ModelProtocolCallContext(new string[0])));
             AssertEqual(0, (int)noToolSchema.SelectToken("properties.tool_calls.maxItems"),
                 "empty callable set permits no calls");
         }
@@ -1421,7 +1455,7 @@ namespace RNAssistant.Harness
             // Reproduce the real CLI question failure against the schema actually
             // sent to the provider, then validate the same intent at both gates.
             var questions = UserQuestionToolCatalog.GetTools().Single();
-            var options = ModelProtocolWire.CreateRequestOptions(AgentResponseModes.JsonSchema, new[] { questions });
+            var options = ModelProtocolWire.CreateRequestOptions(AgentResponseModes.JsonSchema, new[] { questions }, new ModelProtocolCallContext(new string[0]));
             var request = LlmClient.BuildRequestBody(new AppSettings(), new ChatMessage[0], 4096, options);
             var argumentsSchema = (JObject)request.SelectToken(
                 "response_format.json_schema.schema.properties.tool_calls.items.anyOf[0].properties.arguments");
@@ -1489,13 +1523,13 @@ namespace RNAssistant.Harness
                     Id = "fixture.type_named_argument",
                     ArgumentSchemaJson = "{\"type\":\"object\",\"properties\":{\"type\":{\"type\":\"string\",\"description\":\"Domain type.\"}},\"required\":[\"type\"],\"additionalProperties\":false}"
                 };
-                var schema = JObject.Parse(ConversationResponseSchemaBuilder.Build(new[] { tool }));
+                var schema = JObject.Parse(ConversationResponseSchemaBuilder.Build(new[] { tool }, new ModelProtocolCallContext(new string[0])));
                 AssertEqual("string",
                     (string)schema.SelectToken("properties.tool_calls.items.anyOf[0].properties.arguments.properties.type.type"),
                     "schema property named type");
 
                 var patchTool = executor.GetControllerTools().Single(candidate => candidate.Id == "common.vba_apply_patch");
-                var patchSchema = JObject.Parse(ConversationResponseSchemaBuilder.Build(new[] { patchTool }));
+                var patchSchema = JObject.Parse(ConversationResponseSchemaBuilder.Build(new[] { patchTool }, new ModelProtocolCallContext(new string[0])));
                 var exactReplace = patchSchema.SelectToken(
                     "properties.tool_calls.items.anyOf[0].properties.arguments.properties.patch.items") as JObject;
                 AssertTrue(exactReplace != null, "patch schema exposes one exact replacement contract");
@@ -1511,7 +1545,7 @@ namespace RNAssistant.Harness
                     "unchecked line deletion and regex patch fields are absent from the model schema");
 
                 var restoreTool = executor.GetControllerTools().Single(candidate => candidate.Id == "common.vba_restore_backup");
-                var restoreSchema = JObject.Parse(ConversationResponseSchemaBuilder.Build(new[] { restoreTool }));
+                var restoreSchema = JObject.Parse(ConversationResponseSchemaBuilder.Build(new[] { restoreTool }, new ModelProtocolCallContext(new string[0])));
                 var restoreVariants = restoreSchema.SelectToken(
                     "properties.tool_calls.items.anyOf[0].properties.arguments.anyOf") as JArray;
                 AssertEqual(2, restoreVariants == null ? 0 : restoreVariants.Count,

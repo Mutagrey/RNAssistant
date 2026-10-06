@@ -1,5 +1,72 @@
 # Stabilization progress
 
+## Shared batch schema and Qwen CSV regression — 2026-10-06
+
+Owner: Core ModelProtocol / CLI evaluation. The unchanged fixed CSV test on
+Qwen `rna-qwen35-9b-32k:latest` (digest
+`2db395653ce79eb0b834f0d454278c80340c2af548153d55769d15a03f50799c`)
+exposed a schema/parser mismatch: strict generation allowed up to 32 arbitrary
+calls, although the parser allowed only independent local reads in a batch.
+The model repeatedly proposed three file creations. All were rejected before
+dispatch; repaired responses read nonexistent files, then repeated those failed
+reads. Runtime stopped at `repeated_tool_no_progress`, without file effects.
+
+Baseline: HEAD `92dd57e8`, runtime binaries identical to the previous Gemma control;
+only model/profile changed. Same task/checks, 32K/4096, system/user roles,
+json_schema, thinking off, one model/request and 16/24/600 bounds. Model sampling
+defaults are retained in the profile evidence. Result: 243.70 s, exit 5, four
+iterations, three failed reads, no files, failed acceptance, no follow-up. Three
+protocol rejections, 7/7 HTTP requests/responses, 18 valid cumulative call/result
+pairs, no missing latest result or compaction. Input/output tokens 38135/8329
+(max 5719/2988). Memory: 50 samples, max gap 5.06 s, pressure level 1 throughout,
+0 MiB swap-in/out; existing swap 987.94 MiB, peak runner RSS 7.35 GiB, no other
+model loaded. This failure was not accompanied by observed memory pressure.
+
+The common strict schema now uses the parser's explicit frozen batch authority:
+up to 32 authorized reads, or one other call. Mixed read/mutation batches and
+multiple mutations are excluded; every exact argument contract occurs once.
+Missing/incomplete authority fails schema construction. CLI, Office request,
+budget and inspector paths supply that authority. Prompt schema deduplication
+matches unique exact names/contracts across the two array alternatives. Local
+parser/kernel guards remain mandatory, including for `json_object` and action/call
+correlation. No protocol version, prompt, acceptance threshold or retry limit changed.
+
+Checks: clean CLI build; host-neutral harness build with the same two PDF
+CA1416 warnings. v6 13/13, ModelProtocol 15/15, request-schema budget/projection
+2/2, immutable context 1/1, tool pack 8/8, compatibility 2/2, agent schema 4/4
+and affected model-admission paths 3/3. CLI response-mode/role/approval and resource
+selector smokes passed. These include actual HTTP schemas, contradictory batch
+policy, incomplete authority, bounded repair and unchanged exact contracts.
+Diff, touched document target and `ValidateVersionFormat` gates passed.
+
+After-fix Qwen run: **355.55 s, exit 5, `iteration_limit`, failed acceptance**.
+Sixteen model iterations / 18 tool steps; three files created separately,
+four verified patches, six successful file reads. All 16/16 model responses
+satisfied v6, with **zero protocol rejections**. The only batch was three reads.
+Four browser checks progressed 1/24 → 8/24 → 12/24 → 12/24; changing category
+still lost the selected sort order. A patch without a current complete read was
+blocked, then the model reread and patched. The last patch exhausted the iteration
+budget before final read/verification: only 2/3 current file reads, no passing
+snapshot and no follow-up. The operator supplied no repair or continuation hints
+and did not increase limits. Categories: remaining `MODEL_ERROR` /
+`VERIFICATION_ERROR`; the reproduced schema/parser defect is fixed.
+
+The paired test kept the Qwen profile, task, checks and limits unchanged. The
+first HTTP body differs only in `response_format`; all 13 argument contracts
+are identical. 16/16 HTTP requests/responses and 102 cumulative call/result pairs
+passed the CAS/wire audit; latest results and the user task remain present.
+Tokens 186946/4922 (max 17302/1699); no compaction. Memory: 72 samples, max gap
+5.06 s, pressure level 1, 0 MiB new swap-out / 0.125 MiB swap-in, existing swap
+987.94 MiB, peak runner RSS 7.66 GiB, no other model loaded. Both temporary servers
+were stopped and models unloaded. These runs demonstrate the specific correction,
+not general model reliability or real-model compaction qualification.
+
+Source archive plus exact working-tree patch, binaries, model profile, drivers,
+HTTP/CAS, browser results and audits are retained locally:
+baseline `/var/folders/k9/hr_94nt142x1f43jr6g0wr_00000gp/T/rna-m5-qwen35-svn31qa3`;
+after-fix `/var/folders/k9/hr_94nt142x1f43jr6g0wr_00000gp/T/rna-m5-qwen35-batch-schema-yo5ityvs`.
+Full M4/M5 and Windows/Office qualification remain open.
+
 ## Fixed CSV evaluation and native-role comparison — 2026-10-06
 
 Production HEAD `1c457044`, clean CLI build, fresh disposable workspaces. Same
@@ -1328,15 +1395,17 @@ boundary, not a functional CSV score. Scripted HTTP tests confirmed both CLI
 transport modes and saved metadata. The existing v6 parser correctly rejected
 these outputs; no permissive JSON repair or separate agent loop was added.
 
-Next concrete slice (2026-10-06): cross-family regression of the fixed CSV task
-with the documented Qwen 3.5 9B / 32K profile and the same fixture, checks and
-16/24/600 bounds, followed by the unchanged feature task only if creation passes.
-The Gemma baseline and isolated native-role diagnostic above both failed; changing
-result role is not an established fix. Inspect exact response/context evidence
-before changing runtime behavior. Controlled HTTP E-CONTEXT/E-RESUME passes;
-real-model compaction/resume quality still needs a separate pressure scenario.
-Bounded event subscription is implemented above. Interactive CLI UX and Office UI
-adoption remain open; no extra runtime or widened model budget is the next step.
+Next concrete slice (2026-10-06): M4 §11.4 interactive CLI presentation over the
+existing application API: bounded progress, changed files, questions/approvals and
+verification summary, retaining the current non-interactive exit/reconnect behavior.
+Owner: CLI host; no new persistence owner, agent loop or automatic approval.
+The Qwen cross-family regression and paired shared-schema correction are complete
+above. Fixed CSV acceptance still failed, so its unchanged feature follow-up
+remains unrun. Do not substitute a larger budget or a diagnostic task for that
+acceptance. Gemma's native-role change is likewise not an established fix.
+Controlled HTTP E-CONTEXT/E-RESUME passes; real-model compaction/resume quality
+still needs a separate pressure scenario. Bounded event subscription is implemented;
+general resource/preview commands and Office UI adoption remain open.
 Modes, typed answer/restart handling, published skills, frozen context, Task Lists
 and workspace-owned Markdown Plans are implemented with the evidence limits above.
 Explicit reconciliation of uncertain planning mutations remains open.

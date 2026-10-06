@@ -1,5 +1,11 @@
 # RNAssistant Harness
 
+`conversation v6:` checks batch policy in both parser and actual HTTP response
+schema: authorized reads, singleton effects, mixed batches, contradictory policy
+and the 32-call bound. `protocol context: immutable complete snapshots` also
+rejects schema generation with missing/incomplete authority. Request-size and
+tool-pack checks cover schema projection and admission with both array branches.
+
 After building the CLI, `python3 -B tests/cli/compaction_resume_smoke.py` checks
 24K context pressure through actual structured compaction, process loss, external
 file edits and same-run continuation. It verifies checkpoint persistence, exact
