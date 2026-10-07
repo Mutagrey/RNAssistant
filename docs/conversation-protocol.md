@@ -39,6 +39,11 @@ constrained generation does not prove that a claim's text follows from its sourc
 Compaction makes one helper request and does not inherit ModelProtocol's automatic
 transport fallback or format-repair attempts. Provider rejection leaves the prior
 checkpoint intact and fails explicitly.
+Prefix boundaries distinguish an accepted call from a typed `CompletedOperation`:
+a completed receipt retains its correlation ID but is not an unanswered call.
+It can be summarized together with the following history. Original durable batches
+still require every result before the checkpoint boundary; incomplete calls remain
+outside the summary.
 
 Agent readiness precedes mutation. The model first maps explicit deliverables,
 required source/current-artifact inspection, dependency order, applicable catalog skills

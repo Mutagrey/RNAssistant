@@ -14,7 +14,7 @@ namespace RNAssistant.Core.Services
 
         public static bool IsCall(ChatMessage message)
         {
-            return message != null && message.ProtocolMessage &&
+            return message != null && message.ProtocolMessage && message.CompletedOperation == null &&
                 string.Equals(message.Role, "assistant", StringComparison.OrdinalIgnoreCase) &&
                 !IsResult(message) && Ids(message).Count > 0;
         }

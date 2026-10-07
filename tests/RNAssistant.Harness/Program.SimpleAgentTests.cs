@@ -3180,6 +3180,35 @@ namespace RNAssistant.Harness
             AssertTrue(batchReplay.Contains(batch) && batchResults.All(batchReplay.Contains),
                 "both accepted batch results retain their original call after compaction");
 
+            // Current-source filtering can fold an older exchange into a typed
+            // terminal receipt. Its correlation ID does not make it a new call.
+            var receiptSession = new ChatSession();
+            var afterReceipts = new ChatMessage { Role = "assistant", Content = "Both earlier operations completed." };
+            var recentTask = new ChatMessage { Role = "user", Content = "Continue the exact remaining task." };
+            var recentAnswer = new ChatMessage { Role = "assistant", Content = "Inspecting the next source." };
+            receiptSession.Messages.AddRange(new[] { task, safeBatchThrough, batch });
+            receiptSession.Messages.AddRange(batchResults);
+            receiptSession.Messages.AddRange(new[] { afterReceipts, recentTask, recentAnswer });
+            var receiptFacts = new List<ChatMessage> { task, safeBatchThrough };
+            foreach (var output in batchResults)
+            {
+                ToolResultWireReadResult wire; string error;
+                AssertTrue(ToolResultHistoryReader.TryRead(output, out wire, out error), "terminal result is readable");
+                var completed = ModelContextCompiler.CompleteOperation(output, wire);
+                AssertTrue(!ToolProtocolMessages.IsCall(completed), "completed receipt is not an unanswered call");
+                AssertTrue(ToolProtocolMessages.Uses(completed, new HashSet<string> { output.ToolCallId }),
+                    "completed receipt keeps its exact exchange correlation");
+                receiptFacts.Add(completed);
+            }
+            receiptFacts.AddRange(new[] { afterReceipts, recentTask, recentAnswer });
+            var receiptCheckpoint = new ContextCompactionRuntime(completion).EnsureWithinBudgetAsync(
+                receiptSession, new AppSettings(), null, true, null, CancellationToken.None,
+                frozen, new ToolCatalogEntry[0], replayFacts: receiptFacts).GetAwaiter().GetResult();
+            AssertEqual(afterReceipts.Id, receiptCheckpoint.ThroughMessageId,
+                "compaction progresses beyond typed completed receipts while respecting the original complete batch");
+            AssertTrue(ContextCompactionRuntime.BuildActiveWindow(receiptSession).Any(item => item.Id == recentTask.Id),
+                "receipt compaction retains the exact current user instruction");
+
             var oversized = NewSession(FakeOfficeAdapter.ForHost("Excel"));
             oversized.Messages.Add(new ChatMessage { Role = "user", Content = new string('x', 500000) });
             oversized.Messages.Add(new ChatMessage { Role = "assistant", Content = "Recent answer." });

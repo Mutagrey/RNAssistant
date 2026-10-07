@@ -1,5 +1,69 @@
 # Stabilization progress
 
+## Compaction past completed tool receipts — 2026-10-07
+
+Owner: Core model context / tool exchange classification. Reproduced the overflow
+on clean `add5c646`, including its shared working set and semantic projections.
+The cause was `ToolProtocolMessages.IsCall`: a typed `CompletedOperation` still
+has an assistant role and correlation ID, so it was mistaken for an unanswered
+call. Prefix protection stopped at the first folded receipt. The fix excludes
+completed receipts from call classification while retaining their exact IDs.
+The original durable batch still needs all results before any checkpoint boundary.
+The earlier budget-selection hypothesis was insufficient; changing budget estimates
+did not fix the reproduction and that experiment was removed.
+
+Controlled before/after with the same release-note fixture and 24K/4096, 40/48
+bounds: before, 12 tools → five-source checkpoint → `PromptBudgetExceeded`
+(11698 > 11455 message tokens). After the one-predicate correction, 30 tools /
+31 iterations and three compactions complete the task; all ten expected files
+match exact bytes. Canonical audits pass: 34 requests, 133 cumulative pairs,
+30 unique completed calls. The fixture's expected runtime manifest is handled by
+the separate grader correction below.
+
+Checks: clean CLI build; host-neutral harness build with the two existing PDF
+CA1416 warnings. `compaction` 8/8, exchange-scoped deletion 1/1 and both controlled
+CLI compaction/restart/resume branches passed. The extended existing regression
+compacts past completed receipts, preserves correlation/current task and still
+rejects incomplete original calls/batches. Version gate and diff passed.
+
+Real Qwen `rna-qwen35-9b-32k:latest`, digest
+`2db395653ce79eb0b834f0d454278c80340c2af548153d55769d15a03f50799c`,
+Ollama 0.35.0, same release-note task/fixture and original 24K planning / 32K model /
+4096 output, system/user roles, json_schema, thinking off, 40/48/600 bounds:
+**checkpoint → process loss → external edit → same-run resume reached**. Three
+compactions, no post-compaction budget failure. Exact task/latest results remain
+on wire, stale anchor content is excluded, external edit and canonical prefix
+survive. Receipt creation appears once. Original limits and counters remain:
+15/14 at interruption → 29/25 at timeout; two accepted repeated failures were
+`NotDispatched` and correctly uncharged.
+
+Full task **failed at 600.45 s**. Only notes 01–05 reached ready; anchor review
+remained pending and receipt contained a literal `\n` instead of a newline.
+Four mutations without a delivered current read were rejected; two subsequent
+identical attempts were denied before dispatch. No unknown effect or operator
+repair. The final model wait was killed by the fixture deadline, so saved run state
+remains interrupted/running, not a fabricated terminal success. Categories:
+remaining `MODEL_ERROR` / `VERIFICATION_ERROR`; full live E-* acceptance stays open.
+
+32 canonical HTTP requests match proxy/CAS, including one held before forwarding;
+30 responses completed and one provider request was interrupted at deadline.
+131 cumulative pairs / 27 accepted calls pass the corrected audit. Reported
+input/output tokens 264051/2381 (30 usage-bearing responses; max 12041/383).
+Memory: 120 samples, maximum gap 5.06 s, pressure level 1, 0 MiB new swap-out,
+0.9375 MiB swap-in, peak test-server RSS 8.05 GiB, no other local model loaded.
+Temporary Ollama stopped and model unloaded. This live run includes the newer
+shared projections; the controlled before/after isolates the predicate fix.
+
+Evidence under `/var/folders/k9/hr_94nt142x1f43jr6g0wr_00000gp/T/`:
+`rna-compaction-budget-repro-trdpsetk` / `rna-compaction-budget-repro-yc6qc9hp`
+(controlled pair), `rna-live-compaction-resume-mumpkbo8` (real source archive,
+binaries, HTTP/CAS, timeout state and corrected audit),
+`rna-live-compaction-ollama-agj823dd` (profile/memory).
+Full M4/M5 and Windows/Office qualification remain open. Next: run the unchanged
+live continuation task with primary Gemma using the corrected grader; interactive
+CLI presentation remains the next UX slice. Fixed CSV creation/follow-up remain
+separate acceptance gates.
+
 ## Live CLI grader accounting — 2026-10-07
 
 Owner: CLI evaluation. The live compaction fixture records WorkspaceStore's
@@ -285,7 +349,7 @@ conversation application services; resource/Office boundaries retain their owner
 | M2 | Workspace/session without document authority, stable identity, known root relocation and read-only association tested. Only the root directory mount is supplied; managed/multiple/external mounts and shared-source identity/heads (A24) remain open. |
 | M3 | Single WorkspaceFileService owns UTF-8 find/read/create/patch/replace/copy/move/delete/restore, exact history, drift and non-replay recovery. Focused tests pass. Remaining §8.1 stat/raw/binary/large views, directory pagination, complete Office/filesystem dispatch and cross-platform path qualification are open. |
 | M4 | First useful real-model multi-file result achieved. Modes, skills, typed questions/answers, approvals, Task Lists/Plans, receipts, cancel/explicit continuation and event following exist. Full §11 remains open: interactive host UX/changed-file presentation, general resource/preview commands and UI use of the shared application contracts. Scripted runs do not close real task quality. |
-| M5 | Retained browser snapshots, dependency checks, structured functional verification, repair, bounded same-run continuation and shared compaction implemented. Controlled compaction/resume passes. Real pressure runs exposed a corrected generation-schema gap and an open post-compaction budget failure; live continuation quality remains unqualified. A real counter repair passed previously; fixed autonomous CSV creation + unchanged feature follow-up still has no passing evidence. General preview and browser screenshots/traces remain open. |
+| M5 | Retained browser snapshots, dependency checks, structured functional verification, repair, bounded same-run continuation and shared compaction implemented. Controlled compaction/resume passes. The schema and completed-receipt boundary defects are fixed; real Qwen reached restart/resume and preserved the external edit but timed out before completing the task. Full live quality remains open. A real counter repair passed previously; fixed autonomous CSV creation + unchanged feature follow-up still has no passing evidence. General preview and browser screenshots/traces remain open. |
 | M6 | Authoring cutover not started. Office HTML/MD/JSON and Plan authoring remain on their existing owners; file materialization/linkage/crash guards and old-writer removal are required. CLI files have no dual writer. |
 | M7 | Receipts/cursors/subscription provide shared primitives; Office UI transport/application migration, file tree, preview isolation, bounded body delivery and pane-independent lifetime are not closed. |
 | M8 | External Office provider/mount/target cutover remains open; exact binding/discovery/SaveAs and multiple-instance behavior need Windows evidence. |
@@ -1520,12 +1584,12 @@ boundary, not a functional CSV score. Scripted HTTP tests confirmed both CLI
 transport modes and saved metadata. The existing v6 parser correctly rejected
 these outputs; no permissive JSON repair or separate agent loop was added.
 
-Next concrete slice (2026-10-07): M5 context admission after real compaction.
-The shared schema correction now allows a typed checkpoint, but Qwen's unchanged
-24K pressure run still cannot admit the next request. Owner: Core model context /
-conversation application services. Diagnose prefix selection against the compiled
-budget while preserving current evidence, exact task and complete protocol pairs;
-then repeat live interruption/external-edit/same-run continuation.
+Next concrete slice (2026-10-07): run the unchanged M5 live continuation fixture
+with primary Gemma and the corrected grader. Owner: CLI evaluation / model context.
+The post-compaction admission defect was completed-receipt misclassification and
+is fixed. Real Qwen now reaches interruption/external-edit/same-run continuation,
+but failed the 600-second task deadline. Preserve the task, exact-byte checks and
+original limits; a partial continuation pass does not close full E-* acceptance.
 Next UX slice remains M4 §11.4 interactive CLI over the existing application API:
 bounded progress, changed files, questions/approvals and verification summary,
 retaining non-interactive exit/reconnect behavior. Owner: CLI host; no new
@@ -1534,8 +1598,8 @@ The Qwen cross-family regression and paired shared-schema correction are complet
 above. Fixed CSV acceptance still failed, so its unchanged feature follow-up
 remains unrun. Do not substitute a larger budget or a diagnostic task for that
 acceptance. Gemma's native-role change is likewise not an established fix.
-Controlled HTTP E-CONTEXT/E-RESUME passes; the real pressure scenario above did
-not reach continuation. Bounded event subscription is implemented;
+Controlled HTTP E-CONTEXT/E-RESUME passes; real continuation reached the expected
+boundary but autonomous task completion remains open. Bounded event subscription is implemented;
 general resource/preview commands and Office UI adoption remain open.
 Modes, typed answer/restart handling, published skills, frozen context, Task Lists
 and workspace-owned Markdown Plans are implemented with the evidence limits above.

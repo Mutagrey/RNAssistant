@@ -43,7 +43,9 @@ original counters, no repeated effects and native pairs in `user`/`tool` profile
 This uses controlled HTTP claims, not real-model compaction quality. Run
 `compaction` for shared checkpoint/publication regression and durable batch
 boundaries. It also checks actual source-bound compaction schemas, both explicit
-response modes, schema budget, mixed provenance and unknown-source rejection;
+response modes, schema budget, mixed provenance and unknown-source rejection.
+Completed receipts keep correlation without blocking a safe checkpoint as if they
+were unanswered calls. Original incomplete calls/batches still block that boundary.
 `context continuity:` checks source/result projection. The omitted-read
 CLI smoke also uses 24K: it admits the current catalog while omitting the oversized
 body, and still requires the original bytes to survive a refused replacement.
