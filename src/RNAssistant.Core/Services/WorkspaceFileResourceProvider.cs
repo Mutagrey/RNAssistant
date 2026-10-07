@@ -46,16 +46,13 @@ namespace RNAssistant.Core.Services
                         Reference = descriptor.Reference, Descriptor = descriptor });
                     result.ResourceRefs.Add(descriptor.Reference);
                 }
-                catch (FileNotFoundException) { result.Partial = true; }
-                catch (DirectoryNotFoundException) { result.Partial = true; }
-                catch (WorkspaceFileException) { result.Partial = true; }
-                catch (UnauthorizedAccessException) { result.Partial = true; }
+                catch (FileNotFoundException) { if (!result.Partial) result.UnavailableScopes.Add("workspace"); }
+                catch (DirectoryNotFoundException) { if (!result.Partial) result.UnavailableScopes.Add("workspace"); }
+                catch (WorkspaceFileException) { if (!result.Partial) result.UnavailableScopes.Add("workspace"); }
+                catch (UnauthorizedAccessException) { if (!result.Partial) result.UnavailableScopes.Add("workspace"); }
             }
-            if (result.Partial) result.UnavailableScopes.Add("workspace");
             result.Total = result.Items.Count;
             result.Complete = !listed.Truncated && !result.Partial;
-            result.Empty = result.Items.Count == 0 && result.Complete;
-            result.RefineQuery = listed.Truncated;
             if (listed.Truncated) result.AvailabilityHint = "Directory scan was truncated; narrow directory or filename query.";
             else if (result.Partial) result.AvailabilityHint = "Some entries changed or were unavailable during discovery; refresh the affected directory.";
             return result;

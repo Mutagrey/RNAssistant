@@ -278,7 +278,7 @@ namespace RNAssistant.Harness
                     invalidClose.Evidence.Dispatch,
                     "invalid index rejects before the mutation boundary");
                 var invalidCloseRecovery =
-                    JObject.Parse(invalidClose.Result.DataJson)["recovery"];
+                    invalidClose.Recovery?.ModelProjection();
                 AssertEqual("RejectedNoEffect",
                     (string)invalidCloseRecovery?["failureKind"],
                     "invalid close certifies no chat-state effect");

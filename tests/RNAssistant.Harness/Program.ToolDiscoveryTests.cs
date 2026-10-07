@@ -49,7 +49,9 @@ namespace RNAssistant.Harness
                     ["kind"] = "resource-read", ["target"] = "data: Customers",
                     ["representation"] = representation, ["table"] = table.DeepClone(),
                     ["complete"] = true, ["uri"] = reference.Uri, ["revision"] = "1",
-                    ["nextCursor"] = "runtime-cursor", ["artifactId"] = "runtime-id"
+                    ["nextCursor"] = "runtime-cursor", ["artifactId"] = "runtime-id",
+                    ["hydratedForNextModelStep"] = false,
+                    ["diagnostics"] = new JObject { ["expectedHash"] = new string('a', 64) }
                 };
                 var source = AgentJsonProtocol.CreateToolResultMessage(command,
                     TerminalToolResult.Ok("Read.", data.ToString(Newtonsoft.Json.Formatting.None),
@@ -67,7 +69,13 @@ namespace RNAssistant.Harness
                     "projection preserves the invocation outcome");
                 AssertTrue(actual["uri"] == null && actual["revision"] == null &&
                     actual["nextCursor"] == null && actual["artifactId"] == null &&
+                    actual["diagnostics"] == null && actual["hydratedForNextModelStep"] == null &&
                     wire.Result.Resources.Count == 0, "runtime envelope evidence stays hidden");
+                AssertEqual(projected.Content, new ModelResultProjection().Project(source).Content,
+                    "Office and Core use exactly one resource result projection");
+                var request = new LlmMessageBuilder().Build(new[] { projected }, new AppSettings());
+                AssertTrue(JArray.FromObject(request.Messages).ToString().IndexOf("expectedHash", StringComparison.Ordinal) < 0,
+                    "the actual wire excludes newly added diagnostic fields");
                 AssertEqual(original, source.Content, "durable result remains unchanged");
             }
         }
@@ -113,6 +121,26 @@ namespace RNAssistant.Harness
                 "resource URI, cursor, revision, and internal id stay hidden");
             AssertEqual(1, resourceMessage.ResourceRefs.Count,
                 "durable resource message retains exact evidence");
+
+            foreach (var tool in new[] { "excel.upsert_chart", "common.vba_write_module", "files.create" })
+            {
+                var operation = Command(tool); operation.ToolCallId = "diagnostic_" + tool;
+                var input = AgentJsonProtocol.CreateToolResultMessage(operation, TerminalToolResult.Error("Inspect the target.",
+                    new JObject { ["code"] = "example_failure", ["moduleName"] = "Module1", ["path"] = "app.js",
+                        ["sheet"] = "Data", ["chartName"] = "Chart 1",
+                        ["diagnostics"] = new JObject { ["expectedHash"] = new string('c', 64), ["trace"] = new string('x', 8000) } }.ToString()));
+                input.ExecutionProgress = new ToolExecutionProgress(ToolExecutionOutcome.Error,
+                    new ToolRecoveryContract(ToolFailureKind.RejectedNoEffect, ToolRetryPolicy.Replan));
+                var output = ModelToolResultProjection.Project(input);
+                AssertTrue(output.Content.IndexOf("diagnostics", StringComparison.Ordinal) < 0,
+                    tool + " has a closed metadata boundary");
+                AssertContains(output.Content, "example_failure", "the error code remains actionable");
+                AssertContains(output.Content, "Replan", "typed recovery is rendered at the request boundary");
+                var beforeWire = JArray.FromObject(new LlmMessageBuilder().Build(new[] { input }, new AppSettings()).Messages).ToString();
+                var afterWire = JArray.FromObject(new LlmMessageBuilder().Build(new[] { output }, new AppSettings()).Messages).ToString();
+                AssertTrue(afterWire.Length < beforeWire.Length / 2, "fixed diagnostic fixture shrinks the actual request without losing outcome/recovery");
+                AssertContains(input.Content, "expectedHash", "full diagnostics remain in the durable result");
+            }
 
             var semanticCall = new AgentToolCall
             {

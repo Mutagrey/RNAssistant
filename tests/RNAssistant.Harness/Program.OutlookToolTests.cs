@@ -135,7 +135,7 @@ namespace RNAssistant.Harness
                 var runtime = executor.CreateNativeRuntime(session, tools, new AppSettings(), "agent", false);
                 var native = ExecuteHtmlNative(runtime, ResourceToolCatalog.ReadToolId, new JObject { ["target"] = ResourceGatewayService.IntentTarget(descriptor), ["representation"] = "media" });
                 AssertEqual(ToolExecutionOutcome.Ok, native.Outcome, "existing model-facing media representation succeeds");
-                AssertTrue((bool)JObject.Parse(native.Result.DataJson)["hydratedForNextModelStep"], "model result declares queued media without base64");
+                AssertTrue((bool)JObject.Parse(native.Result.DataJson)["hydratedForNextModelStep"], "durable diagnostics retain queued media delivery");
                 var originalImage = image.ModelAttachments.Single();
                 System.IO.File.Delete(executor.Payloads.PathFor(originalImage.ContentSha256));
                 var readsBeforeMissing = adapter.OutlookAttachmentReadCount;

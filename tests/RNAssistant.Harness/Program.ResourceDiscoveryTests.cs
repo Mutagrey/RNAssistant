@@ -195,7 +195,7 @@ namespace RNAssistant.Harness
                 }
                 var provider = new ChatArtifactResourceProvider(payloads: executor.Payloads, documentArtifacts: owner);
                 var result = new ResourceGatewayService(new[] { provider }).Find(session, "absent-from-extraction", "document");
-                AssertTrue(!result.Empty && !result.Complete && result.RefineQuery, "model receives an incomplete negative with rediscovery guidance");
+                AssertTrue(!result.Empty && !result.Complete, "model receives an incomplete negative with rediscovery guidance");
             });
         }
 

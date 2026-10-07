@@ -44,8 +44,6 @@ namespace RNAssistant.Office.Services
                         Reason = "Historical operation receipt; source bodies are selected independently.",
                         NextAction = "Keep the recorded outcome. Reuse an included current observation for further work." });
                 receipt.Id = "receipt_" + message.Id;
-                var recovery = message.ExecutionProgress?.Recovery;
-                if (recovery != null) receipt.Content += "\nRECOVERY: " + recovery.ModelProjection().ToString(Formatting.None);
                 var cost = EstimateCost(new[] { receipt }, settings);
                 if (receipts.Count >= 24) break;
                 if (cost > receiptBudget) continue;

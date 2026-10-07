@@ -326,7 +326,6 @@ namespace RNAssistant.Core.Tools
         {
             var completed = DateTime.UtcNow;
             if (completed < context.StartedUtc) completed = context.StartedUtc;
-            result = WithRecovery(result, recovery);
             return new ToolExecutionRecord(context, outcome, completed, message ?? (result == null ? string.Empty : result.Message),
                 mayHaveDispatched: dispatched, pendingId: pendingId, awaitingUser: awaitingUser,
                 evidence: new ToolExecutionEvidence(dispatched ? ToolDispatchEvidence.MayHaveDispatched : ToolDispatchEvidence.NotDispatched, effect),
@@ -335,22 +334,5 @@ namespace RNAssistant.Core.Tools
                 recovery: recovery);
         }
 
-        private static ToolResult WithRecovery(ToolResult result, ToolRecoveryContract recovery)
-        {
-            if (result == null || recovery == null) return result;
-            JObject data;
-            try
-            {
-                data = string.IsNullOrWhiteSpace(result.DataJson)
-                    ? new JObject() : JObject.Parse(result.DataJson);
-            }
-            catch (JsonException)
-            {
-                data = new JObject { ["details"] = result.DataJson };
-            }
-            data["recovery"] = recovery.ModelProjection();
-            return new ToolResult(result.Status, result.Message,
-                data.ToString(Formatting.None), result.Resources);
-        }
     }
 }

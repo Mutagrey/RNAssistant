@@ -59,12 +59,15 @@ namespace RNAssistant.Office.Services
                         : "tool_execution_failed"), retryable ?? false);
             }
             result.ToolStepsConsumed = record.ToolStepsConsumed;
+            result.Recovery = record.Recovery;
             if (record.Outcome == ToolExecutionOutcome.Ok && !record.AwaitingUser && record.Result != null)
                 result.ResultSummary = Summarize(record.Context.Call.Name, record.Result.DataJson);
             if (terminal != null) result.ModelResourceRefs = terminal.Resources;
             if (materialized != null)
             {
                 result.ModelAttachments = materialized.ModelAttachments;
+                if (result.ResultSummary != null)
+                    result.ResultSummary.HydratedForNextModelStep = materialized.ModelAttachments.Count > 0;
                 result.ModelResultResourceRef = materialized.ResultResource;
                 result.ModelResultResourceKind =
                     materialized.ResultResourceKind;

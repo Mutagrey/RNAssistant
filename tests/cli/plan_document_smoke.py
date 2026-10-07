@@ -157,13 +157,18 @@ def run_case(root, role):
         assert len(terminal(wire[4])["data"]["items"]) == 2
         assert terminal(wire[5])["data"]["code"] == "plan_target_ambiguous"
         assert len(terminal(wire[7])["data"]["items"]) == 1
+        assert terminal(wire[-1])["data"]["code"] == "repeated_tool_failure", terminal(wire[-1])
+        # The failed ambiguous selector has no exact recovery dependency. Deleting
+        # another selected lineage cannot release it inside the same logical run.
+        # A fresh user turn can read/select the now unique title normally.
+        _, wire = run([call(READ, type="plan", target="Shared plan"), DONE], session)
         assert plan(wire[-1])["version"] == 5
         assert any(item.get("effect", {}).get("outcome") == "Restored" for item in commits())
 
         other = root / "other-workspace"
         other.mkdir()
         _, wire = run([call(FIND, type="plan"), call(READ, type="plan", target="Shared plan"), DONE], directory=other)
-        assert terminal(wire[1])["data"]["empty"] is True
+        assert terminal(wire[1])["data"]["complete"] is True and terminal(wire[1])["data"]["items"] == []
         assert terminal(wire[-1])["status"] == "error"
 
         # Publication is durable before the chat event; a missing terminal journal entry only repairs its link.

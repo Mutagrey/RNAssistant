@@ -13,9 +13,8 @@ namespace RNAssistant.Core.Models
         [JsonProperty("items")] public List<ResourceFindCandidate> Items { get; set; } = new List<ResourceFindCandidate>();
         [JsonProperty("total")] public int Total { get; set; }
         [JsonProperty("complete")] public bool Complete { get; set; }
-        [JsonProperty("empty")] public bool Empty { get; set; }
-        [JsonProperty("partial")] public bool Partial { get; set; }
-        [JsonProperty("refineQuery")] public bool RefineQuery { get; set; }
+        [JsonIgnore] public bool Empty { get { return Complete && Items.Count == 0; } }
+        [JsonIgnore] public bool Partial { get { return UnavailableScopes.Count > 0; } }
         [JsonProperty("availabilityHint", NullValueHandling = NullValueHandling.Ignore)]
         public string AvailabilityHint { get; set; }
         [JsonProperty("unavailableScopes")] public List<string> UnavailableScopes { get; set; } = new List<string>();

@@ -39,8 +39,7 @@ namespace RNAssistant.Office.Services
 
         private static bool IsOfficeRuntimeStateResult(string name)
         {
-            return string.Equals(name, ExcelFindReplaceToolIds.ReplaceCells, StringComparison.Ordinal) ||
-                string.Equals(name, WordToolIds.ReplaceText, StringComparison.Ordinal) ||
+            return string.Equals(name, WordToolIds.ReplaceText, StringComparison.Ordinal) ||
                 string.Equals(name, PowerPointToolIds.ReplaceText, StringComparison.Ordinal) ||
                 string.Equals(name, "outlook.create_draft", StringComparison.Ordinal) ||
                 string.Equals(name, "outlook.update_mail", StringComparison.Ordinal);
@@ -50,8 +49,7 @@ namespace RNAssistant.Office.Services
         {
             var root = data as JObject;
             if (root == null) return;
-            if (string.Equals(name, ExcelFindReplaceToolIds.ReplaceCells, StringComparison.Ordinal) ||
-                string.Equals(name, WordToolIds.ReplaceText, StringComparison.Ordinal) ||
+            if (string.Equals(name, WordToolIds.ReplaceText, StringComparison.Ordinal) ||
                 string.Equals(name, PowerPointToolIds.ReplaceText, StringComparison.Ordinal))
                 RemoveProperties(root, "scopeSha256");
             else if (string.Equals(name, "outlook.create_draft", StringComparison.Ordinal))
@@ -90,7 +88,7 @@ namespace RNAssistant.Office.Services
             }
             else if (IsResourceResult(name))
             {
-                RNAssistant.Core.Services.ModelResultProjection.ProjectResourceData(name, data);
+                data = RNAssistant.Core.Services.ModelResultProjection.ProjectResourceData(name, data);
             }
             else if (IsPlanningResult(name))
             {
@@ -104,6 +102,10 @@ namespace RNAssistant.Office.Services
             {
                 RemoveAuthoringRuntimeState(data);
             }
+            else if (IsExcelResult(name))
+            {
+                data = ProjectExcelData(data);
+            }
             else if (IsVbaResult(name))
             {
                 var runtimeValues = VbaRuntimeValues(data)
@@ -112,8 +114,7 @@ namespace RNAssistant.Office.Services
                     .OrderByDescending(item => item.Length)
                     .ToArray();
                 message = SanitizeVbaMessage(message, runtimeValues);
-                SanitizeVbaTextValues(data, runtimeValues);
-                RemoveVbaRuntimeState(data);
+                data = ProjectVbaData(data, runtimeValues);
             }
             else
             {
@@ -138,7 +139,7 @@ namespace RNAssistant.Office.Services
         {
             if (IsResourceResult(name) || IsCapabilityResult(name) ||
                 IsPlanningResult(name) || IsHtmlResult(name) ||
-                IsAuthoringResult(name) || IsVbaResult(name)) return name;
+                IsAuthoringResult(name) || IsVbaResult(name) || IsExcelResult(name)) return name;
             return null;
         }
 
@@ -434,36 +435,53 @@ namespace RNAssistant.Office.Services
             foreach (var item in array) RemoveAuthoringRuntimeState(item);
         }
 
-        private static void RemoveVbaRuntimeState(JToken token)
+        private static bool IsExcelResult(string name)
         {
-            var value = token as JObject;
-            if (value != null)
-            {
-                foreach (var property in value.Properties().ToList())
-                {
-                    if (IsVbaRuntimeField(property.Name)) property.Remove();
-                    else RemoveVbaRuntimeState(property.Value);
-                }
-                return;
-            }
-            var array = token as JArray;
-            if (array == null) return;
-            foreach (var item in array) RemoveVbaRuntimeState(item);
+            return ExcelReadToolIds.Owns(name) || ExcelWriteToolIds.Owns(name) || ExcelFindReplaceToolIds.Owns(name) ||
+                ExcelChartToolIds.Owns(name) || ExcelRangeMutationToolIds.Owns(name) || ExcelTableToolIds.Owns(name) || ExcelSheetToolIds.Owns(name);
         }
 
-        private static void SanitizeVbaTextValues(
-            JToken token, IEnumerable<string> runtimeValues)
+        private static JToken ProjectExcelData(JToken data)
         {
-            var value = token as JValue;
-            if (value != null)
-            {
-                if (value.Type == JTokenType.String)
-                    value.Value = SanitizeVbaMessage((string)value, runtimeValues);
-                return;
-            }
-            if (token == null) return;
-            foreach (var child in token.Children())
-                SanitizeVbaTextValues(child, runtimeValues);
+            var result = ModelResultProjection.SelectFields(data, "sheet", "address", "target", "kind", "operation",
+                "rows", "columns", "cellCount", "name", "displayName", "range", "hasHeaders", "style", "verification",
+                "workbook", "items", "item", "content", "header", "headers", "sample", "numericColumns", "blankCells", "formulaCells",
+                "query", "mode", "scope", "matches", "matchCount", "replacements", "returnedCount", "truncated", "complete",
+                "activeSheet", "chartCount", "chartIndex", "chartName", "chartType", "title", "xAxisTitle", "yAxisTitle",
+                "left", "top", "width", "height", "series", "code", "retryable", "details", "field");
+            // Details are operational metadata. Values/previews/samples remain exact.
+            if (result["details"] is JObject)
+                result["details"] = ModelResultProjection.SelectFields(result["details"],
+                    "code", "message", "sheet", "address", "chartIndex", "field", "kind");
+            foreach (var key in new[] { "details", "verification" })
+                if (result[key]?.Type == JTokenType.String) result[key] = SanitizeOperationalText((string)result[key]);
+            if (result["details"] is JObject && result["details"]["message"]?.Type == JTokenType.String)
+                result["details"]["message"] = SanitizeOperationalText((string)result["details"]["message"]);
+            return result;
+        }
+
+        private static JToken ProjectVbaData(JToken data, IEnumerable<string> runtimeValues)
+        {
+            var array = data as JArray;
+            if (array != null) return new JArray(array.Select(item => ProjectVbaData(item, runtimeValues)));
+            if (!(data is JObject)) return data?.DeepClone();
+            var result = ModelResultProjection.SelectFields(data, "code", "retryable", "target", "moduleName", "componentType",
+                "changed", "created", "mode", "macroName", "argumentCount", "previousModuleName", "newModuleName",
+                "nameNormalized", "requestedModuleName", "normalizedModuleName", "requestedNewModuleName", "normalizedNewModuleName",
+                "currentType", "targetComponentType", "backupType", "actualExists", "actualSourceExists", "actualTargetExists",
+                "actualSourceComponentType", "expectedSourceComponentType", "expectedSourceExists", "expectedTargetExists",
+                "vbeNormalized", "lineCount", "expectedLineCount", "actualLineCount", "expectedComponentType", "actualComponentType",
+                "hunkIndex", "findMatchCount", "matchCount", "matchMode", "startLine", "startColumn", "locations", "locationsComplete",
+                "oldLength", "newLength", "operations", "operationData", "stage", "rollbackDisposition", "failure", "rollbackFailure",
+                "message", "rootMessage", "errorCode", "rootCode", "rootType", "details", "restore",
+                "inspectTool", "discoveryScope", "requiredRepresentation", "completeSourceRequired", "retryAfterRefresh",
+                "retrySameTool", "reconcileBeforeOverwrite", "reloadEditor", "creationTool", "creationMode", "discoveryTool", "patchTool", "suggestedMode");
+            foreach (var property in result.Properties())
+                if (property.Value is JContainer) property.Value = ProjectVbaData(property.Value, runtimeValues);
+                else if ((property.Name == "message" || property.Name == "rootMessage" || property.Name == "details") &&
+                    property.Value.Type == JTokenType.String)
+                    property.Value = SanitizeVbaMessage((string)property.Value, runtimeValues);
+            return result;
         }
 
         private static string SanitizeVbaMessage(
@@ -489,47 +507,10 @@ namespace RNAssistant.Office.Services
 
         private static IEnumerable<string> VbaRuntimeValues(JToken token)
         {
-            var value = token as JObject;
-            if (value != null)
-            {
-                foreach (var property in value.Properties())
-                {
-                    if (IsVbaRuntimeField(property.Name))
-                    {
-                        foreach (var item in VbaStringValues(property.Value))
-                            yield return item;
-                    }
-                    else
-                    {
-                        foreach (var item in VbaRuntimeValues(property.Value))
-                            yield return item;
-                    }
-                }
-                yield break;
-            }
-            var array = token as JArray;
-            if (array == null) yield break;
-            foreach (var child in array)
-            {
-                foreach (var item in VbaRuntimeValues(child)) yield return item;
-            }
-        }
-
-        private static IEnumerable<string> VbaStringValues(JToken token)
-        {
-            var value = token as JValue;
-            if (value != null)
-            {
-                if (value.Type == JTokenType.String &&
-                    !string.IsNullOrEmpty((string)value))
-                    yield return (string)value;
-                yield break;
-            }
-            if (token == null) yield break;
-            foreach (var child in token.Children())
-            {
-                foreach (var item in VbaStringValues(child)) yield return item;
-            }
+            var root = token as JContainer;
+            return root == null ? Enumerable.Empty<string>() : root.Descendants().OfType<JProperty>()
+                .Where(property => IsVbaRuntimeField(property.Name) && property.Value.Type == JTokenType.String)
+                .Select(property => (string)property.Value);
         }
 
         private static bool IsVbaRuntimeField(string name)

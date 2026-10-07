@@ -104,7 +104,9 @@ namespace RNAssistant.Harness
             {
                 var failed = ContinuityResult("failed", "common.resources_read", ToolResult.Error(
                     "This target exposes records at $. Omit path or pass that exact value.",
-                    "{\"code\":\"RESOURCE_VIEW_PATH_MISMATCH\",\"retryable\":false,\"recovery\":{\"retryPolicy\":\"Replan\"}}"), role);
+                    "{\"code\":\"RESOURCE_VIEW_PATH_MISMATCH\",\"retryable\":false}"), role);
+                failed.ExecutionProgress = new ToolExecutionProgress(ToolExecutionOutcome.Error,
+                    new ToolRecoveryContract(ToolFailureKind.RejectedNoEffect, ToolRetryPolicy.Replan));
                 var compiled = compiler.Compile(authority, new ChatMessage[0],
                     new[] { ContinuityCall(failed), failed }, null, new ToolCatalogEntry[0], new AppSettings(), 10000);
                 ToolResultWireReadResult wire; string error;

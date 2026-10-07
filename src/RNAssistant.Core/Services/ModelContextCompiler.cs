@@ -801,20 +801,23 @@ namespace RNAssistant.Core.Services
                 // A historical failed evaluation keeps its diagnostics/recovery;
                 // source currency must never turn it into a different error.
                 DataJson = observation == null || preserveDiagnostic
-                    ? wire.Result.DataJson : null,
+                    ? wire.Result.DataJson : wire.Result.Status == RNAssistant.Core.Tools.Contracts.ToolResultStatus.Ok ? null :
+                        ModelResultProjection.SelectFields(ToolResultWire.ParseData(wire.Result.DataJson),
+                            "code", "hunkIndex", "field", "chartIndex", "recovery").ToString(Formatting.None),
                 // wire is already model-projected: never recover labels from
                 // unsanitized durable data when omitting the original body.
                 Targets = OperationTargets(wire, call) };
             return new ChatMessage {
                 Id = result.Id, RunId = result.RunId, CreatedUtc = result.CreatedUtc,
                 Role = "assistant", ProtocolMessage = true, ToolCallId = wire.ToolCallId,
-                ToolName = wire.Name, ResourceEffect = effect, CompletedOperation = fact,
+                ToolName = wire.Name, ResourceEffect = effect, ExecutionProgress = result.ExecutionProgress, CompletedOperation = fact,
                 Content = "TOOL_INTERACTION (completed causal frame; historical outcome, not current source):\n" +
                     JsonConvert.SerializeObject(new {
                         tool_call_id = fact.ToolCallId, tool = fact.ToolName,
                         outcome = fact.Status.ToString(), message = fact.Message,
                         targets = fact.Targets,
                         data = ToolResultWire.ParseData(fact.DataJson), observation,
+                        recovery = fact.DataJson == null ? result.ExecutionProgress?.Recovery?.ModelProjection() : null,
                         effect = effect == null ? null : new {
                             operation = effect.Operation, outcome = effect.Outcome.ToString(),
                             verification = ModelResultProjection.SanitizeOperationalText(effect.Verification),

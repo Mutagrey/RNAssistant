@@ -486,10 +486,10 @@ namespace RNAssistant.Harness
                     AssertEqual("tool_mutation_busy", (string)blockedData["code"],
                         "native live find reports the occupied document gate");
                     AssertEqual("BusyNoEffect",
-                        (string)blockedData["recovery"]?["failureKind"],
+                        (string)blocked.Recovery?.ModelProjection()?["failureKind"],
                         "occupied document gate is a typed no-effect busy failure");
                     AssertEqual("RetryLater",
-                        (string)blockedData["recovery"]?["retryPolicy"],
+                        (string)blocked.Recovery?.ModelProjection()?["retryPolicy"],
                         "busy resource admission is deferred without automatic replay");
                     AssertEqual(backendCalls, adapter.TotalBackendCallCount, "blocked native live find never reaches Office backend");
                 }

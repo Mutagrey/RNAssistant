@@ -57,9 +57,18 @@ namespace RNAssistant.Core.Services
             var data = ToolResultWire.ParseData(wire.Result.DataJson);
             var materialized = new ToolResultMaterialization(
                 wire.Result, resultResource: wire.ResultResource, data: data);
-            var model = _projectData == null
+            // Common families have one projection in both hosts. Domain projection
+            // runs only for other tools; recovery is rendered once from typed facts.
+            var model = IsResourceEvidence(wire.Name) || IsWorkspaceMutation(wire.Name) || _projectData == null
                 ? ProjectData(wire.Name, materialized)
                 : _projectData(wire.Name, materialized, tools, skills);
+            var recovery = source.ExecutionProgress?.Recovery;
+            if (recovery != null)
+            {
+                var visible = model.Data as JObject ?? new JObject { ["content"] = model.Data };
+                visible["recovery"] = recovery.ModelProjection();
+                model.ReplaceResult(model.Result, visible);
+            }
             recordPresentation?.Invoke(DescribeProjectedData(data, model.Data));
             var json = ToolResultWire.WriteParsed(
                 wire.ToolCallId,
@@ -139,26 +148,53 @@ namespace RNAssistant.Core.Services
 
         private static ToolResultMaterialization ProjectData(string name, ToolResultMaterialization source)
         {
-            if (!IsResourceEvidence(name)) return GenericForModel(name, source);
-            var data = source.Data.DeepClone();
-            ProjectResourceData(name, data);
+            if (!IsResourceEvidence(name) && !IsWorkspaceMutation(name)) return GenericForModel(name, source);
+            var data = IsWorkspaceMutation(name)
+                ? SelectFields(source.Data, "path", "targetPath", "changed", "restored", "moved", "deleted", "code")
+                : ProjectResourceData(name, source.Data);
             var result = new ToolResult(source.Result.Status,
                 SanitizeOperationalText(RemoveRuntimeResourceValues(source.Result.Message, source.Result.Resources)),
                 data.ToString(Formatting.None), new ResourceRef[0]);
             return new ToolResultMaterialization(result, source.ModelAttachments, data: data);
         }
 
-        public static void ProjectResourceData(string name, JToken data)
+        private static bool IsWorkspaceMutation(string name)
         {
-            var resourceData = data as JObject;
-            if ((string)resourceData?["type"] == "shared context" && resourceData["text"]?.Type == JTokenType.String)
+            return new[] { "files.create", "files.patch", "files.replace", "files.copy", "files.move", "files.delete", "files.restore" }
+                .Contains(name, StringComparer.Ordinal);
+        }
+
+        // Only the service-owned envelope is selected. Text, tables and user JSON
+        // are copied intact; field names inside business data carry no authority.
+        public static JObject SelectFields(JToken data, params string[] fields)
+        {
+            var source = data as JObject;
+            var result = new JObject();
+            if (source != null)
+                foreach (var property in source.Properties())
+                    if (fields.Contains(property.Name, StringComparer.Ordinal) && property.Value.Type != JTokenType.Null)
+                        result[property.Name] = property.Value.DeepClone();
+            return result;
+        }
+
+        public static JObject ProjectResourceData(string name, JToken data)
+        {
+            var result = name == "common.resources_find"
+                ? SelectFields(data, "scope", "query", "items", "total", "complete", "availabilityHint", "unavailableScopes", "directory", "code", "retryable")
+                : SelectFields(data, "version", "historical", "startLine", "requestedLines", "section", "kind", "target", "type", "scope",
+                    "representation", "text", "table", "coverage", "offset", "returnedCharacters", "totalCharacters", "complete",
+                    "rawContentIncluded", "references", "claims", "claimsUnavailable", "usage", "code", "retryable");
+            if (name == "common.resources_find" && result["items"] is JArray)
+                result["items"] = new JArray(((JArray)result["items"]).Select(item => SelectFields(item,
+                    "target", "type", "title", "representations", "sectionTitle", "description", "usage", "snippet")));
+            if (result["unavailableScopes"] is JArray && !result["unavailableScopes"].HasValues) result.Remove("unavailableScopes");
+            if ((string)result["type"] == "shared context" && result["text"] != null)
             {
-                resourceData.Remove("text");
-                resourceData.Remove("json");
-                resourceData["claimsUnavailable"] = true;
-                resourceData["usage"] = "Shared claims require the authority-filtered model context compiler; raw archives are never model context.";
+                result.Remove("text");
+                result["claimsUnavailable"] = true;
+                result["usage"] = "Shared claims require the authority-filtered model context compiler.";
             }
-            RemoveResourceRuntimeState(data, preserveTable: name == "common.resources_read");
+            return result;
         }
 
         public static ToolResultMaterialization GenericForModel(

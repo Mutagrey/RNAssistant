@@ -154,10 +154,10 @@ namespace RNAssistant.Harness
                 AssertEqual("excel_write_protected", (string)refusedData["code"],
                     "predispatch error code survives typed mapping");
                 AssertEqual("RejectedNoEffect",
-                    (string)refusedData["recovery"]?["failureKind"],
+                    (string)refused.Recovery?.ModelProjection()?["failureKind"],
                     "definite domain refusal exposes no-effect recovery");
                 AssertEqual("Replan",
-                    (string)refusedData["recovery"]?["retryPolicy"],
+                    (string)refused.Recovery?.ModelProjection()?["retryPolicy"],
                     "non-retryable domain refusal requires a changed plan");
 
                 adapter.QueueExcelWriteApplyFailure(
@@ -171,10 +171,10 @@ namespace RNAssistant.Harness
                 AssertEqual(ToolExecutionOutcome.Error, transient.Outcome,
                     "retryable predispatch backend refusal remains a definite error");
                 AssertEqual("RejectedNoEffect",
-                    (string)transientData["recovery"]?["failureKind"],
+                    (string)transient.Recovery?.ModelProjection()?["failureKind"],
                     "transient refusal still certifies no effect");
                 AssertEqual("RetryLater",
-                    (string)transientData["recovery"]?["retryPolicy"],
+                    (string)transient.Recovery?.ModelProjection()?["retryPolicy"],
                     "transient refusal is deferred without automatic replay");
             });
 
@@ -275,7 +275,7 @@ namespace RNAssistant.Harness
                         tools, new AppSettings(), false, false, chat);
                     AssertEqual("active_document_changed", closed.ErrorCode,
                         "closed bound workbook is rejected before write dispatch");
-                    var recovery = JObject.Parse(closed.DataJson)["recovery"];
+                    var recovery = closed.Recovery?.ModelProjection();
                     AssertEqual("RejectedNoEffect", (string)recovery?["failureKind"],
                         "closed bound workbook exposes a typed no-effect rejection");
                     AssertEqual("None", (string)recovery?["retryPolicy"],

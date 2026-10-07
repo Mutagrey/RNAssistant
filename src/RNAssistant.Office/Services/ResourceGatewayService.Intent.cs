@@ -40,9 +40,9 @@ namespace RNAssistant.Office.Services
                     Items = new List<ResourceFindCandidate> { candidate },
                     Total = 1,
                     Complete = true,
-                    Empty = false,
-                    Partial = false,
-                    RefineQuery = false,
+
+
+
                     UnavailableScopes = new List<string>(),
                     ResourceRefs = new List<ResourceRef> { candidate.Reference }
                 };
@@ -93,11 +93,11 @@ namespace RNAssistant.Office.Services
                 Items = shown,
                 Total = selected.Count,
                 Complete = !resultTruncated && unavailable.Count == 0,
-                Empty = selected.Count == 0 && !resultTruncated && unavailable.Count == 0,
-                Partial = unavailable.Count > 0,
+
+
                 AvailabilityHint = unavailable.Count == 0 ? null :
                     "Discovery is incomplete for unavailableScopes. Restore those sources or search a healthy scope. Repeat only after availability changes; do not infer absence or target uniqueness within an unavailable scope.",
-                RefineQuery = resultTruncated,
+
                 UnavailableScopes = unavailable
                     .OrderBy(value => value, StringComparer.OrdinalIgnoreCase)
                     .ToList(),

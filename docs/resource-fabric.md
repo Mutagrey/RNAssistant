@@ -39,9 +39,9 @@ to its exact evidence. Provider dispatch remains specific to each host. Historic
 restoration is guarded by a current accepted revision and records the exact source.
 CLI `common.resources_find` scans one selected directory, returns at most 200
 accessible semantic targets, and accepts an optional case-insensitive filename substring.
-It scans at most 5000 entries and reports `complete=false`, `refineQuery` and
-`scannedEntries` when truncated; unavailable entries set `partial` and cannot prove
-an empty result. File descriptors expose metadata/stat without reading content or
+It scans at most 5000 entries; truncation reports `complete=false` with a narrowing
+hint. Unavailable entries populate `unavailableScopes` and cannot prove an empty
+result. `scannedEntries` remains diagnostic metadata, outside the model projection. File descriptors expose metadata/stat without reading content or
 claiming an exact revision. The returned targets are sorted within the
 captured window, not across a truncated directory; there is no pagination or
 recursive search yet. Protected metadata and credential-shaped names stay hidden.
@@ -346,9 +346,10 @@ it may advertise an existing authority head, never a provider hash as a revision
 Discovery consumes ordinary list continuations before claiming completeness.
 `Truncated=true` on a terminal provider page remains incomplete source coverage,
 even when a query leaves only one or zero matches. A later complete provider cannot
-erase that flag. `complete=false` and `refineQuery=true` report bounded coverage;
-`partial`/`unavailableScopes` retain their separate provider-availability meaning.
-`empty=true` requires complete enumeration/search, not just zero observed matches.
+erase that flag. `complete=false` reports incomplete coverage; `unavailableScopes`
+reports unavailable sources. An empty result proves absence only when `complete=true`.
+The internal `Empty` and `Partial` conveniences are derived, not independently stored
+flags; the model receives neither these duplicates nor `refineQuery`.
 Artifact search reports incomplete coverage for a bounded text prefix, truncated
 attachment extraction, unavailable expected source, or an unscanned remainder at
 the result limit. A missing attachment text read is not converted to empty text.

@@ -183,7 +183,7 @@ namespace RNAssistant.Harness
                 Directory.CreateDirectory(Path.Combine(workspace.RootPath, ".git"));
                 var page = gateway.Select("file").Find("", null, 20);
                 AssertEqual(20, page.Items.Count, "gateway file discovery respects requested bound");
-                AssertTrue(page.RefineQuery && page.ScannedEntries.Value <= 5000,
+                AssertTrue(!page.Complete && page.ScannedEntries.Value <= 5000,
                     "directory listing reports an incomplete scan");
                 AssertTrue(!page.Complete && !page.Empty, "bounded listing does not establish absence");
                 AssertTrue(!page.Items.Any(item => item.Target == ".rnassistant" || item.Target == ".git" ||

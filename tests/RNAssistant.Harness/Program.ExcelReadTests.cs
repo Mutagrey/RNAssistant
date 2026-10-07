@@ -30,7 +30,7 @@ namespace RNAssistant.Harness
                     LiveDocumentResourceProvider.DocumentKind, null, 20).Items.Single();
                 var target = ResourceGatewayService.IntentTarget(root);
                 var found = gateway.Find(session, "Name", "document");
-                AssertTrue(found.Items.Count > 0 && !found.Complete && found.RefineQuery && !found.Partial,
+                AssertTrue(found.Items.Count > 0 && !found.Complete && !found.Partial,
                     "large name catalog remains bounded discovery, not provider unavailability");
                 AssertTrue(!gateway.Find(session, "missing-name", "document").Empty,
                     "bounded Excel discovery never proves absence");

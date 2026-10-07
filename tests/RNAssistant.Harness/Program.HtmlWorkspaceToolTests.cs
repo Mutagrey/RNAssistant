@@ -301,7 +301,7 @@ namespace RNAssistant.Harness
                         "mismatch has a precise code");
                     AssertEqual(2, (int)data["hunkIndex"],
                         "mismatch identifies the failed hunk");
-                    AssertEqual(source, (string)data["recovery"]["currentContent"],
+                    AssertEqual(source, failed.Recovery.CurrentContent,
                         "model-facing result contains the current source");
                     AssertEqual(source, failed.Recovery.CurrentContent,
                         "bounded recovery returns the exact current source");

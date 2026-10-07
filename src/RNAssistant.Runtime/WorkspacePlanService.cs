@@ -115,10 +115,9 @@ namespace RNAssistant.Runtime
                 var matches = page.Items.Where(item => !PlanDocumentService.IsTombstone(item) &&
                     (string.IsNullOrWhiteSpace(query) || item.Title.IndexOf(query, StringComparison.OrdinalIgnoreCase) >= 0)).ToArray();
                 var result = new ResourceFindPage { Scope = "workspace", Query = query,
-                    ScannedEntries = Math.Min(100, page.Total), Partial = page.UnavailableResources > 0,
-                    RefineQuery = page.NextOffset.HasValue || matches.Length > 50, Total = matches.Length };
-                result.Complete = !result.Partial && !result.RefineQuery;
-                result.Empty = result.Complete && matches.Length == 0;
+                    ScannedEntries = Math.Min(100, page.Total), Total = matches.Length };
+                if (page.UnavailableResources > 0) result.UnavailableScopes.Add("plans");
+                result.Complete = !result.Partial && !page.NextOffset.HasValue && matches.Length <= 50;
                 if (!result.Complete) result.AvailabilityHint = "Plan discovery is incomplete or contains unavailable metadata; a title match is not proof of uniqueness.";
                 foreach (var artifact in matches.Take(50))
                 {

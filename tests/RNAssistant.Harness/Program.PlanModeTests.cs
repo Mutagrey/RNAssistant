@@ -270,8 +270,7 @@ namespace RNAssistant.Harness
                     Command(UserQuestionToolCatalog.AskToolId,
                         "questions", new JArray()), tools,
                     new AppSettings(), false, false, session);
-                var invalidQuestionRecovery = JObject.Parse(
-                    invalidQuestion.DataJson)["recovery"];
+                var invalidQuestionRecovery = invalidQuestion.Recovery?.ModelProjection();
                 AssertEqual("RejectedNoEffect",
                     (string)invalidQuestionRecovery?["failureKind"],
                     "invalid questions certify no interaction effect");
@@ -410,7 +409,7 @@ namespace RNAssistant.Harness
                     invalid.Evidence.Dispatch,
                     "semantic rejection occurs before the mutation boundary");
                 var invalidRecovery =
-                    JObject.Parse(invalid.Result.DataJson)["recovery"];
+                    invalid.Recovery?.ModelProjection();
                 AssertEqual("RejectedNoEffect",
                     (string)invalidRecovery?["failureKind"],
                     "invalid Plan state certifies no chat-state effect");

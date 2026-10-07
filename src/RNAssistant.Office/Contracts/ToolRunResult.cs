@@ -38,6 +38,9 @@ namespace RNAssistant.Office.Contracts
         [JsonProperty("message")]
         public string Message { get; set; }
 
+        [JsonProperty("recovery", NullValueHandling = NullValueHandling.Ignore)]
+        public RNAssistant.Core.Tools.ToolRecoveryContract Recovery { get; set; }
+
         [JsonProperty("dataJson")]
         public string DataJson { get; set; }
 

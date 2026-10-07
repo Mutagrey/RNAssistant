@@ -125,10 +125,7 @@ namespace RNAssistant.Office.Tools
                 Representation = representation,
                 ReturnedCharacters = characters,
                 ReturnedRows = rows?.Count,
-                Complete = data.Value<bool>("complete"),
-                HydratedForNextModelStep = representation == "media" &&
-                    data["hydratedForNextModelStep"]?.Type == JTokenType.Boolean &&
-                    data.Value<bool>("hydratedForNextModelStep")
+                Complete = data.Value<bool>("complete")
             };
         }
 

@@ -671,7 +671,7 @@ namespace RNAssistant.Harness
                     mismatch.ErrorCode,
                     "manifest id mismatch is not masked as an invalid custom host");
                 var mismatchRecovery =
-                    JObject.Parse(mismatch.DataJson)["recovery"];
+                    mismatch.Recovery?.ModelProjection();
                 AssertEqual("RejectedNoEffect",
                     (string)mismatchRecovery?["failureKind"],
                     "manifest validation certifies no package mutation");

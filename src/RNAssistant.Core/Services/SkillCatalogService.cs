@@ -51,8 +51,7 @@ namespace RNAssistant.Core.Services
                     Descriptor = descriptor, Reference = descriptor.Reference };
             }).ToList();
             return new ResourceFindPage { Scope = "catalog", Query = query, Items = items, Total = matches.Length,
-                Complete = items.Count == matches.Length, Empty = matches.Length == 0,
-                RefineQuery = items.Count < matches.Length,
+                Complete = items.Count == matches.Length,
                 AvailabilityHint = items.Count < matches.Length ? "Skill catalog is bounded; narrow the query." : null,
                 ResourceRefs = items.Select(item => item.Reference).ToList() };
         }

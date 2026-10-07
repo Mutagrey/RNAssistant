@@ -199,7 +199,7 @@ namespace RNAssistant.Harness
             var session = new ChatSession();
             var clipped = gateway.Find(session, "Test", "conversation");
             AssertEqual(1, clipped.Items.Count, "captured matches remain discoverable");
-            AssertTrue(!clipped.Complete && clipped.RefineQuery && !clipped.Empty,
+            AssertTrue(!clipped.Complete && !clipped.Empty,
                 "terminal truncation survives metadata filtering even with one result");
             AssertTrue(!clipped.Partial && clipped.UnavailableScopes.Count == 0, "bounded coverage is not provider unavailability");
             var target = clipped.Items.Single().Target;
@@ -243,7 +243,7 @@ namespace RNAssistant.Harness
             var calls = provider.ListCalls;
             var complete = gateway.Find(session, "Test", "conversation");
             AssertEqual(2, provider.ListCalls - calls, "ordinary pagination is fully consumed");
-            AssertTrue(complete.Complete && !complete.RefineQuery, "intermediate page truncation is resolved by its continuation");
+            AssertTrue(complete.Complete, "intermediate page truncation is resolved by its continuation");
             AssertEqual("rna://alpha/first", gateway.ResolveIntentTarget(session, target).Reference.Uri, "complete enumeration still resolves normally");
             AssertTrue(gateway.Find(session, "missing", "conversation").Empty, "complete negative discovery remains genuinely empty");
             incomplete = true;
@@ -262,7 +262,7 @@ namespace RNAssistant.Harness
             provider.ListPage = cursor => new ResourceListPage { NextCursor = "next", Truncated = true };
             var beforePages = provider.ListCalls;
             var bounded = gateway.Find(session, null, "conversation");
-            AssertTrue(provider.ListCalls - beforePages == 20 && !bounded.Complete && !bounded.Empty && bounded.RefineQuery,
+            AssertTrue(provider.ListCalls - beforePages == 20 && !bounded.Complete && !bounded.Empty,
                 "empty filtered source pages cannot drive an unbounded scan or a complete negative");
             provider.SearchTruncated = true;
             AssertTrue(!gateway.Find(session, "missing", "conversation").Empty, "an incomplete content scan cannot prove absence either");
