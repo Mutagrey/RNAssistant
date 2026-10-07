@@ -269,7 +269,7 @@ namespace RNAssistant.Office.Services
             if (request.Representation == "table" || request.Representation == "records")
             {
                 if (_authority?.Payloads == null) throw new ResourceRequestException("Canonical snapshot storage is required for structural views.", "RESOURCE_VIEW_UNAVAILABLE", false);
-                var derived = ResourceDerivedViewService.TryRead(this, _authority, session, request);
+                var derived = ResourceDerivedViewService.TryRead(this, _authority, session, request, cancellationToken);
                 if (derived != null) return derived;
                 return new ResourceStructuredViewService(this, _authority).Read(session, request, live, cancellationToken);
             }
@@ -288,6 +288,7 @@ namespace RNAssistant.Office.Services
             {
                 var providerRequest = _authority == null ? request : _authority.PrepareRead(session, request, live);
                 var result = provider.Read(session, providerRequest, cancellationToken);
+                cancellationToken.ThrowIfCancellationRequested();
                 return _authority == null ? result : _authority.PublishRead(session, result, request, live);
             });
         }

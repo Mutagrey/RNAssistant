@@ -14,7 +14,7 @@ namespace RNAssistant.Office.Services
         [ThreadStatic] private static int _depth;
 
         internal static ResourceReadSelection TryRead(ResourceGatewayService gateway, ResourceAuthorityService authority,
-            ChatSession session, ResourceReadRequest request)
+            ChatSession session, ResourceReadRequest request, System.Threading.CancellationToken cancellationToken)
         {
             var address = ResourceUri.Parse(request.Reference.Uri);
             if (address.Provider != "state") return null;
@@ -42,7 +42,7 @@ namespace RNAssistant.Office.Services
                 if (fields.Any(field => !definition.Fields.Any(item => item.Field == field)) || fields.Distinct().Count() != fields.Count)
                     throw Error("RESOURCE_FIELD_UNAVAILABLE", "The field is not defined by this exact mapping.");
                 var offset = string.IsNullOrEmpty(request.Cursor) ? request.RowOffset : position.Offset;
-                var table = Project(gateway, session, definition, offset, request.MaxRows <= 0 ? 500 : request.MaxRows, fields);
+                var table = Project(gateway, session, definition, offset, request.MaxRows <= 0 ? 500 : request.MaxRows, fields, cancellationToken);
                 var next = offset + table.Rows.Count;
                 var coverage = new ResourceCoverage(ResourceCoverageKinds.RecordRange, start: offset, end: next, fields: fields);
                 return new ResourceReadSelection { Result = new ResourceReadResult {
@@ -79,7 +79,8 @@ namespace RNAssistant.Office.Services
         }
 
         private static ResourceTableBatch Project(ResourceGatewayService gateway, ChatSession session,
-            ResourceDerivedDefinition definition, int offset, int limit, IReadOnlyList<string> fields)
+            ResourceDerivedDefinition definition, int offset, int limit, IReadOnlyList<string> fields,
+            System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken))
         {
             if (offset < 0 || limit < 1 || limit > 32000 || definition.Source?.IsExact != true ||
                 definition.Schema?.IsExact != true || definition.Mapping?.IsExact != true || definition.SkipRows < 0)
@@ -87,7 +88,7 @@ namespace RNAssistant.Office.Services
             var selected = definition.Fields.Where(item => fields.Contains(item.Field)).ToArray();
             var source = gateway.Read(session, new ResourceReadRequest { Reference = definition.Source.Copy(),
                 Representation = "table", RowOffset = checked(offset + definition.SkipRows), MaxRows = limit,
-                Fields = selected.Select(item => item.SourceField).Distinct(StringComparer.Ordinal).ToList() }).Result;
+                Fields = selected.Select(item => item.SourceField).Distinct(StringComparer.Ordinal).ToList() }, cancellationToken).Result;
             ResourceRef schemaReference;
             var schema = ResourceDefinitionReader.Read<SemanticSchemaDefinition>(gateway, session, definition.Schema, out schemaReference);
             if (schema?.State != SemanticSchemaState.Published || schema.Contract != "resource-schema-v1")
