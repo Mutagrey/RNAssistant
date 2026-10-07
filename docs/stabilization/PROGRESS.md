@@ -1,5 +1,58 @@
 # Stabilization progress
 
+## Fixed Gemma CSV and compaction acceptance — 2026-10-07
+
+Owner: CLI evaluation / model context. Two real runs use unchanged `24fd92cc`
+binaries, tasks/checks and original bounds. No production source, prompts, roles,
+grader or budget changed. Profile: `rna-gemma4-12b-32k:latest`, digest
+`cf94f3793da5f501e0a2948b34825db5baceed926438a78551ffaa83f85a4082`,
+Ollama 0.35.0, system instructions / user results, json_schema, thinking off,
+4096 output. Each run used one isolated model with 32K/f16, Flash Attention and
+the server prompt cache disabled. v6 probes passed; models were unloaded and
+owned servers stopped afterward. Existing binaries were reused; no build needed.
+
+| Fixed acceptance | Result | Remaining failure |
+|---|---|---|
+| CSV creation, 32K, 16 iterations / 24 tools / 600 s | Failed at 600.44 s, cancelled (exit 130); 9 iterations / 8 tools, three files created and one verified replacement, no unknown effects. | First browser snapshot passed 12/24 checks; after repair the second passed only 1/24. Current final reads: 0/3. The unchanged feature follow-up was not run. |
+| Release notes, 24K planning, 40 iterations / 48 tools / 600 s | Failed at 442.72 s; model `done`, 30 iterations / 29 tools, 10 verified writes, no unknown effects. Separate byte audit passes 10/10 files, unchanged runtime metadata, no extra files. | Current final reads: 2/10; prescribed read/write/read-back order: 0/9 stages. No checkpoint, process loss, external edit or resume occurred. Exact files do not close E-CONTEXT/E-RESUME. |
+
+The browser recovery fix is exercised by the real CSV model: after a refused
+unread replacement, an exact read and verified replacement allow the same
+`web.verify` to dispatch again. Its new functional failure is not a repeat-guard
+refusal. One earlier model response hit 4096 tokens with 106 `renderUI();`
+occurrences inside an unterminated patch response. Protocol rejection prevented
+dispatch, then normal format repair continued. This is repetition within a single
+generation, before ToolRuntime; it does not explain every historical loop.
+Failure categories: CSV `MODEL_ERROR`, `PROTOCOL_ERROR`, `VERIFICATION_ERROR`;
+release notes `MODEL_ERROR`, `VERIFICATION_ERROR`. No new context-loss or runtime
+defect is established. Transport presence alone does not prove model attention.
+
+Canonical audits pass: CSV 10 requests / 9 completed responses, 36 cumulative
+call/result pairs; notes 30/30, 309 pairs / 29 unique accepted calls. Exact task
+and latest tool result remain on wire; no compaction in either trajectory. The
+notes run has eight `source_observation_required` refusals, each followed by a
+read and successful mutation, and no protocol rejection. Reported prompt/output
+tokens: CSV 79615/10463, notes 213104/1709. No operator hints or workspace repairs.
+
+Memory was sampled throughout: CSV 120 samples, max gap 5.12 s, pressure level 1
+in 97 samples and warning level 2 in 23 late samples; notes 89 samples, max gap
+5.08 s, pressure level 1 throughout. Both have 0 MiB new swap-in/out and no other
+loaded model; existing swap stayed 747.94 MiB. Peak runner RSS: 11.02/10.83 GiB
+(process accounting, not total unique GPU/system allocation). CSV timing is not
+isolated from late memory pressure; its functional failures preceded the warning.
+
+Evidence under `/var/folders/k9/hr_94nt142x1f43jr6g0wr_00000gp/T/`:
+`rna-m5-csv-head-gemma-9xj_im5t`, `rna-live-compaction-resume-rp_l8tgg` and
+`rna-live-compaction-head-gemma-w78bka7i` (endpoint/memory). These retain source,
+binary/profile/task hashes, drivers, HTTP/CAS, original failed results and separate
+wire/byte/order/memory audits. Diff, touched links and `ValidateVersionFormat`
+pass. No new native-role or Windows/Office qualification is claimed.
+
+Full M4/M5 remain open. Next: cross-family regression using the existing GPT-OSS
+profile, starting with v6 and input-budget/memory preflight at 16K, then the fixed
+CSV task if admitted. Record the changed model/context explicitly; do not weaken
+acceptance or use a smaller context to claim the fixed 24K compaction gate passed.
+
 ## Application resource views and snapshot preview — 2026-10-07
 
 Owner: workspace application service / filesystem provider / development browser
@@ -26,8 +79,8 @@ stale-final rejection and typed retry guards. These are Mac browser and controll
 HTTP checks, not new real LLM or Windows/Office/WebView2 qualification.
 Python syntax, added local links/anchor, diff and `ValidateVersionFormat` pass.
 
-Next concrete slice: unchanged autonomous CSV creation + feature-follow-up
-acceptance, followed by complete real compaction/restart/resume acceptance. M4's
+The subsequent unchanged real CSV and compaction attempts are recorded
+[above](#fixed-gemma-csv-and-compaction-acceptance--2026-10-07); both failed. M4's
 development resource/text/preview surface is now available; full M4/M5 remain open.
 Working previews, binary/image/PDF viewers, screenshots/traces, hard-process-loss
 preview cleanup and Office UI application cutover remain unimplemented or unqualified.
@@ -554,7 +607,7 @@ conversation application services; resource/Office boundaries retain their owner
 | M2 | Workspace/session without document authority, stable identity, known root relocation and read-only association tested. Only the root directory mount is supplied; managed/multiple/external mounts and shared-source identity/heads (A24) remain open. |
 | M3 | Single WorkspaceFileService owns UTF-8 find/read/create/patch/replace/copy/move/delete/restore, exact history, drift and non-replay recovery. Focused tests pass. Remaining §8.1 stat/raw/binary/large views, directory pagination, complete Office/filesystem dispatch and cross-platform path qualification are open. |
 | M4 | First useful real-model multi-file result achieved. Modes, skills, typed questions/answers, approvals, Task Lists/Plans, receipts, cancel/explicit continuation and event following exist. Interactive host UX/recorded file-effect presentation passes Mac PTY checks. Typed application resource discovery, bounded exact text views and isolated development snapshot preview are implemented. Office UI use of shared application contracts is the later M7 cutover. Scripted runs do not close real task quality. |
-| M5 | Retained browser snapshots, dependency checks, structured functional verification, repair, bounded same-run continuation and shared compaction implemented. Controlled compaction/resume passes. Schema, completed-receipt boundary and aggregate source-budget defects are fixed. Real Qwen reached restart/resume but timed out; Gemma produced all exact final files after the latest fix, without reaching a compaction/restart boundary and without the prescribed per-note read-back order. Full live quality remains open. A real counter repair passed previously; typed dependency-change recovery restores the full controlled verify/repair/reverify scenario. Isolated development snapshot preview now passes Mac lifecycle/isolation checks. Fixed autonomous CSV creation + unchanged feature follow-up still has no passing evidence. Working/binary previews and browser screenshots/traces remain open. |
+| M5 | Retained browser snapshots, dependency checks, structured functional verification, repair, bounded same-run continuation and shared compaction implemented. Controlled compaction/resume passes. Schema, completed-receipt boundary and aggregate source-budget defects are fixed. Real Qwen reached restart/resume but timed out; the latest Gemma attempt again produced all exact final files, without checkpoint/restart and with 0/9 prescribed read-back stages. Full live quality remains open. A real counter repair passed previously; typed dependency-change recovery passes controlled guards and real Gemma dispatches re-verification after repair, but its CSV result still fails. Isolated development snapshot preview passes Mac lifecycle/isolation checks. Fixed autonomous CSV creation + unchanged feature follow-up still has no passing evidence. Working/binary previews and browser screenshots/traces remain open. |
 | M6 | Authoring cutover not started. Office HTML/MD/JSON and Plan authoring remain on their existing owners; file materialization/linkage/crash guards and old-writer removal are required. CLI files have no dual writer. |
 | M7 | Receipts/cursors/subscription provide shared primitives; Office UI transport/application migration, file tree, preview isolation, bounded body delivery and pane-independent lifetime are not closed. |
 | M8 | External Office provider/mount/target cutover remains open; exact binding/discovery/SaveAs and multiple-instance behavior need Windows evidence. |
@@ -1789,8 +1842,14 @@ boundary, not a functional CSV score. Scripted HTTP tests confirmed both CLI
 transport modes and saved metadata. The existing v6 parser correctly rejected
 these outputs; no permissive JSON repair or separate agent loop was added.
 
-Next concrete slice (2026-10-07): unchanged real CSV creation/follow-up acceptance,
-then complete real compaction/restart/resume acceptance. Typed resource discovery,
+Next concrete slice (2026-10-07): cross-family regression with the existing
+GPT-OSS profile. First check v6 protocol, input budget and memory at 16K; only then
+run the fixed CSV task and, if it passes, the unchanged feature follow-up. Record
+the profile/context change and retain task/checks/original bounds. The latest
+Gemma CSV and compaction attempts both failed; see the
+[current evidence](#fixed-gemma-csv-and-compaction-acceptance--2026-10-07).
+Complete real compaction/restart/resume acceptance remains open at its original
+24K planning budget; a lower-context diagnostic cannot replace it. Typed resource discovery,
 bounded exact text views and isolated development snapshot preview are implemented.
 Browser provider recovery after verified dependency repair is fixed; full
 `web_checks_runtime_smoke.py` passes with unrelated/no-change/unknown guards preserved.
@@ -1815,9 +1874,10 @@ Explicit reconciliation of uncertain planning mutations remains open.
 M4's first useful real-model/file result is achieved; its complete §11 surface is
 not closed. M5 still needs autonomous fixed CSV creation with current final reads
 and the unchanged feature follow-up, plus remaining E-FILE/E-RESUME/E-CONTEXT/
-E-CAPABILITY evidence. The latest controlled memory runs recorded normal pressure
-and no new swap-out, but still ended with failing checks at iteration/time limits;
-the follow-up was not run. Keep task/checks/bounds fixed and declare each changed
+E-CAPABILITY evidence. The latest real Gemma runs have no new paging; CSV had late
+warning pressure and timed out, while notes had normal pressure and prematurely
+finished without required reads/restart. The follow-up was not run.
+Keep task/checks/bounds fixed and declare each changed
 factor in further model comparisons. Scripted runtime checks do not close that gap.
 Raw/binary views, general preview UI and common Office/file dispatch remain open
 §8.1/M5–M7 scope. File authoring cutover M6 and M7–M11 have not started. Existing

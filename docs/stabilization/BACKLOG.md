@@ -31,12 +31,19 @@ sequence assertion is now implemented: it rejects this trace, while the retained
 correctly ordered controlled restart/resume trace passes. Original fixture results
 remain unchanged; no full real-model acceptance is established by regrading.
 
+At `24fd92cc`, the unchanged real Gemma attempt again produced 10/10 exact final
+files, but finished at 442.72 s before any checkpoint. Only 2/10 final reads and
+0/9 prescribed read/write/read-back stages qualify. All 30 HTTP requests retain
+the task and latest results; 309 cumulative pair checks pass. Normal memory
+pressure and zero new paging do not remove this instruction-following failure.
+The original fixture result remains failed; no interruption or resume occurred.
+
 Closure requires the prescribed read/patch/read-back order, all exact final bytes
 and current reads, an actual checkpoint/process-loss/external-edit/resume boundary,
 retained counters and no replayed effect within 24K/4096, 40/48/600. Do not enlarge
 budgets, weaken source authority or count the controlled fixture as model
 qualification. Exact source/profile/audits are in
-[PROGRESS](PROGRESS.md#canonical-read-back-order-grading--2026-10-07).
+[PROGRESS](PROGRESS.md#fixed-gemma-csv-and-compaction-acceptance--2026-10-07).
 
 ## Office conversation-port source assertion — 2026-10-05
 
@@ -167,6 +174,18 @@ snapshot; the final patch's functional outcome is unknown. No follow-up ran.
 This closes the schema mismatch, not fixed CSV acceptance or model reliability.
 All latest results remained on wire, pressure was normal and no new swap-out was
 observed. Source/profile/HTTP and paired evidence are linked in PROGRESS.md.
+
+At `24fd92cc`, Gemma's unchanged 16/24/600 run timed out after 9 iterations /
+8 tools. A verified repair now permits the identical browser check to dispatch,
+but checks regress from 12/24 to 1/24 and current final reads remain 0/3. The
+feature follow-up was not run. One 4096-token response contains 106 `renderUI();`
+occurrences inside malformed patch JSON; it was rejected before tool dispatch.
+This generation-local repetition is distinct from repeated tool execution. All
+latest results remain on wire. There was late warning pressure but no new paging;
+do not attribute timing solely to the model or memory. The next cross-family
+comparison starts with protocol/input-budget/memory preflight for the existing
+GPT-OSS profile. Full evidence and unchanged closure requirements are in
+[PROGRESS](PROGRESS.md#fixed-gemma-csv-and-compaction-acceptance--2026-10-07).
 
 ## CLI continuation after completed-operation receipts — 2026-10-05
 
