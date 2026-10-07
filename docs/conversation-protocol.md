@@ -1393,8 +1393,9 @@ Owner: Conversation/model context; совместные границы — Core 
   считаются отдельными шансами модели исправиться; оставшиеся calls исполняются
   по обычным policy/guard правилам. Два конфликта с разными аргументами сами по
   себе не останавливают run. Новые данные,
-  точное complete observation для RefreshRequired и verified state change позволяют
-  продолжение. Unknown не очищается посторонним успешным чтением или записью.
+  точное complete observation для RefreshRequired и verified state change того же
+  ресурса позволяют продолжение. Отказы Replan и отказы без resource identity
+  не сбрасываются посторонними изменениями. Unknown не очищается посторонним успешным чтением или записью.
   Старый pending continuation без typed progress явно отвергается; история не удаляется.
 - Workspace `files.copy/move/patch/replace/delete` возвращают отсутствие полного
   чтения как `source_observation_required` с typed `RefreshRequired`:

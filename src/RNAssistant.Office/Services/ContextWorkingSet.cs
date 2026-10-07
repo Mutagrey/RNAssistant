@@ -47,7 +47,8 @@ namespace RNAssistant.Office.Services
                 var recovery = message.ExecutionProgress?.Recovery;
                 if (recovery != null) receipt.Content += "\nRECOVERY: " + recovery.ModelProjection().ToString(Formatting.None);
                 var cost = EstimateCost(new[] { receipt }, settings);
-                if (cost > receiptBudget || receipts.Count >= 24) break;
+                if (receipts.Count >= 24) break;
+                if (cost > receiptBudget) continue;
                 receiptBudget -= cost;
                 receipts.Add(receipt);
             }

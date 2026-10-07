@@ -87,7 +87,8 @@ namespace RNAssistant.Core.Agent
                 foreach (var failure in _failures.ToArray())
                 {
                     var recovery = failure.Value.Recovery;
-                    if (recovery?.ResourceIdentity != null && !effect.Impacts.Any(impact =>
+                    if (recovery?.RetryPolicy != ToolRetryPolicy.RefreshRequired ||
+                        recovery.ResourceIdentity == null || !effect.Impacts.Any(impact =>
                         impact.Identity.Equals(recovery.ResourceIdentity))) continue;
                     _failures.Remove(failure.Key);
                 }

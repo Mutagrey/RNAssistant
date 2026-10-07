@@ -336,6 +336,27 @@ namespace RNAssistant.Harness
             AssertTrue(!tracker.CanDispatch(new ToolCall("new_call", "write", "{}"), out reason, out message, out delay),
                 "restored terminal facts prevent replay after confirmation/restart");
             AssertEqual("repeated_unknown_tool_call", reason, "operation identity does not depend on newly allocated call id");
+
+            var target = new ResourceRef(ResourceUri.Create("workspace", "fixture", "file", "a.txt")).Identity;
+            var other = new ResourceRef(ResourceUri.Create("workspace", "fixture", "file", "b.txt")).Identity;
+            foreach (var policy in new[] { ToolRetryPolicy.Replan, ToolRetryPolicy.RefreshRequired })
+            {
+                tracker = new AgentProgressTracker();
+                tracker.Observe(call, new ToolExecutionProgress(ToolExecutionOutcome.Error,
+                    recovery: new ToolRecoveryContract(ToolFailureKind.RejectedNoEffect, policy,
+                        policy == ToolRetryPolicy.RefreshRequired ? target : null, "text", "a.txt")),
+                    "read required", null, null);
+                foreach (var changed in new[] { other, target })
+                {
+                    tracker.Observe(new ToolCall("change", "write", "{}"),
+                        new ToolExecutionProgress(ToolExecutionOutcome.Ok), "changed", null,
+                        new ResourceEffect("effect", "write", ResourceEffectOutcome.VerifiedChanged,
+                            new[] { new ResourceImpact(changed, ResourceImpactRelation.Exact) }));
+                    AssertEqual(policy == ToolRetryPolicy.RefreshRequired && changed.Equals(target),
+                        tracker.CanDispatch(call, out reason, out message, out delay),
+                        "only a matching refresh dependency releases the failed call");
+                }
+            }
         }
 
         private static void ContextContinuityDeliversReplanFeedback()
@@ -417,6 +438,13 @@ namespace RNAssistant.Harness
             AssertTrue(ToolResultHistoryReader.TryRead(retainedRows, out rowWire, out rowError), "restored row result retains its protocol frame");
             AssertEqual("business value", (string)JObject.Parse(rowWire.Result.DataJson).SelectToken("table.rows[0].revision"), "business field names are unchanged");
             AssertTrue(!retainedRows.ResourceEvidence.Single().Complete, "partial row selection cannot become whole-read evidence");
+            var oversized = ContinuityResult("large_receipt", "common.vba_write_module",
+                ToolResult.Error(new string('x', 24000)));
+            session.Messages.Add(ContinuityCall(oversized)); session.Messages.Add(oversized);
+            checkpoint.ThroughMessageId = oversized.Id;
+            var withLarge = ContextWorkingSet.Restore(session, active, authority, new AppSettings(), 4000);
+            AssertTrue(withLarge.Messages.Any(m => m.CompletedOperation?.ToolCallId == "write_done"),
+                "oversized optional receipt does not hide older affordable receipts");
             var evicted = ContextWorkingSet.Restore(session, active, authority, new AppSettings(), 0);
             AssertEqual(2, evicted.OmittedBodies, "body budget is enforced before hydration");
             AssertTrue(!evicted.Messages.Any(m => (m.Content ?? "").Contains("KEEP_COMPLETE_BODY")), "eviction cannot silently retain bytes");
