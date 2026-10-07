@@ -198,7 +198,10 @@ function appendMessageFooter(node, message, index, activity) {
       (runViewState.executionHealth === "unknown" && runViewState.lifecycle === "failed"
         ? "warning" : window.RNAssistantRunViewState.displayStatus(runViewState, runViewState.lifecycle));
     outcome.textContent = conversationOutcomeLabel(runViewState);
-    if (outcome.textContent) meta.appendChild(outcome);
+    if (outcome.textContent) {
+      meta.appendChild(outcome);
+      footer.classList.add("has-status");
+    }
   } else if (!runViewState && messageRole(message) === "assistant" &&
       !messageProtocolMessage(message) && !activity && !message.Pending && !message.Failed && !message.Local &&
       messageContent(message).trim()) {
@@ -206,7 +209,9 @@ function appendMessageFooter(node, message, index, activity) {
     incompatibleOutcome.className = "message-outcome status-unknown";
     incompatibleOutcome.textContent = "Нет typed runtime state · требуется новый запуск";
     meta.appendChild(incompatibleOutcome);
+    footer.classList.add("has-status");
   }
+  if (message.Failed) footer.classList.add("has-status");
 
   var actions = document.createElement("div");
   actions.className = "message-actions";

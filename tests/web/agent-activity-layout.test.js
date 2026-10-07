@@ -106,7 +106,7 @@ const read = file => fs.readFileSync(path.join(root, file), "utf8");
       });
       assert.ok(layout.assistantLeft < 1 && layout.plainAssistantLeft < 1 && layout.userRight < 1 && layout.metaAfter);
       assert.ok(layout.copyFirst && !layout.overflow);
-      assert.ok(layout.gap >= 0 && layout.gap <= 8 && layout.divider === "1px");
+      assert.ok(layout.gap >= 0 && layout.gap <= 8 && layout.divider === "0px");
     }
     // Exercise the shipped Markdown renderer, not an identity-string mock.
     await page.evaluate(() => {

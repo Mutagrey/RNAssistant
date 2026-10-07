@@ -6,7 +6,10 @@ const vm = require("node:vm");
 class Element {
   constructor() { this.children = []; this.parentNode = null; this.className = ""; }
   get childNodes() { return this.children; }
-  get classList() { return { contains: name => this.className.split(" ").includes(name) }; }
+  get classList() { return {
+    contains: name => this.className.split(" ").includes(name),
+    add: name => { if (!this.className.split(" ").includes(name)) this.className += " " + name; }
+  }; }
   get firstChild() { return this.children[0] || null; }
   get nextSibling() { return this.parentNode.children[this.parentNode.children.indexOf(this) + 1] || null; }
   appendChild(node) { return this.insertBefore(node, null); }
@@ -52,6 +55,13 @@ const titles = node => {
 refresh();
 const article = box.firstChild, body = article.firstChild;
 assert.deepEqual(titles(article), ["Копировать сообщение"]);
+assert.equal(article.children.at(-1).classList.contains("has-status"), false);
+const failed = new Element();
+ctx.appendMessageFooter(failed, { Role: "user", Content: "Retry", Failed: true }, 0, null);
+assert.equal(failed.children[0].classList.contains("has-status"), true, "failed delivery stays visible");
+const incompatible = new Element();
+ctx.appendMessageFooter(incompatible, { Role: "assistant", Content: "Old answer" }, 0, null);
+assert.equal(incompatible.children[0].classList.contains("has-status"), true, "missing runtime state stays visible");
 sending = false; refresh();
 assert.ok(titles(article).includes("Изменить сообщение"));
 assert.ok(titles(article).includes("Ответвить чат отсюда"));

@@ -1,15 +1,14 @@
 .reasoning-block {
-  margin: 0 0 8px;
-  border: 1px solid var(--line);
-  border-radius: 8px;
-  background: color-mix(in srgb, var(--panel) 92%, transparent);
+  margin: 0 0 4px;
+  border: 0;
+  background: transparent;
 }
 
 .reasoning-block summary {
   display: flex;
   align-items: flex-start;
   gap: 8px;
-  padding: 7px 10px;
+  padding: 3px 0;
   color: var(--muted);
   cursor: pointer;
   font-size: 12px;
@@ -22,8 +21,9 @@
 
 .reasoning-block pre {
   max-height: 320px;
-  margin: 0;
-  padding: 0 10px 10px;
+  margin: 4px 0 6px 2px;
+  padding: 2px 0 2px 12px;
+  border-left: 1px solid var(--line);
   overflow: auto;
   white-space: pre-wrap;
   overflow-wrap: anywhere;
@@ -32,5 +32,9 @@
 }
 
 .reasoning-block.is-live {
-  border-color: color-mix(in srgb, var(--accent) 35%, var(--line));
+  color: var(--accent);
+}
+
+.reasoning-block.is-live summary {
+  color: var(--accent);
 }

@@ -103,6 +103,7 @@
 }
 
 .chat-main {
+  --chat-content-width: 860px;
   display: flex;
   min-width: 0;
   min-height: 0;
@@ -589,14 +590,21 @@
 .messages {
   display: flex;
   flex-direction: column;
-  gap: 22px;
+  gap: 28px;
   flex: 1;
   width: 100%;
   height: 100%;
   min-height: 0;
   overflow-x: hidden;
   overflow-y: auto;
-  padding: 16px clamp(12px, 3vw, 24px) 24px;
+  padding: 14px clamp(12px, 3vw, 24px) 28px;
+}
+
+.messages > .message,
+.chat-main > .composer,
+.chat-main > .agent-approval-dock {
+  width: min(100%, var(--chat-content-width));
+  align-self: center;
 }
 
 .chat-history-more {
@@ -667,8 +675,10 @@
 }
 
 .message.user .markdown {
-  max-width: 92%;
+  max-width: 82%;
   border: 0;
+  border-radius: 15px;
+  padding: 9px 13px;
   background: var(--secondary-bg);
   color: var(--text);
   box-shadow: none;
@@ -682,7 +692,7 @@
 }
 
 .message.user .message-attachments {
-  max-width: 92%;
+  max-width: 82%;
   align-self: flex-end;
   justify-content: flex-end;
 }
@@ -717,7 +727,7 @@
 .message.assistant .markdown {
   box-sizing: border-box;
   width: auto;
-  max-width: 94%;
+  max-width: 100%;
   align-self: flex-start;
   padding: 0;
   border: 0;
@@ -745,6 +755,10 @@
 }
 
 .message-footer {
+  position: absolute;
+  top: 100%;
+  left: 0;
+  z-index: 2;
   display: flex;
   align-items: center;
   justify-content: flex-end;
@@ -753,12 +767,14 @@
   margin: 0;
   gap: 8px;
   opacity: 0;
-  transform: translateY(-2px);
-  transition: opacity 0.12s ease, transform 0.12s ease;
+  pointer-events: none;
+  transition: opacity 0.12s ease;
 }
 
 .message.user .message-footer {
-  max-width: 92%;
+  right: 0;
+  left: auto;
+  max-width: 82%;
 }
 
 .message.assistant .message-footer {
@@ -774,7 +790,33 @@
 .message:hover .message-footer,
 .message:focus-within .message-footer {
   opacity: 1;
-  transform: translateY(0);
+  pointer-events: auto;
+}
+
+.message-footer.has-status {
+  position: static;
+  min-height: 0;
+  opacity: 1;
+  pointer-events: auto;
+}
+
+.message-footer.has-status .message-actions {
+  position: absolute;
+  top: 100%;
+  left: 0;
+  opacity: 0;
+  pointer-events: none;
+}
+
+.message.user .message-footer.has-status .message-actions {
+  right: 0;
+  left: auto;
+}
+
+.message:hover .message-footer.has-status .message-actions,
+.message:focus-within .message-footer.has-status .message-actions {
+  opacity: 1;
+  pointer-events: auto;
 }
 
 .message-footer-meta {
@@ -839,7 +881,7 @@
   display: inline-flex;
   flex: none;
   align-items: center;
-  gap: 6px;
+  gap: 2px;
   opacity: 1;
   padding: 0;
   border: 0;
@@ -852,12 +894,12 @@
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 28px;
-  height: 28px;
-  min-height: 28px;
+  width: 24px;
+  height: 24px;
+  min-height: 24px;
   padding: 0;
   border: 0;
-  border-radius: 0;
+  border-radius: 6px;
   background: transparent;
   color: #637083;
   opacity: 0.92;
@@ -870,13 +912,13 @@
 }
 
 .message-action:hover {
-  background: transparent;
+  background: var(--secondary-bg-hover);
   color: #344054;
   opacity: 1;
 }
 
 .message.failed .message-action:hover {
-  background: transparent;
+  background: var(--secondary-bg-hover);
   color: #8a1f14;
 }
 
@@ -1010,6 +1052,11 @@
 @media (hover: none) {
   .message-footer {
     opacity: 1;
-    transform: none;
+    pointer-events: auto;
+  }
+
+  .message-footer.has-status .message-actions {
+    opacity: 1;
+    pointer-events: auto;
   }
 }

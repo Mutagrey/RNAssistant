@@ -427,6 +427,7 @@ html[data-theme="dark"] .message-action {
 }
 
 html[data-theme="dark"] .message-action:hover {
+  background: var(--secondary-bg-hover);
   color: #e1e6ed;
 }
 
@@ -501,7 +502,6 @@ html[data-theme="dark"] .agent-run-empty {
   color: #7f8a9a;
 }
 
-html[data-theme="dark"] .agent-activity-detail-body,
 html[data-theme="dark"] .run-change-diff {
   background: #20252c;
 }
