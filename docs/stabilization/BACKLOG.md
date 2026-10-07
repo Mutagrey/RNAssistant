@@ -12,6 +12,30 @@
 новая возможность требует явной задачи, scope и owner; дефекты работающей системы
 приоритетнее расширения без конкретного пользовательского результата.
 
+## CLI admission after real compaction — 2026-10-07
+
+Owner: Core model context / conversation application services. The fixed live
+release-note scenario now produces an accepted checkpoint with real Qwen after
+the shared generation-schema correction. The next request still fails:
+11909 estimated context tokens exceed its 11455-token message budget. The
+checkpoint covers only five early messages; the runner cannot reach its model-wait
+interruption boundary, so real resume/external-edit behavior remains unqualified.
+`SelectPrefixCount` targets a fraction of the total input budget, then fully
+included source/pair limits can shorten that prefix. Determine whether sufficient
+history can fit one bounded summary request, or mandatory current evidence already
+exceeds the remaining message allowance. Use the common frozen compiler and retain
+complete exchanges, exact source authority and explicit refusal when impossible.
+Do not silently enlarge the task budget or remove evidence to force a pass.
+
+The typed summary also attached a receipt-creation claim to the manifest read;
+schema eligibility does not prove semantic entailment. Both baseline models wrote
+a literal `\n` in the receipt. Preserve the independent byte grader and distinguish
+those model errors from context admission. Closure requires the unchanged live
+task to reach checkpoint delivery, process loss, external edit and same-run resume
+with correct final bytes, current reads, retained counters and no replayed effect.
+Exact source/profile/audits and the 24K/4096, 40/48/600 bounds are in
+[PROGRESS](PROGRESS.md#compaction-schema-and-real-model-context-pressure--2026-10-07).
+
 ## Office conversation-port source assertion — 2026-10-05
 
 Owner: Harness / conversation persistence. `architecture: Office conversation

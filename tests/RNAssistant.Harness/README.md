@@ -6,6 +6,29 @@ and the 32-call bound. `protocol context: immutable complete snapshots` also
 rejects schema generation with missing/incomplete authority. Request-size and
 tool-pack checks cover schema projection and admission with both array branches.
 
+`python3 -B tests/cli/compaction_resume_live.py --base-url http://127.0.0.1:11435
+--model <verified-model-tag> --digest <verified-digest>` runs the separate real-LLM
+E-CONTEXT/E-RESUME fixture in a fresh temporary workspace. Start/probe the real
+local endpoint first and retain its model/profile and memory evidence; use a
+profile with at least 24K context. The runner plans with 24K/4096 and fixes the task
+at 40 iterations / 48 tool steps / 600 total seconds across both invocations.
+`--cli <dll> --source-root <checkout>` pins an already verified binary and its
+matching source for comparisons; the evidence retains binaries, a source archive
+and the working-tree patch. API keys stay in `RNA_API_KEY`, not arguments.
+This is not a replacement for fixed CSV acceptance.
+
+The task changes only release-note headers while retaining source bytes. An HTTP
+proxy forwards exact real requests/responses and holds one request after a
+published checkpoint, before provider dispatch. The runner kills only its own CLI,
+edits one observed file externally and calls explicit same-run continuation.
+Task/final-byte grading remains outside the workspace. Evidence includes original
+files, binary hashes, canonical HTTP/CAS, exact task, prefix continuity, call/result
+pairs, counters, limits, external-edit preservation and a receipt that must not be
+rewritten after restart. Invalid model summaries remain failures; the runner
+does not generate claims or modify accepted history. A run that never publishes a
+checkpoint leaves real resume untested. This live case currently uses `user`
+tool-result role; the controlled test below also covers native `tool` pairs.
+
 After building the CLI, `python3 -B tests/cli/compaction_resume_smoke.py` checks
 24K context pressure through actual structured compaction, process loss, external
 file edits and same-run continuation. It verifies checkpoint persistence, exact
@@ -13,7 +36,9 @@ user task, stale-claim exclusion, read-before-write guards, final read acceptanc
 original counters, no repeated effects and native pairs in `user`/`tool` profiles.
 This uses controlled HTTP claims, not real-model compaction quality. Run
 `compaction` for shared checkpoint/publication regression and durable batch
-boundaries; `context continuity:` for source/result projection. The omitted-read
+boundaries. It also checks actual source-bound compaction schemas, both explicit
+response modes, schema budget, mixed provenance and unknown-source rejection;
+`context continuity:` checks source/result projection. The omitted-read
 CLI smoke also uses 24K: it admits the current catalog while omitting the oversized
 body, and still requires the original bytes to survive a refused replacement.
 

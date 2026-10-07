@@ -1,5 +1,71 @@
 # Stabilization progress
 
+## Compaction schema and real-model context pressure — 2026-10-07
+
+Owner: Core compaction / CLI evaluation. Added a separate reproducible live
+E-CONTEXT/E-RESUME fixture: eight release-note files, exact byte grading, a
+single creation receipt, real structured compaction, disposable CLI process loss,
+external edit and explicit same-run continuation. HTTP is forwarded unchanged;
+no model replies, claims or accepted events are fabricated. The task/graders stay
+outside the workspace. This does not replace fixed CSV acceptance.
+
+Baseline binaries: `ba384023`. Both real models failed at compaction because
+generated claim kinds cited ineligible sources. The helper always requested
+`json_object`, ignoring the selected strict response mode. The shared helper now
+honors that setting and builds a schema from fully included source IDs, using
+the parser's existing source-kind predicate. Request admission includes schema
+cost. Validation, evidence ownership, one helper request and checkpoint format
+remain unchanged; no retry or automatic fallback was added.
+
+All runs used Ollama 0.35.0, model context 32K / CLI planning 24K / output 4096,
+system/user roles, json_schema selected, thinking off, one model/request and
+40 iterations / 48 tools / 600 total seconds. Profile sampling defaults retained.
+The same task/fixture hashes and bounds apply; Qwen's first HTTP request before
+and after the change is byte-identical.
+
+| Attempt | Observed result |
+|---|---|
+| Qwen 3.5 9B baseline | 147.07 s, exit 5, `model_infrastructure`; 13 iterations / 12 tools. Invalid claim provenance, no checkpoint. |
+| Gemma 4 12B baseline | 411.78 s, exit 5, same provenance rejection; 29 iterations / 37 tools. No checkpoint. |
+| Qwen after schema correction | 139.81 s, exit 5, `PromptBudgetExceeded`; 13 iterations / 13 tools. A typed checkpoint was published, but remaining context was 11909 estimated tokens at an 11455-message-token budget. No subsequent model dispatch, interruption or resume occurred. |
+
+The accepted Qwen summary also attributed receipt creation to the manifest-read
+source. Kind/source eligibility does not establish semantic truth. Both baseline
+models wrote a literal `\n` in the receipt; no operator correction or relaxed byte
+grader was applied. Categories: original shared `PROTOCOL_ERROR` generation gap,
+remaining `CONTEXT_ERROR` budget gap and `MODEL_ERROR`/`VERIFICATION_ERROR`.
+Live E-CONTEXT/E-RESUME remains open; a published checkpoint alone is insufficient.
+
+Audits: 13/29/13 canonical requests matched proxy bodies and CAS hashes;
+51/269/56 cumulative call/result pairs, complete unique accepted IDs, latest
+results and exact task retained, no runtime resource URI on wire. No unknown
+write effects. Input/output tokens: 86717/925, 196162/2042 and 91242/833.
+Memory: 31/84/29 samples, maximum gap 5.10 s, pressure level 1 throughout,
+zero new swap-out; swap-in 0/0.109/0 MiB. No other local model loaded; temporary
+servers stopped and models unloaded. These failures showed no memory pressure.
+
+Checks on an isolated `ba384023` checkout plus this schema/test change: clean CLI
+build, harness build with the two existing PDF CA1416 warnings, `compaction` 8/8
+and both controlled CLI compaction/resume branches passed. These cover strict and
+explicit json_object transport, source promotion, unknown IDs, schema budget,
+checkpoint publication, native pairs and original counters. Version gate passed.
+Concurrent main changes were excluded from those builds. Windows/Office and full
+M4/M5 remain unqualified.
+
+Exact binaries, source archive/patch, task/fixture, model profile, HTTP/CAS and
+audits are retained locally under `/var/folders/k9/hr_94nt142x1f43jr6g0wr_00000gp/T/`:
+`rna-live-compaction-resume-tkgrqw_j` (Qwen baseline),
+`rna-live-compaction-resume-s8gzwtvd` (Gemma, same pinned baseline binaries),
+`rna-live-compaction-resume-u3hrrps5` (after fix). Endpoint/memory evidence:
+`rna-live-compaction-ollama-wgqmh537`, `rna-live-compaction-ollama-v0tm9czt`,
+`rna-live-compaction-ollama-g0wswk64`, respectively.
+
+Next priority: diagnose prefix selection against the actual compiled message
+budget/current-source floor, then repeat this unchanged live continuation case.
+The concrete open scope is recorded in [BACKLOG](BACKLOG.md). Interactive CLI
+presentation follows this context-reliability work; fixed CSV acceptance and its
+feature follow-up remain separate open gates.
+
 ## Shared batch schema and Qwen CSV regression — 2026-10-06
 
 Owner: Core ModelProtocol / CLI evaluation. The unchanged fixed CSV test on
@@ -160,7 +226,7 @@ conversation application services; resource/Office boundaries retain their owner
 | M2 | Workspace/session without document authority, stable identity, known root relocation and read-only association tested. Only the root directory mount is supplied; managed/multiple/external mounts and shared-source identity/heads (A24) remain open. |
 | M3 | Single WorkspaceFileService owns UTF-8 find/read/create/patch/replace/copy/move/delete/restore, exact history, drift and non-replay recovery. Focused tests pass. Remaining §8.1 stat/raw/binary/large views, directory pagination, complete Office/filesystem dispatch and cross-platform path qualification are open. |
 | M4 | First useful real-model multi-file result achieved. Modes, skills, typed questions/answers, approvals, Task Lists/Plans, receipts, cancel/explicit continuation and event following exist. Full §11 remains open: interactive host UX/changed-file presentation, general resource/preview commands and UI use of the shared application contracts. Scripted runs do not close real task quality. |
-| M5 | Retained browser snapshots, dependency checks, structured functional verification, repair, bounded same-run continuation and shared compaction implemented. The integrated long-context compaction/resume scenario passes with controlled HTTP; real-model quality remains open. A real counter repair passed previously; fixed autonomous CSV creation + unchanged feature follow-up still has no passing evidence. General preview and browser screenshots/traces remain open. |
+| M5 | Retained browser snapshots, dependency checks, structured functional verification, repair, bounded same-run continuation and shared compaction implemented. Controlled compaction/resume passes. Real pressure runs exposed a corrected generation-schema gap and an open post-compaction budget failure; live continuation quality remains unqualified. A real counter repair passed previously; fixed autonomous CSV creation + unchanged feature follow-up still has no passing evidence. General preview and browser screenshots/traces remain open. |
 | M6 | Authoring cutover not started. Office HTML/MD/JSON and Plan authoring remain on their existing owners; file materialization/linkage/crash guards and old-writer removal are required. CLI files have no dual writer. |
 | M7 | Receipts/cursors/subscription provide shared primitives; Office UI transport/application migration, file tree, preview isolation, bounded body delivery and pane-independent lifetime are not closed. |
 | M8 | External Office provider/mount/target cutover remains open; exact binding/discovery/SaveAs and multiple-instance behavior need Windows evidence. |
@@ -1395,16 +1461,22 @@ boundary, not a functional CSV score. Scripted HTTP tests confirmed both CLI
 transport modes and saved metadata. The existing v6 parser correctly rejected
 these outputs; no permissive JSON repair or separate agent loop was added.
 
-Next concrete slice (2026-10-06): M4 §11.4 interactive CLI presentation over the
-existing application API: bounded progress, changed files, questions/approvals and
-verification summary, retaining the current non-interactive exit/reconnect behavior.
-Owner: CLI host; no new persistence owner, agent loop or automatic approval.
+Next concrete slice (2026-10-07): M5 context admission after real compaction.
+The shared schema correction now allows a typed checkpoint, but Qwen's unchanged
+24K pressure run still cannot admit the next request. Owner: Core model context /
+conversation application services. Diagnose prefix selection against the compiled
+budget while preserving current evidence, exact task and complete protocol pairs;
+then repeat live interruption/external-edit/same-run continuation.
+Next UX slice remains M4 §11.4 interactive CLI over the existing application API:
+bounded progress, changed files, questions/approvals and verification summary,
+retaining non-interactive exit/reconnect behavior. Owner: CLI host; no new
+persistence owner, agent loop or automatic approval.
 The Qwen cross-family regression and paired shared-schema correction are complete
 above. Fixed CSV acceptance still failed, so its unchanged feature follow-up
 remains unrun. Do not substitute a larger budget or a diagnostic task for that
 acceptance. Gemma's native-role change is likewise not an established fix.
-Controlled HTTP E-CONTEXT/E-RESUME passes; real-model compaction/resume quality
-still needs a separate pressure scenario. Bounded event subscription is implemented;
+Controlled HTTP E-CONTEXT/E-RESUME passes; the real pressure scenario above did
+not reach continuation. Bounded event subscription is implemented;
 general resource/preview commands and Office UI adoption remain open.
 Modes, typed answer/restart handling, published skills, frozen context, Task Lists
 and workspace-owned Markdown Plans are implemented with the evidence limits above.

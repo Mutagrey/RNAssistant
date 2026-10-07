@@ -30,6 +30,15 @@ Compaction guidance preserves findings, decisions, constraints, open questions a
 next actions without upgrading intentions/interpretations to facts. Its local
 parser rejects an entire claims array containing non-object entries, preserving
 the prior checkpoint rather than silently accepting a partial extraction.
+The shared compaction helper honors `AgentResponseMode`: `json_schema` sends an
+exact schema whose claim-kind alternatives allow only fully included, eligible
+source IDs; `json_object` uses the same schema in the prompt. The schema and local
+parser share the source-kind predicate. Schema bytes count toward request
+admission. The parser still validates every claim and runtime attaches evidence;
+constrained generation does not prove that a claim's text follows from its source.
+Compaction makes one helper request and does not inherit ModelProtocol's automatic
+transport fallback or format-repair attempts. Provider rejection leaves the prior
+checkpoint intact and fails explicitly.
 
 Agent readiness precedes mutation. The model first maps explicit deliverables,
 required source/current-artifact inspection, dependency order, applicable catalog skills

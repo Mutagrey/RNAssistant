@@ -2802,6 +2802,7 @@ namespace RNAssistant.Harness
 
         private static void CompactionPreservesClaimKindsAndRoles()
         {
+            var responseMode = AgentResponseModes.JsonSchema;
             var scope = new ResourceAuthorityScopeId("document", "claim-fixture");
             var reference = new ResourceRef("rna://vba/claim-fixture/module", "r1");
             var sourceAuthority = new ModelAuthoritySnapshot(new ResourceAuthoritySnapshotSet(new[] {
@@ -2822,10 +2823,38 @@ namespace RNAssistant.Harness
                         .Where(line => line.StartsWith("{\"sourceId\":", StringComparison.Ordinal)).Select(JObject.Parse).ToList();
                     var source = sources.FirstOrDefault(item => (string)item["role"] == selector || (string)item["kind"] == selector);
                     AssertTrue(source != null, "compaction includes selected source " + selector + ": " + string.Join(",", sources.Select(item => (string)item["role"] ?? (string)item["kind"])));
-                    return Task.FromResult(new LlmCompletionResult { Content = new JObject { ["claims"] = new JArray(new JObject {
-                        ["kind"] = kind, ["text"] = "Preserve the layout constraint.", ["sourceIds"] = new JArray(source["sourceId"]) }) }.ToString() });
+                    var draft = new JObject { ["claims"] = new JArray(new JObject {
+                        ["kind"] = kind, ["text"] = "Preserve the layout constraint.", ["sourceIds"] = new JArray(source["sourceId"]) }) };
+                    var strict = responseMode == AgentResponseModes.JsonSchema;
+                    AssertEqual(strict ? LlmResponseFormats.JsonSchema : LlmResponseFormats.JsonObject, options.ResponseFormat,
+                        "compaction honors the selected response mode");
+                    var schema = JObject.Parse(messages.Last().Content.Split('\n')[1]);
+                    var wire = LlmClient.BuildRequestBody(settings, new LlmMessageBuilder().Build(messages, settings, options).Messages, 100, options);
+                    AssertTrue(strict ? JToken.DeepEquals(schema, wire.SelectToken("response_format.json_schema.schema"))
+                        : wire.SelectToken("response_format.json_schema") == null,
+                        "actual compaction wire uses the exact source-bound schema only in strict mode");
+                    string error;
+                    var allowed = selector == "user" && (kind == "constraint" || kind == "decision" || kind == "interpretation") ||
+                        selector == "tool" && kind == "observation";
+                    AssertEqual(allowed, ToolSchemaSupport.ValidateArguments((JObject)draft.DeepClone(), schema, false, out error),
+                        "schema enforces the same source promotion boundary as the parser: " + error);
+                    var invalid = (JObject)draft.DeepClone();
+                    invalid["claims"][0]["sourceIds"] = new JArray("not-an-included-source");
+                    AssertTrue(!ToolSchemaSupport.ValidateArguments(invalid, schema, false, out error), "unknown source cannot be generated");
+                    if (selector == "tool")
+                    {
+                        var userSource = sources.First(item => (string)item["role"] == "user");
+                        invalid["claims"][0]["kind"] = "decision";
+                        invalid["claims"][0]["sourceIds"] = new JArray(userSource["sourceId"], source["sourceId"]);
+                        AssertTrue(!ToolSchemaSupport.ValidateArguments(invalid, schema, false, out error),
+                            "mixed user/tool provenance cannot promote an observation to a decision");
+                    }
+                    AssertTrue(ModelContextBudget.EstimateMessagesTokens(messages, settings) +
+                        ModelContextBudget.EstimateRequestOptionsTokens(options, settings) <= ModelContextBudget.InputBudgetTokens(settings),
+                        "compaction admission includes strict response-schema cost");
+                    return Task.FromResult(new LlmCompletionResult { Content = draft.ToString() });
                 };
-                return new ContextCompactionService(completion).EnsureWithinBudgetAsync(session, new AppSettings(), null, true, null, CancellationToken.None,
+                return new ContextCompactionService(completion).EnsureWithinBudgetAsync(session, new AppSettings { AgentResponseMode = responseMode }, null, true, null, CancellationToken.None,
                     authoritySnapshot: sourceAuthority).GetAwaiter().GetResult();
             };
             var user = fresh();
@@ -2870,6 +2899,8 @@ namespace RNAssistant.Harness
             interpreted.Messages.AddRange(fresh().Messages);
             RuntimeThrows<InvalidOperationException>(() => compact(interpreted, "decision", "interpretation"));
             AssertEqual(original.Id, interpreted.ActiveContextCheckpointId, "recompaction cannot upgrade a prior interpretation or replace the last valid checkpoint");
+            responseMode = AgentResponseModes.JsonObject;
+            compact(fresh(), "constraint", "user");
             var typed = JsonConvert.DeserializeObject<StructuredContextClaim>(JsonConvert.SerializeObject(saved.Claims.Single()));
             var authority = new ModelAuthoritySnapshot(new ResourceAuthoritySnapshotSet(new ResourceAuthoritySnapshot[0]),
                 "tools", new SkillCatalogSnapshot(null), new SchemaRegistrySnapshot(null), 0);
