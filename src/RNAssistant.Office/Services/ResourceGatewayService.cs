@@ -240,8 +240,9 @@ namespace RNAssistant.Office.Services
             return result;
         }
 
-        public ResourceReadSelection Read(ChatSession session, ResourceReadRequest request)
+        public ResourceReadSelection Read(ChatSession session, ResourceReadRequest request, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken))
         {
+            cancellationToken.ThrowIfCancellationRequested();
             if (request == null || request.Reference == null || string.IsNullOrWhiteSpace(request.Reference.Uri))
             {
                 throw new ResourceRequestException(
@@ -270,7 +271,7 @@ namespace RNAssistant.Office.Services
                 if (_authority?.Payloads == null) throw new ResourceRequestException("Canonical snapshot storage is required for structural views.", "RESOURCE_VIEW_UNAVAILABLE", false);
                 var derived = ResourceDerivedViewService.TryRead(this, _authority, session, request);
                 if (derived != null) return derived;
-                return new ResourceStructuredViewService(this, _authority).Read(session, request, live);
+                return new ResourceStructuredViewService(this, _authority).Read(session, request, live, cancellationToken);
             }
             var identityResolver = provider as IResourceIdentityResolver;
             if (identityResolver != null && !request.Reference.IsExact && request.Reference.Uri == request.Reference.Identity.Uri)
@@ -286,7 +287,7 @@ namespace RNAssistant.Office.Services
             return WithProvider(provider, session, delegate
             {
                 var providerRequest = _authority == null ? request : _authority.PrepareRead(session, request, live);
-                var result = provider.Read(session, providerRequest);
+                var result = provider.Read(session, providerRequest, cancellationToken);
                 return _authority == null ? result : _authority.PublishRead(session, result, request, live);
             });
         }

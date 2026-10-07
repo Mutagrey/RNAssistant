@@ -55,8 +55,9 @@ namespace RNAssistant.Office.Services
                 .Where(item => item.Title.IndexOf(query ?? string.Empty, StringComparison.OrdinalIgnoreCase) >= 0).Take(Math.Min(20, limit))
                 .Select(item => new ResourceSearchMatch { Reference = item.Reference, Title = item.Title, Kind = item.Kind }).ToList() };
         }
-        public ResourceReadSelection Read(ChatSession session, ResourceReadRequest request)
+        public ResourceReadSelection Read(ChatSession session, ResourceReadRequest request, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken))
         {
+            cancellationToken.ThrowIfCancellationRequested();
             var scope = Scope(session, request.Reference.Uri);
             var descriptor = Resolve(session, request.Reference.Uri);
             return _reads.Read(session, scope, descriptor, request);

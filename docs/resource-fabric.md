@@ -567,7 +567,9 @@ Named/multi-area range interpretation remains with the bound Excel backend.
 
 Regex and longer literal queries still capture through `ExcelSearchResourceService`
 → the existing Excel provider/Gateway/CAS and run pure matching over the exact cell
-snapshot. Capture admits at most
+snapshot. The operation cancellation token passes through Gateway/provider reads
+and is checked before capture, between cells and after capture; an in-flight
+synchronous COM call is not forcibly interrupted. Capture admits at most
 100,000 cells and one million aggregate field characters; non-formula cells retain
 only their value, avoiding a duplicate `Formula` body. Serialized JSON has its
 own one-million-character cap. Bound range cell counts are checked before cell

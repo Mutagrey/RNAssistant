@@ -16,11 +16,11 @@ namespace RNAssistant.Office.Services
         // A semantic line selection pins the same whole snapshot used by the
         // gateway. Only its exact excerpt becomes model observation evidence.
         internal ResourceReadSelection ReadLines(ChatSession session, ResourceRef reference,
-            string representation, int startLine, int lineCount)
+            string representation, int startLine, int lineCount, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken))
         {
             if ((representation != "source" && representation != "text") || startLine < 1 || lineCount < 1 || lineCount > 500)
                 throw new ResourceRequestException("Use source/text with 1-based startLine and lineCount between 1 and 500.", "resource_lines_invalid", false);
-            var selection = ReadWhole(session, reference, representation);
+            var selection = ReadWhole(session, reference, representation, cancellationToken);
             var result = selection.Result;
             var text = result.Text;
             if (text == null) throw new ResourceRequestException("This representation has no line-addressable text.", "resource_lines_unsupported", false);
@@ -50,7 +50,7 @@ namespace RNAssistant.Office.Services
 
         internal ResourceReadSelection ReadWhole(
             ChatSession session, ResourceRef reference,
-            string representation)
+            string representation, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken))
         {
             var cursor = string.Empty;
             var seenCursors = new HashSet<string>(StringComparer.Ordinal);
@@ -83,7 +83,7 @@ namespace RNAssistant.Office.Services
                             : first.Representation,
                         Cursor = cursor,
                         MaxChars = InternalReadCharacters
-                    });
+                    }, cancellationToken);
                 if (page == null || page.Result == null)
                 {
                     throw new InvalidOperationException(

@@ -29,7 +29,7 @@ namespace RNAssistant.Office.Services
             _revisions = (IResourceRevisionStore)authority.Store; _payloads = authority.Payloads;
         }
 
-        internal ResourceReadSelection Read(ChatSession session, ResourceReadRequest request, bool live)
+        internal ResourceReadSelection Read(ChatSession session, ResourceReadRequest request, bool live, System.Threading.CancellationToken cancellationToken)
         {
             var path = string.IsNullOrWhiteSpace(request.ViewPath) ? "$" : request.ViewPath;
             if (path.Length > 256 || !Regex.IsMatch(path, @"\A\$(?:\.[A-Za-z_][A-Za-z0-9_]*)*\z"))
@@ -51,7 +51,7 @@ namespace RNAssistant.Office.Services
                 do
                 {
                     var selected = _gateway.Read(session, new ResourceReadRequest { Reference = reference,
-                        Representation = "text", Cursor = cursor, MaxChars = 32000 });
+                        Representation = "text", Cursor = cursor, MaxChars = 32000 }, cancellationToken);
                     var part = selected.Result;
                     if (first == null)
                     {

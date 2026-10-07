@@ -82,12 +82,13 @@ namespace RNAssistant.Office.Services
                 .Select(item => new ResourceSearchMatch { Reference = item.Reference, Title = item.Title, Kind = item.Kind, Representation = "metadata" }).ToList() };
         }
 
-        public ResourceReadSelection Read(ChatSession session, ResourceReadRequest request)
+        public ResourceReadSelection Read(ChatSession session, ResourceReadRequest request, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken))
         {
+            cancellationToken.ThrowIfCancellationRequested();
             return _scope.Read(session, () =>
             {
                 var parsed = Parse(session, request.Reference.Uri);
-                if (parsed.Segments[1] == "search") return ReadSearch(session, request, parsed);
+                if (parsed.Segments[1] == "search") return ReadSearch(session, request, parsed, cancellationToken);
                 if (parsed.Segments[1] == "table") return ReadTable(session, request, parsed.Segments[2]);
                 if (parsed.Segments[1] == "name") return ReadName(session, request, parsed.Segments[2]);
                 var view = string.IsNullOrWhiteSpace(request.Representation) || request.Representation == "auto" ? "text" : request.Representation;

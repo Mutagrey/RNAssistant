@@ -30,7 +30,7 @@ namespace RNAssistant.Office.Tools
             _captureAttachments = captureAttachments;
         }
 
-        protected override ToolHandlerResult Execute(ToolHandlerContext context)
+        protected override ToolHandlerResult Execute(ToolHandlerContext context, System.Threading.CancellationToken cancellationToken)
         {
             var target = ToolArgumentReader.String(
                 context.Arguments, "target", string.Empty).Trim();
@@ -64,16 +64,16 @@ namespace RNAssistant.Office.Tools
                 : null;
             var selection = lines
                 ? Gateway.ReadLines(Session, reference, representation,
-                    ToolArgumentReader.Int32(context.Arguments, "startLine", 1), ToolArgumentReader.Int32(context.Arguments, "lineCount", 100))
+                    ToolArgumentReader.Int32(context.Arguments, "startLine", 1), ToolArgumentReader.Int32(context.Arguments, "lineCount", 100), cancellationToken)
                 : section != null
-                ? Gateway.Read(Session, new ResourceReadRequest { Reference = reference, Representation = "text", Section = section, MaxChars = InternalReadCharacters })
+                ? Gateway.Read(Session, new ResourceReadRequest { Reference = reference, Representation = "text", Section = section, MaxChars = InternalReadCharacters }, cancellationToken)
                 : structured
                 ? Gateway.Read(Session, new ResourceReadRequest { Reference = reference, Representation = representation,
                     MaxRows = ToolArgumentReader.Int32(context.Arguments, "limit", 500),
                     RowOffset = ToolArgumentReader.Int32(context.Arguments, "offset", 0),
                     ViewPath = viewPath,
-                    Fields = Fields(context.Arguments) })
-                : Gateway.ReadWhole(Session, reference, representation);
+                    Fields = Fields(context.Arguments) }, cancellationToken)
+                : Gateway.ReadWhole(Session, reference, representation, cancellationToken);
             var observation = new ResourceReadObservation(selection.Result,
                 Gateway.Evidence(Session, selection.Result));
             var projection = ResourceReadProjection.From(observation.Result,

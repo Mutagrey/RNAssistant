@@ -328,7 +328,7 @@ namespace RNAssistant.Harness
                 throw new NotSupportedException();
             }
 
-            public ResourceReadSelection Read(ChatSession session, ResourceReadRequest request)
+            public ResourceReadSelection Read(ChatSession session, ResourceReadRequest request, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken))
             {
                 throw new NotSupportedException();
             }

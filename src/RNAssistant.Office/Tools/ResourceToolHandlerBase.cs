@@ -37,7 +37,7 @@ namespace RNAssistant.Office.Tools
                 using (DocumentAccessGate.BeginOperation())
                 {
                     context.MarkDispatchPossible();
-                    return Task.FromResult(Execute(context));
+                    return Task.FromResult(Execute(context, cancellationToken));
                 }
             }
             catch (KeyNotFoundException ex)
@@ -56,7 +56,7 @@ namespace RNAssistant.Office.Tools
             }
         }
 
-        protected abstract ToolHandlerResult Execute(ToolHandlerContext context);
+        protected abstract ToolHandlerResult Execute(ToolHandlerContext context, CancellationToken cancellationToken);
 
         protected static ToolHandlerResult Completed(RuntimeResult result)
         {

@@ -61,7 +61,7 @@ namespace RNAssistant.Office.Services
                 var target = _gateway.ResolveIntentTarget(session, "Excel search scope: " + ExcelResourceProvider.SearchTitle(
                     new ExcelCellScopeRequest { Scope = request.Scope, Sheet = request.Sheet, Address = request.Address }));
                 var read = _gateway.Read(session, new ResourceReadRequest {
-                    Reference = new ResourceRef(target.Reference.Uri), Representation = "text", MaxChars = 256 }).Result;
+                    Reference = new ResourceRef(target.Reference.Uri), Representation = "text", MaxChars = 256 }, cancellationToken).Result;
                 var payload = read.CompleteViewPayload;
                 if (payload == null || payload.ByteLength > 4L * ExcelFindReplaceService.MaximumSearchCharacters)
                     return Failure("The exact Excel search snapshot is unavailable.", "RESOURCE_SNAPSHOT_UNAVAILABLE");

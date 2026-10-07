@@ -283,8 +283,9 @@ namespace RNAssistant.Office.Services
             };
         }
 
-        public ResourceReadSelection Read(ChatSession session, ResourceReadRequest request)
+        public ResourceReadSelection Read(ChatSession session, ResourceReadRequest request, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken))
         {
+            cancellationToken.ThrowIfCancellationRequested();
             session = ProjectSession(session, request?.Reference?.Uri);
             var resourceUri = request == null || request.Reference == null
                 ? string.Empty

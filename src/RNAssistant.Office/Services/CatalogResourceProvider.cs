@@ -85,8 +85,9 @@ namespace RNAssistant.Office.Services
             return new ResourceSearchResult { Query = query, Matches = results.Take(Math.Max(1, Math.Min(20, limit))).ToList() };
         }
 
-        public ResourceReadSelection Read(ChatSession session, ResourceReadRequest request)
+        public ResourceReadSelection Read(ChatSession session, ResourceReadRequest request, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken))
         {
+            cancellationToken.ThrowIfCancellationRequested();
             var address = Address(request.Reference.Uri);
             if (ToolKind(address.Segments[0]) && address.Segments.Count == 1 && !JavaScriptEnabled)
                 throw Error("Tool catalog root is unavailable while JavaScript tools are disabled.", "RESOURCE_ACCESS_DENIED");

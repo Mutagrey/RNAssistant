@@ -16,8 +16,9 @@ namespace RNAssistant.Office.Services
         private const int MaximumSearchCharactersPerResource = 128000;
         private const string TruncatedMarker = "\n...[truncated]";
 
-        public ResourceReadSelection Read(ChatSession session, ResourceReadRequest request)
+        public ResourceReadSelection Read(ChatSession session, ResourceReadRequest request, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken))
         {
+            cancellationToken.ThrowIfCancellationRequested();
             return _scope.Read(session, delegate
             {
                 var resourceUri = request == null || request.Reference == null

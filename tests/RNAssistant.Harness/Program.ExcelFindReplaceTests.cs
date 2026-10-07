@@ -78,6 +78,22 @@ namespace RNAssistant.Harness
                 try { gateway.Read(session, new ResourceReadRequest { Reference = evidence.Resource, Representation = "text" }); }
                 catch (ResourceRequestException error) { denied = error.ErrorCode == "RESOURCE_SNAPSHOT_UNAVAILABLE"; }
                 AssertTrue(denied, "missing exact payload never falls forward");
+
+                using (var cancel = new CancellationTokenSource())
+                {
+                    adapter.ExcelSearchCellTransform = cell => { cancel.Cancel(); return cell; };
+                    var cancelled = false;
+                    try
+                    {
+                        new ExcelSearchResourceService(gateway).Find(session,
+                            new System.Collections.Generic.Dictionary<string, object> {
+                                { "scope", "range" }, { "sheet", "Data" }, { "address", "D1:D2" },
+                                { "query", "needle" }, { "mode", "regex" } }, cancel.Token);
+                    }
+                    catch (OperationCanceledException) { cancelled = true; }
+                    finally { adapter.ExcelSearchCellTransform = null; }
+                    AssertTrue(cancelled, "regex search propagates cancellation into cell capture through the gateway");
+                }
             });
         }
 

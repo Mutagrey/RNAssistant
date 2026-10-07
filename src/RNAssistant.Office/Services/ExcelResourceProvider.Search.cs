@@ -91,7 +91,7 @@ namespace RNAssistant.Office.Services
             return request;
         }
 
-        private ResourceReadSelection ReadSearch(ChatSession session, ResourceReadRequest request, ResourceAddress address)
+        private ResourceReadSelection ReadSearch(ChatSession session, ResourceReadRequest request, ResourceAddress address, CancellationToken cancellationToken)
         {
             var source = SearchRequest(address);
             var descriptor = DescribeSearch(session, source);
@@ -105,7 +105,7 @@ namespace RNAssistant.Office.Services
             if (_searchBackend == null) throw Error("RESOURCE_PROVIDER_UNAVAILABLE", "The bound Excel search reader is unavailable.");
             try
             {
-                var snapshot = new ExcelFindReplaceService(_searchBackend).CaptureSearch(source, CancellationToken.None);
+                var snapshot = new ExcelFindReplaceService(_searchBackend).CaptureSearch(source, cancellationToken);
                 var text = JsonConvert.SerializeObject(snapshot);
                 if (text.Length > ExcelFindReplaceService.MaximumSearchCharacters)
                     throw Error("RESOURCE_SNAPSHOT_TOO_LARGE",

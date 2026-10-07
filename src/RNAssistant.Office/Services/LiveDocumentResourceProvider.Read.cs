@@ -13,8 +13,9 @@ namespace RNAssistant.Office.Services
         private const int MaximumSearchResults = 20;
         private const int MaximumSnippetCharacters = 2000;
 
-        public ResourceReadSelection Read(ChatSession session, ResourceReadRequest request)
+        public ResourceReadSelection Read(ChatSession session, ResourceReadRequest request, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken))
         {
+            cancellationToken.ThrowIfCancellationRequested();
             return _scope.Read(session, delegate
             {
                 var resourceUri = request == null || request.Reference == null

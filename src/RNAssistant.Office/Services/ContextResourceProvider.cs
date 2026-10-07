@@ -65,8 +65,9 @@ namespace RNAssistant.Office.Services
             return new ResourceSearchResult { Query = query, Matches = matches.Take(maximum).ToList() };
         }
 
-        public ResourceReadSelection Read(ChatSession session, ResourceReadRequest request)
+        public ResourceReadSelection Read(ChatSession session, ResourceReadRequest request, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken))
         {
+            cancellationToken.ThrowIfCancellationRequested();
             var scope = Scope(session, request.Reference.Uri);
             return _reads.Read(session, scope, Resolve(session, request.Reference.Uri), request);
         }

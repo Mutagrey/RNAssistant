@@ -23,7 +23,7 @@ namespace RNAssistant.Office.Services
         ResourceListPage List(ChatSession session, string kind, string cursor, int limit);
         ResourceDescriptor Resolve(ChatSession session, string resourceUri);
         ResourceSearchResult Search(ChatSession session, string query, string kind, int limit, int maxCharsPerMatch);
-        ResourceReadSelection Read(ChatSession session, ResourceReadRequest request);
+        ResourceReadSelection Read(ChatSession session, ResourceReadRequest request, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken));
     }
 
     internal interface IResourceIdentityResolver

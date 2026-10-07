@@ -29,7 +29,7 @@ namespace RNAssistant.Office.Tools
         {
         }
 
-        protected override ToolHandlerResult Execute(ToolHandlerContext context)
+        protected override ToolHandlerResult Execute(ToolHandlerContext context, System.Threading.CancellationToken cancellationToken)
         {
             var result = Gateway.Find(
                 Session,
