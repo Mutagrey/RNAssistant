@@ -2340,7 +2340,7 @@ namespace RNAssistant.Harness
                             ["code"] = "vba_patch_ambiguous", ["hunkIndex"] = 2, ["matchCount"] = 3,
                             ["locations"] = new JArray(new JObject { ["startLine"] = 12, ["startColumn"] = 5 }),
                             ["locationsComplete"] = false,
-                            ["currentSource"] = diagnostic }.ToString())), int.MaxValue, role);
+                            ["details"] = diagnostic }.ToString())), int.MaxValue, role);
                     failure.ResultPayload = PayloadRef.FromBlob(payloads.StoreText(failure.Content, "application/json"));
                     var compact = AgentJsonProtocol.CreateToolResultMessage(new ToolInvocation {
                             ToolCallId = mutationCall.ToolCallId, ToolId = mutationCall.ToolName },
@@ -2360,7 +2360,7 @@ namespace RNAssistant.Harness
                     AssertEqual(3, (int)frameData["data"]["matchCount"], "ambiguous locations retain their count");
                     AssertEqual(12, (int)frameData["data"]["locations"][0]["startLine"],
                         "semantic patch coordinates survive mutation folding and runtime-evidence sanitization");
-                    AssertEqual(diagnostic, (string)frameData["data"]["currentSource"],
+                    AssertEqual(diagnostic, (string)frameData["data"]["details"],
                         "archived mutation diagnostics are delivered completely within the request budget");
                     RuntimeThrows<PromptBudgetExceededException>(() => new ModelContextCompiler(payloads, projection: ModelToolResultProjection.Instance).Compile(
                         authority, new ChatMessage[0], new[] { mutationCall, failure }, null,
@@ -2414,6 +2414,76 @@ namespace RNAssistant.Harness
             AssertEqual(RNAssistant.Core.Tools.Contracts.ToolResultStatus.Ok,
                 ToolResultWire.Read(oversizedResult.Content).Result.Status,
                 "budget refusal does not rewrite durable source evidence");
+
+            // Each body fits on its own, but an accepted read batch can exceed
+            // the aggregate budget even after older history has been compacted.
+            var batchRefs = Enumerable.Range(1, 8).Select(index =>
+                new ResourceRef("rna://file/workspace/note" + index, "r1")).ToArray();
+            var batchAuthority = new ModelAuthoritySnapshot(new ResourceAuthoritySnapshotSet(new[] {
+                new ResourceAuthoritySnapshot(scope, 2, null, 0, batchRefs.Select(reference => ResourceHeadState.Known(reference, 2))) }),
+                "tools1", new SkillCatalogSnapshot(null), new SchemaRegistrySnapshot(null), 2);
+            var task = new ChatMessage { Role = "user", Content = "Update the notes in order and preserve every other byte." };
+            foreach (var role in new[] { "user", "developer", "tool" })
+            {
+                var batch = new List<ChatMessage>();
+                for (var index = 0; index < batchRefs.Length; index++)
+                {
+                    var id = "batch-" + index;
+                    var target = "notes/" + (index + 1) + ".md";
+                    batch.Add(new ChatMessage { Role = "assistant", ProtocolMessage = true, ToolCallId = id,
+                        ToolName = command.ToolId, ToolCalls = new List<RNAssistant.Core.Llm.LlmToolCall> {
+                            new RNAssistant.Core.Llm.LlmToolCall { Id = id, Name = command.ToolId, Type = "function",
+                                ArgumentsJson = new JObject { ["target"] = target }.ToString() } } });
+                    batch.Add(AgentJsonProtocol.CreateToolResultMessage(new ToolInvocation { ToolId = command.ToolId, ToolCallId = id },
+                        new ToolResultMaterialization(RNAssistant.Core.Tools.Contracts.ToolResult.Ok("read",
+                            new JObject { ["type"] = "file", ["target"] = target,
+                                ["text"] = "EXACT_BODY_" + index + new string('z', 5144) }.ToString()),
+                            resourceEvidence: new[] { new ResourceEvidence("read", scope, batchRefs[index],
+                                "text", ResourceCoverage.Whole(), true, 2) }), int.MaxValue, role));
+                }
+                var compiler = new ModelContextCompiler(projection: ModelToolResultProjection.Instance);
+                var settings = new AppSettings();
+                var unbounded = compiler.Compile(batchAuthority, new[] { task }, batch, null,
+                    new ToolCatalogEntry[0], settings, 4096, enforceBudget: false);
+                AssertTrue(unbounded.Receipt.EstimatedTokens > 4096, "batch really exceeds the request budget");
+                AssertEqual(8, unbounded.Messages.Count(message => message.ResourceEvidence.Count > 0),
+                    "compaction preflight still sees all original bodies");
+                var bounded = compiler.Compile(batchAuthority, new[] { task }, batch, null,
+                    new ToolCatalogEntry[0], settings, 4096);
+                var presented = bounded.Messages;
+                AssertTrue(bounded.Receipt.EstimatedTokens <= 4096, "aggregate read projection fits " + role);
+                AssertEqual(task.Content, presented[0].Content, "the exact user task is not an eviction candidate");
+                AssertEqual(17, presented.Count, "every accepted call/result remains adjacent " + role);
+                var omittedBodies = 0;
+                for (var index = 0; index < batchRefs.Length; index++)
+                {
+                    var sentCall = presented[1 + index * 2];
+                    var sentResult = presented[2 + index * 2];
+                    ToolResultWireReadResult sent; string error;
+                    AssertTrue(ToolResultHistoryReader.TryRead(sentResult, out sent, out error), "valid projected result");
+                    AssertEqual("batch-" + index, sentCall.ToolCalls.Single().Id, "original call ID preserved");
+                    AssertEqual(sentCall.ToolCallId, sent.ToolCallId, "result correlation preserved");
+                    AssertEqual(role, sentResult.Role, "selected result transport preserved");
+                    AssertEqual(RNAssistant.Core.Tools.Contracts.ToolResultStatus.Ok, sent.Result.Status, "read outcome preserved");
+                    var data = JObject.Parse(sent.Result.DataJson);
+                    if (data["observation"] != null)
+                    {
+                        omittedBodies++;
+                        AssertTrue(!(bool)data["observation"]["bodyIncluded"], "omission is explicit");
+                        AssertContains((string)data["observation"]["nextAction"], "one at a time", "aggregate recovery differs from oversized single read");
+                        AssertEqual(0, sentResult.ResourceEvidence.Count, "omitted body grants no write authority");
+                        AssertTrue(!sentResult.Content.Contains("EXACT_BODY_"), "omission never leaks partial source");
+                    }
+                    else AssertContains(sentResult.Content, "EXACT_BODY_" + index + new string('z', 5144), "retained body is complete");
+                    AssertContains(batch[index * 2 + 1].Content, "EXACT_BODY_" + index, "durable result unchanged");
+                    AssertEqual(1, batch[index * 2 + 1].ResourceEvidence.Count, "durable evidence unchanged");
+                }
+                AssertTrue(omittedBodies > 0 && omittedBodies < 8, "only needed bodies are omitted");
+                AssertContains(presented.Last().Content, "EXACT_BODY_7", "latest read remains fully delivered");
+                RuntimeThrows<PromptBudgetExceededException>(() => compiler.Compile(batchAuthority,
+                    new[] { new ChatMessage { Role = "system", Content = new string('x', 20000) } }, batch, null,
+                    new ToolCatalogEntry[0], settings, 4096));
+            }
         }
 
         private static void DocumentAuthoritySurvivesSaveAsAndSeparatesCopy()

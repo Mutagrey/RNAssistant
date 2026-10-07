@@ -339,6 +339,14 @@ prompt budget` checks refusal before model dispatch without losing durable bytes
 `agent: tool result uses calibrated prompt budget` covers calibrated capacity.
 Storage thresholds must not become separate limits on data sent to the model.
 
+`resource cutover: correctness before budget` covers aggregate overflow from eight
+individually affordable source reads in all three result roles. It checks exact
+retained bodies, explicit omissions with no write authority, adjacent call/result
+pairs, unchanged durable evidence and failure when required instructions overflow.
+It also retains stale-source notices through model projection; the diagnostic
+payload fixture uses the supported `details` field of the current VBA envelope.
+The omitted-read CLI smoke checks the actual mutation refusal and preserved bytes.
+
 `shared context:` checks automatic compaction publication, competing generations,
 second-chat discovery/native paged reads, externalized archive projection with a
 model stub, per-claim invalidation, raw archive masking, alternate-view refusal,

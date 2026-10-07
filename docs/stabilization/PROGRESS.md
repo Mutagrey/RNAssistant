@@ -1,5 +1,70 @@
 # Stabilization progress
 
+## Aggregate source budget and observation notices — 2026-10-07
+
+Owner: Core model context / CLI evaluation. On unchanged `ffd69fee` binaries,
+primary Gemma read all eight release-note files in one accepted batch. Each body
+fit individually, but together they exceeded the post-compaction request budget:
+17106 > 11455 estimated message tokens. A checkpoint was published; no subsequent
+model request, process interruption or resume occurred. The bounded real run failed
+at 57.51 s, 4 iterations / 10 tool steps, with only the receipt written. All nine
+source files were unchanged. This is a reproduced `CONTEXT_ERROR`, without memory
+pressure or an unknown mutation effect.
+
+The shared compiler now omits older complete source/text bodies when their total
+exceeds the budget, retaining each affected call/result pair, semantic target,
+actual outcome and explicit body-omission recovery. Omitted bodies grant no write
+authority; a fresh needed read can displace older bodies. Required instructions,
+failed diagnostics and unresolved effects remain protected. No budgets, system prompts,
+agent loops, durable history or filesystem authority were changed.
+The existing correctness test also exposed repeated domain projection erasing a
+compiler-created stale-source notice. Such notices now survive without another
+domain projection. Its old diagnostic fixture now uses the supported VBA
+`details` field; raw `currentSource` is outside the current semantic envelope.
+
+Checks: CLI build clean; host-neutral Harness build with the two existing PDF
+CA1416 warnings. Correctness/budget 1/1 (including aggregate reads in user,
+developer and tool roles), context continuity 8/8, compaction 8/8 and compiler
+presentation 1/1 passed. The current-source check also passed separately. Controlled
+CLI omitted-read write refusal and both compaction/restart/resume branches passed.
+Version gate, diff and updated local status link passed.
+Full M4/M5 and Windows/Office qualification remain open.
+
+Real Gemma `rna-gemma4-12b-32k:latest`, digest
+`cf94f3793da5f501e0a2948b34825db5baceed926438a78551ffaa83f85a4082`,
+Ollama 0.35.0: task/fixture/grader, 24K planning / 32K model / 4096 output,
+system/user roles, json_schema, thinking off and 40/48/600 bounds are unchanged.
+The first HTTP request is byte-identical before/after; subsequent model choices
+vary. The controlled regression isolates the aggregate-budget behavior.
+
+After the fix, Gemma reached `done` in **437.46 s**, 30 iterations / 38 tool steps.
+Independent grading confirms **10/10 exact final files**, unchanged runtime
+metadata and no extra files. The canonical stream records 20 successful reads,
+10 verified writes, 8 `source_observation_required` refusals and no unknown effect.
+The final request exercises aggregate omission while retaining every call/result
+pair. Thirty HTTP requests match canonical CAS, with 309 cumulative pairs and
+38 unique completed calls; exact task/latest result are retained throughout.
+Reported input/output: 214779/1958 tokens (max 10523/275 per response).
+
+This is **not** full E-CONTEXT/E-RESUME acceptance: no compaction was needed in this
+trajectory, so interruption/external edit/resume were not exercised and the
+original fixture result remains `failed`. The model also deferred every per-note
+read-back to the final read batch instead of following the task's specified order.
+The current byte/counter grader does not enforce that intermediate order; its
+canonical-sequence assertion remains an explicit evaluation gap. Final-file success
+does not establish full instruction following. No operator repairs or enlarged
+limits were used. Fixed CSV creation/follow-up and full M4/M5 remain open.
+
+Memory before/after: 13/88 samples, max gaps 5.09/5.08 s, pressure level 1,
+0/0 MiB new swap-out, 0/0.125 MiB swap-in, peak test-server RSS 9.99/10.58 GiB.
+No other local model loaded; both owned servers stopped and models unloaded.
+Evidence under `/var/folders/k9/hr_94nt142x1f43jr6g0wr_00000gp/T/`:
+`rna-live-compaction-resume-10c0f81o` / `rna-live-compaction-resume-ydo0z0tw`
+(source archives/patches, binaries, HTTP/CAS, original failed fixture results and
+separate final-byte/sequence audits), paired with
+`rna-live-compaction-ollama-v6xi63no` / `rna-live-compaction-ollama-h7v9xgau`
+(profile/memory). No real native-role or Windows/Office qualification is claimed.
+
 ## Compaction past completed tool receipts — 2026-10-07
 
 Owner: Core model context / tool exchange classification. Reproduced the overflow
@@ -59,10 +124,9 @@ Evidence under `/var/folders/k9/hr_94nt142x1f43jr6g0wr_00000gp/T/`:
 (controlled pair), `rna-live-compaction-resume-mumpkbo8` (real source archive,
 binaries, HTTP/CAS, timeout state and corrected audit),
 `rna-live-compaction-ollama-agj823dd` (profile/memory).
-Full M4/M5 and Windows/Office qualification remain open. Next: run the unchanged
-live continuation task with primary Gemma using the corrected grader; interactive
-CLI presentation remains the next UX slice. Fixed CSV creation/follow-up remain
-separate acceptance gates.
+Full M4/M5 and Windows/Office qualification remain open. The subsequent primary
+Gemma comparison is recorded above; interactive CLI presentation remains the next
+UX slice. Fixed CSV creation/follow-up remain separate acceptance gates.
 
 ## Live CLI grader accounting — 2026-10-07
 
@@ -349,7 +413,7 @@ conversation application services; resource/Office boundaries retain their owner
 | M2 | Workspace/session without document authority, stable identity, known root relocation and read-only association tested. Only the root directory mount is supplied; managed/multiple/external mounts and shared-source identity/heads (A24) remain open. |
 | M3 | Single WorkspaceFileService owns UTF-8 find/read/create/patch/replace/copy/move/delete/restore, exact history, drift and non-replay recovery. Focused tests pass. Remaining §8.1 stat/raw/binary/large views, directory pagination, complete Office/filesystem dispatch and cross-platform path qualification are open. |
 | M4 | First useful real-model multi-file result achieved. Modes, skills, typed questions/answers, approvals, Task Lists/Plans, receipts, cancel/explicit continuation and event following exist. Full §11 remains open: interactive host UX/changed-file presentation, general resource/preview commands and UI use of the shared application contracts. Scripted runs do not close real task quality. |
-| M5 | Retained browser snapshots, dependency checks, structured functional verification, repair, bounded same-run continuation and shared compaction implemented. Controlled compaction/resume passes. The schema and completed-receipt boundary defects are fixed; real Qwen reached restart/resume and preserved the external edit but timed out before completing the task. Full live quality remains open. A real counter repair passed previously; fixed autonomous CSV creation + unchanged feature follow-up still has no passing evidence. General preview and browser screenshots/traces remain open. |
+| M5 | Retained browser snapshots, dependency checks, structured functional verification, repair, bounded same-run continuation and shared compaction implemented. Controlled compaction/resume passes. Schema, completed-receipt boundary and aggregate source-budget defects are fixed. Real Qwen reached restart/resume but timed out; Gemma produced all exact final files after the latest fix, without reaching a compaction/restart boundary and without the prescribed per-note read-back order. Full live quality remains open. A real counter repair passed previously; fixed autonomous CSV creation + unchanged feature follow-up still has no passing evidence. General preview and browser screenshots/traces remain open. |
 | M6 | Authoring cutover not started. Office HTML/MD/JSON and Plan authoring remain on their existing owners; file materialization/linkage/crash guards and old-writer removal are required. CLI files have no dual writer. |
 | M7 | Receipts/cursors/subscription provide shared primitives; Office UI transport/application migration, file tree, preview isolation, bounded body delivery and pane-independent lifetime are not closed. |
 | M8 | External Office provider/mount/target cutover remains open; exact binding/discovery/SaveAs and multiple-instance behavior need Windows evidence. |
@@ -1584,12 +1648,13 @@ boundary, not a functional CSV score. Scripted HTTP tests confirmed both CLI
 transport modes and saved metadata. The existing v6 parser correctly rejected
 these outputs; no permissive JSON repair or separate agent loop was added.
 
-Next concrete slice (2026-10-07): run the unchanged M5 live continuation fixture
-with primary Gemma and the corrected grader. Owner: CLI evaluation / model context.
-The post-compaction admission defect was completed-receipt misclassification and
-is fixed. Real Qwen now reaches interruption/external-edit/same-run continuation,
-but failed the 600-second task deadline. Preserve the task, exact-byte checks and
-original limits; a partial continuation pass does not close full E-* acceptance.
+Next concrete slice (2026-10-07): complete the live fixture's canonical assertion
+for the already required per-note read-back order. Owner: CLI evaluation. The
+Gemma comparison above is complete: exact final files passed, full continuation
+acceptance did not. A real run must still combine task completion with checkpoint
+publication, process loss, external edit and same-run resume. Qwen previously
+reached that boundary but timed out. Preserve task/checks/original bounds; neither
+partial trajectory closes full E-* acceptance. Do not rerun simply to select a pass.
 Next UX slice remains M4 §11.4 interactive CLI over the existing application API:
 bounded progress, changed files, questions/approvals and verification summary,
 retaining non-interactive exit/reconnect behavior. Owner: CLI host; no new

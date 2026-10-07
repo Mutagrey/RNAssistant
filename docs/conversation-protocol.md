@@ -337,6 +337,18 @@ results and then checks the complete request budget. The durable event stream ke
 original calls/results; filtering never deletes them. Search results are bounded
 discovery metadata/snippets, not proof that the underlying body was read.
 
+When several complete source/text reads fit individually but exceed the combined
+request budget, the compiler omits older bodies until the request fits. Each
+affected call/result pair keeps its selected transport, correlation and actual
+outcome, with an explicit `bodyIncluded:false` observation and semantic target.
+Omitted bodies grant no write authority. Recovery requests one needed target at
+a time; it does not repeat the overflowing batch. Current-source copies from
+verified writes use the same body bound without replaying the write. Original
+CAS/events remain intact. User instructions, failed diagnostics and unresolved
+effects are not aggregate-eviction candidates; if required facts still overflow,
+admission fails explicitly. Compiler-created observation notices already contain
+projected semantic data and are not passed through a domain envelope again.
+
 - Optional tool schemas remain callable through durable admission events. A later
   turn in the same chat reuses unchanged exact schemas when the prior capability
   read remains in chat history and the complete request fits its budget. Edited or
