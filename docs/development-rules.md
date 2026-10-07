@@ -291,6 +291,19 @@ Modelfile; RNAssistant должен иметь такой же или меньш
 состав запроса/резервы и фактическую память на целевой машине; загруженные tools,
 skills и история могут превысить и этот лимит.
 
+На `6fc913d4` фиксированная CSV-задача уже не проходит начальный compiler budget
+при 16K/4096: 5647 токенов сообщений против 3196 после schema/repair/continuation
+резервов. Простой v6 probe GPT-OSS проходит на 16K и 32K, но временный 32K/f16
+профиль на этой машине сохраняет warning pressure; полный CSV run не начинался.
+Это проверка допустимости профиля, не оценка качества модели; подробности в
+[PROGRESS](stabilization/PROGRESS.md#gpt-oss-input-and-endpoint-qualification--2026-10-07).
+
+Requested thinking и фактическое reasoning фиксировать отдельно. У проверенного
+GPT-OSS `/api/show` объявляет `low|medium|high` с default `medium`, и ответ содержит
+reasoning даже при `reasoning_effort: none`. Поэтому `--thinking off` в сохранённых
+настройках не доказывает отключение reasoning у endpoint. Значения и default
+зависят от модели; [Ollama описывает их в thinking metadata](https://docs.ollama.com/capabilities/thinking).
+
 Для диагностики памяти на Mac измерять `vm_stat` (дельты `Swapins`/`Swapouts`),
 `memory_pressure -Q`, `vm.swapusage` и процессы во время всего прогона. Сам объём
 уже занятого swap не заменяет измерение текущей подкачки и давления памяти;

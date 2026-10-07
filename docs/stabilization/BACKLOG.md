@@ -182,10 +182,18 @@ feature follow-up was not run. One 4096-token response contains 106 `renderUI();
 occurrences inside malformed patch JSON; it was rejected before tool dispatch.
 This generation-local repetition is distinct from repeated tool execution. All
 latest results remain on wire. There was late warning pressure but no new paging;
-do not attribute timing solely to the model or memory. The next cross-family
-comparison starts with protocol/input-budget/memory preflight for the existing
-GPT-OSS profile. Full evidence and unchanged closure requirements are in
+do not attribute timing solely to the model or memory. Full evidence and unchanged
+closure requirements are in
 [PROGRESS](PROGRESS.md#fixed-gemma-csv-and-compaction-acceptance--2026-10-07).
+
+The GPT-OSS preflight at `6fc913d4` passes simple v6 JSON at 16K/32K, but cannot
+start the fixed task: 16K fails initial compiler admission (5647 message tokens
+vs 3196 budget), and the tested 32K profiles have sustained warning pressure.
+No new paging occurred; the full CSV task/follow-up were not run. Its reasoning
+metadata offers low/medium/high, and requested `none` still produces reasoning.
+This provides no new task-quality comparison with Gemma. A reference run needs
+compatible protocol plus qualified input/memory capacity; retain the original
+task/checks/bounds. See [preflight evidence](PROGRESS.md#gpt-oss-input-and-endpoint-qualification--2026-10-07).
 
 ## CLI continuation after completed-operation receipts — 2026-10-05
 

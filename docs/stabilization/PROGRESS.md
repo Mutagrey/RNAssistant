@@ -1,5 +1,60 @@
 # Stabilization progress
 
+## GPT-OSS input and endpoint qualification — 2026-10-07
+
+Owner: CLI evaluation / environment profile. `6fc913d4` has the same production
+sources and binary hashes as `24fd92cc`; existing CLI binaries were reused.
+The fixed CSV tasks/checks, 4096 output, system/user roles, json_schema and
+16 iterations / 24 tools / 600 s remain unchanged. No production source or
+acceptance requirement changed. The full GPT-OSS CSV task and follow-up were
+**not run**: input and memory preflight did not admit the tested profiles.
+
+- At 16K, the production compiler rejects the initial CSV context before HTTP:
+  5647 estimated message tokens exceed 3196 available after schema and mandatory
+  repair/continuation reserves (`PromptBudgetExceeded`, zero tools/files).
+  This is a measured `CONTEXT_ERROR` at admission, not a model-quality result.
+  A separate 32K compiler probe reaches HTTP and is cancelled before any model
+  response. Neither admission probe fabricates a model answer or tool result.
+- Simple real v6 `done` probes pass on Ollama 0.35.0 at 16K and 32K: 100 prompt /
+  114 completion tokens, 4096 output cap, exact three-field JSON. They do not
+  qualify the full catalog, streaming tool trajectory or autonomous task quality.
+  The endpoint returns a separate reasoning field despite requested
+  `reasoning_effort: none`. Its saved `/api/show` advertises only
+  `low|medium|high`, default `medium`; effective reasoning-off is not claimed.
+- The 16K probe has normal pressure. The first temporary 32K profile reaches
+  warning pressure immediately after its probe. A separate bounded retry requires
+  four consecutive normal samples five seconds apart within 30 s and zero new
+  paging. All seven qualification snapshots stay at warning level 2 (17% free),
+  so no full run starts (`ENVIRONMENT_ERROR` / preflight not admitted).
+  No other model is loaded, and all attempts have zero new swap-in/out; existing
+  swap remains 747.94 MiB. The retry's complete audit has 16 snapshots, max gap
+  4.12 s, peak runner RSS 13.20 GiB (not total GPU/system allocation). This does
+  not establish that every smaller profile or machine state is infeasible.
+
+Original profile: `rna-gpt-oss-20b-16k:latest`, digest
+`236b951778f336db7e66af76ee93038d1fb7de34a790b89a508756373575aca9`.
+Both owned 32K profiles inherit the same weights with only `num_ctx` changed;
+digest `dba3fbdbfb5b3780cc9be011ccc429d26d895a56b8bc4840dcbcdf4724e95a1f`.
+One isolated model, f16/Flash Attention, prompt cache disabled throughout.
+Both temporary profiles were removed, models unloaded and servers stopped;
+normal pressure returned. No user applications or swap configuration changed.
+
+Evidence under `/var/folders/k9/hr_94nt142x1f43jr6g0wr_00000gp/T/`:
+`rna-gptoss-input-preflight-udl3p5a_` (16K),
+`rna-gptoss-input-preflight-ej_s8hx3` (32K),
+`rna-gptoss-protocol-preflight-v1_36y2j`,
+`rna-m5-csv-gptoss-lmqu1z8e`, `rna-m5-csv-gptoss-settled-yq490byx`.
+Drivers, commands, profile/source/binary hashes, protocol bodies, original
+preflight failures and complete memory/cleanup audits are retained. Diff, touched
+links and `ValidateVersionFormat` pass; no build or Office validation was needed.
+
+Full M4/M5 remain open. Next implementation slice: bounded browser screenshots
+and trace references tied to the existing retained snapshot/verification result,
+owned by the development browser provider. Full CSV creation/follow-up and real
+compaction/resume remain separate acceptance gates; a reference run needs both
+protocol support and a qualified input/memory budget. Repeating the unchanged
+Gemma task or lowering its acceptance does not close those gates.
+
 ## Fixed Gemma CSV and compaction acceptance — 2026-10-07
 
 Owner: CLI evaluation / model context. Two real runs use unchanged `24fd92cc`
@@ -48,10 +103,10 @@ binary/profile/task hashes, drivers, HTTP/CAS, original failed results and separ
 wire/byte/order/memory audits. Diff, touched links and `ValidateVersionFormat`
 pass. No new native-role or Windows/Office qualification is claimed.
 
-Full M4/M5 remain open. Next: cross-family regression using the existing GPT-OSS
-profile, starting with v6 and input-budget/memory preflight at 16K, then the fixed
-CSV task if admitted. Record the changed model/context explicitly; do not weaken
-acceptance or use a smaller context to claim the fixed 24K compaction gate passed.
+Full M4/M5 remain open. The subsequent GPT-OSS preflight is recorded
+[above](#gpt-oss-input-and-endpoint-qualification--2026-10-07); its full CSV task
+was not admitted. Do not weaken acceptance or use a smaller context to claim the
+fixed 24K compaction gate passed.
 
 ## Application resource views and snapshot preview — 2026-10-07
 
@@ -1842,12 +1897,13 @@ boundary, not a functional CSV score. Scripted HTTP tests confirmed both CLI
 transport modes and saved metadata. The existing v6 parser correctly rejected
 these outputs; no permissive JSON repair or separate agent loop was added.
 
-Next concrete slice (2026-10-07): cross-family regression with the existing
-GPT-OSS profile. First check v6 protocol, input budget and memory at 16K; only then
-run the fixed CSV task and, if it passes, the unchanged feature follow-up. Record
-the profile/context change and retain task/checks/original bounds. The latest
-Gemma CSV and compaction attempts both failed; see the
-[current evidence](#fixed-gemma-csv-and-compaction-acceptance--2026-10-07).
+Next concrete slice (2026-10-07): M5 bounded browser screenshots/trace references
+through the existing retained snapshot and verification result owner. The
+[GPT-OSS preflight](#gpt-oss-input-and-endpoint-qualification--2026-10-07) did not
+admit a full CSV run: 16K cannot fit the initial context/reserves, and tested 32K
+profiles retain warning pressure. Reference task qualification still needs a
+compatible endpoint with input/memory headroom. Keep the fixed task/checks and
+original bounds; the latest Gemma CSV and compaction attempts remain failed.
 Complete real compaction/restart/resume acceptance remains open at its original
 24K planning budget; a lower-context diagnostic cannot replace it. Typed resource discovery,
 bounded exact text views and isolated development snapshot preview are implemented.
