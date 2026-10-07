@@ -1,5 +1,43 @@
 # Stabilization progress
 
+## Canonical read-back order grading — 2026-10-07
+
+Owner: CLI evaluation. The fixed release-note fixture now grades the specified
+read → verified mutation → separate read-back sequence from canonical accepted
+calls and typed terminal evidence. It correlates exact before/after revisions,
+whole file coverage, CAS hashes/bytes and the first accepted call to the next note.
+The final anchor review needs a fresh read after all eight notes. Internal tool
+verification and late final reads cannot replace the requested intermediate reads.
+The recorded marker-only external edit is allowed at its saved restart boundary;
+an arbitrary changed revision, partial body, `ok` without effect or unknown effect
+cannot qualify. No task, model instructions, runtime, counters or limits changed.
+
+The runner saves `readback-order-audit.json` and `readbackOrderPassed` on every exit,
+including completion before checkpoint and timeout. A failed/unavailable order
+audit forces overall acceptance to fail; file, continuation and counter checks
+remain independent. The shared CAS reader still validates exact bytes and hashes.
+
+Checks: 14 pure grader cases passed, including user/native roles, recorded external
+drift and the rejection boundaries above. Read-only regrading of retained logs:
+real Gemma `rna-live-compaction-resume-ydo0z0tw` passes 0/9 ordered stages; real Qwen
+`rna-live-compaction-resume-mumpkbo8` passes only 3/9; the previously successful
+controlled restart/resume trace `rna-live-compaction-resume-hm3xen6k` passes 9/9.
+Their canonical HTTP/CAS audits still pass (30/32/36 requests, 38/27/31 accepted
+calls). Separate `readback-order-audit-current.json` reports pin the grader hash;
+original result/event hashes are unchanged. Evidence is under the temporary root
+listed in the aggregate-budget report below.
+Python syntax, touched status link, diff and `ValidateVersionFormat` passed.
+
+Current-CLI controlled probes also exercised audit publication on completion
+without a checkpoint (`rna-live-compaction-resume-kylf7qev`, order passed) and on a
+failed resumed run (`rna-live-compaction-resume-l8x7guur`, order failed). The latter
+script did not recover from omitted sources and finished with missing changes;
+its file/overall acceptance remains failed. These are controlled endpoint probes,
+not new real-model qualification. No C# source changed or rebuild was needed.
+Full M4/M5 and Windows/Office evidence remain open. Next implementation slice:
+M4 §11.4 interactive CLI; full real compaction/restart/resume completion and fixed
+CSV acceptance remain separate evidence gaps.
+
 ## Aggregate source budget and observation notices — 2026-10-07
 
 Owner: Core model context / CLI evaluation. On unchanged `ffd69fee` binaries,
@@ -50,8 +88,8 @@ This is **not** full E-CONTEXT/E-RESUME acceptance: no compaction was needed in 
 trajectory, so interruption/external edit/resume were not exercised and the
 original fixture result remains `failed`. The model also deferred every per-note
 read-back to the final read batch instead of following the task's specified order.
-The current byte/counter grader does not enforce that intermediate order; its
-canonical-sequence assertion remains an explicit evaluation gap. Final-file success
+At that run, the byte/counter grader did not enforce that intermediate order;
+the canonical-sequence assertion is now implemented in the slice above. Final-file success
 does not establish full instruction following. No operator repairs or enlarged
 limits were used. Fixed CSV creation/follow-up and full M4/M5 remain open.
 
@@ -1648,17 +1686,15 @@ boundary, not a functional CSV score. Scripted HTTP tests confirmed both CLI
 transport modes and saved metadata. The existing v6 parser correctly rejected
 these outputs; no permissive JSON repair or separate agent loop was added.
 
-Next concrete slice (2026-10-07): complete the live fixture's canonical assertion
-for the already required per-note read-back order. Owner: CLI evaluation. The
-Gemma comparison above is complete: exact final files passed, full continuation
-acceptance did not. A real run must still combine task completion with checkpoint
-publication, process loss, external edit and same-run resume. Qwen previously
-reached that boundary but timed out. Preserve task/checks/original bounds; neither
-partial trajectory closes full E-* acceptance. Do not rerun simply to select a pass.
-Next UX slice remains M4 §11.4 interactive CLI over the existing application API:
-bounded progress, changed files, questions/approvals and verification summary,
-retaining non-interactive exit/reconnect behavior. Owner: CLI host; no new
-persistence owner, agent loop or automatic approval.
+Next concrete slice (2026-10-07): M4 §11.4 interactive CLI over the existing
+application API: bounded progress, changed files, questions/approvals and
+verification summary, retaining non-interactive exit/reconnect behavior.
+Owner: CLI host; no new persistence owner, agent loop or automatic approval.
+The per-note read-back order grader is complete. A real run must still combine
+the prescribed task sequence with checkpoint publication, process loss, external
+edit and same-run resume. Gemma produced exact files without the required order
+or restart boundary; Qwen reached that boundary but timed out. Preserve the fixed
+task/checks/original bounds; neither partial trajectory closes full E-* acceptance.
 The Qwen cross-family regression and paired shared-schema correction are complete
 above. Fixed CSV acceptance still failed, so its unchanged feature follow-up
 remains unrun. Do not substitute a larger budget or a diagnostic task for that

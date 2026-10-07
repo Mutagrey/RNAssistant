@@ -26,16 +26,17 @@ entailment; some Qwen claims cite unrelated eligible sources.
 The primary Gemma comparison is complete. Its aggregate read-budget failure is
 fixed; the next real attempt produced all ten exact final files within 437.46 s,
 30/38 steps. It needed no compaction, leaving restart/external-edit/resume untested.
-It also postponed all per-note read-backs to the final read batch. Add a canonical
-sequence assertion for this existing task requirement; the current byte/counter
-grader does not cover it. Preserve the original failed fixture results.
+It also postponed all per-note read-backs to the final read batch. The canonical
+sequence assertion is now implemented: it rejects this trace, while the retained
+correctly ordered controlled restart/resume trace passes. Original fixture results
+remain unchanged; no full real-model acceptance is established by regrading.
 
 Closure requires the prescribed read/patch/read-back order, all exact final bytes
 and current reads, an actual checkpoint/process-loss/external-edit/resume boundary,
 retained counters and no replayed effect within 24K/4096, 40/48/600. Do not enlarge
 budgets, weaken source authority or count the controlled fixture as model
 qualification. Exact source/profile/audits are in
-[PROGRESS](PROGRESS.md#aggregate-source-budget-and-observation-notices--2026-10-07).
+[PROGRESS](PROGRESS.md#canonical-read-back-order-grading--2026-10-07).
 
 ## Office conversation-port source assertion — 2026-10-05
 

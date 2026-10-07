@@ -46,6 +46,164 @@ def fixture():
     return {name: text.encode() for name, text in files.items()}
 
 
+def read_blob(root, sha256, byte_length):
+    if len(sha256) != 64 or any(c not in "0123456789abcdef" for c in sha256):
+        raise ValueError("Invalid CAS hash")
+    raw = (root / "state/chat-blobs" / sha256[:2] / (sha256 + ".blob")).read_bytes()
+    if raw.startswith(b"RNACAS01"):
+        if raw[8:12] != b"\x01\x00\x00\x00" or int.from_bytes(raw[20:28], "little") != len(raw) - 28:
+            raise ValueError("Unsupported or corrupt CAS envelope")
+        raw = gzip.decompress(raw[28:])
+    if len(raw) != byte_length or digest(raw) != sha256:
+        raise ValueError("CAS integrity failure")
+    return raw
+
+
+def audit_readback_order(root):
+    """Grade this fixture's prescribed sequence, independently of context/counters.
+
+    Only canonical accepted calls and typed terminal evidence count. A mutation's
+    internal read-back is not the separate resource read requested by the task.
+    """
+    paths = sorted(name for name in fixture() if name.startswith("notes/"))
+    streams = list((root / "state/chats").rglob("*.events.jsonl"))
+    if len(streams) != 1:
+        raise ValueError("Read-back grading requires exactly one canonical chat")
+    events = [json.loads(line) for line in streams[0].read_text().splitlines()]
+    calls, errors = {}, []
+    for event in events:
+        if event["Type"] != "session.commit":
+            continue
+        for index, operation in enumerate(event["Data"]["Operations"]):
+            value = operation["Data"].get("Value", {})
+            position = (event["Sequence"], index)
+            if operation["Type"] == "tool.call.recorded":
+                for call_index, call in enumerate(value["ToolCalls"]):
+                    if call["Id"] in calls:
+                        raise ValueError("Duplicate accepted call")
+                    args = json.loads(call["ArgumentsJson"])
+                    calls[call["Id"]] = {"id": call["Id"], "name": call["Name"],
+                        "path": args.get("target", args.get("relativePath")),
+                        "accepted": (*position, call_index), "run": value["RunId"]}
+            elif operation["Type"] == "tool.result.recorded" and value.get("ToolCallId"):
+                call = calls.get(value.get("ToolCallId"))
+                if call is None or "result" in call or value.get("ToolName") != call["name"] or value.get("RunId") != call["run"]:
+                    raise ValueError("Missing, duplicate or mismatched terminal call/result")
+                call.update(result=value, ended=(*position, 0))
+
+    # The runner's external edit is outside chat history. Admit only its exact
+    # recorded marker-only transition at the saved interruption boundary.
+    external, boundary = None, None
+    if (root / "external-edit.json").is_file():
+        external = json.loads((root / "external-edit.json").read_text())
+        prefix = (root / "events-before-resume.jsonl").read_bytes()
+        if not streams[0].read_bytes().startswith(prefix):
+            raise ValueError("Interrupted canonical prefix changed")
+        boundary = (json.loads(prefix.splitlines()[-1])["Sequence"], float("inf"), 0)
+        if external["path"] != paths[0]:
+            raise ValueError("Unexpected external edit target")
+
+    observations, mutations = [], []
+    for call in calls.values():
+        if call["path"] not in paths:
+            continue
+        result = call.get("result", {})
+        outcome = (result.get("ExecutionProgress") or {}).get("Outcome")
+        effect = result.get("ResourceEffect") or {}
+        if outcome == 2 or effect.get("outcome") == "UnknownAfterDispatch":
+            errors.append({"code": "unknown_note_effect", "callId": call["id"]})
+        if outcome != 0:  # ToolExecutionOutcome.Ok; refusals are not successful steps.
+            continue
+        if call["name"] == "common.resources_read":
+            evidence = result.get("ResourceEvidence") or []
+            if len(evidence) != 1:
+                continue
+            evidence = evidence[0]
+            payload, reference = evidence.get("Payload"), evidence.get("Resource") or {}
+            if evidence.get("Complete") is not True or (evidence.get("Coverage") or {}).get("kind") != "whole" or \
+                    (evidence.get("ScopeId") or {}).get("kind") != "file" or evidence.get("View") not in ("text", "source") or \
+                    not payload or not reference.get("uri") or not reference.get("revision"):
+                continue
+            body = read_blob(root, payload["sha256"], payload["byteLength"])
+            if evidence.get("ContentSha256") != digest(body):
+                raise ValueError("Read evidence and exact body disagree")
+            observations.append(dict(call, reference=reference, body=body))
+        elif call["name"].startswith("files."):
+            if effect.get("outcome") == "VerifiedNoChange":
+                continue
+            impacts = effect.get("impacts") or []
+            impact = impacts[0] if len(impacts) == 1 else {}
+            before, after = impact.get("before") or {}, impact.get("after") or {}
+            if effect.get("outcome") != "VerifiedChanged" or effect.get("operation") != call["name"] or \
+                    impact.get("relation") != "Exact" or (impact.get("coverage") or {}).get("kind") != "whole" or \
+                    not before.get("revision") or not after.get("revision") or before == after or \
+                    not before.get("uri") or before.get("uri") != after.get("uri"):
+                errors.append({"code": "unverified_note_write", "callId": call["id"]})
+                continue
+            mutations.append(dict(call, before=before, after=after))
+
+    initial = fixture()
+    stages, readback_positions = [], []
+    for index, path in enumerate(paths + [paths[0]]):
+        review = index == len(paths)
+        writes = [call for call in mutations if call["path"] == path]
+        write_index = 1 if review else 0
+        stage = {"path": path, "phase": "review" if review else "status", "passed": False}
+        stages.append(stage)
+        readback_positions.append(None)
+        if len(writes) <= write_index:
+            errors.append({"code": "missing_verified_write", "path": path, "phase": stage["phase"]})
+            continue
+        write = writes[write_index]
+        stage["writeCallId"], stage["writeSequence"] = write["id"], write["ended"][0]
+        expected_before = initial[path]
+        if review:
+            expected_before = expected_before.replace(b"status: draft\n", b"status: ready\n")
+        expected_after = expected_before.replace(b"review: pending\n", b"review: complete\n") if review else \
+            expected_before.replace(b"status: draft\n", b"status: ready\n")
+
+        def expected_body(body, expected):
+            return body == expected or external is not None and path == paths[0] and \
+                body == expected.replace(OLD_MARKER.encode(), NEW_MARKER.encode())
+
+        prior = [read for read in observations if read["path"] == path and read["ended"] < write["accepted"] and
+                 read["reference"] == write["before"] and expected_body(read["body"], expected_before)]
+        read_before = prior[-1] if prior else None
+        # A later note must not be started before this note's read-back result.
+        # For note 08, the next phase starts with the required fresh anchor read.
+        next_path = paths[index + 1] if index < len(paths) - 1 else paths[0]
+        following = [call for call in calls.values() if call["path"] == next_path and
+                     (index < len(paths) - 1 or call["accepted"] > write["accepted"])] if not review else []
+        deadline = min((call["accepted"] for call in following), default=None)
+
+        def is_after(read):
+            if read["path"] != path or read["accepted"] <= write["ended"] or not expected_body(read["body"], expected_after):
+                return False
+            if read["reference"] == write["after"]:
+                return True
+            return external is not None and path == paths[0] and write["ended"] < boundary < read["accepted"] and \
+                read["reference"]["uri"] == write["after"]["uri"] and external["before"] == digest(expected_after) and \
+                external["after"] == digest(expected_after.replace(OLD_MARKER.encode(), NEW_MARKER.encode())) == digest(read["body"])
+
+        read_after = next((read for read in observations if is_after(read)), None)
+        stage.update(readSequence=read_before["ended"][0] if read_before else None,
+                     readbackSequence=read_after["ended"][0] if read_after else None,
+                     nextNoteSequence=deadline[0] if deadline else None)
+        readback_positions[-1] = read_after["ended"] if read_after else None
+        ordered = read_after is not None and (deadline is None or read_after["ended"] < deadline)
+        if review:
+            ordered = ordered and all(item["passed"] for item in stages[:-1]) and read_before is not None and \
+                read_before["accepted"] > readback_positions[-2]
+        stage["passed"] = read_before is not None and ordered
+        if not stage["passed"]:
+            errors.append({"code": "read_write_readback_order", "path": path, "phase": stage["phase"],
+                           "writeCallId": write["id"]})
+    for path in paths:
+        if sum(call["path"] == path for call in mutations) > (2 if path == paths[0] else 1):
+            errors.append({"code": "extra_verified_write", "path": path})
+    return {"passed": not errors and all(stage["passed"] for stage in stages), "stages": stages, "errors": errors}
+
+
 def audit_canonical(root, before=None, final=None, prefix_sequence=0):
     events = [json.loads(line) for path in (root / "state/chats").rglob("*.events.jsonl")
               for line in path.read_text().splitlines()]
@@ -55,13 +213,7 @@ def audit_canonical(root, before=None, final=None, prefix_sequence=0):
     task = (root / "task.md").read_text()
 
     def body(ref):
-        h = ref["Sha256"]
-        raw = (root / "state/chat-blobs" / h[:2] / (h + ".blob")).read_bytes()
-        if raw.startswith(b"RNACAS01"):
-            assert raw[8:12] == b"\x01\x00\x00\x00" and int.from_bytes(raw[20:28], "little") == len(raw) - 28
-            raw = gzip.decompress(raw[28:])
-        assert len(raw) == ref["ByteLength"] and digest(raw) == h, "CAS integrity failure"
-        return json.loads(raw)
+        return json.loads(read_blob(root, ref["Sha256"], ref["ByteLength"]))
 
     for event in events:
         if event["Type"] == "llm.request":
@@ -378,6 +530,15 @@ def main():
             except Exception as error:
                 result["canonicalAuditError"] = repr(error)
         result["canonicalAuditPassed"] = audit is not None and not audit["errors"]
+        result["readbackOrderPassed"] = False
+        try:
+            order_audit = audit_readback_order(root)
+            save("readback-order-audit.json", order_audit)
+            result["readbackOrderPassed"] = order_audit["passed"]
+        except Exception as error:
+            result["readbackOrderError"] = repr(error)
+        if not result["readbackOrderPassed"]:
+            result["acceptance"] = "failed"
         result["seconds"] = round(time.monotonic() - start, 2)
         result["proxyErrors"] = proxy_errors
         save("requests.json", requests)

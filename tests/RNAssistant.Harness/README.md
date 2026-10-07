@@ -35,6 +35,26 @@ Counter auditing counts the fixture's dispatched workspace steps separately from
 accepted calls: typed `NotDispatched` repeat denials close exchanges without a
 tool-budget charge.
 
+`readback-order-audit.json` independently grades the task's prescribed sequence.
+For each note, a complete CAS-backed read must match the verified mutation's
+before revision; a separate complete resource read must match its after revision
+and expected bytes before the first accepted call to the next note. Internal
+mutation read-back, `ok` prose, partial reads and a late final read batch do not
+satisfy that order. The anchor review requires a fresh read after all eight notes.
+Only the runner's recorded marker-only external edit can admit a newer read-back
+revision at the saved restart boundary. Missing/corrupt evidence fails explicitly.
+The order audit runs on every exit, including timeout or completion before a
+checkpoint; `readbackOrderPassed:false` prevents overall acceptance. It does not
+replace canonical continuity, final-byte or counter checks.
+
+`python3 -B tests/cli/compaction_order_smoke.py` checks this grader with synthetic
+canonical operation/CAS fixtures: ordered and native-role reads, the recorded
+external edit, late/prefetched reads, missing before evidence, unverified/unknown
+effects, unchanged/stale revisions, partial/missing bodies and broken correlation.
+It needs no build or model. These are grader unit checks, not authenticated stream,
+production runtime or real-model qualification. Retained real logs can be graded
+read-only with `audit_readback_order(root)`; keep their original result files intact.
+
 After building the CLI, `python3 -B tests/cli/compaction_resume_smoke.py` checks
 24K context pressure through actual structured compaction, process loss, external
 file edits and same-run continuation. It verifies checkpoint persistence, exact
