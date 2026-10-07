@@ -90,6 +90,18 @@ saved browser result matches exact snapshot/record IDs while stale current
 acceptance still fails. It verifies an already-correct counter fixture and does
 not replace the separate verify/repair/reverify acceptance scenario.
 
+After building the CLI, `python3 -B tests/cli/resource_preview_smoke.py` checks
+bounded descriptor discovery, metadata without decoding, inert source fragments,
+exact Unicode continuation across external edits, missing-payload refusal,
+path confinement and absence of model write authority from UI reads. Real
+Chromium checks cover immutable preview routes, historical reopen after live
+move/deletion, deadline/Ctrl+C profile/server cleanup, missing-browser reporting,
+fresh storage, absent native bridge, sandbox headers and blocked off-origin
+requests/navigation. Preview creates no run or verification record. The controlled
+model is used only to check a refused write after a UI read, not task quality.
+Run `web_checks_runtime_smoke.py` when changing their shared browser runner to
+preserve functional verification, repair/retry and stale-final rejection.
+
 After building the CLI, `python3 -B tests/cli/run_control_smoke.py` checks local
 cross-process cancel and explicit same-run continuation: exact cursors, late model
 response exclusion, unchanged limits/counters/history, retained verified writes,

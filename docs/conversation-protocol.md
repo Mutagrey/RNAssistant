@@ -288,8 +288,19 @@ for its conversation state. `events` reads metadata notices after that position;
 use `NextCursor` and the first page's `HighWater` as `--through` while `HasMore`.
 Pages default to 50 notices, maximum 100. `events.resync_required` (exit 3) means
 the client must refresh state/resolve history, never resubmit mutations. This is
-bounded polling; it is not yet push subscription or incremental indexed I/O.
-Interactive UX, push subscription and full Office UI adoption remain open §11 scope.
+bounded event delivery. `events --follow` uses `SubscribeEventsAsync` until timeout,
+Ctrl+C or explicit resync; unchanged files reuse validated stream boundaries.
+The interactive CLI projects canonical progress, file effects, typed questions and
+approvals; redirected/JSONL input never waits for answers. Full Office UI adoption
+remains open §11/M7 scope.
+
+The same workspace application façade exposes typed `FindResources`,
+`OpenResourceView` and `OpenPreviewAsync` independently of sessions and model
+configuration. Resource views and snapshot preview do not become model observations,
+verification outcomes or mutation permissions. Cancelling preview closes its owned
+browser lifetime without signalling a conversation run. Bounds, exact continuation
+and preview isolation are defined in
+[Resource Fabric](resource-fabric.md#application-resource-views-and-development-preview).
 
 ### Workspace cancellation and bounded continuation
 

@@ -118,9 +118,7 @@ namespace RNAssistant.Runtime
             string entryPath, CancellationToken cancellationToken = default(CancellationToken), string snapshotId = null,
             WebFunctionalChecks checks = null)
         {
-            var resources = new ResourceProviderRouter<WorkspaceFileResourceProvider>(new[]
-                { new WorkspaceFileResourceProvider(_files, workspace) });
-            return new WorkspaceWebVerifier(resources, _webSnapshots, workspace)
+            return new WorkspaceWebVerifier(FileResources(workspace), _webSnapshots, workspace)
                 .VerifyAsync(entryPath, cancellationToken, snapshotId, checks: checks);
         }
 

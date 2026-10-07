@@ -97,6 +97,25 @@ namespace RNAssistant.Cli
                     outcome = recovered.Outcome.ToString(), replayed = false });
                 return 0;
             }
+            if (args[0] == "resources")
+            {
+                Output(jsonl, "resource.list", service.FindResources(workspace, new WorkspaceFindResourcesRequest {
+                    Directory = Value(options, "directory", null), Query = Value(options, "query", null),
+                    Limit = options.ContainsKey("limit") ? PositiveBoundedOption(options, "limit", 200) : 50 }));
+                return 0;
+            }
+            if (args[0] == "open")
+            {
+                if (options.ContainsKey("uri") != options.ContainsKey("revision"))
+                    throw new ArgumentException("Exact reads require both --uri and --revision from the preceding resource view.");
+                Output(jsonl, "resource.view", service.OpenResourceView(workspace, new WorkspaceOpenResourceRequest {
+                    Target = Required(options, "path"), Representation = Value(options, "view", "text"),
+                    Exact = options.ContainsKey("uri") ? new ResourceRef(Required(options, "uri"), Required(options, "revision")) : null,
+                    SnapshotId = Value(options, "snapshot", null), Offset = NonnegativeOption(options, "offset"),
+                    MaxCharacters = options.ContainsKey("max-chars") ? PositiveBoundedOption(options, "max-chars", 32000) : 4096 }));
+                return 0;
+            }
+            if (args[0] == "preview") return Preview(service, workspace, options, jsonl);
             if (args[0] == "verify")
             {
                 if (options.ContainsKey("entry") && options.ContainsKey("snapshot"))
@@ -657,7 +676,7 @@ namespace RNAssistant.Cli
                 var key = args[i].Substring(2);
                 if (key == "jsonl" || key == "read-only" || key == "create" ||
                     key == "require-web-verify" || key == "continue" || key == "follow" ||
-                    key == "interactive" || key == "no-interactive") result[key] = "true";
+                    key == "interactive" || key == "no-interactive" || key == "headless") result[key] = "true";
                 else
                 {
                     if (i + 1 >= args.Length || args[i + 1].StartsWith("--", StringComparison.Ordinal))
@@ -731,6 +750,34 @@ namespace RNAssistant.Cli
             if (jsonl) Console.WriteLine(JsonConvert.SerializeObject(new { type, data = payload }));
             else Console.WriteLine(type + ": " + JsonConvert.SerializeObject(payload));
         }
+        private static int Preview(WorkspaceConversationService service, WorkspaceDescriptor workspace,
+            Dictionary<string, string> options, bool jsonl)
+        {
+            var request = new WorkspacePreviewRequest { EntryPath = Value(options, "entry", null),
+                SnapshotId = Value(options, "snapshot", null), Headless = options.ContainsKey("headless"),
+                LifetimeSeconds = options.ContainsKey("timeout-seconds") ? PositiveBoundedOption(options, "timeout-seconds", 3600) : 300 };
+            using (var cancelled = new CancellationTokenSource())
+            {
+                WorkspacePreviewReport current = null;
+                ConsoleCancelEventHandler handler = (sender, e) => { e.Cancel = true; cancelled.Cancel(); };
+                Console.CancelKeyPress += handler;
+                try
+                {
+                    var result = service.OpenPreviewAsync(workspace, request, opened => {
+                        current = opened; Output(jsonl, "preview.opened", opened);
+                    }, cancelled.Token).GetAwaiter().GetResult();
+                    Output(jsonl, result.Status == WorkspacePreviewStatus.Closed ? "preview.closed" : "preview.unavailable", result);
+                    return result.Status == WorkspacePreviewStatus.Closed ? 0 : result.Status == WorkspacePreviewStatus.NotAvailable ? 4 : 5;
+                }
+                catch (OperationCanceledException) when (cancelled.IsCancellationRequested)
+                {
+                    current = current ?? new WorkspacePreviewReport();
+                    current.Status = WorkspacePreviewStatus.Closed; current.CloseReason = WorkspacePreviewCloseReason.Cancelled;
+                    Output(jsonl, "preview.closed", current); return 130;
+                }
+                finally { Console.CancelKeyPress -= handler; }
+            }
+        }
         private static void Help()
         {
             Console.WriteLine("RNAssistant workspace CLI (development profile)");
@@ -749,6 +796,9 @@ namespace RNAssistant.Cli
             Console.WriteLine("rna events --workspace <path> --session <id> --after <Cursor> [--through <HighWater>] [--limit <1..100>] [--jsonl]  (read bounded event notices; resync_required never replays work)");
             Console.WriteLine("rna events --workspace <path> --session <id> --after <Cursor> --follow [--limit <1..100>] [--timeout-seconds <1..3600>] [--jsonl]  (subscribe until Ctrl+C, timeout or resync; never runs the agent)");
             Console.WriteLine("rna recover --workspace <path> --path <relative-path> [--jsonl]  (inspect an uncertain file effect)");
+            Console.WriteLine("rna resources --workspace <path> [--directory <relative-path>] [--query <filename>] [--limit <1..200>] [--jsonl]  (bounded metadata; incomplete listing does not establish absence)");
+            Console.WriteLine("rna open --workspace <path> --path <relative-path> [--view text|metadata] [--max-chars <128..32000>] [--uri <runtime-uri> --revision <revision> | --snapshot <id>] [--offset <n>] [--jsonl]  (inert view; continuation requires exact reference or snapshot; no model read credit)");
+            Console.WriteLine("rna preview --workspace <path> [--entry index.html | --snapshot <id>] [--timeout-seconds <1..3600>] [--headless] [--jsonl]  (isolated snapshot browser; default 300 seconds; Ctrl+C closes; never certifies verification)");
             Console.WriteLine("rna verify --workspace <path> [--entry index.html | --snapshot <id>] [--web-checks <json-file>] [--jsonl]  (historical success does not verify current files)");
             Console.WriteLine("rna verification --workspace <path> --id <id> [--jsonl]  (read a saved result; Pending means no terminal result, never auto-replayed)");
             Console.WriteLine("rna verifications --workspace <path> [--offset <n>] [--jsonl]  (up to 20 saved/pending results in resource order)");

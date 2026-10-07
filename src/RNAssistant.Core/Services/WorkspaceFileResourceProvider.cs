@@ -63,6 +63,9 @@ namespace RNAssistant.Core.Services
             return Project(_files.ReadText(_workspace, relativePath), false);
         }
 
+        public ResourceDescriptor Describe(string relativePath)
+        { return _files.Describe(_workspace, relativePath); }
+
         // Runtime-only retained read. This does not observe or republish the live head;
         // callers assess currentness separately against frozen authority.
         public ResourceReadObservation ReadExact(string relativePath, ResourceRef exact)

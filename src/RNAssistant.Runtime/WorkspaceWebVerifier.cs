@@ -17,6 +17,7 @@ using Newtonsoft.Json.Linq;
 using RNAssistant.Core.Models;
 using RNAssistant.Core.Services;
 using RNAssistant.Core.Storage;
+using RNAssistant.Runtime.Contracts;
 
 namespace RNAssistant.Runtime
 {
@@ -179,7 +180,7 @@ namespace RNAssistant.Runtime
                 using (var server = new SnapshotServer(snapshot))
                 {
                     await server.StartAsync().ConfigureAwait(false);
-                    var browserErrors = await SmokeBrowserAsync(browser,
+                    var browserErrors = await RunBrowserAsync(browser,
                         new Uri(server.BaseUrl, EscapePath(entryPath)), server.BaseUrl,
                         checks, checkResults, cancellationToken).ConfigureAwait(false);
                     errors.AddRange(browserErrors);
@@ -424,10 +425,12 @@ namespace RNAssistant.Runtime
         private sealed class SnapshotServer : IDisposable
         {
             private readonly Dictionary<string, SnapshotFile> _files;
+            private readonly bool _preview;
             private HttpListener _listener;
             private Task _loop;
             public Uri BaseUrl { get; private set; }
-            public SnapshotServer(Dictionary<string, SnapshotFile> files) { _files = files; }
+            public SnapshotServer(Dictionary<string, SnapshotFile> files, bool preview = false)
+            { _files = files; _preview = preview; }
 
             public Task StartAsync()
             {
@@ -468,7 +471,13 @@ namespace RNAssistant.Runtime
                     if (context.Request.HttpMethod != "GET" || !_files.TryGetValue(path, out file))
                     { context.Response.StatusCode = 404; return; }
                     context.Response.Headers["Content-Security-Policy"] =
-                        "default-src 'self' data: blob:; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; connect-src 'self'; img-src 'self' data: blob:; object-src 'none'; base-uri 'none'";
+                        "default-src 'self' data: blob:; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; connect-src 'self'; img-src 'self' data: blob:; object-src 'none'; base-uri 'none'" +
+                        (_preview ? "; sandbox allow-scripts allow-same-origin; frame-src 'none'; worker-src 'none'; form-action 'none'; frame-ancestors 'none'" : "");
+                    if (_preview)
+                    {
+                        context.Response.Headers["Permissions-Policy"] = "camera=(), microphone=(), geolocation=(), clipboard-read=(), clipboard-write=(), display-capture=(), fullscreen=()";
+                        context.Response.Headers["Referrer-Policy"] = "no-referrer";
+                    }
                     context.Response.Headers["Cache-Control"] = "no-store";
                     context.Response.Headers["X-Content-Type-Options"] = "nosniff";
                     context.Response.ContentType = path.EndsWith(".css", StringComparison.OrdinalIgnoreCase) ? "text/css" :
@@ -492,8 +501,9 @@ namespace RNAssistant.Runtime
             }
         }
 
-        private static async Task<IReadOnlyList<string>> SmokeBrowserAsync(string executable, Uri page,
-            Uri origin, WebFunctionalChecks checks, List<WebCheckResult> checkResults, CancellationToken cancellationToken)
+        private static async Task<IReadOnlyList<string>> RunBrowserAsync(string executable, Uri page,
+            Uri origin, WebFunctionalChecks checks, List<WebCheckResult> checkResults, CancellationToken cancellationToken,
+            WorkspacePreviewRequest preview = null, Action opened = null)
         {
             var errors = new List<string>();
             var profile = Path.Combine(Path.GetTempPath(), "rna-browser-" + Guid.NewGuid().ToString("N"));
@@ -503,7 +513,9 @@ namespace RNAssistant.Runtime
             {
                 var start = new ProcessStartInfo(executable) { UseShellExecute = false,
                     CreateNoWindow = true, RedirectStandardOutput = true, RedirectStandardError = true };
-                foreach (var option in new[] { "--headless=new", "--disable-gpu", "--no-first-run",
+                if (preview == null || preview.Headless) start.ArgumentList.Add("--headless=new");
+                if (preview != null) start.ArgumentList.Add("--force-webrtc-ip-handling-policy=disable_non_proxied_udp");
+                foreach (var option in new[] { "--disable-gpu", "--no-first-run",
                     "--no-default-browser-check", "--disable-background-networking", "--disable-extensions",
                     "--disable-sync", "--remote-debugging-port=0", "--user-data-dir=" + profile,
                     "--proxy-server=http://127.0.0.1:9", "about:blank" }) start.ArgumentList.Add(option);
@@ -539,6 +551,14 @@ namespace RNAssistant.Runtime
                             new JObject { ["bypass"] = true }, cancellationToken).ConfigureAwait(false);
                         await devtools.CommandAsync("Browser.setDownloadBehavior",
                             new JObject { ["behavior"] = "deny", ["eventsEnabled"] = true }, cancellationToken).ConfigureAwait(false);
+                        if (preview != null)
+                        {
+                            devtools.AllowedDocument = page;
+                            await devtools.CommandAsync("Browser.grantPermissions",
+                                new JObject { ["origin"] = origin.GetLeftPart(UriPartial.Authority), ["permissions"] = new JArray() }, cancellationToken).ConfigureAwait(false);
+                            await devtools.CommandAsync("Fetch.enable", new JObject { ["patterns"] = new JArray(
+                                new JObject { ["urlPattern"] = "*", ["requestStage"] = "Request" }) }, cancellationToken).ConfigureAwait(false);
+                        }
                         var navigate = await devtools.CommandAsync("Page.navigate",
                             new JObject { ["url"] = page.AbsoluteUri }, cancellationToken).ConfigureAwait(false);
                         if ((string)navigate["result"]?["errorText"] != null)
@@ -558,8 +578,10 @@ namespace RNAssistant.Runtime
                                 await RunChecksAsync(devtools, checks, checkResults, profile, deadline.Token).ConfigureAwait(false);
                             }
                         }
-                        await devtools.ObserveForAsync(TimeSpan.FromMilliseconds(1500),
-                            cancellationToken).ConfigureAwait(false);
+                        if (preview != null && errors.Count == 0) opened?.Invoke();
+                        if (preview == null || errors.Count == 0)
+                            await devtools.ObserveForAsync(preview == null ? TimeSpan.FromMilliseconds(1500) :
+                                TimeSpan.FromSeconds(preview.LifetimeSeconds), cancellationToken).ConfigureAwait(false);
                         errors.AddRange(devtools.Errors);
                         errors.AddRange(checkResults.Where(check => check.Status == WebCheckStatus.Failed)
                             .Select(check => "Functional check " + check.Id + ": " + check.Error));
@@ -572,7 +594,7 @@ namespace RNAssistant.Runtime
             {
                 if (process != null)
                 {
-                    try { if (!process.HasExited) process.Kill(true); }
+                    try { if (!process.HasExited) process.Kill(true); process.WaitForExit(3000); }
                     catch (InvalidOperationException) { }
                     catch (System.ComponentModel.Win32Exception) { }
                     process.Dispose();
@@ -593,6 +615,8 @@ namespace RNAssistant.Runtime
             private int _id;
             private bool _loaded;
             public bool RejectNavigation { get; set; }
+            public Uri AllowedDocument { get; set; }
+            private readonly HashSet<int> _policyCommands = new HashSet<int>();
             public List<BrowserDownload> Downloads { get; } = new List<BrowserDownload>();
             public IReadOnlyList<string> Errors { get { return _errors.Distinct(StringComparer.Ordinal).Take(16).ToArray(); } }
             public DevToolsClient(string url, Uri origin) { _url = url; _origin = origin; }
@@ -613,7 +637,7 @@ namespace RNAssistant.Runtime
                     while (true)
                     {
                         var received = await ReadAsync(deadline.Token).ConfigureAwait(false);
-                        Observe(received);
+                        await ObserveAsync(received, deadline.Token).ConfigureAwait(false);
                         if ((int?)received["id"] != id) continue;
                         if (received["error"] != null)
                             throw new IOException("Browser protocol rejected " + method + ": " +
@@ -628,7 +652,7 @@ namespace RNAssistant.Runtime
                 using (var deadline = CancellationTokenSource.CreateLinkedTokenSource(token))
                 {
                     deadline.CancelAfter(TimeSpan.FromSeconds(10));
-                    while (!_loaded) Observe(await ReadAsync(deadline.Token).ConfigureAwait(false));
+                    while (!_loaded) await ObserveAsync(await ReadAsync(deadline.Token).ConfigureAwait(false), deadline.Token).ConfigureAwait(false);
                 }
             }
 
@@ -639,7 +663,7 @@ namespace RNAssistant.Runtime
                     deadline.CancelAfter(duration);
                     try
                     {
-                        while (true) Observe(await ReadAsync(deadline.Token).ConfigureAwait(false));
+                        while (true) await ObserveAsync(await ReadAsync(deadline.Token).ConfigureAwait(false), deadline.Token).ConfigureAwait(false);
                     }
                     catch (OperationCanceledException) when (!token.IsCancellationRequested) { }
                 }
@@ -663,11 +687,30 @@ namespace RNAssistant.Runtime
                 }
             }
 
-            private void Observe(JObject message)
+            private async Task ObserveAsync(JObject message, CancellationToken token)
             {
+                if (_policyCommands.Remove((int?)message["id"] ?? 0) && message["error"] != null)
+                    throw new IOException("Browser rejected preview request isolation.");
                 var method = (string)message["method"];
                 var args = message["params"];
-                if (method == "Page.loadEventFired") _loaded = true;
+                if (method == "Fetch.requestPaused" && AllowedDocument != null)
+                {
+                    var url = (string)args?["request"]?["url"];
+                    Uri requested;
+                    var allowed = Uri.TryCreate(url, UriKind.Absolute, out requested) &&
+                        requested.GetLeftPart(UriPartial.Authority) == _origin.GetLeftPart(UriPartial.Authority) &&
+                        (string)args?["request"]?["method"] == "GET" &&
+                        ((string)args?["resourceType"] != "Document" || requested.AbsoluteUri == AllowedDocument.AbsoluteUri);
+                    var parameters = new JObject { ["requestId"] = (string)args?["requestId"] };
+                    if (!allowed) { parameters["errorReason"] = "BlockedByClient"; AddError("Preview request blocked: " + SafeUrl(url)); }
+                    if (_policyCommands.Count >= 128) throw new IOException("Too many pending preview requests.");
+                    var id = ++_id;
+                    _policyCommands.Add(id);
+                    var response = new JObject { ["id"] = id, ["method"] = allowed ? "Fetch.continueRequest" : "Fetch.failRequest", ["params"] = parameters };
+                    await _socket.SendAsync(new ArraySegment<byte>(StrictUtf8.GetBytes(response.ToString(Formatting.None))),
+                        WebSocketMessageType.Text, true, token).ConfigureAwait(false);
+                }
+                else if (method == "Page.loadEventFired") _loaded = true;
                 else if (method == "Browser.downloadWillBegin")
                 {
                     var id = (string)args?["guid"];
@@ -689,22 +732,22 @@ namespace RNAssistant.Runtime
                     }
                 }
                 else if (method == "Page.frameNavigated" && RejectNavigation && args?["frame"]?["parentId"] == null)
-                    _errors.Add("Functional checks navigated away from the captured document.");
+                    AddError("Functional checks navigated away from the captured document.");
                 else if (method == "Runtime.exceptionThrown")
-                    _errors.Add("JavaScript exception: " +
+                    AddError("JavaScript exception: " +
                         ((string)args?["exceptionDetails"]?["exception"]?["description"] ??
                          (string)args?["exceptionDetails"]?["text"] ?? "unknown")
                         .Replace(_origin.AbsoluteUri, "/"));
                 else if (method == "Runtime.consoleAPICalled" && (string)args?["type"] == "error")
-                    _errors.Add("Console error: " + string.Join(" ",
+                    AddError("Console error: " + string.Join(" ",
                         args["args"].Children().Select(item => (string)item["value"] ?? (string)item["description"] ?? "error")));
                 else if (method == "Log.entryAdded" && (string)args?["entry"]?["level"] == "error")
-                    _errors.Add("Browser error: " + ((string)args["entry"]["text"] ?? "unknown")
+                    AddError("Browser error: " + ((string)args["entry"]["text"] ?? "unknown")
                         .Replace(_origin.AbsoluteUri, "/"));
                 else if (method == "Network.loadingFailed" && (string)args?["errorText"] != "net::ERR_ABORTED")
-                    _errors.Add("Asset load failed: " + (string)args?["errorText"]);
+                    AddError("Asset load failed: " + (string)args?["errorText"]);
                 else if (method == "Network.responseReceived" && (int?)args?["response"]?["status"] >= 400)
-                    _errors.Add("Asset HTTP " + (int?)args["response"]["status"] + ": " +
+                    AddError("Asset HTTP " + (int?)args["response"]["status"] + ": " +
                         LocalPath((string)args["response"]["url"]));
                 else if (method == "Network.requestWillBeSent")
                 {
@@ -714,8 +757,15 @@ namespace RNAssistant.Runtime
                         (parsed.Scheme == Uri.UriSchemeHttp || parsed.Scheme == Uri.UriSchemeHttps) &&
                         !parsed.GetLeftPart(UriPartial.Authority).Equals(
                             _origin.GetLeftPart(UriPartial.Authority), StringComparison.OrdinalIgnoreCase))
-                        _errors.Add("External request attempted: " + SafeUrl(url));
+                        AddError("External request attempted: " + SafeUrl(url));
                 }
+            }
+
+            private void AddError(string error)
+            {
+                if (_errors.Count >= 16) return;
+                error = error.Length > 700 ? error.Substring(0, 700) + "…" : error;
+                if (!_errors.Contains(error)) _errors.Add(error);
             }
 
             private static string SafeUrl(string value)

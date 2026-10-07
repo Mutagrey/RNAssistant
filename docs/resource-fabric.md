@@ -195,6 +195,60 @@ fit 64 KiB and 700 decoded characters, and match the expected ordered CSV cells.
 Malformed/truncated/extra data fails. No project file is opened by this check runner;
 all source materialization remains with the filesystem provider and file owner.
 
+### Application resource views and development preview
+
+The workspace application service exposes typed `FindResources`, `OpenResourceView`
+and `OpenPreviewAsync` contracts for the CLI and later UI consumers. Files still
+use `ResourceProviderRouter` → `WorkspaceFileResourceProvider` →
+`WorkspaceFileService`; these entry points add no reader or authority store.
+
+```text
+rna resources --workspace <path> [--directory <relative-path>] [--query <filename>] [--limit 50] --jsonl
+rna open --workspace <path> --path app.js [--view text|metadata] [--max-chars 4096] --jsonl
+rna open --workspace <path> --path app.js --uri <returned-uri> --revision <returned-revision> --offset <NextOffset> --jsonl
+rna open --workspace <path> --path app.js --snapshot <retained-web-snapshot> --jsonl
+rna preview --workspace <path> [--entry index.html | --snapshot <id>] [--timeout-seconds 300] [--headless] --jsonl
+```
+
+Discovery returns descriptors, a 1–200 item bound (default 50), scanned-entry count
+and explicit incompleteness. It does not load source bodies or claim an exhaustive
+directory when truncated. `open --view metadata` can inspect directories/binary
+files without decoding them. Text uses the existing one-MiB UTF-8 whole-read limit
+internally; delivery is 128–32000 UTF-16 characters, default 4096, without splitting
+surrogate pairs. Each fragment reports exact reference, coverage, returned/total
+characters and `NextOffset`. Continuation requires that exact URI/revision or a
+retained manifest, so external edits cannot silently join two versions. Only a
+whole body has `complete=true`; the last fragment alone is not whole evidence.
+Missing historical payloads fail without a current-file fallback. Retained manifest
+members remain readable after live paths move or disappear. These runtime references
+are application transport metadata, not model arguments.
+
+`open` is inert, including for HTML. Neither resource views nor preview append
+accepted model reads, alter a conversation or grant file mutation authority.
+Preview freezes the existing bounded, coherent web snapshot and opens a fresh
+Chromium profile through the same development runner and exact-route server as
+`verify`. It serves only captured assets, never the workspace root. It has no
+agent/native bridge. Preview-specific CSP sandbox blocks frames, workers, forms,
+popups and downloads; CDP denies permissions/downloads and permits only same-origin
+GETs, with document navigation pinned to the selected entry. The existing dead
+proxy and disabled non-proxied WebRTC policy further constrain browser networking.
+Request interception follows the [Chromium Fetch contract](https://chromedevtools.github.io/devtools-protocol/tot/Fetch/).
+Diagnostics are bounded to 16 entries of at most 701 characters.
+
+`preview.opened` includes source mode `snapshot`, manifest, captured paths and an
+ephemeral URL. The foreground lifetime defaults to 300 seconds, maximum 3600;
+the application caller closes it with its cancellation token. CLI Ctrl+C closes
+only this viewer (exit 130). Normal expiry returns `preview.closed`/exit 0 after
+browser, temporary profile and server teardown. Missing Chromium returns
+`NotAvailable`/exit 4. Browser startup/transport failures return exit 5; `Closed` certifies viewer
+lifetime completion, not functional correctness. Preview never publishes a
+verification record or satisfies run acceptance. Its URL is diagnostic; the
+supported viewer is the owned isolated browser, not a user's existing profile.
+
+This is a development snapshot viewer, not a production localhost application
+server. Working previews, binary/image/PDF viewers, Office UI integration,
+screenshots/traces and hard-process-loss cleanup qualification remain open.
+
 One resource identity, shared current-state authority, immutable historical evidence
 and one model-context compiler serve model reads, HTML and viewers. Reading content
 never admits a tool schema, activates a stored package or authorizes a mutation.

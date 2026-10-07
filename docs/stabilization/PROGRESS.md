@@ -1,5 +1,37 @@
 # Stabilization progress
 
+## Application resource views and snapshot preview — 2026-10-07
+
+Owner: workspace application service / filesystem provider / development browser
+runner. CLI now has `resources`, `open` and `preview` through typed application
+contracts. Discovery returns bounded descriptors and explicit incompleteness;
+inert metadata/text views use the existing file owner. Text delivery is bounded
+and exact continuation remains pinned across external edits, with fragment coverage
+and Unicode boundaries. Missing retained bytes cannot fall back to current files.
+Application views never grant model read/write authority.
+
+Preview uses the verifier's existing retained snapshot capture, exact-route server
+and browser runner. A fresh Chromium profile has no privileged bridge; preview
+adds sandbox/permission/download restrictions and request interception. Only the
+captured assets are served. Cancellation/deadline closes this foreground viewer;
+no conversation run, verification record or acceptance is produced. Diagnostics
+are bounded. No second file reader, context composer, agent loop or artifact store
+was introduced. CLI/UI adoption in Office remains the later M7 boundary.
+
+Checks: clean CLI build (zero warnings/errors); `resource_preview_smoke.py` passes
+resource/authority, immutable lifetime/historical replay and real-browser isolation
+groups. The default visible Chromium path also opens/closes on its one-second
+deadline. The existing full `web_checks_runtime_smoke.py` still passes repair,
+stale-final rejection and typed retry guards. These are Mac browser and controlled
+HTTP checks, not new real LLM or Windows/Office/WebView2 qualification.
+Python syntax, added local links/anchor, diff and `ValidateVersionFormat` pass.
+
+Next concrete slice: unchanged autonomous CSV creation + feature-follow-up
+acceptance, followed by complete real compaction/restart/resume acceptance. M4's
+development resource/text/preview surface is now available; full M4/M5 remain open.
+Working previews, binary/image/PDF viewers, screenshots/traces, hard-process-loss
+preview cleanup and Office UI application cutover remain unimplemented or unqualified.
+
 ## Browser verification recovery after repair — 2026-10-07
 
 Owner: workspace browser provider / Core typed tool recovery. Failed published
@@ -29,8 +61,8 @@ checks; no new real LLM or Windows/Office qualification is claimed.
 Python syntax, changed local links/status anchor, diff and
 `ValidateVersionFormat` pass.
 
-Next concrete slice: general resource/open/preview commands through the shared
-application contracts. Full M4/M5 remain open: fixed autonomous CSV creation plus
+The subsequent application resource/preview slice is recorded above.
+Full M4/M5 remain open: fixed autonomous CSV creation plus
 unchanged feature follow-up, complete real compaction/restart/resume acceptance,
 and remaining preview/screenshots/traces scope still need evidence or implementation.
 
@@ -521,8 +553,8 @@ conversation application services; resource/Office boundaries retain their owner
 | M1 | Independent production Core/Runtime/CLI uses ProjectReference, LlmClient/v6, coordinator → AgentKernel, ToolRuntime and the same frozen compiler. No fake Office dependency or second loop. Office/CLI application preparation and handler composition remain separate; full shared application/lifetime cutover is open. |
 | M2 | Workspace/session without document authority, stable identity, known root relocation and read-only association tested. Only the root directory mount is supplied; managed/multiple/external mounts and shared-source identity/heads (A24) remain open. |
 | M3 | Single WorkspaceFileService owns UTF-8 find/read/create/patch/replace/copy/move/delete/restore, exact history, drift and non-replay recovery. Focused tests pass. Remaining §8.1 stat/raw/binary/large views, directory pagination, complete Office/filesystem dispatch and cross-platform path qualification are open. |
-| M4 | First useful real-model multi-file result achieved. Modes, skills, typed questions/answers, approvals, Task Lists/Plans, receipts, cancel/explicit continuation and event following exist. Interactive host UX/recorded file-effect presentation now passes Mac PTY checks. General resource/preview commands remain open; Office UI use of shared application contracts is the later M7 cutover. Scripted runs do not close real task quality. |
-| M5 | Retained browser snapshots, dependency checks, structured functional verification, repair, bounded same-run continuation and shared compaction implemented. Controlled compaction/resume passes. Schema, completed-receipt boundary and aggregate source-budget defects are fixed. Real Qwen reached restart/resume but timed out; Gemma produced all exact final files after the latest fix, without reaching a compaction/restart boundary and without the prescribed per-note read-back order. Full live quality remains open. A real counter repair passed previously; typed dependency-change recovery now restores the full controlled verify/repair/reverify scenario (see latest report). Fixed autonomous CSV creation + unchanged feature follow-up still has no passing evidence. General preview and browser screenshots/traces remain open. |
+| M4 | First useful real-model multi-file result achieved. Modes, skills, typed questions/answers, approvals, Task Lists/Plans, receipts, cancel/explicit continuation and event following exist. Interactive host UX/recorded file-effect presentation passes Mac PTY checks. Typed application resource discovery, bounded exact text views and isolated development snapshot preview are implemented. Office UI use of shared application contracts is the later M7 cutover. Scripted runs do not close real task quality. |
+| M5 | Retained browser snapshots, dependency checks, structured functional verification, repair, bounded same-run continuation and shared compaction implemented. Controlled compaction/resume passes. Schema, completed-receipt boundary and aggregate source-budget defects are fixed. Real Qwen reached restart/resume but timed out; Gemma produced all exact final files after the latest fix, without reaching a compaction/restart boundary and without the prescribed per-note read-back order. Full live quality remains open. A real counter repair passed previously; typed dependency-change recovery restores the full controlled verify/repair/reverify scenario. Isolated development snapshot preview now passes Mac lifecycle/isolation checks. Fixed autonomous CSV creation + unchanged feature follow-up still has no passing evidence. Working/binary previews and browser screenshots/traces remain open. |
 | M6 | Authoring cutover not started. Office HTML/MD/JSON and Plan authoring remain on their existing owners; file materialization/linkage/crash guards and old-writer removal are required. CLI files have no dual writer. |
 | M7 | Receipts/cursors/subscription provide shared primitives; Office UI transport/application migration, file tree, preview isolation, bounded body delivery and pane-independent lifetime are not closed. |
 | M8 | External Office provider/mount/target cutover remains open; exact binding/discovery/SaveAs and multiple-instance behavior need Windows evidence. |
@@ -1757,10 +1789,11 @@ boundary, not a functional CSV score. Scripted HTTP tests confirmed both CLI
 transport modes and saved metadata. The existing v6 parser correctly rejected
 these outputs; no permissive JSON repair or separate agent loop was added.
 
-Next concrete slice (2026-10-07): general resource/open/preview commands through
-the shared application contracts. Browser provider recovery after verified
-dependency repair is fixed; full `web_checks_runtime_smoke.py` now passes with
-unrelated/no-change/unknown guards preserved (see the latest report above).
+Next concrete slice (2026-10-07): unchanged real CSV creation/follow-up acceptance,
+then complete real compaction/restart/resume acceptance. Typed resource discovery,
+bounded exact text views and isolated development snapshot preview are implemented.
+Browser provider recovery after verified dependency repair is fixed; full
+`web_checks_runtime_smoke.py` passes with unrelated/no-change/unknown guards preserved.
 M4 §11.4 interactive CLI is implemented with retained non-interactive/reconnect
 behavior.
 The per-note read-back order grader is complete. A real run must still combine
@@ -1774,7 +1807,7 @@ remains unrun. Do not substitute a larger budget or a diagnostic task for that
 acceptance. Gemma's native-role change is likewise not an established fix.
 Controlled HTTP E-CONTEXT/E-RESUME passes; real continuation reached the expected
 boundary but autonomous task completion remains open. Bounded event subscription is implemented;
-general resource/preview commands and Office UI adoption remain open.
+working/binary preview and Office UI adoption remain open.
 Modes, typed answer/restart handling, published skills, frozen context, Task Lists
 and workspace-owned Markdown Plans are implemented with the evidence limits above.
 Explicit reconciliation of uncertain planning mutations remains open.
