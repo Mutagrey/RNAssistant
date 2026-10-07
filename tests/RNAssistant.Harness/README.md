@@ -78,6 +78,18 @@ materialization, unchanged-file polling without rescans, changed-prefix/torn-tai
 rejection, callback backpressure and storage-lock release before delivery.
 These use controlled HTTP/canonical temporary stores, not a real LLM or Office.
 
+After building the CLI, `python3 -B tests/cli/interactive_smoke.py` checks real Mac/
+Unix PTYs and redirected input with controlled HTTP: typed single/multiple/free-text
+answers, invalid input, leave/restart, retained native result role/context/limits,
+prior-question effects, explicit approval/denial, Ctrl+C, an external edit during
+approval, non-interactive/JSONL behavior, bounded terminal narrative and the latest
+32 canonical file operations. Failed/no-change calls and model claims cannot
+populate changed files. It does not qualify Windows terminals or real-model quality.
+`python3 -B tests/cli/interactive_smoke.py --browser-only` checks that the presented
+saved browser result matches exact snapshot/record IDs while stale current
+acceptance still fails. It verifies an already-correct counter fixture and does
+not replace the separate verify/repair/reverify acceptance scenario.
+
 After building the CLI, `python3 -B tests/cli/run_control_smoke.py` checks local
 cross-process cancel and explicit same-run continuation: exact cursors, late model
 response exclusion, unchanged limits/counters/history, retained verified writes,

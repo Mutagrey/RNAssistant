@@ -64,7 +64,7 @@ namespace RNAssistant.Runtime
                         _chats.Save(session);
                     }
                     return new WorkspaceRunResult(session.Id, result.Summary, acceptance, GetPendingQuestions(session),
-                        cursor: ConversationEventFeed.Cursor(session));
+                        cursor: ConversationEventFeed.Cursor(session), presentation: Presentation(workspace, session));
                 }
             }
         }

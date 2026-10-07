@@ -12,6 +12,31 @@
 новая возможность требует явной задачи, scope и owner; дефекты работающей системы
 приоритетнее расширения без конкретного пользовательского результата.
 
+## Browser verification retry after repair — 2026-10-07
+
+Owner: workspace browser provider / typed tool recovery. The full existing
+`python3 -B tests/cli/web_checks_runtime_smoke.py` fails after the confirmed
+`app.js` repair: the second identical `web.verify(index.html)` is NotDispatched
+with `repeated_tool_failure`. `WebVerifierHandler` returns the failed snapshot and
+source evidence but no `ToolRecoveryContract`; `AgentProgressTracker` only clears
+failures when the declared recovery is satisfied. A verified dependency edit
+therefore cannot make this call eligible again. Acceptance correctly remains
+failed (six iterations, four charged tools, one verified write).
+
+Reproduced during the interactive CLI slice and on extracted `cc6d8c62` CLI/Runtime
+C# sources using unchanged Core. Baseline projects were relocated to a temporary
+directory; reference paths and an explicit CLI reference to the same Core project
+were adjusted for that location. C# sources and the original test were unchanged.
+Diagnostic source/build/output:
+`/var/folders/k9/hr_94nt142x1f43jr6g0wr_00000gp/T/rna-cli-baseline-4lr5xgwk`
+(`BASELINE.txt`, `web-retry-baseline.json`).
+
+Closure: declare provider recovery against the exact checked dependencies and
+permit re-verification after relevant verified repair. Preserve rejection after
+unrelated/no-change work and all unknown-write non-replay rules. Restore the full
+verify/read/repair/read/verify/done scenario and stale-final rejection. The passing
+one-pass browser presentation checks are narrower evidence and do not close this.
+
 ## Real-model compaction/resume task completion — 2026-10-07
 
 Owner: CLI evaluation / model context. The completed-receipt boundary defect is

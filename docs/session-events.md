@@ -481,3 +481,40 @@ new tail cannot establish the integrity of an externally changed prefix. There i
 no persistent event index or second store. Changed-file validation remains O(history);
 the application's initial session scope check also loads its existing projection.
 Office UI subscription adoption and bounded resource body transport remain open.
+
+### Interactive workspace CLI presentation
+
+The CLI run/answer/approval/continuation surface renders short progress messages,
+file effects and verification summaries. Terminal stdin and stdout enable prompts;
+`--no-interactive` disables them, `--interactive` requires both terminals and
+conflicts with `--jsonl`. Redirected input and JSONL never wait for answers: the
+existing `needs_input`/approval status and exit 3 remain. Machine progress/results
+retain their existing fields and add the typed `activity`/`presentation` metadata.
+
+`WorkspaceRunPresentation`, also returned by `ReadState`, is rebuilt from accepted
+call/result facts for the latest run and its typed-question lineage. It contains
+the latest 32 file operations with explicit incompleteness and bounded path excerpts
+(1024 characters), never source bodies or a filesystem scan. Verified changes and
+unknown possible effects remain distinct; failed/no-effect and verified-no-change
+calls do not claim a changed file. These facts record effects when executed, not
+the present contents of each path. Assistant narrative and task-list statuses
+cannot populate this projection. There is no new store or event type.
+
+The latest browser observation is read through its exact saved verification
+resource, matched to the accepted session/run/call. It carries a typed status,
+snapshot/record identity and counts. Unavailable evidence is explicit. A passed
+snapshot never overrides current-file acceptance; missing task criteria are shown
+as not requested. Human excerpts strip terminal control/format characters and mark
+truncation. Canonical messages, effects, resource references and model requests
+remain unchanged.
+
+Terminal answers use runtime question/option IDs with the existing typed answer
+validation and `SubmitInputAsync`. Recommended choices have no implicit default.
+Approval requires explicit `yes`; `no` uses `ResolvePendingAsync` without dispatch,
+and Enter leaves approval pending. Esc/Ctrl+D leaves a question pending. Ctrl+C
+returns 130. User waits happen only after the application call releases its run
+lease. `resume` can present these same pending questions/approvals after restart;
+it does not automatically execute interrupted work. Every submitted answer or
+decision is revalidated by the application owner. No tool replay, new agent loop
+or automatic approval is introduced. Windows terminal behavior remains
+unqualified by the Mac PTY tests.

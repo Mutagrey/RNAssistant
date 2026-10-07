@@ -262,7 +262,7 @@ namespace RNAssistant.Runtime
                         _chats.Save(session);
                     }
                     return new WorkspaceRunResult(session.Id, result.Summary, acceptedContract, GetPendingQuestions(session),
-                        receipt, ConversationEventFeed.Cursor(session));
+                        receipt, ConversationEventFeed.Cursor(session), Presentation(workspace, session));
                 }
             }
         }
@@ -325,7 +325,7 @@ namespace RNAssistant.Runtime
                         _chats.Save(session);
                     }
                     return new WorkspaceRunResult(session.Id, result.Summary, acceptance, GetPendingQuestions(session),
-                        cursor: ConversationEventFeed.Cursor(session));
+                        cursor: ConversationEventFeed.Cursor(session), presentation: Presentation(workspace, session));
                 }
             }
         }
@@ -615,6 +615,7 @@ namespace RNAssistant.Runtime
         {
             private readonly ChatStore _chats;
             private readonly WorkspaceFileService _files;
+            private readonly WorkspaceWebSnapshotStore _webSnapshots;
             private readonly WorkspaceDescriptor _workspace;
             private readonly ChatSession _session;
             private readonly AppSettings _settings;
@@ -644,6 +645,7 @@ namespace RNAssistant.Runtime
                 bool restorePendingObservation = true, string mode = null)
             {
                 _chats = chats; _files = files; _workspace = workspace; _session = session;
+                _webSnapshots = webSnapshots;
                 _settings = settings.Clone(); _progress = progress; _acceptance = acceptance;
                 _mode = ConversationRunPolicy.For(ChatModes.Require(mode ?? session?.Mode ?? ChatModes.Agent));
                 _compiler = new ModelContextCompiler(payloads);
@@ -1115,8 +1117,23 @@ namespace RNAssistant.Runtime
                 }
                 _chats.Save(_session);
                 _cursor++;
-                _progress?.Invoke(new WorkspaceRunEvent(fact.Kind.ToString(), fact.Summary,
-                    fact.ToolContext?.Call.Name ?? fact.Execution?.Context.Call.Name, ConversationEventFeed.Cursor(_session)));
+                if (_progress != null)
+                {
+                    var record = fact.Execution;
+                    var activity = record == null ? null : new WorkspaceToolActivity
+                    {
+                        Outcome = record.Outcome,
+                        Message = PresentationText(record.Message, 512),
+                        File = FileActivity(record.Context.Call.Name, record.Context.Call.ArgumentsJson,
+                            record.Outcome, record.ResourceEffect),
+                        Verification = record.Context.Call.Name == "web.verify"
+                            ? VerificationSummary(_webSnapshots, _workspace, _session.Id, record.Context.RunId,
+                                record.Context.Call.Id, record.Result?.Resources) : null
+                    };
+                    _progress(new WorkspaceRunEvent(fact.Kind.ToString(), fact.Summary,
+                        fact.ToolContext?.Call.Name ?? record?.Context.Call.Name,
+                        ConversationEventFeed.Cursor(_session), activity: activity));
+                }
                 return Task.FromResult(_cursor);
             }
         }
@@ -1292,8 +1309,10 @@ namespace RNAssistant.Runtime
         public string ToolId { get; private set; }
         public string Cursor { get; private set; }
         public WorkspaceInputReceipt Receipt { get; private set; }
-        public WorkspaceRunEvent(string kind, RunSummary summary, string toolId, string cursor = null, WorkspaceInputReceipt receipt = null)
-        { Kind = kind; Summary = summary; ToolId = toolId; Cursor = cursor; Receipt = receipt; }
+        public WorkspaceToolActivity Activity { get; private set; }
+        public WorkspaceRunEvent(string kind, RunSummary summary, string toolId, string cursor = null,
+            WorkspaceInputReceipt receipt = null, WorkspaceToolActivity activity = null)
+        { Kind = kind; Summary = summary; ToolId = toolId; Cursor = cursor; Receipt = receipt; Activity = activity; }
     }
 
     public sealed class WorkspaceRunResult
@@ -1305,9 +1324,12 @@ namespace RNAssistant.Runtime
         public WorkspaceInputReceipt Receipt { get; private set; }
         public string Cursor { get; private set; }
         public bool Duplicate { get; private set; }
+        public WorkspaceRunPresentation Presentation { get; private set; }
         public WorkspaceRunResult(string sessionId, RunSummary summary, WorkspaceRunAcceptance acceptance,
-            WorkspaceUserInput userInput = null, WorkspaceInputReceipt receipt = null, string cursor = null)
-        { SessionId = sessionId; Summary = summary; Acceptance = acceptance; UserInput = userInput; Receipt = receipt; Cursor = cursor; }
+            WorkspaceUserInput userInput = null, WorkspaceInputReceipt receipt = null, string cursor = null,
+            WorkspaceRunPresentation presentation = null)
+        { SessionId = sessionId; Summary = summary; Acceptance = acceptance; UserInput = userInput; Receipt = receipt;
+            Cursor = cursor; Presentation = presentation; }
         public static WorkspaceRunResult AlreadyAccepted(WorkspaceInputReceipt receipt)
         { return new WorkspaceRunResult(receipt.SessionId, null, null, receipt: receipt) { Duplicate = true }; }
     }

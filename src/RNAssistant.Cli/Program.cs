@@ -45,6 +45,7 @@ namespace RNAssistant.Cli
                 options = Parse(args.Skip(2).ToArray());
             else options = Parse(args.Skip(1).ToArray());
             var jsonl = options.ContainsKey("jsonl");
+            Interactive(options, jsonl); // Validate terminal flags before admitting work.
             var root = Required(options, "workspace");
             var stateRoot = Environment.GetEnvironmentVariable("RNA_STATE_ROOT");
             var paths = string.IsNullOrWhiteSpace(stateRoot)
@@ -143,11 +144,19 @@ namespace RNAssistant.Cli
                         throw new ArgumentException("Continuation must keep the accepted thinking setting.");
                     string resumeKey, digest;
                     if (!EndpointReady(resumeSettings, out resumeKey) || !ModelReady(resumeSettings, out digest)) return 4;
-                    return ExecuteControlled(jsonl, (progress, token) => service.ContinueAsync(workspace, controlRequest,
+                    return ExecuteControlled(service, workspace, options, jsonl, (progress, token) => service.ContinueAsync(workspace, controlRequest,
                         resumeSettings, () => resumeKey, progress, token, digest).GetAwaiter().GetResult());
                 }
                 var session = service.PrepareResume(workspace, Required(options, "session"));
                 var questions = service.GetPendingQuestions(session);
+                if (!jsonl && (questions != null || session.LastRun?.KernelState?.Summary?.PendingConfirmation != null))
+                {
+                    var snapshot = service.ReadState(workspace, session.Id);
+                    return ExecuteControlled(service, workspace, options, false, (progress, token) =>
+                        new WorkspaceRunResult(session.Id, session.LastRun.KernelState.Summary,
+                            session.LastRun.WorkspaceAcceptance ?? new WorkspaceRunAcceptance(), questions,
+                            cursor: snapshot.Cursor, presentation: snapshot.Presentation));
+                }
                 if (questions != null)
                 {
                     Output(jsonl, "run.needs_input", new QuestionsRequired
@@ -213,7 +222,7 @@ namespace RNAssistant.Cli
                         requestedThinking.Value != session.LastRun.ModelConfiguration.ReasoningEnabled)
                         throw new ArgumentException("Approval must keep the accepted run's thinking setting.");
                 }
-                return ExecuteControlled(jsonl, (progress, token) => service.ResolvePendingAsync(workspace, sessionId, pendingId, approve,
+                return ExecuteControlled(service, workspace, options, jsonl, (progress, token) => service.ResolvePendingAsync(workspace, sessionId, pendingId, approve,
                     continuationSettings, () => continuationKey, progress, token, continuationDigest).GetAwaiter().GetResult());
             }
             var answering = args[0] == "answer";
@@ -268,7 +277,7 @@ namespace RNAssistant.Cli
             if (!EndpointReady(settings, out key)) return 4;
             string modelDigest;
             if (!ModelReady(settings, out modelDigest)) return 4;
-            return ExecuteControlled(jsonl, (progress, token) => service.SubmitInputAsync(workspace, inputRequest,
+            return ExecuteControlled(service, workspace, options, jsonl, (progress, token) => service.SubmitInputAsync(workspace, inputRequest,
                 settings, () => key, progress, token, modelDigest).GetAwaiter().GetResult());
         }
 
@@ -276,8 +285,22 @@ namespace RNAssistant.Cli
         { return new WorkspaceRunControlRequest { SessionId = Required(options, "session"),
             RunId = Required(options, "run"), Cursor = Required(options, "cursor") }; }
 
-        private static int ExecuteControlled(bool jsonl, Func<Action<WorkspaceRunEvent>, CancellationToken, WorkspaceRunResult> execute)
+        private static bool Interactive(Dictionary<string, string> options, bool jsonl)
         {
+            var requested = options.ContainsKey("interactive");
+            if (requested && (jsonl || options.ContainsKey("no-interactive")))
+                throw new ArgumentException("--interactive cannot be combined with --jsonl or --no-interactive.");
+            var terminal = !Console.IsInputRedirected && !Console.IsOutputRedirected;
+            if (requested && !terminal) throw new ArgumentException("--interactive requires terminal input and output.");
+            return !jsonl && !options.ContainsKey("no-interactive") && terminal;
+        }
+
+        private static int ExecuteControlled(WorkspaceConversationService service, WorkspaceDescriptor workspace,
+            Dictionary<string, string> options, bool jsonl,
+            Func<Action<WorkspaceRunEvent>, CancellationToken, WorkspaceRunResult> execute)
+        {
+            var interactive = Interactive(options, jsonl);
+            var console = new CliRunConsole();
             using (var cancellation = new CancellationTokenSource())
             {
                 ConsoleCancelEventHandler interrupt = (sender, eventArgs) =>
@@ -287,13 +310,70 @@ namespace RNAssistant.Cli
                 {
                     Action<WorkspaceRunEvent> progress = update =>
                         {
+                            if (!jsonl) { console.Progress(update); return; }
                             if (update.Kind == "InputAccepted") Output(jsonl, "input.accepted", update.Receipt);
                             if (update.Kind == "ToolStarted" || update.Kind == "ToolCompleted")
                                 Output(jsonl, update.Kind == "ToolStarted" ? "tool.started" : "tool.completed",
                                     new { update.Summary.RunId, update.ToolId, update.Cursor, lifecycle = update.Summary.Lifecycle.ToString(),
-                                        health = update.Summary.ExecutionHealth.ToString() });
+                                        health = update.Summary.ExecutionHealth.ToString(), activity = update.Activity });
                         };
-                    return ReportRun(jsonl, execute(progress, cancellation.Token));
+                    var result = execute(progress, cancellation.Token);
+                    // Only explicit terminal answers/decisions invoke the existing
+                    // application API again. Never retry a failed/unknown run here.
+                    while (true)
+                    {
+                        var code = ReportRun(jsonl, result);
+                        if (!interactive || result.Duplicate || code != 3) return code;
+                        var pending = result.Summary.PendingConfirmation;
+                        bool? approval = null;
+                        UserQuestionAnswerCommand answers = null;
+                        if (pending != null)
+                        {
+                            approval = console.Approval(pending.Call.Name,
+                                PendingPath(pending.Call.Name, pending.Call.ArgumentsJson),
+                                PendingTarget(pending.Call.Name, pending.Call.ArgumentsJson), cancellation.Token);
+                            if (!approval.HasValue) return 3;
+                        }
+                        else if (result.UserInput != null)
+                        {
+                            answers = console.Answers(result.UserInput, cancellation.Token);
+                            if (answers == null) return 3;
+                        }
+                        else return 3;
+                        cancellation.Token.ThrowIfCancellationRequested();
+                        AppSettings settings = null;
+                        string key = null, digest = null;
+                        if (approval != false)
+                        {
+                            var session = service.GetSession(workspace, result.SessionId);
+                            var config = session.LastRun?.ModelConfiguration;
+                            settings = Settings(options, session.Model, config?.AgentResponseMode,
+                                config?.SystemPromptRole, config?.ToolResultRole);
+                            var limits = session.LastRun?.KernelState?.Limits;
+                            if (limits != null)
+                            {
+                                if (!options.ContainsKey("max-iterations")) settings.MaxAgentIterations = limits.MaxIterations;
+                                if (!options.ContainsKey("max-tool-steps")) settings.MaxAgentToolSteps = limits.MaxToolSteps;
+                            }
+                            if (config != null)
+                            {
+                                if (!options.ContainsKey("context-tokens") && string.IsNullOrWhiteSpace(Environment.GetEnvironmentVariable("RNA_CONTEXT_TOKENS")))
+                                    settings.ContextWindowOverrideTokens = config.ContextWindowTokens;
+                                if (!options.ContainsKey("reasoning-mode") && string.IsNullOrWhiteSpace(Environment.GetEnvironmentVariable("RNA_REASONING_MODE")))
+                                    settings.ReasoningRequestMode = config.ReasoningRequestMode;
+                            }
+                            var thinking = OptionalThinking(options);
+                            if (thinking.HasValue && thinking.Value != session.ReasoningEnabled)
+                                throw new ArgumentException("Continuation must keep the accepted thinking setting.");
+                            if (!EndpointReady(settings, out key) || !ModelReady(settings, out digest)) return 4;
+                        }
+                        result = pending != null
+                            ? service.ResolvePendingAsync(workspace, result.SessionId, pending.PendingId, approval.Value,
+                                settings, () => key, progress, cancellation.Token, digest).GetAwaiter().GetResult()
+                            : service.SubmitInputAsync(workspace, new WorkspaceSubmitInputRequest
+                                { SessionId = result.SessionId, Answers = answers }, settings, () => key,
+                                progress, cancellation.Token, digest).GetAwaiter().GetResult();
+                    }
                 }
                 finally { Console.CancelKeyPress -= interrupt; }
             }
@@ -452,9 +532,10 @@ namespace RNAssistant.Cli
 
         private static int ReportRun(bool jsonl, WorkspaceRunResult result)
         {
+            if (!jsonl) new CliRunConsole().Result(result);
             if (result.Duplicate)
             {
-                Output(jsonl, "input.already_accepted", result.Receipt);
+                if (jsonl) Output(true, "input.already_accepted", result.Receipt);
                 return 0;
             }
             var checkedAcceptance = result.Acceptance;
@@ -464,7 +545,7 @@ namespace RNAssistant.Cli
             var acceptancePassed = checkedAcceptance.State == WorkspaceAcceptanceState.NotRequested ||
                 checkedAcceptance.State == WorkspaceAcceptanceState.Passed;
             var cancelled = summary.Lifecycle == RNAssistant.Core.Agent.RunLifecycle.Cancelled;
-            Output(jsonl, pending != null ? "run.awaiting_confirmation" : needsInput ? "run.needs_input" : cancelled ? "run.cancelled" : "run.completed",
+            if (jsonl) Output(true, pending != null ? "run.awaiting_confirmation" : needsInput ? "run.needs_input" : cancelled ? "run.cancelled" : "run.completed",
                 new { result.SessionId, summary.RunId, result.Cursor, inputReceipt = result.Receipt,
                     lifecycle = summary.Lifecycle.ToString(), reason = summary.Reason,
                     action = summary.Reason == "model_done" ? "done" :
@@ -486,7 +567,7 @@ namespace RNAssistant.Cli
                     completeFileReads = checkedAcceptance.AcceptedCompleteFileReads,
                     verifiedFileChanges = checkedAcceptance.VerifiedFileChanges,
                     webSnapshotVerified = checkedAcceptance.VerifiedWebSnapshot,
-                    acceptanceError = checkedAcceptance.Error });
+                    acceptanceError = checkedAcceptance.Error, presentation = result.Presentation });
             if (pending != null || needsInput) return 3;
             if (cancelled) return 130;
             if (!acceptancePassed) return 5;
@@ -550,15 +631,21 @@ namespace RNAssistant.Cli
         private static string PendingPath(string toolId, string argumentsJson)
         {
             if (toolId != "files.delete" && toolId != "files.move") return null;
-            try { return (string)JObject.Parse(argumentsJson)["relativePath"]; }
+            try { return JsonConvert.DeserializeObject<PendingFileTarget>(argumentsJson)?.RelativePath; }
             catch (JsonException) { return null; }
         }
 
         private static string PendingTarget(string toolId, string argumentsJson)
         {
             if (toolId != "files.move") return null;
-            try { return (string)JObject.Parse(argumentsJson)["targetPath"]; }
+            try { return JsonConvert.DeserializeObject<PendingFileTarget>(argumentsJson)?.TargetPath; }
             catch (JsonException) { return null; }
+        }
+
+        private sealed class PendingFileTarget
+        {
+            public string RelativePath { get; set; }
+            public string TargetPath { get; set; }
         }
 
         private static Dictionary<string, string> Parse(string[] args)
@@ -569,7 +656,8 @@ namespace RNAssistant.Cli
                 if (!args[i].StartsWith("--", StringComparison.Ordinal)) throw new ArgumentException("Unexpected argument: " + args[i]);
                 var key = args[i].Substring(2);
                 if (key == "jsonl" || key == "read-only" || key == "create" ||
-                    key == "require-web-verify" || key == "continue" || key == "follow") result[key] = "true";
+                    key == "require-web-verify" || key == "continue" || key == "follow" ||
+                    key == "interactive" || key == "no-interactive") result[key] = "true";
                 else
                 {
                     if (i + 1 >= args.Length || args[i + 1].StartsWith("--", StringComparison.Ordinal))
@@ -646,6 +734,8 @@ namespace RNAssistant.Cli
         private static void Help()
         {
             Console.WriteLine("RNAssistant workspace CLI (development profile)");
+            Console.WriteLine("run/answer/approve/deny/resume show bounded progress, file effects and verification summaries. Terminal input + output enable prompts automatically; --interactive requires a terminal; --no-interactive disables prompts; --jsonl never prompts.");
+            Console.WriteLine("Approval requires explicit yes or no; Enter leaves it pending. Questions accept listed numbers (comma-separated for multiple choice) or text: <answer> when allowed. Esc/Ctrl+D leaves input pending; Ctrl+C exits 130. Recommended options are not selected automatically.");
             Console.WriteLine("rna workspace open <path> [--read-only]");
             Console.WriteLine("rna env --workspace <path> [--mode chat|plan|agent]");
             Console.WriteLine("rna sessions --workspace <path> [--jsonl]");

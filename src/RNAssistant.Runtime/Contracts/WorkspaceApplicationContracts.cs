@@ -53,6 +53,7 @@ namespace RNAssistant.Runtime.Contracts
         [JsonProperty("interruptedPath")] public string InterruptedPath { get; set; }
         [JsonProperty("interruptedEffectPossible")] public bool? InterruptedEffectPossible { get; set; }
         [JsonProperty("messageCount")] public int MessageCount { get; set; }
+        public WorkspaceRunPresentation Presentation { get; set; }
     }
 
     public sealed class WorkspaceRunControlRequest

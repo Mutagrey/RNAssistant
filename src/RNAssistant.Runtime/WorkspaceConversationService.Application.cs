@@ -29,7 +29,8 @@ namespace RNAssistant.Runtime
                 ContextReceipt = session.LastContextReceipt, Acceptance = session.LastRun?.WorkspaceAcceptance,
                 UserInput = GetPendingQuestions(session), TaskList = GetTaskList(session), Plan = GetPlan(workspace, session),
                 InterruptedToolId = session.LastRun?.InterruptedToolId, InterruptedPath = session.LastRun?.InterruptedFilePath,
-                InterruptedEffectPossible = session.LastRun?.InterruptedEffectPossible, MessageCount = session.Messages.Count
+                InterruptedEffectPossible = session.LastRun?.InterruptedEffectPossible, MessageCount = session.Messages.Count,
+                Presentation = Presentation(workspace, session)
             };
         }
 

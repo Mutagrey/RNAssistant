@@ -203,7 +203,20 @@ accepted file before dispatch; denial closes the call without dispatch.
 `files.move` also requires confirmation after a complete read. It moves a file
 to an unoccupied path with an existing parent while preserving its logical identity;
 an interrupted move requires explicit `recover` from its source or target path.
-`--jsonl` emits one event per line. See `--help` for the
+Without `--jsonl`, run commands show progress, recorded file effects and browser/
+acceptance summaries. With terminal input and output they also ask pending
+questions and approvals in place. `--no-interactive` disables prompts;
+`--interactive` requires a terminal. Approval needs explicit `yes`; `no` denies
+without dispatch (exit 130), and Enter leaves it pending (exit 3). Questions accept
+option numbers, comma-separated multiple choices, or `text: <answer>` when allowed.
+Esc/Ctrl+D leaves the question pending; Ctrl+C exits 130. `resume --session <id>`
+can present the saved questions/approval after restart. Changed-file summaries
+show at most 32 recorded operations with an explicit truncation flag; these are
+historical effects, not a claim about current file contents. Saved browser results
+likewise refer to their exact snapshots; current acceptance is reported separately.
+
+Piped input and `--jsonl` never answer or approve automatically and never wait at
+these prompts. `--jsonl` emits one event per line. See `--help` for the
 current command and exit-code surface. Broader real-model quality, browser verification,
 full file operations and Windows delivery remain open in
 [progress](docs/stabilization/PROGRESS.md#workspace-first-implementation--2026-10-04-in-progress).
