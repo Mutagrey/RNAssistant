@@ -1,5 +1,44 @@
 # Stabilization progress
 
+## Shared context and compact tool results — 2026-10-07
+
+Owner: Core model context / ToolRuntime; Office resource gateway and domain result
+projection. Implemented the bounded harness simplification plan against the working
+baseline; retained the parallel compaction-schema correction below.
+
+- Failed-call guards are released only by matching typed refresh dependencies;
+  unrelated Task List/Plan writes do not clear deterministic failures. Recovery is
+  stored once on the typed runtime record and rendered at request preparation,
+  rather than copied into domain `DataJson`. Manual/UI results expose typed recovery.
+- Resources and workspace file mutations use one Core model envelope. Excel/native
+  VBA use an explicit Office metadata envelope. New diagnostic fields do not enter
+  those model results by default. User text/tables and nested business fields stay
+  intact; full diagnostics remain in terminal events. Derived discovery flags are
+  no longer separate writable state. No new DTO hierarchy, store or protocol version.
+- Core `ContextWorkingSet` replaces the Office-owned implementation and serves
+  Office request/preview and CLI. Unresolved effects and current-run recovery are
+  mandatory, current bodies precede optional receipts, oversized optional receipts
+  are skipped. Mandatory overflow fails before sending a request. Source authority
+  and exact call/result pairing remain enforced across compaction and restart.
+- Excel snapshot search receives the run cancellation token through the provider;
+  nested structural/derived reads retain it and post-read cancellation is checked.
+  Synchronous Office calls are not forcibly interrupted.
+
+Checks: host-neutral Harness and CLI builds; 41 focused checks across continuity,
+model projections/inspector, structured compaction, VBA semantic contracts, Excel
+read/write/search, resource discovery, manual result mapping, Task List and HTML
+recovery passed. Scripted CLI resource selectors, Plan (user/tool roles) and
+compaction/process-loss/resume (user/tool roles) passed. A failed ambiguous Plan
+selector with no exact dependency remains blocked in the same run; a fresh user
+turn can select the now unique title. This intentional guard behavior is asserted.
+The fixed 8000-character diagnostic fixture produces an actual model request less
+than half its raw size while preserving error and typed recovery; arbitrary table
+fields are unchanged. This is contract evidence, not a production token benchmark.
+Touched local links, diff and `ValidateVersionFormat` passed. Existing two PDF
+CA1416 warnings remain. No Office/VSTO validation or new live-model evaluation was
+run for this slice. Remaining family projection work is bounded in `MIGRATION_MAP`;
+Windows/Office behavior and end-to-end reproduction of the photos remain open.
+
 ## Compaction schema and real-model context pressure — 2026-10-07
 
 Owner: Core compaction / CLI evaluation. Added a separate reproducible live
