@@ -1297,7 +1297,15 @@ namespace RNAssistant.Runtime
                     // A browser failure is still an observation of an exact
                     // captured source snapshot, not a timeless error. Preparation
                     // failures without a published snapshot assert no such evidence.
-                    resourceEvidence: result.SnapshotId != null ? result.Evidence : null);
+                    resourceEvidence: result.SnapshotId != null ? result.Evidence : null,
+                    recovery: result.Status == WebVerificationStatus.Failed && result.SnapshotId != null &&
+                        result.Evidence.Count > 0 && result.Evidence.All(item => item.Complete &&
+                            item.Coverage.Kind == ResourceCoverageKinds.Whole)
+                        ? new ToolRecoveryContract(ToolFailureKind.RejectedNoEffect, ToolRetryPolicy.ChangeRequired,
+                            semanticTarget: result.EntryPath,
+                            changeDependencies: result.Evidence.Select(item => item.Resource)
+                                .GroupBy(item => item.Uri, StringComparer.Ordinal).Select(group => group.First()))
+                        : null);
             }
         }
     }

@@ -13,6 +13,7 @@ from pathlib import Path
 
 from web_verifier_smoke import CLI, REPO, record
 from read_acceptance_context_smoke import read_progress
+from interactive_smoke import Scenario
 
 
 def run_case(root, change_after_verify):
@@ -117,7 +118,49 @@ def main():
         for name, changed in [("repair", False), ("stale", True)]:
             (root / name).mkdir()
             run_case(root / name, changed)
+        run_recovery_guards(root / "recovery-guards")
     print("PASS scripted production runtime: verify/read/repair/read/verify/done, frozen checks, stale final evidence rejected")
+
+
+def run_recovery_guards(root):
+    scenario = Scenario(root)
+    try:
+        scenario.env.pop("RNA_BROWSER_EXECUTABLE")
+        shutil.copytree(REPO / "tests/cli/fixtures/counter-repair", scenario.workspace, dirs_exist_ok=True)
+        original = (scenario.workspace / "app.js").read_text()
+        def tool(name, **arguments):
+            return {"message": "Exercise exact recovery.", "action": "tool",
+                    "tool_calls": [{"name": name, "arguments": arguments}]}
+        verify = tool("web.verify", entryPath="index.html")
+        scenario.responses.extend([
+            verify, verify,
+            tool("files.create", relativePath="unrelated.txt", text="not a dependency"), verify,
+            tool("common.resources_read", target="app.js"), verify,
+            tool("files.replace", relativePath="app.js", text=original), verify,
+            tool("files.patch", relativePath="app.js", oldText="count += increment", newText="count += 1"),
+            tool("common.resources_read", target="app.js"), verify,
+            {"message": "Verified repair.", "action": "done", "tool_calls": []},
+        ])
+        output = scenario.cli("run", "--message", "Repair the counter and verify its checked snapshot.",
+                              "--web-checks", str(REPO / "tests/cli/counter_checks.json"),
+                              "--min-reads", "1", "--min-writes", "1", "--max-iterations", "16",
+                              "--max-tool-steps", "16", "--jsonl")
+        events = [json.loads(line) for line in output.stdout.splitlines()]
+        verifications = [event["data"]["activity"]["Outcome"] for event in events
+                         if event["type"] == "tool.completed" and event["data"]["ToolId"] == "web.verify"]
+        assert verifications == ["Error", *(["NotDispatched"] * 4), "Ok"], verifications
+        result = events[-1]["data"]
+        assert result["acceptance"] == "passed" and result["webSnapshotVerified"]
+        assert result["ToolStepsUsed"] == 7 and result["IterationsUsed"] == 12, result
+        assert result["presentation"]["LatestVerification"]["PassedChecks"] == 9
+        assert scenario.json("verifications")["Total"] == 2, "Rejected repeats must not start browsers or publish results"
+        assert len(scenario.requests) == 12 and not scenario.responses and not scenario.errors
+        wire = json.dumps(scenario.requests)
+        assert "ChangeRequired" in wire and "rna://" not in wire and "ChangeDependencies" not in wire
+        assert (scenario.workspace / "app.js").read_text() == original.replace("count += increment", "count += 1")
+        print("PASS browser recovery: unchanged retry, unrelated write, fresh read and no-op stay blocked; exact repair permits one verification")
+    finally:
+        scenario.close()
 
 
 if __name__ == "__main__":

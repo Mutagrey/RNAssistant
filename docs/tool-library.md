@@ -75,6 +75,16 @@ When a JavaScript exception occurs, the result may include an advisory hint for
 literal `getElementById` calls whose IDs are absent from captured HTML. Dynamic
 DOM construction can make such a hint inapplicable; the browser error remains the
 verification fact.
+For a failed published browser snapshot, typed `ChangeRequired` recovery retains
+up to 32 exact checked dependency revisions in runtime metadata. An identical
+`web.verify` becomes eligible after a later verified whole-resource change on a
+checked dependency, with matching before/after identity and a new exact revision.
+Reading source, changing an unrelated file or writing identical bytes cannot
+satisfy that condition. Unknown effects never unlock a retry. The model receives
+the policy and semantic entry target, without dependency URIs/revisions. The next
+verification is still an explicit model call and captures a new immutable snapshot.
+This recovery applies to failed snapshots with complete source evidence; `NotRun`
+and failures before snapshot publication do not receive it.
 `files.delete` requires a complete accepted read of the current UTF-8 file and
 moves it to workspace-local managed trash after explicit confirmation and journal preparation. It publishes
 success only after the original path is absent and trash bytes match the retained

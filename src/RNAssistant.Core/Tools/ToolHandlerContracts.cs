@@ -23,7 +23,8 @@ namespace RNAssistant.Core.Tools
         None,
         Replan,
         RefreshRequired,
-        RetryLater
+        RetryLater,
+        ChangeRequired
     }
 
     public sealed class ToolRecoveryContract
@@ -36,12 +37,16 @@ namespace RNAssistant.Core.Tools
         public string CurrentContent { get; private set; }
         public bool CurrentContentComplete { get; private set; }
         public string Diff { get; private set; }
+        // Exact dependency versions of the failed observation. Runtime-only;
+        // semantic targets, not these references, are delivered to the model.
+        public IReadOnlyList<ResourceRef> ChangeDependencies { get; private set; }
 
         [Newtonsoft.Json.JsonConstructor]
         public ToolRecoveryContract(ToolFailureKind failureKind, ToolRetryPolicy retryPolicy,
             ResourceIdentity resourceIdentity = null, string view = null,
             string semanticTarget = null, string currentContent = null,
-            bool currentContentComplete = false, string diff = null)
+            bool currentContentComplete = false, string diff = null,
+            IEnumerable<ResourceRef> changeDependencies = null)
         {
             if (!Enum.IsDefined(typeof(ToolFailureKind), failureKind))
                 throw new ArgumentOutOfRangeException(nameof(failureKind));
@@ -55,6 +60,17 @@ namespace RNAssistant.Core.Tools
                 throw new ArgumentException("Recovery content exceeds the bounded model projection.", nameof(currentContent));
             if (diff != null && diff.Length > 8192)
                 throw new ArgumentException("Recovery diff exceeds the bounded model projection.", nameof(diff));
+            var dependencies = (changeDependencies ?? new ResourceRef[0]).Take(33).ToArray();
+            if (retryPolicy == ToolRetryPolicy.ChangeRequired)
+            {
+                if (dependencies.Length < 1 || dependencies.Length > 32 ||
+                    dependencies.Any(item => item == null || !item.IsExact) ||
+                    dependencies.Select(item => item.Uri).Distinct(StringComparer.Ordinal).Count() != dependencies.Length ||
+                    resourceIdentity != null || string.IsNullOrWhiteSpace(semanticTarget))
+                    throw new ArgumentException("Change recovery requires 1–32 distinct exact dependencies and a semantic target.");
+            }
+            else if (dependencies.Length != 0)
+                throw new ArgumentException("Change dependencies require ChangeRequired recovery.");
             FailureKind = failureKind;
             RetryPolicy = retryPolicy;
             ResourceIdentity = resourceIdentity;
@@ -63,6 +79,7 @@ namespace RNAssistant.Core.Tools
             CurrentContent = currentContent;
             CurrentContentComplete = currentContentComplete;
             Diff = diff;
+            ChangeDependencies = Array.AsReadOnly(dependencies.Select(item => item.Copy()).ToArray());
         }
 
         public bool IsSatisfiedBy(ResourceEvidence evidence)
@@ -75,6 +92,20 @@ namespace RNAssistant.Core.Tools
 
         public bool IsSatisfiedBy(IEnumerable<ResourceEvidence> observations, ResourceEffect effect)
         {
+            if (RetryPolicy == ToolRetryPolicy.ChangeRequired)
+            {
+                // A fresh read, unrelated write, no-op or uncertain effect is not
+                // a repair. Exact read-back must prove a new dependency revision.
+                return effect != null && (effect.Outcome == ResourceEffectOutcome.VerifiedChanged ||
+                    effect.Outcome == ResourceEffectOutcome.Restored) &&
+                    effect.Impacts.Any(impact => impact.Relation == ResourceImpactRelation.Exact &&
+                        impact.Coverage?.Kind == ResourceCoverageKinds.Whole &&
+                        impact.Before?.IsExact == true && impact.After?.IsExact == true &&
+                        impact.Identity.Equals(impact.Before.Identity) && impact.Identity.Equals(impact.After.Identity) &&
+                        impact.Before.Revision != impact.After.Revision &&
+                        ChangeDependencies.Any(dependency => dependency.Identity.Equals(impact.Identity) &&
+                            dependency.Revision != impact.After.Revision));
+            }
             if (RetryPolicy != ToolRetryPolicy.RefreshRequired || ResourceIdentity == null) return false;
             return (observations ?? new ResourceEvidence[0]).Any(IsSatisfiedBy) ||
                 effect != null && (effect.Outcome == ResourceEffectOutcome.VerifiedChanged ||

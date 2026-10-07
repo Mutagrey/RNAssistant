@@ -307,6 +307,7 @@ namespace RNAssistant.Harness
                 Test("context continuity: source-bound failure becomes historical", ContextContinuityTracksFailedObservation),
                 Test("context continuity: mutation receipts preserve target and outcome", ContextContinuityKeepsMutationReceipts),
                 Test("context continuity: bounds loops and restores progress", ContextContinuityBoundsLoops),
+                Test("context continuity: exact dependency change recovery", ContextContinuityChangeRecovery),
                 Test("context continuity: delivers recovery and allows another tool", ContextContinuityDeliversReplanFeedback),
                 Test("context continuity: restores bounded working set", ContextContinuityRestoresWorkingSet),
                 Test("agent continuity: archived read presentation", AgentContinuityReadPresentation),

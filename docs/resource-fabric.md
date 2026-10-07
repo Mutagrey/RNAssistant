@@ -163,6 +163,13 @@ original diagnostic but marks it historical when its sources change; it cannot
 be presented indefinitely as a failure of the current files. Preparation failures
 without a published snapshot do not claim complete source evidence. Browser error
 evidence does not authorize writes or satisfy run acceptance.
+Failed published snapshots declare typed `ChangeRequired` recovery against their
+exact dependency revisions. A subsequent confirmed whole-resource mutation of a
+checked dependency can release the identical verification call; ordinary reads,
+no-op writes, unrelated changes, partial impacts and uncertain effects cannot.
+The recovery references remain runtime-only and survive canonical history replay.
+Retry eligibility does not certify repair: the new browser snapshot and its
+assertions must pass independently, with current-file acceptance rechecked at done.
 
 CLI `verify --snapshot <id>` reopens a retained manifest after restart and performs
 a new explicitly historical browser check. Its result does not certify current

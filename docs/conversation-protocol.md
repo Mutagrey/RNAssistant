@@ -509,7 +509,31 @@ pending entry and rejects its original promise, including calls queued behind
 initialization. Other pending requests remain correlated. A send failure never
 triggers automatic replay or establishes a physical mutation outcome.
 
-A confirmed tool result always returns to the Agent loop, including `ok:false`, so the model can explain the failure, correct arguments, or choose another tool. Runtime failures carry a typed class (`RejectedNoEffect`, `ConflictNoEffect`, `BusyNoEffect` or `ToolDefect`) and retry policy (`None`, `Replan`, `RefreshRequired` or `RetryLater`); the model chooses the semantic next action, while runtime never automatically replays a tool. A definite no-effect `error` returns to the model even when the same public call was tried before; the model may inspect current source, change arguments or choose another tool. The kernel imposes no separate count cap on rejected calls. `RefreshRequired` and `Replan` remain recovery guidance; the domain guard still validates current state before any mutation. A call with an `unknown` effect is not automatically repeated because it may already have changed the document. After a side-effecting call ends in `unknown`, the uncertainty is retained in run health and final status; later calls in the same run are still governed by their own policy, confirmation and guard checks. Chat tools never require confirmation. An explicit user cancellation is terminal for that run and does not invoke the model again. Fresh and confirmed controller invocations share one progress/checkpoint callback, success/failure finalizer and run-lease release path; targeted store recovery releases that ownership before canonical reload. The lease remains per chat. Global coordination and document-access gates are not held across model wait, and `ConversationRunService → AgentKernel` remains the single execution loop.
+A confirmed tool result always returns to the Agent loop, including `ok:false`, so
+the model can explain failure, correct arguments or choose another tool. Runtime
+failures carry a typed class (`RejectedNoEffect`, `ConflictNoEffect`, `BusyNoEffect`
+or `ToolDefect`) and retry policy (`None`, `Replan`, `RefreshRequired`, `RetryLater`
+or `ChangeRequired`). Identical failed calls stay blocked until their declared
+recovery is satisfied; repeated ignored recovery is bounded by the existing
+kernel progress guard. `RetryLater` allows its existing bounded retry attempts.
+The model chooses the next semantic action; runtime never automatically replays a
+tool. `RefreshRequired` can be satisfied by an exact complete target read or
+matching resource effect. `ChangeRequired` instead pins up to 32 failed dependency
+versions and requires a verified exact whole-resource before/after change on one
+of them, ending at a different revision. Fresh reads, unrelated/no-change writes
+and unknown effects cannot clear it. The same predicate is used by kernel replay
+and the context working set. Exact dependency references never enter model context.
+
+Recovery eligibility does not authorize a mutation or establish task success.
+The domain guard still validates current state before dispatch. Calls with an
+`unknown` effect stay protected from replay independently of recovery, and their
+uncertainty remains in run health/final status. Later calls retain their own policy,
+confirmation and guards. Chat tools never require confirmation. Explicit user
+cancellation is terminal and does not invoke the model again. Fresh and confirmed
+controller invocations share the progress/checkpoint callback, finalizer and
+run-lease release path. The lease remains per chat; global coordination and
+document gates are not held across model wait. `ConversationRunService →
+AgentKernel` remains the single execution loop.
 
 The skill entries in the unified capability catalog are metadata only. When the user names a skill or a summary clearly matches, the model calls `common.capabilities_read` with that exact public id. Its model result contains `kind:"skill"`, id, readable metadata/version, complete `bodyMarkdown`, and explicit loaded/complete flags, but no package revision. Runtime validates the hidden exact revision before every projection and replaces stale evidence with `capability_evidence_stale`. Each tool named by the skill still needs its own schema read unless already callable. Oversized evidence becomes explicit `capability_evidence_context_too_large`. Compaction alone requires no reread: reuse a current complete body restored in the working set; reload only needed absent or stale bodies.
 

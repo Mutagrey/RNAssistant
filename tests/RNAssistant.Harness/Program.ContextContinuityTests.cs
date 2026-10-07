@@ -361,6 +361,77 @@ namespace RNAssistant.Harness
             }
         }
 
+        private static void ContextContinuityChangeRecovery()
+        {
+            var first = new ResourceRef(ResourceUri.Create("workspace", "fixture", "file", "index.html"), "r1");
+            var script = new ResourceRef(ResourceUri.Create("workspace", "fixture", "file", "app.js"), "r1");
+            var changed = new ResourceRef(script.Uri, "r2");
+            var other = new ResourceRef(ResourceUri.Create("workspace", "fixture", "file", "other.txt"), "r2");
+            var recovery = new ToolRecoveryContract(ToolFailureKind.RejectedNoEffect, ToolRetryPolicy.ChangeRequired,
+                semanticTarget: "index.html", changeDependencies: new[] { first, script });
+            var restored = Newtonsoft.Json.JsonConvert.DeserializeObject<ToolExecutionProgress>(
+                Newtonsoft.Json.JsonConvert.SerializeObject(new ToolExecutionProgress(ToolExecutionOutcome.Error, recovery)));
+            AssertEqual(2, restored.Recovery.ChangeDependencies.Count, "exact dependencies survive canonical progress serialization");
+            AssertEqual(script.Revision, restored.Recovery.ChangeDependencies[1].Revision, "failed revision survives restart");
+            var model = restored.Recovery.ModelProjection().ToString();
+            AssertContains(model, "ChangeRequired", "model receives a repair condition");
+            AssertTrue(!model.Contains("rna://") && !model.Contains("ChangeDependencies"), "dependency authority remains runtime-only");
+            var failed = new ToolCall("verify", "read", "{}");
+            var history = new[] { AgentMessage.Assistant(new AgentResponse("verify", new[] { failed }, false)),
+                AgentMessage.AcceptedToolResult(failed.Id, "snapshot failed", "{}", restored) };
+            Func<AgentProgressTracker> tracker = () => { var value = new AgentProgressTracker(); value.Restore(history); return value; };
+            string reason, message; int delay;
+            var evidence = new ResourceEvidence("read", new ResourceAuthorityScopeId("workspace", "fixture"),
+                changed, "text", ResourceCoverage.Whole(), true, 2);
+            var observed = tracker();
+            observed.Observe(new ToolCall("read-source", "read_source", "{}"), new ToolExecutionProgress(ToolExecutionOutcome.Ok),
+                "source read", new[] { evidence }, null);
+            AssertTrue(!observed.CanDispatch(failed, out reason, out message, out delay), "even a new complete read is not a verified repair");
+            var effects = new[]
+            {
+                new ResourceEffect("other", "write", ResourceEffectOutcome.VerifiedChanged,
+                    new[] { new ResourceImpact(other.Identity, ResourceImpactRelation.Exact, before: new ResourceRef(other.Uri, "r1"), after: other) }),
+                new ResourceEffect("no-change", "write", ResourceEffectOutcome.VerifiedNoChange,
+                    new[] { new ResourceImpact(script.Identity, ResourceImpactRelation.Exact, before: script, after: script) }),
+                new ResourceEffect("unknown", "write", ResourceEffectOutcome.UnknownAfterDispatch,
+                    new[] { new ResourceImpact(script.Identity, ResourceImpactRelation.Exact, before: script, after: changed) }),
+                new ResourceEffect("same-revision", "write", ResourceEffectOutcome.VerifiedChanged,
+                    new[] { new ResourceImpact(script.Identity, ResourceImpactRelation.Exact, before: script, after: script) }),
+                new ResourceEffect("old-result", "write", ResourceEffectOutcome.VerifiedChanged,
+                    new[] { new ResourceImpact(script.Identity, ResourceImpactRelation.Exact, before: changed, after: script) }),
+                new ResourceEffect("indirect", "write", ResourceEffectOutcome.VerifiedChanged,
+                    new[] { new ResourceImpact(script.Identity, ResourceImpactRelation.DependsOn, before: script, after: changed) }),
+                new ResourceEffect("partial", "write", ResourceEffectOutcome.VerifiedChanged,
+                    new[] { new ResourceImpact(script.Identity, ResourceImpactRelation.Exact,
+                        new ResourceCoverage(ResourceCoverageKinds.CharacterRange, start: 0, end: 2), script, changed) }),
+                new ResourceEffect("missing-before", "write", ResourceEffectOutcome.VerifiedChanged,
+                    new[] { new ResourceImpact(script.Identity, ResourceImpactRelation.Exact, after: changed) }),
+                new ResourceEffect("wrong-identity", "write", ResourceEffectOutcome.VerifiedChanged,
+                    new[] { new ResourceImpact(script.Identity, ResourceImpactRelation.Exact, before: script, after: other) })
+            };
+            foreach (var effect in effects)
+            {
+                var guarded = tracker();
+                guarded.Observe(new ToolCall("repair", "write", "{}"), new ToolExecutionProgress(ToolExecutionOutcome.Ok),
+                    "unrelated or unproven repair", null, effect);
+                AssertTrue(!guarded.CanDispatch(failed, out reason, out message, out delay), "rejected recovery: " + effect.EffectId);
+                AssertEqual("repeated_tool_failure", reason, "failed observation remains guarded");
+            }
+            var repair = new ResourceEffect("repair", "write", ResourceEffectOutcome.VerifiedChanged,
+                new[] { new ResourceImpact(script.Identity, ResourceImpactRelation.Exact, before: script, after: changed) });
+            var acceptedRepair = AgentMessage.AcceptedToolResult("repair", "verified", "{}",
+                new ToolExecutionProgress(ToolExecutionOutcome.Ok), effect: repair);
+            var continued = new AgentProgressTracker();
+            continued.Restore(history.Concat(new[] { AgentMessage.Assistant(new AgentResponse("repair",
+                new[] { new ToolCall("repair", "write", "{}") }, false)), acceptedRepair }));
+            AssertTrue(continued.CanDispatch(failed, out reason, out message, out delay), "verified dependency repair permits explicit retry after restore");
+            var unknown = new AgentProgressTracker();
+            unknown.Observe(failed, new ToolExecutionProgress(ToolExecutionOutcome.Unknown), "unknown", null, null);
+            unknown.Observe(new ToolCall("repair", "write", "{}"), new ToolExecutionProgress(ToolExecutionOutcome.Ok), "repair", null, repair);
+            AssertTrue(!unknown.CanDispatch(failed, out reason, out message, out delay), "a dependency repair cannot replay an uncertain call");
+            AssertEqual("repeated_unknown_tool_call", reason, "unknown protection is independent of recovery");
+        }
+
         private static void ContextContinuityDeliversReplanFeedback()
         {
             WithTempExecutor(FakeOfficeAdapter.ForHost("Excel"), (executor, adapter) =>

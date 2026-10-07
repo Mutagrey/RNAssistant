@@ -148,11 +148,18 @@ and ambiguous selector. `python3 tests/cli/web_checks_runtime_smoke.py` uses a
 scripted HTTP model through the production runtime for verify/read/patch/read/
 verify/done, frozen admission checks and rejection of a source edit after the last
 passing verification. This is deterministic contract evidence, not LLM quality.
+It also checks failed verification → blocked identical retry, unrelated write,
+fresh source read and no-op write → still blocked → verified dependency repair →
+one passing re-verification. Only two browser records may be published, and runtime
+dependency references must remain absent from actual HTTP model requests.
 It also inspects the actual HTTP context after each step: current diagnostic,
 historical failure after an external dependency edit, completed write result with
 its target/change status, then current source bytes. `context continuity:` covers source-bound
 failure invalidation after CAS hydration, original argument-error preservation,
 semantic mutation receipts through compaction and existing repeat/recovery guards.
+`context continuity: exact dependency change recovery` checks serialized/replayed
+dependency versions, rejection of partial/indirect/mismatched/unknown/no-change
+effects and unchanged unknown-call non-replay protection.
 It also checks the latest call/result pair through compiler and wire in all three
 result roles, frozen repair, budget-only folding of older writes and target recovery
 from accepted arguments. `resource cutover: large call` checks exact CAS hydration

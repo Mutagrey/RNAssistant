@@ -1,5 +1,39 @@
 # Stabilization progress
 
+## Browser verification recovery after repair — 2026-10-07
+
+Owner: workspace browser provider / Core typed tool recovery. Failed published
+browser snapshots now declare `ChangeRequired` against their exact checked source
+revisions. A later successful mutation with verified whole-resource before/after
+evidence and a new dependency revision permits an explicit `web.verify` retry.
+Fresh reads, unrelated writes, no-op writes, partial/indirect or mismatched impacts
+and unknown effects cannot satisfy it. Unknown-call protection remains independent.
+No kernel exception, automatic retry, second loop or source authority was added.
+The contract survives accepted-history replay; dependency references remain
+runtime-only. `NotRun` and failures without a published snapshot retain their
+existing behavior. A read of external drift alone does not unlock this recovery.
+
+This closes the provider defect reproduced during the interactive CLI slice and
+on extracted `cc6d8c62` CLI/Runtime sources with unchanged Core. Baseline evidence:
+`/var/folders/k9/hr_94nt142x1f43jr6g0wr_00000gp/T/rna-cli-baseline-4lr5xgwk`
+(`BASELINE.txt`, `web-retry-baseline.json`).
+
+Checks: clean CLI build; host-neutral Harness build with the two existing PDF
+CA1416 warnings. `context continuity:` passes 9/9, including serialized recovery,
+exact dependency guards and unknown non-replay. `web_checks_runtime_smoke.py`
+passes verify/read/repair/read/verify/done and stale-final rejection. Its additional
+guard sequence rejects four ineligible retries and publishes exactly two browser
+records, ending with nine passing functional assertions after the verified repair.
+All six existing file-read recovery cases pass. These are controlled HTTP/runtime
+checks; no new real LLM or Windows/Office qualification is claimed.
+Python syntax, changed local links/status anchor, diff and
+`ValidateVersionFormat` pass.
+
+Next concrete slice: general resource/open/preview commands through the shared
+application contracts. Full M4/M5 remain open: fixed autonomous CSV creation plus
+unchanged feature follow-up, complete real compaction/restart/resume acceptance,
+and remaining preview/screenshots/traces scope still need evidence or implementation.
+
 ## Interactive workspace CLI — 2026-10-07
 
 Owner: CLI host / workspace application presentation. M4 §11.4 now has bounded
@@ -29,16 +63,13 @@ current acceptance. Existing `run_control_smoke.py` and
 qualification. Windows terminal/Office behavior remains unqualified.
 `ValidateVersionFormat` and the scoped diff check pass.
 
-The existing full `web_checks_runtime_smoke.py` **fails**: after verified repair of
-`app.js`, repeated `web.verify(index.html)` is rejected as `repeated_tool_failure`.
-The same failure reproduces on extracted `cc6d8c62` CLI/Runtime C# sources with the
-unchanged Core. Its verifier returns no typed recovery contract; the progress guard
-therefore never sees its recovery satisfied. Acceptance remains failed. This is
-recorded separately in [BACKLOG](BACKLOG.md#browser-verification-retry-after-repair--2026-10-07).
-Next concrete slice: fix this provider/recovery boundary before general resource/
-preview commands. Do not weaken repeat guards or substitute the one-pass browser
-presentation check for verify/repair/reverify acceptance. Full M4/M5 remain open,
-including fixed real CSV creation/follow-up and real compaction/restart completion.
+At this slice, the existing full `web_checks_runtime_smoke.py` failed: after
+verified repair of `app.js`, repeated `web.verify(index.html)` was rejected as
+`repeated_tool_failure` because the provider declared no recovery contract. The
+subsequent [recovery fix](#browser-verification-recovery-after-repair--2026-10-07)
+restores the full scenario without weakening repeat guards. The one-pass browser
+presentation check remains narrower evidence. Full M4/M5 remain open, including
+fixed real CSV creation/follow-up and real compaction/restart completion.
 
 ## Canonical read-back order grading — 2026-10-07
 
@@ -491,7 +522,7 @@ conversation application services; resource/Office boundaries retain their owner
 | M2 | Workspace/session without document authority, stable identity, known root relocation and read-only association tested. Only the root directory mount is supplied; managed/multiple/external mounts and shared-source identity/heads (A24) remain open. |
 | M3 | Single WorkspaceFileService owns UTF-8 find/read/create/patch/replace/copy/move/delete/restore, exact history, drift and non-replay recovery. Focused tests pass. Remaining §8.1 stat/raw/binary/large views, directory pagination, complete Office/filesystem dispatch and cross-platform path qualification are open. |
 | M4 | First useful real-model multi-file result achieved. Modes, skills, typed questions/answers, approvals, Task Lists/Plans, receipts, cancel/explicit continuation and event following exist. Interactive host UX/recorded file-effect presentation now passes Mac PTY checks. General resource/preview commands remain open; Office UI use of shared application contracts is the later M7 cutover. Scripted runs do not close real task quality. |
-| M5 | Retained browser snapshots, dependency checks, structured functional verification, repair, bounded same-run continuation and shared compaction implemented. Controlled compaction/resume passes. Schema, completed-receipt boundary and aggregate source-budget defects are fixed. Real Qwen reached restart/resume but timed out; Gemma produced all exact final files after the latest fix, without reaching a compaction/restart boundary and without the prescribed per-note read-back order. Full live quality remains open. A real counter repair passed previously; current scripted re-verification after repair is blocked by missing provider recovery (see latest report). Fixed autonomous CSV creation + unchanged feature follow-up still has no passing evidence. General preview and browser screenshots/traces remain open. |
+| M5 | Retained browser snapshots, dependency checks, structured functional verification, repair, bounded same-run continuation and shared compaction implemented. Controlled compaction/resume passes. Schema, completed-receipt boundary and aggregate source-budget defects are fixed. Real Qwen reached restart/resume but timed out; Gemma produced all exact final files after the latest fix, without reaching a compaction/restart boundary and without the prescribed per-note read-back order. Full live quality remains open. A real counter repair passed previously; typed dependency-change recovery now restores the full controlled verify/repair/reverify scenario (see latest report). Fixed autonomous CSV creation + unchanged feature follow-up still has no passing evidence. General preview and browser screenshots/traces remain open. |
 | M6 | Authoring cutover not started. Office HTML/MD/JSON and Plan authoring remain on their existing owners; file materialization/linkage/crash guards and old-writer removal are required. CLI files have no dual writer. |
 | M7 | Receipts/cursors/subscription provide shared primitives; Office UI transport/application migration, file tree, preview isolation, bounded body delivery and pane-independent lifetime are not closed. |
 | M8 | External Office provider/mount/target cutover remains open; exact binding/discovery/SaveAs and multiple-instance behavior need Windows evidence. |
@@ -1726,11 +1757,12 @@ boundary, not a functional CSV score. Scripted HTTP tests confirmed both CLI
 transport modes and saved metadata. The existing v6 parser correctly rejected
 these outputs; no permissive JSON repair or separate agent loop was added.
 
-Next concrete slice (2026-10-07): fix browser provider recovery after a verified
-dependency repair. `web_checks_runtime_smoke.py` currently fails on the repeated
-`web.verify` call, including on baseline `cc6d8c62`; see the latest report above.
+Next concrete slice (2026-10-07): general resource/open/preview commands through
+the shared application contracts. Browser provider recovery after verified
+dependency repair is fixed; full `web_checks_runtime_smoke.py` now passes with
+unrelated/no-change/unknown guards preserved (see the latest report above).
 M4 §11.4 interactive CLI is implemented with retained non-interactive/reconnect
-behavior. General resource/preview commands follow this reproducible M5 defect.
+behavior.
 The per-note read-back order grader is complete. A real run must still combine
 the prescribed task sequence with checkpoint publication, process loss, external
 edit and same-run resume. Gemma produced exact files without the required order
