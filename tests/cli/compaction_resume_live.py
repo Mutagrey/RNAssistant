@@ -26,6 +26,7 @@ CLI = REPO / "src/RNAssistant.Cli/bin/Debug/net8.0/RNAssistant.Cli.dll"
 TASK_FILE = Path(__file__).with_name("compaction_resume_task.md")
 OLD_MARKER = "ANCHOR_ORIGINAL_NOTE"
 NEW_MARKER = "ANCHOR_EXTERNAL_NOTE_KEEP"
+WORKSPACE_MANIFEST = ".rnassistant/workspace.json"
 
 
 def digest(value):
@@ -50,7 +51,7 @@ def audit_canonical(root, before=None, final=None, prefix_sequence=0):
               for line in path.read_text().splitlines()]
     events.sort(key=lambda event: event["Sequence"])
     errors, bodies, call_ids, result_ids, steps = [], {}, [], [], set()
-    pair_checks, new_calls, summaries, latest_result = 0, 0, 0, None
+    pair_checks, new_calls, uncharged_calls, summaries, latest_result = 0, 0, 0, 0, None
     task = (root / "task.md").read_text()
 
     def body(ref):
@@ -104,6 +105,11 @@ def audit_canonical(root, before=None, final=None, prefix_sequence=0):
                 if operation["Type"] == "tool.result.recorded" and value.get("Role") != "assistant" and value.get("ToolCallId"):
                     result_ids.append(value["ToolCallId"])
                     latest_result = value["ToolCallId"]
+                    # This fixture uses one-step workspace tools. Kernel-denied
+                    # repeats close the accepted exchange without spending a step.
+                    # 4 is the durable ToolExecutionOutcome.NotDispatched value.
+                    if event["Sequence"] > prefix_sequence and (value.get("ExecutionProgress") or {}).get("Outcome") == 4:
+                        uncharged_calls += 1
     if len(set(call_ids)) != len(call_ids) or sorted(call_ids) != sorted(result_ids):
         errors.append("Accepted calls/results are not unique and complete")
     raw_requests = [json.loads(p.read_bytes()) for p in sorted(root.glob("request-*.json"))]
@@ -112,10 +118,11 @@ def audit_canonical(root, before=None, final=None, prefix_sequence=0):
     if before is not None and final is not None:
         if final["IterationsUsed"] != before["IterationsUsed"] + len(steps):
             errors.append("Resumed iteration accounting differs from dispatched kernel steps")
-        if final["ToolStepsUsed"] != before["ToolStepsUsed"] + new_calls:
-            errors.append("Resumed tool accounting differs from newly accepted calls")
+        if final["ToolStepsUsed"] != before["ToolStepsUsed"] + new_calls - uncharged_calls:
+            errors.append("Resumed tool accounting differs from charged workspace calls")
     return {"errors": errors, "requests": len(bodies), "summaryRequests": summaries,
-            "pairChecks": pair_checks, "acceptedCalls": len(call_ids), "stepsAfterBoundary": len(steps), "newCalls": new_calls}
+            "pairChecks": pair_checks, "acceptedCalls": len(call_ids), "stepsAfterBoundary": len(steps),
+            "newCalls": new_calls, "unchargedCalls": uncharged_calls}
 
 
 def main():
@@ -181,6 +188,11 @@ def main():
                     raise ValueError("Unexpected request size")
                 raw = self.rfile.read(length)
                 request = json.loads(raw)
+                if not requests:
+                    # WorkspaceStore creates this reserved manifest before the
+                    # first model request. It is runtime state, not agent output.
+                    metadata["workspaceManifestSha256"] = digest((workspace / WORKSPACE_MANIFEST).read_bytes())
+                    save("metadata.json", metadata)
                 content = "\n".join(m.get("content") or "" for m in request["messages"])
                 summary = "CONVERSATION_PREFIX (data to summarize" in content
                 record = {"index": len(requests), "resumed": phase["resumed"], "summary": summary,
@@ -324,7 +336,10 @@ def main():
         expected["receipt.txt"] = b"RELEASE_NOTES_STARTED\n"
         actual_names = {str(p.relative_to(workspace)) for p in workspace.rglob("*") if p.is_file()}
         result["fileChecks"] = {name: (workspace / name).is_file() and (workspace / name).read_bytes() == content for name, content in expected.items()}
-        result["extraFiles"] = sorted(actual_names - set(expected))
+        manifest = workspace / WORKSPACE_MANIFEST
+        result["runtimeMetadataUnchanged"] = manifest.is_file() and digest(manifest.read_bytes()) == metadata["workspaceManifestSha256"]
+        runtime_files = {WORKSPACE_MANIFEST} if result["runtimeMetadataUnchanged"] else set()
+        result["extraFiles"] = sorted(actual_names - set(expected) - runtime_files)
         result["receiptUnchangedAfterRestart"] = receipt.stat().st_mtime_ns == receipt_stamp
         result["canonicalPrefixUnchanged"] = event_path.read_bytes().startswith(prefix)
         result["sameRun"] = final.get("RunId") == before["RunId"]
@@ -341,7 +356,7 @@ def main():
         audit = audit_canonical(root, before, final, json.loads(prefix.splitlines()[-1])["Sequence"])
         save("canonical-audit.json", audit)
         predicates = [result[k] for k in ("receiptUnchangedAfterRestart", "canonicalPrefixUnchanged", "sameRun", "limitsUnchanged",
-                      "countersPreserved", "exactTaskRetained", "staleMarkerExcluded", "checkpointDeliveredAfterRestart", "anchorReviewPendingAtRestart")]
+                      "countersPreserved", "exactTaskRetained", "staleMarkerExcluded", "checkpointDeliveredAfterRestart", "anchorReviewPendingAtRestart", "runtimeMetadataUnchanged")]
         result["continuationChecksPassed"] = all(predicates) and not audit["errors"]
         if process.returncode == 0 and final.get("acceptance") == "passed" and all(result["fileChecks"].values()) and not result["extraFiles"] and result["continuationChecksPassed"] and not proxy_errors:
             result["acceptance"] = "passed"

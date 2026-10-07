@@ -28,6 +28,12 @@ rewritten after restart. Invalid model summaries remain failures; the runner
 does not generate claims or modify accepted history. A run that never publishes a
 checkpoint leaves real resume untested. This live case currently uses `user`
 tool-result role; the controlled test below also covers native `tool` pairs.
+The reserved `.rnassistant/workspace.json` is recorded before the first provider
+dispatch and must remain byte-identical. Only that unchanged runtime manifest is
+excluded from extra-file grading; unexpected files and changed metadata fail.
+Counter auditing counts the fixture's dispatched workspace steps separately from
+accepted calls: typed `NotDispatched` repeat denials close exchanges without a
+tool-budget charge.
 
 After building the CLI, `python3 -B tests/cli/compaction_resume_smoke.py` checks
 24K context pressure through actual structured compaction, process loss, external

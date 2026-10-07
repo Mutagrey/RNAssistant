@@ -1,5 +1,25 @@
 # Stabilization progress
 
+## Live CLI grader accounting — 2026-10-07
+
+Owner: CLI evaluation. The live compaction fixture records WorkspaceStore's
+reserved `.rnassistant/workspace.json` before the first provider dispatch. Only
+that byte-identical runtime manifest is excluded from extra-file grading. A
+changed manifest or any unexpected file still fails. Counter audit now excludes
+typed `NotDispatched` results from charged workspace steps; accepted exchanges
+must still be unique and complete. These correct false failures in the grader.
+
+Controlled HTTP self-check: checkpoint → process loss → external edit → same-run
+resume, all ten exact files and unchanged metadata passed. A read omitted from
+the resumed request correctly blocked its patch until a fresh read. The retained
+real Qwen trace's two denied repeats also reconcile with the original counters:
+13 newly accepted calls, 2 not dispatched, 11 charged steps. The real run still
+failed its 600-second task deadline; these grader corrections do not turn it into
+a pass. Evidence: `rna-live-compaction-resume-hm3xen6k` (controlled) and
+`rna-live-compaction-resume-mumpkbo8` (real), under the local temporary directory
+listed in the earlier compaction report. Syntax, exact retained-trace audits and
+the version gate passed; no production runtime behavior changed in this slice.
+
 ## Shared context and compact tool results — 2026-10-07
 
 Owner: Core model context / ToolRuntime; Office resource gateway and domain result
