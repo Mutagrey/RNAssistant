@@ -80,26 +80,14 @@ namespace RNAssistant.Core.Agent
                 return;
             }
             var observations = (evidence ?? new ResourceEvidence[0]).Where(e => e != null).ToArray();
-            // A verified state transition can make a previously rejected call valid.
+            foreach (var pair in _failures.ToArray())
+                if (pair.Value.Recovery?.IsSatisfiedBy(observations, effect) == true)
+                    _failures.Remove(pair.Key);
             if (effect != null && (effect.Outcome == ResourceEffectOutcome.VerifiedChanged ||
                 effect.Outcome == ResourceEffectOutcome.Restored || effect.Outcome == ResourceEffectOutcome.ExternalDriftObserved))
             {
-                foreach (var failure in _failures.ToArray())
-                {
-                    var recovery = failure.Value.Recovery;
-                    if (recovery?.RetryPolicy != ToolRetryPolicy.RefreshRequired ||
-                        recovery.ResourceIdentity == null || !effect.Impacts.Any(impact =>
-                        impact.Identity.Equals(recovery.ResourceIdentity))) continue;
-                    _failures.Remove(failure.Key);
-                }
                 _unchanged.Clear(); _seenResults.Clear();
                 return;
-            }
-            foreach (var pair in _failures.ToArray())
-            {
-                var recovery = pair.Value.Recovery;
-                if (recovery?.RetryPolicy != ToolRetryPolicy.RefreshRequired || !observations.Any(recovery.IsSatisfiedBy)) continue;
-                _failures.Remove(pair.Key);
             }
             var resultFingerprint = effect?.Outcome == ResourceEffectOutcome.VerifiedNoChange
                 ? "verified-no-change" : progress.ResultFingerprint;

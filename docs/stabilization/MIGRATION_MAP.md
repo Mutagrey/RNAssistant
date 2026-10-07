@@ -18,13 +18,27 @@ gates; active tool compatibility adapter отсутствует. Windows/Office 
 проверкой resource-consumer cleanup (2026-09-07). Порядок задаёт
 [Resource MASTER](resource-cutover/MASTER.md), владельцев — [Resource Fabric](../resource-fabric.md).
 
+## Model result families — 2026-10-07
+
+Core `ModelResultProjection` owns closed resources/workspace-file envelopes;
+Office `ModelToolResultProjection` owns Excel and native VBA result metadata.
+There is no second result store or fallback for these families. Typed recovery is
+rendered at this shared boundary, not copied into domain `DataJson` by ToolRuntime.
+
+The existing capability, HTML, authoring, Word/PowerPoint/Outlook and custom-package
+projections remain explicitly outside this slice. Owner: Office domain result
+producers / model projection. Removal gate for each remaining generic/field-removal
+branch: inventory its real payloads, switch its consumers and actual-wire tests to
+an explicit envelope, then delete that branch in the same change. Arbitrary custom
+output remains business content, not recursively filtered metadata.
+
 ## Workspace-first adapters — 2026-10-04
 
 | Temporary seam | Owner / current consumers | Removal gate |
 |---|---|---|
 | `Host="Workspace"`, `DocumentKey=WorkspaceId` as ChatStore path partition | `WorkspaceStore` creates workspace chats in the canonical event store; CLI loads them through the same association. `DocumentAuthorityId` is null. These fields are internal routing, not a fake Office document. | M7: native workspace partition in session/catalog paths, then remove the routing adapter without rewriting historical events. |
 | Net8 Core project over the same production source tree | `RNAssistant.Core.Net8.csproj` builds Core for CLI; .NET Framework project remains for Office. DPAPI `SettingsService` is excluded from the net8 text path; CLI reads key from process environment. | M11: settle the cross-target secret/storage ports and packaging; no copied source files or fake Office dependency. |
-| CLI accepted-fact and authority preparation | `WorkspaceConversationService` normalizes durable accepted facts with stable message IDs, refreshes current-run file authority through `WorkspaceFileService` and pins committed skill metadata, conversation-owned Task Lists and workspace-owned Plans through shared Core publication owners. Core `ModelContextCompiler` owns request assembly, filtering, budgeting and repair; `ContextCompactionRuntime` owns checkpoint selection/claims for both hosts. Office retains authority capture, domain projection and prompt preparation, with no separate compaction algorithm. | M5–M7: consolidate application preparation when host profiles share the same capability/context inputs; preserve one compiler, compactor and file authority owner. |
+| CLI accepted-fact and authority preparation | `WorkspaceConversationService` normalizes durable accepted facts with stable message IDs, refreshes current-run file authority through `WorkspaceFileService` and pins committed skill metadata, conversation-owned Task Lists and workspace-owned Plans through shared Core publication owners. Core `ModelContextCompiler` owns request assembly, filtering, budgeting and repair; `ContextCompactionRuntime` owns checkpoint selection/claims for both hosts. Core `ContextWorkingSet` also restores receipts and current bodies for both hosts. Office retains authority capture, domain projection and prompt preparation, with no separate compaction/retention algorithm. | M5–M7: consolidate application preparation when host profiles share the same capability/context inputs; preserve one compiler, compactor and file authority owner. |
 | Filesystem text-only provider surface | Office and CLI use shared `ResourceFindPage`/`ResourceReadProjection` and exact `ResourceReadObservation`; bounded CLI discovery carries metadata descriptors and explicit incompleteness. The filesystem provider now exposes exact retained text to the browser verifier (2026-10-05). `ResourceProviderRouter<TProvider>` still only routes providers. | §8.1 remains open for raw/binary views, remaining preview/viewer consumers and shared Office/filesystem operation dispatch. Close each with a concrete consumer, bounded coverage and exact evidence, preserving Office host guards; the text slice does not replace the target architecture. |
 | CLI abandoned-run reconciliation | Plain `PrepareResume` still closes an abandoned run without replay. Explicit continuation now uses the shared coordinator/kernel, exact checkpoint, complete history and original remaining limits. Cross-process cancellation reaches only the owning kernel through an ephemeral current-user pipe. | M5–M7: consolidate startup and CLI reconciliation in the common application lifecycle; adopt control contracts in UI and qualify Windows transport. Keep incomplete/unknown tool exchanges blocked from same-run continuation. |
 | Workspace application request/reconnect consumer | CLI `run`/`answer` use typed `SubmitInputAsync` with receipts from shared Core `ConversationInputJournal`; Office inbox uses the same existing event/CAS serializer. `ReadState`/`ReadEvents`/`SubscribeEventsAsync` use canonical sequence/hash cursors and Core event metadata projection. ChatStore's bounded reader reuses unchanged-file boundaries; changed files receive streaming full validation. No second store. | §11/M7: adopt these application contracts in Office UI and consolidate host composition/lifetime. Initial scope loading and changed-file validation remain O(history); optimize only through the canonical owner without weakening prefix integrity. |

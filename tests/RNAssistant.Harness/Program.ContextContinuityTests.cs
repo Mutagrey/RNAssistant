@@ -451,6 +451,43 @@ namespace RNAssistant.Harness
             AssertEqual(2, evicted.OmittedBodies, "body budget is enforced before hydration");
             AssertTrue(!evicted.Messages.Any(m => (m.Content ?? "").Contains("KEEP_COMPLETE_BODY")), "eviction cannot silently retain bytes");
             AssertContains(string.Join("\n", evicted.Messages.Select(m => m.Content)), "not missing resources", "body absence is distinct from resource absence");
+            var pending = ContinuityResult("uncertain", "files.patch", ToolResult.Unknown("Inspect before retry."));
+            pending.ExecutionProgress = new ToolExecutionProgress(ToolExecutionOutcome.Unknown);
+            pending.ResourceEffect = new ResourceEffect("unknown", "files.patch", ResourceEffectOutcome.UnknownAfterDispatch);
+            session.Messages.Add(ContinuityCall(pending)); session.Messages.Add(pending);
+            checkpoint.ThroughMessageId = pending.Id;
+            var pinned = ContextWorkingSet.Restore(session, active, authority, new AppSettings(), 0);
+            AssertTrue(pinned.Messages.Any(m => m.CompletedOperation?.ToolCallId == "uncertain"),
+                "unknown effects are retained even when the optional budget is zero");
+            var exhausted = false;
+            try { new ModelContextCompiler().Compile(authority, new ChatMessage[0], pinned.Messages,
+                null, new ToolCatalogEntry[0], new AppSettings(), 1); }
+            catch (PromptBudgetExceededException) { exhausted = true; }
+            AssertTrue(exhausted, "mandatory receipts cannot be silently dropped to fit a request");
+            var neededRead = ContinuityResult("needs_refresh", "files.patch", ToolResult.Error("Read first."));
+            neededRead.ExecutionProgress = new ToolExecutionProgress(ToolExecutionOutcome.Error,
+                new ToolRecoveryContract(ToolFailureKind.RejectedNoEffect, ToolRetryPolicy.RefreshRequired,
+                    source.Identity, "text", "test"));
+            session.Messages.Add(ContinuityCall(neededRead)); session.Messages.Add(neededRead);
+            var recoverySet = ContextWorkingSet.Restore(session, active, authority, new AppSettings(), 0);
+            AssertContains(string.Join("\n", recoverySet.Messages.Select(m => m.Content)), "RefreshRequired",
+                "unresolved typed recovery is retained without repeating tool execution");
+            var refreshed = ContinuityResult("refreshed", "common.resources_read", ToolResult.Ok("Read."));
+            refreshed.ExecutionProgress = new ToolExecutionProgress(ToolExecutionOutcome.Ok);
+            refreshed.ResourceEvidence.Add(skill.ResourceEvidence.Single());
+            session.Messages.Add(ContinuityCall(refreshed)); session.Messages.Add(refreshed);
+            var resolved = ContextWorkingSet.Restore(session, active, authority, new AppSettings(), 0);
+            AssertTrue(!resolved.Messages.Any(m => m.CompletedOperation?.ToolCallId == "needs_refresh"),
+                "matching complete observation releases only the satisfied recovery receipt");
+            neededRead.ExecutionProgress = new ToolExecutionProgress(ToolExecutionOutcome.Error,
+                new ToolRecoveryContract(ToolFailureKind.RejectedNoEffect, ToolRetryPolicy.Replan));
+            session.LastRun = new ChatRunRecord { RunId = "new-user-run" };
+            var newRun = ContextWorkingSet.Restore(session, active, authority, new AppSettings(), 0);
+            AssertTrue(!newRun.Messages.Any(m => m.CompletedOperation?.ToolCallId == "needs_refresh") &&
+                newRun.Messages.Any(m => m.CompletedOperation?.ToolCallId == "uncertain"),
+                "a new user run releases old replan receipts but preserves unresolved effects");
+
+
         }
 
         private static ChatMessage ContinuityCall(ChatMessage result)

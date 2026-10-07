@@ -873,7 +873,7 @@ Format repair reuses the frozen request, including the chosen pairs.
 
 ```text
 TOOL_RESULT:
-{"tool_call_id":"call_1","name":"common.resources_read","status":"ok","message":"Complete resource representation read.","data":{"kind":"resource-read","target":"note: Example","type":"artifact","scope":"conversation","representation":"text","text":"Hello","coverage":{"kind":"whole","fields":[]},"returnedCharacters":5,"totalCharacters":5,"complete":true,"hydratedForNextModelStep":false,"rawContentIncluded":true}}
+{"tool_call_id":"call_1","name":"common.resources_read","status":"ok","message":"Complete resource representation read.","data":{"kind":"resource-read","target":"note: Example","type":"artifact","scope":"conversation","representation":"text","text":"Hello","coverage":{"kind":"whole","fields":[]},"returnedCharacters":5,"totalCharacters":5,"complete":true,"rawContentIncluded":true}}
 ```
 
 All five root fields shown are required. `data` may be any JSON
@@ -1420,15 +1420,20 @@ Owner: Conversation/model context; совместные границы — Core 
   File owner сохраняет version guard, journal и read-back; typed recovery не
   разрешает повтор unknown effect. Pending-вызов без требуемого prepared state
   не исполняется через fallback: его следует отклонить и запросить операцию заново.
-- `ContextWorkingSet` заменяет `ArchivedCurrentSources`: оба потребителя (реальный
-  запрос и preview) восстанавливают точные тела из events/CAS в пределах бюджета.
-  До 32 недавних current bodies, в том числе skills/references и ограниченные
-  table/records/structure results; до 24 коротких operation receipts. Для archive
-  отводится не более трети message budget и только свободное место после active
-  facts; четверть этого резерва, максимум 2048 tokens, — receipts. Selection по
-  recency детерминирован; второй durable store не создаётся. Media не переигрывается
-  как якобы доставленное изображение. Current Task List/Plan остаются у существующих
-  владельцев, не копируются в новый store.
+- Core `ContextWorkingSet` общий для Office request/preview и CLI. Он восстанавливает
+  current bodies из events/CAS, без provider calls и второго store. Неизвестные
+  эффекты и unresolved typed recovery текущего run удерживаются обязательно;
+  matching refresh проверяет тот же `ToolRecoveryContract`, что и kernel.
+  Replan без точной зависимости требует исправленных аргументов и не снимается
+  посторонней записью. Ошибочный outcome/code сохраняется отдельно от актуальности
+  и присутствия source body. Если обязательная часть не помещается, compiler
+  возвращает `PromptBudgetExceeded`, а не удаляет факты.
+- Необязательный архив ограничен свободным местом и третью message budget:
+  сначала до 32 current bodies, затем до 24 коротких receipts из оставшегося
+  места (максимум 2048 tokens). Слишком большой receipt пропускается, не останавливая просмотр.
+  Selection по recency детерминирован; exact coverage и authority остаются обязательны.
+  Media не переигрывается как доставленное изображение; Task List/Plan остаются
+  у существующих владельцев.
 - Дополнительные схемы инструментов из предыдущего turn того же чата
   восстанавливаются из сохранённых admission events при точном совпадении
   descriptor/profile и сохранённом read frame. При нехватке бюджета новый turn
@@ -1681,6 +1686,30 @@ OpenAI описывает agent loop как последовательное п�
 Это обоснование принципов; предложенная реализация — вывод из кода RNAssistant,
 а не утверждение, что другой framework автоматически исправит его дефекты.
 
+## Компактные модельные результаты — 2026-10-07
+
+`ToolResult` и typed evidence/effect/recovery остаются исходными runtime facts.
+`ToolRuntime` больше не вставляет recovery внутрь `DataJson`: `ExecutionProgress`
+сохраняет его в terminal event, а `ModelResultProjection` добавляет только модельную
+форму при подготовке запроса. Manual/UI `ToolRunResult` отдаёт typed `recovery`
+отдельно от domain data. Outcome, effect и актуальность источника не объединяются.
+
+Core владеет закрытой проекцией оболочек `common.resources_find/read` и встроенных
+`files.create/patch/replace/copy/move/delete/restore`. Office дополняет её закрытой
+проекцией Excel и штатных VBA mutations/macro результатов. Compiler, compactor и
+inspector используют одну проекцию; inspector отражает реально выбранные поля.
+Diagnostic trees, runtime refs, hashes и journal IDs не копируются в эти модельные
+оболочки. Text/table payloads и значения пользовательских колонок сохраняются
+дословно, включая пользовательские поля `id`, `hash`, `revision`.
+
+Find сообщает targets, отличительные сведения, полноту и недоступные источники.
+Read сообщает представление, exact coverage и содержимое; техническое обещание
+`hydratedForNextModelStep` не передаётся модели. Оно остаётся в raw diagnostics;
+UI delivery summary берётся из фактических materialized attachments. Error содержит
+исходный code/message и один typed recovery; historical receipt сохраняет error code.
+Полная durable диагностика остаётся доступна отдельно. Остальные семейства сохраняют
+явно существующий путь; границы дальнейшего перехода — в `MIGRATION_MAP`.
+
 ## Системное ревью harness — 2026-10-05
 
 Scope: текущая цепочка Office/Core от результата инструмента до следующего model
@@ -1721,6 +1750,11 @@ family-specific удалением полей, JSON summaries и отдельн�
 
 ### Подтверждённые остаточные проблемы
 
+Исторические результаты ревью ниже: пункты 1–3 исправлены 2026-10-07.
+Закрытые проекции введены для resources, Excel/VBA и workspace files; риск других
+семейств остаётся ограниченным follow-up, а не основанием переписывать весь runtime.
+
+
 1. **P2, recovery owner:** `AgentProgressTracker.Observe` снимает отказы без
    `ResourceIdentity` после любого `VerifiedChanged/Restored/ExternalDriftObserved`.
    В probe одинаковый `resources_read` с ошибкой пути сначала блокируется, затем
@@ -1755,7 +1789,7 @@ family-specific удалением полей, JSON summaries и отдельн�
 Связанные исходники:
 [progress](../src/RNAssistant.Core/Agent/AgentProgressTracker.cs),
 [search](../src/RNAssistant.Office/Services/ExcelResourceProvider.Search.cs),
-[working set](../src/RNAssistant.Office/Services/ContextWorkingSet.cs),
+[working set](../src/RNAssistant.Core/Services/ContextWorkingSet.cs),
 [generic projection](../src/RNAssistant.Core/Services/ModelResultProjection.cs),
 [Office projection](../src/RNAssistant.Office/Services/ModelToolResultProjection.cs).
 

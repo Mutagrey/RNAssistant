@@ -10,6 +10,14 @@ exact-build gate.
 
 ## Harness follow-up review — 2026-10-05
 
+**Update 2026-10-07:** the three P2 defects below are fixed: unrelated effects do
+not release failed calls, Excel snapshot reads receive cancellation, and shared
+Core working-set selection skips oversized optional receipts while retaining
+unknown effects and unresolved current-run recovery. Core/Office use closed model
+envelopes for resources, workspace file mutations and Excel/native VBA. Remaining
+family projection work is explicitly tracked in `MIGRATION_MAP`; real Office
+cancellation latency and photographed end-to-end reproduction remain open.
+
 Current-code follow-up to the 2026-10-01 continuity audit; its original compiler,
 claim-generation and skill-retention findings are not all still-open defects.
 Detailed contracts, evidence and public harness comparison are in the
@@ -367,7 +375,7 @@ model requests отсутствуют; нельзя доказать причи�
    `ConversationPromptComposer` включает для Task List только discovery entry
    через `ChatResourcePromptIndex`, с общим бюджетом индекса 192–600 tokens.
    Цель/шаги/статусы отдельной обязательной проекцией не передаются.
-   [ContextWorkingSet](../../src/RNAssistant.Office/Services/ContextWorkingSet.cs)
+   [ContextWorkingSet](../../src/RNAssistant.Core/Services/ContextWorkingSet.cs)
    восстанавливает source/resource/capability bodies, но не гарантирует восстановление
    последнего `task_list_set` с полным списком. После ухода результата в compacted
    prefix остаются summary claims и возможность повторного чтения ресурса.

@@ -532,7 +532,7 @@ namespace RNAssistant.Office.Services
             if (packState != null) required.Add(packState);
             var budget = RequestMessageBudget(tools);
             var workingSet = ContextWorkingSet.Restore(_session, facts, frozen, _settings,
-                Math.Max(0, Math.Min(budget / 3, budget - ContextWorkingSet.EstimateCost(required.Concat(facts), _settings))));
+                Math.Max(0, Math.Min(budget / 3, budget - ContextWorkingSet.EstimateCost(required.Concat(facts), _settings))), ModelToolResultProjection.Instance);
             facts.AddRange(workingSet.Messages);
             return _compiler.Compile(frozen, required, facts, _context?.Notes, _runnableCatalog,
                 _settings, budget, enforceBudget, workingSet.IncludedBodies, workingSet.OmittedBodies);

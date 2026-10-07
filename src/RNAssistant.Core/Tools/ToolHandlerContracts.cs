@@ -73,6 +73,15 @@ namespace RNAssistant.Core.Tools
                 ResourceIdentity.Equals(evidence.Resource.Identity);
         }
 
+        public bool IsSatisfiedBy(IEnumerable<ResourceEvidence> observations, ResourceEffect effect)
+        {
+            if (RetryPolicy != ToolRetryPolicy.RefreshRequired || ResourceIdentity == null) return false;
+            return (observations ?? new ResourceEvidence[0]).Any(IsSatisfiedBy) ||
+                effect != null && (effect.Outcome == ResourceEffectOutcome.VerifiedChanged ||
+                    effect.Outcome == ResourceEffectOutcome.Restored || effect.Outcome == ResourceEffectOutcome.ExternalDriftObserved) &&
+                effect.Impacts.Any(impact => impact.Identity.Equals(ResourceIdentity));
+        }
+
         public Newtonsoft.Json.Linq.JObject ModelProjection()
         {
             var result = new Newtonsoft.Json.Linq.JObject

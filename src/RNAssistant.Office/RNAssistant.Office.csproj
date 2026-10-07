@@ -278,7 +278,6 @@
     <Compile Include="Services\ConversationKernelAdapter.Tools.cs" />
     <Compile Include="Services\ConversationKernelAdapter.Store.cs" />
     <Compile Include="Services\ConversationModelSession.cs" />
-    <Compile Include="Services\ContextWorkingSet.cs" />
     <Compile Include="Services\ConversationProtocolContext.cs" />
     <Compile Include="Services\ConversationStreamProgressProjector.cs" />
     <Compile Include="Services\AgentJsonProtocol.cs" />

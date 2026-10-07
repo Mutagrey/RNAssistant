@@ -172,6 +172,12 @@ Library revision/read-back checks, but do not alter execution fingerprints, mode
 `ToolDescriptor` or the serialized invocation. Existing source-owned Office target
 formatters remain for built-ins without explicit target selectors. Result/effect
 presentation remains governed by [Conversation protocol](conversation-protocol.md#effect-mapping-and-ui-projection).
+The model receives the shared [semantic result projection](conversation-protocol.md#компактные-модельные-результаты--2026-10-07),
+not the raw diagnostic object. New metadata in a migrated family must be explicitly
+admitted there. Keep arbitrary business payloads intact. Typed recovery belongs to
+the runtime record and is rendered once at request preparation; do not insert a
+second recovery object into domain result JSON.
+
 
 Model and Library upsert paths both carry `components` as one native `JArray` of
 component `JObject` values into `ToolAuthoringService`; they never serialize and

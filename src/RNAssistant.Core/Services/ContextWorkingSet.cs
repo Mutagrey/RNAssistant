@@ -6,66 +6,88 @@ using Newtonsoft.Json.Linq;
 using RNAssistant.Core.Llm;
 using RNAssistant.Core.ModelProtocol;
 using RNAssistant.Core.Models;
-using RNAssistant.Core.Services;
 using RNAssistant.Core.Tools.Contracts;
-using RNAssistant.Office.Tools;
+using RNAssistant.Core.Tools;
 
-namespace RNAssistant.Office.Services
+namespace RNAssistant.Core.Services
 {
     // A bounded request projection of the event archive, never another memory store.
     // Bodies retain their exact evidence and CAS references until compiler hydration.
-    internal sealed class ContextWorkingSet
+    public sealed class ContextWorkingSet
     {
-        internal readonly List<ChatMessage> Messages = new List<ChatMessage>();
-        internal int IncludedBodies;
-        internal int OmittedBodies;
+        public readonly List<ChatMessage> Messages = new List<ChatMessage>();
+        public int IncludedBodies;
+        public int OmittedBodies;
         private readonly List<string> _omittedTargets = new List<string>();
 
-        internal static ContextWorkingSet Restore(ChatSession session, IReadOnlyList<ChatMessage> active,
-            ModelAuthoritySnapshot authority, AppSettings settings, int budget)
+        public static ContextWorkingSet Restore(ChatSession session, IReadOnlyList<ChatMessage> active,
+            ModelAuthoritySnapshot authority, AppSettings settings, int budget,
+            ModelResultProjection projection = null, IReadOnlyList<ChatMessage> archive = null)
         {
             var result = new ContextWorkingSet();
-            if (ContextCompactionService.ActiveCheckpoint(session) == null) return result;
-            // Reserve space for exact execution receipts even when large bodies are evicted.
-            var receiptBudget = Math.Min(2048, budget / 4);
-            result.Messages.AddRange(result.SelectBodies(session, active, authority.Resources, settings, budget - receiptBudget));
+            if (ContextCompactionRuntime.ActiveCheckpoint(session) == null) return result;
+            projection = projection ?? new ModelResultProjection();
+            var history = archive ?? session.Messages;
             var activeIds = new HashSet<string>(active.Select(item => item.Id), StringComparer.Ordinal);
-            var receipts = new List<ChatMessage>();
-            foreach (var message in session.Messages.AsEnumerable().Reverse())
+            var runId = session.LastRun?.RunId ?? history.LastOrDefault(item => !string.IsNullOrEmpty(item.RunId))?.RunId;
+            var required = new List<ChatMessage>();
+            var optional = new List<ChatMessage>();
+            var selected = new HashSet<string>(StringComparer.Ordinal);
+            for (var index = history.Count - 1; index >= 0; index--)
             {
-                if (activeIds.Contains(message.Id) || !ContextCompactionService.IsReplayMessage(message)) continue;
+                var message = history[index];
+                if (activeIds.Contains(message.Id) || !ContextCompactionRuntime.IsReplayMessage(message)) continue;
                 ToolResultWireReadResult wire; string error;
                 if (!ToolResultHistoryReader.TryRead(message, out wire, out error) ||
                     message.ResourceEffect == null && wire.Result.Status == ToolResultStatus.Ok) continue;
-                var projected = ModelToolResultProjection.Project(message);
+                var mandatory = wire.Result.Status == ToolResultStatus.Unknown ||
+                    message.ResourceEffect?.Outcome == ResourceEffectOutcome.UnknownAfterDispatch;
+                var recovery = message.ExecutionProgress?.Recovery;
+                if (message.RunId == runId && recovery != null && recovery.RetryPolicy != ToolRetryPolicy.None &&
+                    message.ExecutionProgress.Outcome == ToolExecutionOutcome.Error &&
+                    !history.Skip(index + 1).Any(later => later.ExecutionProgress?.Outcome == ToolExecutionOutcome.Ok &&
+                        recovery.IsSatisfiedBy(later.ResourceEvidence, later.ResourceEffect))) mandatory = true;
+                // Keep the latest receipt for an exact call, including resumed runs.
+                if (!selected.Add(wire.ToolCallId)) continue;
+                var projected = projection.Project(message);
                 if (!ToolResultHistoryReader.TryRead(projected, out wire, out error)) continue;
-                var receipt = ModelContextCompiler.CompleteOperation(message, wire,
+                var receipt = ModelContextCompiler.CompleteOperation(projected, wire,
                     new ResourceObservationNotice { BodyIncluded = false, State = EvidenceState.Unknown,
-                        Reason = "Historical operation receipt; source bodies are selected independently.",
-                        NextAction = "Keep the recorded outcome. Reuse an included current observation for further work." });
+                        Reason = "Historical operation; body not included." });
                 receipt.Id = "receipt_" + message.Id;
-                var cost = EstimateCost(new[] { receipt }, settings);
+                (mandatory ? required : optional).Add(receipt);
+            }
+            required.Reverse();
+            result.Messages.AddRange(required);
+            // Mandatory facts cannot be evicted by a body or residual budget. The
+            // compiler checks the whole request and fails explicitly if it cannot fit.
+            var remaining = Math.Max(0, budget - EstimateCost(required, settings));
+            var bodies = result.SelectBodies(history, active, authority.Resources, settings, remaining);
+            result.Messages.AddRange(bodies);
+            var receiptBudget = Math.Min(2048, Math.Max(0, remaining - EstimateCost(bodies, settings)));
+            var receipts = new List<ChatMessage>();
+            foreach (var receipt in optional)
+            {
                 if (receipts.Count >= 24) break;
+                var cost = EstimateCost(new[] { receipt }, settings);
                 if (cost > receiptBudget) continue;
                 receiptBudget -= cost;
                 receipts.Add(receipt);
             }
-            receipts.Reverse();
-            result.Messages.InsertRange(0, receipts);
+            receipts.Reverse(); result.Messages.AddRange(receipts);
             if (result.IncludedBodies + result.OmittedBodies > 0)
                 result.Messages.Add(new ChatMessage { Role = "user", ProtocolMessage = true,
-                    Content = "WORKING_SET (reconstructed from saved results, without executing tools):\n" +
+                    Content = "WORKING_SET:\n" +
                         JsonConvert.SerializeObject(new { includedBodies = result.IncludedBodies, omittedBodies = result.OmittedBodies,
                             omittedTargets = result._omittedTargets,
-                            instruction = "Reuse included complete bodies and exact coverage. Omitted bodies are outside this request budget, not missing resources. Read a known target only when its absent content is needed; do not repeat discovery or a completed mutation." }) });
+                            instruction = "Omitted bodies are outside this request budget, not missing resources." }) });
             return result;
         }
 
-        private List<ChatMessage> SelectBodies(ChatSession session, IReadOnlyList<ChatMessage> active,
+        private List<ChatMessage> SelectBodies(IReadOnlyList<ChatMessage> history, IReadOnlyList<ChatMessage> active,
             ResourceAuthoritySnapshotSet resources, AppSettings settings, int budget)
         {
             var bodies = new List<ChatMessage>();
-            if (ContextCompactionService.ActiveCheckpoint(session) == null) return bodies;
             var reducer = new EvidenceStateReducer();
             Func<ResourceEvidence, bool> current = evidence => evidence != null &&
                 reducer.Reduce(evidence, resources).State == EvidenceState.Current;
@@ -73,11 +95,11 @@ namespace RNAssistant.Office.Services
             var selected = new HashSet<string>(active.Where(ExposesBody)
                 .SelectMany(item => item.ResourceEvidence ?? new List<ResourceEvidence>()).Where(current)
                 .Select(ObservationKey), StringComparer.Ordinal);
-            var calls = session.Messages.Where(item => item.Role == "assistant" && item.CompletedOperation == null &&
+            var calls = history.Where(item => item.Role == "assistant" && item.CompletedOperation == null &&
                 item.ToolCallId != null).GroupBy(item => item.ToolCallId).ToDictionary(group => group.Key, group => group.Last());
-            foreach (var message in session.Messages.AsEnumerable().Reverse())
+            foreach (var message in history.Reverse())
             {
-                if (activeIds.Contains(message.Id) || !ContextCompactionService.IsReplayMessage(message) || !ExposesBody(message)) continue;
+                if (activeIds.Contains(message.Id) || !ContextCompactionRuntime.IsReplayMessage(message) || !ExposesBody(message)) continue;
                 var evidence = (message.ResourceEvidence ?? new List<ResourceEvidence>()).Where(current).ToArray();
                 if (evidence.Length == 0 || evidence.Length != message.ResourceEvidence.Count) continue;
                 // Media attachments are supplied to one model step only. A saved
@@ -94,7 +116,7 @@ namespace RNAssistant.Office.Services
                 // Skills/references and structured results keep the original closed
                 // read frame: headers, fields, coverage, loaded state and body agree.
                 if (message.ResourceEffect == null && calls.TryGetValue(message.ToolCallId ?? "", out call) &&
-                    (message.ToolName == CapabilityToolCatalog.ReadToolId || evidence.Any(item =>
+                    (message.ToolName == "common.capabilities_read" || (string)data?["type"] == "skill" || evidence.Any(item =>
                         item.View != ResourceRepresentations.Text && item.View != ResourceRepresentations.Source ||
                         item.Coverage.Kind != ResourceCoverageKinds.Whole)))
                 {
@@ -128,7 +150,7 @@ namespace RNAssistant.Office.Services
             return bodies;
         }
 
-        internal static int EstimateCost(IEnumerable<ChatMessage> messages, AppSettings settings)
+        public static int EstimateCost(IEnumerable<ChatMessage> messages, AppSettings settings)
         {
             long cost = 0;
             foreach (var message in messages)
@@ -149,10 +171,10 @@ namespace RNAssistant.Office.Services
             if (message.ResourceEffect != null) return message.ResourceEffect.Outcome == ResourceEffectOutcome.VerifiedChanged ||
                 message.ResourceEffect.Outcome == ResourceEffectOutcome.Restored;
             var data = ToolResultWire.ParseData(wire.Result.DataJson) as JObject;
-            if (message.ToolName == ResourceToolCatalog.ReadToolId)
+            if (message.ToolName == "common.resources_read")
                 return (string)data?["type"] != "shared context" && (string)data?["type"] != "HTML data" &&
                     (string)data?["type"] != "HTML workspace";
-            return message.ToolName == CapabilityToolCatalog.ReadToolId &&
+            return message.ToolName == "common.capabilities_read" &&
                 ((string)data?["kind"] == "skill" || (string)data?["kind"] == "reference" ||
                  message.ResourceEvidence.Any(item => {
                      var address = ResourceUri.Parse(item.Resource.Uri);
