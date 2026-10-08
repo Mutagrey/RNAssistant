@@ -313,7 +313,10 @@ Diagnostics are bounded to 16 entries of at most 701 characters.
 ephemeral URL. The foreground lifetime defaults to 300 seconds, maximum 3600;
 the application caller closes it with its cancellation token. CLI Ctrl+C closes
 only this viewer (exit 130). Normal expiry returns `preview.closed`/exit 0 after
-browser, temporary profile and server teardown. Missing Chromium returns
+browser, temporary profile and server teardown. An aborted/closed WebSocket during
+a requested observation deadline is classified by the actual tokens: caller cancellation propagates,
+own lifetime expiry completes normally. Without a requested deadline, transport
+errors remain failures. Missing Chromium returns
 `NotAvailable`/exit 4. Browser startup/transport failures return exit 5; `Closed` certifies viewer
 lifetime completion, not functional correctness. Preview never publishes a
 verification record or satisfies run acceptance. Its URL is diagnostic; the

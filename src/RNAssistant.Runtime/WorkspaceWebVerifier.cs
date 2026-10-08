@@ -712,7 +712,15 @@ namespace RNAssistant.Runtime
                     {
                         while (true) await ObserveAsync(await ReadAsync(deadline.Token).ConfigureAwait(false), deadline.Token).ConfigureAwait(false);
                     }
-                    catch (OperationCanceledException) when (!token.IsCancellationRequested) { }
+                    catch (Exception ex) when (deadline.IsCancellationRequested &&
+                        (ex is OperationCanceledException || ex is WebSocketException ||
+                         ex is InvalidOperationException || ex is IOException))
+                    {
+                        // Cancelling a WebSocket receive can surface as Aborted/closed
+                        // transport instead of OperationCanceledException. Preserve
+                        // user cancellation; only this observation's expiry is normal.
+                        token.ThrowIfCancellationRequested();
+                    }
                 }
             }
 
