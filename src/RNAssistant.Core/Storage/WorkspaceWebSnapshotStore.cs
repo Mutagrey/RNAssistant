@@ -12,7 +12,7 @@ namespace RNAssistant.Core.Storage
 {
     // Publication owner only: manifests/results use the existing authority journal
     // and CAS. Source bytes and revisions stay owned by WorkspaceFileService.
-    public sealed class WorkspaceWebSnapshotStore
+    public sealed partial class WorkspaceWebSnapshotStore
     {
         public const int MaximumFiles = 32;
         public const int MaximumSnapshotBytes = 4 * 1024 * 1024;
@@ -106,7 +106,7 @@ namespace RNAssistant.Core.Storage
 
         public void CompleteVerification(WorkspaceDescriptor workspace, string id, WebVerificationState state,
             string browser, IReadOnlyList<string> errors, IReadOnlyList<string> hints,
-            IReadOnlyList<WebCheckResult> checkResults = null)
+            IReadOnlyList<WebCheckResult> checkResults = null, IReadOnlyList<WebDiagnosticCapture> diagnostics = null)
         {
             ResourceRef previous;
             var record = ReadVerification(workspace, id, out previous);
@@ -120,6 +120,7 @@ namespace RNAssistant.Core.Storage
             record.State = state; record.CompletedUtc = DateTime.UtcNow;
             record.Browser = browser; record.Errors = errors; record.Hints = hints;
             record.CheckResults = results;
+            record.Diagnostics = StoreDiagnostics(record, diagnostics);
             SaveVerification(workspace, record, previous);
         }
 
@@ -157,7 +158,8 @@ namespace RNAssistant.Core.Storage
         private WebVerificationRecord ReadVerificationRevision(WorkspaceDescriptor workspace, string id, ResourceRef reference)
         {
             if (reference == null) throw Unavailable("Verification record is unavailable in this workspace.");
-            var record = Read<WebVerificationRecord>(PublishedView(workspace, reference, VerificationView));
+            var view = PublishedView(workspace, reference, VerificationView);
+            var record = Read<WebVerificationRecord>(view);
             if (record == null || record.SchemaVersion != 1 || record.Id != id || record.WorkspaceId != workspace.WorkspaceId ||
                 !Enum.IsDefined(typeof(WebVerificationState), record.State) ||
                 (record.State == WebVerificationState.Pending) == record.CompletedUtc.HasValue ||
@@ -167,6 +169,7 @@ namespace RNAssistant.Core.Storage
                 record.State == WebVerificationState.Passed && (record.SnapshotId == null ||
                     string.IsNullOrWhiteSpace(record.Browser) || record.Errors.Count != 0 || record.CheckedFiles.Count == 0))
                 throw Unavailable("Verification record is invalid or unsupported.");
+            ValidateDiagnosticDescriptors(record, reference, view);
             record.Reference = reference;
             return record;
         }
@@ -182,14 +185,18 @@ namespace RNAssistant.Core.Storage
         private void SaveVerification(WorkspaceDescriptor workspace, WebVerificationRecord record, ResourceRef previous)
         {
             var snapshot = record.SnapshotId == null ? null : ReadSnapshot(workspace, record.SnapshotId);
-            Publish(workspace, Reference(workspace, "verification", record.Id, Guid.NewGuid().ToString("N")),
-                VerificationView, record, snapshot == null ? new PayloadRef[0] : new[] { snapshot.Payload }, previous,
-                snapshot == null ? null : new[] { new ResourceDependency(snapshot.Reference, ManifestView, kind: "verified-snapshot") });
+            var reference = Reference(workspace, "verification", record.Id, Guid.NewGuid().ToString("N"));
+            var captured = record.Diagnostics.Where(item => item.State == WebDiagnosticState.Captured).ToArray();
+            foreach (var item in captured) item.Reference = reference;
+            var parts = (snapshot == null ? new PayloadRef[0] : new[] { snapshot.Payload })
+                .Concat(captured.Select(item => item.Payload)).ToArray();
+            Publish(workspace, reference, VerificationView, record, parts, previous,
+                snapshot == null ? null : new[] { new ResourceDependency(snapshot.Reference, ManifestView, kind: "verified-snapshot") }, captured);
         }
 
         private void Publish(WorkspaceDescriptor workspace, ResourceRef reference, string viewName,
             object record, IEnumerable<PayloadRef> parts, ResourceRef expected = null,
-            IEnumerable<ResourceDependency> dependencies = null)
+            IEnumerable<ResourceDependency> dependencies = null, IEnumerable<WebDiagnosticDescriptor> diagnostics = null)
         {
             var json = JsonConvert.SerializeObject(record);
             if (Encoding.UTF8.GetByteCount(json) > MaximumRecordBytes)
@@ -200,6 +207,9 @@ namespace RNAssistant.Core.Storage
                 parent: expected, dependencies: dependencies));
             _authority.RegisterView(scope, new ResourceRevisionView(reference, viewName, payload.Sha256,
                 payload, ResourceCoverage.Whole(), parts));
+            foreach (var diagnostic in diagnostics ?? Enumerable.Empty<WebDiagnosticDescriptor>())
+                _authority.RegisterView(scope, new ResourceRevisionView(reference, diagnostic.View,
+                    diagnostic.Payload.Sha256, diagnostic.Payload, ResourceCoverage.Whole()));
             for (var retry = 0; retry < 8; retry++)
             {
                 var frozen = _authority.Capture(scope);

@@ -128,13 +128,31 @@ namespace RNAssistant.Cli
                     checkedFiles = result.CheckedFiles, snapshotSha256 = result.SnapshotSha256,
                     snapshotId = result.SnapshotId, verificationId = result.VerificationId,
                     historical = result.Historical,
-                    browser = result.Browser, errors = result.Errors, hints = result.Hints, checks = result.CheckResults });
+                    browser = result.Browser, errors = result.Errors, hints = result.Hints, checks = result.CheckResults,
+                    diagnostics = result.Diagnostics });
                 return result.Status == WebVerificationStatus.Passed ? 0 :
                     result.Status == WebVerificationStatus.NotRun ? 4 : 5;
             }
             if (args[0] == "verification")
             {
                 Output(jsonl, "verification.record", service.GetWebVerification(workspace, Required(options, "id")));
+                return 0;
+            }
+            if (args[0] == "diagnostic")
+            {
+                var raw = options.ContainsKey("raw");
+                if (raw && (jsonl || !Console.IsOutputRedirected))
+                    throw new ArgumentException("--raw requires redirected stdout and cannot be combined with --jsonl.");
+                var kind = Required(options, "kind");
+                if (kind != "screenshot" && kind != "trace")
+                    throw new ArgumentException("--kind must be screenshot or trace.");
+                var view = service.OpenWebDiagnostic(workspace, new WorkspaceWebDiagnosticRequest {
+                    VerificationId = Required(options, "id"), Kind = kind == "screenshot" ? WebDiagnosticKind.Screenshot : WebDiagnosticKind.Trace });
+                if (raw)
+                {
+                    using (var output = Console.OpenStandardOutput()) output.Write(view.Bytes, 0, view.Bytes.Length);
+                }
+                else Output(jsonl, "verification.diagnostic", view);
                 return 0;
             }
             if (args[0] == "verifications")
@@ -676,7 +694,7 @@ namespace RNAssistant.Cli
                 var key = args[i].Substring(2);
                 if (key == "jsonl" || key == "read-only" || key == "create" ||
                     key == "require-web-verify" || key == "continue" || key == "follow" ||
-                    key == "interactive" || key == "no-interactive" || key == "headless") result[key] = "true";
+                    key == "interactive" || key == "no-interactive" || key == "headless" || key == "raw") result[key] = "true";
                 else
                 {
                     if (i + 1 >= args.Length || args[i + 1].StartsWith("--", StringComparison.Ordinal))
@@ -801,6 +819,7 @@ namespace RNAssistant.Cli
             Console.WriteLine("rna preview --workspace <path> [--entry index.html | --snapshot <id>] [--timeout-seconds <1..3600>] [--headless] [--jsonl]  (isolated snapshot browser; default 300 seconds; Ctrl+C closes; never certifies verification)");
             Console.WriteLine("rna verify --workspace <path> [--entry index.html | --snapshot <id>] [--web-checks <json-file>] [--jsonl]  (historical success does not verify current files)");
             Console.WriteLine("rna verification --workspace <path> --id <id> [--jsonl]  (read a saved result; Pending means no terminal result, never auto-replayed)");
+            Console.WriteLine("rna diagnostic --workspace <path> --id <verification-id> --kind screenshot|trace [--jsonl | --raw > output-file]  (exact retained bytes; --raw requires redirected stdout; no browser rerun)");
             Console.WriteLine("rna verifications --workspace <path> [--offset <n>] [--jsonl]  (up to 20 saved/pending results in resource order)");
             Console.WriteLine("rna resume --workspace <path> --session <id> [--jsonl]  (close an abandoned run, show pending action or request new input; never replay tools)");
             Console.WriteLine("rna approve --workspace <path> --session <id> --pending <id> [--base-url <url>] [--model <name>] [--context-tokens <n>] [--response-mode json_schema|json_object] [--instruction-role system|developer] [--tool-result-role user|developer|tool] [--reasoning-mode <mode>] [--jsonl]");

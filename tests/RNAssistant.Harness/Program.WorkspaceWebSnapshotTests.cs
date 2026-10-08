@@ -10,6 +10,91 @@ namespace RNAssistant.Harness
 {
     internal static partial class Program
     {
+        private static void WorkspaceWebDiagnosticsStayExact()
+        {
+            WithTempPaths(paths =>
+            {
+                var files = new WorkspaceFileService(paths);
+                var workspace = new WorkspaceStore(paths).Open(Path.Combine(paths.Root, "project"));
+                files.CreateText(workspace, "index.html", "<h1>diagnostics</h1>");
+                var file = files.ReadText(workspace, "index.html");
+                var store = new WorkspaceWebSnapshotStore(paths, files);
+                var snapshot = store.PublishSnapshot(workspace, "index.html", new[] {
+                    new WebSnapshotFile("index.html", file.Reference, file.Evidence.Payload) });
+                var id = store.BeginVerification(workspace, "index.html", false);
+                store.AttachSnapshot(workspace, id, snapshot);
+                var png = Convert.FromBase64String("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAusB9Wl6p9sAAAAASUVORK5CYII=");
+                var trace = new WebBrowserTrace { VerificationId = id, SnapshotId = snapshot.Id,
+                    SnapshotSha256 = snapshot.SnapshotSha256, Outcome = WebVerificationState.Failed,
+                    DurationMilliseconds = 1, Truncated = true, DroppedEntries = 3,
+                    Entries = new[] { new WebBrowserTraceEntry { Name = "fixture", Milliseconds = 0,
+                        Kind = WebBrowserTraceEventKind.Check, Detail = "Failed" } } };
+                var utf8 = new System.Text.UTF8Encoding(false, true);
+                var wrongTrace = JsonConvert.DeserializeObject<WebBrowserTrace>(JsonConvert.SerializeObject(trace));
+                wrongTrace.VerificationId = Guid.NewGuid().ToString("N");
+                foreach (var captures in new[] {
+                    new[] { new WebDiagnosticCapture(WebDiagnosticKind.Screenshot, new byte[WorkspaceWebSnapshotStore.MaximumScreenshotBytes + 1]) },
+                    new[] { new WebDiagnosticCapture(WebDiagnosticKind.Trace, utf8.GetBytes(JsonConvert.SerializeObject(wrongTrace))) },
+                    new[] { new WebDiagnosticCapture(WebDiagnosticKind.Screenshot, png), new WebDiagnosticCapture(WebDiagnosticKind.Screenshot, png) }
+                })
+                {
+                    var rejected = false;
+                    try { store.CompleteVerification(workspace, id, WebVerificationState.Failed, "fixture",
+                        new[] { "check failed" }, new string[0], diagnostics: captures); }
+                    catch (WorkspaceFileException) { rejected = true; }
+                    AssertTrue(rejected, "oversized, substituted and duplicate diagnostics cannot publish");
+                    AssertEqual(WebVerificationState.Pending, store.ReadVerification(workspace, id).State,
+                        "invalid capture cannot publish a terminal result");
+                }
+                var traceBytes = utf8.GetBytes(JsonConvert.SerializeObject(trace));
+                store.CompleteVerification(workspace, id, WebVerificationState.Failed, "fixture",
+                    new[] { "check failed" }, new string[0], diagnostics: new[] {
+                        new WebDiagnosticCapture(WebDiagnosticKind.Screenshot, png),
+                        new WebDiagnosticCapture(WebDiagnosticKind.Trace, traceBytes) });
+                var saved = store.ReadVerification(workspace, id);
+                store = new WorkspaceWebSnapshotStore(paths, new WorkspaceFileService(paths));
+                AssertTrue(saved.Diagnostics.All(item => item.Reference.Revision == saved.Reference.Revision &&
+                    item.Reference.Uri == saved.Reference.Uri), "diagnostic refs pin the terminal verification revision");
+                files.ReplaceText(workspace, "index.html", file.Reference, "<h1>changed</h1>");
+                AssertTrue(png.SequenceEqual(store.ReadDiagnostic(workspace, saved.Reference, WebDiagnosticKind.Screenshot)),
+                    "exact screenshot survives restart and source drift");
+                AssertTrue(traceBytes.SequenceEqual(store.ReadDiagnostic(workspace, saved.Reference, WebDiagnosticKind.Trace)),
+                    "bounded trace retains exact correlation and explicit incompleteness");
+                var foreign = new WorkspaceStore(paths).Open(Path.Combine(paths.Root, "foreign"));
+                var denied = false;
+                try { store.ReadDiagnostic(foreign, saved.Reference, WebDiagnosticKind.Screenshot); }
+                catch (WorkspaceFileException) { denied = true; }
+                AssertTrue(denied, "diagnostic reference cannot cross workspace authority");
+                var blobs = new ChatBlobStore(paths);
+                var orphan = blobs.StoreText("orphan diagnostic fixture", "text/plain");
+                var collected = CasService(paths, new ChatStore(paths), new VbaJournalStore(paths), () => StorageProtector.None).Collect();
+                AssertTrue(collected.Completed && !File.Exists(blobs.PathFor(orphan.Sha256)), "CAS GC collects an unrelated orphan");
+                AssertTrue(png.SequenceEqual(store.ReadDiagnostic(workspace, saved.Reference, WebDiagnosticKind.Screenshot)) &&
+                    traceBytes.SequenceEqual(store.ReadDiagnostic(workspace, saved.Reference, WebDiagnosticKind.Trace)),
+                    "verification views root both diagnostic payloads for GC");
+                File.Delete(blobs.PathFor(saved.Diagnostics.Single(item => item.Kind == WebDiagnosticKind.Screenshot).Payload.Sha256));
+                denied = false;
+                try { store.ReadDiagnostic(workspace, saved.Reference, WebDiagnosticKind.Screenshot); }
+                catch (WorkspaceFileException) { denied = true; }
+                AssertTrue(denied, "missing screenshot has no regeneration fallback");
+                AssertEqual(WebVerificationState.Failed, store.ReadVerification(workspace, id).State,
+                    "missing diagnostic does not rewrite the recorded check outcome");
+                File.WriteAllBytes(blobs.PathFor(saved.Diagnostics.Single(item => item.Kind == WebDiagnosticKind.Trace).Payload.Sha256), new byte[] { 0 });
+                denied = false;
+                try { store.ReadDiagnostic(workspace, saved.Reference, WebDiagnosticKind.Trace); }
+                catch (WorkspaceFileException) { denied = true; }
+                AssertTrue(denied, "corrupt trace fails closed");
+
+                var withoutImage = store.BeginVerification(workspace, "index.html", true, requestedSnapshotId: snapshot.Id);
+                store.AttachSnapshot(workspace, withoutImage, snapshot);
+                store.CompleteVerification(workspace, withoutImage, WebVerificationState.Passed, "fixture",
+                    new string[0], new string[0], diagnostics: new[] {
+                        new WebDiagnosticCapture(WebDiagnosticKind.Screenshot, null, "capture unavailable") });
+                AssertEqual(WebVerificationState.Passed, store.ReadVerification(workspace, withoutImage).State,
+                    "diagnostic availability is separate from verified assertions");
+            });
+        }
+
         private static void WorkspaceWebSnapshotsSurviveRestartAndMoves()
         {
             WithTempPaths(paths =>

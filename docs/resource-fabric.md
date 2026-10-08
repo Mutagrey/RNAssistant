@@ -180,8 +180,9 @@ tool's evidence, then freezes refreshed authority. Model-facing data contains on
 semantic check results; the contract digest and resource references stay in runtime.
 `verification --id <id>` reads a recorded result without running a browser.
 The saved digest describes captured routes/bytes; the manifest's own CAS payload
-also pins entry and exact revisions. General UI preview routing, binary assets,
-screenshots/browser traces remain open M5–M7 work.
+also pins entry and exact revisions. Binary source assets and Office UI preview
+routing remain open M5–M7 work. Development snapshot preview and retained browser
+diagnostics are described below.
 The development verifier supports bounded pointer clicks, text/numeric assertions,
 input/select changes, CSV uploads, table/export comparison and SVG bar geometry
 in one captured document, without caller-supplied evaluator code or navigation.
@@ -194,6 +195,46 @@ assertion. The download must come from the snapshot origin or a blob/data CSV,
 fit 64 KiB and 700 decoded characters, and match the expected ordered CSV cells.
 Malformed/truncated/extra data fails. No project file is opened by this check runner;
 all source materialization remains with the filesystem provider and file owner.
+
+### Retained browser diagnostics
+
+Each development verification attempts a viewport PNG after checks/observation
+and a typed CDP observation journal. `WebDiagnosticDescriptor` reports `Captured`
+with a payload and exact terminal verification reference, or `Unavailable` with
+a bounded reason. Older records with an empty diagnostic list have no recorded
+capture. A missing browser produces `NotRun` and unavailable diagnostics. Capture
+failure or a size limit does not change the check outcome; a screenshot is never
+an acceptance assertion or source-read authority.
+
+The existing `WorkspaceWebSnapshotStore` publishes `browser-screenshot` and
+`browser-trace` views before committing the terminal head. The primary verification
+view's `Parts` roots both payloads in the existing CAS. PNG admission checks its
+header, dimensions (at most 2048 per side) and 512 KiB byte bound; it is not a
+general image decoder. Trace JSON is limited to 128 KiB and 256 entries, with
+explicit `Truncated`/`DroppedEntries`. Names/details are bounded to 128/700 UTF-16
+characters. The trace pins verification, snapshot, digest and outcome, and records
+ordered lifecycle, navigation, request/response, error and check events. Network
+entries omit query strings, fragments and user information; request bodies,
+headers, cookies, evaluator code and upload fixture paths are not recorded.
+This is a bounded CDP journal, not a Playwright archive or full DOM recording.
+
+The typed application `OpenWebDiagnostic` validates workspace ownership, published
+exact reference, whole-view coverage, payload integrity and trace correlation.
+Missing/corrupt bytes fail explicitly; reads never rerun the browser, resolve live
+files or change the saved check outcome. CLI returns metadata by default and exact
+bytes only with redirected `--raw` stdout; `--raw` and `--jsonl` are incompatible:
+
+```text
+rna diagnostic --workspace <path> --id <verification-id> --kind screenshot --jsonl
+rna diagnostic --workspace <path> --id <verification-id> --kind screenshot --raw > screenshot.png
+rna diagnostic --workspace <path> --id <verification-id> --kind trace --raw > trace.json
+```
+
+Use `verification --id` to inspect unavailable captures. Binary bodies are excluded
+from metadata JSON, and diagnostic references remain runtime/application data,
+outside model tool results. Preview does not create these verification records.
+Office UI presentation remains part of M7; abrupt process-loss cleanup/capture is
+not qualified by ordinary completion tests.
 
 ### Application resource views and development preview
 

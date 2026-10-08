@@ -71,5 +71,15 @@ namespace RNAssistant.Runtime
             Action<WorkspacePreviewReport> opened, CancellationToken cancellationToken = default(CancellationToken))
         { return new WorkspaceWebVerifier(FileResources(workspace), _webSnapshots, workspace)
                 .PreviewAsync(request, opened, cancellationToken); }
+
+        public WorkspaceWebDiagnosticView OpenWebDiagnostic(WorkspaceDescriptor workspace, WorkspaceWebDiagnosticRequest request)
+        {
+            if (request == null || !Enum.IsDefined(typeof(WebDiagnosticKind), request.Kind))
+                throw new ArgumentException("A valid browser diagnostic request is required.");
+            var record = _webSnapshots.ReadVerification(workspace, request.VerificationId);
+            var bytes = _webSnapshots.ReadDiagnostic(workspace, record.Reference, request.Kind);
+            return new WorkspaceWebDiagnosticView { VerificationId = record.Id, SnapshotId = record.SnapshotId,
+                Diagnostic = record.Diagnostics.Single(item => item.Kind == request.Kind), Bytes = bytes };
+        }
     }
 }

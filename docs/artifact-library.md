@@ -18,20 +18,25 @@ The existing Resource Fabric ingestion, CAS,
 document defines the user-visible lifecycle, viewers and mutation rules; it does not
 introduce another artifact transport or store.
 
-## Workspace CLI static-web smoke — 2026-10-04
+## Workspace CLI web verification and preview — 2026-10-08
 
 The development CLI has a separate `verify` command and optional `web.verify`
-agent tool for ordinary workspace files. The verifier captures a bounded in-memory
-snapshot through the file owner, rechecks its exact revisions, and serves only that
-snapshot to a fresh headless Chromium profile over loopback. It returns passed,
-failed or not-run with checked paths, missing dependencies, page/console errors and
-a CLI snapshot fingerprint. The browser has no Office bridge or user profile.
-`--require-web-verify` accepts a successful tool check only while all checked file
-evidence remains current. This creates no Library artifact or editable HTML
-aggregate; the document-owned HTML path below is unchanged. Functional assertions,
-images/binary assets, durable preview manifests and a UI preview remain M5/M7 work.
-Literal DOM-ID mismatch hints accompany actual JavaScript exceptions; they are
-advice for repair, not independent proof of a runtime defect.
+agent tool for ordinary workspace files. The verifier retains a bounded exact
+snapshot through the file owner and existing authority/CAS, and serves only its
+routes to a fresh headless Chromium profile over loopback. Structured functional
+checks, pending/terminal results and optional bounded PNG/CDP diagnostics persist
+against that snapshot. `verification` and `diagnostic` read saved results after
+restart without running a browser. Diagnostics do not certify acceptance.
+
+Typed application discovery/text views and CLI `preview` provide an isolated
+development viewer of a retained snapshot. The browser has no Office bridge or
+user profile. `--require-web-verify` accepts a passing tool check only while its
+functional contract and checked file evidence remain current. Exact contracts,
+limits and CLI commands belong to
+[Resource Fabric](resource-fabric.md#retained-browser-diagnostics). This creates
+no Library artifact or editable HTML aggregate. Working previews, binary source
+assets/viewers and Office UI adoption remain open M5/M7 scope. Literal DOM-ID
+mismatch hints accompany actual JavaScript exceptions; they remain repair advice.
 
 ## Local catalog and artifact transfer — 2026-10-02
 

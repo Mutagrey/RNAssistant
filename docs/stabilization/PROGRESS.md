@@ -1,5 +1,45 @@
 # Stabilization progress
 
+## Bounded browser verification diagnostics — 2026-10-08
+
+Owner: development browser provider / existing workspace verification publication
+owner. M5 now retains a viewport PNG and typed CDP observation journal against
+the exact terminal verification revision. Both use the existing authority/CAS,
+with payload roots published before the terminal head. No new artifact store,
+file writer, model authority or agent loop was introduced.
+
+Limits: PNG 512 KiB and 2048 pixels per side; trace 128 KiB / 256 entries, bounded
+strings and explicit truncation. Unavailable/oversized captures have a reason and
+cannot change the check outcome. The trace correlates snapshot, verification and
+outcome; it is a bounded event journal, not a Playwright archive or full DOM
+recording. Typed `OpenWebDiagnostic` and CLI `diagnostic` read exact saved bytes
+after restart without browser/source fallback. Metadata excludes binary bodies;
+raw output requires redirected stdout. Model results retain semantic check data
+without diagnostic references.
+
+Checks: CLI build passes with zero warnings/errors; Harness build passes with two
+existing PDF CA1416 warnings. All three `workspace snapshots:` tests pass, including
+publication rejection, CAS GC retention, foreign workspace and missing/corrupt
+payloads. Real Chromium `web_diagnostics_smoke.py` passes failed-check PNG/trace,
+restart after source deletion, Unicode event flood, oversized screenshot and
+missing browser. Existing `web_verifier_smoke.py` and
+`web_checks_runtime_smoke.py` pass observation, historical replay and guarded
+verify/read/repair/read/verify/done regressions. The counter PNG was visually
+inspected; local evidence is in `/tmp/rna-m5-browser-diagnostics-20261008`.
+Diff, touched links and `ValidateVersionFormat` pass.
+
+This implements the screenshot/structured-trace part of §21.3/M5 with the existing
+CDP provider. Abrupt process-loss cleanup/capture, real-model quality and
+Windows/Office/WebView2 behavior were not qualified by this slice. Full M4/M5
+remain open: fixed autonomous CSV creation/follow-up and real 24K
+compaction/restart/resume still lack passing evidence. The previous GPT-OSS
+input/memory preflight did not admit those full tasks.
+
+Next implementation slice: bounded raw/image resource views through the existing
+file owner for binary web-project assets (§8.1/M5). Working-preview UX and Office
+UI adoption remain separate open scope. Acceptance requires a compatible real
+endpoint with qualified input/memory headroom and unchanged tasks/checks/bounds.
+
 ## GPT-OSS input and endpoint qualification — 2026-10-07
 
 Owner: CLI evaluation / environment profile. `6fc913d4` has the same production
@@ -48,9 +88,9 @@ Drivers, commands, profile/source/binary hashes, protocol bodies, original
 preflight failures and complete memory/cleanup audits are retained. Diff, touched
 links and `ValidateVersionFormat` pass; no build or Office validation was needed.
 
-Full M4/M5 remain open. Next implementation slice: bounded browser screenshots
-and trace references tied to the existing retained snapshot/verification result,
-owned by the development browser provider. Full CSV creation/follow-up and real
+Full M4/M5 remain open. The subsequent bounded screenshot/trace implementation is
+recorded [above](#bounded-browser-verification-diagnostics--2026-10-08).
+Full CSV creation/follow-up and real
 compaction/resume remain separate acceptance gates; a reference run needs both
 protocol support and a qualified input/memory budget. Repeating the unchanged
 Gemma task or lowering its acceptance does not close those gates.
@@ -662,7 +702,7 @@ conversation application services; resource/Office boundaries retain their owner
 | M2 | Workspace/session without document authority, stable identity, known root relocation and read-only association tested. Only the root directory mount is supplied; managed/multiple/external mounts and shared-source identity/heads (A24) remain open. |
 | M3 | Single WorkspaceFileService owns UTF-8 find/read/create/patch/replace/copy/move/delete/restore, exact history, drift and non-replay recovery. Focused tests pass. Remaining §8.1 stat/raw/binary/large views, directory pagination, complete Office/filesystem dispatch and cross-platform path qualification are open. |
 | M4 | First useful real-model multi-file result achieved. Modes, skills, typed questions/answers, approvals, Task Lists/Plans, receipts, cancel/explicit continuation and event following exist. Interactive host UX/recorded file-effect presentation passes Mac PTY checks. Typed application resource discovery, bounded exact text views and isolated development snapshot preview are implemented. Office UI use of shared application contracts is the later M7 cutover. Scripted runs do not close real task quality. |
-| M5 | Retained browser snapshots, dependency checks, structured functional verification, repair, bounded same-run continuation and shared compaction implemented. Controlled compaction/resume passes. Schema, completed-receipt boundary and aggregate source-budget defects are fixed. Real Qwen reached restart/resume but timed out; the latest Gemma attempt again produced all exact final files, without checkpoint/restart and with 0/9 prescribed read-back stages. Full live quality remains open. A real counter repair passed previously; typed dependency-change recovery passes controlled guards and real Gemma dispatches re-verification after repair, but its CSV result still fails. Isolated development snapshot preview passes Mac lifecycle/isolation checks. Fixed autonomous CSV creation + unchanged feature follow-up still has no passing evidence. Working/binary previews and browser screenshots/traces remain open. |
+| M5 | Retained browser snapshots, dependency checks, structured functional verification, repair, bounded same-run continuation and shared compaction implemented. Controlled compaction/resume passes. Schema, completed-receipt boundary and aggregate source-budget defects are fixed. Real Qwen reached restart/resume but timed out; the latest Gemma attempt again produced all exact final files, without checkpoint/restart and with 0/9 prescribed read-back stages. Full live quality remains open. A real counter repair passed previously; typed dependency-change recovery passes controlled guards and real Gemma dispatches re-verification after repair, but its CSV result still fails. Isolated development snapshot preview passes Mac lifecycle/isolation checks. Bounded PNG/CDP diagnostics have exact retained references and pass browser/CAS checks. Fixed autonomous CSV creation + unchanged feature follow-up still has no passing evidence. Working/binary previews remain open. |
 | M6 | Authoring cutover not started. Office HTML/MD/JSON and Plan authoring remain on their existing owners; file materialization/linkage/crash guards and old-writer removal are required. CLI files have no dual writer. |
 | M7 | Receipts/cursors/subscription provide shared primitives; Office UI transport/application migration, file tree, preview isolation, bounded body delivery and pane-independent lifetime are not closed. |
 | M8 | External Office provider/mount/target cutover remains open; exact binding/discovery/SaveAs and multiple-instance behavior need Windows evidence. |
@@ -1897,8 +1937,10 @@ boundary, not a functional CSV score. Scripted HTTP tests confirmed both CLI
 transport modes and saved metadata. The existing v6 parser correctly rejected
 these outputs; no permissive JSON repair or separate agent loop was added.
 
-Next concrete slice (2026-10-07): M5 bounded browser screenshots/trace references
-through the existing retained snapshot and verification result owner. The
+Next concrete slice (2026-10-08): bounded raw/image resource views for binary
+web-project assets through the existing file owner (§8.1/M5). Bounded screenshot
+and CDP trace references are implemented and checked as recorded
+[above](#bounded-browser-verification-diagnostics--2026-10-08). The
 [GPT-OSS preflight](#gpt-oss-input-and-endpoint-qualification--2026-10-07) did not
 admit a full CSV run: 16K cannot fit the initial context/reserves, and tested 32K
 profiles retain warning pressure. Reference task qualification still needs a

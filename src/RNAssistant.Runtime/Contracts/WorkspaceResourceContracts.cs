@@ -50,6 +50,20 @@ namespace RNAssistant.Runtime.Contracts
         public bool Headless { get; set; }
     }
 
+    public sealed class WorkspaceWebDiagnosticRequest
+    {
+        public string VerificationId { get; set; }
+        public WebDiagnosticKind Kind { get; set; }
+    }
+
+    public sealed class WorkspaceWebDiagnosticView
+    {
+        public string VerificationId { get; set; }
+        public string SnapshotId { get; set; }
+        public WebDiagnosticDescriptor Diagnostic { get; set; }
+        [JsonIgnore] public byte[] Bytes { get; set; }
+    }
+
     [JsonConverter(typeof(Newtonsoft.Json.Converters.StringEnumConverter))]
     public enum WorkspacePreviewStatus { Opened, Closed, NotAvailable, Failed }
 

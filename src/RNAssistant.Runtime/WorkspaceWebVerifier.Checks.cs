@@ -35,6 +35,7 @@ namespace RNAssistant.Runtime
             for (var index = 0; index < checks.Steps.Count; index++)
             {
                 var step = checks.Steps[index];
+                devtools.Diagnostics?.Add(WebBrowserTraceEventKind.Check, step.Id, "start " + step.Operation + " " + step.Selector);
                 BrowserCheckTarget target;
                 try
                 {
@@ -77,6 +78,7 @@ namespace RNAssistant.Runtime
                 { target = new BrowserCheckTarget { Error = ex.Message.Length > 700 ? ex.Message.Substring(0, 700) : ex.Message }; }
                 results[index] = new WebCheckResult(step.Id, target.Error == null ? WebCheckStatus.Passed : WebCheckStatus.Failed,
                     target.Text, target.Error);
+                devtools.Diagnostics?.Add(WebBrowserTraceEventKind.Check, step.Id, results[index].Status.ToString());
                 if (target.Error != null) return; // Remaining steps are explicitly NotRun.
             }
         }

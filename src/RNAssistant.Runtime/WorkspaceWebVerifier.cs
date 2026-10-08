@@ -38,6 +38,7 @@ namespace RNAssistant.Runtime
         public ResourceRef VerificationReference { get; internal set; }
         public bool Historical { get; internal set; }
         public IReadOnlyList<WebCheckResult> CheckResults { get; internal set; }
+        public IReadOnlyList<WebDiagnosticDescriptor> Diagnostics { get; internal set; }
     }
 
     // Development-only browser verifier. The browser receives an immutable,
@@ -106,12 +107,14 @@ namespace RNAssistant.Runtime
         {
             var checkResults = (checks?.NotRun() ?? new WebCheckResult[0]).ToList();
             var id = _snapshots.BeginVerification(_workspace, entryPath, snapshotId != null, origin, snapshotId, checks);
+            var diagnostics = new BrowserDiagnostics(id);
             WebVerificationResult result;
-            try { result = await VerifyCoreAsync(entryPath, snapshotId, id, checks, checkResults, cancellationToken).ConfigureAwait(false); }
+            try { result = await VerifyCoreAsync(entryPath, snapshotId, id, checks, checkResults, diagnostics, cancellationToken).ConfigureAwait(false); }
             catch (OperationCanceledException)
             {
                 _snapshots.CompleteVerification(_workspace, id, WebVerificationState.NotRun,
-                    null, new[] { "Verification was cancelled." }, new string[0], checkResults);
+                    null, new[] { "Verification was cancelled." }, new string[0], checkResults,
+                    diagnostics.Finish(WebVerificationState.NotRun));
                 throw;
             }
             catch (Exception ex) when (ex is WorkspaceFileException || ex is IOException ||
@@ -124,17 +127,19 @@ namespace RNAssistant.Runtime
             result.VerificationId = id;
             result.Historical = snapshotId != null;
             result.CheckResults = checkResults.AsReadOnly();
-            _snapshots.CompleteVerification(_workspace, id,
-                result.Status == WebVerificationStatus.Passed ? WebVerificationState.Passed :
-                result.Status == WebVerificationStatus.Failed ? WebVerificationState.Failed : WebVerificationState.NotRun,
-                result.Browser, result.Errors, result.Hints, result.CheckResults);
-            result.VerificationReference = _snapshots.ReadVerification(_workspace, id).Reference;
+            var state = result.Status == WebVerificationStatus.Passed ? WebVerificationState.Passed :
+                result.Status == WebVerificationStatus.Failed ? WebVerificationState.Failed : WebVerificationState.NotRun;
+            _snapshots.CompleteVerification(_workspace, id, state,
+                result.Browser, result.Errors, result.Hints, result.CheckResults, diagnostics.Finish(state));
+            var saved = _snapshots.ReadVerification(_workspace, id);
+            result.VerificationReference = saved.Reference;
+            result.Diagnostics = saved.Diagnostics;
             return result;
         }
 
         private async Task<WebVerificationResult> VerifyCoreAsync(string entryPath, string snapshotId,
             string verificationId, WebFunctionalChecks checks, List<WebCheckResult> checkResults,
-            CancellationToken cancellationToken)
+            BrowserDiagnostics diagnostics, CancellationToken cancellationToken)
         {
             var retained = snapshotId == null ? null : _snapshots.ReadSnapshot(_workspace, snapshotId);
             if (retained != null) entryPath = retained.EntryPath;
@@ -167,6 +172,7 @@ namespace RNAssistant.Runtime
                 snapshot.Values.Select(file => new WebSnapshotFile(file.Path, file.Reference, file.Evidence.Payload)));
             _snapshots.AttachSnapshot(_workspace, verificationId, retained);
             result.SnapshotId = retained.Id;
+            diagnostics.Bind(retained);
             var browser = FindBrowserExecutable();
             if (browser == null)
             {
@@ -182,7 +188,7 @@ namespace RNAssistant.Runtime
                     await server.StartAsync().ConfigureAwait(false);
                     var browserErrors = await RunBrowserAsync(browser,
                         new Uri(server.BaseUrl, EscapePath(entryPath)), server.BaseUrl,
-                        checks, checkResults, cancellationToken).ConfigureAwait(false);
+                        checks, checkResults, cancellationToken, diagnostics: diagnostics).ConfigureAwait(false);
                     errors.AddRange(browserErrors);
                     if (browserErrors.Any(error => error.StartsWith("JavaScript exception:", StringComparison.Ordinal)))
                         result.Hints = DomIdHints(snapshot);
@@ -503,7 +509,7 @@ namespace RNAssistant.Runtime
 
         private static async Task<IReadOnlyList<string>> RunBrowserAsync(string executable, Uri page,
             Uri origin, WebFunctionalChecks checks, List<WebCheckResult> checkResults, CancellationToken cancellationToken,
-            WorkspacePreviewRequest preview = null, Action opened = null)
+            WorkspacePreviewRequest preview = null, Action opened = null, BrowserDiagnostics diagnostics = null)
         {
             var errors = new List<string>();
             var profile = Path.Combine(Path.GetTempPath(), "rna-browser-" + Guid.NewGuid().ToString("N"));
@@ -511,6 +517,7 @@ namespace RNAssistant.Runtime
             Process process = null;
             try
             {
+                diagnostics?.Start();
                 var start = new ProcessStartInfo(executable) { UseShellExecute = false,
                     CreateNoWindow = true, RedirectStandardOutput = true, RedirectStandardError = true };
                 if (preview == null || preview.Headless) start.ArgumentList.Add("--headless=new");
@@ -542,6 +549,7 @@ namespace RNAssistant.Runtime
                     if (target == null) throw new IOException("Browser page target is unavailable.");
                     using (var devtools = new DevToolsClient((string)target["webSocketDebuggerUrl"], origin))
                     {
+                        devtools.Diagnostics = diagnostics;
                         await devtools.ConnectAsync(cancellationToken).ConfigureAwait(false);
                         await devtools.CommandAsync("Page.enable", null, cancellationToken).ConfigureAwait(false);
                         await devtools.CommandAsync("Runtime.enable", null, cancellationToken).ConfigureAwait(false);
@@ -559,6 +567,7 @@ namespace RNAssistant.Runtime
                             await devtools.CommandAsync("Fetch.enable", new JObject { ["patterns"] = new JArray(
                                 new JObject { ["urlPattern"] = "*", ["requestStage"] = "Request" }) }, cancellationToken).ConfigureAwait(false);
                         }
+                        diagnostics?.Add(WebBrowserTraceEventKind.Navigation, "navigate", page.AbsolutePath);
                         var navigate = await devtools.CommandAsync("Page.navigate",
                             new JObject { ["url"] = page.AbsoluteUri }, cancellationToken).ConfigureAwait(false);
                         if ((string)navigate["result"]?["errorText"] != null)
@@ -579,9 +588,15 @@ namespace RNAssistant.Runtime
                             }
                         }
                         if (preview != null && errors.Count == 0) opened?.Invoke();
-                        if (preview == null || errors.Count == 0)
-                            await devtools.ObserveForAsync(preview == null ? TimeSpan.FromMilliseconds(1500) :
-                                TimeSpan.FromSeconds(preview.LifetimeSeconds), cancellationToken).ConfigureAwait(false);
+                        if (preview == null)
+                        {
+                            // A cancelled WebSocket receive aborts the socket. Drain with bounded
+                            // commands so the subsequent screenshot can use the same connection.
+                            await devtools.ObserveWithCommandsAsync(TimeSpan.FromMilliseconds(1500), cancellationToken).ConfigureAwait(false);
+                            await CaptureScreenshotAsync(devtools, diagnostics, cancellationToken).ConfigureAwait(false);
+                        }
+                        else if (errors.Count == 0)
+                            await devtools.ObserveForAsync(TimeSpan.FromSeconds(preview.LifetimeSeconds), cancellationToken).ConfigureAwait(false);
                         errors.AddRange(devtools.Errors);
                         errors.AddRange(checkResults.Where(check => check.Status == WebCheckStatus.Failed)
                             .Select(check => "Functional check " + check.Id + ": " + check.Error));
@@ -602,6 +617,7 @@ namespace RNAssistant.Runtime
                 try { Directory.Delete(profile, true); }
                 catch (IOException) { }
                 catch (UnauthorizedAccessException) { }
+                diagnostics?.Add(WebBrowserTraceEventKind.Lifecycle, "browser-closed", null);
             }
             return errors.Take(16).ToArray();
         }
@@ -616,6 +632,7 @@ namespace RNAssistant.Runtime
             private bool _loaded;
             public bool RejectNavigation { get; set; }
             public Uri AllowedDocument { get; set; }
+            public BrowserDiagnostics Diagnostics { get; set; }
             private readonly HashSet<int> _policyCommands = new HashSet<int>();
             public List<BrowserDownload> Downloads { get; } = new List<BrowserDownload>();
             public IReadOnlyList<string> Errors { get { return _errors.Distinct(StringComparer.Ordinal).Take(16).ToArray(); } }
@@ -669,6 +686,16 @@ namespace RNAssistant.Runtime
                 }
             }
 
+            public async Task ObserveWithCommandsAsync(TimeSpan duration, CancellationToken token)
+            {
+                var elapsed = Stopwatch.StartNew();
+                while (elapsed.Elapsed < duration)
+                {
+                    await CommandAsync("Runtime.evaluate", new JObject { ["expression"] = "0", ["returnByValue"] = true }, token).ConfigureAwait(false);
+                    await Task.Delay(50, token).ConfigureAwait(false);
+                }
+            }
+
             private async Task<JObject> ReadAsync(CancellationToken token)
             {
                 var bytes = new byte[8192];
@@ -710,7 +737,8 @@ namespace RNAssistant.Runtime
                     await _socket.SendAsync(new ArraySegment<byte>(StrictUtf8.GetBytes(response.ToString(Formatting.None))),
                         WebSocketMessageType.Text, true, token).ConfigureAwait(false);
                 }
-                else if (method == "Page.loadEventFired") _loaded = true;
+                else if (method == "Page.loadEventFired")
+                { _loaded = true; Diagnostics?.Add(WebBrowserTraceEventKind.Lifecycle, "loaded", null); }
                 else if (method == "Browser.downloadWillBegin")
                 {
                     var id = (string)args?["guid"];
@@ -759,10 +787,17 @@ namespace RNAssistant.Runtime
                             _origin.GetLeftPart(UriPartial.Authority), StringComparison.OrdinalIgnoreCase))
                         AddError("External request attempted: " + SafeUrl(url));
                 }
+                if (method == "Network.requestWillBeSent")
+                    Diagnostics?.Add(WebBrowserTraceEventKind.Request, (string)args?["request"]?["method"] ?? "request",
+                        TraceUrl((string)args?["request"]?["url"]));
+                else if (method == "Network.responseReceived")
+                    Diagnostics?.Add(WebBrowserTraceEventKind.Response, "HTTP " + (int?)args?["response"]?["status"],
+                        TraceUrl((string)args?["response"]?["url"]));
             }
 
             private void AddError(string error)
             {
+                Diagnostics?.Add(WebBrowserTraceEventKind.Error, "browser", error.Replace(_origin.AbsoluteUri, "/"));
                 if (_errors.Count >= 16) return;
                 error = error.Length > 700 ? error.Substring(0, 700) + "…" : error;
                 if (!_errors.Contains(error)) _errors.Add(error);
@@ -782,6 +817,15 @@ namespace RNAssistant.Runtime
                     uri.GetLeftPart(UriPartial.Authority).Equals(
                         _origin.GetLeftPart(UriPartial.Authority), StringComparison.OrdinalIgnoreCase)
                     ? uri.AbsolutePath : SafeUrl(value);
+            }
+
+            private string TraceUrl(string value)
+            {
+                Uri uri;
+                if (!Uri.TryCreate(value, UriKind.Absolute, out uri)) return "unknown URL";
+                if (uri.Scheme != Uri.UriSchemeHttp && uri.Scheme != Uri.UriSchemeHttps) return uri.Scheme + ":";
+                return uri.GetLeftPart(UriPartial.Authority) == _origin.GetLeftPart(UriPartial.Authority)
+                    ? uri.AbsolutePath : uri.Scheme + "://" + uri.IdnHost + (uri.IsDefaultPort ? "" : ":" + uri.Port) + uri.AbsolutePath;
             }
 
             public void Dispose() { _socket.Dispose(); }

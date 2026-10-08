@@ -75,6 +75,8 @@ namespace RNAssistant.Core.Models
         public WebVerificationOrigin Origin { get; set; }
         public WebFunctionalChecks Checks { get; set; }
         public IReadOnlyList<WebCheckResult> CheckResults { get; set; } = new WebCheckResult[0];
+        // Empty means no diagnostics were recorded. Bodies never enter this metadata.
+        public IReadOnlyList<WebDiagnosticDescriptor> Diagnostics { get; set; } = new WebDiagnosticDescriptor[0];
     }
 
     public sealed class WebVerificationPage

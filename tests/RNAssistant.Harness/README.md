@@ -153,6 +153,18 @@ and terminal records, historical reads after move/replacement/deletion, workspac
 isolation and CAS GC retention. The browser smoke reopens the saved snapshot in a
 new CLI process with current paths changed/deleted and reads saved verification
 records without rerunning the browser.
+`python3 -B tests/cli/web_diagnostics_smoke.py` checks real PNG/CDP capture against
+a failed functional check, exact hashes/correlation, restart after source deletion,
+workspace isolation, bounded Unicode event floods, oversized screenshots and an
+unavailable browser. PNG unavailability cannot change a passing check outcome.
+Set `RNA_DIAGNOSTIC_EVIDENCE=<directory>` to retain the failed counter PNG, trace
+and result for inspection. CLI `diagnostic --kind screenshot|trace` emits metadata;
+`--raw` emits exact retained bytes to redirected stdout (never with `--jsonl`).
+The `workspace snapshots:` diagnostic case additionally checks rejection before
+terminal publication, CAS roots through GC, missing/corrupt payloads and no
+regeneration fallback. These are browser/storage checks, not real-LLM or Office
+qualification. Trace format and bounds are documented in
+[Resource Fabric](../../docs/resource-fabric.md#retained-browser-diagnostics).
 `python3 tests/cli/web_functional_checks_smoke.py` exercises real pointer/text
 checks against exact snapshots: a click-time exception missed by page load, repair,
 no-op handler, historical broken bytes after repair, missing browser, wrong entry
