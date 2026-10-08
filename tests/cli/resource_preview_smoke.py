@@ -42,7 +42,7 @@ def views(s):
     assert not rest["Content"]["complete"] and rest["Content"]["offset"] == 127
     assert s.json("open", "--path", "long.txt")["Content"]["text"] == "EXTERNAL EDIT"
     for args in [("--offset", "1"), ("--uri", ref["uri"]), ("--max-chars", "127"),
-                 ("--view", "raw"), ("--offset", "128", *exact_args)]:
+                 ("--view", "unsupported"), ("--offset", "128", *exact_args)]:
         s.cli("open", "--path", "long.txt", *args, code=2)
     s.cli("open", "--path", "other.txt", *exact_args, code=5)
     for path in ["../outside.txt", str(s.workspace.parent / "outside.txt"), "escape.txt", ".env"]:

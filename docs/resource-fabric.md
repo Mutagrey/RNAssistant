@@ -98,10 +98,10 @@ accepted complete source read. It requires an existing target parent and never
 overwrites a target or prior target identity. A durable two-path move intent lets
 `recover` inspect either path after an interrupted dispatch; both paths are blocked
 from ordinary reads until reconciliation. An uncertain move is never replayed.
-Cross-volume move semantics, large/binary files, trash retention policy and full
-symlink/hardlink race guarantees remain open M3–M5 work. The immediate text-file
-contract and shared compiler do not complete workspace-first plan §8.1:
-raw/binary views, remaining preview/viewer
+Cross-volume move semantics, binary mutations, large files, trash retention policy
+and full symlink/hardlink race guarantees remain open M3–M5 work. Bounded raw and
+PNG/JPEG application views are implemented below. They and the shared compiler do
+not complete workspace-first plan §8.1: large/format-specific views, remaining preview/viewer
 consumers and a shared Office/filesystem operation API remain open scope. These
 close when the corresponding consumers use the common contracts with bounded
 coverage, exact evidence and existing host guards; the target architecture is unchanged. See
@@ -109,7 +109,7 @@ coverage, exact evidence and existing host guards; the target architecture is un
 
 Development `verify` / `web.verify` select the workspace-bound filesystem provider
 through the same router as model resource reads. They observe the current reference,
-read its exact retained text through that provider, check byte length/hash, refresh
+read its exact retained bytes through that provider, check byte length/hash, refresh
 each source and require current evidence against one frozen authority snapshot.
 The verifier no longer reads `WorkspaceFileService` directly. Only the captured
 bytes are served from a bounded in-memory snapshot on loopback to isolated Chromium;
@@ -117,8 +117,9 @@ missing retained bytes fail before browser launch. The browser cannot
 open the writable workspace through that server. The tool records exact file
 evidence alongside its result; CLI acceptance refreshes those files and requires
 the evidence to remain current at completion. Dependency discovery currently
-covers HTML script/stylesheet references, CSS imports/URLs and static JS imports;
-dynamic asset discovery, binary assets, behavior beyond the observation window
+covers quoted HTML script/stylesheet/image/icon references, CSS imports/URLs and
+static JS imports, including bounded PNG/JPEG assets. Dynamic asset discovery,
+other binary formats, behavior beyond the observation window
 and configured functional checks, and remaining preview/viewer routing stay open.
 CSV assertions use this same verifier and retained manifest; the separate Node
 grader and its workspace reader have been removed.
@@ -129,8 +130,9 @@ Core `WorkspaceWebSnapshotStore` owns immutable manifests and verification recor
 in the existing `ResourceAuthorityStore` journal and CAS, under the workspace-bound
 `workspace-web` scope. It adds no database or mutable source mirror. A manifest pins
 the entry and at most 32 relative asset routes / four MiB to exact file revisions
-and retained payloads. Metadata is bounded to 128 KiB; source text remains bounded
-to one MiB per file. Revision dependencies record provenance and view `Parts` root
+and retained payloads. Metadata is bounded to 128 KiB; each source body is bounded
+to one MiB. Members pin their exact `text` or `raw` view; existing text manifests
+remain historical text observations. Revision dependencies record provenance and view `Parts` root
 the source payloads for CAS maintenance. A staged revision/view is unreadable until
 its head publication commits. Missing/corrupt metadata or bodies fail explicitly.
 
@@ -180,7 +182,7 @@ tool's evidence, then freezes refreshed authority. Model-facing data contains on
 semantic check results; the contract digest and resource references stay in runtime.
 `verification --id <id>` reads a recorded result without running a browser.
 The saved digest describes captured routes/bytes; the manifest's own CAS payload
-also pins entry and exact revisions. Binary source assets and Office UI preview
+also pins entry and exact revisions. Additional binary formats and Office UI preview
 routing remain open M5–M7 work. Development snapshot preview and retained browser
 diagnostics are described below.
 The development verifier supports bounded pointer clicks, text/numeric assertions,
@@ -245,9 +247,11 @@ use `ResourceProviderRouter` → `WorkspaceFileResourceProvider` →
 
 ```text
 rna resources --workspace <path> [--directory <relative-path>] [--query <filename>] [--limit 50] --jsonl
-rna open --workspace <path> --path app.js [--view text|metadata] [--max-chars 4096] --jsonl
+rna open --workspace <path> --path app.js [--view text|metadata|raw|image] [--max-chars 4096] --jsonl
 rna open --workspace <path> --path app.js --uri <returned-uri> --revision <returned-revision> --offset <NextOffset> --jsonl
 rna open --workspace <path> --path app.js --snapshot <retained-web-snapshot> --jsonl
+rna open --workspace <path> --path picture.png --view image --jsonl
+rna open --workspace <path> --path picture.png --view raw --raw > exported-picture.png
 rna preview --workspace <path> [--entry index.html | --snapshot <id>] [--timeout-seconds 300] [--headless] --jsonl
 ```
 
@@ -263,6 +267,35 @@ whole body has `complete=true`; the last fragment alone is not whole evidence.
 Missing historical payloads fail without a current-file fallback. Retained manifest
 members remain readable after live paths move or disappear. These runtime references
 are application transport metadata, not model arguments.
+
+Raw views return whole exact bytes up to one MiB, with coverage and payload metadata.
+They share the text reader's confinement, identity, mutation lease, unresolved-effect
+guards, authority and CAS. Materializing another view of unchanged bytes keeps the
+same revision/head. UTF-8 text and raw views share that retained body. Exact reads
+require a published matching view; missing/corrupt historical bytes cannot borrow
+current files. A retained manifest permits its exact members after move/deletion.
+An unmaterialized view is explicitly unavailable, without a hidden read fallback.
+
+Image delivery admits PNG and common 8-bit baseline/extended/progressive JPEG
+headers up to 4096 pixels per side, within the same one-MiB bound. The pure Core
+`RasterImageHeader` supplies MIME/dimensions and also serves screenshot admission;
+it does not decode pixels or create thumbnails. Only an admitted exact image gains
+the `image` capability. Other binaries remain metadata/raw resources. The typed
+application result carries `ResourceBinaryView`; bytes are excluded from JSON.
+CLI emits bytes only with redirected `--raw` stdout, without `--jsonl`. Raw reads
+are whole-file, without text offsets. Model discovery does not advertise these
+application-only views as model read capabilities; `common.resources_read` remains
+complete UTF-8 text. Binary/UI inspection never grants a model write observation.
+
+The browser snapshot uses this exact byte path for both text and PNG/JPEG, with
+extension/header MIME agreement for raster assets. HTML image/icon and CSS URL
+routes are captured before launch; unsupported/missing dependencies fail explicitly.
+Both preview and verify serve the pinned bytes/MIME with `nosniff`. Verification
+also rejects incomplete/undecoded HTML images, bounded to 256 elements. This does
+not grade image content or establish complete CSS/pixel-rendering correctness.
+Context preparation and final acceptance refresh raw dependencies through the same
+file owner, so an external image change invalidates a previously passing snapshot.
+Neither browser evidence nor raw application reads count as accepted model text reads.
 
 `open` is inert, including for HTML. Neither resource views nor preview append
 accepted model reads, alter a conversation or grant file mutation authority.
@@ -287,8 +320,9 @@ verification record or satisfies run acceptance. Its URL is diagnostic; the
 supported viewer is the owned isolated browser, not a user's existing profile.
 
 This is a development snapshot viewer, not a production localhost application
-server. Working previews, binary/image/PDF viewers, Office UI integration,
-screenshots/traces and hard-process-loss cleanup qualification remain open.
+server. Working previews, additional image/PDF renderers, Office UI integration
+and hard-process-loss cleanup qualification remain open. Retained verification
+screenshots/traces are implemented above.
 
 One resource identity, shared current-state authority, immutable historical evidence
 and one model-context compiler serve model reads, HTML and viewers. Reading content

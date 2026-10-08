@@ -138,6 +138,20 @@ namespace RNAssistant.Core.Models
                 throw new System.InvalidOperationException("Complete text read requires matching exact whole-view evidence.");
         }
 
+        public void RequireCompleteExactBytes()
+        {
+            if (!Result.Complete || Result.Resource?.Reference?.IsExact != true || Result.Bytes == null ||
+                Result.Coverage?.Kind != ResourceCoverageKinds.Whole || Result.CompleteViewPayload == null ||
+                Result.CompleteViewPayload.ByteLength != Result.Bytes.LongLength ||
+                Result.ContentSha256 != Result.CompleteViewPayload.Sha256 ||
+                !Evidence.Any(item => item != null && item.Complete && item.View == Result.Representation &&
+                    item.Coverage?.Kind == ResourceCoverageKinds.Whole &&
+                    item.Resource?.Uri == Result.Resource.Reference.Uri && item.Resource.Revision == Result.Resource.Reference.Revision &&
+                    item.Payload?.Sha256 == Result.ContentSha256 && item.Payload.ByteLength == Result.Bytes.LongLength &&
+                    item.ContentSha256 == Result.ContentSha256))
+                throw new System.InvalidOperationException("Complete byte read requires matching exact whole-view evidence.");
+        }
+
     }
 
 }

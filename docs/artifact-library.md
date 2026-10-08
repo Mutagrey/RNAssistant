@@ -28,14 +28,16 @@ checks, pending/terminal results and optional bounded PNG/CDP diagnostics persis
 against that snapshot. `verification` and `diagnostic` read saved results after
 restart without running a browser. Diagnostics do not certify acceptance.
 
-Typed application discovery/text views and CLI `preview` provide an isolated
+Typed application discovery/text/raw views and CLI `preview` provide an isolated
 development viewer of a retained snapshot. The browser has no Office bridge or
 user profile. `--require-web-verify` accepts a passing tool check only while its
 functional contract and checked file evidence remain current. Exact contracts,
 limits and CLI commands belong to
 [Resource Fabric](resource-fabric.md#retained-browser-diagnostics). This creates
-no Library artifact or editable HTML aggregate. Working previews, binary source
-assets/viewers and Office UI adoption remain open M5/M7 scope. Literal DOM-ID
+no Library artifact or editable HTML aggregate. PNG/JPEG assets now use exact
+retained byte views in that preview; image metadata/export has bounded header
+admission, with decoding owned by the viewer. Working previews, additional binary
+formats/renderers and Office UI adoption remain open M5/M7 scope. Literal DOM-ID
 mismatch hints accompany actual JavaScript exceptions; they remain repair advice.
 
 ## Local catalog and artifact transfer — 2026-10-02

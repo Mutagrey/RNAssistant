@@ -38,6 +38,9 @@ namespace RNAssistant.Runtime.Contracts
         public string Target { get; set; }
         public ResourceDescriptor Descriptor { get; set; }
         public ResourceReadProjection Content { get; set; }
+        public string Representation { get; set; }
+        public ResourceBinaryView Binary { get; set; }
+        [JsonIgnore] public byte[] Bytes { get; set; }
         public int? NextOffset { get; set; }
         public bool Retained { get; set; }
     }

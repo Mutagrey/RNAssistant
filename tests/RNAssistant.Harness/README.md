@@ -148,6 +148,16 @@ with BOM/CRLF and rejects a missing retained CAS payload before browser launch,
 even when the workspace file still exists. Focused `workspace files:` tests cover
 retained provider evidence after edit/deletion, empty text, unpublished revisions,
 corrupt/missing payloads and the existing mutation/recovery guards.
+`workspace files: exact raw and image views` additionally covers shared identity
+across text/raw, binary drift, snapshot reads after deletion/restart, foreign refs,
+publication barriers, CAS GC/corruption, size bounds and unresolved effects.
+After the CLI build, `python3 -B tests/cli/binary_resource_smoke.py` checks PNG/JPEG
+metadata and exact byte export, model authority separation, real browser asset
+delivery/historical replay, MIME mismatch and broken image decoding. Its controlled
+HTTP cases accept unchanged image evidence and reject an external image edit during
+the final model wait. It does not qualify real-model or Office behavior.
+Run browser suites sequentially: `resource_preview_smoke.py` also checks the shared
+temporary-profile directory for leaks, so concurrent suites can interfere with it.
 Focused `workspace snapshots:` tests cover manifest publication barriers, pending
 and terminal records, historical reads after move/replacement/deletion, workspace
 isolation and CAS GC retention. The browser smoke reopens the saved snapshot in a

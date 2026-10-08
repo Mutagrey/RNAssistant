@@ -63,6 +63,15 @@ namespace RNAssistant.Core.Services
             return Project(_files.ReadText(_workspace, relativePath), false);
         }
 
+        public ResourceReadObservation ReadBytes(string relativePath)
+        { return ProjectBytes(_files.ReadBytes(_workspace, relativePath), false); }
+
+        public ResourceReadObservation ReadExactBytes(string relativePath, ResourceRef exact)
+        { return ProjectBytes(_files.ReadExactBytes(_workspace, relativePath, exact), true); }
+
+        public ResourceReadObservation ReadSnapshotBytes(RetainedWebSnapshot snapshot, string relativePath)
+        { return ProjectBytes(_files.ReadSnapshotBytes(_workspace, snapshot, relativePath), true); }
+
         public ResourceDescriptor Describe(string relativePath)
         { return _files.Describe(_workspace, relativePath); }
 
@@ -80,19 +89,42 @@ namespace RNAssistant.Core.Services
 
         private ResourceReadObservation Project(WorkspaceFileObservation observed, bool retained)
         {
+            var descriptor = Descriptor(observed, retained);
+            descriptor.Representations.Add(ResourceRepresentations.Text);
+            var result = new ResourceReadResult { Resource = descriptor,
+                Representation = ResourceRepresentations.Text, Text = observed.Text, Bytes = observed.Bytes,
+                ContentSha256 = observed.ContentSha256, Coverage = ResourceCoverage.Whole(),
+                Complete = true, ReturnedCharacters = observed.Text.Length,
+                TotalCharacters = observed.Text.Length, RawContentIncluded = true,
+                CompleteViewPayload = observed.Evidence.Payload };
+            return new ResourceReadObservation(result, new[] { observed.Evidence });
+        }
+
+        private ResourceDescriptor Descriptor(WorkspaceFileObservation observed, bool retained)
+        {
             var descriptor = new ResourceDescriptor { Reference = observed.Reference,
                 Provider = Id, Kind = "file", Title = Path.GetFileName(observed.RelativePath),
                 Mutable = !retained && !_workspace.ReadOnly, Tracking = retained ? "snapshot" : "current",
                 ByteLength = observed.Evidence.Payload.ByteLength,
                 ContentSha256 = observed.ContentSha256, Coverage = ResourceCoverage.Whole() };
             descriptor.Representations.Add(ResourceRepresentations.Metadata);
-            descriptor.Representations.Add(ResourceRepresentations.Text);
             descriptor.Metadata["relativePath"] = observed.RelativePath;
+            return descriptor;
+        }
+
+        private ResourceReadObservation ProjectBytes(WorkspaceFileObservation observed, bool retained)
+        {
+            var descriptor = Descriptor(observed, retained);
+            var image = RasterImageHeader.Read(observed.Bytes);
+            descriptor.MimeType = image?.MimeType ?? "application/octet-stream";
+            descriptor.Representations.Add(ResourceRepresentations.Raw);
+            if (image != null) descriptor.Representations.Add(ResourceRepresentations.Image);
             var result = new ResourceReadResult { Resource = descriptor,
-                Representation = ResourceRepresentations.Text, Text = observed.Text,
+                Representation = observed.Evidence.View, Bytes = observed.Bytes,
                 ContentSha256 = observed.ContentSha256, Coverage = ResourceCoverage.Whole(),
-                Complete = true, ReturnedCharacters = observed.Text.Length,
-                TotalCharacters = observed.Text.Length, RawContentIncluded = true,
+                Complete = true, RawContentIncluded = true,
+                Binary = new ResourceBinaryView { Payload = observed.Evidence.Payload,
+                    Width = image?.Width ?? 0, Height = image?.Height ?? 0 },
                 CompleteViewPayload = observed.Evidence.Payload };
             return new ResourceReadObservation(result, new[] { observed.Evidence });
         }

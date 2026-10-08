@@ -34,7 +34,7 @@ namespace RNAssistant.Runtime
                 SnapshotSha256 = SnapshotHash(snapshot), Diagnostics = BoundedErrors(errors) };
             if (errors.Count != 0) { report.Status = WorkspacePreviewStatus.Failed; return report; }
             retained = retained ?? _snapshots.PublishSnapshot(_workspace, entry,
-                snapshot.Values.Select(file => new WebSnapshotFile(file.Path, file.Reference, file.Evidence.Payload)));
+                snapshot.Values.Select(file => new WebSnapshotFile(file.Path, file.Reference, file.Evidence.Payload, file.Evidence.View)));
             report.SnapshotId = retained.Id;
             var browser = FindBrowserExecutable();
             if (browser == null)

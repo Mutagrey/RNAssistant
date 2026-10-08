@@ -119,6 +119,7 @@
     <Compile Include="Models\WorkspaceModels.cs" />
     <Compile Include="Models\WebProjectSnapshotModels.cs" />
     <Compile Include="Models\WebBrowserDiagnosticModels.cs" />
+    <Compile Include="Services\RasterImageHeader.cs" />
     <Compile Include="Models\WebFunctionalChecks.cs" />
     <Compile Include="Models\RunViewState.cs" />
     <Compile Include="Models\CasMaintenanceModels.cs" />

@@ -134,7 +134,7 @@ namespace RNAssistant.Runtime
             var missing = new List<string>();
             foreach (var path in relativePaths ?? Enumerable.Empty<string>())
             {
-                try { _files.ReadText(workspace, path); }
+                try { _files.ReadBytes(workspace, path); }
                 catch (FileNotFoundException) { missing.Add(path); }
                 catch (DirectoryNotFoundException) { missing.Add(path); }
             }
@@ -375,7 +375,7 @@ namespace RNAssistant.Runtime
                 // accepted read targets, including files outside ExpectedFiles.
                 foreach (var path in completeReads.Select(read => read.Target).Distinct(StringComparer.Ordinal))
                 {
-                    try { _files.ReadText(workspace, path); }
+                    try { _files.ReadBytes(workspace, path); }
                     catch (FileNotFoundException) { /* Owner marked the head unavailable. */ }
                     catch (DirectoryNotFoundException) { /* Owner marked the head unavailable. */ }
                 }
@@ -489,7 +489,7 @@ namespace RNAssistant.Runtime
                 evidence.Payload?.Sha256 == file.Payload.Sha256))) return false;
             foreach (var path in record.CheckedFiles)
             {
-                try { _files.ReadText(workspace, path); }
+                try { _files.ReadBytes(workspace, path); }
                 catch (FileNotFoundException) { return false; }
                 catch (DirectoryNotFoundException) { return false; }
             }
@@ -953,11 +953,11 @@ namespace RNAssistant.Runtime
                 foreach (var path in paths)
                 {
                     cancellationToken.ThrowIfCancellationRequested();
-                    try { _resources.Select("file").Read(path); }
+                    try { _resources.Select("file").ReadBytes(path); }
                     catch (FileNotFoundException) { /* The file owner marked the old head unavailable. */ }
                     catch (DirectoryNotFoundException) { /* The file owner marked the old head unavailable. */ }
                     catch (WorkspaceFileException ex) when (ex.Code == "encoding_ambiguous" || ex.Code == "file_too_large")
-                    { /* The file owner marked the old text head unknown. */ }
+                    { /* The file owner marked unrepresentable bytes unknown. */ }
                 }
                 _taskLists.ReconcileInterrupted();
                 _plans.ReconcileInterrupted();

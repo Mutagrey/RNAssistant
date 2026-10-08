@@ -12,6 +12,20 @@
 новая возможность требует явной задачи, scope и owner; дефекты работающей системы
 приоритетнее расширения без конкретного пользовательского результата.
 
+## Preview cancellation classification — 2026-10-08
+
+Owner: development browser lifetime. `resource_preview_smoke.py` twice reports
+`preview.unavailable` / exit 5 after Ctrl+C, with a WebSocket Aborted-state
+exception, instead of cancellation / exit 130. One failure was isolated from
+other browser tests. The same preview case passes once on a separately built
+`d1297ced` source archive; the cause has not been isolated to raw/image changes.
+Normalize transport termination only when the relevant cancellation/deadline is
+actually requested. Preserve unexpected transport failures and browser/profile/
+server teardown. Closure requires the original lifecycle/isolation suite and a
+focused cancellation check; ordinary expiry must still report its own reason.
+Hard-process-loss cleanup remains a separate qualification gap. Evidence is in
+[PROGRESS](PROGRESS.md#exact-raw-and-raster-workspace-views--2026-10-08).
+
 ## Real-model compaction/resume task completion — 2026-10-07
 
 Owner: CLI evaluation / model context. The completed-receipt boundary defect is

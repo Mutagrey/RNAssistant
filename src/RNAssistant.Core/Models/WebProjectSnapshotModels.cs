@@ -11,10 +11,11 @@ namespace RNAssistant.Core.Models
         public string Path { get; private set; }
         public ResourceRef Reference { get; private set; }
         public PayloadRef Payload { get; private set; }
+        public string View { get; private set; }
 
         [JsonConstructor]
-        public WebSnapshotFile(string path, ResourceRef reference, PayloadRef payload)
-        { Path = path; Reference = reference; Payload = payload; }
+        public WebSnapshotFile(string path, ResourceRef reference, PayloadRef payload, string view = ResourceRepresentations.Text)
+        { Path = path; Reference = reference; Payload = payload; View = view; }
 
         internal bool Matches(PayloadRef payload)
         { return Payload != null && payload != null && Payload.Sha256 == payload.Sha256 &&

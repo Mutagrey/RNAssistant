@@ -106,13 +106,20 @@ namespace RNAssistant.Cli
             }
             if (args[0] == "open")
             {
+                var raw = options.ContainsKey("raw");
+                var representation = Value(options, "view", "text");
+                if (raw && (jsonl || !Console.IsOutputRedirected || representation != "raw" && representation != "image"))
+                    throw new ArgumentException("--raw requires a raw/image view and redirected stdout, without --jsonl.");
                 if (options.ContainsKey("uri") != options.ContainsKey("revision"))
                     throw new ArgumentException("Exact reads require both --uri and --revision from the preceding resource view.");
-                Output(jsonl, "resource.view", service.OpenResourceView(workspace, new WorkspaceOpenResourceRequest {
-                    Target = Required(options, "path"), Representation = Value(options, "view", "text"),
+                var view = service.OpenResourceView(workspace, new WorkspaceOpenResourceRequest {
+                    Target = Required(options, "path"), Representation = representation,
                     Exact = options.ContainsKey("uri") ? new ResourceRef(Required(options, "uri"), Required(options, "revision")) : null,
                     SnapshotId = Value(options, "snapshot", null), Offset = NonnegativeOption(options, "offset"),
-                    MaxCharacters = options.ContainsKey("max-chars") ? PositiveBoundedOption(options, "max-chars", 32000) : 4096 }));
+                    MaxCharacters = options.ContainsKey("max-chars") ? PositiveBoundedOption(options, "max-chars", 32000) : 4096 });
+                if (raw)
+                { using (var output = Console.OpenStandardOutput()) output.Write(view.Bytes, 0, view.Bytes.Length); }
+                else Output(jsonl, "resource.view", view);
                 return 0;
             }
             if (args[0] == "preview") return Preview(service, workspace, options, jsonl);
@@ -815,7 +822,7 @@ namespace RNAssistant.Cli
             Console.WriteLine("rna events --workspace <path> --session <id> --after <Cursor> --follow [--limit <1..100>] [--timeout-seconds <1..3600>] [--jsonl]  (subscribe until Ctrl+C, timeout or resync; never runs the agent)");
             Console.WriteLine("rna recover --workspace <path> --path <relative-path> [--jsonl]  (inspect an uncertain file effect)");
             Console.WriteLine("rna resources --workspace <path> [--directory <relative-path>] [--query <filename>] [--limit <1..200>] [--jsonl]  (bounded metadata; incomplete listing does not establish absence)");
-            Console.WriteLine("rna open --workspace <path> --path <relative-path> [--view text|metadata] [--max-chars <128..32000>] [--uri <runtime-uri> --revision <revision> | --snapshot <id>] [--offset <n>] [--jsonl]  (inert view; continuation requires exact reference or snapshot; no model read credit)");
+            Console.WriteLine("rna open --workspace <path> --path <relative-path> [--view text|metadata|raw|image] [--raw > output-file] [--max-chars <128..32000>] [--uri <runtime-uri> --revision <revision> | --snapshot <id>] [--offset <n>] [--jsonl]  (inert view; continuation requires exact reference or snapshot; no model read credit)");
             Console.WriteLine("rna preview --workspace <path> [--entry index.html | --snapshot <id>] [--timeout-seconds <1..3600>] [--headless] [--jsonl]  (isolated snapshot browser; default 300 seconds; Ctrl+C closes; never certifies verification)");
             Console.WriteLine("rna verify --workspace <path> [--entry index.html | --snapshot <id>] [--web-checks <json-file>] [--jsonl]  (historical success does not verify current files)");
             Console.WriteLine("rna verification --workspace <path> --id <id> [--jsonl]  (read a saved result; Pending means no terminal result, never auto-replayed)");

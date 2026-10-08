@@ -50,6 +50,8 @@ namespace RNAssistant.Runtime
         private static readonly UTF8Encoding StrictUtf8 = new UTF8Encoding(false, true);
         private static readonly Regex ScriptTag = new Regex("<script\\b[^>]*>", RegexOptions.IgnoreCase | RegexOptions.Compiled,
             TimeSpan.FromMilliseconds(100));
+        private static readonly Regex ImageTag = new Regex("<img\\b[^>]*>", RegexOptions.IgnoreCase | RegexOptions.Compiled,
+            TimeSpan.FromMilliseconds(100));
         private static readonly Regex LinkTag = new Regex("<link\\b[^>]*>", RegexOptions.IgnoreCase | RegexOptions.Compiled,
             TimeSpan.FromMilliseconds(100));
         private static readonly Regex Attribute = new Regex("(?<name>src|href|rel)\\s*=\\s*(?<quote>[\"'])(?<value>.*?)\\k<quote>",
@@ -70,6 +72,7 @@ namespace RNAssistant.Runtime
         {
             public string Path;
             public byte[] Bytes;
+            public string MimeType;
             public string Sha256;
             public ResourceRef Reference;
             public ResourceEvidence Evidence;
@@ -169,7 +172,7 @@ namespace RNAssistant.Runtime
             if (errors.Count != 0)
             { result.Status = WebVerificationStatus.Failed; result.Errors = BoundedErrors(errors); return result; }
             retained = retained ?? _snapshots.PublishSnapshot(_workspace, entryPath,
-                snapshot.Values.Select(file => new WebSnapshotFile(file.Path, file.Reference, file.Evidence.Payload)));
+                snapshot.Values.Select(file => new WebSnapshotFile(file.Path, file.Reference, file.Evidence.Payload, file.Evidence.View)));
             _snapshots.AttachSnapshot(_workspace, verificationId, retained);
             result.SnapshotId = retained.Id;
             diagnostics.Bind(retained);
@@ -223,12 +226,12 @@ namespace RNAssistant.Runtime
             foreach (var file in retained.Files)
             {
                 token.ThrowIfCancellationRequested();
-                var read = _resources.ForUri(file.Reference.Uri).ReadSnapshot(retained, file.Path);
-                read.RequireCompleteExactText();
-                var bytes = StrictUtf8.GetBytes(read.Result.Text);
+                var read = _resources.ForUri(file.Reference.Uri).ReadSnapshotBytes(retained, file.Path);
+                read.RequireCompleteExactBytes();
+                var bytes = read.Result.Bytes;
                 if (bytes.LongLength != file.Payload.ByteLength || Hash(bytes) != file.Payload.Sha256)
                     throw new WorkspaceFileException("snapshot_unavailable", "Retained source bytes do not match the manifest.");
-                result.Add(file.Path, new SnapshotFile { Path = file.Path, Bytes = bytes,
+                result.Add(file.Path, new SnapshotFile { Path = file.Path, Bytes = bytes, MimeType = AssetContentType(file.Path, bytes),
                     Sha256 = file.Payload.Sha256, Reference = file.Reference, Evidence = read.Evidence.Single() });
             }
             return result;
@@ -273,33 +276,34 @@ namespace RNAssistant.Runtime
                 if (snapshot.ContainsKey(path)) continue;
                 if (snapshot.Count >= MaximumFiles)
                 { errors.Add("Snapshot exceeds the 32-file bound."); break; }
-                if (!SupportedText(path))
+                if (!SupportedText(path) && !RasterImageHeader.IsSupportedExtension(path))
                 { errors.Add("Unsupported local asset in static snapshot: " + path); continue; }
                 ResourceReadObservation observed;
                 try
                 {
-                    var current = _resources.Select("file").Read(path);
-                    current.RequireCompleteExactText();
+                    var current = _resources.Select("file").ReadBytes(path);
+                    current.RequireCompleteExactBytes();
                     var exact = current.Result.Resource.Reference;
-                    observed = _resources.ForUri(exact.Uri).ReadExact(path, exact);
-                    observed.RequireCompleteExactText();
+                    observed = _resources.ForUri(exact.Uri).ReadExactBytes(path, exact);
+                    observed.RequireCompleteExactBytes();
+                    AssetContentType(path, observed.Result.Bytes);
                 }
                 catch (Exception ex) when (ex is WorkspaceFileException || ex is IOException ||
-                    ex is UnauthorizedAccessException || ex is InvalidOperationException)
+                    ex is UnauthorizedAccessException || ex is InvalidOperationException || ex is DecoderFallbackException)
                 { errors.Add("Cannot read " + path + ": " + ex.Message); continue; }
                 var read = observed.Result;
-                var bytes = StrictUtf8.GetBytes(read.Text);
+                var bytes = read.Bytes;
                 if (bytes.LongLength != read.CompleteViewPayload.ByteLength || Hash(bytes) != read.ContentSha256)
                 { errors.Add("Snapshot bytes differ from the observed source: " + path); continue; }
                 total += bytes.Length;
                 if (total > MaximumSnapshotBytes)
                 { errors.Add("Snapshot exceeds the four MiB bound."); break; }
-                snapshot.Add(path, new SnapshotFile { Path = path, Bytes = bytes,
+                snapshot.Add(path, new SnapshotFile { Path = path, Bytes = bytes, MimeType = AssetContentType(path, bytes),
                     Sha256 = read.ContentSha256, Reference = read.Resource.Reference,
                     Evidence = observed.Evidence.Single() });
                 try
                 {
-                    foreach (var dependency in Dependencies(path, read.Text, errors))
+                    foreach (var dependency in Dependencies(path, SupportedText(path) ? StrictUtf8.GetString(bytes) : string.Empty, errors))
                         if (!snapshot.ContainsKey(dependency)) queue.Enqueue(dependency);
                 }
                 catch (RegexMatchTimeoutException)
@@ -310,7 +314,7 @@ namespace RNAssistant.Runtime
                 cancellationToken.ThrowIfCancellationRequested();
                 try
                 {
-                    var current = _resources.Select("file").Read(file.Path).Result;
+                    var current = _resources.Select("file").ReadBytes(file.Path).Result;
                     if (current.Resource.Reference.Uri != file.Reference.Uri ||
                         current.Resource.Reference.Revision != file.Reference.Revision ||
                         current.ContentSha256 != file.Sha256)
@@ -357,17 +361,18 @@ namespace RNAssistant.Runtime
             }
             if (!owner.EndsWith(".html", StringComparison.OrdinalIgnoreCase) &&
                 !owner.EndsWith(".htm", StringComparison.OrdinalIgnoreCase)) yield break;
-            foreach (Match tag in ScriptTag.Matches(text).Cast<Match>().Concat(LinkTag.Matches(text).Cast<Match>()))
+            foreach (Match tag in ScriptTag.Matches(text).Cast<Match>().Concat(LinkTag.Matches(text).Cast<Match>()).Concat(ImageTag.Matches(text).Cast<Match>()))
             {
                 var attributes = Attribute.Matches(tag.Value).Cast<Match>()
                     .GroupBy(match => match.Groups["name"].Value, StringComparer.OrdinalIgnoreCase)
                     .ToDictionary(group => group.Key, group => group.Last().Groups["value"].Value,
                         StringComparer.OrdinalIgnoreCase);
-                var script = tag.Value.StartsWith("<script", StringComparison.OrdinalIgnoreCase);
+                var sourceTag = tag.Value.StartsWith("<script", StringComparison.OrdinalIgnoreCase) ||
+                    tag.Value.StartsWith("<img", StringComparison.OrdinalIgnoreCase);
                 string href;
-                if (!attributes.TryGetValue(script ? "src" : "href", out href) ||
-                    !script && (!attributes.TryGetValue("rel", out var rel) ||
-                        !rel.Split(' ').Contains("stylesheet", StringComparer.OrdinalIgnoreCase))) continue;
+                if (!attributes.TryGetValue(sourceTag ? "src" : "href", out href) ||
+                    !sourceTag && (!attributes.TryGetValue("rel", out var rel) ||
+                        !rel.Split(' ').Any(value => value.Equals("stylesheet", StringComparison.OrdinalIgnoreCase) || value.Equals("icon", StringComparison.OrdinalIgnoreCase)))) continue;
                 if (href.StartsWith("data:", StringComparison.OrdinalIgnoreCase)) continue;
                 string dependency;
                 try { dependency = NormalizeDependency(owner, href); }
@@ -406,6 +411,30 @@ namespace RNAssistant.Runtime
             return string.Join("/", parts);
         }
 
+        private static string AssetContentType(string path, byte[] bytes)
+        {
+            var extension = Path.GetExtension(path).ToLowerInvariant();
+            if (SupportedText(path))
+            {
+                StrictUtf8.GetString(bytes); // Exact text admission, retaining BOM/EOL bytes.
+                switch (extension)
+                {
+                    case ".html": case ".htm": return "text/html; charset=utf-8";
+                    case ".js": case ".mjs": return "text/javascript; charset=utf-8";
+                    case ".css": return "text/css; charset=utf-8";
+                    case ".svg": return "image/svg+xml";
+                    case ".json": return "application/json";
+                    default: return "text/plain; charset=utf-8";
+                }
+            }
+            var header = RasterImageHeader.Read(bytes);
+            var expected = extension == ".png" ? "image/png" :
+                extension == ".jpg" || extension == ".jpeg" ? "image/jpeg" : null;
+            if (header == null || expected == null || header.MimeType != expected)
+                throw new WorkspaceFileException("unsupported_image", "Asset requires a matching bounded PNG/JPEG header: " + path);
+            return header.MimeType;
+        }
+
         private static bool SupportedText(string path)
         {
             var extension = Path.GetExtension(path);
@@ -416,7 +445,7 @@ namespace RNAssistant.Runtime
         private static string SnapshotHash(Dictionary<string, SnapshotFile> snapshot)
         {
             return WorkspaceWebSnapshotStore.Digest(snapshot.Values.Select(file =>
-                new WebSnapshotFile(file.Path, file.Reference, file.Evidence.Payload)));
+                new WebSnapshotFile(file.Path, file.Reference, file.Evidence.Payload, file.Evidence.View)));
         }
 
         private static string Hash(byte[] bytes)
@@ -486,12 +515,7 @@ namespace RNAssistant.Runtime
                     }
                     context.Response.Headers["Cache-Control"] = "no-store";
                     context.Response.Headers["X-Content-Type-Options"] = "nosniff";
-                    context.Response.ContentType = path.EndsWith(".css", StringComparison.OrdinalIgnoreCase) ? "text/css" :
-                        path.EndsWith(".js", StringComparison.OrdinalIgnoreCase) ||
-                        path.EndsWith(".mjs", StringComparison.OrdinalIgnoreCase) ? "text/javascript" :
-                        path.EndsWith(".html", StringComparison.OrdinalIgnoreCase) ||
-                        path.EndsWith(".htm", StringComparison.OrdinalIgnoreCase) ? "text/html" :
-                        path.EndsWith(".svg", StringComparison.OrdinalIgnoreCase) ? "image/svg+xml" : "text/plain";
+                    context.Response.ContentType = file.MimeType;
                     context.Response.ContentLength64 = file.Bytes.Length;
                     context.Response.OutputStream.Write(file.Bytes, 0, file.Bytes.Length);
                 }
@@ -593,6 +617,12 @@ namespace RNAssistant.Runtime
                             // A cancelled WebSocket receive aborts the socket. Drain with bounded
                             // commands so the subsequent screenshot can use the same connection.
                             await devtools.ObserveWithCommandsAsync(TimeSpan.FromMilliseconds(1500), cancellationToken).ConfigureAwait(false);
+                            var images = await devtools.CommandAsync("Runtime.evaluate", new JObject {
+                                ["expression"] = "document.images.length > 256 ? -1 : Array.from(document.images).filter(i => !i.complete || i.naturalWidth === 0).length",
+                                ["returnByValue"] = true }, cancellationToken).ConfigureAwait(false);
+                            var brokenImages = (int?)images["result"]?["result"]?["value"];
+                            if (!brokenImages.HasValue || brokenImages.Value != 0)
+                                errors.Add("Image loading check failed or exceeded its 256-element bound.");
                             await CaptureScreenshotAsync(devtools, diagnostics, cancellationToken).ConfigureAwait(false);
                         }
                         else if (errors.Count == 0)

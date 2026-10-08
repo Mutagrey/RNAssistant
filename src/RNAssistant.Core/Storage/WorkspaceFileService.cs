@@ -20,6 +20,7 @@ namespace RNAssistant.Core.Storage
     {
         public string RelativePath { get; internal set; }
         public string Text { get; internal set; }
+        [JsonIgnore] public byte[] Bytes { get; internal set; }
         public ResourceRef Reference { get; internal set; }
         public string ContentSha256 { get; internal set; }
         public ResourceEvidence Evidence { get; internal set; }
@@ -54,7 +55,7 @@ namespace RNAssistant.Core.Storage
         public int ScannedEntries { get; internal set; }
     }
 
-    // One file owner for text reads and writes. The locator catalog is not a head store.
+    // One file owner for bounded reads and text writes. The locator catalog is not a head store.
     public sealed class WorkspaceFileService
     {
         internal const int MaximumTextBytes = 1024 * 1024;
@@ -158,7 +159,10 @@ namespace RNAssistant.Core.Storage
                     Tracking = "metadata-only"
                 };
                 descriptor.Representations.Add(ResourceRepresentations.Metadata);
-                descriptor.Representations.Add(ResourceRepresentations.Text);
+                descriptor.Representations.Add(ResourceRepresentations.Raw);
+                if (!RasterImageHeader.IsSupportedExtension(relativePath))
+                    descriptor.Representations.Add(ResourceRepresentations.Text);
+                // Image capability is advertised only after inspecting the exact bytes.
                 descriptor.Metadata["relativePath"] = relativePath;
                 return descriptor;
             }
@@ -175,6 +179,12 @@ namespace RNAssistant.Core.Storage
         }
 
         public WorkspaceFileObservation ReadText(WorkspaceDescriptor workspace, string relativePath)
+        { return ReadContent(workspace, relativePath, false); }
+
+        public WorkspaceFileObservation ReadBytes(WorkspaceDescriptor workspace, string relativePath)
+        { return ReadContent(workspace, relativePath, true); }
+
+        private WorkspaceFileObservation ReadContent(WorkspaceDescriptor workspace, string relativePath, bool raw)
         {
             var path = ResolvePath(workspace, relativePath, false);
             var id = FileIdentity(path);
@@ -190,21 +200,22 @@ namespace RNAssistant.Core.Storage
                 }
                 byte[] bytes;
                 string text;
-                try { bytes = ReadBounded(path); text = Decode(bytes); }
+                try { bytes = ReadBounded(path); text = raw ? null : Decode(bytes); }
                 catch (WorkspaceFileException ex) when (ex.Code == "encoding_ambiguous" || ex.Code == "file_too_large")
                 {
                     ObserveUnknown(scope, id, ex.Code);
                     throw;
                 }
-                var exact = Observe(scope, id, bytes);
+                var exact = Observe(scope, id, bytes, raw);
                 var snapshot = _authority.Capture(scope);
-                var view = _authority.GetView(scope, exact, "text");
+                var viewName = raw ? ResourceRepresentations.Raw : ResourceRepresentations.Text;
+                var view = _authority.GetView(scope, exact, viewName);
                 if (view?.Payload == null || snapshot.GetHead(Identity(id))?.Revision?.Revision != exact.Revision)
                     throw new WorkspaceFileException("snapshot_unavailable", "Exact observed file view is unavailable.");
                 return new WorkspaceFileObservation
-                { RelativePath = relativePath, Text = text, Reference = exact, ContentSha256 = Hash(bytes),
+                { RelativePath = relativePath, Text = text, Bytes = bytes, Reference = exact, ContentSha256 = Hash(bytes),
                     Evidence = new ResourceEvidence("ev_" + Guid.NewGuid().ToString("N"), scope, exact,
-                        "text", ResourceCoverage.Whole(), true, snapshot.Generation, view.Payload,
+                        viewName, ResourceCoverage.Whole(), true, snapshot.Generation, view.Payload,
                         contentSha256: Hash(bytes)) };
             }
         }
@@ -220,28 +231,42 @@ namespace RNAssistant.Core.Storage
         }
 
         public WorkspaceFileObservation ReadExactText(WorkspaceDescriptor workspace, string relativePath, ResourceRef exact)
+        { return ReadExactContent(workspace, relativePath, exact, ResourceRepresentations.Text); }
+
+        public WorkspaceFileObservation ReadExactBytes(WorkspaceDescriptor workspace, string relativePath, ResourceRef exact)
+        { return ReadExactContent(workspace, relativePath, exact, ResourceRepresentations.Raw); }
+
+        private WorkspaceFileObservation ReadExactContent(WorkspaceDescriptor workspace, string relativePath, ResourceRef exact, string view)
         {
             var path = ResolvePath(workspace, relativePath, false);
             var id = FileIdentity(path);
             if (exact == null || !exact.IsExact || exact.Uri != ResourceUri.Create("file", id))
                 throw new WorkspaceFileException("invalid_resource_ref", "Exact reference does not belong to this file.");
-            return ReadPublishedText(relativePath, exact);
+            return ReadPublishedContent(relativePath, exact, view);
         }
 
         internal WorkspaceFileObservation ReadSnapshotText(WorkspaceDescriptor workspace,
             RetainedWebSnapshot snapshot, string relativePath)
+        { return ReadSnapshotContent(workspace, snapshot, relativePath, false); }
+
+        internal WorkspaceFileObservation ReadSnapshotBytes(WorkspaceDescriptor workspace,
+            RetainedWebSnapshot snapshot, string relativePath)
+        { return ReadSnapshotContent(workspace, snapshot, relativePath, true); }
+
+        private WorkspaceFileObservation ReadSnapshotContent(WorkspaceDescriptor workspace,
+            RetainedWebSnapshot snapshot, string relativePath, bool raw)
         {
             if (snapshot == null || snapshot.WorkspaceId != workspace.WorkspaceId)
                 throw new WorkspaceFileException("invalid_resource_ref", "Snapshot belongs to another workspace.");
             var file = snapshot.Files.SingleOrDefault(item => item.Path == relativePath);
             if (file == null) throw new WorkspaceFileException("invalid_resource_ref", "Path is not in this exact snapshot.");
-            var observed = ReadPublishedText(relativePath, file.Reference);
+            var observed = ReadPublishedContent(relativePath, file.Reference, raw ? file.View : ResourceRepresentations.Text);
             if (!file.Matches(observed.Evidence.Payload))
                 throw new WorkspaceFileException("snapshot_unavailable", "Snapshot file payload does not match its exact revision.");
             return observed;
         }
 
-        private WorkspaceFileObservation ReadPublishedText(string relativePath, ResourceRef exact)
+        private WorkspaceFileObservation ReadPublishedContent(string relativePath, ResourceRef exact, string viewName)
         {
             var address = ResourceUri.Parse(exact.Uri);
             if (!exact.IsExact || address.Provider != "file" || address.Segments.Count != 1)
@@ -254,20 +279,21 @@ namespace RNAssistant.Core.Storage
                 change.After.Revision.Revision == exact.Revision)))
                 throw new WorkspaceFileException("snapshot_unavailable", "Exact file revision was not published.");
             var revision = _authority.GetRevision(scope, exact);
-            var view = _authority.GetView(scope, exact, "text");
+            var view = _authority.GetView(scope, exact, viewName);
             if (view?.Payload == null || view.Coverage?.Kind != ResourceCoverageKinds.Whole ||
                 view.ContentSha256 != view.Payload.Sha256 || revision?.ContentSha256 != view.ContentSha256)
-                throw new WorkspaceFileException("snapshot_unavailable", "Exact whole-text file view is unavailable.");
+                throw new WorkspaceFileException("snapshot_unavailable", "Exact whole-file view is unavailable.");
             if (view.Payload.ByteLength > MaximumTextBytes)
-                throw new WorkspaceFileException("file_too_large", "Exact text exceeds the one MiB whole-read bound.");
+                throw new WorkspaceFileException("file_too_large", "Exact file exceeds the one MiB whole-read bound.");
             var bytes = _blobs.ReadBytes(view.Payload.ToBlobReference());
             if (bytes == null)
                 throw new WorkspaceFileException("snapshot_unavailable", "Exact file payload is missing or corrupt.");
             return new WorkspaceFileObservation
-            { RelativePath = relativePath, Text = Decode(bytes), Reference = exact.Copy(),
+            { RelativePath = relativePath, Text = viewName == ResourceRepresentations.Text ? Decode(bytes) : null,
+                Bytes = bytes, Reference = exact.Copy(),
                 ContentSha256 = view.ContentSha256,
                 Evidence = new ResourceEvidence("ev_" + Guid.NewGuid().ToString("N"), scope, exact,
-                    "text", ResourceCoverage.Whole(), true, snapshot.Generation, view.Payload,
+                    viewName, ResourceCoverage.Whole(), true, snapshot.Generation, view.Payload,
                     contentSha256: view.ContentSha256) };
         }
 
@@ -863,22 +889,41 @@ namespace RNAssistant.Core.Storage
             }
         }
 
-        private ResourceRef Observe(ResourceAuthorityScopeId scope, string id, byte[] bytes)
+        private ResourceRef Observe(ResourceAuthorityScopeId scope, string id, byte[] bytes, bool raw = false)
         {
             var hash = Hash(bytes);
+            var viewName = raw ? ResourceRepresentations.Raw : ResourceRepresentations.Text;
             var snapshot = _authority.Capture(scope);
             var previous = snapshot.GetHead(Identity(id));
             if (previous?.Knowledge == HeadKnowledge.Known &&
-                _authority.GetRevision(scope, previous.Revision)?.ContentSha256 == hash) return previous.Revision.Copy();
-            var payload = PayloadRef.FromBlob(_blobs.StoreBytes(bytes, "text/plain; charset=utf-8"));
+                _authority.GetRevision(scope, previous.Revision)?.ContentSha256 == hash)
+            {
+                // Materialize an additional exact view of the same bytes; never advance
+                // authority or regenerate a missing historical body from live content.
+                var retained = _authority.GetRevision(scope, previous.Revision).Payload;
+                _authority.RegisterView(scope, new ResourceRevisionView(previous.Revision, viewName,
+                    hash, retained, ResourceCoverage.Whole()));
+                if (raw) RegisterUtf8View(scope, previous.Revision, retained, bytes);
+                return previous.Revision.Copy();
+            }
+            var payload = PayloadRef.FromBlob(_blobs.StoreBytes(bytes, raw ? "application/octet-stream" : "text/plain; charset=utf-8"));
             var exact = NewRevision(id);
             _authority.RegisterRevision(scope, new ResourceRevisionMetadata(exact, hash, payload, previous?.Revision));
-            _authority.RegisterView(scope, new ResourceRevisionView(exact, "text", hash, payload, ResourceCoverage.Whole()));
+            _authority.RegisterView(scope, new ResourceRevisionView(exact, viewName, hash, payload, ResourceCoverage.Whole()));
+            if (raw) RegisterUtf8View(scope, exact, payload, bytes);
             _authority.Publish(ResourceAuthorityCommit.Create(scope, snapshot.Generation, null,
                 new[] { new ResourceHeadChange(Identity(id), previous,
                     ResourceHeadState.Known(exact, snapshot.Generation + 1)) },
                 previous == null ? AuthorityCommitReason.InitialObservation : AuthorityCommitReason.ExternalDrift));
             return exact;
+        }
+
+        private void RegisterUtf8View(ResourceAuthorityScopeId scope, ResourceRef exact, PayloadRef payload, byte[] bytes)
+        {
+            try { Decode(bytes); }
+            catch (WorkspaceFileException) { return; }
+            _authority.RegisterView(scope, new ResourceRevisionView(exact, ResourceRepresentations.Text,
+                payload.Sha256, payload, ResourceCoverage.Whole()));
         }
 
         private void ObserveMissing(ResourceAuthorityScopeId scope, string id)
@@ -904,7 +949,7 @@ namespace RNAssistant.Core.Storage
             var effect = new ResourceEffect("fx_" + Guid.NewGuid().ToString("N"), "filesystem.external_unrepresentable",
                 ResourceEffectOutcome.ExternalDriftObserved,
                 new[] { new ResourceImpact(Identity(id), ResourceImpactRelation.Exact,
-                    before: previous?.Revision, changeKind: cause) }, "File cannot be represented as bounded UTF-8 text.");
+                    before: previous?.Revision, changeKind: cause) }, "File cannot be represented by the requested bounded view.");
             _authority.Publish(ResourceAuthorityCommit.Create(scope, snapshot.Generation, effect,
                 new[] { new ResourceHeadChange(Identity(id), previous,
                     ResourceHeadState.Unknown(Identity(id), snapshot.Generation + 1, cause)) },
@@ -1173,7 +1218,7 @@ namespace RNAssistant.Core.Storage
         {
             using (var input = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.ReadWrite))
             {
-                if (input.Length > MaximumTextBytes) throw new WorkspaceFileException("file_too_large", "Text file exceeds the one MiB whole-read bound.");
+                if (input.Length > MaximumTextBytes) throw new WorkspaceFileException("file_too_large", "File exceeds the one MiB whole-read bound.");
                 var bytes = new byte[input.Length];
                 var offset = 0;
                 while (offset < bytes.Length)

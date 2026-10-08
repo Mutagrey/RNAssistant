@@ -1,5 +1,44 @@
 # Stabilization progress
 
+## Exact raw and raster workspace views — 2026-10-08
+
+Owner: WorkspaceFileService / filesystem provider / development browser. The
+existing owner now reads bounded raw bytes and retains their exact views in the
+same authority/CAS. Text/raw observations of unchanged bytes share one revision;
+both obey confinement and unresolved-effect guards. Historical reads require the
+published body, with no live fallback. The application/CLI exposes `raw` and
+PNG/JPEG `image` views and explicit redirected byte export. Image header admission
+is limited to one MiB and 4096 pixels per side; it does not decode pixels or add
+thumbnails. Binary bodies stay outside model JSON and grant no model write credit.
+
+Preview and verification use these exact bytes, including quoted HTML image/icon
+references and CSS image URLs. Manifest members pin their source view; PNG/JPEG
+headers must agree with their served MIME. Verification rejects broken/incomplete
+HTML images. Context preparation and done acceptance refresh raw dependencies, so
+an image edited externally after verification cannot retain passing acceptance.
+No new file reader, artifact store, writer or model loop was introduced. Additional
+formats, large/streamed views, binary mutations and Office viewer adoption remain
+open §8.1/M5–M7 scope.
+
+Checks: CLI builds with zero warnings/errors. Focused Harness `workspace files:`
+8/8 and `workspace snapshots:` 3/3 pass (the Harness build retains two existing PDF
+CA1416 warnings). `binary_resource_smoke.py` passes PNG/JPEG metadata/export,
+historical browser replay, MIME/decode failures and controlled acceptance both
+with and without an external image edit. Its model-discovery/authority checks
+also pass after filtering application-only view capabilities. The existing
+`web_checks_runtime_smoke.py` passes repair/retry guards, text evidence and final
+freshness rejection. No real LLM or Windows/Office qualification was run.
+Diff, touched links and `ValidateVersionFormat` pass.
+
+`resource_preview_smoke.py` passes resource/text and ordinary preview checks, then
+fails Ctrl+C classification twice (including an isolated run): WebSocket `Aborted`
+becomes exit 5 instead of 130. An isolated source archive of `d1297ced` passes that
+case once, so causation is not established. Evidence:
+`/var/folders/k9/hr_94nt142x1f43jr6g0wr_00000gp/T/rna-preview-cancel-baseline-f2uv3cgb`.
+The complete preview suite is not claimed green; cancellation is the next focused
+slice, recorded in [BACKLOG](BACKLOG.md#preview-cancellation-classification--2026-10-08).
+Full M4/M5 and the fixed real CSV/24K compaction-resume gates remain open.
+
 ## Bounded browser verification diagnostics — 2026-10-08
 
 Owner: development browser provider / existing workspace verification publication
@@ -35,8 +74,8 @@ remain open: fixed autonomous CSV creation/follow-up and real 24K
 compaction/restart/resume still lack passing evidence. The previous GPT-OSS
 input/memory preflight did not admit those full tasks.
 
-Next implementation slice: bounded raw/image resource views through the existing
-file owner for binary web-project assets (§8.1/M5). Working-preview UX and Office
+Bounded raw/PNG/JPEG views are implemented in the subsequent slice
+[above](#exact-raw-and-raster-workspace-views--2026-10-08). Working-preview UX and Office
 UI adoption remain separate open scope. Acceptance requires a compatible real
 endpoint with qualified input/memory headroom and unchanged tasks/checks/bounds.
 
@@ -700,9 +739,9 @@ conversation application services; resource/Office boundaries retain their owner
 | M0 | Baseline, ADR-0013, migration map and SDK limits recorded. Done as a planning baseline; Windows builds were not qualified. |
 | M1 | Independent production Core/Runtime/CLI uses ProjectReference, LlmClient/v6, coordinator → AgentKernel, ToolRuntime and the same frozen compiler. No fake Office dependency or second loop. Office/CLI application preparation and handler composition remain separate; full shared application/lifetime cutover is open. |
 | M2 | Workspace/session without document authority, stable identity, known root relocation and read-only association tested. Only the root directory mount is supplied; managed/multiple/external mounts and shared-source identity/heads (A24) remain open. |
-| M3 | Single WorkspaceFileService owns UTF-8 find/read/create/patch/replace/copy/move/delete/restore, exact history, drift and non-replay recovery. Focused tests pass. Remaining §8.1 stat/raw/binary/large views, directory pagination, complete Office/filesystem dispatch and cross-platform path qualification are open. |
+| M3 | Single WorkspaceFileService owns UTF-8 find/read/create/patch/replace/copy/move/delete/restore, bounded raw/PNG/JPEG views, exact history, drift and non-replay recovery. Focused tests pass. Remaining §8.1 large/format-specific views, directory pagination, complete Office/filesystem dispatch and cross-platform path qualification are open. |
 | M4 | First useful real-model multi-file result achieved. Modes, skills, typed questions/answers, approvals, Task Lists/Plans, receipts, cancel/explicit continuation and event following exist. Interactive host UX/recorded file-effect presentation passes Mac PTY checks. Typed application resource discovery, bounded exact text views and isolated development snapshot preview are implemented. Office UI use of shared application contracts is the later M7 cutover. Scripted runs do not close real task quality. |
-| M5 | Retained browser snapshots, dependency checks, structured functional verification, repair, bounded same-run continuation and shared compaction implemented. Controlled compaction/resume passes. Schema, completed-receipt boundary and aggregate source-budget defects are fixed. Real Qwen reached restart/resume but timed out; the latest Gemma attempt again produced all exact final files, without checkpoint/restart and with 0/9 prescribed read-back stages. Full live quality remains open. A real counter repair passed previously; typed dependency-change recovery passes controlled guards and real Gemma dispatches re-verification after repair, but its CSV result still fails. Isolated development snapshot preview passes Mac lifecycle/isolation checks. Bounded PNG/CDP diagnostics have exact retained references and pass browser/CAS checks. Fixed autonomous CSV creation + unchanged feature follow-up still has no passing evidence. Working/binary previews remain open. |
+| M5 | Retained browser snapshots, dependency checks, structured functional verification, repair, bounded same-run continuation and shared compaction implemented. Controlled compaction/resume passes. Schema, completed-receipt boundary and aggregate source-budget defects are fixed. Real Qwen reached restart/resume but timed out; the latest Gemma attempt again produced all exact final files, without checkpoint/restart and with 0/9 prescribed read-back stages. Full live quality remains open. A real counter repair passed previously; typed dependency-change recovery passes controlled guards and real Gemma dispatches re-verification after repair, but its CSV result still fails. Isolated development snapshot preview passes Mac lifecycle/isolation checks. Bounded PNG/CDP diagnostics have exact retained references and pass browser/CAS checks. Fixed autonomous CSV creation + unchanged feature follow-up still has no passing evidence. Bounded PNG/JPEG assets pass snapshot replay and stale-final checks. Working previews/additional formats remain open; Ctrl+C classification needs a focused follow-up. |
 | M6 | Authoring cutover not started. Office HTML/MD/JSON and Plan authoring remain on their existing owners; file materialization/linkage/crash guards and old-writer removal are required. CLI files have no dual writer. |
 | M7 | Receipts/cursors/subscription provide shared primitives; Office UI transport/application migration, file tree, preview isolation, bounded body delivery and pane-independent lifetime are not closed. |
 | M8 | External Office provider/mount/target cutover remains open; exact binding/discovery/SaveAs and multiple-instance behavior need Windows evidence. |
@@ -1937,10 +1976,10 @@ boundary, not a functional CSV score. Scripted HTTP tests confirmed both CLI
 transport modes and saved metadata. The existing v6 parser correctly rejected
 these outputs; no permissive JSON repair or separate agent loop was added.
 
-Next concrete slice (2026-10-08): bounded raw/image resource views for binary
-web-project assets through the existing file owner (§8.1/M5). Bounded screenshot
-and CDP trace references are implemented and checked as recorded
-[above](#bounded-browser-verification-diagnostics--2026-10-08). The
+Next concrete slice (2026-10-08): preview cancellation classification, followed
+by abrupt process-loss cleanup qualification. Bounded raw/PNG/JPEG views and
+retained screenshots/traces are implemented as recorded
+[above](#exact-raw-and-raster-workspace-views--2026-10-08). The
 [GPT-OSS preflight](#gpt-oss-input-and-endpoint-qualification--2026-10-07) did not
 admit a full CSV run: 16K cannot fit the initial context/reserves, and tested 32K
 profiles retain warning pressure. Reference task qualification still needs a
@@ -1964,7 +2003,7 @@ remains unrun. Do not substitute a larger budget or a diagnostic task for that
 acceptance. Gemma's native-role change is likewise not an established fix.
 Controlled HTTP E-CONTEXT/E-RESUME passes; real continuation reached the expected
 boundary but autonomous task completion remains open. Bounded event subscription is implemented;
-working/binary preview and Office UI adoption remain open.
+working preview, additional binary formats and Office UI adoption remain open.
 Modes, typed answer/restart handling, published skills, frozen context, Task Lists
 and workspace-owned Markdown Plans are implemented with the evidence limits above.
 Explicit reconciliation of uncertain planning mutations remains open.
@@ -1977,8 +2016,8 @@ warning pressure and timed out, while notes had normal pressure and prematurely
 finished without required reads/restart. The follow-up was not run.
 Keep task/checks/bounds fixed and declare each changed
 factor in further model comparisons. Scripted runtime checks do not close that gap.
-Raw/binary views, general preview UI and common Office/file dispatch remain open
-§8.1/M5–M7 scope. File authoring cutover M6 and M7–M11 have not started. Existing
+Bounded raw/PNG/JPEG views are implemented. Additional format/large-file views,
+general preview UI and common Office/file dispatch remain open §8.1/M5–M7 scope. File authoring cutover M6 and M7–M11 have not started. Existing
 Office document authoring remains active; CLI Plans use service artifacts pending
 the explicit M6 file-backed transition. No CLI source file is dual-written.
 

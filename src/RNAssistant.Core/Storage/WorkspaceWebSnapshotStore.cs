@@ -52,13 +52,15 @@ namespace RNAssistant.Core.Storage
             manifest.SnapshotSha256 = Digest(manifest.Files);
             foreach (var file in manifest.Files)
             {
-                var observed = _files.ReadExactText(workspace, file.Path, file.Reference);
+                var observed = file.View == ResourceRepresentations.Raw
+                    ? _files.ReadExactBytes(workspace, file.Path, file.Reference)
+                    : _files.ReadExactText(workspace, file.Path, file.Reference);
                 if (!file.Matches(observed.Evidence.Payload))
                     throw Unavailable("Snapshot file does not match its published exact payload.");
             }
             var reference = Reference(workspace, "snapshot", manifest.Id, "1");
             Publish(workspace, reference, ManifestView, manifest, manifest.Files.Select(file => file.Payload),
-                dependencies: manifest.Files.Select(file => new ResourceDependency(file.Reference, "text", kind: "snapshot-source")));
+                dependencies: manifest.Files.Select(file => new ResourceDependency(file.Reference, file.View, kind: "snapshot-source")));
             return ReadSnapshot(workspace, manifest.Id);
         }
 
@@ -259,7 +261,8 @@ namespace RNAssistant.Core.Storage
                 manifest.WorkspaceId != workspace.WorkspaceId || !ValidPath(manifest.EntryPath) ||
                 manifest.Files == null || manifest.Files.Count == 0 || manifest.Files.Count > MaximumFiles ||
                 manifest.Files.Any(file => file == null || !ValidPath(file.Path) || file.Reference?.IsExact != true ||
-                    file.Payload == null || file.Payload.ByteLength > WorkspaceFileService.MaximumTextBytes) ||
+                    file.Payload == null || file.Payload.ByteLength > WorkspaceFileService.MaximumTextBytes ||
+                    file.View != ResourceRepresentations.Text && file.View != ResourceRepresentations.Raw) ||
                 manifest.Files.Select(file => file.Path).Distinct(StringComparer.OrdinalIgnoreCase).Count() != manifest.Files.Count ||
                 manifest.Files.Sum(file => file.Payload.ByteLength) > MaximumSnapshotBytes ||
                 !manifest.Files.Any(file => file.Path == manifest.EntryPath) || checkDigest && manifest.SnapshotSha256 != Digest(manifest.Files))

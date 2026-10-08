@@ -109,15 +109,10 @@ namespace RNAssistant.Core.Storage
         // Header/dimension/byte admission, not a general-purpose image decoder.
         public static bool IsBoundedScreenshot(byte[] bytes)
         {
-            return bytes != null && bytes.Length >= 33 && bytes.Length <= MaximumScreenshotBytes &&
-                bytes.Take(8).SequenceEqual(new byte[] { 137, 80, 78, 71, 13, 10, 26, 10 }) &&
-                bytes[8] == 0 && bytes[9] == 0 && bytes[10] == 0 && bytes[11] == 13 &&
-                Encoding.ASCII.GetString(bytes, 12, 4) == "IHDR" && ValidPngDimension(bytes, 16) && ValidPngDimension(bytes, 20);
+            var header = RNAssistant.Core.Services.RasterImageHeader.Read(bytes);
+            return bytes != null && bytes.Length <= MaximumScreenshotBytes && header?.MimeType == "image/png" &&
+                header.Width <= 2048 && header.Height <= 2048;
         }
-
-        private static bool ValidPngDimension(byte[] bytes, int offset)
-        { return bytes[offset] == 0 && bytes[offset + 1] == 0 &&
-            (bytes[offset + 2] * 256 + bytes[offset + 3]) > 0 && (bytes[offset + 2] * 256 + bytes[offset + 3]) <= 2048; }
 
         private static bool SamePayload(PayloadRef left, PayloadRef right)
         { return left != null && right != null && left.Sha256 == right.Sha256 && left.ByteLength == right.ByteLength &&

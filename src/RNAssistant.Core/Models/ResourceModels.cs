@@ -136,6 +136,9 @@ namespace RNAssistant.Core.Models
 
     public sealed class ResourceReadResult
     {
+        // Exact bounded provider body for application/browser consumers, never model JSON.
+        [Newtonsoft.Json.JsonIgnore]
+        public byte[] Bytes { get; set; }
         [Newtonsoft.Json.JsonIgnore]
         public long? AuthorityGeneration { get; set; }
         // Provider read-back ownership only, never proof of consumer observation.

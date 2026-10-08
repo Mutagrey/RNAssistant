@@ -41,6 +41,15 @@ namespace RNAssistant.Runtime
                 {
                     var page = type == "plan" ? _plans.Find(Value(context, "query")) : type == "file" ? _files.Find(Value(context, "directory"), Value(context, "query")) :
                         SkillCatalogService.Find(_skills(), Value(context, "query"));
+                    if (type == "file")
+                        foreach (var item in page.Items)
+                        {
+                            // Binary delivery belongs to application/browser consumers;
+                            // this model tool currently admits complete UTF-8 text only.
+                            item.Representations.RemoveAll(view => view != ResourceRepresentations.Metadata && view != ResourceRepresentations.Text);
+                            if (item.Type == "file" && !item.Representations.Contains(ResourceRepresentations.Text))
+                                item.Usage = "Binary source; model text reading is unavailable. Application raw/image views can inspect it.";
+                        }
                     return Return(ToolResult.Ok(ResourceFindProjection.Message(page), ResourceFindProjection.Serialize(page), page.ResourceRefs));
                 }
                 var target = Value(context, "target");

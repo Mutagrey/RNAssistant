@@ -92,6 +92,7 @@ namespace RNAssistant.Harness
                 Test("workspace files: guarded create patch and external conflict", WorkspaceFilesGuardWrites),
                 Test("workspace files: paths and historical view", WorkspaceFilesRejectUnsafePaths),
                 Test("workspace files: exact provider snapshots", WorkspaceFilesRetainExactProviderSnapshots),
+                Test("workspace files: exact raw and image views", WorkspaceBinaryViewsStayExact),
                 Test("workspace files: uncertain dispatch blocks repeat", WorkspaceFilesDoNotReplayUncertainWrite),
                 Test("workspace files: recoverable delete and explicit restore", WorkspaceFilesRecoverableDelete),
                 Test("workspace files: identity-preserving move and interrupted recovery", WorkspaceFilesMoveAndRecover),

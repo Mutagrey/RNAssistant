@@ -28,8 +28,9 @@ namespace RNAssistant.Runtime
         {
             if (request == null || string.IsNullOrWhiteSpace(request.Target))
                 throw new ArgumentException("A workspace-relative resource target is required.");
-            if (request.Representation != ResourceRepresentations.Text && request.Representation != ResourceRepresentations.Metadata)
-                throw new ArgumentException("Supported resource views: metadata, text.");
+            var binary = request.Representation == ResourceRepresentations.Raw || request.Representation == ResourceRepresentations.Image;
+            if (!binary && request.Representation != ResourceRepresentations.Text && request.Representation != ResourceRepresentations.Metadata)
+                throw new ArgumentException("Supported resource views: metadata, text, raw, image.");
             if (request.Offset < 0 || request.MaxCharacters < ResourceReadRequest.MinimumCharacters ||
                 request.MaxCharacters > ResourceReadRequest.MaximumCharacters)
                 throw new ArgumentException("Resource offset must be nonnegative and max characters must be 128–32000.");
@@ -37,12 +38,27 @@ namespace RNAssistant.Runtime
                 request.Offset != 0 && request.Exact == null && request.SnapshotId == null)
                 throw new ArgumentException("Continuation requires one exact reference or retained snapshot.");
             var resources = FileResources(workspace);
+            if (binary)
+            {
+                if (request.Offset != 0) throw new ArgumentException("Binary views are bounded whole-file reads; offsets are not supported.");
+                var bytes = request.SnapshotId != null
+                    ? resources.Select("file").ReadSnapshotBytes(_webSnapshots.ReadSnapshot(workspace, request.SnapshotId), request.Target)
+                    : request.Exact != null ? resources.ForUri(request.Exact.Uri).ReadExactBytes(request.Target, request.Exact)
+                    : resources.Select("file").ReadBytes(request.Target);
+                bytes.RequireCompleteExactBytes();
+                if (request.Representation == ResourceRepresentations.Image &&
+                    !bytes.Result.Resource.Representations.Contains(ResourceRepresentations.Image))
+                    throw new RNAssistant.Core.Storage.WorkspaceFileException("unsupported_image", "Image view requires a bounded PNG or JPEG header (at most 4096 pixels per side).");
+                return new WorkspaceResourceView { Target = request.Target, Descriptor = bytes.Result.Resource,
+                    Representation = request.Representation, Binary = bytes.Result.Binary, Bytes = bytes.Result.Bytes,
+                    Retained = request.Exact != null || request.SnapshotId != null };
+            }
             if (request.Representation == ResourceRepresentations.Metadata)
             {
                 if (request.Exact != null || request.SnapshotId != null || request.Offset != 0)
                     throw new ArgumentException("Metadata discovery describes the current target, without a revision or offset.");
                 return new WorkspaceResourceView { Target = request.Target,
-                    Descriptor = resources.Select("file").Describe(request.Target) };
+                    Representation = ResourceRepresentations.Metadata, Descriptor = resources.Select("file").Describe(request.Target) };
             }
             var read = request.SnapshotId != null
                 ? resources.Select("file").ReadSnapshot(_webSnapshots.ReadSnapshot(workspace, request.SnapshotId), request.Target)
@@ -59,6 +75,7 @@ namespace RNAssistant.Runtime
                 new ResourceCoverage(ResourceCoverageKinds.CharacterRange, start: request.Offset, end: end);
             // UI reads never append accepted tool evidence or grant model write authority.
             return new WorkspaceResourceView { Target = request.Target, Descriptor = read.Result.Resource,
+                Representation = ResourceRepresentations.Text,
                 Retained = request.Exact != null || request.SnapshotId != null,
                 NextOffset = end < text.Length ? (int?)end : null,
                 Content = new ResourceReadProjection { Target = request.Target, Type = "file", Scope = "workspace",
