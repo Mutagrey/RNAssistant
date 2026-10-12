@@ -8,6 +8,70 @@ retired or deferred is not an active P0/P1 implementation defect merely because
 that original severity remains in the table. Release qualification is a separate
 exact-build gate.
 
+## Resources, links and artifacts review — 2026-10-12
+
+Five P2 findings reproduced against `921c504c`, fixed host-neutral on 2026-10-13.
+Original reproductions and corrections by owner:
+
+- **Prompt working set / `ChatResourcePromptIndex`:** only HTML revisions are
+  collapsed before constructing semantic targets. Fourteen normal saves of one
+  Markdown resource produce twelve advertised targets, eleven of which fail with
+  `resource_target_not_found`; discovery resolves only the current document head.
+  Historical snapshots consume the manifest limit and displace other resources.
+  Fixed: collapse observed revisions by working-set identity before prompt limits,
+  preserving independent same-title resources, detach and exact historical access.
+- **Artifact transfer / `DocumentArtifactStore.ImportOriginal`:** PDF copy/import
+  stores the original bytes but changes its attachment kind to `file` and retains
+  no extraction or page metadata. The same PDF through ordinary attachment
+  ingestion advertises `metadata,text,media`; its independent transfer copy exposes
+  only `metadata`, and an explicit text read fails. Fixed: shared attachment
+  inspection retains text/media/page metadata and bounded extraction warnings.
+  Copy/restart coverage also caught MIME-driven UTF-8 hydration of raw DOCX/encoded
+  text; originals now remain metadata-only until their resource view is read.
+- **Semantic search / `ChatArtifactResourceProvider.Search`:** metadata matches
+  concatenate artifact IDs and raw `MetadataJson` into snippets. A normal title
+  search exposes `artifact_md_*` and `documentId`; the model result projector
+  preserves that snippet. Existing `artifacts: prompt uses bounded working set`
+  failed its runtime-metadata exclusion assertion (expected 0, actual 1). Fixed:
+  explicitly project public searchable metadata; arbitrary user content remains data.
+- **Resource descriptors / `ChatArtifactResourceProvider.HasTextHint`:** authored
+  JSON uses `ChatArtifactKinds.File`, absent from the retained-text classification.
+  Discovery advertises `metadata,raw` for an imported JSON whose explicit/default
+  text read succeeds with the exact body. This is incorrect discovery guidance,
+  not lost JSON bytes. Fixed: advertise authored JSON/text file views from retained
+  metadata without classifying opaque originals as text.
+- **Artifact transfer / `ArtifactCatalogService.Import` and `SafeName`:** filename
+  truncation runs before extension dispatch. A valid HTML project with a
+  180-character title exports a 193-character `*.rna-html.zip` filename; copying
+  it truncates off the suffix and successfully publishes an `attachment` instead
+  of an editable `html_workspace`. Fixed: bound export/import filenames while
+  preserving the extension; the 200-character project title round-trips independently.
+
+Fix validation: isolated source archive of `921c504c` plus these resource changes:
+`artifact` 38/38, `attachments:` 27/27, `resources:` 29/29, `shared Markdown:` 4/4.
+The initial working-tree build encountered concurrent protocol edits and stale
+protocol tests; those edits were preserved and excluded from this validation.
+The focused suites cover copy/restart, exact bytes/extraction, media descriptors,
+opaque/empty originals, extraction bounds, public search snippets, long filenames,
+14 Markdown/Plan revisions, same-title identities and detach. This evidence does
+not qualify the combined parallel changes or real Windows/Office/WebView2 behavior.
+
+Original review validation: one host-neutral Harness build, then focused `--no-build` slices:
+`resources:` 29/29, `resource cutover:` 36/39, `artifact` 35/36,
+`attachments:` 27/27, `context continuity:` 10/10, `storage: CAS` 7/7,
+`storage: html` 7/7, and `shared context:` 2/2. Filters overlap; these are execution
+counts, not distinct-test coverage. The three cutover failures are the already
+recorded [baseline failures](#baseline-checks-isolated-during-continuity-work--2026-10-01):
+old copied-workspace restore and the two unexpected mutable-settings load counts.
+They do not establish replacement of retained prompt bodies by current settings.
+
+Eight selected web suites pass, including actual Chromium image decoding/layout
+with installed Chrome. `artifact-library-projection` still fails its obsolete
+`app-chat-session.js` cache-key assertion. A temporary isolated probe using the
+built production owners reproduces the five cases above without model HTTP or
+user data. No new durable-byte loss was observed in these scenarios; no full-suite,
+real-model or Windows/Office/WebView2 qualification is claimed.
+
 ## Chat transcript review — 2026-10-12
 
 - **Open older-page refresh / web history + chat projection owners:** code inspection

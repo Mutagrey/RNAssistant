@@ -11,6 +11,9 @@ using RNAssistant.Core.Storage;
 using RNAssistant.Office.Contracts;
 using RNAssistant.Office.Services;
 using RNAssistant.Office.Tools;
+using UglyToad.PdfPig.Writer;
+using UglyToad.PdfPig.Fonts.Standard14Fonts;
+using UglyToad.PdfPig.Core;
 
 namespace RNAssistant.Harness
 {
@@ -36,7 +39,8 @@ namespace RNAssistant.Harness
                 target.DocumentAuthorityId = registry.Resolve("excel", "target", Path.Combine(paths.Root, "target.xlsx")).Id;
                 var catalog = new ArtifactCatalogService(registry, chats.DocumentArtifacts, links, new ResourceAuthorityStore(paths), new ChatBlobStore(paths));
                 var fixture = TransferFixture();
-                var first = catalog.Import(source, fixture.Export(), "fixture.rna-html.zip", "application/zip", Guid.NewGuid().ToString("N"));
+                fixture.Title = new string('Ж', 200);
+                var first = catalog.Import(source, fixture.Export(), fixture.Title + ".rna-html.zip", "application/zip", Guid.NewGuid().ToString("N"));
                 links.Change(source, LinkRequest(source, ChatResourceUri.CreateArtifactRevisionUri(source, first), false), chats.Save);
                 AssertEqual(2, source.HtmlWorkspace.Files.Count, "imported HTML restores files");
                 AssertEqual("index.html", source.HtmlWorkspace.ActiveFileId, "entry retained");
@@ -46,11 +50,14 @@ namespace RNAssistant.Harness
                 var export = catalog.Export(target, new ArtifactTransferRequest { ChatId = target.Id, DocumentId = source.DocumentAuthorityId,
                     ResourceUri = listing.Items[0].ResourceUri });
                 var decoded = ArtifactTransferPackage.Import(export.Bytes);
+                AssertTrue(export.FileName.Length <= 180 && export.FileName.EndsWith(".rna-html.zip"), "bounded export preserves the package extension");
+                AssertEqual(fixture.Title, decoded.Title, "filename bound does not truncate the project title");
                 AssertEqual(fixture.Files[1].Content, decoded.Files[1].Content, "sources survive export");
                 AssertEqual(fixture.Data[0].Json, decoded.Data[0].Json, "data preserved byte for byte");
                 AssertEqual(fixture.Data[0].SchemaJson, decoded.Data[0].SchemaJson, "schema dependency preserved");
                 var operation = Guid.NewGuid().ToString("N");
                 var copied = catalog.Import(target, export.Bytes, export.FileName, export.ContentType, operation);
+                AssertEqual(ChatArtifactKinds.HtmlWorkspace, copied.Kind, "a long project name still copies as an editable workspace");
                 links.Change(target, LinkRequest(target, ChatResourceUri.CreateArtifactRevisionUri(target, copied), false), chats.Save);
                 var loaded = new ChatStore(paths).Load(target.Id);
                 AssertEqual(copied.Id, loaded.ActiveHtmlArtifactId, "copy survives restart");
@@ -126,12 +133,80 @@ namespace RNAssistant.Harness
                 session.DocumentAuthorityId = new DocumentAuthorityRegistry(paths).Resolve("excel", "files", Path.Combine(paths.Root, "files.xlsx")).Id;
                 var catalog = new ArtifactCatalogService(new DocumentAuthorityRegistry(paths), chats.DocumentArtifacts,
                     new ArtifactWorkingSetService(chats.DocumentArtifacts, new ResourceMutationJournal(paths)), new ResourceAuthorityStore(paths), new ChatBlobStore(paths));
-                foreach (var name in new[] { "notes.md", "data.json", "raw.bin" }) {
-                    var bytes = name.EndsWith(".bin") ? new byte[] { 0, 255, 3, 17 } : Encoding.UTF8.GetBytes(name.EndsWith(".md") ? "# Пример\n" : "{\"a\":1}");
+                foreach (var name in new[] { new string('m', 200) + ".md", new string('j', 200) + ".json", "raw.bin", "empty.bin" }) {
+                    var binary = name.EndsWith(".bin");
+                    var bytes = name == "empty.bin" ? new byte[0] : binary ? new byte[] { 0, 255, 3, 17 } : Encoding.UTF8.GetBytes(name.EndsWith(".md") ? "# Пример\n" : "{\"a\":1}");
                     var item = catalog.Import(session, bytes, name, "application/octet-stream", Guid.NewGuid().ToString("N"));
                     var exported = catalog.Export(session, new ArtifactTransferRequest { ChatId = session.Id, DocumentId = session.DocumentAuthorityId,
                         ResourceUri = ChatResourceUri.CreateArtifactRevisionUri(session, item) });
                     AssertTrue(bytes.SequenceEqual(exported.Bytes), "exact file bytes survive " + name);
+                    AssertTrue(exported.FileName.Length <= 180 && exported.FileName.EndsWith(Path.GetExtension(name)), "bounded names preserve file extensions");
+                    var found = executor.ResourceGateway.Find(session, item.Title, "document").Items.Single();
+                    AssertEqual(!binary, found.Representations.Contains("text"), "discovery advertises retained text only for authored files");
+                    if (!binary)
+                        AssertEqual(Encoding.UTF8.GetString(bytes), executor.ResourceGateway.Read(session, new ResourceReadRequest {
+                            Reference = ChatResourceUri.CreateArtifactRevision(session, item), Representation = "text", MaxChars = 1000 }).Result.Text,
+                            "advertised text reads exact authored bytes");
+                }
+            });
+        }
+
+        private static void ArtifactTransferOriginalRepresentations()
+        {
+            WithTempExecutor(FakeOfficeAdapter.ForHost("Excel"), (executor, adapter) => {
+                var paths = FixturePaths.Value; var chats = new ChatStore(paths);
+                var registry = new DocumentAuthorityRegistry(paths);
+                var source = NewSession(adapter); executor.BindResourceAuthority(source);
+                var target = NewSession(adapter);
+                target.DocumentAuthorityId = registry.Resolve("excel", "copies", Path.Combine(paths.Root, "copies.xlsx")).Id;
+                var links = new ArtifactWorkingSetService(chats.DocumentArtifacts, new ResourceMutationJournal(paths));
+                var catalog = new ArtifactCatalogService(registry, chats.DocumentArtifacts, links, new ResourceAuthorityStore(paths), new ChatBlobStore(paths));
+                var ingestion = new ChatResourceIngestionService(new AttachmentStore(paths), chats.DocumentArtifacts);
+                var pdf = new PdfDocumentBuilder();
+                pdf.AddPage(300, 300).AddText("Retained PDF attachment text", 12, new PdfPoint(20, 250), pdf.AddStandard14Font(Standard14Font.Helvetica));
+                pdf.AddPage(300, 300);
+                var mp3 = new byte[427]; mp3[0] = 0x49; mp3[1] = 0x44; mp3[2] = 0x33; mp3[3] = 4;
+                mp3[10] = 0xff; mp3[11] = 0xfb; mp3[12] = 0x90;
+                var cases = new Dictionary<string, byte[]> {
+                    ["report.pdf"] = pdf.Build(),
+                    ["recording.mp3"] = mp3,
+                    ["unicode.txt"] = Encoding.Unicode.GetPreamble().Concat(Encoding.Unicode.GetBytes("Сохранённый текст")).ToArray(),
+                    ["bounded.txt"] = Encoding.UTF8.GetBytes(new string('x', 1000050)),
+                    ["report.docx"] = OfficeZip(new Dictionary<string, string> { ["word/document.xml"] =
+                        "<w:document xmlns:w=\"http://schemas.openxmlformats.org/wordprocessingml/2006/main\"><w:body><w:p><w:r><w:t>Retained Word text</w:t></w:r></w:p></w:body></w:document>" })
+                };
+                foreach (var fixture in cases)
+                {
+                    var draft = ingestion.Stage(source, fixture.Key, fixture.Key.EndsWith(".txt") ? "text/plain" : "application/octet-stream", fixture.Value);
+                    var message = new ChatMessage { Role = "user", Content = "Original", Attachments = ingestion.LoadDrafts(source, new[] { draft.Id }).ToList() };
+                    source.Messages.Add(message); ingestion.CommitAndLink(source, message, source.Messages.Count - 1);
+                    var original = chats.DocumentArtifacts.Read(source, message.ResourceRefs.Single());
+                    var exported = catalog.Export(source, new ArtifactTransferRequest { ChatId = source.Id, DocumentId = source.DocumentAuthorityId, ResourceUri = message.ResourceRefs.Single().Uri });
+                    var copied = catalog.Import(target, exported.Bytes, exported.FileName, exported.ContentType, Guid.NewGuid().ToString("N"), exported.Origin);
+                    links.Change(target, LinkRequest(target, ChatResourceUri.CreateArtifactRevisionUri(target, copied), false), chats.Save);
+                    target = new ChatStore(paths).Load(target.Id);
+                    AssertTrue(target.Artifacts.All(item => item.InlineText == null), "opening the chat does not hydrate original bytes as UTF-8");
+                    var exact = ChatResourceUri.CreateArtifactRevision(target, copied);
+                    var retained = new ChatStore(paths).DocumentArtifacts.Read(target, exact);
+                    AssertTrue(copied.Id != original.Id, "copy has independent identity: " + fixture.Key);
+                    AssertTrue(fixture.Value.SequenceEqual(chats.DocumentArtifacts.ExportBytes(target, exact)), "copy preserves original bytes: " + fixture.Key);
+                    var expected = original.OriginalAttachment; var actual = retained.OriginalAttachment;
+                    AssertEqual(expected.Kind, actual.Kind, "attachment kind survives copy and restart: " + fixture.Key);
+                    AssertEqual(expected.ExtractedTextSha256, actual.ExtractedTextSha256, "extracted text survives copy: " + fixture.Key);
+                    AssertEqual(expected.PageCount, actual.PageCount, "PDF page count survives copy");
+                    AssertEqual(expected.TextTruncated, actual.TextTruncated, "bounded extraction retains truncation evidence");
+                    var found = executor.ResourceGateway.Find(target, fixture.Key, "document").Items.Single();
+                    if (actual.ExtractedTextSha256 != null)
+                    {
+                        AssertTrue(found.Representations.Contains("text"), "copy advertises extracted text");
+                        var read = executor.ResourceGateway.Read(target, new ResourceReadRequest { Reference = exact, Representation = "text", MaxChars = 1000 });
+                        AssertTrue(read.Result.Text.Length > 0, "extracted copy is readable after restart");
+                    }
+                    if (actual.Kind == "pdf" || actual.Kind == "audio")
+                        AssertTrue(found.Representations.Contains("media"), "copy advertises supported media");
+                    if (actual.Kind == "pdf")
+                        AssertTrue(expected.PageTextLengths.SequenceEqual(actual.PageTextLengths) && !string.IsNullOrEmpty(actual.ExtractionWarning), "PDF page and scan evidence survives copy");
+                    if (actual.TextTruncated) AssertTrue(!string.IsNullOrEmpty(actual.ExtractionWarning), "partial text has an explicit warning");
                 }
             });
         }

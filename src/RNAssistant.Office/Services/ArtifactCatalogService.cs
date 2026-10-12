@@ -96,12 +96,12 @@ namespace RNAssistant.Office.Services
             {
                 var project = CaptureProject(source, artifact);
                 project.Origin = new ArtifactTransferOrigin { ResourceUri = reference.Uri, ContentSha256 = artifact.ContentSha256 };
-                return new ArtifactTransferContent { Kind = "html_workspace", FileName = SafeName(artifact.Title) + ".rna-html.zip",
+                return new ArtifactTransferContent { Kind = "html_workspace", FileName = SafeName(artifact.Title + ".rna-html.zip"),
                     ContentType = request.Preview ? "application/json" : "application/zip", Bytes = request.Preview ? Encoding.UTF8.GetBytes(JsonConvert.SerializeObject(Preview(project))) : project.Export() };
             }
             var bytes = _artifacts.ExportBytes(source, reference);
-            return new ArtifactTransferContent { Kind = artifact.Kind, FileName = SafeName(artifact.OriginalAttachment?.FileName ?? artifact.Title) +
-                (artifact.OriginalAttachment != null ? "" : artifact.Kind == ChatArtifactKinds.Markdown && !artifact.Title.EndsWith(".md", StringComparison.OrdinalIgnoreCase) ? ".md" : artifact.MimeType == "application/json" && !artifact.Title.EndsWith(".json", StringComparison.OrdinalIgnoreCase) ? ".json" : ""),
+            return new ArtifactTransferContent { Kind = artifact.Kind, FileName = SafeName((artifact.OriginalAttachment?.FileName ?? artifact.Title) +
+                (artifact.OriginalAttachment != null ? "" : artifact.Kind == ChatArtifactKinds.Markdown && !artifact.Title.EndsWith(".md", StringComparison.OrdinalIgnoreCase) ? ".md" : artifact.MimeType == "application/json" && !artifact.Title.EndsWith(".json", StringComparison.OrdinalIgnoreCase) ? ".json" : "")),
                 ContentType = artifact.MimeType ?? "application/octet-stream", Bytes = bytes,
                 Origin = new ArtifactTransferOrigin { ResourceUri = reference.Uri, ContentSha256 = artifact.ContentSha256 } };
         }
@@ -203,7 +203,16 @@ namespace RNAssistant.Office.Services
         }
         private static string SafeName(string name)
         {
-            var result = new string((name ?? "artifact").Select(c => char.IsControl(c) || "<>:\"/\\|?*".Contains(c) ? '_' : c).Take(180).ToArray());
+            var result = new string((name ?? "artifact").Select(c => char.IsControl(c) || "<>:\"/\\|?*".Contains(c) ? '_' : c).ToArray());
+            if (result.Length > 180)
+            {
+                var extension = result.EndsWith(".rna-html.zip", StringComparison.OrdinalIgnoreCase)
+                    ? result.Substring(result.Length - ".rna-html.zip".Length) : Path.GetExtension(result);
+                if (extension.Length >= 180) extension = string.Empty;
+                var length = 180 - extension.Length;
+                if (char.IsHighSurrogate(result[length - 1])) length--;
+                result = result.Substring(0, length) + extension;
+            }
             return string.IsNullOrWhiteSpace(result) ? "artifact" : result;
         }
     }

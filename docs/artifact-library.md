@@ -92,6 +92,14 @@ JSON resource, `.html`/`.htm` a new HTML workspace; other files become immutable
 originals. Only `*.rna-html.zip` is interpreted as a project package. No rename,
 original deletion, bulk operation, automatic source refresh or new model tool is added.
 
+Transfer filenames preserve their extension (including `.rna-html.zip`) within the
+180-character bound; the project title remains in the package. Original imports use
+the attachment detectors/extractors and retain extracted UTF-8 text, page metadata,
+media kind and explicit truncation warnings in the existing CAS/record. Opaque and
+empty originals remain byte-preserving files. Opening a chat never hydrates original
+bytes as UTF-8 based on MIME; extracted text is read through its resource view.
+Authored JSON discovery advertises its retained text representation.
+
 Evidence: Harness `artifact transfer:` and `artifact working set:`, browser-script
 `artifact-working-set.test.js` / `artifact-library-projection.test.js`, and MockDemo
 `--artifact-transfer-test` exercise independent identities, restart, continuation,
@@ -406,6 +414,10 @@ complete traversal/search, source-page ceilings, unavailable metadata and writer
 
 ### Implemented exact text discovery views — 2026-09-08
 
+Artifact metadata search selects public title, kind, MIME and authored description;
+runtime artifact IDs and raw metadata JSON never populate snippets. User-authored
+body content remains searchable without recursive key filtering.
+
 Document Markdown and Plan content search now uses `artifact-text-index-v1`, a
 deterministic `ResourceRevisionView` over the exact published body. Its manifest
 and 32,000-character text parts live in the existing CAS/revision journal, using
@@ -628,6 +640,12 @@ selection roles and authored descriptions do not prove currentness. Current/shar
 discovery uses `common.resources_find`, followed by `common.resources_read` with
 the returned target. The prompt index does not derive currentness from timestamps
 or create a second authority projection.
+
+Before applying the row/token limits, it keeps only the greatest observed revision
+per working-set identity, including Markdown and Plan. This collapses history already
+present in the frozen chat; it performs no authority IO and does not infer unseen
+updates from other chats. Same-title independent resources, exact historical reads
+and logical detach decisions retain their existing semantics.
 
 Authored Markdown purpose is optional context: its projection is bounded to 240
 characters with an omission marker, sanitized and JSON-quoted. An over-budget

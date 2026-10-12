@@ -464,8 +464,26 @@ namespace RNAssistant.Core.Storage
             var kind = DetectKind(fileName, null, bytes);
             if (kind != "text" && kind != "pdf" && kind != "image" && kind != "office")
                 throw new InvalidOperationException("Only text, PDF, DOCX, XLSX, PPTX and image attachments are supported.");
+            var result = ExtractContent(fileName, null, bytes, kind);
+            if (result.TextTruncated)
+                throw new InvalidOperationException("Complete attachment text exceeds 1,000,000 characters.");
+            return result;
+        }
+
+        // Transfers also retain opaque/empty originals and supported media.
+        // Inspect the actual bytes with the same detectors and extractors as uploads.
+        internal static AttachmentContent ReadOriginalContent(string fileName, string contentType, byte[] bytes)
+        {
+            if (bytes == null || bytes.LongLength > MaxFileBytes)
+                throw new InvalidOperationException("Attachment must not exceed 20 MB.");
+            return ExtractContent(fileName, contentType, bytes, DetectKind(fileName, contentType, bytes) ?? "file");
+        }
+
+        private static AttachmentContent ExtractContent(string fileName, string contentType, byte[] bytes, string kind)
+        {
             var result = new AttachmentContent { Kind = kind, ContentType = kind == "office"
-                ? OfficeContentType(fileName) : NormalizeContentType(kind, null, bytes) };
+                ? OfficeContentType(fileName) : kind == "file" ? contentType ?? "application/octet-stream"
+                : NormalizeContentType(kind, contentType, bytes) };
             if (kind == "text")
             {
                 string text;
@@ -478,15 +496,19 @@ namespace RNAssistant.Core.Storage
                 result.Text = pdf.Text;
                 result.PageCount = pdf.PageCount;
                 result.PageTextLengths = pdf.PageTextLengths;
-                if (pdf.PageTextLengths.Count != pdf.PageCount)
-                    throw new InvalidOperationException("Complete PDF text exceeds the extraction limit.");
+                result.TextTruncated = pdf.PageTextLengths.Count != pdf.PageCount;
                 if (pdf.PageTextLengths.Any(length => length < 20))
                     result.Warning = "Some PDF pages have little or no text; use the media representation with a vision model to inspect them.";
             }
             if (kind == "office")
                 result.Text = OfficeAttachmentTextExtractor.Extract(fileName, bytes, MaxExtractedChars);
             if (result.Text != null && result.Text.Length > MaxExtractedChars)
-                throw new InvalidOperationException("Complete attachment text exceeds 1,000,000 characters.");
+            {
+                result.Text = result.Text.Substring(0, MaxExtractedChars);
+                result.TextTruncated = true;
+            }
+            if (result.TextTruncated)
+                result.Warning = "Extracted text was truncated at 1,000,000 characters. " + result.Warning;
             return result;
         }
 
@@ -732,6 +754,7 @@ namespace RNAssistant.Core.Storage
         public string Warning { get; set; }
         public int PageCount { get; set; }
         public List<int> PageTextLengths { get; set; }
+        public bool TextTruncated { get; set; }
     }
 
 }

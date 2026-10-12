@@ -197,11 +197,10 @@ namespace RNAssistant.Office.Services
                     {
                         var metadata = string.Join(" ", new[]
                         {
-                            artifact.Id,
                             artifact.Kind,
                             artifact.Title,
                             artifact.MimeType,
-                            artifact.MetadataJson
+                            ArtifactDescription(artifact)
                         }.Where(value => !string.IsNullOrWhiteSpace(value)).ToArray());
                         var metadataIndex = metadata.IndexOf(query, StringComparison.OrdinalIgnoreCase);
                         if (metadataIndex >= 0)
@@ -584,6 +583,9 @@ namespace RNAssistant.Office.Services
                 (string.Equals(artifact.Kind, ChatArtifactKinds.TaskList, StringComparison.OrdinalIgnoreCase) ||
                  string.Equals(artifact.Kind, ChatArtifactKinds.PlanDocument, StringComparison.OrdinalIgnoreCase) ||
                  string.Equals(artifact.Kind, ChatArtifactKinds.Markdown, StringComparison.OrdinalIgnoreCase) ||
+                 string.Equals(artifact.Kind, ChatArtifactKinds.File, StringComparison.OrdinalIgnoreCase) &&
+                    (string.Equals(artifact.MimeType, "application/json", StringComparison.OrdinalIgnoreCase) ||
+                     artifact.MimeType?.StartsWith("text/", StringComparison.OrdinalIgnoreCase) == true) ||
                  string.Equals(artifact.Kind, ChatArtifactKinds.HtmlWorkspace, StringComparison.OrdinalIgnoreCase) ||
                  string.Equals(artifact.Kind, ChatArtifactKinds.Compaction, StringComparison.OrdinalIgnoreCase) ||
                  string.Equals(artifact.Kind, ChatArtifactKinds.ToolResult, StringComparison.OrdinalIgnoreCase) ||

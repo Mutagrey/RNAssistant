@@ -241,7 +241,9 @@ namespace RNAssistant.Core.Storage
 
         private bool HydrateArtifact(ChatArtifact artifact)
         {
-            if (artifact == null) return false;
+            // Originals retain raw bytes here; their extracted text is a separate
+            // resource view, even when the MIME contains "text" or "xml".
+            if (artifact == null || artifact.OriginalAttachment != null) return false;
             if (!string.IsNullOrEmpty(artifact.InlineText)) return true;
             if (string.IsNullOrWhiteSpace(artifact.ContentSha256) || !artifact.ContentByteLength.HasValue) return false;
             artifact.InlineText = _blobs.ReadText(ArtifactBodyReference(artifact));

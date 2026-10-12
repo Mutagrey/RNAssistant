@@ -2126,7 +2126,7 @@ namespace RNAssistant.Harness
             session.Artifacts.Add(checkpoint);
             session.ActiveContextCheckpointId = checkpoint.Id;
             session.Artifacts[0].MetadataJson =
-                "{\"attachmentId\":\"runtime-secret-id\"}";
+                "{\"attachmentId\":\"runtime-secret-id\",\"description\":\"Public purpose\"}";
             session.ActivePlanDocumentArtifactId = "artifact_0";
             var latestMessage = new ChatMessage
             {
@@ -2158,6 +2158,12 @@ namespace RNAssistant.Harness
                 "raw artifact metadata cannot enter semantic search snippets");
             AssertTrue(provider.Search(session, "Artifact 0", null, 20, 128).Matches.Count > 0,
                 "public artifact metadata remains searchable");
+            var publicMatch = provider.Search(session, "Public purpose", null, 20, 512).Matches.Single();
+            AssertTrue(!publicMatch.Snippet.Contains("artifact_0") && !publicMatch.Snippet.Contains("runtime-secret-id") &&
+                !publicMatch.Snippet.Contains("attachmentId"), "public descriptions never include internal identity or raw metadata");
+            session.Artifacts[1].InlineText = "Business JSON: {\"documentId\":\"invoice-42\"}";
+            AssertContains(provider.Search(session, "invoice-42", null, 20, 512).Matches.Single().Snippet,
+                "\"documentId\":\"invoice-42\"", "user content is not recursively scrubbed as runtime metadata");
 
             var oversized = new ChatSession();
             oversized.Artifacts.Add(new ChatArtifact { Kind = ChatArtifactKinds.Markdown,
@@ -2184,6 +2190,49 @@ namespace RNAssistant.Harness
             AssertEqual(unusual.Artifacts[0].Id, ResourceUri.Parse(resolved.Reference.Uri).Segments[2],
                 "quoted prompt target round-trips through real resolver without changing title whitespace");
 
+        }
+
+        private static void ArtifactPromptUsesLogicalHeads()
+        {
+            WithTempExecutor(FakeOfficeAdapter.ForHost("Excel"), (executor, adapter) => {
+                var session = NewSession(adapter);
+                var tools = executor.GetControllerTools().ToList();
+                var chats = new ChatStore(FixturePaths.Value);
+                string target = null;
+                ResourceRef first = null;
+                for (var revision = 1; revision <= 14; revision++)
+                {
+                    var command = Command(MarkdownDocumentToolCatalog.SaveToolId, "title", "Repeated note",
+                        "description", "Design decisions", "markdown", "# Revision " + revision);
+                    if (target != null) command.Arguments["target"] = target;
+                    var saved = executor.ExecuteManual(command, tools, new AppSettings(), false, false, session);
+                    AssertTrue(saved.Success, "save Markdown revision: " + saved.Message);
+                    target = (string)JObject.Parse(saved.DataJson)["target"];
+                    if (first == null) first = executor.ResourceGateway.ResolveIntentTarget(session, target).Reference;
+                    saved = executor.ExecuteManual(Command(PlanDocumentToolCatalog.SaveToolId, "title", "Repeated Plan",
+                        "markdown", "# Plan revision " + revision, "status", "draft"), tools, new AppSettings(), false, false, session);
+                    AssertTrue(saved.Success, "save Plan revision: " + saved.Message);
+                }
+                AssertTrue(executor.ExecuteManual(Command(MarkdownDocumentToolCatalog.SaveToolId, "title", "Repeated note",
+                    "description", "Independent resource", "markdown", "# Independent"), tools, new AppSettings(), false, false, session).Success,
+                    "same-title resources retain separate identities");
+                session.Messages.Add(new ChatMessage { Role = "assistant", Content = "Historical reference", ResourceRefs = new List<ResourceRef> { first } });
+                chats.Save(session); session = chats.Load(session.Id);
+                var prompt = ChatResourcePromptIndex.Build(session, 5000);
+                AssertContains(prompt, "showing=3/3", "history cannot crowd out current resource targets");
+                foreach (var row in prompt.Split('\n').Where(line => line.StartsWith("- target=", StringComparison.Ordinal)))
+                {
+                    var encoded = row.Substring(9, row.IndexOf(" | type=", StringComparison.Ordinal) - 9);
+                    var resolved = executor.ResourceGateway.ResolveIntentTarget(session, JsonConvert.DeserializeObject<string>(encoded));
+                    var artifact = chats.DocumentArtifacts.Read(session, resolved.Reference);
+                    AssertTrue(artifact.Revision == 14 || artifact.InlineText == "# Independent", "every advertised target resolves to an observed head");
+                }
+                AssertEqual("# Revision 1", chats.DocumentArtifacts.Read(session, first).InlineText, "historical exact access is preserved");
+                var current = chats.DocumentArtifacts.Read(session, executor.ResourceGateway.ResolveIntentTarget(session, target).Reference);
+                var links = new ArtifactWorkingSetService(chats.DocumentArtifacts, new ResourceMutationJournal(FixturePaths.Value));
+                links.Change(session, LinkRequest(session, ChatResourceUri.CreateArtifactRevisionUri(session, current), true), chats.Save);
+                AssertContains(ChatResourcePromptIndex.Build(session, 5000), "showing=2/2", "detaching a lineage leaves its same-title peer and Plan visible");
+            });
         }
 
         private static void ArtifactPromptPreservesDecisionContext()

@@ -104,22 +104,23 @@ namespace RNAssistant.Core.Storage
             Guid parsed;
             if (!Guid.TryParseExact(operationId, "N", out parsed) || bytes == null || bytes.Length > ArtifactTransferPackage.MaximumBytes)
                 throw new InvalidDataException("Некорректный импорт файла.");
-            var raw = _payloads.StoreBytes(bytes, contentType);
+            var content = AttachmentStore.ReadOriginalContent(fileName, contentType, bytes);
+            var raw = _payloads.StoreBytes(bytes, content.ContentType);
             var original = new ChatAttachment { Id = TextPatternEngine.Sha256(session.Id + ":" + operationId), FileName = fileName,
-                ContentType = contentType, Size = bytes.Length, Kind = contentType.StartsWith("image/", StringComparison.Ordinal) ? "image" : "file",
-                ContentSha256 = raw.Sha256, ContentByteLength = raw.ByteLength };
-            if (contentType.StartsWith("text/", StringComparison.Ordinal))
+                ContentType = content.ContentType, Size = bytes.Length, Kind = content.Kind,
+                ContentSha256 = raw.Sha256, ContentByteLength = raw.ByteLength, PageCount = content.PageCount,
+                PageTextLengths = content.PageTextLengths ?? new List<int>(), TextTruncated = content.TextTruncated, ExtractionWarning = content.Warning };
+            if (content.Text != null)
             {
-                try {
-                    var text = new UTF8Encoding(false, true).GetString(bytes);
-                    original.ExtractedTextSha256 = raw.Sha256; original.ExtractedTextByteLength = raw.ByteLength; original.ExtractedCharCount = text.Length;
-                }
-                catch (DecoderFallbackException) { original.ExtractionWarning = "Текст не UTF-8; исходные байты сохранены без преобразования."; }
+                var extracted = _payloads.StoreText(content.Text, "text/plain; charset=utf-8");
+                original.ExtractedTextSha256 = extracted.Sha256;
+                original.ExtractedTextByteLength = extracted.ByteLength;
+                original.ExtractedCharCount = content.Text.Length;
             }
             var artifact = new ChatArtifact { Id = "attachment_" + original.Id, Revision = 1, Title = fileName,
                 Kind = original.Kind == "image" ? ChatArtifactKinds.Image : ChatArtifactKinds.Attachment,
                 MetadataJson = JsonConvert.SerializeObject(new ArtifactImportMetadata { ImportedFromUri = origin?.ResourceUri, ImportedSourceContentSha256 = origin?.ContentSha256 }),
-                MimeType = contentType, ContentSha256 = raw.Sha256, ContentByteLength = raw.ByteLength, DocumentAuthorityId = session.DocumentAuthorityId };
+                MimeType = content.ContentType, ContentSha256 = raw.Sha256, ContentByteLength = raw.ByteLength, DocumentAuthorityId = session.DocumentAuthorityId };
             if (_authority.GetHead(Scope(session), ChatResourceUri.CreateArtifactRevision(session, artifact).Identity) != null)
                 throw new InvalidOperationException("Этот перенос уже опубликован. Найдите файл в каталоге.");
             return PublishOriginal(session, artifact, original);
