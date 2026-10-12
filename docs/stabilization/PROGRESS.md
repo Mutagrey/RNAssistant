@@ -1,5 +1,36 @@
 # Stabilization progress
 
+## Browser lifetime after caller process loss — 2026-10-12
+
+Owner: development browser lifetime. Baseline `bb9a519d` reproduced a CLI
+`SIGKILL` leaving 9 Chromium processes and its temporary profile; the in-process
+HTTP server closed. Evidence:
+`/private/var/folders/k9/hr_94nt142x1f43jr6g0wr_00000gp/T/rna-preview-loss-baseline-cyvrhl1q/result.json`.
+The reproduction cleaned up only its own surviving processes.
+
+The shared preview/verify runner now uses `RNAssistant.BrowserHost` to create and
+own Chromium/profile before reporting readiness. Caller pipe EOF closes that
+owned tree and removes the profile; normal completion awaits cleanup and reports
+failures. There is no PID journal, global sweep, new resource reader/store or
+second agent loop. The helper cannot publish verification outcomes: interrupted
+verification remains `Pending`, without invented diagnostics or automatic replay.
+
+Checks: CLI build passes with zero warnings/errors. `browser_lifetime_smoke.py`
+passes real-browser caller loss, concurrent viewer isolation, retained snapshots,
+controlled pre-DevTools loss and real verification interruption. A focused helper
+check also confirms safety-deadline cleanup while its caller pipe stays open. Existing
+`resource_preview_smoke.py` and `web_checks_runtime_smoke.py` pass expiry/Ctrl+C,
+sandbox, repair/retry and stale-final regressions. A framework-dependent Debug
+publish includes the helper and passes a real preview lifetime. Diff, touched
+links and `ValidateVersionFormat` pass.
+
+Scope: Mac headless Chromium caller loss; simultaneous helper/OS loss, other
+platforms and self-contained packaging remain unqualified. No real LLM or
+Windows/Office qualification was run. Full M4/M5 remain open: the next priority
+is a compatible endpoint with qualified input/memory headroom, then unchanged
+autonomous CSV creation/follow-up and real 24K compaction/restart/resume acceptance.
+Working-preview UX/additional formats and the M6–M11 cutovers remain separate scope.
+
 ## Preview cancellation classification — 2026-10-08
 
 Owner: development browser lifetime. Follow-up to `b86cb6ec`: a cancelled CDP
@@ -16,8 +47,8 @@ active-observation timing with PNG/JPEG assets, exit 130/Cancelled and no invent
 verification record. Diff, touched links and `ValidateVersionFormat` pass.
 No new real LLM or Windows/Office qualification is claimed.
 
-Next concrete implementation/qualification: abrupt process-loss cleanup of the
-owned preview browser/profile/server. Full M4/M5 remain open, including fixed
+The subsequent caller-loss cleanup slice is recorded
+[above](#browser-lifetime-after-caller-process-loss--2026-10-12). Full M4/M5 remain open, including fixed
 autonomous CSV/follow-up and real 24K compaction/restart/resume. Those need a
 compatible endpoint with qualified input/memory headroom and unchanged acceptance.
 
@@ -762,7 +793,7 @@ conversation application services; resource/Office boundaries retain their owner
 | M2 | Workspace/session without document authority, stable identity, known root relocation and read-only association tested. Only the root directory mount is supplied; managed/multiple/external mounts and shared-source identity/heads (A24) remain open. |
 | M3 | Single WorkspaceFileService owns UTF-8 find/read/create/patch/replace/copy/move/delete/restore, bounded raw/PNG/JPEG views, exact history, drift and non-replay recovery. Focused tests pass. Remaining §8.1 large/format-specific views, directory pagination, complete Office/filesystem dispatch and cross-platform path qualification are open. |
 | M4 | First useful real-model multi-file result achieved. Modes, skills, typed questions/answers, approvals, Task Lists/Plans, receipts, cancel/explicit continuation and event following exist. Interactive host UX/recorded file-effect presentation passes Mac PTY checks. Typed application resource discovery, bounded exact text views and isolated development snapshot preview are implemented. Office UI use of shared application contracts is the later M7 cutover. Scripted runs do not close real task quality. |
-| M5 | Retained browser snapshots, dependency checks, structured functional verification, repair, bounded same-run continuation and shared compaction implemented. Controlled compaction/resume passes. Schema, completed-receipt boundary and aggregate source-budget defects are fixed. Real Qwen reached restart/resume but timed out; the latest Gemma attempt again produced all exact final files, without checkpoint/restart and with 0/9 prescribed read-back stages. Full live quality remains open. A real counter repair passed previously; typed dependency-change recovery passes controlled guards and real Gemma dispatches re-verification after repair, but its CSV result still fails. Isolated development snapshot preview passes Mac lifecycle/isolation checks. Bounded PNG/CDP diagnostics have exact retained references and pass browser/CAS checks. Fixed autonomous CSV creation + unchanged feature follow-up still has no passing evidence. Bounded PNG/JPEG assets pass snapshot replay and stale-final checks. Working previews/additional formats remain open; Ctrl+C/expiry checks pass after the focused cancellation fix; abrupt process-loss cleanup remains unqualified. |
+| M5 | Retained browser snapshots, dependency checks, structured functional verification, repair, bounded same-run continuation and shared compaction implemented. Controlled compaction/resume passes. Schema, completed-receipt boundary and aggregate source-budget defects are fixed. Real Qwen reached restart/resume but timed out; the latest Gemma attempt again produced all exact final files, without checkpoint/restart and with 0/9 prescribed read-back stages. Full live quality remains open. A real counter repair passed previously; typed dependency-change recovery passes controlled guards and real Gemma dispatches re-verification after repair, but its CSV result still fails. Isolated development snapshot preview passes Mac lifecycle/isolation checks. Bounded PNG/CDP diagnostics have exact retained references and pass browser/CAS checks. Fixed autonomous CSV creation + unchanged feature follow-up still has no passing evidence. Bounded PNG/JPEG assets pass snapshot replay and stale-final checks. Working previews/additional formats remain open; Ctrl+C/expiry and abrupt caller-loss cleanup pass on Mac. Helper/OS loss and other platforms remain unqualified. |
 | M6 | Authoring cutover not started. Office HTML/MD/JSON and Plan authoring remain on their existing owners; file materialization/linkage/crash guards and old-writer removal are required. CLI files have no dual writer. |
 | M7 | Receipts/cursors/subscription provide shared primitives; Office UI transport/application migration, file tree, preview isolation, bounded body delivery and pane-independent lifetime are not closed. |
 | M8 | External Office provider/mount/target cutover remains open; exact binding/discovery/SaveAs and multiple-instance behavior need Windows evidence. |
@@ -1997,8 +2028,10 @@ boundary, not a functional CSV score. Scripted HTTP tests confirmed both CLI
 transport modes and saved metadata. The existing v6 parser correctly rejected
 these outputs; no permissive JSON repair or separate agent loop was added.
 
-Next concrete slice (2026-10-08): abrupt process-loss cleanup qualification for
-the owned preview lifetime; Ctrl+C classification is fixed and checked. Bounded raw/PNG/JPEG views and
+Next concrete slice (2026-10-12): qualify endpoint input/memory headroom before
+the unchanged real CSV/follow-up and 24K compaction/resume tasks. Owned browser/profile
+cleanup after CLI loss now passes on Mac, as recorded
+[above](#browser-lifetime-after-caller-process-loss--2026-10-12). Bounded raw/PNG/JPEG views and
 retained screenshots/traces are implemented as recorded
 [above](#exact-raw-and-raster-workspace-views--2026-10-08). The
 [GPT-OSS preflight](#gpt-oss-input-and-endpoint-qualification--2026-10-07) did not

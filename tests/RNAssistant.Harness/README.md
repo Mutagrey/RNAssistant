@@ -102,6 +102,16 @@ model is used only to check a refused write after a UI read, not task quality.
 Run `web_checks_runtime_smoke.py` when changing their shared browser runner to
 preserve functional verification, repair/retry and stale-final rejection.
 
+After building the CLI, `python3 -B tests/cli/browser_lifetime_smoke.py` checks
+abrupt caller loss on Mac/Linux (qualified on Mac): real Chromium after preview
+open, a controlled process before DevTools readiness, and a real verification
+interrupted during navigation. It asserts helper/browser/descendant/profile/server
+cleanup, a held-pipe safety deadline, another live viewer's isolation, retained
+snapshots, and `Pending` without invented diagnostics or replay. It touches only its own launches and isolated temp
+roots. This does not cover losing the helper itself or the machine. Run browser
+suites sequentially; `resource_preview_smoke.py` also checks global temp-profile
+leaks. No real-model or Office qualification is implied.
+
 After building the CLI, `python3 -B tests/cli/run_control_smoke.py` checks local
 cross-process cancel and explicit same-run continuation: exact cursors, late model
 response exclusion, unchanged limits/counters/history, retained verified writes,

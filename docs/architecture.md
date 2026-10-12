@@ -32,6 +32,13 @@ kernel, model protocol, tool runtime, frozen Core `ModelContextCompiler` and can
 uses its document-owned composition until the M6–M9 cutovers; this is an in-flight
 architecture, not a claim that the UI and CLI have identical context preparation.
 
+The optional development Chromium runner uses `RNAssistant.BrowserHost`, a small
+.NET 8 executable referenced by Runtime. It owns only its browser process tree and
+temporary profile, with a private caller pipe and a bounded safety lifetime. It has
+no Core/Runtime dependency, model loop, workspace reader or durable store. Runtime
+retains snapshot serving, CDP checks and verification publication; see
+[Resource Fabric](resource-fabric.md#application-resource-views-and-development-preview).
+
 ## Dependency direction
 
 ```text

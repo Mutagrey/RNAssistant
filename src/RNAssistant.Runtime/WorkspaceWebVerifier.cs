@@ -18,6 +18,7 @@ using RNAssistant.Core.Models;
 using RNAssistant.Core.Services;
 using RNAssistant.Core.Storage;
 using RNAssistant.Runtime.Contracts;
+using RNAssistant.BrowserHost;
 
 namespace RNAssistant.Runtime
 {
@@ -536,26 +537,13 @@ namespace RNAssistant.Runtime
             WorkspacePreviewRequest preview = null, Action opened = null, BrowserDiagnostics diagnostics = null)
         {
             var errors = new List<string>();
-            var profile = Path.Combine(Path.GetTempPath(), "rna-browser-" + Guid.NewGuid().ToString("N"));
-            Directory.CreateDirectory(profile);
-            Process process = null;
+            BrowserProcess process = null;
             try
             {
                 diagnostics?.Start();
-                var start = new ProcessStartInfo(executable) { UseShellExecute = false,
-                    CreateNoWindow = true, RedirectStandardOutput = true, RedirectStandardError = true };
-                if (preview == null || preview.Headless) start.ArgumentList.Add("--headless=new");
-                if (preview != null) start.ArgumentList.Add("--force-webrtc-ip-handling-policy=disable_non_proxied_udp");
-                foreach (var option in new[] { "--disable-gpu", "--no-first-run",
-                    "--no-default-browser-check", "--disable-background-networking", "--disable-extensions",
-                    "--disable-sync", "--remote-debugging-port=0", "--user-data-dir=" + profile,
-                    "--proxy-server=http://127.0.0.1:9", "about:blank" }) start.ArgumentList.Add(option);
-                process = Process.Start(start);
-                if (process == null) throw new IOException("Browser process could not start.");
-                process.OutputDataReceived += (sender, args) => { };
-                process.ErrorDataReceived += (sender, args) => { };
-                process.BeginOutputReadLine();
-                process.BeginErrorReadLine();
+                process = await BrowserProcess.StartAsync(executable, preview == null || preview.Headless,
+                    preview != null, (preview?.LifetimeSeconds ?? 60) + 60, cancellationToken).ConfigureAwait(false);
+                var profile = process.ProfilePath;
                 var active = Path.Combine(profile, "DevToolsActivePort");
                 for (var i = 0; i < 100 && !File.Exists(active); i++)
                 {
@@ -637,16 +625,7 @@ namespace RNAssistant.Runtime
             }
             finally
             {
-                if (process != null)
-                {
-                    try { if (!process.HasExited) process.Kill(true); process.WaitForExit(3000); }
-                    catch (InvalidOperationException) { }
-                    catch (System.ComponentModel.Win32Exception) { }
-                    process.Dispose();
-                }
-                try { Directory.Delete(profile, true); }
-                catch (IOException) { }
-                catch (UnauthorizedAccessException) { }
+                if (process != null) await process.StopAsync().ConfigureAwait(false);
                 diagnostics?.Add(WebBrowserTraceEventKind.Lifecycle, "browser-closed", null);
             }
             return errors.Take(16).ToArray();

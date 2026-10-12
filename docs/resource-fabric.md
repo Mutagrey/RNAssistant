@@ -235,8 +235,9 @@ rna diagnostic --workspace <path> --id <verification-id> --kind trace --raw > tr
 Use `verification --id` to inspect unavailable captures. Binary bodies are excluded
 from metadata JSON, and diagnostic references remain runtime/application data,
 outside model tool results. Preview does not create these verification records.
-Office UI presentation remains part of M7; abrupt process-loss cleanup/capture is
-not qualified by ordinary completion tests.
+Office UI presentation remains part of M7. Caller process loss is covered by the
+development lifetime owner below; interrupted verification stays `Pending`, with
+no fabricated terminal screenshot/trace or automatic retry.
 
 ### Application resource views and development preview
 
@@ -322,10 +323,29 @@ lifetime completion, not functional correctness. Preview never publishes a
 verification record or satisfies run acceptance. Its URL is diagnostic; the
 supported viewer is the owned isolated browser, not a user's existing profile.
 
+The shared development runner delegates Chromium/profile lifetime to the small
+`RNAssistant.BrowserHost` process. This framework-dependent .NET 8 helper is shipped
+with Runtime/CLI; it has no workspace, resource, model or conversation dependency.
+It creates a fresh profile and launches the browser itself. Its private stdin pipe
+is held by the caller and is not inherited by Chromium. EOF (including caller
+`SIGKILL`) or normal release closes only that browser tree and removes that profile.
+There is no persisted PID lookup or global process/profile sweep. The exact-route
+HTTP server remains in the caller and its sockets close on caller process loss.
+
+Normal completion awaits the helper; failed/timed-out cleanup is an explicit
+failure. The helper has a safety lifetime of 120 seconds for verification, or the
+requested preview lifetime plus 60 seconds (at most 3660). It drains browser output
+without retaining it. It cannot read or update verification/session records.
+Real headless Chromium on Mac covers loss after opening, isolation from another
+active viewer and interrupted verification; a controlled process checks loss before
+DevTools readiness. Ordinary expiry/Ctrl+C and a published CLI distribution pass.
+Simultaneous termination of the helper, OS/machine loss, self-contained packaging
+and Windows/Linux behavior are not qualified by these checks; no next-start orphan
+sweep is implemented. Existing user browser profiles are never cleanup targets.
+
 This is a development snapshot viewer, not a production localhost application
 server. Working previews, additional image/PDF renderers, Office UI integration
-and hard-process-loss cleanup qualification remain open. Retained verification
-screenshots/traces are implemented above.
+remain open. Retained verification screenshots/traces are implemented above.
 
 One resource identity, shared current-state authority, immutable historical evidence
 and one model-context compiler serve model reads, HTML and viewers. Reading content
