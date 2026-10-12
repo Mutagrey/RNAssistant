@@ -381,6 +381,14 @@ running markers cannot leave separate active cards after failure. A changed
 `RunViewState` on an existing message also invalidates its rendered unit. Step
 narration is rendered once, with earlier steps available in the collapsed history.
 
+An idle selected chat with `RunViewState.lifecycle=awaiting_user` shows a static
+“Нужен ваш ответ” notice above the composer, with an “Ответить” action that focuses
+the input without changing its draft. The input invites a reply and the send
+control says “Отправить ответ”. This comes only from the typed run state, never
+from question marks or model prose. Sending, attachment preparation, message
+editing, navigation, unavailable chat detail or bridge hide the notice. It does
+not alter execution health, resume work automatically or represent tool approval.
+
 ## Inspection
 
 Settings → Diagnostics → Trajectory queries the same stream through disposable `ITrajectoryQuery`. Raw results use exclusive sequence cursors, newest-first pages, tokenized text search and filters for sequence, event type, run/turn/step, tool call, artifact, status and reconstructed `current`/`shadowed`/`log-only` visibility. Retained `ResponseStatus` may be shown as raw accepted-history/provider diagnostic metadata, but it is not the lifecycle/effect source for `RunViewState`. Snapshot-paged derived views correlate model replay, tools, artifact lineage, confirmation pauses, failures/retries and per-turn timing/usage; every row carries its complete source event sequences and ids. Event metadata and state operations are inline; model payloads and streaming-frame batches are fetched lazily by event id and shown as a bounded preview. Selected chat rows can be exported as a bounded ZIP with metadata-only default, optional credential-field redaction, or explicit full decrypted data/CAS; protection keys never enter it. CAS storage audits all retained chat/VBA references and exposes an explicitly confirmed orphan cleanup. The bridge never includes API keys, history secrets or authorization headers. See [trajectory-query.md](trajectory-query.md) and [trajectory-export.md](trajectory-export.md).

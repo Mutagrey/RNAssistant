@@ -274,7 +274,7 @@ function agentRunSummaryTitle(status, elapsed, runViewState) {
   if (runViewState) {
     if (runViewState.lifecycle === "failed") title = "Работа остановлена";
     else if (runViewState.lifecycle === "cancelled") title = "Работа отменена";
-    else if (runViewState.lifecycle === "awaiting_user") title = "Ожидает ответа";
+    else if (runViewState.lifecycle === "awaiting_user") title = "Нужен ваш ответ";
     else if (runViewState.lifecycle === "awaiting_confirmation") title = "Ожидает подтверждения";
   }
   return title + (elapsed ? " · " + elapsed : "");

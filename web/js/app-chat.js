@@ -161,6 +161,7 @@ function bindChatActions() {
   $("compactContextButton").addEventListener("click", compactChatContext);
   $("stopButton").addEventListener("click", stopActiveSend);
   $("clearInputButton").addEventListener("click", function () { setChatInputText("", true); });
+  $("focusReplyButton").addEventListener("click", function () { $("chatInput").focus(); });
   $("cancelMessageEditButton").addEventListener("click", cancelMessageEdit);
   $("chatInput").addEventListener("input", updateComposerInputState);
   window.addEventListener("resize", resizeChatInput);

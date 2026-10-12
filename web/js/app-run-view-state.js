@@ -179,7 +179,7 @@
   function outcomeLabel(viewState) {
     if (!viewState) return "Статус неизвестен";
     if (viewState.lifecycle === "awaiting_confirmation") return "Нужно подтверждение";
-    if (viewState.lifecycle === "awaiting_user") return "Ожидает ответа";
+    if (viewState.lifecycle === "awaiting_user") return "Нужен ваш ответ";
     if (viewState.lifecycle === "cancelled") return "Отменено";
     if (viewState.lifecycle === "failed") return viewState.executionHealth === "unknown"
       ? "Работа остановлена · результат действия неизвестен"

@@ -71,6 +71,10 @@ function renderSendControls() {
   var isPreparingAttachments = !isSending && isPendingChatSubmit(state.activeChatId);
   var isCanceling = isSending && !!activeSend.canceling;
   var approvalPending = !isEditing && typeof pendingAgentApprovalActivity === "function" && !!pendingAgentApprovalActivity();
+  var awaitingReply = !!state.activeChatId && !navigating && !detailUnavailable &&
+    !isSending && !isPreparingAttachments && !isEditing && !state.bridgeUnavailable &&
+    !!state.activeRunViewState && state.activeRunViewState.lifecycle === "awaiting_user";
+  var replyPrompt = $("composerReplyPrompt");
   var sendButton = $("sendButton");
   var stopButton = $("stopButton");
   var input = $("chatInput");
@@ -94,10 +98,12 @@ function renderSendControls() {
   if (cancelEditButton) {
     cancelEditButton.disabled = !isEditing || state.editingBusy || isSending;
   }
+  if (replyPrompt) replyPrompt.hidden = !awaitingReply;
+  if ($("focusReplyButton")) $("focusReplyButton").disabled = !!(state.modeSaving || state.reasoningSaving);
 
   if (sendButton) {
     sendButton.classList.remove("hidden");
-    sendButton.title = isPreparingAttachments ? "Подготовка вложения" : (isEditing ? "Отправить заново" : (isSending ? (runningMessageDelivery() === "Queue" ? "В очередь" : "Отправить сразу") : "Отправить"));
+    sendButton.title = isPreparingAttachments ? "Подготовка вложения" : (isEditing ? "Отправить заново" : (isSending ? (runningMessageDelivery() === "Queue" ? "В очередь" : "Отправить сразу") : (awaitingReply ? "Отправить ответ" : "Отправить")));
     sendButton.setAttribute("aria-label", sendButton.title);
   }
   if (stopButton) {
@@ -116,7 +122,8 @@ function renderSendControls() {
         ? "Откройте RNAssistant внутри Office, чтобы начать чат..."
         : (isSending || approvalPending
           ? "Уточните задачу или добавьте сообщение в очередь…"
-          : (currentDocumentAvailable ? "Спросите про текущий документ..." : "Обсудите сохранённый контекст...")));
+          : (awaitingReply ? "Напишите ответ, чтобы продолжить…"
+            : (currentDocumentAvailable ? "Спросите про текущий документ..." : "Обсудите сохранённый контекст..."))));
   }
   if (clearButton) {
     clearButton.disabled = isPreparingAttachments || state.editingBusy;
