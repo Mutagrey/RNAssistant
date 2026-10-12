@@ -8,9 +8,15 @@ using RNAssistant.Core.Models;
 namespace RNAssistant.Core.ModelProtocol
 {
     // One active wire contract for model attempts, transcript envelopes and probes.
-    // No version selection or historical fallback: all active responses use v6.
+    // No version selection or historical fallback: all active responses use v7.
     public static class ModelProtocolWire
     {
+        public const string ActionGuidance =
+            "Use action=tool with calls to act and continue after their results. " +
+            "Without calls, end the turn: done when the requested answer or work is complete, " +
+            "needs_input when a required user answer is missing, or blocked when work cannot proceed. " +
+            "Put progress in message alongside the calls. Actions do not prove execution or effects.";
+
         public static LlmRequestOptions CreateRequestOptions(string responseMode, IEnumerable<ToolCatalogEntry> tools,
             ModelProtocolCallContext context)
         {
@@ -30,13 +36,10 @@ namespace RNAssistant.Core.ModelProtocol
             return new ConversationResponseParser().Parse(content, callableTools, runnableCatalog, context);
         }
 
-        public static string Write(string message, IEnumerable<ConversationToolCall> calls, bool? final = null)
+        public static string Write(string message, IEnumerable<ConversationToolCall> calls)
         {
             var snapshot = (calls ?? new ConversationToolCall[0]).ToArray();
-            if (final == true && snapshot.Length > 0)
-                throw new ArgumentException("A terminal response cannot contain tool calls.", nameof(final));
-            var action = snapshot.Length > 0 ? ConversationResponse.ToolAction :
-                final == false ? ConversationResponse.ContinueAction : ConversationResponse.DoneAction;
+            var action = snapshot.Length > 0 ? ConversationResponse.ToolAction : ConversationResponse.DoneAction;
             return new ConversationResponse(message ?? string.Empty, snapshot, action).ToJson();
         }
 

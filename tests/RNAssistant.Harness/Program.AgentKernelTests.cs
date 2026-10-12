@@ -95,50 +95,16 @@ namespace RNAssistant.Harness
             }
         }
 
-        private static async Task KernelRejectsNoToolNonFinal()
+        private static async Task KernelRejectsUnsupportedContinuation()
         {
-            var f = new KernelFixture(
-                new AgentResponseDraft("Продолжаю анализ.", new ToolCallDraft[0], ConversationResponse.ContinueAction),
-                KernelResponse());
+            var f = new KernelFixture(new AgentResponseDraft("I will continue.", new ToolCallDraft[0], "continue"));
             var result = await f.RunAsync();
-            AssertEqual(RunLifecycle.Completed, result.Summary.Lifecycle, "a no-tool progress step does not finish the run");
-            AssertEqual(2, f.Model.Requests.Count, "kernel requests a next decision after progress");
-            AssertTrue(!f.Model.Requests[0].IsNarrativeContinuation && f.Model.Requests[1].IsNarrativeContinuation,
-                "kernel signals the accepted no-call step only to the next request");
-            AssertEqual(2, f.Store.Events.Count(e => e.Kind == AgentRunEventKind.ResponseAccepted),
-                "progress and terminal decisions are both accepted facts");
-
-            var loop = new KernelFixture(
-                new AgentResponseDraft("Шаг 1.", new ToolCallDraft[0], ConversationResponse.ContinueAction),
-                new AgentResponseDraft("Шаг 2.", new ToolCallDraft[0], ConversationResponse.ContinueAction),
-                new AgentResponseDraft("Шаг 3.", new ToolCallDraft[0], ConversationResponse.ContinueAction));
-            var stopped = await loop.RunAsync();
-            AssertEqual(RunLifecycle.Failed, stopped.Summary.Lifecycle, "repeated no-call progress stops without false completion");
-            AssertEqual("no_tool_progress", stopped.Summary.Reason, "bounded no-call loop has an explicit reason");
-            AssertTrue(loop.Model.Requests.Skip(1).All(request => request.IsNarrativeContinuation),
-                "both allowed continuations receive feedback before the unchanged third-step stop");
-
-            var resumedWork = new KernelFixture(
-                new AgentResponseDraft("Проверю источник.", new ToolCallDraft[0], ConversationResponse.ContinueAction),
-                KernelResponse(KernelCall("read")), KernelResponse());
-            await resumedWork.RunAsync();
-            AssertTrue(resumedWork.Model.Requests[1].IsNarrativeContinuation &&
-                !resumedWork.Model.Requests[2].IsNarrativeContinuation, "a tool step clears narrative feedback");
-            AssertEqual(1, resumedWork.Tools.Calls.Count, "feedback neither executes nor replays a tool");
-
-            var steered = new KernelFixture(
-                new AgentResponseDraft("Выбран следующий шаг.", new ToolCallDraft[0], ConversationResponse.ContinueAction),
-                KernelResponse());
-            var input = new KernelInputFake();
-            steered.Store.OnAppended = fact => {
-                if (fact.Kind == AgentRunEventKind.ResponseAccepted && fact.Summary.IterationsUsed == 1)
-                    input.Add("Измени задачу.");
-            };
-            await new AgentKernel(steered.Model, steered.Tools, steered.Store, input: input).RunAsync(
-                new AgentRunRequest("run", "turn", "Исходная задача.", new AgentRunLimits(5, 5)), CancellationToken.None);
-            AssertTrue(!steered.Model.Requests[1].IsNarrativeContinuation, "new user input clears narrative feedback");
-            AssertEqual(2, steered.Model.Requests[1].AcceptedMessages.Count(message => message.Kind == AgentMessageKind.User),
-                "feedback reset preserves both user messages");
+            AssertEqual(RunLifecycle.Failed, result.Summary.Lifecycle, "unsupported action cannot end as success");
+            AssertEqual("invalid_accepted_response", result.Summary.Reason, "kernel defends the accepted boundary");
+            AssertEqual(1, f.Model.Requests.Count, "unsupported narrative cannot trigger another model step");
+            AssertEqual(0, f.Tools.Calls.Count, "no fabricated tool dispatch");
+            AssertTrue(!f.Store.Events.Any(e => e.Kind == AgentRunEventKind.ResponseAccepted),
+                "invalid continuation is never accepted as progress");
         }
 
         private static async Task KernelBlocksIdenticalDefiniteFailure()
@@ -902,23 +868,16 @@ namespace RNAssistant.Harness
             }
         }
 
-        private static async Task KernelContinuesNarrativeLimit()
+        private static void KernelRejectsNarrativeCheckpoint()
         {
-            using (var cancel = new CancellationTokenSource())
-            {
-                var narrative = new AgentResponseDraft("Still planning.", new ToolCallDraft[0], ConversationResponse.ContinueAction);
-                var f = new KernelFixture(narrative, narrative, narrative);
-                f.Store.OnAppended = fact => { if (fact.Kind == AgentRunEventKind.ResponseAccepted && fact.Summary.IterationsUsed == 2) cancel.Cancel(); };
-                var stopped = await f.RunAsync(cancel.Token);
-                f.Store.OnAppended = null;
-                var continuation = AgentRunContinuation.RestoreCheckpoint(new AgentRunState(stopped.Summary, new AgentRunLimits(10, 10)),
-                    f.Store.Events.Count, stopped.AcceptedMessages);
-                var result = await f.Kernel.ContinueAsync(continuation, CancellationToken.None);
-                AssertEqual("no_tool_progress", result.Summary.Reason, "cancellation cannot reset consecutive narrative limit");
-                AssertEqual(3, result.Summary.IterationsUsed, "third narrative ends the same run");
-                AssertTrue(f.Model.Requests.Last().IsNarrativeContinuation,
-                    "checkpoint continuation restores narrative feedback from accepted facts");
-            }
+            var summary = new RunSummary("run", "turn", RunLifecycle.Cancelled, new ToolCounts(),
+                1, 0, "", "cancelled", null);
+            var state = new AgentRunState(summary, new AgentRunLimits(10, 10));
+            var narrative = AgentMessage.Assistant(new AgentResponse("Still planning.", new ToolCall[0], "continue"));
+            KernelCheckpointRejected(() => AgentRunContinuation.RestoreCheckpoint(state, 1,
+                new[] { AgentMessage.User("Task"), narrative }), "old narrative checkpoint cannot resume");
+            KernelCheckpointRejected(() => AgentRunContinuation.RestoreCheckpoint(state, 1,
+                new[] { narrative, AgentMessage.User("New task") }), "unsupported action is rejected even before a new input");
         }
 
         private sealed class KernelFixture

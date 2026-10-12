@@ -37,7 +37,6 @@ namespace RNAssistant.Office.Services
         private ResourceAuthorityService _authority;
         private ChatBlobStore _payloads;
         private ModelContextSnapshot _lastSnapshot;
-        private bool _isNarrativeContinuation;
         private ModelAuthoritySnapshot _currentAuthority;
         private DocumentContext _context;
         private IReadOnlyList<ChatAttachment> _currentAttachments;
@@ -124,14 +123,8 @@ namespace RNAssistant.Office.Services
         }
 
         internal async Task<ModelProtocolRequest> PrepareRequestAsync(
-            string stepId, ModelProtocolCallContext callContext, CancellationToken cancellationToken,
-            bool isNarrativeContinuation = false)
+            string stepId, ModelProtocolCallContext callContext, CancellationToken cancellationToken)
         {
-            if (_isNarrativeContinuation != isNarrativeContinuation)
-            {
-                _isNarrativeContinuation = isNarrativeContinuation;
-                _lastSnapshot = null;
-            }
             // Compile at the request boundary, after every accepted terminal
             // result (including confirmation continuation) has entered history.
             if (_lastSnapshot == null)
@@ -210,17 +203,6 @@ namespace RNAssistant.Office.Services
                 accepted.ArgumentPayload = PayloadRef.FromBlob(_payloads.StoreText(arguments, "application/json"));
                 AcceptedCallPayloadService.Externalize(accepted, _payloads);
             }
-            _session.Messages.Add(accepted);
-            _lastSnapshot = null;
-        }
-
-        internal void AppendNarrativeStep(string message, LlmCompletionResult completion)
-        {
-            var accepted = AgentTranscript.CreateAssistantMessage(
-                ModelProtocolWire.WriteAction(message, ConversationResponse.ContinueAction), completion,
-                null, AgentResponseStatuses.InProgress);
-            accepted.ProtocolMessage = true;
-            AttachResponseEvidence(accepted);
             _session.Messages.Add(accepted);
             _lastSnapshot = null;
         }
@@ -542,8 +524,7 @@ namespace RNAssistant.Office.Services
                 Math.Max(0, Math.Min(budget / 3, budget - ContextWorkingSet.EstimateCost(required.Concat(facts), _settings))), ModelToolResultProjection.Instance);
             facts.AddRange(workingSet.Messages);
             return _compiler.Compile(frozen, required, facts, _context?.Notes, _runnableCatalog,
-                _settings, budget, enforceBudget, workingSet.IncludedBodies, workingSet.OmittedBodies,
-                _isNarrativeContinuation);
+                _settings, budget, enforceBudget, workingSet.IncludedBodies, workingSet.OmittedBodies);
         }
 
         private ChatMessage MaterializeToolResultMessage(

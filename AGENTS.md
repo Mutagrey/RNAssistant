@@ -55,7 +55,7 @@ evidence и ADR — только когда нужны причина, точн�
 - `web`: static UI без npm/bundler; feature logic — в тематических `app-*.js`,
   `app.js` — boot/shared rendering.
 - Все modes идут через `ConversationRunService` → `AgentKernel`; только kernel
-  считает lifecycle/outcomes. Model wire — conversation-response v6
+  считает lifecycle/outcomes. Model wire — conversation-response v7
   `message + action + tool_calls`; IDs, guards, URI/revision/cursor и authority принадлежат
   runtime, а не модели/UI.
 - Model-facing reads используют только `common.resources_*` и semantic target;

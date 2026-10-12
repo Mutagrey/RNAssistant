@@ -148,7 +148,7 @@ namespace RNAssistant.Office.Services
                 {
                     Name = call.Name,
                     Arguments = JObject.FromObject(call.Arguments ?? new Dictionary<string, object>())
-                } }, false);
+                } });
             var protocolMessage = AgentTranscript.CreateAssistantMessage(content, completion);
             protocolMessage.ResponseProtocolVersion = AgentResponseProtocol.CurrentVersion;
             protocolMessage.ToolResultProtocolVersion = ToolResultWire.CurrentVersion;

@@ -155,6 +155,9 @@ namespace RNAssistant.Core.Agent
                 else
                 {
                     if (open.Count != 0) throw new InvalidOperationException("Continuation contains an incomplete tool exchange.");
+                    if (message.Kind == AgentMessageKind.Assistant &&
+                        !ConversationResponse.IsValidAction(message.Action, message.ToolCalls.Count))
+                        throw new InvalidOperationException("Continuation contains an unsupported model action.");
                     foreach (var call in message.ToolCalls)
                     {
                         if (!ids.Add(call.Id)) throw new InvalidOperationException("Duplicate accepted call in continuation.");
@@ -164,7 +167,7 @@ namespace RNAssistant.Core.Agent
             }
             if (open.Count != 0) throw new InvalidOperationException("An accepted tool call is unresolved; it cannot be replayed.");
             var last = messages.Last();
-            if (last.Kind == AgentMessageKind.Assistant && last.Action != ConversationResponse.ContinueAction)
+            if (last.Kind == AgentMessageKind.Assistant)
                 throw new InvalidOperationException("The accepted model decision cannot be continued.");
             return new AgentRunContinuation(summary, limits, revision, messages, ids);
         }

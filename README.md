@@ -84,14 +84,14 @@ The CLI requests 4096 output tokens; `RNA_REASONING_MODE` defaults to
 `reasoning_effort`. Set `RNA_THINKING=on` only for a deliberate reasoning-mode
 comparison. `--response-mode` / `RNA_RESPONSE_MODE` explicitly selects
 `json_schema` (CLI default) or `json_object` for an endpoint that needs it;
-both use the same v6 parser and agent loop. The run saves model, Ollama digest
+both use the same v7 parser and agent loop. The run saves model, Ollama digest
 when available, context, response mode, instruction/result roles and reasoning mode;
 `rna inspect` shows that snapshot. `--instruction-role` / `RNA_INSTRUCTION_ROLE`
 selects `developer` (default) or `system` using the existing `SystemPromptRole`
 setting, with identical instruction text. Select a role that the endpoint's model
 template actually renders. `--tool-result-role` / `RNA_TOOL_RESULT_ROLE` selects
 `user` (default), `developer`, or `tool` (native accepted call/result pairs).
-This uses the existing `ToolResultRole` setting; generation still uses v6 JSON,
+This uses the existing `ToolResultRole` setting; generation still uses v7 JSON,
 with no second native tool catalog or loop. The common compiler keeps the latest
 pair and compresses older write frames only under context pressure. Source bodies
 can be omitted or marked stale independently; an omitted read cannot authorize

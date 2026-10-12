@@ -31,7 +31,7 @@ namespace RNAssistant.Core.ModelProtocol
         {
             if (message == null || !string.Equals(message.Role, "assistant", StringComparison.OrdinalIgnoreCase) ||
                 message.Activity != null || message.ResponseProtocolVersion != ConversationResponse.ProtocolVersion)
-                return ConversationHistoryReadResult.Fail("History record is not an identified v6 assistant response.");
+                return ConversationHistoryReadResult.Fail("History record is not an identified v7 assistant response.");
 
             var nativeCalls = message.ToolCalls;
             if (nativeCalls != null && nativeCalls.Count > 0)
@@ -68,7 +68,7 @@ namespace RNAssistant.Core.ModelProtocol
                 message.AcceptedCallOrigin != null)
                 return ConversationHistoryReadResult.Fail("Plain assistant history has unexpected tool-call metadata.");
             if (message.ResponseStatus == AgentResponseStatuses.InProgress)
-                return ConversationHistoryReadResult.Fail("No-call progress requires a v6 protocol envelope.");
+                return ConversationHistoryReadResult.Fail("No-call progress is not supported by v7.");
             var action = message.ResponseStatus == AgentResponseStatuses.Blocked ? ConversationResponse.BlockedAction :
                 message.ResponseStatus == AgentResponseStatuses.AwaitingUser ? ConversationResponse.NeedsInputAction :
                 ConversationResponse.DoneAction;

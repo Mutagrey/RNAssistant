@@ -9,13 +9,13 @@ namespace RNAssistant.Core.ModelProtocol
 {
     public static class ConversationResponseSchemaBuilder
     {
-        public const string SchemaName = "rnassistant_conversation_response_v6";
+        public const string SchemaName = "rnassistant_conversation_response_v7";
         public const int MaximumToolCalls = 32;
 
         public static string Build(IEnumerable<ToolCatalogEntry> callableTools, ModelProtocolCallContext context)
         {
             if (context == null || !context.IsComplete)
-                throw new System.ArgumentException("V6 schema requires a complete local sequential-batch context.", nameof(context));
+                throw new System.ArgumentException("V7 schema requires a complete local sequential-batch context.", nameof(context));
             var reads = new JArray();
             var singleCalls = new JArray();
             foreach (var tool in (callableTools ?? new ToolCatalogEntry[0])
@@ -47,17 +47,17 @@ namespace RNAssistant.Core.ModelProtocol
             return new JObject
             {
                 ["type"] = "object",
-                ["description"] = "V6: message/action/tool_calls. Runtime owns IDs, lifecycle and effects. " +
+                ["description"] = "V7: message/action/tool_calls. Runtime owns IDs, lifecycle and effects. " +
                     "Only independent local reads may be batched. Return every mutation and other call alone; wait for the result before proposing another mutation. " +
-                    "Use tool for calls, continue only for a new concrete finding or decision when no call or terminal decision is ready, done only for a completed answer, blocked or needs_input for unfinished work. Never repeat an intention to start. Action is not execution evidence.",
+                    ModelProtocolWire.ActionGuidance,
                 ["properties"] = new JObject
                 {
                     ["message"] = new JObject { ["type"] = "string", ["description"] = "User-facing message. On tool turns, briefly connect a relevant observed finding, the purpose of the actual upcoming calls, and what their results will clarify. Omit parts not yet known; do not invent findings or narrate private reasoning. Wording never determines execution success; runtime owns status and effects." },
                     ["action"] = new JObject
                     {
                         ["type"] = "string",
-                        ["enum"] = new JArray("tool", "continue", "done", "blocked", "needs_input"),
-                        ["description"] = "tool requires calls; continue is a new finding or decision without calls, never a repeated intention; done/blocked/needs_input end the turn with no calls."
+                        ["enum"] = new JArray("tool", "done", "blocked", "needs_input"),
+                        ["description"] = "tool requires calls; done/blocked/needs_input end the turn with no calls."
                     },
                     ["tool_calls"] = calls
                 },

@@ -42,15 +42,6 @@ namespace RNAssistant.Office.Services
                             index == 0 ? fact.Response.Message : string.Empty,
                             index == 0 ? _lastModel.Completion : null,
                             new AcceptedToolCallOrigin(fact.StepId, _lastModel.SourceModelAttemptId, index));
-                    if (fact.Response.Action == ConversationResponse.ContinueAction)
-                    {
-                        _modelSession.AppendNarrativeStep(fact.Response.Message, _lastModel.Completion);
-                        activity = new ChatMessage { Role = "assistant", Content = string.Empty,
-                            ExcludeFromModelContext = true, Activity = new ChatActivity
-                            { Kind = "step", StepId = fact.StepId, StepMessage = fact.Response.Message,
-                                Title = fact.Response.Message, Status = "completed" } };
-                        _session.Messages.Add(activity);
-                    }
                     break;
                 case AgentRunEventKind.ToolStarted:
                     run.Phase = "executing";

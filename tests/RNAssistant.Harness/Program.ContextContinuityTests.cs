@@ -18,34 +18,6 @@ namespace RNAssistant.Harness
 {
     internal static partial class Program
     {
-        private static void ContextContinuityNarrativeFeedback()
-        {
-            var authority = new ModelAuthoritySnapshot(new ResourceAuthoritySnapshotSet(new ResourceAuthoritySnapshot[0]),
-                "pack", new SkillCatalogSnapshot(null), null, 1);
-            var compiler = new ModelContextCompiler();
-            foreach (var role in new[] { "developer", "system", "user" })
-            {
-                var settings = new AppSettings { SystemPromptRole = role };
-                // Compaction can omit the narrative from the active window. The kernel
-                // still owns the signal; the compiler must not infer it from that window.
-                var snapshot = compiler.Compile(authority, new ChatMessage[0], new ChatMessage[0], null,
-                    new ToolCatalogEntry[0], settings, 1000, isNarrativeContinuation: true);
-                AssertEqual(1, snapshot.Messages.Count, "feedback survives an empty compacted window");
-                AssertEqual(role, snapshot.Messages.Single().Role, "configured instruction role is retained");
-                AssertEqual("runtime-feedback", snapshot.Receipt.Messages.Single().Kind, "inspector identifies service feedback");
-                AssertEqual(ContextPresentationKind.Full, snapshot.Receipt.Messages.Single().Presentation, "feedback is fully accounted");
-                AssertTrue(snapshot.Receipt.EstimatedTokens > 0, "feedback participates in request admission");
-                var overBudget = false;
-                try { compiler.Compile(authority, new ChatMessage[0], new ChatMessage[0], null,
-                    new ToolCatalogEntry[0], settings, 1, isNarrativeContinuation: true); }
-                catch (PromptBudgetExceededException) { overBudget = true; }
-                AssertTrue(overBudget, "feedback cannot bypass the prompt budget");
-                var cleared = compiler.Compile(authority, new ChatMessage[0], new ChatMessage[0], null,
-                    new ToolCatalogEntry[0], settings, 1000);
-                AssertEqual(0, cleared.Messages.Count, "compiler does not retain feedback between requests");
-            }
-        }
-
         private static void ContextContinuityKeepsRecentPair()
         {
             var authority = new ModelAuthoritySnapshot(new ResourceAuthoritySnapshotSet(new ResourceAuthoritySnapshot[0]),
@@ -80,7 +52,7 @@ namespace RNAssistant.Harness
                     AssertEqual("recent", (string)request[1]["tool_call_id"], "native result reaches wire");
                     AssertContains((string)request[0]["tool_calls"][0]["function"]["arguments"], "<p>exact body</p>", "native arguments are exact");
                 }
-                else AssertContains((string)request[0]["content"], "<p>exact body</p>", "v6 accepted arguments are exact");
+                else AssertContains((string)request[0]["content"], "<p>exact body</p>", "v7 accepted arguments are exact");
                 AssertEqual(result.Content, snapshot.Messages[1].Content, "short result is unchanged");
                 var repaired = new LlmMessageBuilder().Build(compiler.CompileRepair(snapshot,
                     new ChatMessage { Role = "user", Content = "Repair format only." }), new AppSettings()).Messages;
@@ -360,7 +332,7 @@ namespace RNAssistant.Harness
             var durable = Newtonsoft.Json.JsonConvert.DeserializeObject<ChatMessage>(Newtonsoft.Json.JsonConvert.SerializeObject(
                 new ChatMessage { ExecutionProgress = progress }));
             var tracker = new AgentProgressTracker();
-            tracker.Restore(new[] { AgentMessage.Assistant(new AgentResponse("", new[] { call }, false)),
+            tracker.Restore(new[] { AgentMessage.Assistant(new AgentResponse("", new[] { call })),
                 AgentMessage.AcceptedToolResult(call.Id, "unknown", "{}", durable.ExecutionProgress) });
             string reason, message; int delay;
             AssertTrue(!tracker.CanDispatch(new ToolCall("new_call", "write", "{}"), out reason, out message, out delay),
@@ -405,7 +377,7 @@ namespace RNAssistant.Harness
             AssertContains(model, "ChangeRequired", "model receives a repair condition");
             AssertTrue(!model.Contains("rna://") && !model.Contains("ChangeDependencies"), "dependency authority remains runtime-only");
             var failed = new ToolCall("verify", "read", "{}");
-            var history = new[] { AgentMessage.Assistant(new AgentResponse("verify", new[] { failed }, false)),
+            var history = new[] { AgentMessage.Assistant(new AgentResponse("verify", new[] { failed })),
                 AgentMessage.AcceptedToolResult(failed.Id, "snapshot failed", "{}", restored) };
             Func<AgentProgressTracker> tracker = () => { var value = new AgentProgressTracker(); value.Restore(history); return value; };
             string reason, message; int delay;
@@ -451,7 +423,7 @@ namespace RNAssistant.Harness
                 new ToolExecutionProgress(ToolExecutionOutcome.Ok), effect: repair);
             var continued = new AgentProgressTracker();
             continued.Restore(history.Concat(new[] { AgentMessage.Assistant(new AgentResponse("repair",
-                new[] { new ToolCall("repair", "write", "{}") }, false)), acceptedRepair }));
+                new[] { new ToolCall("repair", "write", "{}") })), acceptedRepair }));
             AssertTrue(continued.CanDispatch(failed, out reason, out message, out delay), "verified dependency repair permits explicit retry after restore");
             var unknown = new AgentProgressTracker();
             unknown.Observe(failed, new ToolExecutionProgress(ToolExecutionOutcome.Unknown), "unknown", null, null);

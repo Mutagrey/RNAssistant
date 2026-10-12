@@ -61,10 +61,10 @@ namespace RNAssistant.Core.ModelProtocol
                     ConversationResponseSchemaBuilder.MaximumToolCalls + " calls per response.");
             var action = (string)root["action"];
             if (!ConversationResponse.IsValidAction(action, calls.Count))
-                return ConversationResponseParseResult.Fail("action must be tool with calls, or continue/done/blocked/needs_input with no calls.");
-            if ((action == ConversationResponse.ContinueAction || action == ConversationResponse.BlockedAction ||
+                return ConversationResponseParseResult.Fail("action must be tool with calls, or done/blocked/needs_input with no calls.");
+            if ((action == ConversationResponse.BlockedAction ||
                 action == ConversationResponse.NeedsInputAction) && string.IsNullOrWhiteSpace((string)root["message"]))
-                return ConversationResponseParseResult.Fail("action=continue/blocked/needs_input requires a concrete message.");
+                return ConversationResponseParseResult.Fail("action=blocked/needs_input requires a concrete message.");
 
             var parsedCalls = new List<ConversationToolCall>();
             foreach (var token in calls)

@@ -35,13 +35,6 @@ namespace RNAssistant.Core.Agent
         {
         }
 
-        public AgentResponseDraft(string message, IEnumerable<ToolCallDraft> calls, bool final)
-            : this(message, calls, !final && calls != null && !calls.Any()
-                ? ConversationResponse.ContinueAction : null)
-        {
-            if (final && ToolCalls.Count > 0) throw new ArgumentException("A final response cannot contain tool calls.", nameof(final));
-        }
-
         public AgentResponseDraft(string message, IEnumerable<ToolCallDraft> calls, string action)
         {
             var snapshot = (calls ?? throw new ArgumentNullException(nameof(calls))).ToArray();
@@ -83,13 +76,6 @@ namespace RNAssistant.Core.Agent
         public AgentResponse(string message, IEnumerable<ToolCall> calls)
             : this(message, calls, (string)null)
         {
-        }
-
-        public AgentResponse(string message, IEnumerable<ToolCall> calls, bool final)
-            : this(message, calls, !final && calls != null && !calls.Any()
-                ? ConversationResponse.ContinueAction : null)
-        {
-            if (final && ToolCalls.Count > 0) throw new ArgumentException("A final response cannot contain tool calls.", nameof(final));
         }
 
         public AgentResponse(string message, IEnumerable<ToolCall> calls, string action)

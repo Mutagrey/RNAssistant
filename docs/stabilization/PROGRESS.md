@@ -1,5 +1,31 @@
 # Stabilization progress
 
+## Response v7: tool-driven continuation — 2026-10-13
+
+Owner: ModelProtocol / AgentKernel. Standalone no-call `continue` is removed from
+the schema, parser, kernel, checkpoint restore and Office/CLI consumers. Progress
+accompanies calls; a no-call response ends the turn as `done`, `blocked` or
+`needs_input`. A question retains its distinct awaiting-user outcome and resumes
+only after actual input. Typed `common.questions_ask` remains available. Terminal
+intent does not certify completion or effects. No prose classifier or case-specific
+rules were introduced; transient narrative feedback and its counter are removed.
+
+Prompt schema 40 shares the same action guidance across default modes, response
+schema, repair and CLI. Prior prompts retain the existing archive-on-save migration.
+Old v6 history is explicitly rejected before dispatch, stays intact and needs a
+new chat/reset; `continue` is never silently converted into `done`.
+
+Evidence: host-neutral no-tool flow 3/3, v7 wire 13/13, model protocol 15/15,
+preflight 2/2, prompt migration 3/3, default prompt contract 1/1 and native question
+1/1 and built-in guidance 1/1 pass. Kernel checks are 54/55; the corrective-retry
+fixture also fails unchanged on baseline `921c504c`, independently of the response
+contract. Its source-owned recovery requires a separate fix.
+The CLI builds with zero warnings/errors. Controlled HTTP checks pass all four
+response-format/result-role combinations, typed questions in Plan/Agent, Chat
+admission, interrupted-run recovery and explicit cancellation/continuation. Web
+history rendering also passes, including old no-progress diagnostics. Real-model task quality and
+Windows/Office/WebView2 delivery remain unqualified; no Office/VSTO validation ran.
+
 ## Ollama checkpoint memory and fixed acceptance — 2026-10-12
 
 Owner: CLI evaluation / isolated endpoint profile. Tested pinned `881596f2`

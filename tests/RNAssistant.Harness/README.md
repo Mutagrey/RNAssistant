@@ -1,18 +1,19 @@
 # RNAssistant Harness
 
-`conversation v6:` checks batch policy in both parser and actual HTTP response
+`conversation v7:` checks batch policy in both parser and actual HTTP response
 schema: authorized reads, singleton effects, mixed batches, contradictory policy
 and the 32-call bound. `protocol context: immutable complete snapshots` also
 rejects schema generation with missing/incomplete authority. Request-size and
 tool-pack checks cover schema projection and admission with both array branches.
 
-`no-tool`, `kernel: continues without tools`, `kernel: stopped continuation retains
-narrative limit` and `context continuity: narrative feedback` check transient
-no-call feedback, frozen repair, budget accounting, tool/user-input reset and
-checkpoint continuation. After building the CLI,
-`python3 -B tests/cli/narrative_feedback_smoke.py` checks actual HTTP requests with
-both result roles and response formats. These are controlled host-neutral checks;
-they do not establish fewer repeats from a real model or qualify Office delivery.
+`no-tool` checks distinct terminal outcomes, rejection and frozen repair of the
+removed `continue` action, and resuming tool work only after an actual user reply.
+`kernel: rejects narrative checkpoint` and `protocol preflight:` reject old
+checkpoints/history without migration or dispatch. After building the CLI,
+`python3 -B tests/cli/turn_decisions_smoke.py` checks production HTTP requests in
+both result roles and response formats; `mode_questions_smoke.py` checks typed
+question/answer persistence. These are controlled host-neutral checks; they do not
+qualify real-model task completion or Office delivery.
 
 `python3 -B tests/cli/compaction_resume_live.py --base-url http://127.0.0.1:11435
 --model <verified-model-tag> --digest <verified-digest>` runs the separate real-LLM

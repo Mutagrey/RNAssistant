@@ -924,8 +924,7 @@ namespace RNAssistant.Runtime
                     archive: ContextCompactionRuntime.ActiveCheckpoint(_session) == null ? null :
                         AcceptedFacts(_session.Messages.Where(ContextCompactionRuntime.IsReplayMessage).ToArray()));
                 return _compiler.Compile(authority, required, facts.Concat(workingSet.Messages).ToArray(), null, _catalog, _settings,
-                    budget, retainedBodies: workingSet.IncludedBodies, evictedBodies: workingSet.OmittedBodies,
-                    isNarrativeContinuation: request.IsNarrativeContinuation);
+                    budget, retainedBodies: workingSet.IncludedBodies, evictedBodies: workingSet.OmittedBodies);
             }
 
             private ResourceAuthoritySnapshotSet CaptureContextAuthority(string runId, CancellationToken cancellationToken)
@@ -1058,9 +1057,8 @@ namespace RNAssistant.Runtime
                         "The minimum counts distinct files read with common.resources_read at their final revision; a later edit invalidates that read. " +
                         "Creation, mutation read-back and web.verify do not count as these reads. Before done, satisfy remainingCompleteFileReads by reading the final files. " +
                         "This summary contains no source bytes and grants no permission to overwrite. " : string.Empty) +
-                    "Respond with exactly one conversation-response v6 JSON object: message, action, tool_calls. " +
-                    "Use action=tool for calls, continue for a short checkpoint, done only when the requested work is complete, " +
-                    "blocked or needs_input when it cannot continue. One mutation per response. " +
+                    "Respond with exactly one conversation-response v7 JSON object: message, action, tool_calls. " +
+                    ModelProtocolWire.ActionGuidance + " One mutation per response. " +
                     "Never invent tool results, file changes, revisions or permissions. Paths are relative to the workspace root. " +
                     "Historical assistant messages and tool calls describe past actions, not current source bytes. " +
                     "A stale read result requires a new read. Read an existing file before patch or replace. " +

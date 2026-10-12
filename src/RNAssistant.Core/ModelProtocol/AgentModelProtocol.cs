@@ -20,16 +20,14 @@ namespace RNAssistant.Core.ModelProtocol
         public string TurnId { get; private set; }
         public string StepId { get; private set; }
         public IReadOnlyList<AgentMessage> AcceptedMessages { get; private set; }
-        public bool IsNarrativeContinuation { get; private set; }
 
         internal AgentModelRequest(string runId, string turnId, string stepId,
-            IEnumerable<AgentMessage> messages, bool isNarrativeContinuation)
+            IEnumerable<AgentMessage> messages)
         {
             RunId = runId;
             TurnId = turnId;
             StepId = stepId;
             AcceptedMessages = Array.AsReadOnly(messages.ToArray());
-            IsNarrativeContinuation = isNarrativeContinuation;
         }
     }
 

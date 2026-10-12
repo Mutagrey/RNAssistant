@@ -173,7 +173,7 @@ namespace RNAssistant.Harness
             {
                 var json = new JObject { ["message"] = message, ["action"] = "done", ["tool_calls"] = new JArray() }.ToString(Formatting.None);
                 var parsed = ParseV4(json);
-                AssertTrue(parsed.Success, "v6 accepts a string message without interpreting its wording");
+                AssertTrue(parsed.Success, "v7 accepts a string message without interpreting its wording");
                 AssertEqual(message, parsed.Response.Message, "message remains exact");
                 AssertTrue(parsed.Response.Final, "final answer intent is explicit");
                 AssertTrue(JToken.DeepEquals(JObject.Parse(json), JObject.Parse(parsed.Response.ToJson())), "status-free final round trip");
@@ -197,104 +197,88 @@ namespace RNAssistant.Harness
                 "nested arrays and objects remain native JSON tokens");
             AssertTrue(!call.Response.Final, "tool turns are not final answers");
             AssertTrue(JToken.DeepEquals(JObject.Parse(callJson), JObject.Parse(call.Response.ToJson())), "call round trip preserves arguments without assigning ids");
-            AssertTrue(typeof(ConversationResponse).GetProperty("Status") == null, "v6 DTO has no model or universal status");
-            foreach (var action in new[] { "continue", "blocked", "needs_input" })
+            AssertTrue(typeof(ConversationResponse).GetProperty("Status") == null, "v7 DTO has no model or universal status");
+            foreach (var action in new[] { "done", "blocked", "needs_input" })
             {
                 var envelope = ModelProtocolWire.WriteAction("Observed result; next decision is explicit.", action);
                 var parsed = ParseV4(envelope);
                 AssertTrue(parsed.Success && parsed.Response.Action == action && parsed.Response.ToolCalls.Count == 0,
-                    "v6 preserves no-call action: " + action);
+                    "v7 preserves no-call action: " + action);
                 AssertEqual(envelope, parsed.Response.ToJson(), "no-call action round trips exactly");
             }
             AssertTrue(!ParseV4("{\"message\":\"Wait\",\"action\":\"continue\",\"tool_calls\":[{}]}").Success,
                 "progress cannot conceal a call");
-            AssertTrue(!ParseV4("{\"message\":\"\",\"action\":\"continue\",\"tool_calls\":[]}").Success,
-                "no-call progress requires a visible checkpoint");
+            AssertTrue(!ParseV4("{\"message\":\"Observed fact.\",\"action\":\"continue\",\"tool_calls\":[]}").Success,
+                "no-call progress is excluded even with a concrete message");
             AssertTrue(!ParseV4("{\"message\":\"\",\"action\":\"blocked\",\"tool_calls\":[]}").Success,
                 "a blocked outcome must explain the remaining work");
         }
 
-        private static void SimpleAgentPersistsNoToolContinuation()
+        private static void SimpleAgentEndsNoToolTurn()
         {
+            foreach (var mode in new[] { ChatModes.Agent, ChatModes.Chat, ChatModes.Plan })
+            foreach (var action in new[] { ConversationResponse.DoneAction, ConversationResponse.BlockedAction, ConversationResponse.NeedsInputAction })
             WithTempExecutor(FakeOfficeAdapter.ForHost("Excel"), (executor, adapter) => {
-                var responses = new Queue<string>(new[] {
-                    ModelProtocolWire.WriteAction("Источник просмотрен; сверяю вывод перед ответом.", ConversationResponse.ContinueAction),
-                    ModelProtocolWire.WriteAction("Проверка завершена.", ConversationResponse.DoneAction)
-                });
-                var requests = new List<IReadOnlyList<ChatMessage>>();
+                var requests = 0;
                 var session = NewSession(adapter);
+                session.Mode = mode;
                 var result = CreateConversationRunService(adapter, executor, (settings, messages, options, stream, token) => {
-                    requests.Add(messages.ToList());
-                    return Task.FromResult(new LlmCompletionResult { Content = responses.Dequeue() });
-                }).ExecuteAsync(ChatModes.Agent, "Сверь вывод.", session, NewContext(adapter), new AppSettings(),
+                    requests++;
+                    return Task.FromResult(new LlmCompletionResult { Content = ModelProtocolWire.WriteAction("Ответ пользователю.", action) });
+                }).ExecuteAsync(mode, "Запрос пользователя.", session, NewContext(adapter), new AppSettings(),
                     OfficeToolCatalog.ForHost(adapter.HostName).Concat(executor.GetControllerTools()).ToList(), null)
                     .GetAwaiter().GetResult();
-                AssertEqual(AgentResponseStatuses.Completed, result.ResponseStatus, "explicit done ends after a no-call checkpoint");
-                AssertEqual(2, requests.Count, "continue triggers the next model decision");
-                AssertContains(FlattenSimple(requests[1]), "\"action\":\"continue\"", "checkpoint survives into the next request");
-                AssertTrue(session.Messages.Any(message => message.ProtocolMessage && message.ResponseStatus == AgentResponseStatuses.InProgress &&
-                    ConversationResponseHistoryReader.Read(message).Success &&
-                    ConversationResponseHistoryReader.Read(message).Response.Action == ConversationResponse.ContinueAction),
-                    "accepted no-call step is durable protocol history");
-                AssertTrue(session.Messages.Any(message => message.Activity?.Kind == "step" &&
-                    message.Activity.StepMessage == "Источник просмотрен; сверяю вывод перед ответом."),
-                    "checkpoint is visible in the run trace");
-            });
-            foreach (var action in new[] { ConversationResponse.BlockedAction, ConversationResponse.NeedsInputAction })
-            WithTempExecutor(FakeOfficeAdapter.ForHost("Excel"), (executor, adapter) => {
-                var session = NewSession(adapter);
-                var result = CreateConversationRunService(adapter, executor, (settings, messages, options, stream, token) =>
-                    Task.FromResult(new LlmCompletionResult { Content = ModelProtocolWire.WriteAction("Остался вопрос.", action) }))
-                    .ExecuteAsync(ChatModes.Agent, "Выполни задачу.", session, NewContext(adapter), new AppSettings(),
-                        OfficeToolCatalog.ForHost(adapter.HostName).Concat(executor.GetControllerTools()).ToList(), null)
-                    .GetAwaiter().GetResult();
-                AssertEqual(action == ConversationResponse.BlockedAction ? AgentResponseStatuses.Blocked : AgentResponseStatuses.AwaitingUser,
-                    result.ResponseStatus, "unfinished model outcome is retained in the terminal record");
-                AssertEqual(action == ConversationResponse.BlockedAction ? "model_blocked" : "model_needs_input",
-                    result.RunViewState.Reason, "run view keeps distinct model decision");
+                AssertEqual(1, requests, "a no-call response ends the turn without self-prompting: " + mode);
+                AssertEqual(action == ConversationResponse.DoneAction ? AgentResponseStatuses.Completed :
+                    action == ConversationResponse.BlockedAction ? AgentResponseStatuses.Blocked : AgentResponseStatuses.AwaitingUser,
+                    result.ResponseStatus, "the terminal reason is retained independently of prose");
+                AssertEqual("model_" + action, result.RunViewState.Reason, "done, blocked and needs_input remain distinct");
+                var terminal = session.Messages.Last(message => message.Role == "assistant" && message.Activity == null);
+                var parsed = ConversationResponseHistoryReader.Read(terminal);
+                AssertTrue(parsed.Success && parsed.Response.Action == action, "history preserves the terminal decision");
             });
         }
 
-        private static void SimpleAgentNarrativeFeedback()
+        private static void SimpleAgentRejectsContinueThenWaitsForReply()
         {
             foreach (var responseMode in new[] { AgentResponseModes.JsonSchema, AgentResponseModes.JsonObject })
             WithTempExecutor(FakeOfficeAdapter.ForHost("Excel"), (executor, adapter) => {
-                var narrative = ModelProtocolWire.WriteAction("Источник выбран; следующий шаг — чтение.", ConversationResponse.ContinueAction);
-                var responses = new Queue<string>(new[] { narrative, "{}", narrative,
+                var responses = new Queue<string>(new[] {
+                    "{\"message\":\"I will continue.\",\"action\":\"continue\",\"tool_calls\":[]}",
+                    ModelProtocolWire.WriteAction("Какой источник использовать?", ConversationResponse.NeedsInputAction),
                     V4Envelope(V4Call("common.capabilities_search", new JObject { ["query"] = "markdown" })),
                     ModelProtocolWire.WriteAction("Готово.", ConversationResponse.DoneAction) });
                 var requests = new List<JObject>();
                 var session = NewSession(adapter);
-                var settings = new AppSettings { AgentResponseMode = responseMode, ToolResultRole = ToolResultRoles.Tool,
-                    SystemPromptRole = "system" };
-                var result = CreateConversationRunService(adapter, executor, (currentSettings, messages, options, stream, token) => {
+                var settings = new AppSettings { AgentResponseMode = responseMode, ToolResultRole = ToolResultRoles.Tool };
+                var service = CreateConversationRunService(adapter, executor, (currentSettings, messages, options, stream, token) => {
                     requests.Add(LlmClient.BuildRequestBody(currentSettings,
                         new LlmMessageBuilder().Build(messages, currentSettings, options).Messages, 100, options));
                     return Task.FromResult(new LlmCompletionResult { Content = responses.Dequeue() });
-                }).ExecuteAsync(ChatModes.Agent, "Изучи доступные средства.", session, NewContext(adapter), settings,
-                    OfficeToolCatalog.ForHost(adapter.HostName).Concat(executor.GetControllerTools()).ToList(), null)
+                });
+                var catalog = OfficeToolCatalog.ForHost(adapter.HostName).Concat(executor.GetControllerTools()).ToList();
+                var waiting = service.ExecuteAsync(ChatModes.Agent, "Изучи источник.", session, NewContext(adapter), settings, catalog, null)
                     .GetAwaiter().GetResult();
-                AssertEqual(AgentResponseStatuses.Completed, result.ResponseStatus, "two checkpoints can proceed to a real tool step");
-                AssertEqual(5, requests.Count, "one format repair does not add accepted steps");
-                for (var index = 0; index < requests.Count; index++)
-                {
-                    var messages = (JArray)requests[index]["messages"];
-                    var feedback = messages.Where(message => ((string)message["content"] ?? "").StartsWith("RUNTIME_FEEDBACK:\n", StringComparison.Ordinal)).ToArray();
-                    AssertEqual(index > 0 && index < 4 ? 1 : 0, feedback.Length, "one transient feedback on each narrative request and repair");
-                    if (feedback.Length == 0) continue;
-                    AssertEqual((string)messages[0]["role"], (string)feedback[0]["role"],
-                        "feedback follows the effective published instruction role");
-                    AssertContains((string)feedback[0]["content"], "No tools were called in that step", "feedback reports the actual no-call fact");
-                    AssertContains((string)feedback[0]["content"], "Another continue remains allowed", "feedback preserves model choice");
-                    AssertTrue(feedback[0]["tool_call_id"] == null, "feedback is not a tool result");
-                    if (index != 2) AssertTrue(JToken.DeepEquals(feedback[0], messages.Last()), "feedback follows accepted history");
-                }
-                var beforeRepair = (JArray)requests[1]["messages"];
-                var afterRepair = (JArray)requests[2]["messages"];
-                AssertTrue(JToken.DeepEquals(beforeRepair, new JArray(afterRepair.Take(beforeRepair.Count))),
-                    "format repair preserves the frozen feedback and accepted prefix exactly");
-                AssertTrue(!session.Messages.Any(message => (message.Content ?? "").StartsWith("RUNTIME_FEEDBACK:", StringComparison.Ordinal)),
-                    "runtime feedback never becomes a durable chat message");
+                AssertEqual(AgentResponseStatuses.AwaitingUser, waiting.ResponseStatus, "repair may ask a question instead of claiming completion");
+                AssertEqual("model_needs_input", waiting.RunViewState.Reason, "question is not done");
+                AssertEqual(2, requests.Count, "one rejected response and repair, then wait for actual input");
+                var original = (JArray)requests[0]["messages"];
+                var repaired = (JArray)requests[1]["messages"];
+                AssertTrue(JToken.DeepEquals(original, new JArray(repaired.Take(original.Count))), "repair keeps the frozen request intact");
+                AssertContains((string)repaired.Last()["content"], "FORMAT_REPAIR:", "unsupported continue receives protocol repair");
+                AssertContains((string)repaired.Last()["content"], ModelProtocolWire.ActionGuidance, "repair carries the shared control contract");
+                AssertTrue(!session.Messages.Any(message => (message.Content ?? "").Contains("I will continue.")),
+                    "rejected narrative never enters durable chat history");
+                if (responseMode == AgentResponseModes.JsonSchema)
+                    AssertTrue(JToken.DeepEquals(new JArray("tool", "done", "blocked", "needs_input"),
+                        requests[0].SelectToken("response_format.json_schema.schema.properties.action.enum")), "schema exposes only four actions");
+                var completed = service.ExecuteAsync(ChatModes.Agent, "Используй Markdown.", session, NewContext(adapter), settings, catalog, null)
+                    .GetAwaiter().GetResult();
+                AssertEqual(AgentResponseStatuses.Completed, completed.ResponseStatus, "user reply resumes work through a real tool step");
+                AssertEqual(4, requests.Count, "user reply and tool result each drive one request");
+                AssertContains(requests[2]["messages"].ToString(), "Какой источник использовать?", "next turn retains the question");
+                AssertContains(requests[2]["messages"].ToString(), "Используй Markdown.", "next turn contains the actual answer");
+                AssertTrue(!requests.Any(request => request["messages"].ToString().Contains("RUNTIME_FEEDBACK:")), "no narrative feedback path remains");
             });
         }
 
@@ -313,7 +297,7 @@ namespace RNAssistant.Harness
             AssertTrue(!ParseV4("{\"message\":\"thinking\",\"action\":\"tool\",\"tool_calls\":[]}").Success,
                 "non-final intent requires a real tool call");
             AssertTrue(!ParseV4("{\"message\":\"old\",\"final\":true,\"tool_calls\":[]}").Success,
-                "v5 envelope is not silently interpreted as v6");
+                "v5 envelope is not silently interpreted as v7");
             foreach (var json in new[] { "{}", "{\"message\":\"x\"}", "{\"message\":\"x\",\"action\":\"done\"}",
                 "{\"message\":\"x\",\"tool_calls\":[]}", "{\"tool_calls\":[]}",
                 "{\"message\":null,\"action\":\"done\",\"tool_calls\":[]}", "{\"message\":1,\"action\":\"done\",\"tool_calls\":[]}",
@@ -940,7 +924,7 @@ namespace RNAssistant.Harness
                     "the final model request saw the folded error outcome");
                 AssertContains(FlattenSimple(requests.Last()), "Write rejected before the effect.",
                     "the folded error retains its actionable message");
-                AssertContains(requests.Last().Last().Content, "unsupported root field: executionSummary", "model cannot inject runtime health into v6");
+                AssertContains(requests.Last().Last().Content, "unsupported root field: executionSummary", "model cannot inject runtime health into v7");
                 AssertEqual(RunViewLifecycles.Completed, result.RunViewState.Lifecycle, "loop completion is independent of execution health");
                 AssertRunViewState(result, session, "errors", 0, 1, 0);
                 AssertEqual(AgentResponseStatuses.Completed, result.ResponseStatus, "model completed is accepted after write error");
@@ -1415,7 +1399,7 @@ namespace RNAssistant.Harness
                     AssertEqual(AgentResponseProtocol.CurrentVersion, terminalResult.ResponseProtocolVersion,
                         "final record carries the active protocol version");
                     AssertTrue(ConversationResponseHistoryReader.Read(terminalSession.Messages.Last()).Success,
-                        "actual final history is a valid v6 form even with empty or question-like text");
+                        "actual final history is a valid v7 form even with empty or question-like text");
                 }
 
                 var limitedSession = NewSession(adapter);

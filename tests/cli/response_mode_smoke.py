@@ -87,7 +87,7 @@ def main():
                 "Changing the wire role must not rewrite the instruction text"
 
             def assert_pair(request, role, name, arguments):
-                assert "tools" not in request, "v6 stays the only generation protocol"
+                assert "tools" not in request, "v7 stays the only generation protocol"
                 messages = request["messages"]
                 if role == "tool":
                     pending = set()

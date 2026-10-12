@@ -1,4 +1,4 @@
-"""Transient no-call feedback through production CLI and controlled HTTP.
+"""Terminal decisions and rejected no-call continuation through production CLI HTTP.
 
 This checks request delivery and repair, not real-model quality or Office delivery.
 """
@@ -19,8 +19,9 @@ def run_case(root, result_role, response_mode):
     for name in ("first.txt", "second.txt"):
         (workspace / name).write_text(name, encoding="utf-8")
     narrative = {"message": "I will read the next file.", "action": "continue", "tool_calls": []}
+    question = {"message": "Which file should I read next?", "action": "needs_input", "tool_calls": []}
     responses = [call("common.resources_read", target="first.txt"), narrative,
-                 {}, narrative, call("common.resources_read", target="second.txt"), DONE]
+                 question, call("common.resources_read", target="second.txt"), DONE]
     requests, errors = [], []
 
     class Handler(BaseHTTPRequestHandler):
@@ -50,35 +51,41 @@ def run_case(root, result_role, response_mode):
     env.update(RNA_STATE_ROOT=str(root / "state"), RNA_MODEL="scripted", RNA_API_KEY="test",
                RNA_BASE_URL=f"http://127.0.0.1:{server.server_port}")
     try:
-        result = subprocess.run(["dotnet", str(CLI), "run", "--workspace", str(workspace),
-            "--message", "Read first.txt and second.txt.", "--instruction-role", "system",
-            "--tool-result-role", result_role, "--response-mode", response_mode,
-            "--context-tokens", "32768", "--min-reads", "2", "--min-writes", "0",
-            "--max-iterations", "8", "--max-tool-steps", "4", "--jsonl"],
-            cwd=REPO, env=env, text=True, capture_output=True, timeout=30)
+        def run(message, session=None):
+            args = ["dotnet", str(CLI), "run", "--workspace", str(workspace),
+                "--message", message, "--instruction-role", "system", "--tool-result-role", result_role,
+                "--response-mode", response_mode, "--context-tokens", "32768", "--max-iterations", "8",
+                "--max-tool-steps", "4", "--jsonl"]
+            if session:
+                args += ["--session", session]
+            return subprocess.run(args, cwd=REPO, env=env, text=True, capture_output=True, timeout=30)
+
+        waiting = run("Read first.txt, then ask me which file to read next.")
+        assert waiting.returncode == 3, (waiting.stdout, waiting.stderr, errors)
+        question_result = json.loads(waiting.stdout.splitlines()[-1])["data"]
+        assert question_result["reason"] == "model_needs_input" and question_result["action"] == "needs_input", question_result
+        assert len(requests) == 3, "The question must stop model generation"
+        result = run("Read second.txt.", question_result["SessionId"])
         assert result.returncode == 0, (result.stdout, result.stderr, errors)
         final = json.loads(result.stdout.splitlines()[-1])["data"]
-        assert final["reason"] == "model_done" and final["completeFileReads"] == 2, final
+        assert final["reason"] == "model_done" and final["ToolCounts"]["ReadOk"] == 1, final
         assert len(requests) == len(responses) and not errors, (len(requests), errors)
-        for index, request in enumerate(requests):
-            feedback = [message for message in request["messages"]
-                        if (message.get("content") or "").startswith("RUNTIME_FEEDBACK:\n")]
-            assert len(feedback) == (1 if index in (2, 3, 4) else 0), (index, feedback)
-            if feedback:
-                assert feedback[0]["role"] == "system" and "tool_call_id" not in feedback[0]
-                assert "No tools were called in that step" in feedback[0]["content"]
-                assert "Another continue remains allowed" in feedback[0]["content"]
-                if index != 3:
-                    assert request["messages"][-1] == feedback[0], "Feedback must follow accepted history"
-        original = requests[2]["messages"]
-        repaired = requests[3]["messages"]
+        for request in requests:
+            assert not any((message.get("content") or "").startswith("RUNTIME_FEEDBACK:")
+                           for message in request["messages"]), "Obsolete feedback must not be injected"
+            if response_mode == "json_schema":
+                schema = request["response_format"]["json_schema"]
+                assert schema["name"] == "rnassistant_conversation_response_v7", schema["name"]
+                assert schema["schema"]["properties"]["action"]["enum"] == ["tool", "done", "blocked", "needs_input"]
+        original = requests[1]["messages"]
+        repaired = requests[2]["messages"]
         assert repaired[:-1] == original and repaired[-1]["content"].startswith("FORMAT_REPAIR:"), repaired
-        if response_mode == "json_schema":
-            actions = requests[4]["response_format"]["json_schema"]["schema"]["properties"]["action"]["enum"]
-            assert "continue" in actions, actions
+        followup = json.dumps(requests[3]["messages"])
+        assert "Which file should I read next?" in followup and "Read second.txt." in followup, followup
+        assert "I will read the next file." not in followup, "Rejected continue cannot enter accepted history"
         for name in ("first.txt", "second.txt"):
             assert (workspace / name).read_text(encoding="utf-8") == name
-        print(f"PASS narrative feedback: {result_role}/{response_mode}")
+        print(f"PASS turn decisions: {result_role}/{response_mode}")
     finally:
         server.shutdown()
         server.server_close()
@@ -86,7 +93,7 @@ def run_case(root, result_role, response_mode):
 
 
 if __name__ == "__main__":
-    with TemporaryDirectory(prefix="rna-narrative-feedback-") as temporary:
+    with TemporaryDirectory(prefix="rna-turn-decisions-") as temporary:
         for result_role in ("user", "tool"):
             for response_mode in ("json_schema", "json_object"):
                 run_case(Path(temporary) / f"{result_role}-{response_mode}", result_role, response_mode)

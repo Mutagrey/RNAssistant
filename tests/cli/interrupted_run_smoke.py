@@ -28,10 +28,12 @@ def main():
             if len(requests) == 1:
                 entered.set()
                 release.wait(10)
-            action = "continue" if len(requests) == 3 else "needs_input"
+            content = {"message": "Waiting for an explicit new task.", "action": "needs_input", "tool_calls": []}
+            if len(requests) == 3:
+                content = {"message": "Inspect available files.", "action": "tool", "tool_calls": [
+                    {"name": "common.resources_find", "arguments": {"query": "index.html"}}]}
             response = json.dumps({"choices": [{"message": {"role": "assistant", "content":
-                json.dumps({"message": "Waiting for an explicit new task.",
-                            "action": action, "tool_calls": []})}}]}).encode()
+                json.dumps(content)}}]}).encode()
             try:
                 self.send_response(200)
                 self.send_header("Content-Type", "application/json")

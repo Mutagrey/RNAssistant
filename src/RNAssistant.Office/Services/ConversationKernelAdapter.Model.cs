@@ -116,7 +116,7 @@ namespace RNAssistant.Office.Services
         {
             return _modelSession.PrepareRequestAsync(request.StepId,
                 new ModelProtocolCallContext(ConversationProtocolContext.SequentialBatchIds(_catalog)),
-                cancellationToken, request.IsNarrativeContinuation);
+                cancellationToken);
         }
 
         private async Task RefreshAuthorityAsync(CancellationToken cancellationToken)
