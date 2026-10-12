@@ -16,6 +16,7 @@ namespace RNAssistant.Office
         private readonly IOfficeApplicationAdapter _inner;
         private readonly OfficeUiDispatcher _dispatcher;
         private readonly IOfficeDocumentSession _documentSession;
+        private readonly OfficeDocumentMetadata _metadata;
         private readonly IExcelReadBackend _excelReadBackend;
         private readonly IExcelWriteBackend _excelWriteBackend;
         private readonly IExcelFindReplaceBackend _excelFindReplaceBackend;
@@ -34,6 +35,7 @@ namespace RNAssistant.Office
             _inner = inner ?? throw new ArgumentNullException("inner");
             _dispatcher = dispatcher ?? throw new ArgumentNullException("dispatcher");
             IOfficeDocumentSession documentSession = null;
+            OfficeDocumentMetadata metadata = null;
             IExcelReadBackend excelReadBackend = null;
             IExcelWriteBackend excelWriteBackend = null;
             IExcelFindReplaceBackend excelFindReplaceBackend = null;
@@ -49,6 +51,7 @@ namespace RNAssistant.Office
             {
                 var provider = _inner as IOfficeDocumentSessionProvider;
                 documentSession = provider == null ? null : provider.DocumentSession;
+                metadata = new OfficeDocumentMetadata(_inner, documentSession);
                 var excel = _inner as IExcelBackendProvider;
                 excelReadBackend = excel == null ? null : excel.ExcelReadBackend;
                 excelWriteBackend = excel == null ? null : excel.ExcelWriteBackend;
@@ -71,6 +74,7 @@ namespace RNAssistant.Office
                 return true;
             });
             _documentSession = documentSession;
+            _metadata = metadata;
             _excelReadBackend = excelReadBackend;
             _excelWriteBackend = excelWriteBackend;
             _excelFindReplaceBackend = excelFindReplaceBackend;
@@ -84,10 +88,10 @@ namespace RNAssistant.Office
             _vbaHostBackend = vbaHostBackend;
         }
 
-        public string HostName { get { return ReadExpected(delegate { return _inner.HostName; }); } }
-        public string DocumentKey { get { return ReadExpected(delegate { return _inner.DocumentKey; }); } }
-        public string RuntimeDocumentKey { get { return ReadExpected(delegate { return _inner.RuntimeDocumentKey; }); } }
-        public string DocumentTitle { get { return ReadExpected(delegate { return _inner.DocumentTitle; }); } }
+        public string HostName { get { return ReadExpected(delegate { return _metadata.HostName; }); } }
+        public string DocumentKey { get { return ReadExpected(delegate { return _metadata.DocumentKey; }); } }
+        public string RuntimeDocumentKey { get { return ReadExpected(delegate { return _metadata.RuntimeDocumentKey; }); } }
+        public string DocumentTitle { get { return ReadExpected(delegate { return _metadata.DocumentTitle; }); } }
 
         public IOfficeStaDispatcher StaDispatcher { get { return _dispatcher; } }
 
@@ -154,6 +158,7 @@ namespace RNAssistant.Office
         {
             return ReadExpected(delegate
             {
+                if (_documentSession != null && !_documentSession.IsAlive) return null;
                 var provider = _inner as IOfficeContextProvider;
                 return provider == null ? null : provider.GetOfficeContext();
             });

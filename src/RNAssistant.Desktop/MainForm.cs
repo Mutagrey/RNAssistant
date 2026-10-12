@@ -506,28 +506,30 @@ namespace RNAssistant.Desktop
                     DocumentTitle = _runtime.Controller.DocumentTitle, State = currentState
                 };
 
-            var chat = _runtime.Controller.ListChats().Chats.FirstOrDefault(item =>
+            var catalog = await Task.Run(() => _runtime.Controller.ListChats());
+            var chat = catalog.Chats.FirstOrDefault(item =>
                 string.Equals(item.Id, chatId, StringComparison.Ordinal));
             if (chat == null || string.IsNullOrWhiteSpace(chat.Host) ||
                 string.IsNullOrWhiteSpace(chat.DocumentKey))
                 throw new InvalidOperationException("Чат не найден в каталоге документов.");
-            if (string.Equals(_runtime.Controller.HostName, chat.Host, StringComparison.Ordinal) &&
-                string.Equals(_runtime.Controller.DocumentKey, chat.DocumentKey, StringComparison.Ordinal))
-            {
-                var state = _runtime.Controller.SelectChat(chatId);
-                return new OfficeHostChatResponse
-                {
-                    Host = chat.Host, ChatId = chatId,
-                    DocumentTitle = chat.DocumentTitle, State = state
-                };
-            }
-
             _pendingLaunchHost = chat.Host;
             try
             {
-                using (var opened = await OfficeHostChatCoordinator.OpenExistingAsync(
+                using (var opened = await OfficeHostChatCoordinator.TryBindExistingAsync(
                     chat.Host, chat.DocumentKey, chatId))
                 {
+                    if (opened == null)
+                    {
+                        var state = await Task.Run(() => _runtime.Controller.SelectChat(chatId));
+                        state.Chats = catalog.Chats;
+                        state.Documents = catalog.Documents;
+                        return new OfficeHostChatResponse
+                        {
+                            Host = chat.Host, ChatId = chatId,
+                            DocumentTitle = chat.DocumentTitle, State = state
+                        };
+                    }
+                    _runtime.Controller.EnsureHostSwitchReady();
                     var entry = _targetRegistry.Upsert(opened.Target);
                     if (entry == null) throw new InvalidOperationException("Office target не найден.");
                     _targetRegistry.Select(entry.Id);

@@ -848,7 +848,7 @@ namespace RNAssistant.Harness
                 var store = new ChatStore(paths);
                 var registry = new DocumentAuthorityRegistry(paths);
                 var service = new ChatSessionService(adapter, ConversationStore(store), null, registry);
-                var active = service.LoadSession(null);
+                var active = service.CreatePersistentChat("Active");
                 var archived = store.Create("Word", "archived-doc", "Archive.docx", "Archive chat");
                 archived.DocumentPath = "C:\\Archive.docx";
                 archived.DocumentAuthorityId = registry.Resolve(
@@ -875,6 +875,22 @@ namespace RNAssistant.Harness
                     "addressed load does not move the foreign authority locator");
                 AssertEqual(active.Id, service.GetActiveSession().Id,
                     "addressed load preserves the selected chat");
+
+                var selected = service.LoadSession(archived.Id);
+                AssertEqual(archivedAuthorityId, selected.DocumentAuthorityId,
+                    "selecting a closed chat preserves its document authority");
+                AssertEqual(activeAuthorityId, registry.Resolve(adapter.HostName,
+                    adapter.RuntimeDocumentKey, adapter.DocumentPathValue).Id,
+                    "selection does not move the live document authority to the archived chat");
+                AssertEqual(archivedAuthorityId, registry.Resolve(archived.Host,
+                    null, archived.DocumentPath).Id,
+                    "selection preserves the archived document locator");
+                AssertEqual(archived.Id, service.GetActiveSessionForOfficeState().Id,
+                    "catalog polling keeps the selected closed chat");
+                AssertTrue(!service.GetChatSummaries(selected.Id).Single(item => item.Id == selected.Id).IsCurrentDocument,
+                    "selected closed document remains unavailable to Office tools");
+                AssertEqual(active.Id, service.TryLoadCurrentDocumentChat(active.Id).Id,
+                    "the original document chat remains selectable");
             });
         }
 

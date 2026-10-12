@@ -412,8 +412,7 @@ namespace RNAssistant.Office.Services
                     string.Equals(_activeDocumentKey, documentKey, StringComparison.OrdinalIgnoreCase))
                     session = _activeSession;
                 if (currentDocumentOnly && (session == null ||
-                    !string.Equals(session.Host, host, StringComparison.OrdinalIgnoreCase) ||
-                    !string.Equals(session.DocumentKey, documentKey, StringComparison.OrdinalIgnoreCase)))
+                    !IsCurrentDocument(session)))
                     return null;
                 if (session == null &&
                     (!allowMissingRequestedFallback ||
@@ -451,7 +450,7 @@ namespace RNAssistant.Office.Services
                 session = _conversations.LoadOrCreateActive(host, documentKey, title);
             }
 
-            if (makeActive || IsCurrentDocument(session))
+            if (IsCurrentDocument(session))
             {
                 BindDocumentAuthority(session, host, runtimeKey, documentPath);
             }
@@ -678,6 +677,9 @@ namespace RNAssistant.Office.Services
             var headerMs = timer.ElapsedMilliseconds;
             var currentHost = _adapter.HostName;
             var currentDocumentKey = _adapter.DocumentKey;
+            var provider = _adapter as IOfficeDocumentSessionProvider;
+            if (provider != null && provider.DocumentSession != null &&
+                !IsCurrentDocument(currentHost, currentDocumentKey)) currentDocumentKey = null;
             var currentDocumentMs = timer.ElapsedMilliseconds - headerMs;
             var summaries = headers.Select(header => ToSummary(header, currentHost, currentDocumentKey)).ToList();
             var summaryMs = timer.ElapsedMilliseconds - headerMs - currentDocumentMs;
@@ -779,8 +781,8 @@ namespace RNAssistant.Office.Services
 
         private bool IsCurrentDocument(string host, string documentKey)
         {
-            return string.Equals(host, _adapter.HostName, StringComparison.OrdinalIgnoreCase) &&
-                string.Equals(documentKey, _adapter.DocumentKey, StringComparison.OrdinalIgnoreCase);
+            return OfficeDocumentExecutionGuardState.Validate(_adapter,
+                new OfficeDocumentExecutionExpectation { Host = host, DocumentKey = documentKey }) == null;
         }
 
         public string GetDocumentPath(ChatSession session)

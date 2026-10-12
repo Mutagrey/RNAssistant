@@ -715,6 +715,13 @@ For the derived chat index, run `storage: sqlite`, `storage: corrupt sqlite`,
 `RNA_CHAT_PERF=1` case `storage perf: large chat profile` records first index
 build, indexed cold/warm reads and save times on temporary 30/50 MiB chats.
 
+Closed-document chat navigation: run `chat sessions:`, `agent: closed document`
+and `host runtime:`. These cover retained metadata after bound-session closure,
+archived selection without authority reassignment, HTML creation in the selected
+closed chat, catalog/model availability and guarded live reads. The UI route and
+reselection after reopening are covered by `node tests/web/chat-sync.test.js`.
+Desktop/VSTO attachment and real COM lifetime still need Windows/Office evidence.
+
 The `harness:` slice also verifies that every production `.cs` file is explicitly included in its old-style `.csproj`, preventing source-linked harness globs from hiding a broken production project.
 
 The bound-session fixtures test operation ownership, STA handoff/cancellation,

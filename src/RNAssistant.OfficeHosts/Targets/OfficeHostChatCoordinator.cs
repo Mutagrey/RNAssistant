@@ -53,26 +53,24 @@ namespace RNAssistant.OfficeHosts
                     Host = runtime.Controller.HostName, ChatId = chatId,
                     DocumentTitle = runtime.Controller.DocumentTitle, State = currentState
                 };
-            var chat = await Task.Run(() => runtime.Controller.ListChats().Chats
-                .FirstOrDefault(item => string.Equals(item.Id, chatId, StringComparison.Ordinal)))
-                .ConfigureAwait(false);
+            var catalog = await Task.Run(() => runtime.Controller.ListChats()).ConfigureAwait(false);
+            var chat = catalog.Chats.FirstOrDefault(item => string.Equals(item.Id, chatId, StringComparison.Ordinal));
             if (chat == null || string.IsNullOrWhiteSpace(chat.Host) ||
                 string.IsNullOrWhiteSpace(chat.DocumentKey))
                 throw new InvalidOperationException("Чат не найден в каталоге документов.");
-            if (string.Equals(runtime.Controller.HostName, chat.Host, StringComparison.Ordinal) &&
-                string.Equals(runtime.Controller.DocumentKey, chat.DocumentKey, StringComparison.Ordinal))
+            using (var opened = await TryBindExistingAsync(chat.Host, chat.DocumentKey, chatId).ConfigureAwait(false))
             {
-                var state = await Task.Run(() => runtime.Controller.SelectChat(chatId)).ConfigureAwait(false);
-                return new OfficeHostChatResponse
+                if (opened == null)
                 {
-                    Host = chat.Host, ChatId = chatId,
-                    DocumentTitle = chat.DocumentTitle, State = state
-                };
-            }
-
-            runtime.Controller.EnsureHostSwitchReady();
-            using (var opened = await OpenExistingAsync(chat.Host, chat.DocumentKey, chatId).ConfigureAwait(false))
-            {
+                    var state = await Task.Run(() => runtime.Controller.SelectChat(chatId)).ConfigureAwait(false);
+                    state.Chats = catalog.Chats;
+                    state.Documents = catalog.Documents;
+                    return new OfficeHostChatResponse
+                    {
+                        Host = chat.Host, ChatId = chatId,
+                        DocumentTitle = chat.DocumentTitle, State = state
+                    };
+                }
                 var init = await runtime.SwitchToAdapterAsync(
                     opened.TakeAdapter(), chatId, chat.Host, chat.DocumentKey).ConfigureAwait(false);
                 return new OfficeHostChatResponse
@@ -83,7 +81,7 @@ namespace RNAssistant.OfficeHosts
             }
         }
 
-        public static Task<OfficeHostChatCreation> OpenExistingAsync(
+        public static Task<OfficeHostChatCreation> TryBindExistingAsync(
             string host, string documentKey, string chatId)
         {
             if (string.IsNullOrWhiteSpace(documentKey) || string.IsNullOrWhiteSpace(chatId))
@@ -93,7 +91,6 @@ namespace RNAssistant.OfficeHosts
                 var provider = new OfficeComAdapterProvider();
                 using (var dispatcher = new OfficeStaDispatcher())
                 {
-                    dispatcher.Invoke(() => OfficeHostLauncher.OpenOrActivate(host));
                     var targets = dispatcher.Invoke(() => provider.ListOpenTargets(host).ToArray());
                     foreach (var target in targets)
                     {
@@ -123,8 +120,7 @@ namespace RNAssistant.OfficeHosts
                         }
                     }
                 }
-                throw new InvalidOperationException(
-                    "Документ этого чата сейчас не открыт в " + host + ". Откройте его и повторите действие.");
+                return null;
             });
         }
 

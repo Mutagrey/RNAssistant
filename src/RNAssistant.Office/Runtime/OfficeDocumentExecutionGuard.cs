@@ -153,16 +153,10 @@ namespace RNAssistant.Office
         internal static bool SessionMatchesAdapter(IOfficeApplicationAdapter adapter, ChatSession session)
         {
             if (adapter == null || session == null) return false;
-            try
+            return Validate(adapter, new OfficeDocumentExecutionExpectation
             {
-                return string.Equals(session.Host, adapter.HostName, StringComparison.OrdinalIgnoreCase) &&
-                    !string.IsNullOrWhiteSpace(session.DocumentKey) &&
-                    string.Equals(session.DocumentKey, adapter.DocumentKey, StringComparison.OrdinalIgnoreCase);
-            }
-            catch
-            {
-                return false;
-            }
+                Host = session.Host, DocumentKey = session.DocumentKey
+            }) == null;
         }
 
         private sealed class Scope : IDisposable

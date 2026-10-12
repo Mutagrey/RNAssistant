@@ -46,6 +46,7 @@ function createSyncContext() {
   context.chatCasReferenceIssueCount = () => 0;
   context.chatStorageWarningLevel = () => "none";
   context.currentActiveSend = () => context.activeSend || null;
+  context.activeChatUsesCurrentDocument = () => true;
   context.applyChatCatalogState = response => {
     catalogStates.push(response);
     context.state.chats = response.chats || response.Chats || [];
@@ -132,6 +133,34 @@ function createSyncContext() {
     await context.selectChat("word-chat");
     assert.equal(applied.length, 1, "existing foreign chat reloads the target host in this pane");
     console.log("PASS Office chat selection: current pane applies target initialization");
+  }
+
+  {
+    const { context, fullStates, calls } = createSyncContext();
+    context.confirmDiscardHtmlWorkspaceChanges = () => true;
+    context.renderChatSessions = () => {};
+    context.clearSendError = () => {};
+    context.log = () => {};
+    context.state.host = "Excel";
+    context.activeChatUsesCurrentDocument = () => false;
+    const closedState = {
+      activeChatId: "word-closed", messages: [{ Content: "Saved HTML task" }],
+      htmlWorkspace: { files: [{ path: "index.html" }] }
+    };
+    context.send = async (type, payload) => {
+      calls.push({ type, payload });
+      return { host: "Word", chatId: "word-closed", state: closedState };
+    };
+    await context.selectChat("word-closed");
+    assert.equal(fullStates[0], closedState, "closed chat applies its saved transcript and HTML");
+    assert.equal(context.state.host, "Excel", "closed chat selection needs no replacement Office binding");
+    await context.selectChat("word-closed");
+    assert.deepEqual(calls.map(call => call.type), ["selectChat", "selectChat"],
+      "the selected offline chat can be reselected after its document reopens");
+    context.activeChatUsesCurrentDocument = () => true;
+    await context.selectChat("word-closed");
+    assert.equal(calls.length, 2, "a selected live chat still skips redundant navigation");
+    console.log("PASS Office chat selection: closed chat keeps HTML and permits reconnection");
   }
 
   {
@@ -351,10 +380,10 @@ function createSyncContext() {
   assert.ok(index.includes("app-core.js?v=office-chat-20260930-3"), "app-core.js cache key was bumped");
   assert.ok(index.includes("app-chat-run.js?v=response-render-timing-20260928-1"), "chat run cache key was bumped");
   assert.ok(index.includes("app-chat-edit.js?v=chat-sync-20260903-1"), "chat edit cache key was bumped");
-  assert.ok(index.includes("app-chat-session.js?v=office-chat-20260930-4"), "chat session cache key was bumped");
+  assert.ok(index.includes("app-chat-session.js?v=closed-document-20261012-1"), "chat session cache key was bumped");
   assert.ok(fs.readFileSync(path.join(root, "web/js/app.js"), "utf8")
     .includes("window.setInterval(synchronizeChatState, 60000)"), "background catalog scan is limited to once per minute");
-  console.log("OK 12/12");
+  console.log("OK 13/13");
 }()).catch(error => {
   console.error(error.stack || error);
   process.exitCode = 1;

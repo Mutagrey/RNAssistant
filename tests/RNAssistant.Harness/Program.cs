@@ -169,6 +169,7 @@ namespace RNAssistant.Harness
                 Test("agent: resource media projection failure is explicit", AgentResourceMediaProjectionFailureIsExplicit),
                 Test("agent: routes artifact media through helper", AgentRoutesArtifactMediaThroughHelper),
                 Test("agent: closed document keeps local tools", AgentContinuesWithLocalToolsForClosedDocument),
+                Test("chat sessions: closed bound document keeps navigation and HTML", ClosedDocumentNavigationPreservesMetadataAndLocalTools),
                 Test("agent: loads full skill through tool", SimpleAgentLoadsFullSkillThroughTool),
                 Test("agent: model projection hides runtime evidence", ModelProjectionHidesRuntimeEvidence),
                 Test("agent: model projection preserves resource table payload", ModelProjectionPreservesResourceTablePayload),

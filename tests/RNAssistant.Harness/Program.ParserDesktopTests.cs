@@ -769,6 +769,71 @@ namespace RNAssistant.Harness
             AssertEqual("Excel:DocumentId:legacy-id", legacy, "existing persisted identity remains supported");
         }
 
+        private static void ClosedDocumentNavigationPreservesMetadataAndLocalTools()
+        {
+            WithTempPaths(paths =>
+            {
+                var document = new BoundTestDocument { StableId = "Excel:Path:first.xlsx", IsAlive = true };
+                using (var adapter = CreateBoundTestDispatchedAdapter(document, "closed-navigation"))
+                {
+                    var store = new ChatStore(paths);
+                    var sessions = new ChatSessionService(adapter, ConversationStore(store), null,
+                        new DocumentAuthorityRegistry(paths));
+                    var first = sessions.CreatePersistentChat("First");
+                    var second = sessions.CreatePersistentChat("Second");
+                    var title = adapter.DocumentTitle;
+                    var key = adapter.DocumentKey;
+                    var runtimeKey = adapter.RuntimeDocumentKey;
+                    AssertTrue(sessions.IsCurrentDocument(second), "live bound chat is available");
+
+                    adapter.StaDispatcher.Invoke(() =>
+                    {
+                        document.IsAlive = false;
+                        document.StableId = "Excel:Runtime:unavailable";
+                        return true;
+                    });
+                    AssertEqual(key, adapter.DocumentKey, "closed document keeps its last verified identity");
+                    AssertEqual(title, adapter.DocumentTitle, "closed document keeps its display title");
+                    AssertEqual(runtimeKey, adapter.RuntimeDocumentKey, "closing cannot select a replacement lifetime");
+                    AssertEqual(null, adapter.GetOfficeContext(), "closed document has no live context");
+                    AssertTrue(sessions.TryLoadCurrentDocumentChat(first.Id) == null,
+                        "a closed bound document cannot take the live selection route");
+                    var selected = sessions.LoadSession(first.Id);
+                    AssertEqual(first.DocumentAuthorityId, selected.DocumentAuthorityId, "closed selection retains authority");
+                    AssertEqual(first.Id, sessions.GetActiveSessionForOfficeState().Id, "poll retains closed selection");
+                    AssertTrue(sessions.GetChatSummaries(first.Id).All(item => !item.IsCurrentDocument),
+                        "catalog does not call a closed document active");
+
+                    var executor = new OfficeToolExecutor(adapter, new VbaJournalStore(paths),
+                        new SkillStore(paths), new ToolStore(paths), () => new AppSettings(), null, paths);
+                    var tools = OfficeToolCatalog.ForHost("Excel").Concat(executor.GetControllerTools()).ToList();
+                    var calls = 0;
+                    LlmCompletionDelegate completion = (settings, messages, options, stream, cancellationToken) =>
+                    {
+                        AssertContains(FlattenSimple(messages), "\"office_tools_available\":false",
+                            "closed matching identity is not advertised as a live document");
+                        calls++;
+                        return Task.FromResult(new LlmCompletionResult { Content = calls == 1
+                            ? LoadToolSchemaResponse(HtmlWorkspaceToolCatalog.WriteFileToolId)
+                            : calls == 2
+                                ? "{\"message\":\"Creating HTML.\",\"action\":\"tool\",\"tool_calls\":[{\"name\":\"common.html_workspace_write_file\",\"arguments\":{\"path\":\"index.html\",\"content\":\"<main>Offline</main>\"}}]}"
+                                : "{\"message\":\"Done.\",\"action\":\"done\",\"tool_calls\":[]}" });
+                    };
+                    var result = CreateConversationRunService(adapter, executor, completion).ExecuteAsync(
+                        ChatModes.Agent, "Create HTML", selected, new DocumentContext(), new AppSettings(),
+                        tools, null, null, null, CancellationToken.None).GetAwaiter().GetResult();
+                    AssertEqual("Done.", result.AssistantText, "local run completes after bound document closes");
+                    AssertTrue(selected.HtmlWorkspace.Files.Any(file => file.Path == "index.html"),
+                        "local HTML belongs to the selected closed chat");
+                    AssertEqual(0, store.Load(second.Host, second.DocumentKey, second.Id).HtmlWorkspace.Files.Count,
+                        "another chat receives no HTML changes");
+                    var denied = executor.ExecuteManual(Command(ResourceToolCatalog.ReadToolId,
+                        "target", "Excel range: Data!A1:B2"), tools, new AppSettings(), false, false, selected);
+                    AssertEqual("active_document_changed", denied.ErrorCode, "live reads remain guarded");
+                }
+            });
+        }
+
         private static void HostRuntimeDirectReadsPreserveRootAndTarget()
         {
             WithTempPaths(paths =>

@@ -18,6 +18,7 @@ namespace RNAssistant.Office
         private readonly OfficeDocumentExecutionGuardState _documentGuard = new OfficeDocumentExecutionGuardState();
         private IOfficeApplicationAdapter _inner;
         private IOfficeDocumentSession _documentSession;
+        private OfficeDocumentMetadata _metadata;
         private IExcelReadBackend _excelReadBackend;
         private IExcelWriteBackend _excelWriteBackend;
         private IExcelFindReplaceBackend _excelFindReplaceBackend;
@@ -46,22 +47,22 @@ namespace RNAssistant.Office
 
         public string HostName
         {
-            get { return ReadExpected(delegate { return Inner.HostName; }); }
+            get { return ReadExpected(delegate { return _metadata.HostName; }); }
         }
 
         public string DocumentKey
         {
-            get { return ReadExpected(delegate { return Inner.DocumentKey; }); }
+            get { return ReadExpected(delegate { return _metadata.DocumentKey; }); }
         }
 
         public string RuntimeDocumentKey
         {
-            get { return ReadExpected(delegate { return Inner.RuntimeDocumentKey; }); }
+            get { return ReadExpected(delegate { return _metadata.RuntimeDocumentKey; }); }
         }
 
         public string DocumentTitle
         {
-            get { return ReadExpected(delegate { return Inner.DocumentTitle; }); }
+            get { return ReadExpected(delegate { return _metadata.DocumentTitle; }); }
         }
 
         public IOfficeStaDispatcher StaDispatcher { get { return _dispatcher; } }
@@ -91,6 +92,7 @@ namespace RNAssistant.Office
                     if (_inner == null) _inner = _adapterFactory(_dispatcher);
                     var provider = _inner as IOfficeDocumentSessionProvider;
                     _documentSession = provider == null ? null : provider.DocumentSession;
+                    _metadata = new OfficeDocumentMetadata(_inner, _documentSession);
                     var excel = _inner as IExcelBackendProvider;
                     _excelReadBackend = excel == null ? null : excel.ExcelReadBackend;
                     _excelWriteBackend = excel == null ? null : excel.ExcelWriteBackend;
@@ -268,6 +270,7 @@ namespace RNAssistant.Office
         {
             return ReadExpected(delegate
             {
+                if (_documentSession != null && !_documentSession.IsAlive) return null;
                 var provider = Inner as IOfficeContextProvider;
                 return provider == null ? null : provider.GetOfficeContext();
             });

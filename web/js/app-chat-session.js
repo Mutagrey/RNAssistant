@@ -144,7 +144,7 @@ async function createDocumentChat(documentItem) {
 }
 
 async function selectChat(id) {
-  if (!id || (id === state.activeChatId && !state.chatNavigationPending)) {
+  if (!id || (id === state.activeChatId && !state.chatNavigationPending && activeChatUsesCurrentDocument())) {
     return;
   }
   if (typeof confirmDiscardHtmlWorkspaceChanges === "function" &&

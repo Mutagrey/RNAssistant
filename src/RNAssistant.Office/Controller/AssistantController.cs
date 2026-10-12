@@ -245,7 +245,8 @@ namespace RNAssistant.Office
         public InitResponse Initialize()
         {
             var timer = Stopwatch.StartNew();
-            var session = LoadSession(null);
+            EnsureStartupRecovery();
+            var session = _chatSessions.GetActiveSessionForOfficeState();
             var sessionMs = timer.ElapsedMilliseconds;
             var activeId = session.Id;
             var context = LoadContext(session);

@@ -56,6 +56,21 @@ The profile instructions are updated in [development rules](../development-rules
 Next: a separately labelled thinking-enabled/reference-model comparison on a
 qualified endpoint, with the same tasks, read requirements and original budgets.
 
+## Closed-document chat navigation — 2026-10-12
+
+Owners: ChatSessionService, Office chat coordinators and bound adapter metadata.
+Existing chats can be selected without opening their document or launching Office.
+Local HTML work keeps the selected chat's authority; a live exact session is still
+required for Office capabilities and reads. Closing the bound document preserves
+navigation metadata without treating it as live evidence. Reopening and selecting
+the chat again restores the exact binding through the existing attach path.
+
+Evidence: host-neutral `chat sessions:` 17/17, `host runtime:` 10/10 and
+`agent: closed document` pass; web chat navigation 13/13 passes. These include
+HTML creation after closure and isolation from other chats/document authorities.
+Windows/Office/WebView2 delivery and actual COM closure/reopen remain unqualified;
+no Office/VSTO validation was run on this machine. Existing release gaps remain open.
+
 ## VBA context recovery and authoring contracts — 2026-10-12
 
 Owners: VBA mutation/recovery, Tool Authoring, built-in skills and Library editor.
