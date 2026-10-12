@@ -32,7 +32,7 @@ namespace RNAssistant.Office.Tools
                     ["moduleName"] = new JObject
                     {
                         ["type"] = "string",
-                        ["description"] = "Existing or intended VBA component name. Invalid new names are normalized deterministically only when creating.",
+                        ["description"] = "Component name from the VBA project inventory, such as Module1; not a procedure name, Module1.Run, or a resource target. New names are normalized deterministically; use the returned actual name.",
                         ["minLength"] = 1,
                         ["maxLength"] = 255
                     },
@@ -51,7 +51,7 @@ namespace RNAssistant.Office.Tools
                     ["mode"] = new JObject
                     {
                         ["type"] = "string",
-                        ["description"] = "Write behavior: upsert updates or creates; createOnly/updateOnly guard existence.",
+                        ["description"] = "Use createOnly for a new component and updateOnly when replacing an existing component. upsert permits either outcome; use it only when either is intended.",
                         ["default"] = "upsert",
                         ["enum"] = new JArray("upsert", "createOnly", "updateOnly")
                     }
@@ -131,7 +131,7 @@ namespace RNAssistant.Office.Tools
             var find = new JObject
             {
                 ["type"] = "string",
-                ["description"] = "Current VBA source to replace. Exact matching runs first; if it fails, one unique complete-line token-equivalent block may match VBE spacing/case changes, including line-aligned context. Strings and comments remain significant. Copy from complete current source in context; use exact context or startLine/startColumn to select a repeated occurrence. Explicit locations require exact text with no format-normalized search.",
+                ["description"] = "Current VBA source block to replace, copied from current source or an exact source excerpt. A complete module read is not required for a focused patch. Exact matching runs first; if it fails, one unique complete-line token-equivalent block may match VBE spacing/case changes. Strings and comments remain significant. Use unchanged context or startLine/startColumn to select a repeated occurrence; explicit locations require exact text with no format-normalized search.",
                 ["minLength"] = 1
             };
             var text = new JObject
@@ -178,7 +178,7 @@ namespace RNAssistant.Office.Tools
                     ["moduleName"] = new JObject
                     {
                         ["type"] = "string",
-                        ["description"] = "Existing VBA component name. Case and safely normalizable punctuation/length are resolved by runtime.",
+                        ["description"] = "Existing component name from the VBA project inventory, such as Module1; not a procedure name, Module1.Run, or the VBA module resource target.",
                         ["minLength"] = 1,
                         ["maxLength"] = 255
                     },

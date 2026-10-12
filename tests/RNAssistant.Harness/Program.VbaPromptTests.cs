@@ -1942,7 +1942,10 @@ namespace RNAssistant.Harness
                     }));
                 var missingPatchResult = executor.ExecuteManual(missingPatch, OfficeToolCatalog.ForHost(adapter.HostName).Concat(executor.GetControllerTools()).ToList(), new AppSettings { AutoConfirmToolActions = true }, false, false);
                 AssertEqual("vba_module_not_found", missingPatchResult.ErrorCode, "patch cannot masquerade as module creation");
-                AssertContains(missingPatchResult.Message, "common.vba_write_module", "missing patch points directly to the creation tool");
+                AssertContains(missingPatchResult.Message, "Resolve the component", "missing patch first resolves the existing edit target");
+                AssertContains(missingPatchResult.Message, "If creation is intended", "missing edit does not silently change intent to creation");
+                AssertEqual("createOnly", (string)JObject.Parse(missingPatchResult.DataJson)["creationMode"],
+                    "intentional creation preserves its existence guard");
                 AssertContains(missingPatchResult.DataJson, "creationTool", "missing patch returns machine-readable recovery guidance");
             });
         }
@@ -2528,12 +2531,16 @@ namespace RNAssistant.Harness
                 "VBA skill does not mistake one query match for the full project");
             AssertContains(editing.BodyMarkdown, "first `VBA project` target",
                 "VBA discovery fallback selects the aggregate project target");
-            AssertContains(editing.BodyMarkdown, "one successful result contains the complete representation",
-                "VBA skill relies on whole model-facing resource reads");
+            AssertContains(editing.BodyMarkdown, "whole reads are complete only when the source body is included",
+                "VBA skill distinguishes a successful read from source omitted by the context budget");
             AssertContains(editing.BodyMarkdown, "one ordered patch call",
                 "VBA skill batches same-snapshot hunks into one atomic mutation");
-            AssertContains(editing.BodyMarkdown, "before a second source mutation",
-                "VBA skill requires a fresh complete model-visible snapshot between writes");
+            AssertContains(editing.BodyMarkdown, "Exact patches can use relevant excerpts",
+                "VBA skill does not require whole-source observation for focused patches");
+            AssertContains(editing.BodyMarkdown, "including source restored after compaction",
+                "VBA skill reuses current source after compaction");
+            AssertContains(editing.BodyMarkdown, "not an Office access denial",
+                "VBA skill distinguishes missing context from host access failures");
             AssertContains(editing.BodyMarkdown, "never backslash escaping",
                 "VBA skill distinguishes JSON transport escaping from VBA string syntax");
             AssertContains(editing.BodyMarkdown, "never creates a missing module", "patch remains existing-only");
@@ -2655,6 +2662,13 @@ namespace RNAssistant.Harness
                     session);
                 AssertTrue(first.Success, "first mutation succeeds and verifies read-back: " + first.Message);
 
+                var excerpt = executor.ExecuteManual(Command(ResourceToolCatalog.ReadToolId,
+                    "target", "VBA module: Module1", "representation", "source", "startLine", 3, "lineCount", 1),
+                    tools, new AppSettings(), false, false, session);
+                AssertTrue(excerpt.Success, "model can inspect the relevant line after a source mutation");
+                AssertEqual("Debug.Print \"first\"\n", (string)JObject.Parse(excerpt.DataJson)["text"],
+                    "bounded read returns the current patch anchor");
+
                 var secondPending = PrepareVbaNative(
                     executor,
                     session,
@@ -2684,6 +2698,8 @@ namespace RNAssistant.Harness
                 var blocked = ToolRunResultFactory.Create(blockedExecution);
                 AssertEqual("vba_snapshot_refresh_required", blocked.ErrorCode,
                     "whole-module overwrite remains guarded by model-visible source authority");
+                AssertContains(blocked.Message, "context budget", "missing source diagnostic explains context omission");
+                AssertContains(blocked.Message, "startLine/lineCount", "missing source diagnostic offers bounded patch recovery");
                 AssertTrue(blockedExecution.Recovery != null &&
                     blockedExecution.Recovery.FailureKind == ToolFailureKind.ConflictNoEffect &&
                     blockedExecution.Recovery.RetryPolicy == ToolRetryPolicy.Replan &&

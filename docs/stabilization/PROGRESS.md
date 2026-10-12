@@ -1,5 +1,34 @@
 # Stabilization progress
 
+## VBA context recovery and authoring contracts — 2026-10-12
+
+Owners: VBA mutation/recovery, Tool Authoring, built-in skills and Library editor.
+A scripted production-run reproduction found that an omitted-source overwrite
+refusal embedded a synthetic 16K-character source head/tail in its mandatory
+recovery result. At a 24K context window, the next request required 20,243 tokens
+against a 19,400 message budget and stopped before the model could recover.
+Large/truncated recovery sources now retain the semantic target and refresh
+policy without that body/diff; small complete source recovery is preserved.
+The same scenario now refuses the overwrite, reads exact lines, applies a patch
+and preserves all other source. Guards, confirmation and read-back remain intact.
+
+Guidance distinguishes missing source observation from host access denial,
+component/procedure/read selectors and create/update intent. Missing edit targets
+resolve their owning component rather than imply creation. Tool authoring uses
+manifest-owned VBA metadata, separate JS fields and complete package replacement;
+Library metadata controls no longer offer ignored VBA edits. Each package
+component now receives the existing static live-source validation before saving.
+Built-in skills and canonical docs follow these contracts and automatic archived
+prompt migration.
+
+Evidence: focused host-neutral create/read/edit/compaction, 24K refusal/recovery,
+VBA guards, tool/skill CRUD and JS schema checks; web editor/resource/UX tests.
+The unrelated catalog-test expectation drift is recorded in
+[RISK_REGISTER](RISK_REGISTER.md#vba-context-recovery-review--2026-10-12).
+The user's exact access error remains uncorrelated without its diagnostic/trace;
+no real LLM or Windows/Office/WebView2 qualification was run. Existing M4/M5 and
+release evidence gaps remain open.
+
 ## Browser lifetime after caller process loss — 2026-10-12
 
 Owner: development browser lifetime. Baseline `bb9a519d` reproduced a CLI

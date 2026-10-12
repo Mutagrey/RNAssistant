@@ -277,6 +277,7 @@ namespace RNAssistant.Harness
                 Test("agent: confirmation replays one final result", SimpleAgentConfirmationReplaysOnlyFinalResult),
                 Test("agent: VBA confirmation resumes prepared native state", () => SimpleAgentVbaConfirmationResumesPreparedState(true)),
                 Test("agent: confirmed VBA after-state reaches next request", () => SimpleAgentVbaConfirmationResumesPreparedState(false)),
+                Test("agent: large VBA read and edit survive compaction", SimpleAgentVbaEditsAfterCompaction),
                 Test("agent: confirmed tool failure continues", SimpleAgentConfirmationFailureContinues),
                 Test("agent: native read batch keeps paired replay", NativeReadBatchKeepsPairedReplay),
                 Test("agent: runtime ids preserve complete HTML in user history", () => RuntimeIdsPreserveCompleteHtml("user")),

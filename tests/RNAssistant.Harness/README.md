@@ -454,6 +454,12 @@ serialization. `agent: resource media projection failure is explicit` also check
 that delivery failures preserve mutation outcome/effect metadata. The source
 compaction check rejects input-only references as substitutes for visible bytes
 and covers calibrated admission of complete mutation source.
+`agent: large VBA read and edit survive compaction` uses the production run service
+with a scripted model and fake host: create/read a CRLF module over the internal
+32K resource page, restore its source after a persisted checkpoint, then edit it.
+At 24K context it checks omitted-source overwrite refusal followed by an exact
+line read and patch, preserving all unrelated source. Large conflict recovery
+must not pin a stitched head/tail body that prevents the next request.
 `vba: patch disambiguates with exact context` also covers explicit line/column
 selection, duplicate procedures, stale-address refusal and candidate completeness.
 `vba: pure patch text contract` covers copied blocks in mixed-newline source.
@@ -927,7 +933,10 @@ exact source, no callable admission, publication-dependent evidence, retained hi
 and no authoring-file fallback/Office discovery. It also rejects the retired reader
 and its stored call. Existing `tools: agent CRUD preserves omitted fields` reads back
 through the same generic resource tool; `tools: authoring intents are semantic`
-checks the replacement guidance. `tools: R61 built-in contract inventory` checks
+checks the replacement guidance. CRUD also rejects invalid entry/supporting VBA
+source before create/update storage; JS source/policy checks cover explicit
+executor alternatives and rejection of mixed VBA/JS fields.
+`tools: R61 built-in contract inventory` checks
 the final reviewed [baseline](../../docs/stabilization/R61_TOOL_PROPERTY_INVENTORY.tsv)
 (66 ids/66 host variants); its pass does not qualify real Windows/model behavior.
 

@@ -144,11 +144,11 @@ namespace RNAssistant.Office.Vba
             {
                 return VbaMutationOutcome.Error(
                     "VBA module already exists: " + moduleName +
-                    ". Use mode=upsert to replace its complete source, or common.vba_apply_patch for a targeted edit.",
+                    ". If editing this existing component is intended, inspect its current source and use mode=updateOnly, or common.vba_apply_patch for a targeted edit.",
                     new JObject
                     {
                         ["moduleName"] = moduleName,
-                        ["suggestedMode"] = "upsert",
+                        ["suggestedMode"] = "updateOnly",
                         ["patchTool"] = ToolId("vba_apply_patch")
                     },
                     "vba_module_exists",
@@ -158,11 +158,11 @@ namespace RNAssistant.Office.Vba
             {
                 return VbaMutationOutcome.Error(
                     "VBA module does not exist: " + moduleName +
-                    ". Use mode=upsert to create it automatically.",
+                    ". Resolve the existing component from the VBA project inventory. Use mode=createOnly only if creating a new component is intended.",
                     new JObject
                     {
                         ["moduleName"] = moduleName,
-                        ["suggestedMode"] = "upsert"
+                        ["suggestedMode"] = "createOnly"
                     },
                     "vba_module_not_found",
                     true);

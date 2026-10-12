@@ -196,6 +196,16 @@ before preparation or storage. For model authoring, this outer ordered package i
 the sole component-list input: runtime writes the manifest's component-name array
 from that order before validation. The model does not duplicate the same list in a
 second, differently shaped manifest field.
+The supplied `components` array replaces the complete package; it is not a merge
+of selected components. VBA `name`, `description` and `parameters` belong only in
+the entry manifest. The model schema omits duplicate root metadata fields, and
+the Library's host/description/schema controls are read-only for VBA with a pointer
+to the manifest. JS-specific authoring fields require `executor=js` and cannot be
+mixed with VBA components. Shared documentation-only updates preserve the stored
+executor and source.
+Every supplied VBA component passes the same source-safety/duplicate-procedure
+validation as live module writes before confirmation or storage. This static
+check does not certify compilation or macro execution.
 Model-facing upsert has no create/update existence mode: it resolves current
 existence atomically and creates or updates accordingly. Internal revision-guarded
 Library mutations retain explicit create/update intent. Manifest schema errors name

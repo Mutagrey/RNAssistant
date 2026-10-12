@@ -222,6 +222,13 @@ namespace RNAssistant.Office.Tools
                 {
                     return ToolAuthoringOutcome.Error("VBA package source is missing declared component: " + missing, null, "vba_component_missing", false);
                 }
+                foreach (var component in components)
+                {
+                    string sourceError;
+                    if (!VbaSourceValidator.TryValidateLiveCode(component.Code, out sourceError))
+                        return ToolAuthoringOutcome.Error("VBA component " + component.Name + ": " + sourceError,
+                            null, "vba_code_invalid", false);
+                }
 
                 if (!ToolSchemaSupport.TryParse(
                         tool, out normalizedSchema, out schemaError))

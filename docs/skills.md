@@ -183,6 +183,14 @@ authoritative for the exact operation, root arguments and returned evidence. If 
 skill and schema disagree, the model follows the higher-priority runtime prompt and
 schema and reports the inconsistency rather than inventing compatibility fields.
 
+VBA guidance distinguishes component names, procedure names and semantic resource
+targets. Complete current source may be reused after mutation or compaction when
+its body is included; a missing/oversized body is not an Office access failure.
+Focused patches can use exact line excerpts, while whole-module replacement keeps
+its complete-source guard. Tool authoring uses manifest-owned VBA metadata and a
+complete component replacement, never an implicit package merge. Prompt authoring
+follows automatic archived prompt migration rather than a retired manual reset gate.
+
 Every exact `common.*`, `excel.*`, `word.*`, `powerpoint.*` or `outlook.*`
 capability named by built-in guidance must resolve to the current tool/skill
 catalog. Harness checks that invariant across all four hosts, rejects duplicate or

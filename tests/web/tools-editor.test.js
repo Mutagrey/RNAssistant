@@ -9,7 +9,7 @@ const page = fs.readFileSync(path.join(__dirname, "../../web/index.html"), "utf8
 const ids = new Set(Array.from(page.matchAll(/\bid="([^"]+)"/g), match => match[1]));
 class Element {
   constructor() {
-    this.value = ""; this.checked = false; this.style = {}; this.handlers = {}; this.children = [];
+    this.value = ""; this.checked = false; this.style = {}; this.handlers = {}; this.children = []; this.options = [];
     this.classList = { toggle() {}, add() {}, remove() {} };
   }
   addEventListener(name, handler) { this.handlers[name] = handler; }
@@ -26,7 +26,7 @@ const get = id => {
 };
 let pendingCode = null;
 const context = vm.createContext({
-  state: { host: "Excel", tools: [], selectedToolIndex: -1 }, $: get,
+  state: { host: "Excel", tools: [], selectedToolIndex: -1, settings: { EnableAgentJavaScript: true } }, $: get,
   document: { createElement: () => new Element(), querySelectorAll: () => [] },
   createResourceEmptyState: () => new Element(),
   send() {}, setControlBusy() {}, log() {}, logToolResult() {}, addEventListener() {},
@@ -55,6 +55,15 @@ assert.equal(get("toolCodeInput").value, created.Components[0].Code);
 assert.equal(manifest(created.Code).id, created.Id);
 assert.equal(manifest(created.Code).host, "Excel");
 assert.equal(manifest(created.Code).entryPoint, "Run");
+for (const id of ["toolHostInput", "toolDescriptionInput", "toolSchemaInput", "formatToolSchemaButton"]) {
+  assert.equal(get(id).disabled, true, "VBA metadata is edited in its manifest: " + id);
+  assert.match(get(id).title, /manifest/);
+}
+assert.equal(context.state.toolBuilderReadOnly, true, "visual schema editor cannot offer ignored VBA parameter changes");
+const originalDescription = created.Description;
+get("toolDescriptionInput").value = "This disabled field is not an authored change";
+context.syncSelectedToolFromEditor();
+assert.equal(created.Description, originalDescription, "VBA editor preserves manifest-derived metadata");
 assert.match(created.Code, /Public Function Run\(\) As String/);
 assert.match(created.Code, /Err.Raise/, "unfinished draft cannot claim successful execution");
 const originalCode = created.Code;

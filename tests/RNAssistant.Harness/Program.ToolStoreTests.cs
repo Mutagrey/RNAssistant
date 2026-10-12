@@ -86,6 +86,19 @@ namespace RNAssistant.Harness
                     enabledSchema.SelectToken("properties.parameters") != null &&
                     enabledSchema.SelectToken("properties.code") != null,
                     "enabled JS authoring exposes the package fields it needs");
+                var jsAuthoring = new JObject { ["id"] = tool.Id, ["executor"] = "js", ["name"] = tool.Name,
+                    ["code"] = source, ["parameters"] = tool.ArgumentSchemaJson };
+                AssertTrue(ToolSchemaSupport.ValidateArguments(jsAuthoring, enabledSchema, false, out selectorError),
+                    "JS authoring fields have an explicit executor branch");
+                jsAuthoring["components"] = new JArray();
+                AssertTrue(!ToolSchemaSupport.ValidateArguments(jsAuthoring, enabledSchema, false, out selectorError),
+                    "authoring cannot silently mix VBA components and JS metadata");
+                jsAuthoring.Remove("components");
+                jsAuthoring.Remove("executor");
+                AssertTrue(!ToolSchemaSupport.ValidateArguments(jsAuthoring, enabledSchema, false, out selectorError),
+                    "JS-specific metadata cannot be ignored by the default VBA branch");
+                AssertTrue(ToolSchemaSupport.ValidateArguments(new JObject { ["id"] = tool.Id, ["readme"] = "Notes" },
+                    enabledSchema, false, out selectorError), "shared metadata updates still preserve the stored executor");
                 AssertTrue(executor.ResourceGateway.Find(resourceSession,
                     JsToolHandler.RunId, "catalogs").Items.Any(),
                     "enabled JS run appears in resource discovery");
@@ -591,7 +604,7 @@ namespace RNAssistant.Harness
                     .ArgumentSchemaJson);
                 foreach (var removed in new[]
                 {
-                    "host", "parameters", "parameterDefinitions", "executor",
+                    "host", "name", "description", "parameters", "parameterDefinitions", "executor",
                     "enabled", "requiresConfirmation", "mutatesDocument",
                     "mutatesLocalState", "agentCanRun", "riskLevel",
                     "capabilityStatus"
@@ -1029,6 +1042,26 @@ namespace RNAssistant.Harness
                         conservative.AgentCanRun &&
                         conservative.RiskLevel == 3,
                     "model authoring receives conservative runtime authority");
+
+                foreach (var create in new[] { true, false })
+                {
+                    var id = create ? "excel.invalid_source" : conservative.Id;
+                    var invalid = CustomTool("Excel", id);
+                    if (create)
+                        invalid.Components.Add(new ToolPackageComponentDefinition { Name = "RNA_Helper", Type = "StdModule",
+                            Code = "Sub Duplicate()\nEnd Sub\nSub Duplicate()\nEnd Sub" });
+                    else invalid.Components[0].Code += "\nPublic Function Run() As String\nEnd Function";
+                    var rejected = ExecuteToolAuthoringNative(native, ToolAuthoringCatalog.UpsertToolId,
+                        new JObject { ["id"] = id, ["components"] = ToolComponentsPayload(invalid) });
+                    AssertEqual(ToolExecutionOutcome.Error, rejected.Outcome,
+                        "duplicate procedures fail before confirmation for both create and update");
+                    AssertEqual("vba_code_invalid", (string)JObject.Parse(rejected.Result.DataJson)["code"],
+                        "package validation checks each complete component source");
+                    AssertEqual(ToolDispatchEvidence.NotDispatched, rejected.Evidence.Dispatch,
+                        "invalid source never reaches package storage");
+                    AssertEqual(conservative.Code, new ToolStore(FixturePaths.Value).Load()
+                        .Single().Code, "rejected package mutation preserves the previous tool");
+                }
 
                 var update = new ToolInvocation { ToolId = "common.tools_upsert" };
                 update.Arguments["id"] = "excel.generated_report";

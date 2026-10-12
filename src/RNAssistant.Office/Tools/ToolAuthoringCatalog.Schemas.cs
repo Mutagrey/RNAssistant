@@ -21,8 +21,6 @@ namespace RNAssistant.Office.Tools
                     ["minLength"] = 1,
                     ["maxLength"] = 128
                 },
-                ["name"] = BoundedStringProperty("User-visible tool name.", 200),
-                ["description"] = BoundedStringProperty("Tool description for model discovery.", 8000),
                 ["components"] = new JObject
                 {
                     ["type"] = "array",
@@ -62,20 +60,36 @@ namespace RNAssistant.Office.Tools
                 ["doNotUseWhen"] = BoundedStringProperty("Cases where the model should not select this tool.", 4000),
                 ["limitations"] = BoundedStringProperty("Known limitations presented to the model.", 4000)
             };
+            var vbaProperties = (JObject)properties.DeepClone();
             if (enableJavaScript)
             {
+                properties["name"] = BoundedStringProperty("JavaScript tool name. VBA name belongs in the entry component manifest.", 200);
+                properties["description"] = BoundedStringProperty("JavaScript tool discovery description. VBA description belongs in the entry component manifest.", 8000);
                 properties["executor"] = EnumProperty("Custom tool runtime.", "vba", "js");
                 properties["host"] = EnumProperty("Tool host for JavaScript packages; VBA host comes from its manifest.", "Common", "Excel", "Word", "PowerPoint", "Outlook");
                 properties["parameters"] = BoundedStringProperty("Strict object JSON Schema serialized as a string for saved JS tool arguments.", 64000);
                 properties["code"] = BoundedStringProperty("Complete JS async function body when executor=js.", 1000000);
             }
-            return new JObject
+            var schema = new JObject
             {
                 ["type"] = "object",
                 ["properties"] = properties,
                 ["required"] = new JArray("id"),
                 ["additionalProperties"] = false
-            }.ToString(Formatting.None);
+            };
+            if (enableJavaScript)
+            {
+                vbaProperties["executor"] = EnumProperty("VBA package runtime; optional for metadata-only updates.", "vba");
+                var jsProperties = (JObject)properties.DeepClone();
+                jsProperties.Remove("components");
+                jsProperties["executor"] = EnumProperty("Required when supplying JavaScript-specific fields.", "js");
+                schema["anyOf"] = new JArray(
+                    new JObject { ["type"] = "object", ["properties"] = vbaProperties,
+                        ["required"] = new JArray("id"), ["additionalProperties"] = false },
+                    new JObject { ["type"] = "object", ["properties"] = jsProperties,
+                        ["required"] = new JArray("id", "executor"), ["additionalProperties"] = false });
+            }
+            return schema.ToString(Formatting.None);
         }
 
         private static JObject Property(string type, string description)

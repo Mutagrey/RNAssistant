@@ -8,6 +8,30 @@ retired or deferred is not an active P0/P1 implementation defect merely because
 that original severity remains in the table. Release qualification is a separate
 exact-build gate.
 
+## VBA context recovery review — 2026-10-12
+
+- **Fixed host-neutral / VBA recovery:** an omitted-source whole-module write
+  correctly refused dispatch, but its recovery appended 8K source characters
+  from each end. At 24K context this mandatory error overflowed the message budget
+  (20,243 vs 19,400 tokens), preventing the next model call. Large/truncated source
+  now yields the semantic target and refresh policy without synthetic source/diff.
+  The production-run scripted regression passes refusal → line read → patch with
+  unrelated source preserved. Complete small-source recovery remains covered.
+- **Open incident correlation / Office runtime:** the reported inability to reach
+  or edit a macro has no exact error/trajectory yet. The reproduced budget defect
+  is a possible cause, not proof of the user's original failure. The same fixture
+  at 16K cannot admit even its mandatory prompts/causal frames (15,159 vs 11,550
+  tokens); this is separate context headroom, not lost VBA access. Real model and
+  Windows/Office behavior remain unqualified.
+- **Open expectation drift / catalog Harness owner:** the R61 inventory differs
+  for unchanged `common.html_data_bind`, `common.plan_doc_save`,
+  `common.questions_ask`, `common.resources_read`, `common.task_list_set`,
+  `excel.find_cells` and `excel.replace_cells`. Only the three descriptors changed
+  by this review were updated in the baseline. The separate `tools: prompt
+  metadata is model-friendly` test expects an obsolete flat HTML bind schema.
+  These checks are not green; review their current contracts separately instead
+  of refreshing unrelated expectations as part of the VBA fix.
+
 ## Harness follow-up review — 2026-10-05
 
 **Update 2026-10-07:** the three P2 defects below are fixed: unrelated effects do

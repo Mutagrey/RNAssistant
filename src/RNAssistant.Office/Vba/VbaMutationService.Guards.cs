@@ -184,7 +184,7 @@ namespace RNAssistant.Office.Vba
         private static VbaMutationOutcome SnapshotRefreshRequired(string moduleName)
         {
             return VbaMutationOutcome.Error(
-                "The VBA module was changed by an earlier mutation and the model-visible source is now stale. Read the complete current module source, reconcile the intended change, then retry the mutation.",
+                "Whole-module replacement requires the complete current source in model context. That source is missing or stale; it may have been omitted by the context budget. This is a source-observation guard, not a VBA access denial. Reuse complete current source if supplied, otherwise read it with common.resources_read and reconcile before replacing. If it does not fit, read the relevant source lines with startLine/lineCount and use common.vba_apply_patch for a focused edit. Do not repeat an unchanged whole-source read/write loop or create another module to bypass this guard.",
                 new JObject
                 {
                     ["moduleName"] = moduleName ?? string.Empty,
@@ -212,7 +212,7 @@ namespace RNAssistant.Office.Vba
             var message = editor
                 ? "The VBA module changed after it was loaded in the editor. Reload it and reconcile the changes before saving."
                 : wholeWrite
-                    ? "The VBA module changed after the source was inspected or this write was prepared. Re-read and reconcile if the complete source was derived from that version; retry the same write only for an intentional complete overwrite."
+                    ? "The VBA module changed after the source was inspected or this write was prepared. Obtain its complete current source and reconcile before replacing it. If the complete source does not fit in context, read the relevant source lines with startLine/lineCount and use common.vba_apply_patch. This conflict does not mean VBA access was denied."
                     : "The VBA module changed after this action was prepared. Retry the same tool so runtime can bind the current state; read it only if the intended action may no longer match.";
             return VbaMutationOutcome.Error(
                 message,

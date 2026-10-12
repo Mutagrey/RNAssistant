@@ -27,8 +27,8 @@ namespace RNAssistant.Office.Tools
             yield return Projection(
                 UpsertToolId,
                 enableJavaScript
-                    ? "Mutates settings: Create or update a VBA package or read-only JavaScript tool. JS requires executor=js, code and a strict parameters schema with a required resources array. Omitted update fields are preserved."
-                    : "Mutates settings: Create or update a VBA package. Omitted update fields are preserved.",
+                    ? "Mutates settings: Create or update a VBA package or read-only JavaScript tool. VBA implementation and metadata belong in the complete components package and entry manifest. JS-specific fields require executor=js; creation requires code and a strict parameters schema with a required resources array. Do not mix VBA components and JS fields. Omitted update fields are preserved."
+                    : "Mutates settings: Create or update a VBA package. Supply the complete components package when creating or changing source, name, description or parameters; VBA metadata belongs in the entry manifest. Supplied components replace the entire package, not one component. Omitted update fields are preserved.",
                 SchemaFor(UpsertToolId, enableJavaScript), "tools_upsert");
             yield return Projection(
                 DeleteToolId,

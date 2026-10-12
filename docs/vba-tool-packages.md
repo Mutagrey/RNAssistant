@@ -74,6 +74,7 @@ End Function
 - Необязательный параметр имеет `default` в schema, потому что `Application.Run` получает позиционные аргументы.
 - Entry point всегда `Public Function ... As String`. `Sub`, `Variant` и object return запрещены.
 - Manifest — источник истины для id, версии, схемы и safety metadata; duplicate JSON fields отклоняются. Код supporting modules не содержит второго manifest.
+- При создании или изменении через `common.tools_upsert` передаётся весь массив `components`: отсутствующие компоненты не сохраняются автоматически. `name`, `description` и `parameters` VBA-инструмента редактируются в manifest первого компонента. Каждый компонент проходит статическую проверку исходника, включая duplicate procedures, до сохранения; это не проверка компиляции в Office.
 
 Рекомендуемые имена: entry module `RNA_<Tool>`, entry function `RNATool_<Tool>`, зависимости `RNA_<Tool>_<Role>`. Используйте `Option Explicit`, явные ссылки на workbook/document/presentation и восстанавливайте изменённые application-wide настройки в error handler.
 

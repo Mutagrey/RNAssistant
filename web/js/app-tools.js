@@ -672,8 +672,8 @@ function renderToolEditor() {
   var readOnly = builtIn || documentLocal || sourceUnavailable || !!state.bridgeUnavailable ||
     !!(skill && String(skill.Executor || "").toLowerCase() === "js" && !javascriptEnabled);
   setToolRunContinuation(null);
-  state.toolBuilderReadOnly = disabled || readOnly;
   var isVba = !!(skill && String(skill.Executor || "").toLowerCase() === "vba");
+  state.toolBuilderReadOnly = disabled || readOnly || isVba;
   var isJs = !!(skill && String(skill.Executor || "").toLowerCase() === "js");
   var panel = $("toolEditorPanel");
   var empty = $("toolEditorEmpty");
@@ -758,10 +758,16 @@ function renderToolEditor() {
   ].forEach(function (id) {
     $(id).disabled = disabled || readOnly;
   });
+  ["toolHostInput", "toolDescriptionInput", "toolSchemaInput", "formatToolSchemaButton"].forEach(function (id) {
+    var control = $(id);
+    if (!control) return;
+    control.disabled = disabled || readOnly || isVba;
+    control.title = isVba ? "Для VBA измените эти данные в manifest первого компонента и сохраните пакет." : "";
+  });
   $("toolRunArgsInput").disabled = sourceUnavailable;
   $("applyToolRunJsonButton").disabled = sourceUnavailable;
   if (typeof setCodeEditorReadOnly === "function") {
-    setCodeEditorReadOnly("toolSchemaInput", disabled || readOnly);
+    setCodeEditorReadOnly("toolSchemaInput", disabled || readOnly || isVba);
     setCodeEditorReadOnly("toolRunArgsInput", sourceUnavailable);
     setCodeEditorReadOnly("toolCodeInput", disabled || readOnly || !isVba && !isJs);
     setCodeEditorReadOnly("toolReadmeInput", disabled || readOnly);
@@ -798,13 +804,13 @@ function syncSelectedToolFromEditor() {
   syncSelectedToolComponentFromEditor(skill);
 
   skill.Id = $("toolIdInput").value.trim();
-  skill.Host = $("toolHostInput").value;
-  skill.Name = skill.Id;
   skill.Executor = $("toolExecutorInput").value;
   skill.RequiresConfirmation = $("toolConfirmInput").checked;
-  skill.Description = $("toolDescriptionInput").value;
-  skill.ArgumentSchemaJson = $("toolSchemaInput").value || emptyToolSchema();
   if (String(skill.Executor || "").toLowerCase() !== "vba") {
+    skill.Host = $("toolHostInput").value;
+    skill.Name = skill.Id;
+    skill.Description = $("toolDescriptionInput").value;
+    skill.ArgumentSchemaJson = $("toolSchemaInput").value || emptyToolSchema();
     skill.Code = $("toolCodeInput").value;
   }
   skill.Components = toolComponents(skill);

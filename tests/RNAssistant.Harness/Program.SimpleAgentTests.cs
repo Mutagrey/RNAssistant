@@ -1976,6 +1976,138 @@ namespace RNAssistant.Harness
             });
         }
 
+        private static void SimpleAgentVbaEditsAfterCompaction()
+        {
+            WithTempExecutor(FakeOfficeAdapter.ForHost("Excel"), (executor, adapter) =>
+            {
+                const string module = "ContextModule";
+                var source = "Option Explicit\r\nSub Main()\r\nDebug.Print \"before\"\r\nEnd Sub\r\n" +
+                    string.Join("\r\n", Enumerable.Range(0, 2200).Select(index => "' preserved comment " + index));
+                AssertTrue(source.Length > 32000, "fixture crosses the internal resource cursor boundary");
+                var after = source.Replace("\"before\"", "\"after\"");
+                var session = NewSession(adapter);
+                var phase = 0;
+                var step = 0;
+                Func<string, JObject, string> call = (name, arguments) => ModelProtocolWire.Write("VBA source", new[] {
+                    new ConversationToolCall { Name = name, Arguments = arguments } });
+                LlmCompletionDelegate completion = (completionSettings, messages, options, stream, token) =>
+                {
+                    step++;
+                    string response;
+                    if (phase == 0 && step == 1)
+                        response = call(VbaToolCatalog.WriteModule, new JObject {
+                            ["moduleName"] = module, ["code"] = source, ["mode"] = "createOnly" });
+                    else if (phase == 0 && step == 2)
+                    {
+                        AssertEqual("ok", (string)LastToolResult(messages, VbaToolCatalog.WriteModule)["status"],
+                            "creation has verified source before the next read");
+                        response = call(ResourceToolCatalog.ReadToolId, new JObject {
+                            ["target"] = "VBA module: " + module, ["representation"] = "source" });
+                    }
+                    else if (phase == 0 && step == 3)
+                    {
+                        var read = LastToolResult(messages, ResourceToolCatalog.ReadToolId);
+                        AssertEqual("ok", (string)read["status"], "large source reads across internal exact pages");
+                        AssertEqual(source, (string)read["data"]["text"], "whole source preserves exact CRLF bytes");
+                        response = ModelProtocolWire.Write("Created and read.", new ConversationToolCall[0]);
+                    }
+                    else if (phase == 1 && step == 1)
+                    {
+                        AssertTrue(messages.Any(message => message.SyntheticResourceObservation &&
+                            message.ResourceEvidence.Count > 0 && (message.Content ?? string.Empty).Contains(source)),
+                            "compaction restores the actual complete source with current evidence");
+                        response = call(VbaToolCatalog.WriteModule, new JObject {
+                            ["moduleName"] = module, ["code"] = after, ["mode"] = "updateOnly" });
+                    }
+                    else if (phase == 1 && step == 2)
+                    {
+                        AssertEqual("ok", (string)LastToolResult(messages, VbaToolCatalog.WriteModule)["status"],
+                            "restored source authorizes a whole-module edit without another read");
+                        response = ModelProtocolWire.Write("Updated.", new ConversationToolCall[0]);
+                    }
+                    else if (phase == 2 && step == 1)
+                    {
+                        AssertTrue(!messages.Any(message => (message.Content ?? string.Empty).Contains(after)),
+                            "large source is omitted from the constrained request");
+                        response = call(VbaToolCatalog.WriteModule, new JObject { ["moduleName"] = module,
+                            ["code"] = "Option Explicit\r\nSub Main()\r\nDebug.Print \"final\"\r\nEnd Sub", ["mode"] = "updateOnly" });
+                    }
+                    else if (phase == 2 && step == 2)
+                    {
+                        var rejected = LastToolResult(messages, VbaToolCatalog.WriteModule);
+                        AssertEqual("error", (string)rejected["status"], "missing source blocks a destructive reconstruction");
+                        AssertContains(rejected.ToString(), "vba_snapshot_refresh_required", "source guard explains the refusal");
+                        AssertTrue(!rejected.ToString().Contains("preserved comment"),
+                            "large-source recovery does not pin synthetic head/tail excerpts in the request");
+                        AssertEqual(after, adapter.GetVbaModuleCode(module), "refusal preserves the full module");
+                        response = call(ResourceToolCatalog.ReadToolId, new JObject { ["target"] = "VBA module: " + module,
+                            ["representation"] = "source", ["startLine"] = 1, ["lineCount"] = 4 });
+                    }
+                    else if (phase == 2 && step == 3)
+                    {
+                        var read = LastToolResult(messages, ResourceToolCatalog.ReadToolId);
+                        AssertEqual("ok", (string)read["status"], "bounded source recovery fits the constrained request");
+                        AssertContains((string)read["data"]["text"], "\"after\"", "excerpt has the current exact patch anchor");
+                        AssertEqual(false, (bool)read["data"]["complete"], "excerpt does not claim whole-module authority");
+                        response = call(VbaToolCatalog.ApplyPatch, new JObject { ["moduleName"] = module,
+                            ["patch"] = new JArray(new JObject { ["find"] = "\"after\"", ["text"] = "\"final\"" }) });
+                    }
+                    else if (phase == 2 && step == 4)
+                    {
+                        AssertEqual("ok", (string)LastToolResult(messages, VbaToolCatalog.ApplyPatch)["status"],
+                            "exact patch works without full source in model context");
+                        response = ModelProtocolWire.Write("Patched.", new ConversationToolCall[0]);
+                    }
+                    else throw new InvalidOperationException("Unexpected VBA context recovery step: " + phase + "/" + step);
+                    return Task.FromResult(new LlmCompletionResult { Content = response });
+                };
+                var service = CreateConversationRunService(adapter, executor, completion);
+                var settings = new AppSettings { AutoConfirmToolActions = true,
+                    ContextWindowOverrideTokens = 131072, MaxTokens = 16384 };
+                var tools = executor.GetControllerTools().Where(tool => VbaToolCatalog.Owns(tool.Id) ||
+                    tool.Id == ResourceToolCatalog.ReadToolId || tool.Id == ResourceToolCatalog.FindToolId).ToList();
+                service.ExecuteAsync(ChatModes.Agent, "Create and inspect ContextModule.", session,
+                    NewContext(adapter), settings, tools, null).GetAwaiter().GetResult();
+                AssertEqual(3, step, "creation and read complete without repairs");
+                AssertEqual(source, adapter.GetVbaModuleCode(module), "creation preserves the complete source");
+
+                Action compact = () => {
+                    var through = session.Messages.Last();
+                    var checkpoint = new ContextCheckpoint { ThroughMessageId = through.Id,
+                        SummaryMarkdown = "ContextModule was saved; continue with the requested edit." };
+                    checkpoint.Claims.Add(new StructuredContextClaim { ClaimId = "vba-context-summary", Kind = "interpretation",
+                        Text = checkpoint.SummaryMarkdown, SourceRoles = new List<string> { "assistant" },
+                        SourceMessageIds = new List<string> { through.Id } });
+                    session.Artifacts.Add(new ChatArtifact { Id = checkpoint.Id, Kind = ChatArtifactKinds.Compaction,
+                        MimeType = "application/json", InlineText = JsonConvert.SerializeObject(checkpoint, Formatting.None) });
+                    session.ContextCheckpoints.Add(checkpoint);
+                    session.ActiveContextCheckpointId = checkpoint.Id;
+                };
+                compact();
+                phase = 1;
+                step = 0;
+                var continued = service.ExecuteAsync(ChatModes.Agent, "Change before to after in ContextModule.", session,
+                    NewContext(adapter), settings, tools, null).GetAwaiter().GetResult();
+                AssertEqual(2, step, "post-compaction edit needs no extra source read or repair: " + continued.AssistantText);
+                AssertEqual(after, adapter.GetVbaModuleCode(module), "edit preserves all unrelated source after compaction");
+                AssertEqual(1, adapter.CountVbaCalls(FakeVbaOperation.CreateModule), "creation dispatches once");
+                AssertEqual(1, adapter.CountVbaCalls(FakeVbaOperation.ReplaceModule), "modification dispatches once");
+                compact();
+                phase = 2;
+                step = 0;
+                // Keep room for the production prompts and causal frames while
+                // forcing the full module body out of the request.
+                settings.ContextWindowOverrideTokens = 24576;
+                settings.MaxTokens = 1024;
+                continued = service.ExecuteAsync(ChatModes.Agent, "Change after to final in ContextModule using a focused edit.",
+                    session, NewContext(adapter), settings, tools, null).GetAwaiter().GetResult();
+                AssertEqual(4, step, "small-context refusal recovers through one excerpt and one patch: " + continued.AssistantText);
+                AssertEqual(after.Replace("\"after\"", "\"final\""), adapter.GetVbaModuleCode(module),
+                    "small-context patch preserves all unrelated source");
+                AssertEqual(2, adapter.CountVbaCalls(FakeVbaOperation.ReplaceModule), "bounded recovery writes exactly once");
+            });
+        }
+
         private static void SimpleAgentVbaBatchReadCannotAuthorizeStaleOverwrite()
         {
             WithTempPaths(paths =>

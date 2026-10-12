@@ -120,6 +120,12 @@ resolves that intent to the exact backup id before confirmation and stores it on
 in prepared state. Raw backup ids, hashes, revisions, guards and journal identities
 are absent from accepted model arguments and replay.
 
+`moduleName` selects the component from the project inventory (for example
+`Module1`), not a procedure (`Module1.Run`) or read target (`VBA module: Module1`).
+Use `createOnly` for intended creation and `updateOnly` for replacement of an
+existing component; default `upsert` permits either outcome. A missing edit target
+requires resolving its owning component, not creating a substitute module.
+
 | Representation | Purpose / existing transformation |
 |---|---|
 | Transport / raw CAS bytes | Exact stored source bytes; CAS SHA-256 is not a normalized text hash |
@@ -150,13 +156,23 @@ one bounded resource chunk does not satisfy it. Exact patch is different: runtim
 reads and binds current live source under the document gate, then validates every
 exact hunk before confirmation/dispatch. Sequential patches therefore do not need a
 redundant whole-source read, while stale or ambiguous hunks fail with no effect.
-A whole-write conflict returns bounded current source and a changed-span diff in
-typed recovery; oversized current source still requires a complete
-`common.resources_read`. Multiple edits derived from one snapshot should remain one
-ordered patch array when that is the natural single mutation. Distinct managed
-mutations may also share a sequential model batch: each call rechecks its own live
-guard and commits separately, and an unknown result remains cumulative run
-evidence. Confirmation-required or opaque VBA actions remain singleton.
+A whole-write conflict returns complete current source up to 16,384 characters
+and a changed-span diff in typed recovery. Larger/truncated sources return only
+the semantic target and `RefreshRequired`; no stitched head/tail body or synthetic
+diff is inserted into the mandatory error result. Such a body can itself exhaust
+the request budget and is not an exact resource view. Complete current after-state delivered by runtime, including a
+body restored after compaction, can authorize the next replacement. A successful
+historical read whose body was omitted by the context budget cannot.
+`vba_snapshot_refresh_required` reports this missing/stale model observation; it
+does not establish an Office access denial. If the whole source does not fit,
+`common.resources_read` with `representation=source`, `startLine` and `lineCount`
+provides an exact excerpt for `common.vba_apply_patch`. Do not repeat an unchanged
+whole-read/write loop, invent a cursor, or create another module to bypass the
+guard. Excerpts never authorize a whole-source replacement.
+
+Related edits from one snapshot should remain one ordered patch array when that
+is the natural single mutation. Each model mutation is a singleton call followed
+by its result; unknown effects remain cumulative run evidence.
 
 Accepted model calls retain the resource evidence from the input snapshot that
 produced that exact call. VBA observation guards use that retained evidence against

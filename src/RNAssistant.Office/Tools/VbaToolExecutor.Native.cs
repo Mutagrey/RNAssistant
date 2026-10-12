@@ -273,7 +273,7 @@ namespace RNAssistant.Office.Tools
             string currentSource;
             bool currentSourceComplete;
             ReadCurrentSource(moduleName, data, out currentSource, out currentSourceComplete);
-            var observedSource = ReadObservedSource(correlation, moduleName,
+            var observedSource = currentSource == null ? null : ReadObservedSource(correlation, moduleName,
                 (string)data?["observedCodeSha256"]);
             return outcome.WithRecovery(new ToolRecoveryContract(
                 conflict ? ToolFailureKind.ConflictNoEffect : ToolFailureKind.RejectedNoEffect,
@@ -303,15 +303,14 @@ namespace RNAssistant.Office.Tools
                 moduleName, 1000000, out module, out error) || module == null)
                 return;
             var source = module.Code ?? string.Empty;
-            if (source.Length <= 16384)
+            if (!module.Truncated && source.Length <= 16384)
             {
                 currentSource = source;
-                complete = !module.Truncated;
-                return;
+                complete = true;
             }
-            currentSource = source.Substring(0, 8000) +
-                "\n... current source omitted; use common.resources_read ...\n" +
-                source.Substring(source.Length - 8000);
+            // A stitched head/tail is not an exact source view and can exhaust
+            // the context that must carry this refusal. Keep the semantic target
+            // and RefreshRequired policy; the next read can select exact lines.
         }
 
         private string ReadObservedSource(VbaMutationCorrelation correlation,
