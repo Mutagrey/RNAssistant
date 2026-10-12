@@ -181,6 +181,11 @@ cross one authority publication barrier; saving chat links follows publication.
 A failed link save leaves a discoverable resource, and replaying the same operation
 is refused. Incompatible chat-owned HTML is explicitly rejected for mutation.
 
+Re-linking messages preserves existing exact runtime resource references, including
+HTML member reads and patch results. An archived or bounded activity body cannot
+erase these links. Missing mutation links may be added once; a workspace checkpoint
+alone does not become a resource reference.
+
 Gateway and HTML member URIs preserve the document owner. Exact root/member refs
 reconstruct one snapshot in chat projection; member refs do not create duplicate
 artifact records. Current reads carry the shared logical-head dependency. Exact

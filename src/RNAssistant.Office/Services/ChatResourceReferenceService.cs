@@ -250,14 +250,9 @@ namespace RNAssistant.Office.Services
 
         private static void LinkHtmlWorkspace(ChatSession session, ChatMessage message)
         {
-            var htmlArtifactIds = new HashSet<string>(session.Artifacts
-                .Where(item => item != null && string.Equals(item.Kind, ChatArtifactKinds.HtmlWorkspace, StringComparison.OrdinalIgnoreCase))
-                .Select(item => item.Id), StringComparer.OrdinalIgnoreCase);
-            if (!string.Equals(message.Role, "user", StringComparison.OrdinalIgnoreCase))
-            {
-                RemoveReferences(message, htmlArtifactIds);
-            }
-
+            // Runtime refs are durable facts, including exact members and patch
+            // results. An activity preview may be archived or have another shape;
+            // neither makes those refs invalid. Only add missing mutation links.
             var activity = message.Activity;
             if (activity == null || string.IsNullOrWhiteSpace(activity.DataJson))
             {
@@ -514,19 +509,6 @@ namespace RNAssistant.Office.Services
             var changed = false;
             foreach (var child in token.Children().ToArray()) changed |= RebaseJsonResourceUris(session, child);
             return changed;
-        }
-
-        private static void RemoveReferences(ChatMessage message, ISet<string> artifactIds)
-        {
-            if (message == null || message.ResourceRefs == null || artifactIds == null || artifactIds.Count == 0) return;
-            message.ResourceRefs.RemoveAll(reference =>
-            {
-                string ignoredSessionId;
-                string artifactId;
-                int ignoredRevision;
-                return ChatResourceUri.TryParseArtifactRevision(reference, out ignoredSessionId, out artifactId, out ignoredRevision) &&
-                    artifactIds.Contains(artifactId);
-            });
         }
 
         private static void AddRequired(ISet<string> required, string id)

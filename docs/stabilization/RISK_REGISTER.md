@@ -8,6 +8,26 @@ retired or deferred is not an active P0/P1 implementation defect merely because
 that original severity remains in the table. Release qualification is a separate
 exact-build gate.
 
+## HTML resource links and short-source report — 2026-10-12
+
+- **Fixed host-neutral / ChatResourceReferenceService:** message re-linking removed
+  every non-user HTML reference before reconstructing only inline
+  `rnassistant.htmlWorkspaceMutation` results. Member reads, patch results and
+  archived activity bodies therefore lost their exact links. Re-linking now
+  preserves runtime refs and only adds missing mutation links. The new regression
+  fails before the fix and passes after it, including repeated linking and replay.
+- **Open incident correlation / HTML resources:** the reported source reduced to
+  nine characters has no exact remaining text or trajectory. A 32,009-character
+  regression checks the final nine-character page, partial evidence, full source
+  after patch/save/reload and the original historical snapshot. These all remain
+  intact; this does not establish the cause of the user's short-source incident.
+  Windows/Office/WebView2 qualification was not run.
+- **Open test fixture drift / web tests owner:** `html-workspace-source` passes
+  its eight behavioral checks, then fails its old `app-chat-session.js` cache-key
+  assertion. HEAD already delivers `closed-document-20261012-1`; the fixture still
+  expects `office-chat-20260930-4`. The complete suite is not green. Focused HTML
+  storage (7), replacement guard (1) and chat resource cards (3) pass.
+
 ## VBA context recovery review — 2026-10-12
 
 - **Fixed host-neutral / VBA recovery:** an omitted-source whole-module write

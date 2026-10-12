@@ -264,6 +264,67 @@ namespace RNAssistant.Harness
             AssertEqual(0, incompatible.HtmlWorkspace.Files.Count, "rejected lineage mutates no workspace file");
         }
 
+        private static void HtmlResourceReferencesSurviveArchivalAndBoundedReads()
+        {
+            WithTempPaths(paths =>
+            {
+                var adapter = FakeOfficeAdapter.ForHost("Excel");
+                var executor = new OfficeToolExecutor(adapter, new VbaJournalStore(paths), new SkillStore(paths), new ToolStore(paths));
+                var session = NewSession(adapter);
+                var runtime = executor.CreateNativeRuntime(session, OfficeToolCatalog.ForHost(adapter.HostName)
+                    .Concat(executor.GetControllerTools()).ToList(), new AppSettings(), "agent", false);
+                const string prefix = "<!doctype html><html><body>before";
+                var source = prefix + new string('x', 32000 - prefix.Length - "</body>".Length) + "</body></html>\r\n";
+                var expectedReferences = new Dictionary<string, string[]>();
+                Action<ToolExecutionRecord> recordActivity = record =>
+                {
+                    AssertEqual(ToolExecutionOutcome.Ok, record.Outcome, "HTML operation succeeds");
+                    var command = new ToolInvocation { ToolId = record.Context.Call.Name, ToolCallId = record.Context.Call.Id };
+                    var message = RNAssistant.Office.AgentTranscript.CreateRunningToolMessage(session, command, "step", "HTML");
+                    RNAssistant.Office.AgentTranscript.CompleteToolActivityMessage(session, message, command,
+                        ToolRunResultFactory.Create(record), "step", "HTML");
+                    expectedReferences[message.Id] = message.ResourceRefs.Select(item => item.Uri + "@" + item.Revision).ToArray();
+                    AssertTrue(expectedReferences[message.Id].Length > 0, "runtime supplies exact resource links");
+                    session.Messages.Add(message);
+                };
+                recordActivity(ExecuteHtmlNative(runtime, HtmlWorkspaceToolCatalog.WriteFileToolId,
+                    new JObject { ["path"] = "index.html", ["content"] = source }));
+                var gateway = executor.ResourceGateway;
+                var member = gateway.List(session, "chat", ChatHtmlResourceCatalog.FileKind, null, 10).Items.Single();
+                var first = gateway.Read(session, new ResourceReadRequest { Reference = member.Reference,
+                    Representation = "source", MaxChars = 32000 }).Result;
+                var tail = gateway.Read(session, new ResourceReadRequest { Reference = member.Reference,
+                    Representation = "source", MaxChars = 32000, Cursor = first.NextCursor }).Result;
+                AssertEqual(9, tail.ReturnedCharacters, "the final page contains nine characters");
+                AssertEqual(source, first.Text + tail.Text, "a nine-character page does not replace the complete source");
+                AssertEqual(ResourceCoverageKinds.CharacterRange, gateway.Evidence(session, tail).Single().Coverage.Kind,
+                    "the final page is not whole-source evidence");
+                var target = gateway.Find(session, "index.html", "html").Items.Single(item => item.Type == "HTML file").Target;
+                recordActivity(ExecuteHtmlNative(runtime, ResourceToolCatalog.ReadToolId,
+                    new JObject { ["target"] = target, ["representation"] = "source" }));
+                recordActivity(ExecuteHtmlNative(runtime, HtmlWorkspaceToolCatalog.ApplyPatchToolId,
+                    new JObject { ["path"] = "index.html", ["patch"] = new JArray(new JObject {
+                        ["op"] = "replace", ["find"] = "before", ["text"] = "after!" }) }));
+
+                var store = new ChatStore(paths);
+                store.Save(session);
+                AssertTrue(session.Messages[1].Activity.ResultPayload != null && session.Messages[1].Activity.DataJson == null,
+                    "large read activity is archived without an inline result body");
+                foreach (var current in new[] { session, store.Load(session.Id) })
+                {
+                    ChatResourceReferenceService.LinkMessageResources(current, 0);
+                    ChatResourceReferenceService.LinkMessageResources(current, 0);
+                    foreach (var message in current.Messages)
+                        AssertTrue(expectedReferences[message.Id].SequenceEqual(message.ResourceRefs.Select(item => item.Uri + "@" + item.Revision)),
+                            "relink preserves exact write/read/patch references without duplication or body hydration");
+                    AssertEqual(source.Replace("before", "after!"), current.HtmlWorkspace.Files.Single().Content,
+                        "save and replay preserve the complete HTML after a bounded read and patch");
+                    var historical = gateway.ReadWhole(current, member.Reference, "source").Result;
+                    AssertEqual(source, historical.Text, "historical reference still reads the complete original source");
+                }
+            });
+        }
+
         private static void HtmlWorkspaceMessagesUseCanonicalResourceReferences()
         {
             var empty = new ChatSession();
@@ -308,7 +369,7 @@ namespace RNAssistant.Harness
             {
                 Role = "assistant",
                 HtmlWorkspaceCheckpoint = HtmlCheckpoint(session, revisionId),
-                ResourceRefs = new List<ResourceRef> { HtmlCheckpoint(session, revisionId) },
+                ResourceRefs = new List<ResourceRef> { fileResource.Reference.Copy() },
                 Activity = new ChatActivity { ToolId = read.ToolId, DataJson = Newtonsoft.Json.JsonConvert.SerializeObject(readResult) }
             };
             var duplicateMutationMessage = new ChatMessage
@@ -325,7 +386,8 @@ namespace RNAssistant.Harness
 
             AssertTrue(ReferencesArtifact(session, writeMessage, revisionId), "html mutation links its canonical revision resource");
             AssertTrue(!ReferencesArtifact(session, duplicateMutationMessage, revisionId), "same html revision is linked only once");
-            AssertTrue(!ReferencesArtifact(session, readMessage, revisionId), "html read does not promote the checkpoint to a mutation reference");
+            AssertEqual(fileResource.Reference.Uri, readMessage.ResourceRefs.Single().Uri,
+                "html read preserves its exact member without promoting the checkpoint to a root mutation reference");
         }
     }
 }

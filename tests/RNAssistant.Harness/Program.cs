@@ -446,6 +446,7 @@ namespace RNAssistant.Harness
                 Test("storage: html recovery blocks mutation and selects healthy revision", HtmlRecoveryBlocksMutationAndSelectsHealthyRevision),
                 Test("storage: html recovery keeps readable active with broken parent", HtmlRecoveryKeepsReadableActiveWithBrokenParent),
                 Test("storage: html messages use canonical resource refs", HtmlWorkspaceMessagesUseCanonicalResourceReferences),
+                Test("storage: html resource refs survive archival and bounded reads", HtmlResourceReferencesSurviveArchivalAndBoundedReads),
                 Test("chat sessions: document key migration", ChatSessionServiceMigratesDocumentKey),
                 Test("chat sessions: stale requested id fallback", ChatSessionServiceFallsBackForStaleRequestedId),
                 Test("chat sessions: addressed id loads archived chat", AddressedSessionLoadsExplicitChatAcrossDocuments),
