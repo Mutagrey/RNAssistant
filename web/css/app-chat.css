@@ -668,10 +668,24 @@
 
 .message.user .markdown {
   max-width: 100%;
+  padding: 10px 14px;
   border: 0;
-  background: var(--secondary-bg);
-  color: var(--text);
+  border-radius: 18px;
+  background: var(--user-message-bg);
+  color: var(--user-message-text);
   box-shadow: none;
+}
+
+.message.user .markdown a {
+  color: inherit;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+.message.user .markdown :not(pre) > code {
+  border-color: transparent;
+  background: var(--user-message-code-bg);
+  color: inherit;
 }
 
 .message-attachments {

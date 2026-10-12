@@ -95,6 +95,17 @@ ctx.state.liveStreamContent = "Final answer";
 render();
 assert.equal(box.childNodes.length, 1, "late streaming replay cannot duplicate a persisted final answer");
 assert.equal(walk(box).filter(n => n.classList.contains("agent-final-step")).length, 1);
+const completedOverview = walk(box).find(n => n.classList.contains("agent-run-overview"));
+assert.ok(completedOverview, "completed run keeps its expandable action history");
+assert.equal(completedOverview.open, false);
+completedOverview.open = true; completedOverview.listeners.toggle();
+assert.equal(walk(completedOverview).filter(n => n.classList.contains("agent-model-step-history")).length, 2);
+assert.equal(walk(completedOverview).filter(n => n.classList.contains("kind-tool")).length, 3);
+completedOverview.open = false; completedOverview.listeners.toggle();
+assert.equal(completedOverview.childNodes.length, 1, "collapse releases rendered history");
+completedOverview.open = true; completedOverview.listeners.toggle();
+assert.equal(walk(completedOverview).filter(n => n.classList.contains("agent-model-step-history")).length, 2,
+  "every saved step can be reopened after completion");
 // Distinct transcript segments of one logical run must not share a DOM cache key.
 ctx.state.liveAgentRun = null; ctx.state.liveActivity = null; ctx.state.liveStreamContent = null; ctx.state.chatRuns = {};
 ctx.state.messages = [message(action("s1", "a", "completed", null), 0),

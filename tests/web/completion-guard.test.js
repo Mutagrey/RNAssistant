@@ -76,14 +76,15 @@ function assertVisibleEvidence(node, health) {
 }
 
 const tests = [
-  ["result card separates model outcome from verified effects", () => {
+  ["completed run shows verified effects without a redundant status card", () => {
     const node = renderFinal(view("clean", { verified: 1, noChange: 2 }));
-    const card = walk(node).find(item => item.attributes["data-run-result-card"]);
-    assert.ok(card, "completed run has a compact result card");
-    assert.match(card.textContent, /Ответ завершён/);
-    assert.match(card.textContent, /Подтверждено изменений: 1/);
-    assert.match(card.textContent, /Подтверждено без изменений: 2/);
-    assert.doesNotMatch(card.textContent, /все изменения применены/i);
+    const summary = walk(node).find(item => item.className === "agent-result-summary");
+    assert.ok(summary, "verified effects stay visible");
+    assert.equal(walk(node).some(item => item.attributes["data-run-result-card"]), false);
+    assert.doesNotMatch(summary.textContent, /Ответ завершён/);
+    assert.match(summary.textContent, /Подтверждено изменений: 1/);
+    assert.match(summary.textContent, /Подтверждено без изменений: 2/);
+    assert.doesNotMatch(summary.textContent, /все изменения применены/i);
   }],
   ["blocked model outcome is not displayed as completed work", () => {
     const node = renderFinal(view("clean", { reason: "model_blocked" }));
@@ -91,16 +92,25 @@ const tests = [
     assert.match(card.textContent, /Работа заблокирована/);
     assert.doesNotMatch(card.textContent, /Готово/);
   }],
-  ["result card shows remaining steps from this run's task list", () => {
+  ["completed run shows only remaining steps from this run's task list", () => {
     context.RNAssistantTaskList = { fromActivity: () => ({ steps: [
       { text: "CSS", status: "completed" }, { text: "JS", status: "pending" }
     ] }) };
     const parent = new Element("div");
-    context.appendAgentResultCard(parent, context.RNAssistantRunViewState.normalize(view("clean")), [
+    context.appendAgentRunResult(parent, context.RNAssistantRunViewState.normalize(view("clean")), [
       { activity: { ToolId: "common.task_list_set", Status: "completed" } }
-    ], []);
+    ], [{ message: "Проверил CSS" }]);
+    assert.equal(parent.childNodes[0].className, "agent-result-summary");
     assert.match(parent.textContent, /В списке осталось: 1 из 2/);
     assert.match(parent.textContent, /JS/);
+    assert.doesNotMatch(parent.textContent, /Ответ завершён/);
+    assert.doesNotMatch(parent.textContent, /Последний шаг/);
+    context.RNAssistantTaskList = { fromActivity: () => ({ steps: [{ text: "CSS", status: "completed" }] }) };
+    const finished = new Element("div");
+    context.appendAgentRunResult(finished, context.RNAssistantRunViewState.normalize(view("clean")), [
+      { activity: { ToolId: "common.task_list_set", Status: "completed" } }
+    ], []);
+    assert.equal(finished.childNodes.length, 0, "completed task list alone adds no result block");
     delete context.RNAssistantTaskList;
   }],
   ["failed attempts remain visible without replacing completed lifecycle", () => {
@@ -122,6 +132,8 @@ const tests = [
   ["no write is an ordinary response", () => {
     const node = renderFinal(view("clean", { reads: 1 }));
     assert.equal(walk(node).some(item => item.attributes["data-runtime-health"]), false);
+    assert.equal(walk(node).some(item => item.className === "agent-result-summary" ||
+      item.attributes["data-run-result-card"]), false, "read-only completion adds no result block");
     assert.equal(walk(node).find(item => item.className === "agent-final-step").textContent, "Все изменения применены.");
   }],
   ["verified and no-change writes remain distinct", () => {

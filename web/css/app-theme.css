@@ -27,6 +27,9 @@
 
 :root {
   --accent-strong: color-mix(in srgb, var(--accent) 72%, #122236);
+  --user-message-bg: color-mix(in srgb, var(--accent) 17%, #fff);
+  --user-message-text: var(--accent-strong);
+  --user-message-code-bg: color-mix(in srgb, var(--accent) 8%, #fff);
   --button-primary-bg: color-mix(in srgb, var(--accent) 72%, #162c44);
   --button-primary-bg-hover: color-mix(in srgb, var(--accent) 62%, #162c44);
   --button-accent-bg: color-mix(in srgb, var(--accent) 10%, var(--panel));
@@ -219,6 +222,9 @@ html[data-theme="dark"] {
   --line: #2c323c;
   --line-strong: #3b4451;
   --accent-strong: color-mix(in srgb, var(--accent) 78%, #fff);
+  --user-message-bg: color-mix(in srgb, var(--accent) 22%, #101216);
+  --user-message-text: color-mix(in srgb, var(--accent) 42%, #fff);
+  --user-message-code-bg: color-mix(in srgb, var(--accent) 10%, #101216);
   --danger: #ff7b72;
   --success: #4ac79a;
   --code: #14181e;

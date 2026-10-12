@@ -121,6 +121,7 @@ function testClosedRunIsLazy() {
   };
   vm.runInContext(fs.readFileSync(path.join(root, "web/js/app-agent.js"), "utf8"), context);
   context.agentToolCallCount = () => 1;
+  context.activityKind = activity => activity.Kind || "";
   context.agentRunStats = () => ({});
   context.appendAgentStepMessage = () => { builtSteps++; };
   context.buildAgentRunTranscript = () => context.document.createElement("div");
@@ -136,6 +137,9 @@ function testClosedRunIsLazy() {
   details.open = false;
   details.listeners.toggle();
   assert.equal(details.childNodes.length, 1, "closing releases transcript nodes");
+  details.open = true;
+  details.listeners.toggle();
+  assert.equal(builtSteps, 2, "saved steps rebuild when the run is reopened");
 }
 
 (async () => {
