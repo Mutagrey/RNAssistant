@@ -126,7 +126,7 @@ vm.runInContext(fs.readFileSync(path.join(root, "web/js/app-chat-state.js"), "ut
   assert.ok(index.includes("app-core.js?v=office-chat-20260930-3"), "core has the current cache key");
   assert.ok(index.includes("app-chat-state.js?v=office-chat-20260930-3"), "chat state has the current cache key");
   assert.ok(index.includes("app-messages.js?v=action-severity-20260930-1"), "messages have the current cache key");
-  assert.ok(index.includes("app-attachments.js?v=vba-upload-20260906-1"),
+  assert.ok(index.includes("app-attachments.js?v=attachment-input-20261012-1"),
     "attachment staging has the current pre-dispatch barrier cache key");
   console.log("PASS artifact commit: production boundary and lifecycle labels are wired atomically");
 }

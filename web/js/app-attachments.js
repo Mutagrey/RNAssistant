@@ -80,21 +80,49 @@ function draftAttachmentsForChat(chatId) {
   return draft && draft.attachments ? draft.attachments : [];
 }
 
+function setAttachmentStatus(chatId, message, level) {
+  state.chatAttachmentStatus = state.chatAttachmentStatus || {};
+  if (message) state.chatAttachmentStatus[chatId] = { message: message, level: level };
+  else delete state.chatAttachmentStatus[chatId];
+  if (state.activeChatId === chatId) renderAttachmentStatus();
+  if (message && level) log(message, level);
+}
+
+function renderAttachmentStatus() {
+  var box = $("attachmentStatus");
+  if (!box) return;
+  var status = state.chatAttachmentStatus && state.chatAttachmentStatus[state.activeChatId];
+  box.textContent = status ? status.message : "";
+  box.hidden = !status;
+  box.classList.toggle("is-error", !!(status && status.level));
+}
+
+function attachmentIngestionBlockedReason() {
+  if (state.bridgeUnavailable) return "Связь с приложением недоступна. Не удалось добавить файлы.";
+  if (state.chatNavigationPending || state.initializePromise || state.chatDetailPending || state.chatDetailError)
+    return "Дождитесь загрузки чата, затем добавьте файлы ещё раз.";
+  if (!state.activeChatId) return "Откройте или создайте чат, чтобы добавить файлы.";
+  if (hasActiveMessageEdit()) return "Завершите редактирование сообщения, затем добавьте файлы.";
+  if (isPendingChatSubmit(state.activeChatId)) return "Дождитесь отправки сообщения, затем добавьте файлы.";
+  return "";
+}
+
 async function stageChatResourceFiles(targetChatId, files) {
   var existingAttachments = draftAttachmentsForChat(targetChatId);
   var existingBytes = existingAttachments.reduce(function (sum, item) { return sum + attachmentSize(item); }, 0);
   if (existingAttachments.length + files.length > ATTACHMENT_MAX_FILES) {
-    log("Можно добавить не более 10 файлов.", "warning");
+    setAttachmentStatus(targetChatId, "Можно добавить не более 10 файлов.", "warning");
     return false;
   }
   if (files.some(function (file) { return file.size <= 0 || file.size > ATTACHMENT_MAX_FILE_BYTES; }) ||
       existingBytes + files.reduce(function (sum, file) { return sum + file.size; }, 0) > ATTACHMENT_MAX_TOTAL_BYTES) {
-    log("Лимит: 20 МБ на файл и 50 МБ на сообщение.", "warning");
+    setAttachmentStatus(targetChatId, "Файл должен быть непустым. Лимит: 20 МБ на файл и 50 МБ на сообщение.", "warning");
     return false;
   }
   try {
     for (var index = 0; index < files.length; index += 1) {
       var file = files[index];
+      setAttachmentStatus(targetChatId, "Добавление " + (index + 1) + "/" + files.length + ": " + file.name + "…");
       var response = await uploadChatResourceFile(targetChatId, file);
       var attachment = response.resource || response.Resource;
       if (file.type.indexOf("image/") === 0) attachment.previewUrl = URL.createObjectURL(file);
@@ -109,9 +137,10 @@ async function stageChatResourceFiles(targetChatId, files) {
         drafts[targetChatId] = draft;
       }
     }
+    setAttachmentStatus(targetChatId, "");
     return true;
   } catch (error) {
-    log(error.detail || error.message, "error");
+    setAttachmentStatus(targetChatId, "Не удалось добавить «" + file.name + "»: " + (error.detail || error.message), "error");
     return false;
   }
 }
@@ -120,7 +149,9 @@ function ingestChatResourceFiles(files) {
   files = Array.prototype.slice.call(files || []);
   if (!files.length) return Promise.resolve(true);
   var targetChatId = state.activeChatId;
-  if (!targetChatId || state.bridgeUnavailable || isPendingChatSubmit(targetChatId)) {
+  var blocked = attachmentIngestionBlockedReason();
+  if (blocked) {
+    setAttachmentStatus(targetChatId, blocked, "warning");
     return Promise.resolve(false);
   }
 
@@ -131,6 +162,7 @@ function ingestChatResourceFiles(files) {
     return previousSucceeded !== false && currentSucceeded;
   });
   queue[targetChatId] = operation;
+  setAttachmentStatus(targetChatId, "Подготовка файлов…");
   updateComposerInputState();
 
   return operation.then(function (succeeded) {
@@ -140,7 +172,7 @@ function ingestChatResourceFiles(files) {
   }, function (error) {
     if (queue[targetChatId] === operation) delete queue[targetChatId];
     if (state.activeChatId === targetChatId) updateComposerInputState();
-    log(error.detail || error.message, "error");
+    setAttachmentStatus(targetChatId, "Не удалось добавить файлы: " + (error.detail || error.message), "error");
     return false;
   });
 }
@@ -209,6 +241,7 @@ function attachmentCard(item, removable, lifecycle) {
 }
 
 function renderAttachmentDrafts() {
+  renderAttachmentStatus();
   var box = $("attachmentDrafts");
   if (!box) return;
   box.innerHTML = "";
@@ -224,37 +257,65 @@ function clearDraftAttachments() {
   renderAttachmentDrafts();
 }
 
+function attachmentTransferFiles(transfer) {
+  if (!transfer) return [];
+  var files = Array.prototype.slice.call(transfer.files || []);
+  return files.length ? files : Array.prototype.slice.call(transfer.items || [])
+    .filter(function (item) { return item.kind === "file"; })
+    .map(function (item) { return item.getAsFile(); })
+    .filter(function (file) { return !!file; });
+}
+
+function attachmentTransferHasFiles(transfer) {
+  return !!transfer && (Array.prototype.indexOf.call(transfer.types || [], "Files") >= 0 ||
+    !!(transfer.files && transfer.files.length) ||
+    Array.prototype.some.call(transfer.items || [], function (item) { return item.kind === "file"; }));
+}
+
 function bindAttachmentActions() {
   var button = $("attachFileButton");
   var input = $("attachmentFileInput");
   var composer = $("chatForm");
+  var dropZone = $("chatDropZone");
+  var dragDepth = 0;
+  function clearDrag() { dragDepth = 0; composer.classList.remove("is-dragging"); }
   button.addEventListener("click", function () { input.click(); });
   input.addEventListener("change", function () {
     ingestChatResourceFiles(input.files);
     input.value = "";
   });
   ["dragenter", "dragover"].forEach(function (name) {
-    composer.addEventListener(name, function (event) {
+    dropZone.addEventListener(name, function (event) {
+      if (!attachmentTransferHasFiles(event.dataTransfer)) return;
       event.preventDefault();
-      composer.classList.add("is-dragging");
+      if (name === "dragenter") dragDepth += 1;
+      var allowed = !attachmentIngestionBlockedReason();
+      event.dataTransfer.dropEffect = allowed ? "copy" : "none";
+      composer.classList.toggle("is-dragging", allowed);
     });
   });
-  ["dragleave", "drop"].forEach(function (name) {
-    composer.addEventListener(name, function (event) {
-      event.preventDefault();
-      composer.classList.remove("is-dragging");
-      if (name === "drop") ingestChatResourceFiles(event.dataTransfer.files);
+  dropZone.addEventListener("dragleave", function () {
+    dragDepth = Math.max(0, dragDepth - 1);
+    if (!dragDepth) clearDrag();
+  });
+  dropZone.addEventListener("drop", function (event) {
+    clearDrag();
+    if (!attachmentTransferHasFiles(event.dataTransfer)) return;
+    event.preventDefault();
+    var files = attachmentTransferFiles(event.dataTransfer);
+    if (files.length) ingestChatResourceFiles(files);
+    else setAttachmentStatus(state.activeChatId, "Не удалось получить файлы для добавления.", "warning");
+  });
+  // A file dropped outside the chat must not navigate away and lose the draft.
+  ["dragover", "drop"].forEach(function (name) {
+    document.addEventListener(name, function (event) {
+      if (attachmentTransferHasFiles(event.dataTransfer)) event.preventDefault();
+      if (name === "drop") clearDrag();
     });
   });
+  window.addEventListener("dragend", clearDrag);
   $("chatInput").addEventListener("paste", function (event) {
-    var clipboard = event.clipboardData;
-    var files = clipboard && clipboard.files ? Array.prototype.slice.call(clipboard.files) : [];
-    if (!files.length && clipboard && clipboard.items) {
-      files = Array.prototype.slice.call(clipboard.items)
-        .filter(function (item) { return item.kind === "file"; })
-        .map(function (item) { return item.getAsFile(); })
-        .filter(function (file) { return !!file; });
-    }
+    var files = attachmentTransferFiles(event.clipboardData);
     if (files && files.length) {
       event.preventDefault();
       ingestChatResourceFiles(files);

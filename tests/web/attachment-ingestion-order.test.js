@@ -56,7 +56,7 @@ function createContext(stageFails) {
   for (const file of ["app-resource-upload.js", "app-attachments.js", "app-chat-run.js"]) {
     vm.runInContext(fs.readFileSync(path.join(root, "web/js", file), "utf8"), context, { filename: file });
   }
-  context.sendChat = (text, attachments, chatId) => sent.push({ text, attachments, chatId });
+  context.submitInboxMessage = (text, attachments, chatId) => sent.push({ text, attachments, chatId });
 
   return {
     context,
@@ -78,7 +78,7 @@ async function settle() {
   {
     const fixture = createContext(false);
     const ingestion = fixture.context.ingestChatResourceFiles([
-      { name: "sample.pdf", type: "application/pdf", size: 7, slice: () => "raw bytes" }
+      { name: "sample.pdf", type: "application/pdf", size: 7, slice: (start, end) => new Blob(["1234567"]).slice(start, end) }
     ]);
     const submission = fixture.context.submitChatInput();
     await settle();
@@ -100,7 +100,7 @@ async function settle() {
     const fixture = createContext(true);
     fixture.input.value = "Прочитай PDF";
     const ingestion = fixture.context.ingestChatResourceFiles([
-      { name: "broken.pdf", type: "application/pdf", size: 7, slice: () => "raw bytes" }
+      { name: "broken.pdf", type: "application/pdf", size: 7, slice: (start, end) => new Blob(["1234567"]).slice(start, end) }
     ]);
     const submission = fixture.context.submitChatInput();
     await settle();
@@ -127,7 +127,7 @@ async function settle() {
   }
 
   const index = fs.readFileSync(path.join(root, "web/index.html"), "utf8");
-  assert.ok(index.includes("app-attachments.js?v=vba-upload-20260906-1"), "attachment upload has the shared uploader cache key");
+  assert.ok(index.includes("app-attachments.js?v=attachment-input-20261012-1"), "attachment upload has the shared uploader cache key");
   assert.ok(index.includes("app-chat-composer.js?v=multi-chat-20260902-1"), "composer retains its unchanged cache key");
   assert.ok(index.includes("app-chat-run.js?v=response-render-timing-20260928-1"), "app-chat-run.js has the current cache key");
   console.log("PASS attachment staging: changed UI modules have current cache keys");

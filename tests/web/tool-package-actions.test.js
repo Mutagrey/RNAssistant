@@ -43,7 +43,7 @@ function fixture(hooks = {}) {
     assert.equal(options.method, "POST"); assert.equal(options.credentials, "omit"); assert.equal(options.redirect, "error");
     const offset = Number(address.searchParams.get("offset")), count = Number(address.searchParams.get("count"));
     assert.equal(upload.bytes.length, offset); assert.ok(count <= 65536);
-    upload.bytes = Buffer.concat([upload.bytes, Buffer.from(await options.body.arrayBuffer())]);
+    upload.bytes = Buffer.concat([upload.bytes, Buffer.from(options.body)]);
     if (hooks.chunk) await hooks.chunk(options);
     return new Response(JSON.stringify({ leaseId: id, nextOffset: offset + count }));
   };

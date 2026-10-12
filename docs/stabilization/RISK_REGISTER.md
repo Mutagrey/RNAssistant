@@ -28,6 +28,28 @@ exact-build gate.
   expects `office-chat-20260930-4`. The complete suite is not green. Focused HTML
   storage (7), replacement guard (1) and chat resource cards (3) pass.
 
+## Attachment input review — 2026-10-12
+
+- **Open Windows evidence / resource upload owner:** the shared browser writer
+  now posts bounded `ArrayBuffer` chunks instead of Blob/File-backed bodies, which
+  avoids relying on WebView2's reported missing request-content path. Chromium
+  with a controlled bridge passes CSS picker/drop/paste, visible failures and
+  chat-switch isolation; transport checks cover exact bytes and cancellation.
+  This does not reproduce or qualify the user's Windows/Office/WebView2 failure.
+- **Open test fixture drift / web tests owner:** `artifact-commit-projection`
+  fails on its old messages cache key, and `tool-package-actions` on old
+  tool/chat cache keys after their behavioral assertions pass. These expectations
+  already disagree with HEAD. `prompt-review` also lacks the accent dependency
+  used by the current settings form, so it stops before upload coverage. The
+  attachment fix updates shared-upload body mocks, without changing those
+  unrelated assertions or the settings fixture; these three suites are not green.
+- **Open browser-demo transport / MockDemo owner:** `MockBridgeScript` forwards
+  bridge controls, but `MockDemoServer` does not serve the internal resource
+  data-plane route. A browser demo upload therefore cannot exercise real chunk
+  delivery even when its begin control succeeds. Add an explicit demo-only
+  transport to the existing router before treating that demo as upload evidence;
+  do not weaken production lease/origin checks or add a second ingestion owner.
+
 ## VBA context recovery review — 2026-10-12
 
 - **Fixed host-neutral / VBA recovery:** an omitted-source whole-module write

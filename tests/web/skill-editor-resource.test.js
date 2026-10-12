@@ -47,7 +47,7 @@ function uploads(f, save, hooks = {}) {
     assert.equal(options.redirect, "error"); assert.equal(options.credentials, "omit");
     const offset = Number(address.searchParams.get("offset")), count = Number(address.searchParams.get("count"));
     assert.equal(current.bytes.length, offset); assert.ok(count <= 262144);
-    current.bytes = Buffer.concat([current.bytes, Buffer.from(await options.body.arrayBuffer())]);
+    current.bytes = Buffer.concat([current.bytes, Buffer.from(options.body)]);
     if (hooks.chunk) await hooks.chunk(options);
     return new Response(JSON.stringify({ leaseId: id, nextOffset: offset + count }));
   };

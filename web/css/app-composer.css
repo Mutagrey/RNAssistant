@@ -144,6 +144,18 @@
   overflow-x: auto;
 }
 
+.attachment-status {
+  order: 2;
+  padding: 5px 2px 1px;
+  color: var(--composer-muted);
+  font-size: 12px;
+  overflow-wrap: anywhere;
+}
+
+.attachment-status.is-error {
+  color: var(--danger);
+}
+
 .attachment-draft,
 .message-attachment {
   display: grid;

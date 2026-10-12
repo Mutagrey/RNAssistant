@@ -30,7 +30,7 @@ function fixture(loadPrompts = true) {
     log: (message, level) => { if (level === "error") errors.push(message); }, confirm: () => true, cancelBridgeRequest: async () => {},
     fetch: async (url, options) => {
       const uri = new URL(url), id = uri.pathname.split("/").pop(), offset = Number(uri.searchParams.get("offset")), count = Number(uri.searchParams.get("count"));
-      if (options.method === "POST") { uploads.get(id).set(new Uint8Array(await options.body.arrayBuffer()), offset); return new Response(JSON.stringify({ leaseId: id, nextOffset: offset + count })); }
+      if (options.method === "POST") { uploads.get(id).set(new Uint8Array(options.body), offset); return new Response(JSON.stringify({ leaseId: id, nextOffset: offset + count })); }
       return new Response(downloads.get(id).slice(offset, offset + count), { headers: { "Content-Type": "text/markdown; charset=utf-8" } });
     },
     send: async (type, payload) => {

@@ -22,11 +22,21 @@
       if (options.signal) options.signal.addEventListener("abort", abortChunk, { once: true });
       var timer = setTimeout(abortChunk, 30000);
       try {
+        // WebView2 Request.Content can omit Blob/File-backed request bodies.
+        // Materialize only this bounded chunk, never the whole attachment.
+        var bytes = await body.slice(offset, offset + count).arrayBuffer();
+        active();
+        if (chunk.signal.aborted) throw new Error("RESOURCE_UPLOAD_TIMEOUT");
+        if (bytes.byteLength !== count) throw new Error("RESOURCE_UPLOAD_INVALID");
         var response = await fetch(lease.url + "?offset=" + offset + "&count=" + count, {
-          method: "POST", body: body.slice(offset, offset + count, "application/octet-stream"),
+          method: "POST", body: bytes, headers: { "Content-Type": "application/octet-stream" },
           credentials: "omit", cache: "no-store", redirect: "error", signal: chunk.signal
         });
-        if (!response.ok) throw new Error("RESOURCE_UPLOAD_FAILED: " + response.status);
+        if (!response.ok) {
+          var failure = await response.json().catch(function () { return null; });
+          throw new Error("RESOURCE_UPLOAD_FAILED: " + response.status +
+            (failure && typeof failure.message === "string" ? " · " + failure.message : ""));
+        }
         var ack = await response.json();
         active();
         if (ack.leaseId !== lease.leaseId || ack.nextOffset !== offset + count)

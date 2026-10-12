@@ -21,7 +21,7 @@ function fixture() {
   context.fetch = async (url, options) => {
     assert.equal(options.method, "POST"); assert.equal(options.redirect, "error"); assert.equal(options.credentials, "omit");
     if (f.fetchHook) return f.fetchHook(url, options);
-    const query = new URL(url).searchParams, bytes = Buffer.from(await options.body.arrayBuffer());
+    const query = new URL(url).searchParams, bytes = Buffer.from(options.body);
     assert.equal(bytes.length, Number(query.get("count"))); assert.ok(bytes.length <= 262144);
     chunks.push(bytes);
     return { ok: true, json: async () => ({ leaseId: lease.leaseId, nextOffset: Number(query.get("offset")) + bytes.length }) };
@@ -125,7 +125,8 @@ function fixture() {
     assert.ok(read("js/app-vba.js").includes('window.addEventListener("pagehide", cancelVbaModuleWrite)'));
     const page = read("index.html");
     for (const name of ["app-resource-upload.js", "app-attachments.js", "app-vba-actions.js"])
-      assert.ok(page.includes(name + "?v=vba-upload-20260906-1"));
+      assert.ok(page.includes(name + "?v=" + (name === "app-vba-actions.js"
+        ? "vba-upload-20260906-1" : "attachment-input-20261012-1")));
     assert.ok(page.indexOf("app-resource-upload.js") < page.indexOf("app-vba-actions.js"));
     console.log("PASS VBA upload: late refresh, lifecycle wiring and shared uploader delivery");
   }

@@ -1152,6 +1152,11 @@ typed metadata/capabilities. Binary POST chunks have an exact acknowledged byte
 offset and count, at most 256 KiB each; CORS preflight admits only POST/Content-Type
 from the opaque local origin. There is one in-flight operation per upload, at most
 four uploads within the shared 50 MiB transfer-buffer and 64-lease budgets.
+The browser materializes one chunk as an `ArrayBuffer` before POST, with explicit
+`application/octet-stream`; it never posts a Blob/File-backed body or reads the
+whole file up front. This avoids WebView2's reported missing binary request-content
+path ([upstream issue](https://github.com/MicrosoftEdge/WebView2Feedback/issues/2162)).
+Cancellation/currentness is rechecked after the file read and before dispatch.
 The existing 20 MiB/file and 50 MiB/message limits remain. Ten-minute expiry is
 checked on access and swept periodically; close/dispose releases idle buffers.
 A cancelled busy lease retains its reservation until the operation actually exits.
@@ -1166,7 +1171,13 @@ Completion consumes the capability and stages managed bytes through the existing
 `ChatResourceIngestionService`/`AttachmentStore`; CAS promotion and message resource
 linking still happen only at send. Known late drafts are discarded, uncertain
 chunks/completion are not replayed. The UI awaits staging in the addressed chat,
-even if another chat becomes active. Extraction runs off the UI thread; the bounded
+even if another chat becomes active.
+File picker, clipboard and file drops over the conversation/composer share this
+ingestion path. Progress and failures are visible beside the composer and scoped
+to the addressed chat. Text drags retain normal editing behavior; file drops
+outside the conversation cannot navigate the app away. Navigation, message editing
+and pending submit refuse new attachments explicitly.
+Extraction runs off the UI thread; the bounded
 WebView request stream is consumed on its STA. No base64 staging route/adapter or
 second durable upload store remains. Real Windows POST/preflight/close-during-PDF
 qualification is still open.

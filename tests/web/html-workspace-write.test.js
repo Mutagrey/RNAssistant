@@ -39,7 +39,7 @@ function fixture(text = "<main>before</main>") {
   context.fetch = async (url, options) => {
     if (f.onFetch) await f.onFetch(options);
     const params = new URL(url).searchParams;
-    const bytes = Buffer.from(await options.body.arrayBuffer());
+    const bytes = Buffer.from(options.body);
     assert.equal(Number(params.get("count")), bytes.length);
     assert.equal(Number(params.get("offset")), chunks.reduce((count, part) => count + part.length, 0));
     assert.ok(bytes.length <= 256 * 1024); assert.equal(options.method, "POST");

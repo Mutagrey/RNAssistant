@@ -34,8 +34,10 @@ function fixture() {
     assert.equal(options.method, "POST");
     assert.equal(options.credentials, "omit");
     assert.equal(options.redirect, "error");
-    assert.equal(options.body.type, "application/octet-stream");
-    const bytes = new Uint8Array(await options.body.arrayBuffer());
+    assert.equal(options.headers["Content-Type"], "application/octet-stream");
+    assert.equal(Object.prototype.toString.call(options.body), "[object ArrayBuffer]",
+      "WebView2 receives in-memory bytes, never a Blob/File-backed request body");
+    const bytes = new Uint8Array(options.body);
     assert.equal(bytes.length, Number(params.get("count")));
     assert.ok(bytes.length <= 3);
     chunks.push(...bytes);
@@ -93,6 +95,29 @@ function fixture() {
     console.log("PASS upload: cancellation aborts data transport and releases the lease");
   }
   {
+    const f = fixture(), signal = new AbortController();
+    let finishRead;
+    const pendingFile = { name: file.name, type: file.type, size: file.size,
+      slice: () => ({ arrayBuffer: () => new Promise(resolve => { finishRead = resolve; }) }) };
+    const operation = f.context.uploadChatResourceFile("chat-a", pendingFile, signal.signal);
+    await new Promise(resolve => setImmediate(resolve));
+    signal.abort();
+    finishRead(new ArrayBuffer(3));
+    await assert.rejects(operation, /RESOURCE_UPLOAD_CANCELLED/);
+    assert.equal(f.chunks.length, 0, "cancellation during file reading prevents the POST");
+    assert.equal(f.calls.some(call => call.type === "completeChatResourceUpload"), false);
+    console.log("PASS upload: cancelling a pending file read never dispatches or completes it");
+  }
+  {
+    const f = fixture();
+    const unreadable = { name: file.name, type: file.type, size: file.size,
+      slice: () => ({ arrayBuffer: async () => { throw new Error("File is no longer readable"); } }) };
+    await assert.rejects(f.context.uploadChatResourceFile("chat-a", unreadable), /no longer readable/);
+    assert.equal(f.chunks.length, 0);
+    assert.deepEqual(f.calls.map(call => call.type), ["beginChatResourceUpload", "cancelChatResourceUpload"]);
+    console.log("PASS upload: file-read failure releases the lease without POST or completion");
+  }
+  {
     const f = fixture(), send = f.context.send;
     f.context.send = async (type, payload) => {
       const value = await send(type, payload);
@@ -106,5 +131,5 @@ function fixture() {
   }
   assert.equal(/fileToBase64|readAsDataURL|send\("stageChatResource"/.test(source), false);
   console.log("PASS upload: legacy bridge body path is removed");
-  console.log("OK 6/6");
+  console.log("OK 8/8");
 }()).catch(error => { console.error(error.stack || error); process.exitCode = 1; });
