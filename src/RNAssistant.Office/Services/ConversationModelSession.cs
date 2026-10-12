@@ -37,6 +37,7 @@ namespace RNAssistant.Office.Services
         private ResourceAuthorityService _authority;
         private ChatBlobStore _payloads;
         private ModelContextSnapshot _lastSnapshot;
+        private bool _isNarrativeContinuation;
         private ModelAuthoritySnapshot _currentAuthority;
         private DocumentContext _context;
         private IReadOnlyList<ChatAttachment> _currentAttachments;
@@ -123,8 +124,14 @@ namespace RNAssistant.Office.Services
         }
 
         internal async Task<ModelProtocolRequest> PrepareRequestAsync(
-            string stepId, ModelProtocolCallContext callContext, CancellationToken cancellationToken)
+            string stepId, ModelProtocolCallContext callContext, CancellationToken cancellationToken,
+            bool isNarrativeContinuation = false)
         {
+            if (_isNarrativeContinuation != isNarrativeContinuation)
+            {
+                _isNarrativeContinuation = isNarrativeContinuation;
+                _lastSnapshot = null;
+            }
             // Compile at the request boundary, after every accepted terminal
             // result (including confirmation continuation) has entered history.
             if (_lastSnapshot == null)
@@ -535,7 +542,8 @@ namespace RNAssistant.Office.Services
                 Math.Max(0, Math.Min(budget / 3, budget - ContextWorkingSet.EstimateCost(required.Concat(facts), _settings))), ModelToolResultProjection.Instance);
             facts.AddRange(workingSet.Messages);
             return _compiler.Compile(frozen, required, facts, _context?.Notes, _runnableCatalog,
-                _settings, budget, enforceBudget, workingSet.IncludedBodies, workingSet.OmittedBodies);
+                _settings, budget, enforceBudget, workingSet.IncludedBodies, workingSet.OmittedBodies,
+                _isNarrativeContinuation);
         }
 
         private ChatMessage MaterializeToolResultMessage(

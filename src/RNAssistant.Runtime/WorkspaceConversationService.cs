@@ -841,7 +841,7 @@ namespace RNAssistant.Runtime
                 options.TraceStepId = request.StepId;
                 options.TraceModelAttemptId = "attempt_" + Guid.NewGuid().ToString("N");
                 ModelContextSnapshot snapshot;
-                try { snapshot = CompileCurrent(authority, options, request.RunId); }
+                try { snapshot = CompileCurrent(authority, options, request); }
                 catch (PromptBudgetExceededException ex)
                 {
                     if (!ex.CanCompact || !_settings.AutoCompressContext)
@@ -860,7 +860,7 @@ namespace RNAssistant.Runtime
                     _progress?.Invoke(new WorkspaceRunEvent("compacted", _session.LastRun.KernelState.Summary,
                         null, ConversationEventFeed.Cursor(_session)));
                     authority = CaptureModelAuthority(request.RunId, cancellationToken);
-                    try { snapshot = CompileCurrent(authority, options, request.RunId); }
+                    try { snapshot = CompileCurrent(authority, options, request); }
                     catch (PromptBudgetExceededException remaining)
                     { return AgentModelResult.Failed(ModelProtocolFailureKind.PromptBudgetExceeded, remaining.Message); }
                 }
@@ -894,7 +894,7 @@ namespace RNAssistant.Runtime
                     _skills, null, _session.Revision);
             }
 
-            private ModelContextSnapshot CompileCurrent(ModelAuthoritySnapshot authority, LlmRequestOptions options, string runId)
+            private ModelContextSnapshot CompileCurrent(ModelAuthoritySnapshot authority, LlmRequestOptions options, AgentModelRequest request)
             {
                 var fixedTokens = ModelContextBudget.EstimateRequestOptionsTokens(options, _settings) +
                     ModelProtocolClient.EstimateFormatRepairOverheadTokens(_settings) +
@@ -904,7 +904,7 @@ namespace RNAssistant.Runtime
                 var context = new WorkspaceModelContext { ActiveTaskList = _taskLists.Project(authority.Resources), ActivePlan = _plans.Project(authority.Resources) };
                 if (_acceptance?.MinimumVerifiedReads > 0)
                 {
-                    var reads = CurrentCompleteFileReads(CompleteFileReads(_session, runId), authority.Resources);
+                    var reads = CurrentCompleteFileReads(CompleteFileReads(_session, request.RunId), authority.Resources);
                     context.ReadAcceptance = new WorkspaceReadAcceptance
                     {
                         CurrentCompleteFileReads = reads.Count,
@@ -924,7 +924,8 @@ namespace RNAssistant.Runtime
                     archive: ContextCompactionRuntime.ActiveCheckpoint(_session) == null ? null :
                         AcceptedFacts(_session.Messages.Where(ContextCompactionRuntime.IsReplayMessage).ToArray()));
                 return _compiler.Compile(authority, required, facts.Concat(workingSet.Messages).ToArray(), null, _catalog, _settings,
-                    budget, retainedBodies: workingSet.IncludedBodies, evictedBodies: workingSet.OmittedBodies);
+                    budget, retainedBodies: workingSet.IncludedBodies, evictedBodies: workingSet.OmittedBodies,
+                    isNarrativeContinuation: request.IsNarrativeContinuation);
             }
 
             private ResourceAuthoritySnapshotSet CaptureContextAuthority(string runId, CancellationToken cancellationToken)

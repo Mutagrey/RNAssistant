@@ -6,6 +6,14 @@ and the 32-call bound. `protocol context: immutable complete snapshots` also
 rejects schema generation with missing/incomplete authority. Request-size and
 tool-pack checks cover schema projection and admission with both array branches.
 
+`no-tool`, `kernel: continues without tools`, `kernel: stopped continuation retains
+narrative limit` and `context continuity: narrative feedback` check transient
+no-call feedback, frozen repair, budget accounting, tool/user-input reset and
+checkpoint continuation. After building the CLI,
+`python3 -B tests/cli/narrative_feedback_smoke.py` checks actual HTTP requests with
+both result roles and response formats. These are controlled host-neutral checks;
+they do not establish fewer repeats from a real model or qualify Office delivery.
+
 `python3 -B tests/cli/compaction_resume_live.py --base-url http://127.0.0.1:11435
 --model <verified-model-tag> --digest <verified-digest>` runs the separate real-LLM
 E-CONTEXT/E-RESUME fixture in a fresh temporary workspace. Start/probe the real

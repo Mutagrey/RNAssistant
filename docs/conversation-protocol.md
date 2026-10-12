@@ -1101,6 +1101,10 @@ effects or require a closed Task List. `continue` with no calls advances once;
 three consecutive such steps fail without false completion. Health comes only from
 immutable execution records: unknown write/external effect dominates errors, then
 clean.
+The next request after `continue` receives transient kernel-owned feedback that
+the message was recorded without a tool call. Shared compilation delivers this
+after history in Office and CLI, including frozen repair and compacted windows;
+it does not change available actions or create a durable user/tool message.
 Narrative is preserved but cannot set either axis. Typed model failures end the
 invocation without fabricated tool errors; native provider refusal is locally
 classified as `failed / provider_refused`.

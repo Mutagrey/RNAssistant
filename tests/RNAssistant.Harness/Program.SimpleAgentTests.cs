@@ -255,6 +255,49 @@ namespace RNAssistant.Harness
             });
         }
 
+        private static void SimpleAgentNarrativeFeedback()
+        {
+            foreach (var responseMode in new[] { AgentResponseModes.JsonSchema, AgentResponseModes.JsonObject })
+            WithTempExecutor(FakeOfficeAdapter.ForHost("Excel"), (executor, adapter) => {
+                var narrative = ModelProtocolWire.WriteAction("Источник выбран; следующий шаг — чтение.", ConversationResponse.ContinueAction);
+                var responses = new Queue<string>(new[] { narrative, "{}", narrative,
+                    V4Envelope(V4Call("common.capabilities_search", new JObject { ["query"] = "markdown" })),
+                    ModelProtocolWire.WriteAction("Готово.", ConversationResponse.DoneAction) });
+                var requests = new List<JObject>();
+                var session = NewSession(adapter);
+                var settings = new AppSettings { AgentResponseMode = responseMode, ToolResultRole = ToolResultRoles.Tool,
+                    SystemPromptRole = "system" };
+                var result = CreateConversationRunService(adapter, executor, (currentSettings, messages, options, stream, token) => {
+                    requests.Add(LlmClient.BuildRequestBody(currentSettings,
+                        new LlmMessageBuilder().Build(messages, currentSettings, options).Messages, 100, options));
+                    return Task.FromResult(new LlmCompletionResult { Content = responses.Dequeue() });
+                }).ExecuteAsync(ChatModes.Agent, "Изучи доступные средства.", session, NewContext(adapter), settings,
+                    OfficeToolCatalog.ForHost(adapter.HostName).Concat(executor.GetControllerTools()).ToList(), null)
+                    .GetAwaiter().GetResult();
+                AssertEqual(AgentResponseStatuses.Completed, result.ResponseStatus, "two checkpoints can proceed to a real tool step");
+                AssertEqual(5, requests.Count, "one format repair does not add accepted steps");
+                for (var index = 0; index < requests.Count; index++)
+                {
+                    var messages = (JArray)requests[index]["messages"];
+                    var feedback = messages.Where(message => ((string)message["content"] ?? "").StartsWith("RUNTIME_FEEDBACK:\n", StringComparison.Ordinal)).ToArray();
+                    AssertEqual(index > 0 && index < 4 ? 1 : 0, feedback.Length, "one transient feedback on each narrative request and repair");
+                    if (feedback.Length == 0) continue;
+                    AssertEqual((string)messages[0]["role"], (string)feedback[0]["role"],
+                        "feedback follows the effective published instruction role");
+                    AssertContains((string)feedback[0]["content"], "No tools were called in that step", "feedback reports the actual no-call fact");
+                    AssertContains((string)feedback[0]["content"], "Another continue remains allowed", "feedback preserves model choice");
+                    AssertTrue(feedback[0]["tool_call_id"] == null, "feedback is not a tool result");
+                    if (index != 2) AssertTrue(JToken.DeepEquals(feedback[0], messages.Last()), "feedback follows accepted history");
+                }
+                var beforeRepair = (JArray)requests[1]["messages"];
+                var afterRepair = (JArray)requests[2]["messages"];
+                AssertTrue(JToken.DeepEquals(beforeRepair, new JArray(afterRepair.Take(beforeRepair.Count))),
+                    "format repair preserves the frozen feedback and accepted prefix exactly");
+                AssertTrue(!session.Messages.Any(message => (message.Content ?? "").StartsWith("RUNTIME_FEEDBACK:", StringComparison.Ordinal)),
+                    "runtime feedback never becomes a durable chat message");
+            });
+        }
+
         private static void ConversationV4RejectsUnknownRootFields()
         {
             foreach (var field in new[] { "status", "phase", "completed", "retry", "verified", "Message", "extra" })

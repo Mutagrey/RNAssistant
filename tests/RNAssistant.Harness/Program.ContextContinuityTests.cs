@@ -18,6 +18,34 @@ namespace RNAssistant.Harness
 {
     internal static partial class Program
     {
+        private static void ContextContinuityNarrativeFeedback()
+        {
+            var authority = new ModelAuthoritySnapshot(new ResourceAuthoritySnapshotSet(new ResourceAuthoritySnapshot[0]),
+                "pack", new SkillCatalogSnapshot(null), null, 1);
+            var compiler = new ModelContextCompiler();
+            foreach (var role in new[] { "developer", "system", "user" })
+            {
+                var settings = new AppSettings { SystemPromptRole = role };
+                // Compaction can omit the narrative from the active window. The kernel
+                // still owns the signal; the compiler must not infer it from that window.
+                var snapshot = compiler.Compile(authority, new ChatMessage[0], new ChatMessage[0], null,
+                    new ToolCatalogEntry[0], settings, 1000, isNarrativeContinuation: true);
+                AssertEqual(1, snapshot.Messages.Count, "feedback survives an empty compacted window");
+                AssertEqual(role, snapshot.Messages.Single().Role, "configured instruction role is retained");
+                AssertEqual("runtime-feedback", snapshot.Receipt.Messages.Single().Kind, "inspector identifies service feedback");
+                AssertEqual(ContextPresentationKind.Full, snapshot.Receipt.Messages.Single().Presentation, "feedback is fully accounted");
+                AssertTrue(snapshot.Receipt.EstimatedTokens > 0, "feedback participates in request admission");
+                var overBudget = false;
+                try { compiler.Compile(authority, new ChatMessage[0], new ChatMessage[0], null,
+                    new ToolCatalogEntry[0], settings, 1, isNarrativeContinuation: true); }
+                catch (PromptBudgetExceededException) { overBudget = true; }
+                AssertTrue(overBudget, "feedback cannot bypass the prompt budget");
+                var cleared = compiler.Compile(authority, new ChatMessage[0], new ChatMessage[0], null,
+                    new ToolCatalogEntry[0], settings, 1000);
+                AssertEqual(0, cleared.Messages.Count, "compiler does not retain feedback between requests");
+            }
+        }
+
         private static void ContextContinuityKeepsRecentPair()
         {
             var authority = new ModelAuthoritySnapshot(new ResourceAuthoritySnapshotSet(new ResourceAuthoritySnapshot[0]),

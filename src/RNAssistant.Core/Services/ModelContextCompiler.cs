@@ -59,7 +59,8 @@ namespace RNAssistant.Core.Services
         public ModelContextSnapshot Compile(ModelAuthoritySnapshot authority,
             IReadOnlyList<ChatMessage> required, IReadOnlyList<ChatMessage> facts,
             IReadOnlyList<ContextNote> notes, IReadOnlyList<ToolCatalogEntry> tools,
-            AppSettings settings, int budget, bool enforceBudget = true, int retainedBodies = 0, int evictedBodies = 0)
+            AppSettings settings, int budget, bool enforceBudget = true, int retainedBodies = 0, int evictedBodies = 0,
+            bool isNarrativeContinuation = false)
         {
             IReadOnlyList<SkillDefinition> projectionSkills = null;
             var receipt = new ContextReceipt
@@ -141,6 +142,18 @@ namespace RNAssistant.Core.Services
                 else atoms.Add(Atom(fact.SyntheticResourceObservation ? "current-source" :
                     fact.ProtocolMessage ? "protocol-fact" : "dialogue", fact, !fact.ProtocolMessage));
             }
+
+            // The kernel supplies this fact independently of the compacted history.
+            // It belongs only to this frozen request, never to accepted chat/tool history.
+            if (isNarrativeContinuation)
+                atoms.Add(Atom("runtime-feedback", new ChatMessage {
+                    Role = required?.FirstOrDefault()?.Role ?? settings?.SystemPromptRole ?? "developer", ProtocolMessage = true,
+                    Content = "RUNTIME_FEEDBACK:\nYour previous action=continue message was recorded. " +
+                        "No tools were called in that step. Choose the next step from the actual task and available results. " +
+                        "Put a ready tool call and its progress comment in the same action=tool response. " +
+                        "Another continue remains allowed for a new concrete finding or decision. " +
+                        "Do not repeat an intention, make an unnecessary call, or claim completion just to advance."
+                }, true));
 
             // Keep the most recent completed interaction in its selected transport.
             // Source currency/body delivery can change without erasing this sequence.
@@ -418,7 +431,7 @@ namespace RNAssistant.Core.Services
             if (enforceBudget && ModelContextBudget.EstimateMessagesTokens(messages, settings) > budget)
             {
                 var invariantCost = ModelContextBudget.EstimateMessagesTokens(atoms.Where(a => a.Kind == "system-invariant" ||
-                    a.Kind == "user-instruction").SelectMany(a => a.Messages), settings);
+                    a.Kind == "user-instruction" || a.Kind == "runtime-feedback").SelectMany(a => a.Messages), settings);
                 foreach (var atom in atoms.Where(a => ModelContextBudget.EstimateMessagesTokens(a.Messages, settings) + invariantCost > budget))
                     if (!OmitSourceBody(atom)) ReplaceOversizedExactReadEvidence(atom);
                 messages = atoms.SelectMany(item => item.Messages).ToList();
@@ -719,7 +732,8 @@ namespace RNAssistant.Core.Services
                 var unchangedData = bodyParts != null && bodyParts.Any(p => p.Kind == "data" && p.Presentation == ContextPresentationKind.Full);
                 var resourceBody = evidence.Length > 0 && !IsFailedResult(message) &&
                     (message.SyntheticResourceObservation || unchangedData);
-                var presentation = summary ? ContextPresentationKind.Summary :
+                var presentation = atom.Kind == "runtime-feedback" ? ContextPresentationKind.Full :
+                    summary ? ContextPresentationKind.Summary :
                     resourceBody ? evidence.All(e => e.Complete && e.Coverage.Kind == ResourceCoverageKinds.Whole)
                         ? ContextPresentationKind.Full : ContextPresentationKind.Fragment :
                     source != null && source.Content == message.Content && source.ResultPayload == null
@@ -727,7 +741,8 @@ namespace RNAssistant.Core.Services
                 var entry = new ContextMessagePresentation { MessageIndex = result.Count,
                     SourceMessageId = message.Id, Role = message.Role, Kind = atom.Kind,
                     Presentation = presentation, OriginalPayload = source?.ResultPayload,
-                    Reason = summary ? "Сохранена сводка наблюдения/операции; исходное сообщение преобразовано." :
+                    Reason = atom.Kind == "runtime-feedback" ? "Служебная обратная связь ядра для текущего запроса." :
+                        summary ? "Сохранена сводка наблюдения/операции; исходное сообщение преобразовано." :
                         presentation == ContextPresentationKind.Full ? "Содержимое сообщения сохранено полностью." :
                         "Нет сведений о полноте исходного содержимого после преобразования." };
                 if (atom.Evidence.Count > 0 && !summary)

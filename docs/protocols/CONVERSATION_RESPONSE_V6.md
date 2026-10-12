@@ -27,6 +27,16 @@ model decisions. They do not prove effects or semantic completion. Runtime
 model decision. `RunViewState` and the result card show actual read/write
 evidence separately.
 
+After an accepted `continue`, the kernel marks the next request for transient
+`RUNTIME_FEEDBACK`: the comment was recorded and no tools were called in that
+step. The shared context compiler places this feedback after history using the
+effective instruction role, includes it in budget/inspector accounting and
+preserves it in the frozen format-repair request. It is not a tool result or a
+durable chat message. A tool step or new user input clears the signal; checkpoint
+continuation reconstructs it from the kernel's accepted facts, independently of
+the compacted model window. All five actions and the three-step limit remain
+unchanged; feedback neither forces a call nor certifies completion.
+
 The `message` on `tool` concisely states the relevant finding from a prior
 result, when available, the decision it supports and why the selected call is
 next. An initial read states the question it will answer. A `continue` message

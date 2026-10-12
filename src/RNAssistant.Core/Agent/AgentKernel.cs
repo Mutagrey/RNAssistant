@@ -107,7 +107,7 @@ namespace RNAssistant.Core.Agent
                     using (var requestCancellation = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken,
                         _input == null ? CancellationToken.None : _input.InterruptToken))
                         model = await _model.SendAsync(new AgentModelRequest(state.RunId, state.TurnId, stepId,
-                            state.Messages), requestCancellation.Token).ConfigureAwait(false);
+                            state.Messages, consecutiveNarrativeSteps > 0), requestCancellation.Token).ConfigureAwait(false);
                 }
                 catch (OperationCanceledException)
                 {

@@ -42,7 +42,7 @@ namespace RNAssistant.Office.Services
                 ModelProtocolRequest preparedRequest;
                 try
                 {
-                    preparedRequest = await PrepareRequestAsync(request.StepId, cancellationToken).ConfigureAwait(false);
+                    preparedRequest = await PrepareRequestAsync(request, cancellationToken).ConfigureAwait(false);
                 }
                 catch (ResourceRequestException ex) when (ex.ErrorCode == "RESOURCE_CATALOG_CHANGED")
                 {
@@ -50,7 +50,7 @@ namespace RNAssistant.Office.Services
                     // adapter construction and the next request. Rebind preparation
                     // once; no model call or tool effect is replayed.
                     await RefreshAuthorityAsync(cancellationToken).ConfigureAwait(false);
-                    preparedRequest = await PrepareRequestAsync(request.StepId, cancellationToken).ConfigureAwait(false);
+                    preparedRequest = await PrepareRequestAsync(request, cancellationToken).ConfigureAwait(false);
                 }
                 var requestMs = contextTimer.ElapsedMilliseconds - authorityMs - sessionMs;
                 if (contextTimer.ElapsedMilliseconds >= 500)
@@ -112,11 +112,11 @@ namespace RNAssistant.Office.Services
                 _executor.ResourceAuthority, _executor.Payloads, () => _skillSnapshot, _catalogGeneration).ConfigureAwait(false);
         }
 
-        private Task<ModelProtocolRequest> PrepareRequestAsync(string stepId, CancellationToken cancellationToken)
+        private Task<ModelProtocolRequest> PrepareRequestAsync(AgentModelRequest request, CancellationToken cancellationToken)
         {
-            return _modelSession.PrepareRequestAsync(stepId,
+            return _modelSession.PrepareRequestAsync(request.StepId,
                 new ModelProtocolCallContext(ConversationProtocolContext.SequentialBatchIds(_catalog)),
-                cancellationToken);
+                cancellationToken, request.IsNarrativeContinuation);
         }
 
         private async Task RefreshAuthorityAsync(CancellationToken cancellationToken)
