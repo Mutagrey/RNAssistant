@@ -1,5 +1,61 @@
 # Stabilization progress
 
+## Ollama checkpoint memory and fixed acceptance — 2026-10-12
+
+Owner: CLI evaluation / isolated endpoint profile. Tested pinned `881596f2`
+binaries, original tasks/checks, 4096 output, system/user roles, json_schema and
+requested thinking off. Production runtime, prompts and acceptance were unchanged.
+CLI build passed with zero warnings/errors; no Office/VSTO qualification was run.
+
+The bundled Ollama 0.35.0 runner retains context checkpoints independently of its
+prompt cache. With `LLAMA_ARG_CACHE_RAM=0`, the Gemma CSV run still created ten
+checkpoints of about 320 MiB each. It was cancelled at 242.77 s after sustained
+warning pressure and new swap-out: three verified files, 12/24 browser checks,
+then a correctly refused unread replacement. This is an environment-limited run,
+not an original 600-second timeout or a passing task.
+
+Setting `LLAMA_ARG_CTX_CHECKPOINTS=0` on the owned server removes those copies;
+runner logs confirm both caches disabled, one slot, Flash Attention and 32K/f16.
+RNAssistant's frozen history and durable compaction checkpoints are unchanged.
+Both Gemma profiles have digest
+`0bb794a6bbd6a906811886d010fa299cf684e5ca7093fdc7228a3dce071360cb`, inherited from
+the installed 12B/32K profile. Binary/task hashes match, and the first production
+HTTP request is identical except for the temporary model tag. This qualifies a
+bounded memory profile; stochastic output and timing are not a quality A/B score.
+
+| Fixed gate with server checkpoints disabled | Result |
+|---|---|
+| CSV, 32K, 16 iterations / 24 tools / 600 s | 196.81 s, model `done`, exit 5. Three verified files and **24/24 browser checks pass**, but **0/3 final complete file reads**. The unchanged follow-up was not run. |
+| Notes, 24K planning, 40 iterations / 48 tools / 600 s | Timeout at 600.43 s before checkpoint/restart. All eight status edits preserve the remaining bytes; the receipt and manifest are correct. Anchor review is missing; prescribed read/write/read-back order passes **0/9**. No restart/resume acceptance is claimed. |
+
+The final CSV request explicitly contains zero current reads, three remaining
+reads and all three filenames. Canonical wire audits pass: CSV 5 requests / 10
+cumulative call-result pairs; notes 26 requests / 233 pairs, 25 accepted calls.
+Both have zero compactions. There is no new demonstrated context-loss defect;
+transport presence alone cannot establish model attention. Full M4/M5 stay open.
+
+The combined no-server-checkpoint experiment has 275 memory samples, maximum gap
+3.07 s, normal pressure throughout and **zero new swap-out**. Existing pages read
+from swap total 12.78 MiB; this is not a zero-swap claim. CSV/notes minimum reported
+free percentages are 28/30; peak runner RSS is 9.21 GiB, not total GPU allocation.
+The previous zero-swap-in preflight rejected otherwise normal Gemma on less than
+1 MiB of reads. The explicitly recorded replacement admission window permits at
+most 2 MiB swap-in, zero swap-out and four normal samples with at least 25% free.
+
+GPT-OSS 20B/32K with q8_0 KV passed its simple v6 probe but failed memory admission:
+one critical and twenty warning samples, 4.48 GiB new swap-out. No full GPT-OSS
+task ran. Its reasoning field remained nonempty despite requested thinking off.
+Cloud metadata timed out; Ollama also documents that Cloud does not support
+structured outputs. Neither observation qualifies Gemma Cloud for this runtime.
+
+All owned profiles were removed, models unloaded and temporary servers stopped;
+user applications/global Ollama settings were unchanged. Evidence, drivers,
+HTTP/CAS, hashes and shared source/binaries are retained locally under the ignored
+`artifacts/cli-evidence/2026-10-12-model-memory/`; `index.json` maps each run.
+The profile instructions are updated in [development rules](../development-rules.md#сравнение-моделей).
+Next: a separately labelled thinking-enabled/reference-model comparison on a
+qualified endpoint, with the same tasks, read requirements and original budgets.
+
 ## VBA context recovery and authoring contracts — 2026-10-12
 
 Owners: VBA mutation/recovery, Tool Authoring, built-in skills and Library editor.
@@ -822,7 +878,7 @@ conversation application services; resource/Office boundaries retain their owner
 | M2 | Workspace/session without document authority, stable identity, known root relocation and read-only association tested. Only the root directory mount is supplied; managed/multiple/external mounts and shared-source identity/heads (A24) remain open. |
 | M3 | Single WorkspaceFileService owns UTF-8 find/read/create/patch/replace/copy/move/delete/restore, bounded raw/PNG/JPEG views, exact history, drift and non-replay recovery. Focused tests pass. Remaining §8.1 large/format-specific views, directory pagination, complete Office/filesystem dispatch and cross-platform path qualification are open. |
 | M4 | First useful real-model multi-file result achieved. Modes, skills, typed questions/answers, approvals, Task Lists/Plans, receipts, cancel/explicit continuation and event following exist. Interactive host UX/recorded file-effect presentation passes Mac PTY checks. Typed application resource discovery, bounded exact text views and isolated development snapshot preview are implemented. Office UI use of shared application contracts is the later M7 cutover. Scripted runs do not close real task quality. |
-| M5 | Retained browser snapshots, dependency checks, structured functional verification, repair, bounded same-run continuation and shared compaction implemented. Controlled compaction/resume passes. Schema, completed-receipt boundary and aggregate source-budget defects are fixed. Real Qwen reached restart/resume but timed out; the latest Gemma attempt again produced all exact final files, without checkpoint/restart and with 0/9 prescribed read-back stages. Full live quality remains open. A real counter repair passed previously; typed dependency-change recovery passes controlled guards and real Gemma dispatches re-verification after repair, but its CSV result still fails. Isolated development snapshot preview passes Mac lifecycle/isolation checks. Bounded PNG/CDP diagnostics have exact retained references and pass browser/CAS checks. Fixed autonomous CSV creation + unchanged feature follow-up still has no passing evidence. Bounded PNG/JPEG assets pass snapshot replay and stale-final checks. Working previews/additional formats remain open; Ctrl+C/expiry and abrupt caller-loss cleanup pass on Mac. Helper/OS loss and other platforms remain unqualified. |
+| M5 | Retained browser snapshots, dependency checks, structured functional verification, repair, bounded same-run continuation and shared compaction implemented. Controlled compaction/resume passes. Schema, completed-receipt boundary and aggregate source-budget defects are fixed. Real Qwen reached restart/resume but timed out; the latest Gemma run with server checkpoints disabled timed out before checkpoint/restart, after eight exact status edits and 0/9 prescribed read-back stages. Full live quality remains open. A real counter repair passed previously; typed dependency-change recovery passes controlled guards and real Gemma dispatches re-verification after repair, but its CSV result still fails. Isolated development snapshot preview passes Mac lifecycle/isolation checks. Bounded PNG/CDP diagnostics have exact retained references and pass browser/CAS checks. The latest CSV passes 24/24 browser checks with normal memory pressure, but 0/3 final reads prevents acceptance and follow-up. Bounded PNG/JPEG assets pass snapshot replay and stale-final checks. Working previews/additional formats remain open; Ctrl+C/expiry and abrupt caller-loss cleanup pass on Mac. Helper/OS loss and other platforms remain unqualified. |
 | M6 | Authoring cutover not started. Office HTML/MD/JSON and Plan authoring remain on their existing owners; file materialization/linkage/crash guards and old-writer removal are required. CLI files have no dual writer. |
 | M7 | Receipts/cursors/subscription provide shared primitives; Office UI transport/application migration, file tree, preview isolation, bounded body delivery and pane-independent lifetime are not closed. |
 | M8 | External Office provider/mount/target cutover remains open; exact binding/discovery/SaveAs and multiple-instance behavior need Windows evidence. |
@@ -2057,8 +2113,9 @@ boundary, not a functional CSV score. Scripted HTTP tests confirmed both CLI
 transport modes and saved metadata. The existing v6 parser correctly rejected
 these outputs; no permissive JSON repair or separate agent loop was added.
 
-Next concrete slice (2026-10-12): qualify endpoint input/memory headroom before
-the unchanged real CSV/follow-up and 24K compaction/resume tasks. Owned browser/profile
+Next concrete slice (2026-10-12): compare explicit thinking-enabled/reference
+model behavior on the qualified low-memory profile, preserving the fixed CSV/follow-up
+and 24K compaction/resume tasks, read requirements and original budgets. Owned browser/profile
 cleanup after CLI loss now passes on Mac, as recorded
 [above](#browser-lifetime-after-caller-process-loss--2026-10-12). Bounded raw/PNG/JPEG views and
 retained screenshots/traces are implemented as recorded

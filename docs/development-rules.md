@@ -312,17 +312,40 @@ reasoning даже при `reasoning_effort: none`. Поэтому `--thinking o
 
 У Ollama 0.35.0 на этом Mac обнаружен отдельный кэш прошлых prompts до 8192 MiB.
 Для ограниченного эксперимента можно запустить отдельный локальный сервер с
-`LLAMA_ARG_CACHE_RAM=0`, `OLLAMA_NUM_PARALLEL=1`, `OLLAMA_MAX_LOADED_MODELS=1`,
+`LLAMA_ARG_CACHE_RAM=0`, `LLAMA_ARG_CTX_CHECKPOINTS=0`,
+`OLLAMA_NUM_PARALLEL=1`, `OLLAMA_MAX_LOADED_MODELS=1`,
 `OLLAMA_FLASH_ATTENTION=1` и `OLLAMA_KV_CACHE_TYPE=f16`. Значение `0` отключает
-серверный кэш прошлых prompts ([llama.cpp](https://github.com/ggml-org/llama.cpp/blob/master/tools/server/README.md#server-specific-params));
-оно не меняет передаваемую RNAssistant историю или размер контекста. Проверить
-применение по runner log, включая Flash Attention и фактический `n_ctx_slot`.
+оба отдельных механизма: кэш прошлых prompts и context checkpoints слота
+([llama.cpp](https://github.com/ggml-org/llama.cpp/blob/master/tools/server/README.md#server-specific-params)).
+У проверенного bundled runner Ollama 0.35.0 checkpoints по умолчанию имеют предел
+32; у Gemma 12B они занимали примерно 320 MiB каждый. Отключение только prompt
+cache оставляло этот дополнительный расход памяти. Эти checkpoints сервера не
+являются durable context checkpoints RNAssistant: передаваемая история, frozen
+compiler, compaction и лимит контекста не меняются. Повторная обработка префикса
+может стать дороже. Проверить поддержку в `llama-server --help` и применение по
+runner log: `context checkpoints disabled`, `prompt cache is disabled`, Flash
+Attention и фактический `n_ctx_slot`.
 Это явный эксперимент с endpoint, не новая настройка agent loop и не глобальное
 изменение пользовательского Ollama. Выгрузить модель и остановить временный
 сервер после прогона. Если увеличен wall-clock timeout, отдельно сохранить
 результат на прежнем рубеже; позднее завершение не выдавать за pass старого бюджета.
 Увеличение iteration/tool budgets также оформлять отдельным диагностическим
 прогоном; оно не заменяет результат исходной ограниченной проверки.
+
+Допуск по памяти фиксировать отдельно от acceptance задачи. Короткий greeting
+probe не проверяет рост памяти на длинной истории. Порог «абсолютно ноль swap-in»
+может отклонять нормальное фоновое чтение ранее выгруженных страниц; сохранять
+точные дельты и порог, не скрывать такой отказ. Для прогона 2026-10-12 использованы
+четыре нормальных замера через пять секунд, не менее 25% по `memory_pressure -Q`,
+не более 2 MiB swap-in и ноль новых swap-out за окно. Во время всей задачи —
+непрерывные замеры и остановка своего теста при critical pressure либо устойчивом
+warning с новой выгрузкой страниц. Это измеренный профиль допуска, не гарантия
+отсутствия давления позже и не разрешение менять исходные проверки/бюджеты задачи.
+
+Ollama Cloud [не поддерживает structured outputs](https://docs.ollama.com/capabilities/structured-outputs).
+Поэтому простой JSON greeting не квалифицирует облачный `json_schema`-маршрут.
+Явный `json_object` также требует отдельного v6/tool-trajectory evidence; строгий
+parser и общий runtime ради cloud-модели не ослабляются.
 
 Для сравнения зафиксировать RNAssistant commit, task, исходный workspace, tool
 catalog, skills, acceptance tests и по возможности temperature/reasoning policy.
