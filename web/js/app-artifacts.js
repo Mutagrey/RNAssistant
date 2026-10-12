@@ -320,7 +320,8 @@
     if (thumbnail && thumbnail.status === "ready" && thumbnail.resourceUri === resourceUri) {
       var image = document.createElement("img");
       image.alt = title || "";
-      image.loading = "lazy";
+      // The thumbnail observer already defers the read. Start decoding now,
+      // without a second lazy queue that can outlive the cache-owned URL.
       image.src = thumbnail.data.objectUrl;
       node.appendChild(image);
       node.classList.add("is-ready");
@@ -599,6 +600,13 @@
     chatThumbnailObserver = null;
   }
 
+  function releaseMessageMediaThumbnails(root) {
+    if (!chatThumbnailObserver || !root || !root.querySelectorAll) return;
+    Array.prototype.forEach.call(root.querySelectorAll(".rn-artifact-thumbnail"), function (node) {
+      chatThumbnailObserver.unobserve(node);
+    });
+  }
+
   function observeChatThumbnail(node, resourceUri) {
     if (typeof window.IntersectionObserver !== "function") {
       loadArtifactThumbnail(resourceUri);
@@ -607,8 +615,9 @@
     if (!chatThumbnailObserver) {
       chatThumbnailObserver = new window.IntersectionObserver(function (entries) {
         entries.forEach(function (entry) {
-          if (!entry.isIntersecting) return;
-          chatThumbnailObserver.unobserve(entry.target);
+          if (!entry.isIntersecting || !entry.target.isConnected) return;
+          // Keep observing: an exact thumbnail may expire or leave the bounded
+          // cache while this message stays mounted outside the viewport.
           loadArtifactThumbnail(entry.target.dataset.resourceUri);
         });
       }, { rootMargin: "160px" });
@@ -1014,6 +1023,7 @@
   window.messageImageAttachmentIds = messageImageAttachmentIds;
   window.appendMessageMediaGallery = appendMessageMediaGallery;
   window.resetMessageMediaThumbnails = resetMessageMediaThumbnails;
+  window.releaseMessageMediaThumbnails = releaseMessageMediaThumbnails;
   window.appendMessageArtifactCards = appendMessageArtifactCards;
   window.appendAgentRunResourceCards = appendAgentRunResourceCards;
   window.bindChatResourceNavigation = bindChatResourceNavigation;

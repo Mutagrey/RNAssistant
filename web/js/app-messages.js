@@ -11,6 +11,7 @@ var chatScrollInteraction = 0;
 var chatScrollPosition = 0;
 
 function resetRenderedMessageUnits(box) {
+  if (typeof resetMessageMediaThumbnails === "function") resetMessageMediaThumbnails();
   if (box && typeof clearMarkdownEnhancements === "function") clearMarkdownEnhancements(box);
   renderedMessageUnits = {};
   renderedLiveRunBase = null;
@@ -746,6 +747,9 @@ function reconcileMessageUnits(box, units, liveOnly) {
     }
     if (!node) {
       var disclosures = messageDisclosureSnapshot(cached && cached.node);
+      if (cached && cached.node && typeof releaseMessageMediaThumbnails === "function") {
+        releaseMessageMediaThumbnails(cached.node);
+      }
       if (cached && cached.node && typeof clearMarkdownEnhancements === "function") {
         clearMarkdownEnhancements(cached.node);
       }
@@ -763,6 +767,7 @@ function reconcileMessageUnits(box, units, liveOnly) {
   Object.keys(renderedMessageUnits).forEach(function (key) {
     if (!nextCache[key] && renderedMessageUnits[key].node) {
       var removed = renderedMessageUnits[key].node;
+      if (typeof releaseMessageMediaThumbnails === "function") releaseMessageMediaThumbnails(removed);
       if (typeof clearMarkdownEnhancements === "function") clearMarkdownEnhancements(removed);
       if (removed.parentNode === box) box.removeChild(removed);
     }
@@ -832,7 +837,6 @@ function renderStreamingMessages() {
 function renderMessages(options) {
   if (typeof isPanelActive === "function" && !isPanelActive("chat")) return;
   options = options || {};
-  if (typeof resetMessageMediaThumbnails === "function") resetMessageMediaThumbnails();
   if (typeof renderChatResourceNavigation === "function") renderChatResourceNavigation();
   var box = $("messages");
   var chatChanged = renderedMessagesChatId !== state.activeChatId;

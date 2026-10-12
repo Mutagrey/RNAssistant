@@ -989,9 +989,16 @@ Collection cards load media lazily near the viewport. Image thumbnails use a
 separate typed exact-revision read: the source attachment URI/hash/length is checked
 as for the full viewer, then a local Skia provider returns JPEG at no more than
 320 px and 512 KiB. The UI admits the returned source hash, thumbnail hash, byte
-length and dimensions, runs at most four reads concurrently and retains at most 48
+length and dimensions, runs at most four reads concurrently and retains at most 24
 ephemeral results per chat. Thumbnail state is cleared on chat switch and is never
 an artifact, revision, message event or model-facing resource.
+
+Chat thumbnail observation survives incremental transcript refreshes and ends when
+the owning message is replaced, removed or reset. Returning to an image after its
+thumbnail expires or leaves the bounded cache reloads the same exact revision.
+The viewport observer owns lazy loading; admitted Blob images start decoding at once
+so a second browser-level lazy queue cannot outlive their cache-owned URLs.
+Draft, collection and message thumbnails proportionally contain the entire image.
 
 Messages render exact committed image refs as a compact mosaic of at most four
 cells; additional images use a `+N` overlay. Opening a cell carries every exact image
@@ -1024,7 +1031,8 @@ are preview frames, never child artifacts or independently durable revisions.
   proportional fit with upscaling, 100%/button/wheel/pinch zoom, pan, rotation,
   Fit/100% double-click toggle and keyboard shortcuts. RNAssistant retains natural
   dimensions, download and teardown. The stage occupies the remaining preview
-  height without cropping or distortion. Collection/message thumbnails and the
+  height without cropping or distortion, including long screenshots whose fit is
+  below the vendor's 1% interactive zoom floor. Collection/message thumbnails and the
   horizontal gallery filmstrip use the separately bounded thumbnail contract above;
   selecting an item loads only that exact full image into Viewer.js. Main-UI CSP
   admits only local `data:`/`blob:` image sources and denies vendor network/worker

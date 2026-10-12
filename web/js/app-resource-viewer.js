@@ -78,13 +78,17 @@
       var width = Number(stageShell.clientWidth || 0);
       var height = Number(stageShell.clientHeight || 0);
       if (width <= 0 || height <= 0) return 1;
-      return Math.max(0.05, Math.min(8, Math.min(width / naturalWidth, height / naturalHeight)));
+      return Math.min(8, width / naturalWidth, height / naturalHeight);
     }
 
     function fitViewer() {
       if (!vendorViewer) return;
       vendorViewer.reset();
-      vendorViewer.zoomTo(fittedRatio(), false);
+      var ratio = fittedRatio();
+      // Viewer.js clamps zoomTo to 1%; its native reset still fits images below
+      // that limit. Keep that fit for long screenshots instead of cropping them.
+      if (ratio >= 0.01) vendorViewer.zoomTo(ratio, false);
+      else updateDimensions("Вписано");
     }
 
     function showActualSize() {
@@ -129,7 +133,7 @@
         loop: false,
         minWidth: 100,
         minHeight: 100,
-        minZoomRatio: 0.05,
+        minZoomRatio: 0.01,
         maxZoomRatio: 8,
         movable: true,
         rotatable: true,
